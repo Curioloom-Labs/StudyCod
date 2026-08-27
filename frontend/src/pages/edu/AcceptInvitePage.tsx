@@ -42,8 +42,8 @@ export const AcceptInvitePage: React.FC = () => {
 
   return (
     <div className="max-w-md mx-auto px-4 py-16 text-center">
-      {status === "working" && <p className="font-mono text-text-muted">{tr("Приймаємо запрошення...", "Accepting invitation...")}</p>}
-      {status === "ok" && <p className="font-mono text-text-primary">{tr("Готово! Перенаправляємо...", "Done! Redirecting...")}</p>}
+      {status === "working" && <p role="status" aria-live="polite" className="font-mono text-text-muted">{tr("Приймаємо запрошення…", "Accepting invitation…")}</p>}
+      {status === "ok" && <p role="status" aria-live="polite" className="font-mono text-text-primary">{tr("Готово! Перенаправляємо…", "Done! Redirecting…")}</p>}
       {status === "error" && (
         <div className="flex flex-col items-center gap-3">
           <p className="font-mono text-[#ef4444]">{message}</p>

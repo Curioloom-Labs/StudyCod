@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StudyCod — LLM Council Report</title>
+  <style>
+    :root { color-scheme: light; --ink:#17202a; --muted:#64748b; --line:#dbe3ec; --soft:#f7f9fc; --green:#237a57; --orange:#c66b2c; --blue:#315d9b; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#fff; color:var(--ink); font:16px/1.65 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1080px; margin:0 auto; padding:42px 24px 72px; }
+    .eyebrow { color:var(--orange); font-size:12px; font-weight:750; letter-spacing:.12em; text-transform:uppercase; }
+    h1 { margin:.25rem 0 .5rem; font-size:clamp(30px,5vw,52px); line-height:1.08; letter-spacing:-.035em; }
+    h2 { margin:2.4rem 0 .7rem; font-size:25px; line-height:1.2; }
+    h3 { margin:1.5rem 0 .45rem; font-size:18px; }
+    p { margin:.55rem 0 1rem; }
+    .lead { max-width:820px; color:#334155; font-size:19px; }
+    .meta { color:var(--muted); font-size:14px; }
+    .verdict { margin:28px 0; padding:24px 26px; border:1px solid #b9dfcd; border-left:6px solid var(--green); border-radius:14px; background:#f3fbf7; }
+    .verdict h2 { margin-top:0; }
+    blockquote { margin:1rem 0; padding:12px 18px; border-left:4px solid var(--orange); background:#fffaf5; color:#263746; font-size:19px; }
+    .grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin:18px 0; }
+    .card { border:1px solid var(--line); border-radius:12px; padding:14px; background:var(--soft); min-height:150px; }
+    .card strong { display:block; margin-bottom:5px; }
+    .card small { display:block; color:var(--muted); line-height:1.4; }
+    .card .bar { height:7px; margin-top:14px; border-radius:99px; background:var(--blue); }
+    .card:nth-child(2) .bar,.card:nth-child(4) .bar { background:var(--green); }
+    .card:nth-child(3) .bar { background:var(--orange); }
+    .callout { padding:18px 20px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+    .callout ul { margin:.4rem 0 .2rem; padding-left:1.2rem; }
+    details { margin:10px 0; border:1px solid var(--line); border-radius:10px; background:#fff; }
+    summary { cursor:pointer; padding:13px 16px; font-weight:700; }
+    details > div { padding:0 16px 15px; color:#334155; }
+    .two { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .tag { display:inline-block; margin:3px 5px 3px 0; padding:3px 9px; border-radius:999px; background:#eef3f9; color:#315d9b; font-size:13px; }
+    footer { margin-top:48px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; }
+    @media (max-width:760px) { main{padding:28px 16px 54px}.grid,.two{grid-template-columns:1fr 1fr}.card{min-height:0}.grid .card:last-child{grid-column:span 2} }
+    @media (max-width:480px) { .grid,.two{grid-template-columns:1fr}.grid .card:last-child{grid-column:auto} }
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">LLM Council · StudyCod</div>
+  <h1>Концепція має сильне ядро, але надто широкий перший продукт</h1>
+  <p class="lead">Рада рекомендує сфокусувати StudyCod на B2B-feedback для викладачів introductory Python: швидше й прозоріше перетворювати невдалі запуски студентів на перевірені виправлення та вимірюваний прогрес.</p>
+  <p class="meta">Сесія: 23 серпня 2026, 19:14:45 · Контекст: README.md, AGENT.md, docs/product-ideas.md</p>
+
+  <section class="verdict">
+    <h2>Вердикт голови ради</h2>
+    <p>Не позиціонувати StudyCod як “платформу для всього навчання програмуванню”. Його найцінніший артефакт — цикл «умова → код → виконання → доказ тестами → пояснення помилки → виправлення → повторна перевірка».</p>
+    <p>Поточний workflow не унікальний. Потенційна перевага — evidence-based feedback, що зв’язує submission, execution evidence, misconception, hint, зміну коду та transfer на наступній задачі. Це поки гіпотеза moat, а не доведена перевага.</p>
+  </section>
+
+  <h2>Позиції радників</h2>
+  <p>П’ять поглядів зійшлися на потребі звузити фокус, але підсвітили різні аспекти рішення.</p>
+  <div class="grid">
+    <div class="card"><strong>Contrarian</strong><small>Workflow уже стандартний; incumbents виграють ціною міграції та deployment.</small><div class="bar"></div></div>
+    <div class="card"><strong>First Principles</strong><small>Справжній job — перетворити failed run на перевірену навичку.</small><div class="bar"></div></div>
+    <div class="card"><strong>Expansionist</strong><small>Можливий “debugging intelligence layer” із картою причин і transfer.</small><div class="bar"></div></div>
+    <div class="card"><strong>Outsider</strong><small>Зовні це звучить як LMS + Codeforces + Zoom + AI tutor.</small><div class="bar"></div></div>
+    <div class="card"><strong>Executor</strong><small>Перший доказ — paid pilot, економія часу та контрольований learning effect.</small><div class="bar"></div></div>
+  </div>
+
+  <h2>Де рада погоджується</h2>
+  <div class="callout">
+    <p><strong>Сильне ядро:</strong> execution evidence + пояснення помилки + повторна перевірка.</p>
+    <p><strong>Проблема фокусу:</strong> Personal, EDU, contests і live classroom — фактично різні продукти з різними покупцями, sales cycles і критеріями успіху.</p>
+    <p><strong>Moat:</strong> не AI, judge чи кілька мов, а перевірений longitudinal dataset: submission → причина → intervention → code change → transfer outcome.</p>
+  </div>
+
+  <h2>Де рада розходиться</h2>
+  <div class="two">
+    <div class="callout"><span class="tag">Комерційний wedge</span><p>Скоротити викладачеві час на grading і debugging support. Це найпростіше виміряти й прив’язати до willingness to pay.</p></div>
+    <div class="callout"><span class="tag">Педагогічний job</span><p>Перетворити failed run на зрозуміле виправлення та transfer навички. Саме це має довести, що продукт більше за автогрейдер.</p></div>
+  </div>
+
+  <h2>Рекомендований beachhead</h2>
+  <div class="callout">
+    <p><strong>Сегмент:</strong> bootcamp або інтенсивний introductory Python-курс.</p>
+    <p><strong>Користувач:</strong> студент. <strong>Champion:</strong> викладач. <strong>Buyer:</strong> автор курсу, керівник bootcamp або навчальної програми.</p>
+    <p><strong>Позиціонування:</strong> “StudyCod допомагає викладачам швидше й прозоріше перетворювати невдалі запуски студентів на перевірені виправлення та вимірюваний прогрес — із доказами виконання, а не неперевіреними AI-відповідями.”</p>
+  </div>
+
+  <h2>Що заморозити</h2>
+  <div class="callout"><span class="tag">LiveKit / live classroom</span><span class="tag">Contests</span><span class="tag">Personal як окремий продукт</span><span class="tag">AI-code detection</span><span class="tag">Багато мов</span><span class="tag">Повний AI Truth Layer</span><span class="tag">Складний Debugging Graph UI</span><p>Залишити: стабільний judge, execution evidence, failing-test explanations, hierarchical hints, teacher dashboard, gradebook/export і ручне підтвердження AI-діагнозу.</p></div>
+
+  <h2>Пілот на 4–6 тижнів</h2>
+  <div class="callout">
+    <p><strong>Дизайн:</strong> 2–3 викладачі, 40–80 студентів, 15–20 задач одного модуля, одна мова. Частину групи або задач залишити в existing workflow як контроль. Підказки не повинні розкривати готове рішення. Додати unseen transfer task через 1–2 тижні.</p>
+    <p><strong>Виміряти:</strong> grading/support time, productive retries, pass after hint, teacher-confirmed correctness, transfer, trust, onboarding, variable cost per student і готовність платити.</p>
+    <p><strong>Go:</strong> щонайменше −30% часу (stretch −50%), +20% виправлень без готової відповіді, transfer не гірший за контроль, ≥80% підтверджених AI-висновків, ≥70% weekly usage, onboarding ≤2 години та 2 із 3 платних продовжень.</p>
+  </div>
+
+  <h2>Сліпі зони</h2>
+  <div class="two">
+    <div class="callout"><strong>Unit economics</strong><p>Sandbox, LLM, storage, support, authoring, maintenance, deployment та інтеграції можуть з’їсти економію.</p></div>
+    <div class="callout"><strong>Switching & distribution</strong><p>Потрібно перемогти чинний стек LMS + autograder + ChatGPT, а не лише продемонструвати красивий UX.</p></div>
+    <div class="callout"><strong>Причинність</strong><p>Retries і engagement не доводять навчання. Потрібні контроль, delayed transfer і anti-gaming checks.</p></div>
+    <div class="callout"><strong>Governance</strong><p>Код, telemetry, misconception profiles, AI feedback і grading appeals потребують прозорих правил.</p></div>
+  </div>
+
+  <h2>Повні позиції радників</h2>
+  <details><summary>The Contrarian</summary><div><p>StudyCod зараз не продукт, а набір чотирьох різних бізнесів. Personal learning, EDU, contests і live classroom мають різних покупців, цикли продажу та критерії успіху. Workflow “написав → запустив → отримав тести → підказка” уже стандартний. Купуватимуть вимірюване зменшення grading time та зростання реального засвоєння, інакше incumbent виграє дешевшим розгортанням. Найкращий beachhead — B2B Python для початківців у bootcamp/університеті; продавати automated evidence-based lab grading і retry management. Graph/Truth Layer — feature до появи датасету misconception → intervention → transfer. Ризики: міграція, недовіра, cheating, sandbox, flaky тести, мови, policy. Тест: Python, один курс, 2–3 викладачі, 50–100 студентів, 10 задач.</p></div></details>
+  <details><summary>The First-Principles Thinker</summary><div><p>Справжній job — не “вивчити програмування”, а перетворити невдалий запуск на зрозуміле виправлення та перевірену навичку. Найкращий beachhead — introductory programming instructors у коледжі/bootcamp; buyer платить за менше grading/debugging і proof of progress. Graph/Truth Layer — second stage. Ризики: зміна workflow, false diagnosis, operational cost, студенти оптимізують submission, довгий sales. Тест: один курс/мова, 20–40 студентів, 15–20 задач, AI лише для failing-test explanations і hierarchical hints.</p></div></details>
+  <details><summary>The Expansionist</summary><div><p>StudyCod може стати системою доказового вимірювання навички: що студент не розуміє, які hints спрацювали і чи був transfer. Але Personal, EDU, contests і live classroom — чотири різні продукти. Contest/LiveKit — слабкі differentiators; AI-code detection — ризикова. Beachhead — школи, bootcamps, університетські курси з викладачем і дедлайнами. Moat — longitudinal graph, не AI. Тест: один курс, одна мова, реальна когорта, порівняння часу викладача, retries, transfer і довіри.</p></div></details>
+  <details><summary>The Outsider</summary><div><p>Для новачка StudyCod — “LMS + Codeforces + Zoom + AI tutor”, що погано пояснюється. Workflow цінний, але не унікальний; справжня відмінність — доведене покращення навички після помилки. Фокус — викладачі bootcamp/intensive courses; student — user, teacher — champion, organization — buyer. Ризики: неправильні diagnoses, grading disputes, cheating, sandbox, task authorship, reluctance to change. Тест одна мова, 15–20 задач, 20–50 студентів, judge, hierarchical hints і простий dashboard.</p></div></details>
+  <details><summary>The Executor</summary><div><p>Найсильніше вузьке формулювання — платформа, що скорочує час викладача на перевірку й пояснення помилок. Чотири режими й багато функцій — портфель, не один продукт. Beachhead — instructors у малих групах; продавати швидший прозорий feedback і gradebook. Moat — накопичена зв’язка submission → execution trace → misconception → hint effectiveness → transfer. Тест: один курс/мова, 15–30 студентів, 20 задач, без LiveKit, contests, generation та AI-code detection; потрібні operational, learning і paid-pilot метрики.</p></div></details>
+
+  <h2>Peer review highlights</h2>
+  <details open><summary>Що витримало критику</summary><div><p>Найчастіше найсильнішою визнано відповідь Executor: вона має вузький buyer/job, конкретний MVP, метрики й paid-pilot criterion. Один рев’юер віддав перевагу First-Principles за точніше формулювання навчального job.</p><p>Спільні пропуски: unit economics, distribution/switching, authoring cost, governance/privacy та causal validation із control і delayed transfer.</p></div></details>
+
+  <footer>Повний аудит-трейл: <code>council-transcript-20260823-191445.md</code> · Згенеровано LLM Council для аналізу концепції StudyCod.</footer>
+</main>
+</body>
+</html>

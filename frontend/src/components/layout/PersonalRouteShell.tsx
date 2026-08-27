@@ -35,7 +35,7 @@ export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "l
   }, []);
   if (loading && !user) return <BrandedPageLoader />;
   if (!user || loadError && !user) {
-    return <main className="flex min-h-[70vh] items-center justify-center px-6 py-12">
+    return <main id="main-content" className="flex min-h-[70vh] items-center justify-center px-6 py-12">
       <section role="alert" className="w-full max-w-md rounded-3xl border border-border bg-bg-surface p-7 text-center shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">StudyCod</p>
         <h1 className="mt-3 text-xl font-bold text-text-primary">Не вдалося відкрити навчальний простір</h1>

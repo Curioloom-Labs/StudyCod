@@ -372,7 +372,7 @@ const EmbeddedImage: React.FC<{ src: string; altText?: string }> = ({
         rel="noopener noreferrer nofollow"
         className="block transition-opacity duration-200 hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-base"
       >
-        <img src={src} alt={alt} loading="lazy" decoding="async" className="block w-full max-h-[70vh] object-contain bg-bg-surface" />
+        <img src={src} alt={alt} width={1200} height={800} loading="lazy" decoding="async" className="block w-full max-h-[70vh] object-contain bg-bg-surface" />
       </a>
       {String(altText || "").trim() ? <figcaption className="border-t border-border px-3 py-2 text-xs text-text-secondary">{altText}</figcaption> : null}
     </figure>;

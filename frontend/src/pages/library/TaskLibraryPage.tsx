@@ -1637,6 +1637,10 @@ export const TaskLibraryPage: React.FC = () => {
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#7b897e]" />
                 <input
+                  id="task-library-search"
+                  name="taskSearch"
+                  type="search"
+                  aria-label={tr("Пошук задач", "Search tasks")}
                   value={qDraft}
                   onChange={(e) => setQDraft(e.target.value)}
                   className="h-12 w-full rounded-2xl border border-[#142018]/10 bg-[#f7f9f6] pl-12 pr-12 text-sm font-medium text-[#152018] outline-none transition placeholder:font-normal placeholder:text-[#98a39b] focus:border-[#00c96d] focus:ring-4 focus:ring-[#00ff88]/10 dark:border-white/10 dark:bg-white/[.035] dark:text-white"
@@ -1655,6 +1659,9 @@ export const TaskLibraryPage: React.FC = () => {
               </div>
 
               <select
+                id="task-library-sort"
+                name="sort"
+                aria-label={tr("Сортування задач", "Sort tasks")}
                 value={sort}
                 onChange={(e) => {
                   const parsed = parseSort(e.target.value);
@@ -1669,6 +1676,9 @@ export const TaskLibraryPage: React.FC = () => {
 
               {view === "approved" ? (
                 <select
+                  id="task-library-language"
+                  name="language"
+                  aria-label={tr("Мова задачі", "Task language")}
                   value={judgeLang}
                   onChange={(e) => {
                     const next = e.target.value;
@@ -1688,6 +1698,9 @@ export const TaskLibraryPage: React.FC = () => {
                 </select>
               ) : (
                 <select
+                  id="task-library-status"
+                  name="status"
+                  aria-label={tr("Статус задачі", "Task status")}
                   value={mineStatus}
                   onChange={(e) => {
                     const parsed = parseMineStatus(e.target.value);
@@ -2842,7 +2855,7 @@ export const TaskLibraryPage: React.FC = () => {
                 {tr("Скасувати", "Cancel")}
               </Button>
               <Button onClick={saveEditor} disabled={saving}>
-                {saving ? tr("Збереження...", "Saving...") : tr("Зберегти", "Save")}
+                {saving ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
               </Button>
             </div>
           </div>

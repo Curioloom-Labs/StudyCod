@@ -222,12 +222,12 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
           <Button variant="secondary" onClick={onRun} disabled={running || checking} className="h-11 px-4" aria-label="Run code">
             <Play className="w-4 h-4 mr-2" />
-            {running ? "Running..." : "Run (Ctrl+Enter)"}
+            {running ? "Running…" : "Run (Ctrl+Enter)"}
           </Button>
 
           <Button onClick={onSubmit} disabled={checking || running} className="h-11 px-4" aria-label="Submit solution">
             <Rocket className="w-4 h-4 mr-2" />
-            {checking ? "Submitting..." : "Submit (Ctrl+Shift+Enter)"}
+            {checking ? "Submitting…" : "Submit (Ctrl+Shift+Enter)"}
           </Button>
         </div>
       </div>
@@ -253,7 +253,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
           onChange={(e) => onRunInputChange(e.target.value)}
           aria-label="Custom run input"
             className="w-full min-h-[120px] sm:min-h-[108px] max-h-[220px] resize-y rounded-xl bg-bg-base border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-secondary/50"
-          placeholder="Paste input to validate edge cases before submit..."
+          placeholder="Paste input to validate edge cases before submit…"
         />
       </div>
     </div>

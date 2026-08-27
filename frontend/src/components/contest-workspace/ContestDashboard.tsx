@@ -132,7 +132,7 @@ export const ContestDashboard: React.FC<ContestDashboardProps> = ({ title, start
         </div>
 
         <div className="flex-1 min-h-0 overflow-auto">
-          {loading ? <div className="text-xs text-text-secondary">{tr("Завантаження лідерборду...", "Loading leaderboard...")}</div> : null}
+          {loading ? <div className="text-xs text-text-secondary">{tr("Завантаження лідерборду…", "Loading leaderboard…")}</div> : null}
           <table className="w-full min-w-[480px] text-xs border border-border rounded-lg overflow-hidden">
             <caption className="sr-only">{tr("Лідерборд контесту: місце, учасник та загальний бал", "Contest leaderboard: rank, participant, and total score")}</caption>
             <thead className="bg-bg-hover">

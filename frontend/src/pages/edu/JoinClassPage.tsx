@@ -101,7 +101,7 @@ export const JoinClassPage: React.FC = () => {
           }}
         />
         <Button onClick={join} disabled={busy}>
-          <KeyRound size={16} /> {busy ? tr("Приєднання...", "Joining...") : tr("Приєднатися", "Join")}
+          <KeyRound size={16} /> {busy ? tr("Приєднання…", "Joining…") : tr("Приєднатися", "Join")}
         </Button>
       </div>
 
@@ -133,7 +133,7 @@ export const JoinClassPage: React.FC = () => {
             style={{ padding: "10px 14px", fontSize: 16, borderRadius: 8, border: "1px solid rgba(128,128,128,0.3)" }}
           />
           <Button variant="ghost" onClick={claim} disabled={claimBusy}>
-            <Link2 size={16} /> {claimBusy ? tr("Привʼязка...", "Linking...") : tr("Привʼязати акаунт", "Link account")}
+            <Link2 size={16} /> {claimBusy ? tr("Привʼязка…", "Linking…") : tr("Привʼязати акаунт", "Link account")}
           </Button>
         </div>
       </div>

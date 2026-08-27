@@ -1227,7 +1227,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
           </div>
         </div>}
       <Suspense fallback={<div className="h-full w-full flex items-center justify-center bg-bg-code border border-border">
-            <div className="text-text-secondary font-mono text-sm">{tr("Завантаження редактора...", "Loading editor...")}</div>
+            <div className="text-text-secondary font-mono text-sm">{tr("Завантаження редактора…", "Loading editor…")}</div>
           </div>}>
         <Editor height="100%" width="100%" language={monacoLang} theme={monacoTheme} value={value} options={editorOptions} onChange={handleChange} beforeMount={(monaco: MonacoApi) => {
         // Theme must be defined before the editor instance is created.
@@ -1327,7 +1327,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
           editor.layout();
         } catch {}
       }} loading={<div className="h-full w-full flex items-center justify-center bg-bg-code border border-border">
-              <div className="text-text-secondary font-mono text-sm">{tr("Завантаження редактора...", "Loading editor...")}</div>
+              <div className="text-text-secondary font-mono text-sm">{tr("Завантаження редактора…", "Loading editor…")}</div>
             </div>} />
       </Suspense>
       </div>

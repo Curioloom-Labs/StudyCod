@@ -50,7 +50,7 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({ variant, err
     <div id="studycod-status" className="min-h-[100dvh] overflow-hidden bg-[radial-gradient(circle_at_50%_-10%,rgba(0,255,136,0.08),transparent_30rem)] bg-[#f7f8f5] font-sans text-[#111814] dark:bg-[radial-gradient(circle_at_50%_-10%,rgba(0,255,136,0.055),transparent_32rem)] dark:bg-[#0b100d] dark:text-[#edf3ef]">
       <PublicProductNav />
 
-      <main className="relative isolate mx-auto flex min-h-[calc(100dvh-74px)] w-[min(1240px,calc(100%_-_48px))] items-center py-16 max-md:min-h-[calc(100dvh-64px)] max-md:w-[calc(100%_-_28px)] max-md:py-12">
+      <main id="main-content" className="relative isolate mx-auto flex min-h-[calc(100dvh-74px)] w-[min(1240px,calc(100%_-_48px))] items-center py-16 max-md:min-h-[calc(100dvh-64px)] max-md:w-[calc(100%_-_28px)] max-md:py-12">
         <div aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 -z-10 size-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(0,255,136,.1),rgba(255,180,84,.035)_42%,transparent_70%)] blur-3xl" />
 
         <section className="grid w-full items-center gap-14 lg:grid-cols-[.92fr_1.08fr] lg:gap-20">

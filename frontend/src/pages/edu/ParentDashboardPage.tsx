@@ -72,7 +72,7 @@ export const ParentDashboardPage: React.FC = () => {
   }, []);
 
   if (loading) {
-    return <div className="max-w-3xl mx-auto px-4 py-10 font-mono text-text-muted">{tr("Завантаження...", "Loading...")}</div>;
+    return <div role="status" aria-live="polite" className="max-w-3xl mx-auto px-4 py-10 font-mono text-text-muted">{tr("Завантаження…", "Loading…")}</div>;
   }
 
   return (

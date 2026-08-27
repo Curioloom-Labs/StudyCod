@@ -1719,7 +1719,7 @@ export const TasksPage: React.FC<Props> = ({
       }
 
       setQuizSubmitting(true);
-      setConsoleOutput(tr("Відправка тесту...", "Submitting quiz..."));
+      setConsoleOutput(tr("Відправка тесту…", "Submitting quiz…"));
       try {
         const resp = await submitPersonalControlQuiz(active.id, orderedAnswers);
         const grade = resp.grade;
@@ -1813,7 +1813,7 @@ export const TasksPage: React.FC<Props> = ({
     setAiResult(null);
     setRevealedHints(0);
     setUIState("evaluating");
-    setConsoleOutput(tr("Оцінювання...", "Evaluating..."));
+    setConsoleOutput(tr("Оцінювання…", "Evaluating…"));
     try {
       if (active.taskMode === "WEB") {
         const checked = await checkWebTask(active.id, toWebTaskFiles());
@@ -2073,7 +2073,7 @@ export const TasksPage: React.FC<Props> = ({
       return;
     }
     setUIState("evaluating");
-    setConsoleOutput(tr("Запуск...", "Running..."));
+    setConsoleOutput(tr("Запуск…", "Running…"));
     try {
       const payload = useFiles ? { files } : latestCode;
       const runInput = normalizeStdinBeforeRun(stdin || "");

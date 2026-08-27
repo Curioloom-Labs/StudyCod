@@ -152,6 +152,9 @@ export const LiveCodeBoard: React.FC<{ isTeacher: boolean }> = ({ isTeacher }) =
         </span>
         {isTeacher ? (
           <select
+            id="live-code-language"
+            name="language"
+            aria-label={tr("Мова коду", "Code language")}
             value={lang}
             onChange={(e) => {
               setLang(e.target.value as BoardLang);

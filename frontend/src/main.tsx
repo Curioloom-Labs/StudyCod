@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "./public.css";
+import "@fontsource-variable/geist";
 import { initTheme } from "./theme";
 import { getMe } from "./lib/api/profile";
 import { PublicErrorPage } from "./pages/public/PublicStatusPage";

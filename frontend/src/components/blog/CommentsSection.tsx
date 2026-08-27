@@ -187,7 +187,7 @@ const CommentCard: React.FC<CardProps> = ({ comment, isAdmin, locale, tr, onRepl
     <div className={`rounded-lg border p-3 ${comment.pinned ? "border-primary/40 bg-primary/5" : "border-border bg-surface"}`}>
       <div className="flex items-center gap-2">
         {comment.authorAvatar ? (
-          <img src={comment.authorAvatar} alt="" className="h-6 w-6 rounded-full object-cover" />
+          <img src={comment.authorAvatar} alt="" width={24} height={24} loading="lazy" className="h-6 w-6 rounded-full object-cover" />
         ) : (
           <div className="flex h-6 w-6 items-center justify-center rounded-full bg-bg-hover text-[10px] font-mono text-text-secondary">
             {comment.author.slice(0, 1).toUpperCase()}

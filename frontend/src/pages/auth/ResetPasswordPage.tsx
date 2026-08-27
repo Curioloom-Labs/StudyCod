@@ -51,7 +51,7 @@ export const ResetPasswordPage: React.FC = () => {
     setLoading(true);
     try {
       await resetPassword(token, newPassword);
-      setSuccess(tr("Пароль успішно змінено! Перенаправлення на сторінку входу...", "Password changed successfully! Redirecting to login..."));
+      setSuccess(tr("Пароль успішно змінено! Перенаправлення на сторінку входу…", "Password changed successfully! Redirecting to login…"));
       setTimeout(() => { navigate("/"); }, 2000);
     } catch (err: unknown) {
       setError(getErrorMessageFromUnknown(err, tr("Помилка зміни паролю", "Failed to change password")));
@@ -158,7 +158,7 @@ export const ResetPasswordPage: React.FC = () => {
 
                 <motion.div variants={prefersReducedMotion ? undefined : fadeUpItem}>
                   <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? tr("Обробка...", "Processing...") : tr("Змінити пароль", "Change password")}
+                    {loading ? tr("Обробка…", "Processing…") : tr("Змінити пароль", "Change password")}
                   </Button>
                 </motion.div>
 

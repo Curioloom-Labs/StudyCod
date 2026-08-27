@@ -173,7 +173,7 @@ export function TaskGenerationOverlay({
                 <span className="shrink-0 font-bold text-primary tabular-nums">{progressValue}%</span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-bg-hover">
-                <div className={`h-full rounded-full transition-all duration-700 ease-out ${activePhase === "error" ? "bg-accent-error" : "bg-primary"}`} style={{ width: `${progressValue}%` }} />
+                <div className={`h-full rounded-full transition-[width] duration-300 ease-out ${activePhase === "error" ? "bg-accent-error" : "bg-primary"}`} style={{ width: `${progressValue}%` }} />
               </div>
 
                 <div className="mt-4 grid gap-2 sm:grid-cols-5">

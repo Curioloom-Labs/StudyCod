@@ -208,7 +208,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
     trace?.steps?.length ? (
       <div className="h-full overflow-auto rounded-xl border border-border bg-bg-base/60 p-3 text-xs text-text-secondary">
         <div className="flex items-center justify-between gap-2"><span className="font-semibold text-text-primary">Step debugger</span><span className="text-primary">{Math.min(traceStep + 1, trace.steps.length)}/{trace.steps.length}</span></div>
-        <input type="range" min={0} max={Math.max(0, trace.steps.length - 1)} value={Math.min(traceStep, Math.max(0, trace.steps.length - 1))} onChange={(event) => setTraceStep(Number(event.target.value))} className="mt-3 w-full accent-primary" />
+        <label htmlFor="workspace-trace-step" className="sr-only">Trace step</label><input id="workspace-trace-step" name="traceStep" type="range" min={0} max={Math.max(0, trace.steps.length - 1)} value={Math.min(traceStep, Math.max(0, trace.steps.length - 1))} onChange={(event) => setTraceStep(Number(event.target.value))} className="mt-3 w-full accent-primary" />
         <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 p-2"><div className="text-[10px] uppercase tracking-[.1em] text-text-muted">Current line</div><div className="mt-1 font-mono text-primary">Line {trace.steps[Math.min(traceStep, trace.steps.length - 1)].line}</div></div>
         <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-bg-code p-2 font-mono text-[11px] text-text-primary">{JSON.stringify(trace.steps[Math.min(traceStep, trace.steps.length - 1)].locals || {}, null, 2)}</pre>
         <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-bg-code p-2 font-mono text-[11px]">{trace.programOutput || trace.stderr || ""}</pre>
@@ -473,7 +473,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
             value={discussionText}
             onChange={(e) => setDiscussionText(e.target.value)}
             className="w-full min-h-[120px] rounded-xl bg-bg-base border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
-            placeholder="Write your question to organizer..."
+            placeholder="Write your question to organizer…"
             disabled={!canAskOrganizer || askingOrganizer}
           />
           <div className="mt-2 flex justify-end">
@@ -482,7 +482,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
               disabled={!canAskOrganizer || askingOrganizer || !discussionText.trim()}
               className="h-11 px-4 rounded-lg border border-border text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {askingOrganizer ? "Sending..." : "Send to organizer"}
+              {askingOrganizer ? "Sending…" : "Send to organizer"}
             </button>
           </div>
         </div>

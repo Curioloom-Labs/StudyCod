@@ -2496,6 +2496,7 @@ export const ContestPage: React.FC = () => {
 
   const removeSelectedCertificateObject = () => {
     if (certificateLayoutSelectedExtraObjectId) {
+      if (!window.confirm(tr("Видалити вибраний об'єкт сертифіката?", "Delete the selected certificate object?"))) return;
       setCertificateLayoutExtraObjects((prev) => prev.filter((obj) => obj.id !== certificateLayoutSelectedExtraObjectId));
       setCertificateLayoutSelectedExtraObjectId(null);
       setCertificateLayoutContextMenu(null);
@@ -2699,6 +2700,7 @@ export const ContestPage: React.FC = () => {
 
   const deleteCertificateLayoutPreset = () => {
     if (!certificateLayoutPresetId) return;
+    if (!window.confirm(tr("Видалити цей пресет сертифіката?", "Delete this certificate preset?"))) return;
     const next = certificateLayoutPresets.filter((p) => p.id !== certificateLayoutPresetId);
     setCertificateLayoutPresets(next);
     void writeCertificateLayoutPresets(contestId, next);
@@ -2725,6 +2727,7 @@ export const ContestPage: React.FC = () => {
 
   const removeOrganizer = async (userId: number) => {
     if (!contestId || !data?.access?.canManage) return;
+    if (!window.confirm(tr("Прибрати цього організатора з контесту?", "Remove this organizer from the contest?"))) return;
     try {
       await removeContestOrganizer(contestId, userId);
       await loadOrganizers();
@@ -3625,7 +3628,7 @@ export const ContestPage: React.FC = () => {
               />
               <div className="border border-border max-h-52 overflow-auto">
                 {copyLoading ? (
-                  <div className="p-3 text-sm text-text-secondary">{tr("Завантаження...", "Loading...")}</div>
+                  <div role="status" aria-live="polite" className="p-3 text-sm text-text-secondary">{tr("Завантаження…", "Loading…")}</div>
                 ) : copyItems.length === 0 ? (
                   <div className="p-3 text-sm text-text-secondary">{tr("Задачі не знайдено", "No tasks found")}</div>
                 ) : (
@@ -3658,7 +3661,7 @@ export const ContestPage: React.FC = () => {
               </div>
               <div>
                 <Button variant="secondary" onClick={importArchiveAndAttach} disabled={importingArchive || !archiveFile}>
-                  {importingArchive ? tr("Імпорт...", "Importing...") : tr("Імпортувати й додати", "Import and add")}
+                  {importingArchive ? tr("Імпорт…", "Importing…") : tr("Імпортувати й додати", "Import and add")}
                 </Button>
               </div>
             </div>
@@ -3669,7 +3672,7 @@ export const ContestPage: React.FC = () => {
               {tr("Скасувати", "Cancel")}
             </Button>
             <Button onClick={submitAddProblem} disabled={adding}>
-              {adding ? tr("Додавання...", "Adding...") : tr("Додати", "Add")}
+              {adding ? tr("Додавання…", "Adding…") : tr("Додати", "Add")}
             </Button>
           </div>
         </div>
@@ -3734,7 +3737,7 @@ export const ContestPage: React.FC = () => {
                         </td>
                         <td className="p-2 border-b border-border text-right">
                           <Button variant="secondary" onClick={() => saveProblemSettings(p.id)} disabled={savingThis}>
-                            {savingThis ? tr("Збереження...", "Saving...") : tr("Зберегти", "Save")}
+                            {savingThis ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
                           </Button>
                         </td>
                       </tr>
@@ -3820,7 +3823,7 @@ export const ContestPage: React.FC = () => {
               {tr("Скасувати", "Cancel")}
             </Button>
             <Button onClick={saveContestSettings} disabled={settingsSaving}>
-              {settingsSaving ? tr("Збереження...", "Saving...") : tr("Зберегти", "Save")}
+              {settingsSaving ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
             </Button>
           </div>
         </div>
@@ -3997,14 +4000,14 @@ export const ContestPage: React.FC = () => {
                 </Button>
                 <Button variant="secondary" onClick={togglePublished} disabled={publishing}>
                   {publishing
-                    ? tr("Оновлення...", "Updating...")
+                    ? tr("Оновлення…", "Updating…")
                     : data.contest.isPublished
                       ? tr("Зняти з публікації", "Unpublish")
                       : tr("Опублікувати", "Publish")}
                 </Button>
                 <Button variant="secondary" onClick={toggleContestPaused} disabled={pauseSaving}>
                   {pauseSaving
-                    ? tr("Оновлення...", "Updating...")
+                    ? tr("Оновлення…", "Updating…")
                     : data.access.isPaused
                       ? tr("Продовжити контест", "Resume contest")
                       : tr("Поставити на паузу", "Pause contest")}
@@ -4038,13 +4041,18 @@ export const ContestPage: React.FC = () => {
                 </div>
                 <div className="flex flex-col md:flex-row gap-2">
                   <input
+                    id="contest-join-code"
+                    name="joinCode"
+                    type="text"
+                    autoComplete="off"
+                    aria-label={tr("Код доступу до контесту", "Contest join code")}
                     value={joinCode}
                     onChange={(e) => setJoinCode(e.target.value)}
                     className="flex-1 px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none"
-                    placeholder={tr("Введіть код...", "Enter code...")}
+                    placeholder={tr("Введіть код…", "Enter code…")}
                   />
                   <Button onClick={onJoin} disabled={joining || !joinCode.trim()}>
-                    {joining ? tr("Приєднання...", "Joining...") : tr("Приєднатися", "Join")}
+                    {joining ? tr("Приєднання…", "Joining…") : tr("Приєднатися", "Join")}
                   </Button>
                 </div>
                 <div className="text-xs text-text-secondary mt-2">
@@ -4342,7 +4350,7 @@ export const ContestPage: React.FC = () => {
                           />
                           <div className="flex items-center gap-2">
                             <Button variant="secondary" onClick={() => void validateCertificateTemplateId()} disabled={certificateTemplateChecking}>
-                              {certificateTemplateChecking ? tr("Перевірка...", "Checking...") : tr("Перевірити ID", "Validate ID")}
+                              {certificateTemplateChecking ? tr("Перевірка…", "Checking…") : tr("Перевірити ID", "Validate ID")}
                             </Button>
                             <Button variant="ghost" onClick={() => navigate("/admin")}>{tr("Відкрити Admin Panel", "Open Admin Panel")}</Button>
                           </div>
@@ -4486,7 +4494,7 @@ export const ContestPage: React.FC = () => {
                             label={tr("Фон layout-превʼю (опційно)", "Layout preview background (optional)")}
                             value={certificateLayoutBackgroundUrl}
                             onChange={(e) => updateCertificateLayoutBackgroundUrl(e.target.value)}
-                            placeholder="https://..."
+                            placeholder="https://example.com/…"
                           />
                           <div className="flex flex-wrap items-center gap-2 text-xs">
                             <label className="inline-flex items-center gap-2 px-2 py-1 border border-border rounded bg-bg-base text-text-secondary cursor-pointer">
@@ -5038,7 +5046,7 @@ export const ContestPage: React.FC = () => {
                                   >
                                     {obj.type === "image" ? (
                                       obj.imageUrl ? (
-                                        <img src={obj.imageUrl} alt="extra" className="w-full h-full object-contain pointer-events-none" />
+                                        <img src={obj.imageUrl} alt="extra" width={800} height={600} loading="lazy" className="w-full h-full object-contain pointer-events-none" />
                                       ) : (
                                         <div className="w-full h-full border border-dashed border-border text-[10px] text-text-secondary flex items-center justify-center">
                                           {tr("Встав URL картинки", "Set image URL")}
@@ -5309,7 +5317,7 @@ export const ContestPage: React.FC = () => {
                                         label={tr("URL картинки", "Image URL")}
                                         value={selectedExtra.imageUrl}
                                         onChange={(e) => setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, imageUrl: e.target.value } : obj))}
-                                        placeholder="https://..."
+                                        placeholder="https://example.com/…"
                                       />
                                       <div className="flex flex-wrap items-center gap-2 text-xs">
                                         <label className="inline-flex items-center gap-2 px-2 py-1 border border-border rounded bg-bg-base text-text-secondary cursor-pointer">
@@ -5461,7 +5469,7 @@ export const ContestPage: React.FC = () => {
                         ) : null}
                         <div className="flex flex-wrap items-center gap-2">
                           <Button variant="secondary" onClick={() => void createCustomCertificateTemplate()} disabled={certificateCreatingTemplate || certificateUnknownPlaceholders.length > 0 || certificateMissingRequiredPlaceholders.length > 0}>
-                            {certificateCreatingTemplate ? tr("Створення...", "Creating...") : tr("Створити шаблон", "Create template")}
+                            {certificateCreatingTemplate ? tr("Створення…", "Creating…") : tr("Створити шаблон", "Create template")}
                           </Button>
                           <Button variant="ghost" onClick={() => setCertificatePreviewOpen((v) => !v)}>
                             {certificatePreviewOpen ? tr("Сховати прев'ю", "Hide preview") : tr("Показати прев'ю", "Show preview")}
@@ -5490,7 +5498,7 @@ export const ContestPage: React.FC = () => {
                       <div className="flex items-center justify-between gap-2">
                         <div className="text-xs text-text-secondary">{tr("Бібліотека шаблонів", "Template library")}</div>
                         <Button variant="ghost" onClick={() => void loadCertificateTemplatesCatalog()} disabled={certificateTemplatesCatalogLoading}>
-                          {certificateTemplatesCatalogLoading ? tr("Оновлення...", "Refreshing...") : tr("Оновити", "Refresh")}
+                          {certificateTemplatesCatalogLoading ? tr("Оновлення…", "Refreshing…") : tr("Оновити", "Refresh")}
                         </Button>
                       </div>
                       <div className="max-h-[240px] overflow-auto border border-border rounded bg-bg-base">
@@ -5511,7 +5519,7 @@ export const ContestPage: React.FC = () => {
                               <tr>
                                 <td colSpan={6} className="p-2 text-text-secondary">
                                   {certificateTemplatesCatalogLoading
-                                    ? tr("Завантаження шаблонів...", "Loading templates...")
+                                    ? tr("Завантаження шаблонів…", "Loading templates…")
                                     : tr("Шаблони не знайдено", "No templates found")}
                                 </td>
                               </tr>
@@ -5538,7 +5546,7 @@ export const ContestPage: React.FC = () => {
 
                     <div className="flex flex-wrap items-center gap-2 mb-3">
                       <Button variant="secondary" onClick={saveCertificateSettings} disabled={certificateSaving || (certificateMode === "custom" && (certificateUnknownPlaceholders.length > 0 || certificateMissingRequiredPlaceholders.length > 0))}>
-                        {certificateSaving ? tr("Збереження...", "Saving...") : tr("Зберегти налаштування", "Save settings")}
+                        {certificateSaving ? tr("Збереження…", "Saving…") : tr("Зберегти налаштування", "Save settings")}
                       </Button>
                       <label className="inline-flex items-center gap-2 text-sm text-text-primary">
                         <input
@@ -5562,7 +5570,7 @@ export const ContestPage: React.FC = () => {
                         </label>
                       ) : null}
                       <Button onClick={enqueueCertificateGeneration} disabled={certificateGenerating}>
-                        {certificateGenerating ? tr("Запуск...", "Starting...") : tr("Згенерувати сертифікати", "Generate certificates")}
+                          {certificateGenerating ? tr("Запуск…", "Starting…") : tr("Згенерувати сертифікати", "Generate certificates")}
                       </Button>
                     </div>
 
@@ -5652,7 +5660,7 @@ export const ContestPage: React.FC = () => {
 
                       <div className="flex flex-wrap items-center gap-2">
                         <Button variant="secondary" onClick={generateAccounts} disabled={accountGenLoading}>
-                          {accountGenLoading ? tr("Генерація...", "Generating...") : tr("Згенерувати акаунти", "Generate accounts")}
+                          {accountGenLoading ? tr("Генерація…", "Generating…") : tr("Згенерувати акаунти", "Generate accounts")}
                         </Button>
                         <Button variant="ghost" onClick={clearRosterInput} disabled={!accountRosterText.trim()}>
                           {tr("Очистити список", "Clear roster")}
@@ -5715,7 +5723,7 @@ export const ContestPage: React.FC = () => {
                         />
                         <div className="flex flex-wrap items-center gap-2">
                           <Button variant="secondary" onClick={sendGeneratedAccountsByEmail} disabled={accountMailLoading}>
-                            {accountMailLoading ? tr("Розсилка...", "Sending...") : tr("Розіслати дані та контест через пошту", "Send credentials and contest info by email")}
+                            {accountMailLoading ? tr("Розсилка…", "Sending…") : tr("Розіслати дані та контест через пошту", "Send credentials and contest info by email")}
                           </Button>
                         </div>
                         {accountMailError ? <div className="text-sm text-accent-error">{accountMailError}</div> : null}
@@ -6139,10 +6147,13 @@ export const ContestPage: React.FC = () => {
                 {hasToken && data.access.canAccessContent ? (
                   <div className="space-y-2">
                     <textarea
+                      id="contest-community-question"
+                      name="communityQuestion"
+                      aria-label={tr("Питання до організатора", "Question for the organizer")}
                       value={communityQuestionText}
                       onChange={(e) => setCommunityQuestionText(e.target.value)}
                       className="w-full min-h-[90px] rounded-xl bg-bg-code border border-border px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
-                      placeholder={tr("Постав запитання щодо задач, правил або тестів...", "Ask about tasks, rules, or tests...")}
+                      placeholder={tr("Постав запитання щодо задач, правил або тестів…", "Ask about tasks, rules, or tests…")}
                     />
                     <div className="flex justify-end">
                       <Button onClick={postContestQuestion} disabled={!communityQuestionText.trim()}>

@@ -631,7 +631,7 @@ export const ContestProblemSolvePage: React.FC = () => {
 
         <div className="text-xs font-mono text-text-secondary w-full sm:w-auto flex items-center gap-3">
           {error ? <span className="text-accent-error">{error}</span> : null}
-          {subsLoading ? <span className="text-text-muted">Syncing submissions...</span> : null}
+          {subsLoading ? <span className="text-text-muted">Syncing submissions…</span> : null}
         </div>
       </div>
 

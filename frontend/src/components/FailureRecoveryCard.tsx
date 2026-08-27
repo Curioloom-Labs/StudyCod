@@ -237,8 +237,8 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
             void recordLearningEvent({ eventType: "retry_started", taskId, taskKind, learningAttemptId, failureCategory: persistedCategory }).catch(() => undefined);
           }
           onTryAgain?.();
-        }} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3.5 py-2.5 text-xs font-semibold text-[#dbe8de] hover:bg-white/[.06]">
-          <RotateCcw className="size-3.5" /> {languageCopy(isEnglish, "Спробувати ще раз", "Try again")}
+        }} aria-label={languageCopy(isEnglish, "Спробувати ще раз", "Try again")} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3.5 py-2.5 text-xs font-semibold text-[#dbe8de] hover:bg-white/[.06]">
+          <RotateCcw className="size-3.5" aria-hidden="true" /> {languageCopy(isEnglish, "Спробувати ще раз", "Try again")}
         </button>
       </div>
     </div>

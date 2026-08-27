@@ -227,6 +227,8 @@ const CoverVisual: React.FC<{
       <img
         src={post.coverUrl}
         alt=""
+        width={1200}
+        height={675}
         className="h-full w-full object-cover"
         loading="lazy"
       />
@@ -525,7 +527,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
   return (
     <div className="min-h-[100dvh] bg-[#f7f8f5] font-sans text-[#111814] dark:bg-[#0b100d] dark:text-[#edf3ef]">
       <PublicProductNav active="blog" />
-      <main className="mx-auto w-[min(1080px,calc(100%_-_32px))] py-10">
+      <main id="main-content" className="mx-auto w-[min(1080px,calc(100%_-_32px))] py-10">
         <button type="button"
         onClick={() => go("/blog")}
           className="inline-flex h-11 items-center gap-2 rounded-[14px] border border-[#122017]/10 bg-white px-4 text-[11px] font-bold text-[#667169] dark:border-white/10 dark:bg-[#151c17] dark:text-[#a5b0a8]"

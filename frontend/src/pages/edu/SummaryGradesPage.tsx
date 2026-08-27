@@ -197,7 +197,7 @@ export const SummaryGradesPage: React.FC = () => {
                     } else if (e.key === "Escape") {
                       setEditingGrade(null);
                     }
-                  }} autoFocus className="w-16 px-2 py-1 bg-bg-base border border-primary text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
+ }} className="w-16 px-2 py-1 bg-bg-base border border-primary text-text-primary font-mono text-sm focus:outline-none focus:border-primary" />
                           </div> : <button type="button" className="text-lg font-mono text-primary tabular-nums hover:bg-bg-hover px-1 rounded transition-fast" onClick={() => {
                   setEditingGrade({
                     id: g.id,

@@ -171,7 +171,10 @@ export const SolveReplayPage: React.FC = () => {
             </span>
           </div>
 
+          <label htmlFor="replay-step" className="sr-only">{tr("Крок відтворення", "Replay step")}</label>
           <input
+            id="replay-step"
+            name="replayStep"
             type="range"
             min={0}
             max={Math.max(0, total - 1)}

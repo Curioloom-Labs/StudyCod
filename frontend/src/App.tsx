@@ -31,6 +31,7 @@ import { clearControlExamSession, getControlExamSession, isPathAllowedInControlE
 import { setActiveEduStudentId } from "./lib/eduContext";
 import { applySeo } from "./lib/seo";
 import { MascotCompanion } from "./components/MascotCompanion";
+import { Button } from "./components/ui/Button";
 const AuthPage = React.lazy(() => import("./pages/auth/AuthPage").then(mod => ({ default: mod.AuthPage })));
 const VerifyEmailPage = React.lazy(() => import("./pages/auth/VerifyEmailPage").then(mod => ({ default: mod.VerifyEmailPage })));
 const ResetPasswordPage = React.lazy(() => import("./pages/auth/ResetPasswordPage").then(mod => ({ default: mod.ResetPasswordPage })));
@@ -866,7 +867,7 @@ const AppContent: React.FC = React.memo(() => {
       onToggleTheme={toggleTheme}
       onLogout={handleLogout}
     >
-      <main className="min-h-0 overflow-y-auto">
+      <main id="main-content" className="min-h-0 overflow-y-auto">
         <Suspense fallback={<PageLoader />}>
           <AdminWorkspacePage />
         </Suspense>
@@ -883,7 +884,7 @@ const AppContent: React.FC = React.memo(() => {
     onToggleTheme={toggleTheme}
     onLogout={handleLogout}
   >
-    <main className="min-h-0 overflow-y-auto">{content}</main>
+    <main id="main-content" className="min-h-0 overflow-y-auto">{content}</main>
     <Suspense fallback={null}>
       <PlacementEntry user={user} onUserChange={setUser} />
     </Suspense>
@@ -1311,7 +1312,7 @@ const ContestRoutes: React.FC = React.memo(() => {
     navigate("/contest", { replace: true });
     window.location.reload();
   }}>
-      <main className="min-h-0 overflow-y-auto">
+      <main id="main-content" className="min-h-0 overflow-y-auto">
         <Suspense fallback={<PageLoader />}>
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
@@ -1547,7 +1548,7 @@ const EduRoutes: React.FC = React.memo(() => {
   const teacherOnly = (element: React.ReactElement) => user.studentId ? <Navigate to="/edu/lessons" replace /> : element;
   const orgAdminOnly = (element: React.ReactElement) => isOrgAdmin ? element : <Navigate to="/edu" replace />;
   const studentOnly = (element: React.ReactElement) => user.studentId ? element : <Navigate to="/edu" replace />;
-  const eduMain = <main className={`flex-1 min-h-0 flex flex-col ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
+  const eduMain = <main id="main-content" className={`flex-1 min-h-0 flex flex-col ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>

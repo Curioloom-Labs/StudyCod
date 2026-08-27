@@ -68,7 +68,6 @@ export const CreateSchoolOnboarding: React.FC<Props> = ({ onCreated }) => {
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               id="school-name"
-              autoFocus
               value={name}
               onChange={e => setName(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") create(); }}

@@ -23,7 +23,7 @@ export const StateIndicator: React.FC<Props> = ({
       color: "text-secondary",
       bg: "bg-secondary/10",
       border: "border-secondary",
-      message: message || tr("Оцінювання...", "Evaluating...")
+      message: message || tr("Оцінювання…", "Evaluating…")
     },
     success: {
       icon: CheckCircle2,

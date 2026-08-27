@@ -295,7 +295,6 @@ export const OrgWorkspacePage: React.FC = () => {
             {editingName ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 <input
-                  autoFocus
                   value={nameDraft}
                   onChange={(event) => setNameDraft(event.target.value)}
                   className="rounded-xl border border-[#19291d]/12 bg-white px-4 py-2 text-2xl font-bold tracking-[-.04em] outline-none ring-[#00ff88]/25 focus:ring-4 dark:border-white/10 dark:bg-[#111b14] dark:text-white"
@@ -363,8 +362,7 @@ export const OrgWorkspacePage: React.FC = () => {
               Створи організацію у студії курсів, щоб керувати викладачами та
               класами.
             </p>
-            <button
-              type="button"
+            <button type="button"
               onClick={() => navigate("/edu/courses")}
               className="mt-6 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]"
             >
@@ -467,9 +465,10 @@ export const OrgWorkspacePage: React.FC = () => {
                               : member.userId,
                           )
                         }
+                        aria-label={`Відкрити дії для ${member.username || member.userId}`}
                         className="grid h-8 w-8 place-items-center rounded-lg text-[#718075] hover:bg-[#eaf0eb] dark:hover:bg-white/[.08]"
                       >
-                        <MoreHorizontal className="h-4 w-4" />
+                        <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
                       </button>
                       {openActions === member.userId && (
                         <div className="absolute right-2 top-12 z-20 w-48 rounded-xl border border-[#19291d]/10 bg-white p-1 shadow-xl dark:border-white/10 dark:bg-[#19251c]">
@@ -680,7 +679,7 @@ export const OrgWorkspacePage: React.FC = () => {
                 />
               </label>
             </div>
-            <button
+            <button type="submit"
               disabled={
                 busy ||
                 !accountDraft.username.trim() ||
@@ -727,7 +726,6 @@ export const OrgWorkspacePage: React.FC = () => {
               Назва класу
               <input
                 required
-                autoFocus
                 value={classDraft.name}
                 onChange={(event) =>
                   setClassDraft((old) => ({ ...old, name: event.target.value }))
@@ -775,7 +773,7 @@ export const OrgWorkspacePage: React.FC = () => {
                 </select>
               </label>
             </div>
-            <button
+            <button type="submit"
               disabled={busy || !classDraft.name.trim()}
               className="mt-6 w-full rounded-xl bg-[#00d978] px-4 py-3.5 text-sm font-bold text-[#062211] disabled:opacity-60"
             >
@@ -817,7 +815,6 @@ export const OrgWorkspacePage: React.FC = () => {
               Назва класу
               <input
                 required
-                autoFocus
                 value={classDraft.name}
                 onChange={(event) =>
                   setClassDraft((old) => ({ ...old, name: event.target.value }))
@@ -866,6 +863,7 @@ export const OrgWorkspacePage: React.FC = () => {
               </label>
             </div>
             <button
+              type="submit"
               disabled={busy || !classDraft.name.trim()}
               className="mt-6 w-full rounded-xl bg-[#00d978] px-4 py-3.5 text-sm font-bold text-[#062211] disabled:opacity-60"
             >

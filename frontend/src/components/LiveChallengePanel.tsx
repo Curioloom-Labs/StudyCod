@@ -131,6 +131,9 @@ export const LiveChallengePanel: React.FC<Props> = ({ classId, isTeacher }) => {
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-bg-base/40 px-4 py-2 text-xs font-mono">
         <span className="text-primary">🏁 {tr("Челендж", "Challenge")}</span>
         <select
+          id="live-challenge-task"
+          name="challengeTask"
+          aria-label={tr("Задача челенджу", "Challenge task")}
           value={taskId}
           onChange={(e) => setTaskId(e.target.value === "" ? "" : Number(e.target.value))}
           className="max-w-[16rem] rounded border border-border bg-bg-code px-2 py-1 text-text-primary focus:border-primary focus:outline-none"
@@ -141,6 +144,9 @@ export const LiveChallengePanel: React.FC<Props> = ({ classId, isTeacher }) => {
           ))}
         </select>
         <select
+          id="live-challenge-duration"
+          name="challengeDuration"
+          aria-label={tr("Тривалість челенджу", "Challenge duration")}
           value={durationSec}
           onChange={(e) => setDurationSec(Number(e.target.value))}
           className="rounded border border-border bg-bg-code px-2 py-1 text-text-primary focus:border-primary focus:outline-none"

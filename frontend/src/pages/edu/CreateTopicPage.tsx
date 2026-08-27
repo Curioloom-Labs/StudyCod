@@ -94,7 +94,7 @@ export const CreateTopicPage: React.FC = () => {
                 <label className="block text-sm font-mono text-text-secondary mb-2">
                   {tr("Опис теми (необов'язково)", "Topic description (optional)")}
                 </label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[100px] transition-fast" placeholder={tr("Короткий опис теми...", "Short topic description...")} />
+                <label htmlFor="create-topic-description" className="sr-only">Опис теми</label><textarea id="create-topic-description" name="description" value={description} onChange={e => setDescription(e.target.value)} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[100px] transition-fast" placeholder={tr("Короткий опис теми…", "Short topic description…")} />
               </div>
             </div>
           </div>

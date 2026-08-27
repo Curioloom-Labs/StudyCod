@@ -125,7 +125,7 @@ export const IadPage: React.FC = () => {
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/[.08] p-5">
               <div className="text-sm text-[#b7caba]">{tr("Поточне значення", "Current value")}</div>
-              <div className="mt-2 text-6xl font-semibold tracking-[-.07em] text-[#7bedb4]">{loading ? "..." : metrics.current.toFixed(3)}</div>
+              <div className="mt-2 text-6xl font-semibold tracking-[-.07em] text-[#7bedb4]">{loading ? "…" : metrics.current.toFixed(3)}</div>
               <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#00d978]" style={{ width: `${metrics.progress}%` }} /></div>
               <div className="mt-3 text-sm text-[#b7caba]">{details?.lang ?? tr("мова не визначена", "language unknown")}</div>
             </div>
@@ -149,7 +149,7 @@ export const IadPage: React.FC = () => {
               <article className="rounded-[28px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15]">
                 <div className="text-xs font-semibold uppercase tracking-[.14em] text-[#d97706]">{tr("Прогноз", "What-if")}</div>
                 <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{tr("Наступна оцінка", "Next grade")}</h2>
-                <input type="range" min={0} max={100} value={nextGrade} onChange={(event) => setNextGrade(Number(event.target.value))} className="mt-6 w-full accent-[#00c96d]" />
+                <label htmlFor="iad-next-grade" className="sr-only">{tr("Наступна оцінка", "Next grade")}</label><input id="iad-next-grade" name="nextGrade" type="range" min={0} max={100} value={nextGrade} onChange={(event) => setNextGrade(Number(event.target.value))} className="mt-6 w-full accent-[#00c96d]" />
                 <div className="mt-5 grid grid-cols-3 gap-3">
                   <Small label={tr("оцінка", "grade")} value={simulation?.grade ?? nextGrade} />
                   <Small label={tr("зміна", "delta")} value={simulation ? signed(simulation.delta) : "—"} />

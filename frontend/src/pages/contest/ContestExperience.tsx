@@ -362,14 +362,14 @@ export const ContestLobbyPage: React.FC = () => {
       title="Змагання, де видно хід думки"
       aside={
         <div className="flex flex-wrap gap-2">
-          <button
+          <button type="button"
             onClick={() => setJoinOpen(true)}
             className="rounded-xl border border-[#1a2a1e]/12 px-4 py-2.5 text-sm font-bold text-[#243329] transition hover:bg-[#edf2ed] dark:border-white/10 dark:text-[#dce7df] dark:hover:bg-white/[.06]"
           >
             <LockKeyhole className="mr-2 inline h-4 w-4" />
             Ввести код
           </button>
-          <button
+          <button type="button"
             onClick={() => setCreateOpen(true)}
             className="rounded-xl bg-[#153321] px-4 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(20,67,40,.2)] transition hover:-translate-y-0.5 dark:bg-[#00d978] dark:text-[#062211]"
           >
@@ -381,7 +381,7 @@ export const ContestLobbyPage: React.FC = () => {
     >
       <div className="mb-6 flex flex-wrap items-center gap-2">
         {(["all", "live", "soon", "ended"] as const).map((item) => (
-          <button
+          <button type="button"
             key={item}
             onClick={() => setFilter(item)}
             className={`rounded-full px-4 py-2 text-sm font-bold transition ${filter === item ? "bg-[#17251c] text-white dark:bg-[#edf3ef] dark:text-[#112016]" : "text-[#617167] hover:bg-[#edf2ed] dark:text-[#a9b7ad] dark:hover:bg-white/[.06]"}`}
@@ -389,7 +389,7 @@ export const ContestLobbyPage: React.FC = () => {
             {item === "all" ? "Усі" : phaseCopy[item]}
           </button>
         ))}
-        <button
+        <button type="button"
           onClick={() => void refresh()}
           className="ml-auto flex h-9 w-9 items-center justify-center rounded-full text-[#65756a] hover:bg-[#edf2ed] dark:text-[#a9b7ad] dark:hover:bg-white/[.06]"
           aria-label="Оновити"
@@ -461,7 +461,7 @@ export const ContestLobbyPage: React.FC = () => {
                       ? "Фінішував"
                       : date(state === "soon" ? item.startsAt : item.endsAt)}
                   </span>
-                  <button
+                  <button type="button"
                     onClick={() => navigate(`/contest/contests/${item.id}`)}
                     className="flex h-10 w-10 items-center justify-center rounded-full bg-[#eff4ef] text-[#183422] transition group-hover:bg-[#153321] group-hover:text-white dark:bg-white/[.07] dark:text-[#e7f0e9] dark:group-hover:bg-[#00d978] dark:group-hover:text-[#062211]"
                     aria-label={`Відкрити ${item.title}`}
@@ -510,7 +510,6 @@ export const ContestLobbyPage: React.FC = () => {
               <label className="block text-sm font-bold">
                 Код доступу
                 <input
-                  autoFocus
                   value={code}
                   onChange={(event) => setCode(event.target.value)}
                   className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 text-base outline-none ring-[#00ff88]/30 focus:ring-4 dark:border-white/10 dark:bg-[#0d1510]"
@@ -522,7 +521,6 @@ export const ContestLobbyPage: React.FC = () => {
                 <label className="block text-sm font-bold">
                   Назва
                   <input
-                    autoFocus
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
                     className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 text-base outline-none ring-[#00ff88]/30 focus:ring-4 dark:border-white/10 dark:bg-[#0d1510]"
@@ -540,7 +538,7 @@ export const ContestLobbyPage: React.FC = () => {
                 </label>
               </>
             )}
-            <button
+            <button type="submit"
               disabled={joinBusy || creating}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3.5 text-sm font-bold text-[#072514] transition hover:bg-[#00ff88] disabled:opacity-60"
             >
@@ -615,7 +613,7 @@ export const ContestDetailPage: React.FC = () => {
     return (
       <Shell eyebrow="Contest" title="Контест недоступний">
         <Notice tone="error">{error || "Такого контесту не знайдено."}</Notice>
-        <button
+        <button type="button"
           onClick={() => navigate("/contest/contests")}
           className="mt-5 font-bold text-[#16834d]"
         >
@@ -637,7 +635,7 @@ export const ContestDetailPage: React.FC = () => {
       }
       title={data.contest.title}
       aside={
-        <button
+        <button type="button"
           onClick={() => navigate("/contest/contests")}
           className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] dark:text-[#aab8ad] dark:hover:bg-white/[.06]"
         >
@@ -668,7 +666,7 @@ export const ContestDetailPage: React.FC = () => {
                 "Задачі зібрані в один короткий, чесний маршрут."}
             </p>
             {!access ? (
-              <button
+              <button type="button"
                 disabled={joining}
                 onClick={() => void join()}
                 className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-5 py-3 text-sm font-bold text-[#062211] transition hover:bg-[#00ff88] disabled:opacity-60"
@@ -722,7 +720,7 @@ export const ContestDetailPage: React.FC = () => {
           </div>
           <div className="space-y-2">
             {data.problems.map((problem) => (
-              <button
+              <button type="button"
                 key={problem.id}
                 disabled={!access}
                 onClick={() =>
@@ -1018,7 +1016,7 @@ export const ContestProblemPage: React.FC = () => {
   return (
     <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-10">
       <div className="mb-5 flex items-center justify-between gap-3">
-        <button
+        <button type="button"
           onClick={() => navigate(`/contest/contests/${contestId}`)}
           className="inline-flex items-center gap-2 text-sm font-bold text-[#64756a] hover:text-[#1b3324] dark:text-[#abb9af] dark:hover:text-white"
         >
@@ -1123,7 +1121,7 @@ export const ContestProblemPage: React.FC = () => {
               />
             </label>
             <div className="mt-3 flex flex-wrap justify-between gap-2">
-              <button
+              <button type="button"
                 disabled={running}
                 onClick={() => void run()}
                 className="inline-flex items-center gap-2 rounded-xl bg-white/[.08] px-4 py-2.5 text-sm font-bold text-[#e9f3eb] hover:bg-white/[.13] disabled:opacity-55"
@@ -1135,7 +1133,7 @@ export const ContestProblemPage: React.FC = () => {
                 )}
                 Запустити
               </button>
-              <button
+              <button type="button"
                 disabled={checking}
                 onClick={() => void check()}
                 className="inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-4 py-2.5 text-sm font-bold text-[#062211] hover:bg-[#00ff88] disabled:opacity-55"

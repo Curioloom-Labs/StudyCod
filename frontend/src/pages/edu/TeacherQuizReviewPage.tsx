@@ -85,7 +85,7 @@ export const TeacherQuizReviewPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div role="status" aria-live="polite" style={{ padding: 24 }}>{tr("Завантаження...", "Loading...")}</div>;
+  if (loading) return <div role="status" aria-live="polite" style={{ padding: 24 }}>{tr("Завантаження…", "Loading…")}</div>;
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 16px 48px" }}>

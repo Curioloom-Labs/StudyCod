@@ -630,16 +630,18 @@ export const ClassManagementPage: React.FC = () => {
                               pinned: item.pinned,
                             })
                           }
+                          aria-label="Редагувати оголошення"
                           className="rounded-xl p-2 text-[#718075] hover:bg-white dark:hover:bg-white/[.08]"
                         >
-                          <Pencil className="size-4" />
+                          <Pencil className="size-4" aria-hidden="true" />
                         </button>
                         <button
                           type="button"
                           onClick={() => void removeAnnouncement(item)}
+                          aria-label="Видалити оголошення"
                           className="rounded-xl p-2 text-[#bd3c62] hover:bg-white dark:hover:bg-white/[.08]"
                         >
-                          <Trash2 className="size-4" />
+                          <Trash2 className="size-4" aria-hidden="true" />
                         </button>
                       </div>
                     </div>
@@ -780,7 +782,7 @@ export const ClassManagementPage: React.FC = () => {
               >
                 {GRADING_SYSTEMS.map((system) => (
                   <option key={system} value={system}>
-                    {gradingSystemLabel(system)}
+                    {gradingSystemLabel(system, false)}
                   </option>
                 ))}
               </select>

@@ -540,7 +540,7 @@ export const StudentAppealsPage: React.FC = () => {
                 <div className="font-mono text-sm">{tr("Оберіть апеляцію", "Select an appeal")}</div>
               </div>
             ) : loadingDetail ? (
-              <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center text-text-secondary font-mono text-sm">{tr("Завантаження деталей...", "Loading details...")}</div>
+              <div role="status" aria-live="polite" className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center text-text-secondary font-mono text-sm">{tr("Завантаження деталей…", "Loading details…")}</div>
             ) : !selectedAppeal ? (
               <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center text-text-secondary font-mono text-sm">{tr("Апеляцію не знайдено", "Appeal not found")}</div>
             ) : (
@@ -630,11 +630,11 @@ export const StudentAppealsPage: React.FC = () => {
                         onChange={e => setMessageText(e.target.value)}
                         rows={3}
                         className="w-full px-3 py-2 bg-bg-surface border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary"
-                        placeholder={tr("Напишіть уточнення або відповідь...", "Write a clarification or response...")}
+                        placeholder={tr("Напишіть уточнення або відповідь…", "Write a clarification or response…")}
                       />
                       <div className="flex justify-end">
                         <Button onClick={handleSendMessage} disabled={sendingMessage || !messageText.trim()}>
-                          {sendingMessage ? tr("Надсилання...", "Sending...") : tr("Надіслати", "Send")}
+                          {sendingMessage ? tr("Надсилання…", "Sending…") : tr("Надіслати", "Send")}
                         </Button>
                       </div>
                     </div>
@@ -644,7 +644,7 @@ export const StudentAppealsPage: React.FC = () => {
                 {selectedAppeal.canStudentCancel ? (
                   <div className="flex justify-end pt-2">
                     <Button variant="ghost" onClick={handleCancelAppeal} disabled={cancelling} className="text-accent-error border border-accent-error hover:bg-bg-hover">
-                      {cancelling ? tr("Скасування...", "Cancelling...") : tr("Скасувати апеляцію", "Cancel appeal")}
+                      {cancelling ? tr("Скасування…", "Cancelling…") : tr("Скасувати апеляцію", "Cancel appeal")}
                     </Button>
                   </div>
                 ) : null}
@@ -714,7 +714,7 @@ export const StudentAppealsPage: React.FC = () => {
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setShowCreateModal(false)}>{tr("Скасувати", "Cancel")}</Button>
               <Button onClick={handleCreateAppeal} disabled={creating || targetOptions.length === 0}>
-                {creating ? tr("Створення...", "Creating...") : tr("Створити апеляцію", "Create appeal")}
+                {creating ? tr("Створення…", "Creating…") : tr("Створити апеляцію", "Create appeal")}
               </Button>
             </div>
           </div>

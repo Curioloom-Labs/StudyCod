@@ -307,7 +307,7 @@ export const PlaygroundPage: React.FC = () => {
           <aside className="order-2 flex flex-col gap-4 rounded-[30px] border border-[#132019]/10 bg-white p-4 shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-[#111a14] xl:order-1">
             <div>
               <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">{tr("Мова", "Language")}</div>
-              <select value={language} onChange={(event) => onLanguageChange(event.target.value as PlaygroundLanguage)} className={selectCls}>
+              <label htmlFor="playground-language" className="sr-only">Language</label><select id="playground-language" name="language" value={language} onChange={(event) => onLanguageChange(event.target.value as PlaygroundLanguage)} className={selectCls}>
                 {PLAYGROUND_LANGS.map((lang) => (
                   <option key={lang} value={lang}>{JUDGE_LANGUAGE_LABELS[lang]}</option>
                 ))}
@@ -317,7 +317,7 @@ export const PlaygroundPage: React.FC = () => {
             {compilerOptions.length > 1 && (
               <div>
                 <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">{tr("Компілятор", "Compiler")}</div>
-                <select value={compiler} onChange={(event) => setCompiler(event.target.value)} className={selectCls}>
+                <label htmlFor="playground-runtime" className="sr-only">Runtime</label><select id="playground-runtime" name="runtime" value={compiler} onChange={(event) => setCompiler(event.target.value)} className={selectCls}>
                   {compilerOptions.map((option) => (
                     <option key={option.id} value={option.id}>{option.label}</option>
                   ))}
@@ -330,7 +330,7 @@ export const PlaygroundPage: React.FC = () => {
                 <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">stdin</span>
                 <span className="text-[11px] text-text-secondary">{JUDGE_ENTRY_FILES[language]}</span>
               </div>
-              <textarea
+              <label htmlFor="playground-code" className="sr-only">Code</label><textarea id="playground-code" name="code"
                 value={stdin}
                 onChange={(event) => setStdin(event.target.value)}
                 className="min-h-[160px] w-full resize-y rounded-xl border border-border bg-bg-code/80 px-3 py-2 font-mono text-sm text-text-primary outline-none focus:border-primary"
@@ -417,7 +417,10 @@ export const PlaygroundPage: React.FC = () => {
                 {trace && (
                   <div className="flex items-center gap-2">
                     <button type="button" className="rounded-lg border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover disabled:opacity-40" onClick={() => setStepIdx((index) => Math.max(0, index - 1))} disabled={stepIdx <= 0}>◀</button>
+                    <label htmlFor="playground-trace-step" className="sr-only">{tr("Крок трасування", "Trace step")}</label>
                     <input
+                      id="playground-trace-step"
+                      name="traceStep"
                       type="range"
                       min={0}
                       max={Math.max(0, trace.steps.length - 1)}

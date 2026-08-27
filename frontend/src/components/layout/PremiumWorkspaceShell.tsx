@@ -140,6 +140,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
 
   return (
     <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
+      <a className="skip-link" href="#main-content">{uk ? "Перейти до основного вмісту" : "Skip to main content"}</a>
       <DialogA11yObserver rootRef={shellRef} />
       <header data-material="premium-header" className="sticky top-0 z-50 bg-[#f7f8f5]/82 backdrop-blur-xl dark:bg-[#0b120e]/82">
         <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-10">
@@ -224,7 +225,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                 }`}
               >
                 <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg bg-[#18261d] text-xs font-bold text-[#70edaf] dark:bg-[#edf3ef] dark:text-[#0b120e]">
-                  {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" /> : initial}
+                  {user.avatarUrl ? <img src={user.avatarUrl} alt="" width={28} height={28} loading="lazy" className="h-full w-full object-cover" /> : initial}
                 </span>
                 <span className="hidden max-w-[190px] truncate text-sm font-semibold sm:block">{displayName}</span>
                 <ChevronDown className={`hidden h-3.5 w-3.5 transition sm:block ${accountOpen ? "rotate-180" : ""}`} />

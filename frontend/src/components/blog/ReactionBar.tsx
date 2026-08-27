@@ -43,13 +43,14 @@ export const ReactionBar: React.FC<Props> = ({ targetType, targetId, initial, co
           type="button"
           disabled={busy}
           onClick={() => react(it.emoji)}
+          aria-label={`React with ${it.emoji}${it.count > 0 ? `, ${it.count} reactions` : ""}`}
           className={`inline-flex items-center gap-1 rounded-full border transition ${size} ${
             it.reacted
               ? "border-primary bg-primary/10 text-primary"
               : "border-border text-text-secondary hover:border-primary/40"
           }`}
         >
-          <span>{it.emoji}</span>
+          <span aria-hidden="true">{it.emoji}</span>
           {it.count > 0 ? <span className="font-mono">{it.count}</span> : null}
         </button>
       ))}
@@ -71,9 +72,10 @@ export const ReactionBar: React.FC<Props> = ({ targetType, targetId, initial, co
                 key={emoji}
                 type="button"
                 onClick={() => react(emoji)}
+                aria-label={`React with ${emoji}`}
                 className="rounded px-1.5 py-1 text-base hover:bg-bg-hover"
               >
-                {emoji}
+                <span aria-hidden="true">{emoji}</span>
               </button>
             ))}
           </div>

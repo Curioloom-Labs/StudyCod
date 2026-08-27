@@ -442,9 +442,9 @@ export const GradebookWorkspace: React.FC = () => {
           <section role="dialog" aria-modal="true" aria-label="Редагування оцінки" tabIndex={-1} className="w-full max-w-md rounded-[26px] bg-white p-6 shadow-2xl dark:bg-[#142018]">
             <div className="flex items-start justify-between gap-4">
               <div><p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]">Оцінка</p><h2 className="mt-2 text-2xl font-bold tracking-[-.04em]">{editing.student.studentName}</h2><p className="mt-1 text-sm text-[#718075] dark:text-[#a6b4a9]">{editing.column.title}</p></div>
-              <button type="button" onClick={() => setEditing(null)} className="rounded-xl bg-[#edf1ed] p-2 text-[#526157] dark:bg-white/[.08] dark:text-[#c0cdc2]"><X className="size-4" /></button>
+              <button type="button" onClick={() => setEditing(null)} aria-label="Закрити редагування оцінки" className="rounded-xl bg-[#edf1ed] p-2 text-[#526157] dark:bg-white/[.08] dark:text-[#c0cdc2]"><X className="size-4" aria-hidden="true" /></button>
             </div>
-            <input autoFocus value={gradeValue} onChange={(event) => setGradeValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveGrade(); }} className="mt-6 w-full rounded-2xl border border-[#19291d]/12 bg-[#f8fbf8] px-4 py-4 text-center text-3xl font-bold outline-none ring-[#00ff88]/25 focus:ring-4 dark:border-white/10 dark:bg-[#0d1510]" placeholder={gradingSystemInputHint(gradingSystem, false)} />
+ <label htmlFor="teacher-grade-value" className="sr-only">Оцінка</label><input id="teacher-grade-value" name="gradeValue" inputMode="decimal" value={gradeValue} onChange={(event) => setGradeValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveGrade(); }} className="mt-6 w-full rounded-2xl border border-[#19291d]/12 bg-[#f8fbf8] px-4 py-4 text-center text-3xl font-bold outline-none ring-[#00ff88]/25 focus:ring-4 dark:border-white/10 dark:bg-[#0d1510]" placeholder={gradingSystemInputHint(gradingSystem, false)} />
             <div className="mt-4 grid grid-cols-5 gap-2">{quickGrades.map((value) => <button key={value} type="button" onClick={() => setGradeValue(value)} className="rounded-xl bg-[#f0f4f0] px-3 py-2 text-sm font-bold dark:bg-white/[.06]">{value}</button>)}</div>
             <div className="mt-6 flex gap-2"><button type="button" onClick={() => setEditing(null)} className="flex-1 rounded-xl px-4 py-3 font-bold">Скасувати</button><button type="button" disabled={saving || !gradeValue.trim()} onClick={() => void saveGrade()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 font-bold text-[#062211] disabled:opacity-55"><Save className="size-4" />Зберегти</button></div>
           </section>
@@ -457,7 +457,7 @@ export const GradebookWorkspace: React.FC = () => {
             <h2 className="text-2xl font-bold tracking-[-.04em]">Додати тематичну в журнал</h2>
             <p className="mt-2 text-sm leading-6 text-[#6d7c71] dark:text-[#a2b1a6]">Оберіть тему, і колонка зʼявиться в цьому журналі поруч з іншими оцінками.</p>
             <select required value={thematicTopicId} onChange={(event) => setThematicTopicId(event.target.value)} className="mt-5 w-full rounded-xl border border-[#19291d]/12 px-4 py-3 dark:border-white/10 dark:bg-[#0d1510]"><option value="">Оберіть тему</option>{topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select>
-            <div className="mt-5 flex gap-2"><button type="button" onClick={() => setThematicOpen(false)} className="flex-1 rounded-xl px-4 py-3 font-bold">Скасувати</button><button disabled={busyAction || !thematicTopicId} className="flex-1 rounded-xl bg-[#00d978] px-4 py-3 font-bold text-[#062211] disabled:opacity-55">Додати</button></div>
+            <div className="mt-5 flex gap-2"><button type="button" onClick={() => setThematicOpen(false)} className="flex-1 rounded-xl px-4 py-3 font-bold">Скасувати</button><button type="submit" disabled={busyAction || !thematicTopicId} className="flex-1 rounded-xl bg-[#00d978] px-4 py-3 font-bold text-[#062211] disabled:opacity-55">Додати</button></div>
           </form>
         </div>
       )}
@@ -527,7 +527,7 @@ export const SummaryGradesWorkspace: React.FC = () => {
           <section key={group.name} className="rounded-[26px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14]">
             <div className="flex items-start justify-between gap-4">
               <div><p className="text-xs font-bold uppercase tracking-[.13em] text-[#ff8c00]">тематичний зріз</p><h2 className="mt-2 text-xl font-bold">{group.name}</h2></div>
-              <button type="button" disabled={!group.grades[0]} onClick={() => group.grades[0] && void remove(group.grades[0].id)} className="rounded-xl bg-[#fff0f4] p-2 text-[#c4436b] disabled:opacity-40 dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]"><Trash2 className="size-4" /></button>
+              <button type="button" disabled={!group.grades[0]} onClick={() => group.grades[0] && void remove(group.grades[0].id)} aria-label={`Видалити оцінку ${group.name}`} className="rounded-xl bg-[#fff0f4] p-2 text-[#c4436b] disabled:opacity-40 dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]"><Trash2 className="size-4" aria-hidden="true" /></button>
             </div>
             <div className="mt-5 space-y-2">
               {(group.grades || []).map((grade) => <div key={grade.id} className="flex items-center justify-between rounded-xl bg-[#f5f8f5] px-3 py-2.5 text-sm dark:bg-white/[.045]"><span>{grade.studentName || `Учень #${grade.studentId}`}</span><b className="text-[#16834d] dark:text-[#72edb0]">{formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</b></div>)}

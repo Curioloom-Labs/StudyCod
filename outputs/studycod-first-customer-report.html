@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>StudyCod: перші клієнти</title>
+  <style>
+    :root{--bg:#090b0f;--panel:#12161d;--panel2:#191f28;--ink:#f5f2ea;--muted:#9ca6b5;--line:#2b3340;--acid:#d9ff63;--blue:#69b7ff;--orange:#ff8f5a;--cyan:#5ee8d0;--radius:18px;--shadow:0 24px 80px rgba(0,0,0,.38)}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.55}body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.3;background:repeating-linear-gradient(135deg,rgba(255,255,255,.018) 0 1px,transparent 1px 12px);mask-image:linear-gradient(#000,transparent 82%)}a{color:inherit}.skip{position:absolute;left:-9999px}.skip:focus{left:16px;top:16px;z-index:9;background:var(--acid);color:#111;padding:10px}
+    .shell{width:min(1180px,calc(100% - 40px));margin:auto;position:relative}.top{display:flex;justify-content:space-between;align-items:center;padding:22px 0;border-bottom:1px solid var(--line)}.brand{font-weight:850;display:flex;align-items:center;gap:10px}.brand i{width:12px;height:12px;border-radius:50%;background:var(--acid);box-shadow:0 0 22px var(--acid)}.meta{display:flex;gap:8px;align-items:center}.chip,.stage{border:1px solid var(--line);border-radius:999px;padding:7px 10px;color:var(--muted);font:750 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.07em}button{background:var(--ink);color:#111;border:0;border-radius:999px;padding:9px 14px;font:800 13px inherit;cursor:pointer}button:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+    .hero{display:grid;grid-template-columns:1.45fr .55fr;gap:36px;align-items:end;padding:72px 0 42px}.eyebrow{color:var(--acid);font:750 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.11em}h1{font-size:clamp(48px,7vw,92px);line-height:.92;letter-spacing:-.065em;margin:13px 0 24px}.verdict{font-size:clamp(18px,2.1vw,25px);color:#dce1e9;max-width:820px;margin:0}.hero-card{background:var(--acid);color:#10120d;padding:26px;border-radius:var(--radius);box-shadow:var(--shadow);transform:rotate(1deg)}.hero-card span{font:800 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em}.hero-card strong{display:block;font-size:64px;line-height:1;letter-spacing:-.08em;margin:15px 0 6px}.hero-card p{margin:0;font-weight:700;font-size:13px}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:28px}.stats>div{padding:18px;background:var(--panel)}.stats>div+div{border-left:1px solid var(--line)}.stats span,.prospect-grid span,.signal span,.evidence span,blockquote span{display:block;color:var(--muted);font:700 10px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}.stats strong{font-size:17px}
+    .best{display:grid;grid-template-columns:180px 1fr auto;gap:24px;align-items:center;padding:25px;background:var(--orange);color:#1b0f09;border-radius:var(--radius);box-shadow:var(--shadow);margin:0 0 72px}.best-label{font:800 11px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.1em}.best h2{font-size:clamp(28px,4vw,46px);letter-spacing:-.045em;line-height:1;margin:0 0 8px}.best p{margin:0}.best strong{font-size:44px}
+    .section-head{display:flex;justify-content:space-between;align-items:end;gap:24px;padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:18px}.section-head h2{font-size:clamp(34px,5vw,62px);line-height:.98;letter-spacing:-.055em;margin:0}.section-head p{color:var(--muted);max-width:470px;margin:0}
+    .prospects{display:grid;gap:16px;margin-bottom:76px}.prospect{background:linear-gradient(135deg,var(--panel),#0f1319);border:1px solid var(--line);border-radius:var(--radius);padding:25px;box-shadow:0 12px 38px rgba(0,0,0,.18)}.prospect-head{display:grid;grid-template-columns:54px 1fr 92px;gap:17px;align-items:start}.rank{font:850 24px ui-monospace,monospace;color:var(--acid);padding-top:8px}.identity h3{font-size:29px;letter-spacing:-.04em;margin:6px 0 10px}.stage{display:inline-block}.stage.hot{color:var(--orange);border-color:rgba(255,143,90,.5)}.stage.warm{color:var(--cyan);border-color:rgba(94,232,208,.45)}.score{--score:0;width:88px;height:88px;border-radius:50%;display:grid;place-content:center;text-align:center;background:radial-gradient(circle,var(--panel) 58%,transparent 60%),conic-gradient(var(--acid) calc(var(--score)*1%),var(--line) 0)}.score strong{font-size:26px;line-height:1}.score small{color:var(--muted)}
+    .signal{margin:21px 0 12px;padding:16px;background:var(--panel2);border-left:4px solid var(--acid)}.signal p{font-size:17px;margin:0}.prospect-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.prospect-grid>div,.evidence>div{border:1px solid var(--line);border-radius:12px;padding:15px;background:rgba(255,255,255,.018)}.prospect-grid p,.evidence p{margin:0}blockquote{margin:12px 0 0;padding:16px;border:1px dashed rgba(217,255,99,.55);border-radius:12px;color:#eaf6c6}details{margin-top:10px}summary{cursor:pointer;color:var(--acid);font-weight:800;padding:10px 0}.evidence{display:grid;grid-template-columns:1fr 1fr;gap:9px}.evidence a{display:inline-block;color:var(--blue);margin-top:8px;word-break:break-word}.metrics{display:grid;gap:8px;margin-top:14px}.metric{display:grid;grid-template-columns:145px 1fr 40px;gap:12px;align-items:center;font-size:13px}.track{height:8px;background:var(--line);border-radius:8px;overflow:hidden}.track i{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--acid))}
+    .patterns{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:76px}.pattern{display:grid;grid-template-columns:42px 1fr auto;gap:15px;align-items:start;padding:20px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}.pattern-num{color:var(--acid);font:800 13px ui-monospace,monospace}.pattern h3{margin:0 0 5px}.pattern p{margin:0;color:var(--muted)}.pattern>strong{font-size:30px;color:var(--acid)}
+    .plan{display:grid;grid-template-columns:.8fr 1.2fr;gap:28px;background:var(--acid);color:#111;padding:29px;border-radius:var(--radius);margin-bottom:30px}.plan h2{font-size:38px;line-height:1;letter-spacing:-.045em;margin:10px 0}.plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.plan-grid>div{border:1px solid rgba(0,0,0,.24);border-radius:11px;padding:13px}.plan-grid span{display:block;font:750 10px ui-monospace,monospace;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}.plan-grid p{margin:0}.limits{border:1px solid var(--line);border-radius:var(--radius);padding:24px;color:var(--muted);margin-bottom:60px}.limits h2{color:var(--ink);margin-top:0}footer{display:flex;justify-content:space-between;gap:20px;border-top:1px solid var(--line);padding:22px 0 40px;color:var(--muted);font-size:12px}.reveal{animation:rise .4s ease both}@keyframes rise{from{opacity:0;transform:translateY(12px)}}
+    @media(max-width:820px){.shell{width:min(100% - 24px,1180px)}.hero,.plan{grid-template-columns:1fr}.hero{padding-top:44px}.hero-card{transform:none}.stats{grid-template-columns:1fr 1fr}.stats>div+div{border-left:0;border-top:1px solid var(--line)}.best{grid-template-columns:1fr}.prospect-head{grid-template-columns:38px 1fr}.score{grid-column:1/-1}.prospect-grid,.evidence,.patterns,.plan-grid{grid-template-columns:1fr}.meta .chip{display:none}}
+    @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}@media print{body{background:#fff;color:#111}body:before,.top button{display:none}.shell{width:100%}.prospect,.pattern,.limits{background:#fff;color:#111;break-inside:avoid}.prospect-grid span,.signal span,.evidence span,blockquote span{color:#444}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to report</a>
+  <div class="shell">
+    <header class="top"><div class="brand"><i></i> First Customer Finder</div><div class="meta"><span class="chip">Public signals only</span><button type="button" onclick="window.print()">Print / Save PDF</button></div></header>
+    <main id="main">
+      <section class="hero"><div><span class="eyebrow">Early-customer report · 2026-08-23</span><h1>StudyCod: перші клієнти</h1><p class="verdict">У StudyCod є досяжний ранній ринок: десять освітніх операторів публічно запускають або масштабують практичні програми з програмування, набирають викладачів або описують потребу в сучасних цифрових інструментах. Найкраща перша пропозиція — вузький пілот на одній когорті з Python/C++/C#: завдання, тести, миттєвий фідбек і журнал прогресу. Це гіпотези потенційних клієнтів за публічними сигналами, а не підтверджені покупці.</p></div><aside class="hero-card"><span>Qualified prospects</span><strong>10</strong><p>Potential customers based on public signals.</p></aside></section>
+      <section class="stats"><div><span>Product</span><strong><a href="https://studycod.space/" target="_blank" rel="noreferrer">StudyCod</a></strong></div><div><span>Target customer</span><strong>Українські coding-школи, bootcamp-и, університетські лабораторії та професійні освітні програми, що ведуть когорти з практичним програмуванням</strong></div><div><span>High intent</span><strong>0</strong></div><div><span>Average fit score</span><strong>79/100</strong></div></section>
+      <section class="best"><div class="best-label">Highest-confidence prospect</div><div><h2>RoboCode</h2><p>Підготовка до нового навчального сезону та відкриття груп створюють коротке вікно для пілота з одним викладачем і 5–10 завданнями.</p></div><strong>85</strong></section>
+      <section><header class="section-head"><h2>People with a reason<br>to care now.</h2><p>Every primary prospect is tied to a public pain, demand, or timing signal. Open the evidence before considering outreach.</p></header><div class="prospects">
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">01</div>
+        <div class="identity">
+          <span class="eyebrow">Coding school</span>
+          <h3>RoboCode</h3>
+          <span class="stage warm">Trigger present</span>
+        </div>
+        <div class="score" style="--score:85" aria-label="Fit score 85 out of 100"><strong>85</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>У вакансії на сезон, що стартує у вересні 2026 року, школа шукає викладачів для дітей 6–16 років; роль включає створення ігор і коду, підтримку учнів, зворотний зв’язок та заповнення журналу успішності.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>StudyCod може дати RoboCode браузерний контур для Python/C++/C# практики, автоматичних тестів, спроб і прогресу; це доповнення до їхніх методичних матеріалів, а не заміна занять з робототехніки.</p></div>
+        <div><span>Why now</span><p>Підготовка до нового навчального сезону та відкриття груп створюють коротке вікно для пілота з одним викладачем і 5–10 завданнями.</p></div>
+        <div><span>Suggested channel</span><p>Відповідь через публічну вакансію або форму RoboCode для викладачів; адресат — керівник навчального процесу.</p></div>
+        <div><span>Caution</span><p>Підтвердити, що школа готова додати окремий інструмент до вже підготовлених матеріалів і що конкретна філія використовує підтримувану мову.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Побачив у вакансії RoboCode, що на новий сезон вам важливі журнал успішності та зворотний зв’язок учням. StudyCod може автоматично перевіряти Python/C++/C# завдання й зберігати прогрес. Чи було б корисно протестувати це на одній групі до старту сезону?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Публічна вакансія від 10 серпня 2026 року описує плановий набір викладачів, відкриття груп і потребу якісно підготувати команду до нового сезону.</p></div><div><span>Source</span><p>Public job posting · 2026-08-10</p><a href="https://robota.ua/company13758593/vacancy11288966" target="_blank" rel="noreferrer">Викладач програмування і робототехніки на суботу і неділю ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">02</div>
+        <div class="identity">
+          <span class="eyebrow">University / short program</span>
+          <h3>SET University</h3>
+          <span class="stage warm">Trigger present</span>
+        </div>
+        <div class="score" style="--score:84" aria-label="Fit score 84 out of 100"><strong>84</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Університет відкрив онлайн-програму на жовтень 2026 року про AI-assisted software engineering; у програмі є практичні завдання, автоматизований рефакторинг, тестування та code review.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>StudyCod може стати контрольованим середовищем для коротких coding-задач, тестів, пояснення помилок і перевірки того, чи справді студент розуміє AI-generated code.</p></div>
+        <div><span>Why now</span><p>Набір і підготовка до жовтневого онлайн-старту дають можливість вбудувати невеликий практичний модуль до початку занять.</p></div>
+        <div><span>Suggested channel</span><p>Форма/контакт Partnerships або hello@setuniversity.edu.ua, з короткою пропозицією course pilot.</p></div>
+        <div><span>Caution</span><p>З’ясувати, чи потрібен окремий judge для навчальних задач: програма може вже мати власний LMS або IDE workflow.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>На сторінці вашої жовтневої програми побачив фокус на AI-assisted coding, тестуванні та code review. StudyCod може додати перевірювані coding-задачі й feedback loop для практичної частини. Чи шукаєте ви зараз середовище для такого пілота?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Офіційна сторінка вказує старт у жовтні 2026, тривалість 9 тижнів, онлайн-формат і фокус на відтворюваних workflow у SDLC.</p></div><div><span>Source</span><p>Official program page · Date unavailable; page crawled 2026-08-23</p><a href="https://www.setuniversity.edu.ua/en/education/genai-agentic-ai-software-engineering-program/" target="_blank" rel="noreferrer">GenAI and Agentic AI for Software Engineering ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">03</div>
+        <div class="identity">
+          <span class="eyebrow">Project-based tech school</span>
+          <h3>//kood Ukraine</h3>
+          <span class="stage warm">Trigger present</span>
+        </div>
+        <div class="score" style="--score:83" aria-label="Fit score 83 out of 100"><strong>83</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>//kood проводить трижневий Selection Sprint із навчальними задачами, іспитом і груповим проєктом; в Одесі стартує когорта у вересні/жовтні 2026 року, а навчання передбачає self-paced coding та оцінювання.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>StudyCod може бути lightweight practice/evaluation layer для вступного спринту або фундаментального модуля Java/JavaScript, з тестами й прозорим фідбеком.</p></div>
+        <div><span>Why now</span><p>Нова когорта та явний пошук партнерів створюють природну точку для design-partner розмови.</p></div>
+        <div><span>Suggested channel</span><p>Контакт із команди //kood через публічну сторінку Get involved/партнерства.</p></div>
+        <div><span>Caution</span><p>//kood позиціонує peer-to-peer модель без викладачів; перевірити, чи потрібні їм teacher-facing gradebook і AI-підказки, а не лише judge.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Побачив, що //kood запускає нову когорту з Selection Sprint, іспитами та self-paced coding. StudyCod може допомогти швидко перевіряти задачі й показувати прогрес у практичній частині. Чи відкриті ви до маленького design-partner пілота для однієї когорти?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Офіційна сторінка описує нову когорту, практичну модель без лекцій, задачі з дедлайнами/рівнями, і прямо запрошує партнерів масштабувати tuition-free project-based education в Україні.</p></div><div><span>Source</span><p>Official school page · Date unavailable; page crawled 2026-08-20</p><a href="https://www.koodukraine.tech/" target="_blank" rel="noreferrer">//kood Ukraine ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">04</div>
+        <div class="identity">
+          <span class="eyebrow">Nonprofit IT school</span>
+          <h3>Star for Life Ukraine</h3>
+          <span class="stage warm">Trigger present</span>
+        </div>
+        <div class="score" style="--score:82" aria-label="Fit score 82 out of 100"><strong>82</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Фонд організував безкоштовну онлайн-літню IT-школу 2026 для учнів 5–11 класів українською, із заняттями двічі на тиждень і модулями Web Layout, Frontend та Python.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>StudyCod відповідає їхній практичній моделі для Python/JavaScript: браузерне виконання, тести, спроби, пояснення помилок і видимий прогрес можуть зменшити ручну перевірку.</p></div>
+        <div><span>Why now</span><p>Після завершення літньої школи можна запропонувати ретроспективний пілот або підготувати інструмент для наступного набору, поки формат ще свіжий.</p></div>
+        <div><span>Suggested channel</span><p>Публічний сайт Star for Life Ukraine або партнерський контакт, вказаний у програмі; звертатися до координатора IT-школи.</p></div>
+        <div><span>Caution</span><p>Поточна літня програма вже завершується; не припускати, що бюджет або наступний набір затверджені.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Побачив у повідомленні МОН вашу онлайн IT-школу з модулями Frontend і Python та практичним проєктом у кожному модулі. StudyCod може автоматизувати перевірку коротких задач і пояснення помилок. Чи має сенс обговорити формат для наступного набору?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>МОН повідомляє про програму 2 червня–20 серпня 2026 року, три модулі та практичний проєкт у кожному модулі.</p></div><div><span>Source</span><p>Government announcement · 2026-05-19</p><a href="https://mon.gov.ua/news/litnia-it-shkola-2026-shkoliariv-zaproshuiut-zrobyty-pershi-kroky-v-prohramuvanni" target="_blank" rel="noreferrer">Літня ІТ школа 2026: школярів запрошують зробити перші кроки в програмуванні ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">05</div>
+        <div class="identity">
+          <span class="eyebrow">University-industry program</span>
+          <h3>NIX + SEMIT, NTU KhPI</h3>
+          <span class="stage warm">Trigger present</span>
+        </div>
+        <div class="score" style="--score:80" aria-label="Fit score 80 out of 100"><strong>80</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>NIX запросив студентів на місячний онлайн Summer Camp 2026 із selection test, технологічними треками, ролями в командах і розробкою web-продукту з нуля.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>StudyCod може бути спільним шаром для selection test, базових задач і перевірки індивідуального внеску до командної роботи на Python/JavaScript або суміжних мовах.</p></div>
+        <div><span>Why now</span><p>Такі інтенсиви повторюються сезонно; наступна підготовка до camp або internship — конкретний момент для короткого proof-of-value.</p></div>
+        <div><span>Suggested channel</span><p>Контакт SEMIT/NTU KhPI з офіційної сторінки або партнерський контакт NIX; адресат — координатор internship/education.</p></div>
+        <div><span>Caution</span><p>Червневий camp, імовірно, вже завершився; перевірити, хто приймає рішення щодо наступних наборів.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Побачив опис NIX Summer Camp із selection test і місячною онлайн-розробкою web-продукту командами. StudyCod може взяти на себе перевірку базових coding-задач і feedback до командного етапу. Чи варто показати короткий варіант для наступного інтенсиву?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Офіційна сторінка кафедри від 9 червня 2026 року описує практичний формат, онлайн-роботу та наближення до реального IT-проєкту.</p></div><div><span>Source</span><p>University department announcement · 2026-06-09</p><a href="https://web.kpi.kharkov.ua/asu/2026/06/09/nix-summer-camp-summer-online-intensive-for-students/" target="_blank" rel="noreferrer">NIX Summer Camp: Summer Online Intensive for Students ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:60%"></i></div><b>3/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">06</div>
+        <div class="identity">
+          <span class="eyebrow">Education transformation initiative</span>
+          <h3>IT Ukraine + Junior Achievement Ukraine (VET Bridge)</h3>
+          <span class="stage warm">Problem aware</span>
+        </div>
+        <div class="score" style="--score:79" aria-label="Fit score 79 out of 100"><strong>79</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>МОН описує професійні коледжі як такі, що стикаються з нестачею сучасних інструментів управління, слабкою цифровою інфраструктурою та застарілою організацією освітнього процесу.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>StudyCod може бути не лише продуктом для одного коледжу, а демонстраційним digital workflow для практичних IT-дисциплін: задачі, оцінювання, прогрес і teacher dashboard.</p></div>
+        <div><span>Why now</span><p>Ініціатива вже працює з керівниками коледжів і шукає прикладні моделі цифрової трансформації; канал партнера може дати доступ до кількох design partners.</p></div>
+        <div><span>Suggested channel</span><p>Партнерський контакт IT Ukraine або Junior Achievement Ukraine; просити 20-хвилинну розмову з координатором VET Bridge.</p></div>
+        <div><span>Caution</span><p>Ініціатива може бути радше каналом дистрибуції/партнером, ніж платником; не припускати єдиного procurement процесу.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>У матеріалі МОН про IT for ProfTech ви прямо описуєте нестачу цифрових інструментів і застарілі процеси в коледжах. StudyCod може бути вузьким прикладом цифрового workflow для практичного програмування. Чи є серед учасників коледж, готовий перевірити такий пілот?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>У квітні 2026 року партнери запустили IT for ProfTech: Bootcamp, розроблений на основі опитування керівників закладів професійної освіти.</p></div><div><span>Source</span><p>Government announcement · 2026-04-03</p><a href="https://mon.gov.ua/news/tsyfrovi-zminy-pochynaiutsia-z-upravlinnia-start-kursu-it-for-proftech-bootcamp" target="_blank" rel="noreferrer">Цифрові зміни починаються з управління — старт курсу IT for ProfTech: Bootcamp ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">07</div>
+        <div class="identity">
+          <span class="eyebrow">University intensive</span>
+          <h3>Kyiv School of Economics — Agentic AI Summer School</h3>
+          <span class="stage warm">Trigger present</span>
+        </div>
+        <div class="score" style="--score:78" aria-label="Fit score 78 out of 100"><strong>78</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Школа запустила 9-тижневу інтенсивну програму з командним проєктом, чотирма sprint demo, review homework/project assignments і оцінюванням уміння працювати з помилками та ітераціями.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>StudyCod може підтримати базову перевірку коду, алгоритмічне мислення та reproducible feedback перед командним AI-проєктом; особливо корисний як pre-work або diagnostic.</p></div>
+        <div><span>Why now</span><p>Для поточного набору це радше розмова про feedback до наступного сезону або інших курсів KSE, але формат інтенсиву добре підходить для короткого пілота.</p></div>
+        <div><span>Suggested channel</span><p>Публічний admission/program contact KSE; адресат — program manager або lecturer responsible for practical work.</p></div>
+        <div><span>Caution</span><p>Поточна школа вже стартувала; не пропонувати заміну їхньому mentoring/review process без розуміння його масштабу.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Побачив у KSE Summer School sprint demos, review homework і фокус на ітерації та виправленні помилок. StudyCod може закрити невеликий pre-work шар із перевірюваними задачами та feedback. Чи цікаво порівняти це з вашим поточним workflow для наступної програми?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Офіційна сторінка описує 30 місць, старт 1 липня 2026 року, практичні завдання, sprint reviews та фінальний Demo Day.</p></div><div><span>Source</span><p>Official university program page · Date unavailable; page crawled 2026-08-20</p><a href="https://university.kse.ua/en/agentic-ai-summer-school-2026" target="_blank" rel="noreferrer">Agentic AI Summer School 2026 ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:60%"></i></div><b>3/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">08</div>
+        <div class="identity">
+          <span class="eyebrow">University / incubator program</span>
+          <h3>Lviv National University — Boot Camp 2026</h3>
+          <span class="stage warm">Trigger present</span>
+        </div>
+        <div class="score" style="--score:75" aria-label="Fit score 75 out of 100"><strong>75</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Boot Camp 2026 моделює роботу IT-компаній: понад 70 учасників у 7 командах понад два місяці створюють цифрові рішення від дослідження проблеми до MVP і фінальної презентації.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>StudyCod може стандартизувати індивідуальну coding-практику до або під час командного інкубатора, щоб наставники бачили прогрес і базові прогалини.</p></div>
+        <div><span>Why now</span><p>Навіть якщо дедлайн цього набору минув, наступний bootcamp — природний повторюваний use case для раннього пілота.</p></div>
+        <div><span>Suggested channel</span><p>Координатори LNU Boot Camp або Харківського IT Кластеру через публічну сторінку програми.</p></div>
+        <div><span>Caution</span><p>Сторінка стосується набору 2026 року; підтвердити, чи є наступна когорта і хто відповідає за інструменти.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Побачив, що Boot Camp об’єднує 70+ учасників у 7 команд і веде їх від проблеми до MVP. StudyCod може дати наставникам єдиний шар для коротких coding-задач і вимірювання базових навичок до командної роботи. Чи варто обговорити це для наступного сезону?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Офіційна сторінка LNU від 3 квітня 2026 року говорить про практичні IT-компетентності, командну роботу, AI та розрив між освітою й потребами ринку.</p></div><div><span>Source</span><p>Official university announcement · 2026-04-03</p><a href="https://lnu.edu.ua/reiestratsiia-na-osvitno-praktychnyy-proiekt-boot-camp-2026/" target="_blank" rel="noreferrer">Реєстрація на освітньо-практичний проєкт Boot Camp 2026 ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:60%"></i></div><b>3/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:60%"></i></div><b>3/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">09</div>
+        <div class="identity">
+          <span class="eyebrow">Online children’s coding school</span>
+          <h3>Digital World, Online School</h3>
+          <span class="stage warm">Trigger present</span>
+        </div>
+        <div class="score" style="--score:75" aria-label="Fit score 75 out of 100"><strong>75</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>Онлайн-школа шукає викладача для курсів дітям у Scratch, Python, Java, Unity, Minecraft і Roblox; роль передбачає онлайн-викладання та індивідуальну підтримку учнів у складних темах.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>Для їхніх Python/Java-груп StudyCod може зменшити ручну перевірку, дати повторні спроби та структурований feedback; Scratch/Unity/Roblox лишаються поза основним fit.</p></div>
+        <div><span>Why now</span><p>Вакансія показує активне розширення teaching capacity; пілот на одній Python-групі можна запропонувати без перебудови всієї школи.</p></div>
+        <div><span>Suggested channel</span><p>Відповідь через вакансію/публічну сторінку Digital World; просити контакт академічного координатора.</p></div>
+        <div><span>Caution</span><p>Вакансія не доводить, що школа вже має проблему з перевіркою; спочатку перевірити обсяг домашніх робіт і поточний інструмент.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Побачив, що Digital World набирає викладача для онлайн-груп дітей і робить акцент на індивідуальній підтримці. Для Python/Java StudyCod може автоматично перевіряти задачі та пояснювати типові помилки. Чи готові ви перевірити це на одній невеликій групі?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Публічна вакансія від 29 липня 2026 року описує одночасно full-time/part-time формат, групи до шести учнів і набір викладача перед новим навчальним циклом.</p></div><div><span>Source</span><p>Public job posting · 2026-07-29</p><a href="https://robota.ua/company13848333/vacancy9696004" target="_blank" rel="noreferrer">Вакансія: Викладач програмування — Digital World, Онлайн-школа ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:60%"></i></div><b>3/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article>
+    <article class="prospect reveal">
+      <header class="prospect-head">
+        <div class="rank">10</div>
+        <div class="identity">
+          <span class="eyebrow">STEM school</span>
+          <h3>STEM school INVENTOR</h3>
+          <span class="stage warm">Trigger present</span>
+        </div>
+        <div class="score" style="--score:73" aria-label="Fit score 73 out of 100"><strong>73</strong><small>/100</small></div>
+      </header>
+      <div class="signal"><span>Public signal</span><p>INVENTOR набирає викладача програмування та робототехніки на кілька київських локацій; роль передбачає роботу з дітьми 9–16 років, Python/Scratch, проєктами та зворотним зв’язком учням і батькам.</p></div>
+      <div class="prospect-grid">
+        <div><span>Why it fits</span><p>StudyCod може доповнити Python-частину їхніх STEM-курсів browser-based задачами, тестами й історією прогресу; робототехніка та Scratch потребуватимуть окремої перевірки сумісності.</p></div>
+        <div><span>Why now</span><p>Набір викладачів і розклад на багато локацій — практичний сигнал для стандартизації feedback до старту осінніх груп.</p></div>
+        <div><span>Suggested channel</span><p>Публічна вакансія або офіційний сайт INVENTOR; адресат — academic/operations lead, не окремий викладач.</p></div>
+        <div><span>Caution</span><p>Не змішувати Python-пілот із Scratch/робототехнікою; перевірити, чи потрібен школі online judge, а не лише LMS/матеріали.</p></div>
+      </div>
+      <blockquote><span>Suggested opener</span>Побачив у вакансії INVENTOR кілька локацій, Python і фокус на проєктній роботі та feedback батькам. StudyCod може додати єдину практику з автоматичними тестами для Python-груп. Чи є сенс перевірити це на одній локації до старту сезону?</blockquote>
+      <details>
+        <summary>Evidence and score breakdown</summary>
+        <div class="evidence"><div><span>Evidence</span><p>Публічна вакансія від 13 серпня 2026 року перелічує вільні часові блоки на багатьох локаціях, готову програму й потребу мотивувати дітей під час роботи над проєктами.</p></div><div><span>Source</span><p>Public job posting · 2026-08-13</p><a href="https://alliance-desktop.robota.ua/company687534/vacancy11296959" target="_blank" rel="noreferrer">Вакансія: Викладач/ка STEM курсів програмування та робототехніки ↗</a></div></div>
+        <div class="metrics"><div class="metric"><span>Pain strength</span><div class="track"><i style="width:60%"></i></div><b>3/5</b></div><div class="metric"><span>Product fit</span><div class="track"><i style="width:60%"></i></div><b>3/5</b></div><div class="metric"><span>Timing</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div><div class="metric"><span>Reachability</span><div class="track"><i style="width:80%"></i></div><b>4/5</b></div><div class="metric"><span>Evidence quality</span><div class="track"><i style="width:100%"></i></div><b>5/5</b></div></div>
+      </details>
+    </article></div></section>
+      <section><header class="section-head"><h2>Signals that repeat.</h2><p>Patterns across prospects reveal the strongest positioning, workflow, and outreach angles.</p></header><div class="patterns">
+    <article class="pattern reveal"><span class="pattern-num">01</span><div><h3>Новий сезон або когорта</h3><p>Найчастіший timing-сигнал — новий набір, літній інтенсив або осінній старт; StudyCod варто продавати як швидкий пілот, який запускається за 1–2 тижні.</p></div><strong>6×</strong></article>
+    <article class="pattern reveal"><span class="pattern-num">02</span><div><h3>Практика замість лекцій</h3><p>Когорти публічно описують проєкти, спринти, MVP, командну роботу та coding-by-doing. Позиціонування має починатися з циклу задача → запуск → тест → виправлення.</p></div><strong>7×</strong></article>
+    <article class="pattern reveal"><span class="pattern-num">03</span><div><h3>Перевірка та feedback у масштабі</h3><p>Вакансії та програми згадують індивідуальну підтримку, журнал успішності, sprint reviews або перевірку homework. Це найкращий міст від pain до StudyCod.</p></div><strong>5×</strong></article>
+    <article class="pattern reveal"><span class="pattern-num">04</span><div><h3>Онлайн і розподілені групи</h3><p>Онлайн/гібридний формат повторюється в школах та інтенсивах, тому браузерний доступ і відсутність локального налаштування — важлива частина першого пілота.</p></div><strong>5×</strong></article></div></section>
+      <section class="plan"><div><span class="eyebrow" style="color:#111">Seven-day manual plan</span><h2>Запропонувати вузький пілот: одна когорта, одна підтримувана мова, 5–10 задач і вимірювання часу на перевірку та feedback.</h2></div><div class="plan-grid"><div><span>First step</span><p>Дні 1–2: вручну звернутися до RoboCode, SET University та //kood через публічні канали; поставити по одному питанню, прив’язаному до їхнього сигналу, без автоматичної розсилки.</p></div><div><span>Follow-up</span><p>Дні 3–5: після підтвердження pain налаштувати 5–10 Python/C++/C# задач і порівняти один навчальний цикл із поточним процесом перевірки.</p></div><div><span>Success signal</span><p>До дня 7: три розмови, один live design-partner пілот, щонайменше 10 студентських submission-ів і згода на наступний крок або оплату.</p></div><div><span>Research scope</span><p>Публічні україномовні та англомовні джерела; переважно сигнали 2026 року; відкриті сайти організацій, університетів, МОН і публічні вакансії</p></div></div></section>
+      <section class="limits"><h2>Use this shortlist responsibly</h2><ul><li>Усі записи — потенційні клієнти на основі публічних сигналів; жоден не підтвердив інтерес, бюджет або готовність купити.</li><li>Частина програм уже стартувала або завершила набір; перед зверненням потрібно перевірити актуальність і наступну когорту.</li><li>Вакансія або опис програми показують timing і fit, але не доводять, що організація незадоволена поточним LMS чи gradebook.</li><li>Підтримка StudyCod найкраща для Python, C++, C#, Java та JavaScript-практики; Scratch, робототехніка, Unity і специфічні AI-workflows треба окремо валідовувати.</li><li>Контакти, повідомлення, форми, підписки та CRM-записи не створювалися; outreach має залишатися ручним і контекстним.</li></ul></section>
+    </main>
+    <footer><span>Generated by $first-customer-finder</span><span>Outreach is never sent automatically.</span></footer>
+  </div>
+</body>
+</html>

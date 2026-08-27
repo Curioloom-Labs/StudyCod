@@ -62,7 +62,7 @@ export const ManualTaskPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>{tr("Завантаження...", "Loading...")}</div>;
+  if (loading) return <div role="status" aria-live="polite" style={{ padding: 24 }}>{tr("Завантаження…", "Loading…")}</div>;
 
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", padding: "0 16px 48px" }}>
@@ -88,7 +88,7 @@ export const ManualTaskPage: React.FC = () => {
           value={text}
           onChange={e => setText(e.target.value)}
           rows={8}
-          placeholder={tr("Ваша відповідь...", "Your answer...")}
+          placeholder={tr("Ваша відповідь…", "Your answer…")}
           style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid rgba(128,128,128,0.3)", boxSizing: "border-box" }}
         />
         <label style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" }}>
@@ -97,7 +97,7 @@ export const ManualTaskPage: React.FC = () => {
           <input type="file" style={{ display: "none" }} onChange={e => setFile(e.target.files?.[0] ?? null)} />
         </label>
         <Button onClick={submit} disabled={busy}>
-          <Send size={16} /> {busy ? tr("Надсилання...", "Submitting...") : tr("Надіслати", "Submit")}
+          <Send size={16} /> {busy ? tr("Надсилання…", "Submitting…") : tr("Надіслати", "Submit")}
         </Button>
       </div>
     </div>

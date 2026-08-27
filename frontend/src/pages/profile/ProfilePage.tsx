@@ -484,7 +484,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
           <motion.div variants={fadeUpItem} className="relative shrink-0">
             <div className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center text-3xl font-mono text-primary bg-bg-surface ring-2 ring-primary/40 ring-offset-2 ring-offset-bg-base">
               {avatarUrl ? (
-                <img src={avatarUrl} alt={`${tr("Аватар", "Avatar")}: ${user.username}`} className="w-full h-full object-cover" />
+                <img src={avatarUrl} alt={`${tr("Аватар", "Avatar")}: ${user.username}`} width={96} height={96} loading="lazy" className="w-full h-full object-cover" />
               ) : (
                 user.username.slice(0, 1).toUpperCase()
               )}

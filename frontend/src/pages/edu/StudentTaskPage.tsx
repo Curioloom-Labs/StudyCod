@@ -1661,7 +1661,7 @@ export const StudentTaskPage: React.FC = () => {
 
                 <Button variant="primary" size="sm" onClick={handleSubmit} disabled={submitting || !canSubmit} className="px-3" aria-label={submitting ? tr("Перевірка…", "Checking…") : tr("Відправити рішення", "Submit solution")}>
                   <Send className="w-4 h-4 sm:mr-1.5" />
-                  <span className="hidden sm:inline">{submitting ? tr("Перевірка...", "Checking...") : tr("Відправити", "Submit")}</span>
+                  <span className="hidden sm:inline">{submitting ? tr("Перевірка…", "Checking…") : tr("Відправити", "Submit")}</span>
                 </Button>
 
                 {}
@@ -1807,7 +1807,7 @@ export const StudentTaskPage: React.FC = () => {
                         {tr("питань", "questions")}
                       </div>
                     </div>
-                    {quizQuestions.map((q, index: number) => <Card id={`quiz-q-${index}`} key={index} className={`p-4 transition-all ${quizAnswers[index] ? "border-primary/50 bg-bg-code/50" : "border-border"} ${quizSubmitted && quizAnswers[index] === q.correct ? "border-accent-success bg-accent-success/10" : quizSubmitted && quizAnswers[index] && quizAnswers[index] !== q.correct ? "border-accent-error bg-accent-error/10" : ""}`}>
+                    {quizQuestions.map((q, index: number) => <Card id={`quiz-q-${index}`} key={index} className={`p-4 transition-[border-color,background-color] duration-150 ${quizAnswers[index] ? "border-primary/50 bg-bg-code/50" : "border-border"} ${quizSubmitted && quizAnswers[index] === q.correct ? "border-accent-success bg-accent-success/10" : quizSubmitted && quizAnswers[index] && quizAnswers[index] !== q.correct ? "border-accent-error bg-accent-error/10" : ""}`}>
                         <div className="mb-4">
                           <div className="flex items-start gap-2 mb-2">
                             <span className="text-xs font-mono text-text-secondary bg-bg-surface px-2 py-1 rounded">
@@ -1824,7 +1824,7 @@ export const StudentTaskPage: React.FC = () => {
                   const isSelected = quizAnswers[index] === option;
                   const isCorrect = q.correct === option;
                   const isWrong = isSelected && !isCorrect && quizSubmitted;
-                  return <label key={option} className={`flex items-start p-3 border-2 rounded-lg cursor-pointer transition-all ${isSelected && !quizSubmitted ? "border-primary bg-primary/10 shadow-md" : quizSubmitted && isCorrect ? "border-accent-success bg-accent-success/20" : quizSubmitted && isWrong ? "border-accent-error bg-accent-error/20" : "border-border hover:border-primary/50 hover:bg-bg-hover"} ${quizSubmitted ? "cursor-default" : ""}`}>
+                  return <label key={option} className={`flex items-start p-3 border-2 rounded-lg cursor-pointer transition-[border-color,background-color,box-shadow] duration-150 ${isSelected && !quizSubmitted ? "border-primary bg-primary/10 shadow-md" : quizSubmitted && isCorrect ? "border-accent-success bg-accent-success/20" : quizSubmitted && isWrong ? "border-accent-error bg-accent-error/20" : "border-border hover:border-primary/50 hover:bg-bg-hover"} ${quizSubmitted ? "cursor-default" : ""}`}>
                                 <input type="radio" name={`question-${index}`} value={option} checked={isSelected} onChange={() => {
                       if (!quizSubmitted) {
                         const newAnswers = {
@@ -1952,7 +1952,7 @@ export const StudentTaskPage: React.FC = () => {
                     {}
                     <div className="border-b border-border p-3 flex-shrink-0">
                       <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-2">{tr("Вхідні дані", "Input")}</div>
-                      <textarea value={testInput} onChange={e => setTestInput(e.target.value)} placeholder={tr("Введіть тестові дані...", "Enter test input...")} className="w-full h-24 bg-bg-base border border-border rounded-lg p-2 font-mono text-xs text-text-primary resize-none focus:outline-none focus:border-primary" spellCheck={false} />
+                      <label htmlFor="student-task-test-input" className="sr-only">{tr("Вхідні тестові дані", "Test input")}</label><textarea id="student-task-test-input" name="testInput" value={testInput} onChange={e => setTestInput(e.target.value)} placeholder={tr("Введіть тестові дані…", "Enter test input…")} className="w-full h-24 bg-bg-base border border-border rounded-lg p-2 font-mono text-xs text-text-primary resize-none focus:outline-none focus:border-primary" spellCheck={false} />
                     </div>
                     {}
                     <div className="flex-1 overflow-y-auto p-4">
@@ -1960,7 +1960,7 @@ export const StudentTaskPage: React.FC = () => {
                       {isRunningTests && Object.keys(testProgress).length > 0 ? <div className="space-y-2" role="status" aria-live="polite">
                           <div className="flex items-center gap-2 text-xs font-mono text-text-primary mb-3">
                             <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                            <span>{tr("Перевіряємо код...", "Checking code...")}</span>
+                            <span>{tr("Перевіряємо код…", "Checking code…")}</span>
                           </div>
                           {Object.entries(testProgress).sort(([a], [b]) => parseInt(a) - parseInt(b)).map(([testId, status], index) => <div key={testId} className="flex items-center gap-2 text-xs font-mono">
                                 {status === 'pending' && <span className="text-text-muted">• {tr("Тест", "Test")} {index + 1}</span>}
@@ -1982,7 +1982,7 @@ export const StudentTaskPage: React.FC = () => {
                 }}>
                           {consoleOutput}
                         </pre> : <span className="text-text-muted italic">
-                          {tr("// Результат виконання з'явиться тут...", "// Program output will appear here...")}
+                          {tr("// Результат виконання з'явиться тут…", "// Program output will appear here…")}
                         </span>}
                     </div>
                   </div>
@@ -2107,7 +2107,7 @@ export const StudentTaskPage: React.FC = () => {
                                   disabled={hintFeedbackSending}
                                   onClick={() => void handleSendHintFeedback("down")}
                                 >
-                                  {hintFeedbackSending ? tr("Надсилання...", "Sending...") : tr("Надіслати відгук", "Send feedback")}
+                                  {hintFeedbackSending ? tr("Надсилання…", "Sending…") : tr("Надіслати відгук", "Send feedback")}
                                 </Button>
                                 <Button
                                   variant="ghost"

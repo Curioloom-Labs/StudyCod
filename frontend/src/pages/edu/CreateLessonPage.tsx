@@ -179,12 +179,12 @@ export const CreateLessonPage: React.FC = () => {
                   </div>
                   {theoryMode === "markdown" ? (
                     <>
-                      <textarea value={theory} onChange={e => setTheory(e.target.value)} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px] transition-fast" placeholder={tr("Введіть теорію або згенеруйте через ШІ...", "Write theory or generate it with AI...")} />
+                      <label htmlFor="create-lesson-theory" className="sr-only">Теорія уроку</label><textarea id="create-lesson-theory" name="theory" value={theory} onChange={e => setTheory(e.target.value)} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary min-h-[200px] transition-fast" placeholder={tr("Введіть теорію або згенеруйте через ШІ…", "Write theory or generate it with AI…")} />
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input type="text" value={topicTitle} onChange={e => setTopicTitle(e.target.value)} placeholder={tr("Назва теми для генерації", "Topic name for generation")} className="flex-1 px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary transition-fast" />
                         <Button variant="ghost" onClick={handleGenerateTheory} disabled={generatingTheory} className="text-xs">
                           <Sparkles className="w-4 h-4 mr-1" />
-                          {generatingTheory ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
+                          {generatingTheory ? tr("Генерація…", "Generating…") : tr("Згенерувати", "Generate")}
                         </Button>
                       </div>
                     </>
@@ -194,7 +194,7 @@ export const CreateLessonPage: React.FC = () => {
                         <input type="text" value={topicTitle} onChange={e => setTopicTitle(e.target.value)} placeholder={tr("Назва теми для генерації", "Topic name for generation")} className="flex-1 px-3 py-2 bg-bg-base border border-border text-text-primary font-mono text-sm focus:outline-none focus:border-primary transition-fast" />
                         <Button variant="ghost" onClick={handleGenerateInteractive} disabled={generatingInteractive} className="text-xs">
                           <Sparkles className="w-4 h-4 mr-1" />
-                          {generatingInteractive ? tr("Генерація...", "Generating...") : tr("Згенерувати", "Generate")}
+                          {generatingInteractive ? tr("Генерація…", "Generating…") : tr("Згенерувати", "Generate")}
                         </Button>
                       </div>
                       <LessonBlocksEditor value={lessonBlocks} onChange={(l) => { setLessonBlocks(l); setTheory(JSON.stringify(l)); }} />

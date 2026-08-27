@@ -221,7 +221,7 @@ const PracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
         </div>
         <button type="button" className="mt-4 w-full rounded-2xl bg-[#173321] px-4 py-3 text-xs font-bold text-white dark:bg-[#00d978] dark:text-[#062211]"><Play className="mr-1.5 inline size-3.5" />Run</button>
       </aside>
-      <main className="min-w-0 overflow-hidden bg-[#101713]">
+      <main id="main-content" className="min-w-0 overflow-hidden bg-[#101713]">
         <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3"><span className="size-2.5 rounded-full bg-[#ff6b9d]" /><span className="size-2.5 rounded-full bg-[#ffd93d]" /><span className="size-2.5 rounded-full bg-[#00ff88]" /><span className="ml-2 text-[10px] text-[#aab7ad]">main.py</span></div>
         <pre className="m-0 min-h-[470px] max-w-full overflow-x-auto whitespace-pre-wrap break-words p-8 font-mono text-[clamp(11px,1vw,13px)] leading-8 text-[#dbe7df] max-md:min-h-[320px] max-md:p-6"><span className={codeColors.keyword}>n</span> = int(input()){"\n"}total = 0{"\n"}<span className={codeColors.keyword}>for</span> i <span className={codeColors.keyword}>in</span> range(1, n + 1):{"\n"}    total += i{"\n"}print(total)</pre>
       </main>

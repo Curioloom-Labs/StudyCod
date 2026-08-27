@@ -145,7 +145,7 @@ export const GradebookConfigPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>{tr("Завантаження...", "Loading...")}</div>;
+  if (loading) return <div role="status" aria-live="polite" style={{ padding: 24 }}>{tr("Завантаження…", "Loading…")}</div>;
 
   return (
     <div style={{ maxWidth: 820, margin: "0 auto", padding: "0 16px 48px" }}>
@@ -208,7 +208,7 @@ export const GradebookConfigPage: React.FC = () => {
           {tr("Сума ваг", "Total weight")}: {totalWeight} ({tr("нормалізується автоматично", "auto-normalized")})
         </span>
         <Button onClick={save} disabled={saving} style={{ marginLeft: "auto" }}>
-          <Save size={16} /> {saving ? tr("Збереження...", "Saving...") : tr("Зберегти", "Save")}
+          <Save size={16} /> {saving ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
         </Button>
       </div>
 
@@ -305,7 +305,7 @@ export const GradebookConfigPage: React.FC = () => {
               </Button>
             )}
             <Button variant="secondary" onClick={loadFinals} disabled={finalsLoading}>
-              {finalsLoading ? tr("Обчислення...", "Computing...") : tr("Оновити", "Refresh")}
+              {finalsLoading ? tr("Обчислення…", "Computing…") : tr("Оновити", "Refresh")}
             </Button>
           </div>
           <p style={{ fontSize: 13, opacity: 0.7, marginTop: 8 }}>

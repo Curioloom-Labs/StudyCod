@@ -53,12 +53,12 @@ export const TheoryModalPortal: React.FC<Props> = ({
             <h2 id={titleId} className="text-lg font-mono text-text-primary">{title}</h2>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-4">
+          <div className="modal-scroll-container flex-1 overflow-y-auto px-6 py-4">
             <MarkdownView content={markdown} />
           </div>
 
           <div className="px-6 py-4 border-t border-border flex justify-end flex-shrink-0">
-            <Button variant="primary" onClick={() => onAcknowledgeRef.current()}>
+            <Button type="button" variant="primary" onClick={() => onAcknowledgeRef.current()}>
               {acknowledgeLabel}
             </Button>
           </div>

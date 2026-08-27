@@ -59,7 +59,7 @@ export const LessonQuizPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>{tr("Завантаження...", "Loading...")}</div>;
+  if (loading) return <div role="status" aria-live="polite" style={{ padding: 24 }}>{tr("Завантаження…", "Loading…")}</div>;
 
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", padding: "0 16px 48px" }}>
@@ -93,7 +93,7 @@ export const LessonQuizPage: React.FC = () => {
             </div>
           ))}
           <Button onClick={submit} disabled={busy}>
-            <Send size={16} /> {busy ? tr("Надсилання...", "Submitting...") : tr("Надіслати", "Submit")}
+            <Send size={16} /> {busy ? tr("Надсилання…", "Submitting…") : tr("Надіслати", "Submit")}
           </Button>
         </div>
       )}

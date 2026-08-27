@@ -629,7 +629,7 @@ export const TopicStudioPage: React.FC = () => {
                   <TerminalSquare className="size-5 text-[#16834d] dark:text-[#7bedb4]" />
                   <h3 className="font-black">Практичне завдання</h3>
                 </div>
-                <input value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} placeholder="Назва завдання" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
+                <input id="topic-task-title" name="taskTitle" aria-label="Назва завдання" value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} placeholder="Назва завдання" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => void generateCondition()} disabled={!!aiBusy || !taskForm.title.trim()} className="inline-flex items-center gap-2 rounded-xl bg-[#fff3df] px-3 py-2 text-xs font-black text-[#9b5300] disabled:opacity-45 dark:bg-[#ff8c00]/12 dark:text-[#ffbc6a]">
                     <Sparkles className="size-3.5" />
@@ -640,8 +640,8 @@ export const TopicStudioPage: React.FC = () => {
                     {aiBusy === "template" ? "Генерую…" : "Стартовий код"}
                   </button>
                 </div>
-                <textarea value={taskForm.description} onChange={(event) => setTaskForm({ ...taskForm, description: event.target.value })} placeholder="Умова, контекст, обмеження" rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
-                <textarea value={taskForm.template} onChange={(event) => setTaskForm({ ...taskForm, template: event.target.value })} placeholder="Стартовий код (необовʼязково)" rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-sm text-[#dbe8df] outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10" />
+                <textarea id="topic-task-description" name="taskDescription" aria-label="Умова завдання" value={taskForm.description} onChange={(event) => setTaskForm({ ...taskForm, description: event.target.value })} placeholder="Умова, контекст, обмеження" rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
+                <textarea id="topic-task-template" name="taskTemplate" aria-label="Стартовий код" value={taskForm.template} onChange={(event) => setTaskForm({ ...taskForm, template: event.target.value })} placeholder="Стартовий код (необовʼязково)" rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-sm text-[#dbe8df] outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10" />
               </section>
               <section className="space-y-4 rounded-[26px] border border-[#142018]/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
                 <div className="flex items-center gap-3">
@@ -650,16 +650,19 @@ export const TopicStudioPage: React.FC = () => {
                 </div>
                 <label className="block">
                   <span className="mb-2 block text-xs font-black uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">Спроб</span>
-                  <input value={taskForm.maxAttempts} onChange={(event) => setTaskForm({ ...taskForm, maxAttempts: event.target.value })} type="number" min="1" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
+                  <input id="topic-task-max-attempts" name="maxAttempts" aria-label="Максимальна кількість спроб" value={taskForm.maxAttempts} onChange={(event) => setTaskForm({ ...taskForm, maxAttempts: event.target.value })} type="number" min="1" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
                 </label>
                 <button type="button" onClick={() => void generateTheory()} disabled={!!aiBusy || !taskForm.description.trim()} className="inline-flex items-center gap-2 rounded-xl bg-[#fff3df] px-3 py-2 text-xs font-black text-[#9b5300] disabled:opacity-45 dark:bg-[#ff8c00]/12 dark:text-[#ffbc6a]">
                   <Sparkles className="size-3.5" />
                   {aiBusy === "theory" ? "Генерую…" : "Згенерувати теорію"}
                 </button>
-                <textarea value={taskForm.theory} onChange={(event) => setTaskForm({ ...taskForm, theory: event.target.value })} placeholder="Коротке пояснення перед практикою: поняття, приклад, пастки" rows={9} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
+                <textarea id="topic-task-theory" name="taskTheory" aria-label="Теорія завдання" value={taskForm.theory} onChange={(event) => setTaskForm({ ...taskForm, theory: event.target.value })} placeholder="Коротке пояснення перед практикою: поняття, приклад, пастки" rows={9} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
                 <div>
                   <label className="mb-2 block text-xs font-black uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">Мініпроєкт · projectSpec JSON (необовʼязково)</label>
                   <textarea
+                    id="topic-task-project-spec"
+                    name="projectSpecJson"
+                    aria-label="Специфікація мініпроєкту JSON"
                     value={taskForm.projectSpecJson}
                     onChange={(event) => setTaskForm({ ...taskForm, projectSpecJson: event.target.value })}
                     placeholder={'{"version":1,"kind":"MINI_PROJECT","estimatedMinutes":45,"skills":["цикли"],"milestones":[{"id":"step-1","title":"Перший етап","description":"Що має зробити учень.","required":true}]}' }
@@ -685,19 +688,19 @@ export const TopicStudioPage: React.FC = () => {
                   <ClipboardCheck className="size-5 text-[#e17800]" />
                   <h3 className="font-black">Параметри контрольної</h3>
                 </div>
-                <input value={controlForm.title} onChange={(event) => setControlForm({ ...controlForm, title: event.target.value })} placeholder="Наприклад, Контрольна · Колекції" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
+                <input id="topic-control-title" name="controlTitle" aria-label="Назва контрольної" value={controlForm.title} onChange={(event) => setControlForm({ ...controlForm, title: event.target.value })} placeholder="Наприклад, Контрольна · Колекції" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
                 <div className="grid gap-3 sm:grid-cols-3">
                   <label className="block">
                     <span className="mb-2 block text-xs font-black uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">хвилин</span>
-                    <input value={controlForm.timeLimitMinutes} onChange={(event) => setControlForm({ ...controlForm, timeLimitMinutes: event.target.value })} type="number" min="1" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
+                    <input id="topic-control-time" name="timeLimitMinutes" aria-label="Ліміт часу в хвилинах" value={controlForm.timeLimitMinutes} onChange={(event) => setControlForm({ ...controlForm, timeLimitMinutes: event.target.value })} type="number" min="1" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
                   </label>
                   <label className="block">
                     <span className="mb-2 block text-xs font-black uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">тестів</span>
-                    <input value={controlForm.quizCount} onChange={(event) => setControlForm({ ...controlForm, quizCount: event.target.value })} type="number" min="0" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
+                    <input id="topic-control-quiz-count" name="quizCount" aria-label="Кількість тестів" value={controlForm.quizCount} onChange={(event) => setControlForm({ ...controlForm, quizCount: event.target.value })} type="number" min="0" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
                   </label>
                   <label className="block">
                     <span className="mb-2 block text-xs font-black uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">практик</span>
-                    <input value={controlForm.practiceCount} onChange={(event) => setControlForm({ ...controlForm, practiceCount: event.target.value })} type="number" min="0" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
+                    <input id="topic-control-practice-count" name="practiceCount" aria-label="Кількість практичних задач" value={controlForm.practiceCount} onChange={(event) => setControlForm({ ...controlForm, practiceCount: event.target.value })} type="number" min="0" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
                   </label>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -716,7 +719,7 @@ export const TopicStudioPage: React.FC = () => {
                   <ListChecks className="size-5 text-[#16834d] dark:text-[#7bedb4]" />
                   <h3 className="font-black">Оцінювання</h3>
                 </div>
-                <textarea value={controlForm.formula} onChange={(event) => setControlForm({ ...controlForm, formula: event.target.value })} rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-sm text-[#dbe8df] outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10" />
+                <textarea id="topic-control-formula" name="gradingFormula" aria-label="Формула оцінювання" value={controlForm.formula} onChange={(event) => setControlForm({ ...controlForm, formula: event.target.value })} rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-sm text-[#dbe8df] outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10" />
                 <div className="rounded-2xl bg-[#e9f8ef] p-4 text-sm leading-6 text-[#506057] dark:bg-[#12301e] dark:text-[#c1d2c5]">
                   Після створення відкриється control studio — там можна згенерувати квіз, додати практичні задачі та перевірити формулу.
                 </div>
@@ -744,17 +747,17 @@ export const TopicStudioPage: React.FC = () => {
                       <p className="truncate font-mono text-xs text-[#34463a] dark:text-[#d8e3db]">in: {test.input || "∅"}</p>
                       <p className="mt-1 truncate font-mono text-xs text-[#34463a] dark:text-[#d8e3db]">out: {test.expectedOutput}</p>
                     </div>
-                    <button type="button" onClick={() => void removeTest(test)} className="text-[#bd4067] dark:text-[#ff9abd]"><Trash2 className="size-4" /></button>
+                    <button type="button" onClick={() => void removeTest(test)} aria-label={`Видалити тест ${index + 1}`} className="text-[#bd4067] dark:text-[#ff9abd]"><Trash2 className="size-4" aria-hidden="true" /></button>
                   </div>
                 ))}
                 {!tests.length && <p className="rounded-2xl border border-dashed border-[#142018]/15 px-4 py-10 text-center text-sm text-[#718075] dark:border-white/10 dark:text-[#a6b4a9]">Тестів ще немає.</p>}
               </section>
               <section className="space-y-3 rounded-[26px] border border-[#142018]/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
                 <h3 className="font-black">Додати тест</h3>
-                <textarea value={testForm.input} onChange={(event) => setTestForm({ ...testForm, input: event.target.value })} placeholder="Вхідні дані" rows={5} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#0d1710]" />
-                <textarea value={testForm.expectedOutput} onChange={(event) => setTestForm({ ...testForm, expectedOutput: event.target.value })} placeholder="Очікуваний результат" rows={5} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#0d1710]" />
+                <textarea id="topic-test-input" name="testInput" aria-label="Вхідні дані тесту" value={testForm.input} onChange={(event) => setTestForm({ ...testForm, input: event.target.value })} placeholder="Вхідні дані" rows={5} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#0d1710]" />
+                <textarea id="topic-test-output" name="expectedOutput" aria-label="Очікуваний результат тесту" value={testForm.expectedOutput} onChange={(event) => setTestForm({ ...testForm, expectedOutput: event.target.value })} placeholder="Очікуваний результат" rows={5} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#0d1710]" />
                 <div className="flex gap-3">
-                  <input value={testForm.points} onChange={(event) => setTestForm({ ...testForm, points: event.target.value })} type="number" min="1" className="w-24 rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
+                  <input id="topic-test-points" name="testPoints" aria-label="Бали за тест" value={testForm.points} onChange={(event) => setTestForm({ ...testForm, points: event.target.value })} type="number" min="1" className="w-24 rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
                   <label className="flex items-center gap-2 text-sm font-bold text-[#627269] dark:text-[#aab7ad]">
                     <input type="checkbox" checked={testForm.isHidden} onChange={(event) => setTestForm({ ...testForm, isHidden: event.target.checked })} />
                     Прихований

@@ -64,7 +64,7 @@ export const ManualTaskSubmissionsPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>{tr("Завантаження...", "Loading...")}</div>;
+  if (loading) return <div role="status" aria-live="polite" style={{ padding: 24 }}>{tr("Завантаження…", "Loading…")}</div>;
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 16px 48px" }}>
@@ -81,7 +81,7 @@ export const ManualTaskSubmissionsPage: React.FC = () => {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
           <strong>{tr("Критерії оцінювання", "Rubric")}</strong>
           <Button variant="ghost" onClick={saveRubric} disabled={savingRubric}>
-            {savingRubric ? tr("Збереження...", "Saving...") : tr("Зберегти критерії", "Save rubric")}
+            {savingRubric ? tr("Збереження…", "Saving…") : tr("Зберегти критерії", "Save rubric")}
           </Button>
         </div>
         <div style={{ fontSize: 13, opacity: 0.7, marginBottom: 10 }}>

@@ -220,7 +220,10 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
               "Filename must be a relative path: no .. and no dotfiles. Folders are allowed (e.g. utils/Solver.swift)."
             )}
           </div>
+          <label htmlFor="multi-file-name" className="sr-only">{tr("Назва файлу", "File name")}</label>
           <input
+            id="multi-file-name"
+            name="fileName"
             value={newName}
             onChange={e => {
               setNewName(e.target.value);

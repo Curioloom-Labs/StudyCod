@@ -1,0 +1,286 @@
+{
+  "title": "StudyCod: перші клієнти",
+  "product": "StudyCod",
+  "product_url": "https://studycod.space/",
+  "target_customer": "Українські coding-школи, bootcamp-и, університетські лабораторії та професійні освітні програми, що ведуть когорти з практичним програмуванням",
+  "search_scope": "Публічні україномовні та англомовні джерела; переважно сигнали 2026 року; відкриті сайти організацій, університетів, МОН і публічні вакансії",
+  "generated_at": "2026-08-23",
+  "verdict": "У StudyCod є досяжний ранній ринок: десять освітніх операторів публічно запускають або масштабують практичні програми з програмування, набирають викладачів або описують потребу в сучасних цифрових інструментах. Найкраща перша пропозиція — вузький пілот на одній когорті з Python/C++/C#: завдання, тести, миттєвий фідбек і журнал прогресу. Це гіпотези потенційних клієнтів за публічними сигналами, а не підтверджені покупці.",
+  "prospects": [
+    {
+      "name": "RoboCode",
+      "type": "Coding school",
+      "stage": "Trigger present",
+      "score": 85,
+      "pain_signal": "У вакансії на сезон, що стартує у вересні 2026 року, школа шукає викладачів для дітей 6–16 років; роль включає створення ігор і коду, підтримку учнів, зворотний зв’язок та заповнення журналу успішності.",
+      "evidence": "Публічна вакансія від 10 серпня 2026 року описує плановий набір викладачів, відкриття груп і потребу якісно підготувати команду до нового сезону.",
+      "why_fit": "StudyCod може дати RoboCode браузерний контур для Python/C++/C# практики, автоматичних тестів, спроб і прогресу; це доповнення до їхніх методичних матеріалів, а не заміна занять з робототехніки.",
+      "why_now": "Підготовка до нового навчального сезону та відкриття груп створюють коротке вікно для пілота з одним викладачем і 5–10 завданнями.",
+      "source_title": "Викладач програмування і робототехніки на суботу і неділю",
+      "source_url": "https://robota.ua/company13758593/vacancy11288966",
+      "source_type": "Public job posting",
+      "signal_date": "2026-08-10",
+      "suggested_channel": "Відповідь через публічну вакансію або форму RoboCode для викладачів; адресат — керівник навчального процесу.",
+      "opener": "Побачив у вакансії RoboCode, що на новий сезон вам важливі журнал успішності та зворотний зв’язок учням. StudyCod може автоматично перевіряти Python/C++/C# завдання й зберігати прогрес. Чи було б корисно протестувати це на одній групі до старту сезону?",
+      "caution": "Підтвердити, що школа готова додати окремий інструмент до вже підготовлених матеріалів і що конкретна філія використовує підтримувану мову.",
+      "dimensions": {
+        "pain_strength": 4,
+        "product_fit": 5,
+        "timing": 5,
+        "reachability": 4,
+        "evidence_quality": 5
+      }
+    },
+    {
+      "name": "SET University",
+      "type": "University / short program",
+      "stage": "Trigger present",
+      "score": 84,
+      "pain_signal": "Університет відкрив онлайн-програму на жовтень 2026 року про AI-assisted software engineering; у програмі є практичні завдання, автоматизований рефакторинг, тестування та code review.",
+      "evidence": "Офіційна сторінка вказує старт у жовтні 2026, тривалість 9 тижнів, онлайн-формат і фокус на відтворюваних workflow у SDLC.",
+      "why_fit": "StudyCod може стати контрольованим середовищем для коротких coding-задач, тестів, пояснення помилок і перевірки того, чи справді студент розуміє AI-generated code.",
+      "why_now": "Набір і підготовка до жовтневого онлайн-старту дають можливість вбудувати невеликий практичний модуль до початку занять.",
+      "source_title": "GenAI and Agentic AI for Software Engineering",
+      "source_url": "https://www.setuniversity.edu.ua/en/education/genai-agentic-ai-software-engineering-program/",
+      "source_type": "Official program page",
+      "signal_date": "Date unavailable; page crawled 2026-08-23",
+      "suggested_channel": "Форма/контакт Partnerships або hello@setuniversity.edu.ua, з короткою пропозицією course pilot.",
+      "opener": "На сторінці вашої жовтневої програми побачив фокус на AI-assisted coding, тестуванні та code review. StudyCod може додати перевірювані coding-задачі й feedback loop для практичної частини. Чи шукаєте ви зараз середовище для такого пілота?",
+      "caution": "З’ясувати, чи потрібен окремий judge для навчальних задач: програма може вже мати власний LMS або IDE workflow.",
+      "dimensions": {
+        "pain_strength": 4,
+        "product_fit": 5,
+        "timing": 5,
+        "reachability": 4,
+        "evidence_quality": 5
+      }
+    },
+    {
+      "name": "//kood Ukraine",
+      "type": "Project-based tech school",
+      "stage": "Trigger present",
+      "score": 83,
+      "pain_signal": "//kood проводить трижневий Selection Sprint із навчальними задачами, іспитом і груповим проєктом; в Одесі стартує когорта у вересні/жовтні 2026 року, а навчання передбачає self-paced coding та оцінювання.",
+      "evidence": "Офіційна сторінка описує нову когорту, практичну модель без лекцій, задачі з дедлайнами/рівнями, і прямо запрошує партнерів масштабувати tuition-free project-based education в Україні.",
+      "why_fit": "StudyCod може бути lightweight practice/evaluation layer для вступного спринту або фундаментального модуля Java/JavaScript, з тестами й прозорим фідбеком.",
+      "why_now": "Нова когорта та явний пошук партнерів створюють природну точку для design-partner розмови.",
+      "source_title": "//kood Ukraine",
+      "source_url": "https://www.koodukraine.tech/",
+      "source_type": "Official school page",
+      "signal_date": "Date unavailable; page crawled 2026-08-20",
+      "suggested_channel": "Контакт із команди //kood через публічну сторінку Get involved/партнерства.",
+      "opener": "Побачив, що //kood запускає нову когорту з Selection Sprint, іспитами та self-paced coding. StudyCod може допомогти швидко перевіряти задачі й показувати прогрес у практичній частині. Чи відкриті ви до маленького design-partner пілота для однієї когорти?",
+      "caution": "//kood позиціонує peer-to-peer модель без викладачів; перевірити, чи потрібні їм teacher-facing gradebook і AI-підказки, а не лише judge.",
+      "dimensions": {
+        "pain_strength": 4,
+        "product_fit": 5,
+        "timing": 5,
+        "reachability": 4,
+        "evidence_quality": 5
+      }
+    },
+    {
+      "name": "Star for Life Ukraine",
+      "type": "Nonprofit IT school",
+      "stage": "Trigger present",
+      "score": 82,
+      "pain_signal": "Фонд організував безкоштовну онлайн-літню IT-школу 2026 для учнів 5–11 класів українською, із заняттями двічі на тиждень і модулями Web Layout, Frontend та Python.",
+      "evidence": "МОН повідомляє про програму 2 червня–20 серпня 2026 року, три модулі та практичний проєкт у кожному модулі.",
+      "why_fit": "StudyCod відповідає їхній практичній моделі для Python/JavaScript: браузерне виконання, тести, спроби, пояснення помилок і видимий прогрес можуть зменшити ручну перевірку.",
+      "why_now": "Після завершення літньої школи можна запропонувати ретроспективний пілот або підготувати інструмент для наступного набору, поки формат ще свіжий.",
+      "source_title": "Літня ІТ школа 2026: школярів запрошують зробити перші кроки в програмуванні",
+      "source_url": "https://mon.gov.ua/news/litnia-it-shkola-2026-shkoliariv-zaproshuiut-zrobyty-pershi-kroky-v-prohramuvanni",
+      "source_type": "Government announcement",
+      "signal_date": "2026-05-19",
+      "suggested_channel": "Публічний сайт Star for Life Ukraine або партнерський контакт, вказаний у програмі; звертатися до координатора IT-школи.",
+      "opener": "Побачив у повідомленні МОН вашу онлайн IT-школу з модулями Frontend і Python та практичним проєктом у кожному модулі. StudyCod може автоматизувати перевірку коротких задач і пояснення помилок. Чи має сенс обговорити формат для наступного набору?",
+      "caution": "Поточна літня програма вже завершується; не припускати, що бюджет або наступний набір затверджені.",
+      "dimensions": {
+        "pain_strength": 4,
+        "product_fit": 4,
+        "timing": 4,
+        "reachability": 4,
+        "evidence_quality": 5
+      }
+    },
+    {
+      "name": "NIX + SEMIT, NTU KhPI",
+      "type": "University-industry program",
+      "stage": "Trigger present",
+      "score": 80,
+      "pain_signal": "NIX запросив студентів на місячний онлайн Summer Camp 2026 із selection test, технологічними треками, ролями в командах і розробкою web-продукту з нуля.",
+      "evidence": "Офіційна сторінка кафедри від 9 червня 2026 року описує практичний формат, онлайн-роботу та наближення до реального IT-проєкту.",
+      "why_fit": "StudyCod може бути спільним шаром для selection test, базових задач і перевірки індивідуального внеску до командної роботи на Python/JavaScript або суміжних мовах.",
+      "why_now": "Такі інтенсиви повторюються сезонно; наступна підготовка до camp або internship — конкретний момент для короткого proof-of-value.",
+      "source_title": "NIX Summer Camp: Summer Online Intensive for Students",
+      "source_url": "https://web.kpi.kharkov.ua/asu/2026/06/09/nix-summer-camp-summer-online-intensive-for-students/",
+      "source_type": "University department announcement",
+      "signal_date": "2026-06-09",
+      "suggested_channel": "Контакт SEMIT/NTU KhPI з офіційної сторінки або партнерський контакт NIX; адресат — координатор internship/education.",
+      "opener": "Побачив опис NIX Summer Camp із selection test і місячною онлайн-розробкою web-продукту командами. StudyCod може взяти на себе перевірку базових coding-задач і feedback до командного етапу. Чи варто показати короткий варіант для наступного інтенсиву?",
+      "caution": "Червневий camp, імовірно, вже завершився; перевірити, хто приймає рішення щодо наступних наборів.",
+      "dimensions": {
+        "pain_strength": 4,
+        "product_fit": 5,
+        "timing": 3,
+        "reachability": 4,
+        "evidence_quality": 5
+      }
+    },
+    {
+      "name": "IT Ukraine + Junior Achievement Ukraine (VET Bridge)",
+      "type": "Education transformation initiative",
+      "stage": "Problem aware",
+      "score": 79,
+      "pain_signal": "МОН описує професійні коледжі як такі, що стикаються з нестачею сучасних інструментів управління, слабкою цифровою інфраструктурою та застарілою організацією освітнього процесу.",
+      "evidence": "У квітні 2026 року партнери запустили IT for ProfTech: Bootcamp, розроблений на основі опитування керівників закладів професійної освіти.",
+      "why_fit": "StudyCod може бути не лише продуктом для одного коледжу, а демонстраційним digital workflow для практичних IT-дисциплін: задачі, оцінювання, прогрес і teacher dashboard.",
+      "why_now": "Ініціатива вже працює з керівниками коледжів і шукає прикладні моделі цифрової трансформації; канал партнера може дати доступ до кількох design partners.",
+      "source_title": "Цифрові зміни починаються з управління — старт курсу IT for ProfTech: Bootcamp",
+      "source_url": "https://mon.gov.ua/news/tsyfrovi-zminy-pochynaiutsia-z-upravlinnia-start-kursu-it-for-proftech-bootcamp",
+      "source_type": "Government announcement",
+      "signal_date": "2026-04-03",
+      "suggested_channel": "Партнерський контакт IT Ukraine або Junior Achievement Ukraine; просити 20-хвилинну розмову з координатором VET Bridge.",
+      "opener": "У матеріалі МОН про IT for ProfTech ви прямо описуєте нестачу цифрових інструментів і застарілі процеси в коледжах. StudyCod може бути вузьким прикладом цифрового workflow для практичного програмування. Чи є серед учасників коледж, готовий перевірити такий пілот?",
+      "caution": "Ініціатива може бути радше каналом дистрибуції/партнером, ніж платником; не припускати єдиного procurement процесу.",
+      "dimensions": {
+        "pain_strength": 5,
+        "product_fit": 4,
+        "timing": 4,
+        "reachability": 4,
+        "evidence_quality": 5
+      }
+    },
+    {
+      "name": "Kyiv School of Economics — Agentic AI Summer School",
+      "type": "University intensive",
+      "stage": "Trigger present",
+      "score": 78,
+      "pain_signal": "Школа запустила 9-тижневу інтенсивну програму з командним проєктом, чотирма sprint demo, review homework/project assignments і оцінюванням уміння працювати з помилками та ітераціями.",
+      "evidence": "Офіційна сторінка описує 30 місць, старт 1 липня 2026 року, практичні завдання, sprint reviews та фінальний Demo Day.",
+      "why_fit": "StudyCod може підтримати базову перевірку коду, алгоритмічне мислення та reproducible feedback перед командним AI-проєктом; особливо корисний як pre-work або diagnostic.",
+      "why_now": "Для поточного набору це радше розмова про feedback до наступного сезону або інших курсів KSE, але формат інтенсиву добре підходить для короткого пілота.",
+      "source_title": "Agentic AI Summer School 2026",
+      "source_url": "https://university.kse.ua/en/agentic-ai-summer-school-2026",
+      "source_type": "Official university program page",
+      "signal_date": "Date unavailable; page crawled 2026-08-20",
+      "suggested_channel": "Публічний admission/program contact KSE; адресат — program manager або lecturer responsible for practical work.",
+      "opener": "Побачив у KSE Summer School sprint demos, review homework і фокус на ітерації та виправленні помилок. StudyCod може закрити невеликий pre-work шар із перевірюваними задачами та feedback. Чи цікаво порівняти це з вашим поточним workflow для наступної програми?",
+      "caution": "Поточна школа вже стартувала; не пропонувати заміну їхньому mentoring/review process без розуміння його масштабу.",
+      "dimensions": {
+        "pain_strength": 3,
+        "product_fit": 4,
+        "timing": 4,
+        "reachability": 4,
+        "evidence_quality": 5
+      }
+    },
+    {
+      "name": "Lviv National University — Boot Camp 2026",
+      "type": "University / incubator program",
+      "stage": "Trigger present",
+      "score": 75,
+      "pain_signal": "Boot Camp 2026 моделює роботу IT-компаній: понад 70 учасників у 7 командах понад два місяці створюють цифрові рішення від дослідження проблеми до MVP і фінальної презентації.",
+      "evidence": "Офіційна сторінка LNU від 3 квітня 2026 року говорить про практичні IT-компетентності, командну роботу, AI та розрив між освітою й потребами ринку.",
+      "why_fit": "StudyCod може стандартизувати індивідуальну coding-практику до або під час командного інкубатора, щоб наставники бачили прогрес і базові прогалини.",
+      "why_now": "Навіть якщо дедлайн цього набору минув, наступний bootcamp — природний повторюваний use case для раннього пілота.",
+      "source_title": "Реєстрація на освітньо-практичний проєкт Boot Camp 2026",
+      "source_url": "https://lnu.edu.ua/reiestratsiia-na-osvitno-praktychnyy-proiekt-boot-camp-2026/",
+      "source_type": "Official university announcement",
+      "signal_date": "2026-04-03",
+      "suggested_channel": "Координатори LNU Boot Camp або Харківського IT Кластеру через публічну сторінку програми.",
+      "opener": "Побачив, що Boot Camp об’єднує 70+ учасників у 7 команд і веде їх від проблеми до MVP. StudyCod може дати наставникам єдиний шар для коротких coding-задач і вимірювання базових навичок до командної роботи. Чи варто обговорити це для наступного сезону?",
+      "caution": "Сторінка стосується набору 2026 року; підтвердити, чи є наступна когорта і хто відповідає за інструменти.",
+      "dimensions": {
+        "pain_strength": 3,
+        "product_fit": 4,
+        "timing": 3,
+        "reachability": 4,
+        "evidence_quality": 4
+      }
+    },
+    {
+      "name": "Digital World, Online School",
+      "type": "Online children’s coding school",
+      "stage": "Trigger present",
+      "score": 75,
+      "pain_signal": "Онлайн-школа шукає викладача для курсів дітям у Scratch, Python, Java, Unity, Minecraft і Roblox; роль передбачає онлайн-викладання та індивідуальну підтримку учнів у складних темах.",
+      "evidence": "Публічна вакансія від 29 липня 2026 року описує одночасно full-time/part-time формат, групи до шести учнів і набір викладача перед новим навчальним циклом.",
+      "why_fit": "Для їхніх Python/Java-груп StudyCod може зменшити ручну перевірку, дати повторні спроби та структурований feedback; Scratch/Unity/Roblox лишаються поза основним fit.",
+      "why_now": "Вакансія показує активне розширення teaching capacity; пілот на одній Python-групі можна запропонувати без перебудови всієї школи.",
+      "source_title": "Вакансія: Викладач програмування — Digital World, Онлайн-школа",
+      "source_url": "https://robota.ua/company13848333/vacancy9696004",
+      "source_type": "Public job posting",
+      "signal_date": "2026-07-29",
+      "suggested_channel": "Відповідь через вакансію/публічну сторінку Digital World; просити контакт академічного координатора.",
+      "opener": "Побачив, що Digital World набирає викладача для онлайн-груп дітей і робить акцент на індивідуальній підтримці. Для Python/Java StudyCod може автоматично перевіряти задачі та пояснювати типові помилки. Чи готові ви перевірити це на одній невеликій групі?",
+      "caution": "Вакансія не доводить, що школа вже має проблему з перевіркою; спочатку перевірити обсяг домашніх робіт і поточний інструмент.",
+      "dimensions": {
+        "pain_strength": 3,
+        "product_fit": 4,
+        "timing": 5,
+        "reachability": 4,
+        "evidence_quality": 5
+      }
+    },
+    {
+      "name": "STEM school INVENTOR",
+      "type": "STEM school",
+      "stage": "Trigger present",
+      "score": 73,
+      "pain_signal": "INVENTOR набирає викладача програмування та робототехніки на кілька київських локацій; роль передбачає роботу з дітьми 9–16 років, Python/Scratch, проєктами та зворотним зв’язком учням і батькам.",
+      "evidence": "Публічна вакансія від 13 серпня 2026 року перелічує вільні часові блоки на багатьох локаціях, готову програму й потребу мотивувати дітей під час роботи над проєктами.",
+      "why_fit": "StudyCod може доповнити Python-частину їхніх STEM-курсів browser-based задачами, тестами й історією прогресу; робототехніка та Scratch потребуватимуть окремої перевірки сумісності.",
+      "why_now": "Набір викладачів і розклад на багато локацій — практичний сигнал для стандартизації feedback до старту осінніх груп.",
+      "source_title": "Вакансія: Викладач/ка STEM курсів програмування та робототехніки",
+      "source_url": "https://alliance-desktop.robota.ua/company687534/vacancy11296959",
+      "source_type": "Public job posting",
+      "signal_date": "2026-08-13",
+      "suggested_channel": "Публічна вакансія або офіційний сайт INVENTOR; адресат — academic/operations lead, не окремий викладач.",
+      "opener": "Побачив у вакансії INVENTOR кілька локацій, Python і фокус на проєктній роботі та feedback батькам. StudyCod може додати єдину практику з автоматичними тестами для Python-груп. Чи є сенс перевірити це на одній локації до старту сезону?",
+      "caution": "Не змішувати Python-пілот із Scratch/робототехнікою; перевірити, чи потрібен школі online judge, а не лише LMS/матеріали.",
+      "dimensions": {
+        "pain_strength": 3,
+        "product_fit": 3,
+        "timing": 5,
+        "reachability": 4,
+        "evidence_quality": 5
+      }
+    }
+  ],
+  "patterns": [
+    {
+      "title": "Новий сезон або когорта",
+      "count": 6,
+      "insight": "Найчастіший timing-сигнал — новий набір, літній інтенсив або осінній старт; StudyCod варто продавати як швидкий пілот, який запускається за 1–2 тижні."
+    },
+    {
+      "title": "Практика замість лекцій",
+      "count": 7,
+      "insight": "Когорти публічно описують проєкти, спринти, MVP, командну роботу та coding-by-doing. Позиціонування має починатися з циклу задача → запуск → тест → виправлення."
+    },
+    {
+      "title": "Перевірка та feedback у масштабі",
+      "count": 5,
+      "insight": "Вакансії та програми згадують індивідуальну підтримку, журнал успішності, sprint reviews або перевірку homework. Це найкращий міст від pain до StudyCod."
+    },
+    {
+      "title": "Онлайн і розподілені групи",
+      "count": 5,
+      "insight": "Онлайн/гібридний формат повторюється в школах та інтенсивах, тому браузерний доступ і відсутність локального налаштування — важлива частина першого пілота."
+    }
+  ],
+  "outreach_plan": {
+    "angle": "Запропонувати вузький пілот: одна когорта, одна підтримувана мова, 5–10 задач і вимірювання часу на перевірку та feedback.",
+    "first_step": "Дні 1–2: вручну звернутися до RoboCode, SET University та //kood через публічні канали; поставити по одному питанню, прив’язаному до їхнього сигналу, без автоматичної розсилки.",
+    "follow_up": "Дні 3–5: після підтвердження pain налаштувати 5–10 Python/C++/C# задач і порівняти один навчальний цикл із поточним процесом перевірки.",
+    "success": "До дня 7: три розмови, один live design-partner пілот, щонайменше 10 студентських submission-ів і згода на наступний крок або оплату."
+  },
+  "limits": [
+    "Усі записи — потенційні клієнти на основі публічних сигналів; жоден не підтвердив інтерес, бюджет або готовність купити.",
+    "Частина програм уже стартувала або завершила набір; перед зверненням потрібно перевірити актуальність і наступну когорту.",
+    "Вакансія або опис програми показують timing і fit, але не доводять, що організація незадоволена поточним LMS чи gradebook.",
+    "Підтримка StudyCod найкраща для Python, C++, C#, Java та JavaScript-практики; Scratch, робототехніка, Unity і специфічні AI-workflows треба окремо валідовувати.",
+    "Контакти, повідомлення, форми, підписки та CRM-записи не створювалися; outreach має залишатися ручним і контекстним."
+  ]
+}

@@ -83,7 +83,7 @@ export const DocsExperience: React.FC<Props> = ({
 
     return <div className="min-h-[100dvh] bg-[#f7f8f5] font-sans text-[#111814] dark:bg-[#0b100d] dark:text-[#edf3ef]">
       <PublicProductNav active="docs" />
-      <main className="mx-auto w-[min(1180px,calc(100%_-_32px))] py-8 sm:py-12">
+      <main id="main-content" className="mx-auto w-[min(1180px,calc(100%_-_32px))] py-8 sm:py-12">
         <button type="button" onClick={onBack} className="group inline-flex h-11 items-center gap-2 rounded-[14px] border border-[#122017]/10 bg-white px-4 text-[12px] font-bold text-[#667169] transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-[#151c17] dark:text-[#aab5ad]">
           <ArrowLeft className="size-4 transition group-hover:-translate-x-0.5" />
           {tr("До всіх інструкцій", "Back to all guides")}
@@ -114,7 +114,7 @@ export const DocsExperience: React.FC<Props> = ({
                   <p className="mt-6 max-w-[650px] text-[16px] leading-7 text-[#657269] dark:text-[#a7b2aa]">{sectionDescription(selected.content)}</p>
                   <div className="mt-6 flex flex-wrap gap-2">{selected.tags.slice(0, 4).map(tag => <span key={tag} className="rounded-full bg-[#eef2ed] px-3 py-1.5 text-[10px] font-semibold text-[#718078] dark:bg-white/[.06] dark:text-[#9da9a1]">{tag}</span>)}</div>
                 </div>
-                <button type="button" onClick={onCopyLink} className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-[#122017]/10 text-[#667169] transition hover:bg-[#f1f4f0] dark:border-white/10 dark:text-[#9da9a1] dark:hover:bg-white/5" title={tr("Копіювати посилання", "Copy link")}><Copy className="size-4" /></button>
+                <button type="button" onClick={onCopyLink} aria-label={tr("Копіювати посилання", "Copy link")} className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-[#122017]/10 text-[#667169] transition hover:bg-[#f1f4f0] dark:border-white/10 dark:text-[#9da9a1] dark:hover:bg-white/5" title={tr("Копіювати посилання", "Copy link")}><Copy className="size-4" aria-hidden="true" /></button>
               </div>
             </header>
 

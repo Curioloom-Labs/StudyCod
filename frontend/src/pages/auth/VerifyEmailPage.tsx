@@ -61,7 +61,7 @@ export const VerifyEmailPage: React.FC<Props> = ({ onAuth }) => {
       <div className="min-h-screen flex items-center justify-center bg-bg-base">
         <div className="rounded-xl border border-border bg-bg-surface p-8 flex flex-col items-center gap-3">
           <Loader2 className="w-6 h-6 text-primary animate-spin" />
-          <p className="text-sm font-mono text-text-secondary">{tr("Підтвердження email...", "Verifying email...")}</p>
+          <p className="text-sm font-mono text-text-secondary">{tr("Підтвердження email…", "Verifying email…")}</p>
         </div>
       </div>
     );
@@ -114,7 +114,7 @@ export const VerifyEmailPage: React.FC<Props> = ({ onAuth }) => {
                 </h1>
                 <p className="mt-1 text-sm text-text-secondary">
                   {success
-                    ? tr("Перенаправлення...", "Redirecting...")
+                    ? tr("Перенаправлення…", "Redirecting…")
                     : (error || tr("Не вдалося підтвердити email", "Failed to verify email"))}
                 </p>
               </div>
@@ -178,7 +178,7 @@ export const VerifyEmailPage: React.FC<Props> = ({ onAuth }) => {
                         disabled={resending}
                         className="w-full"
                       >
-                        {resending ? tr("Відправка...", "Sending...") : tr("Відправити лист повторно", "Resend email")}
+                        {resending ? tr("Відправка…", "Sending…") : tr("Відправити лист повторно", "Resend email")}
                       </Button>
                       <Button variant="secondary" onClick={() => navigate("/auth")} className="w-full">
                         {tr("Повернутись до входу", "Back to login")}

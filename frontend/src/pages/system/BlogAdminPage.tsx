@@ -294,12 +294,13 @@ export const BlogAdminPage: React.FC = () => {
 
       <div className="mt-5 flex gap-2">
         <button
+          type="button"
           onClick={() => setTab("posts")}
           className={`rounded-full border px-3 py-1 text-xs font-mono ${tab === "posts" ? "border-primary bg-primary/10 text-primary" : "border-border text-text-secondary"}`}
         >
           {tr("Записи", "Posts")}
         </button>
-        <button
+        <button type="button"
           onClick={() => setTab("reports")}
           className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-mono ${tab === "reports" ? "border-primary bg-primary/10 text-primary" : "border-border text-text-secondary"}`}
         >
@@ -317,8 +318,7 @@ export const BlogAdminPage: React.FC = () => {
                 {editingId == null ? <Plus className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
                 {editingId == null ? tr("Новий запис", "New post") : tr("Редагування запису", "Edit post")}
               </div>
-              <button
-                type="button"
+        <button type="button"
                 onClick={() => setShowPreview((p) => !p)}
                 className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs ${showPreview ? "border-primary text-primary" : "border-border text-text-secondary"}`}
               >
@@ -328,6 +328,9 @@ export const BlogAdminPage: React.FC = () => {
             </div>
 
             <input
+              id="blog-title"
+              name="title"
+              aria-label={tr("Заголовок", "Title")}
               className={inputCls}
               placeholder={tr("Заголовок", "Title")}
               value={form.title}
@@ -338,7 +341,7 @@ export const BlogAdminPage: React.FC = () => {
             {/* Cover */}
             <div className="flex items-center gap-3">
               {form.coverUrl ? (
-                <img src={form.coverUrl} alt="" className="h-16 w-28 rounded border border-border object-cover" />
+                <img src={form.coverUrl} alt="" width={112} height={64} loading="lazy" className="h-16 w-28 rounded border border-border object-cover" />
               ) : (
                 <div className="flex h-16 w-28 items-center justify-center rounded border border-dashed border-border text-[10px] text-text-secondary">
                   {tr("Без обкладинки", "No cover")}
@@ -371,6 +374,9 @@ export const BlogAdminPage: React.FC = () => {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <select
+                id="blog-category"
+                name="category"
+                aria-label={tr("Категорія", "Category")}
                 className={inputCls}
                 value={form.category}
                 onChange={(e) => setForm((f) => ({ ...f, category: e.target.value as BlogCategory }))}
@@ -382,6 +388,9 @@ export const BlogAdminPage: React.FC = () => {
                 ))}
               </select>
               <input
+                id="blog-version"
+                name="version"
+                aria-label={tr("Версія", "Version")}
                 className={inputCls}
                 placeholder={tr("Версія (напр. v1.4.0)", "Version (e.g. v1.4.0)")}
                 value={form.version ?? ""}
@@ -391,6 +400,9 @@ export const BlogAdminPage: React.FC = () => {
             </div>
 
             <input
+              id="blog-slug"
+              name="slug"
+              aria-label={tr("Slug", "Slug")}
               className={inputCls}
               placeholder={tr("Slug (необов'язково)", "Slug (optional)")}
               value={form.slug ?? ""}
@@ -399,6 +411,9 @@ export const BlogAdminPage: React.FC = () => {
             />
 
             <input
+              id="blog-excerpt"
+              name="excerpt"
+              aria-label={tr("Короткий опис", "Short excerpt")}
               className={inputCls}
               placeholder={tr("Короткий опис для стрічки", "Short excerpt for the feed")}
               value={form.excerpt ?? ""}
@@ -419,6 +434,9 @@ export const BlogAdminPage: React.FC = () => {
                 ))}
               </div>
               <input
+                id="blog-tag"
+                name="tag"
+                aria-label={tr("Тег", "Tag")}
                 className={`${inputCls} mt-1.5`}
                 placeholder={tr("Додати тег і Enter", "Add a tag and press Enter")}
                 value={tagInput}
@@ -437,6 +455,9 @@ export const BlogAdminPage: React.FC = () => {
             <div className={showPreview ? "grid gap-3 lg:grid-cols-2" : ""}>
               <div className="space-y-2">
                 <textarea
+                  id="blog-content"
+                  name="content"
+                  aria-label={tr("Текст у форматі Markdown", "Markdown body")}
                   ref={contentRef}
                   className={`${inputCls} min-h-[220px] font-mono`}
                   placeholder={tr("Текст (Markdown)", "Body (Markdown)")}
@@ -512,7 +533,7 @@ export const BlogAdminPage: React.FC = () => {
             ) : (
               posts.map((post) => (
                 <div key={post.id} className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2">
-                  {post.coverUrl ? <img src={post.coverUrl} alt="" className="h-10 w-14 rounded object-cover" /> : null}
+                  {post.coverUrl ? <img src={post.coverUrl} alt="" width={56} height={40} loading="lazy" className="h-10 w-14 rounded object-cover" /> : null}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="truncate text-sm font-medium text-text-primary">{post.title}</span>
@@ -555,7 +576,7 @@ export const BlogAdminPage: React.FC = () => {
                   <Flag className="h-3.5 w-3.5 text-amber-500" />
                   {tr("Поскаржився", "Reported by")}: {r.reporter}
                   {r.postSlug ? (
-                    <button onClick={() => navigate(`/blog/${r.postSlug}`)} className="ml-auto text-primary hover:underline">
+                    <button type="button" onClick={() => navigate(`/blog/${r.postSlug}`)} className="ml-auto text-primary hover:underline">
                       {r.postTitle ?? r.postSlug}
                     </button>
                   ) : null}

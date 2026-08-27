@@ -89,7 +89,7 @@ export const CourseDetailPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>{tr("Завантаження...", "Loading...")}</div>;
+  if (loading) return <div role="status" aria-live="polite" style={{ padding: 24 }}>{tr("Завантаження…", "Loading…")}</div>;
   if (!course) return <div style={{ padding: 24 }}>{tr("Курс не знайдено", "Course not found")}</div>;
 
   return (

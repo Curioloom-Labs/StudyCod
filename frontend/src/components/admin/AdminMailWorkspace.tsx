@@ -281,6 +281,7 @@ export const AdminMailWorkspace: React.FC = () => {
 
   const deleteCurrent = async () => {
     if (!selectedUid) return;
+    if (!window.confirm("Delete this email message? This action cannot be undone.")) return;
     await deleteAdminMailMessage({ folder: activeFolder, uid: selectedUid });
     await loadMessages(activeFolder);
     setSelectedUid(null);
@@ -625,7 +626,7 @@ export const AdminMailWorkspace: React.FC = () => {
                             </div>
                           </div>
                           {attachmentPreviews[idx] ? (
-                            <img src={attachmentPreviews[idx]} alt={a.filename || ""} className="mt-2 max-h-64 rounded border border-border" />
+                            <img src={attachmentPreviews[idx]} alt={a.filename || ""} width={800} height={600} loading="lazy" className="mt-2 max-h-64 rounded border border-border" />
                           ) : null}
                         </div>
                       );
@@ -679,7 +680,7 @@ export const AdminMailWorkspace: React.FC = () => {
           <div className="mt-3 flex gap-2 justify-end">
             <Button variant="secondary" onClick={() => setComposeOpen(false)} disabled={sending || savingDraft}>Cancel</Button>
             <Button variant="secondary" onClick={saveDraft} disabled={sending || savingDraft}>{savingDraft ? "Saving…" : "Save draft"}</Button>
-            <Button onClick={send} disabled={sending || savingDraft}>{sending ? "Sending..." : "Send"}</Button>
+            <Button onClick={send} disabled={sending || savingDraft}>{sending ? "Sending…" : "Send"}</Button>
           </div>
         </Card>
       ) : null}

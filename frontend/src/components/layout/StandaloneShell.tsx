@@ -161,6 +161,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
 
   return (
     <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f5f7f4] text-[#17231b] transition-colors dark:bg-[#09100c] dark:text-[#edf4ef]">
+      <a className="skip-link" href="#main-content">{ukrainian ? "Перейти до основного вмісту" : "Skip to main content"}</a>
       <DialogA11yObserver rootRef={shellRef} />
       <header className="sticky top-0 z-50 border-b border-[#16281b]/10 bg-[#f5f7f4]/86 backdrop-blur-xl dark:border-white/[.08] dark:bg-[#09100c]/84">
         <div className="mx-auto flex h-[72px] max-w-[1500px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-9">
@@ -195,7 +196,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
             <div className="relative hidden sm:block" ref={accountRef}>
               <button ref={accountTriggerRef} type="button" onClick={() => setAccountOpen((open) => !open)} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setAccountOpen(true); } }} data-motion-press className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-semibold transition motion-safe:active:scale-[.97] hover:bg-[#e9efea] dark:hover:bg-white/[.07]" aria-haspopup="menu" aria-expanded={accountOpen} aria-label={ukrainian ? `Відкрити меню акаунта ${displayName}` : `Open account menu for ${displayName}`}>
                 <span className="grid size-7 place-items-center overflow-hidden rounded-lg bg-[#dff2e5] text-xs font-bold text-[#147645] dark:bg-[#00ff88]/12 dark:text-[#6eecad]">
-                  {shellUser.avatarUrl ? <img src={shellUser.avatarUrl} alt="" className="size-full object-cover" /> : displayName.slice(0, 1).toUpperCase()}
+                  {shellUser.avatarUrl ? <img src={shellUser.avatarUrl} alt="" width={28} height={28} loading="lazy" className="size-full object-cover" /> : displayName.slice(0, 1).toUpperCase()}
                 </span>
                 <span className="max-w-[190px] truncate">{displayName}</span>
                 <span className={`text-xs text-[#748177] transition ${accountOpen ? "rotate-180" : ""}`}>⌄</span>
@@ -269,7 +270,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
         </div>
       ) : null}
 
-      <main className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
+      <main id="main-content" className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f5f7f4]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#09100c]/95 lg:hidden" aria-label={ukrainian ? "Мобільна навігація" : "Mobile navigation"}>
         <div className="grid grid-cols-5 gap-1">
           {[

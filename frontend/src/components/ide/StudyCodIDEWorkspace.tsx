@@ -583,7 +583,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   {props.trace.steps.length}
                 </span>
               </div>
+              <label htmlFor="ide-trace-step" className="sr-only">{tr("Крок трасування", "Trace step")}</label>
               <input
+                id="ide-trace-step"
+                name="traceStep"
                 type="range"
                 min={0}
                 max={Math.max(0, props.trace.steps.length - 1)}

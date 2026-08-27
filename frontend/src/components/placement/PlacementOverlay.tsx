@@ -551,7 +551,7 @@ export const PlacementOverlay: React.FC<{
                   disabled={submitting || assessmentLoading}
                 >
                   {assessmentLoading
-                    ? (lang === "uk" ? "Завантаження..." : "Loading...")
+                    ? (lang === "uk" ? "Завантаження…" : "Loading…")
                     : pickedChoice === "BEGINNER"
                     ? (lang === "uk" ? "Почати з нуля" : "Start from scratch")
                     : (lang === "uk" ? "Відкрити середовище" : "Open environment")}
@@ -564,7 +564,7 @@ export const PlacementOverlay: React.FC<{
                 onClick={() => void submitAssessment()}
                 disabled={submitting}
               >
-                {submitting ? (lang === "uk" ? "Перевіряю..." : "Evaluating...") : (lang === "uk" ? "Завершити тестування" : "Finish assessment")}
+                {submitting ? (lang === "uk" ? "Перевіряю…" : "Evaluating…") : (lang === "uk" ? "Завершити тестування" : "Finish assessment")}
               </Button>
             )}
 
