@@ -27,7 +27,17 @@ function getCookieDomain(): string | undefined {
   return (process.env.COOKIE_DOMAIN || "").trim() || undefined;
 }
 
+function clearCookieVariants(res: Response): void {
+  // Remove the pre-subdomain host-only cookie as well as the current shared
+  // cookie. Without this migration, browsers can send two cookies with the
+  // same name and the request parser may select the stale host-only value.
+  res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
+  const domain = getCookieDomain();
+  if (domain) res.clearCookie(AUTH_COOKIE_NAME, { path: "/", domain });
+}
+
 export function setSharedAuthCookie(res: Response, token: string): void {
+  clearCookieVariants(res);
   res.cookie(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
     secure: authCookieSecure,
@@ -39,8 +49,5 @@ export function setSharedAuthCookie(res: Response, token: string): void {
 }
 
 export function clearSharedAuthCookie(res: Response): void {
-  res.clearCookie(AUTH_COOKIE_NAME, {
-    path: "/",
-    domain: getCookieDomain()
-  });
+  clearCookieVariants(res);
 }
