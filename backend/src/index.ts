@@ -460,6 +460,11 @@ app.use(httpMetricsMiddleware);
 app.use(geoBlockMiddleware);
 app.use(maintenanceMiddleware);
 const sessionStore = createSessionStore();
+// The frontend may be served from www.studycod.space while the API is served
+// from studycod.space. In that setup the browser must be able to read the
+// CSRF cookie from either subdomain so it can mirror it into the request
+// header. Keep this aligned with the session/auth cookie domain setting.
+const sharedCookieDomain = (process.env.COOKIE_DOMAIN || "").trim() || undefined;
 const sessionMiddleware = session({
   store: sessionStore,
   secret: SESSION_SECRET,
@@ -475,7 +480,7 @@ const sessionMiddleware = session({
     maxAge: 24 * 60 * 60 * 1000,
     // Set COOKIE_DOMAIN=.studycod.space in prod to share the session across
     // subdomains (school./contest.). Unset = host-only (current behaviour).
-    domain: (process.env.COOKIE_DOMAIN || "").trim() || undefined
+    domain: sharedCookieDomain
   }
 });
 
@@ -520,7 +525,8 @@ if (process.env.NODE_ENV !== "test") {
       options: {
         httpOnly: false,
         secure: IS_PRODUCTION,
-        sameSite: "lax"
+        sameSite: "lax",
+        domain: sharedCookieDomain
       }
     }
   });
