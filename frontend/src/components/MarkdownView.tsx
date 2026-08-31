@@ -430,8 +430,8 @@ type MathPluginBundle = {
 };
 
 const PlainCodeBlock: React.FC<{ code: string }> = ({ code }) => {
-  return <pre className="my-4 max-w-full overflow-x-auto whitespace-pre-wrap rounded-2xl border border-border/80 bg-bg-code/80 p-4 text-sm leading-relaxed shadow-sm">
-      <code className="whitespace-pre-wrap break-words font-mono text-text-primary">{code}</code>
+  return <pre className="my-4 w-full min-w-0 max-w-full overflow-x-auto whitespace-pre rounded-2xl border border-border/80 bg-bg-code/80 p-4 text-sm leading-relaxed shadow-sm">
+      <code className="whitespace-pre font-mono text-text-primary">{code}</code>
     </pre>;
 };
 
@@ -569,7 +569,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
         if (!SyntaxHighlighter || !syntaxStyle) {
           return <PlainCodeBlock code={code} />;
         }
-        return <div className="my-4 overflow-hidden border border-border">
+        return <div className="my-4 w-full min-w-0 overflow-x-auto rounded-2xl border border-border">
               <SyntaxHighlighter language={language} style={syntaxStyle} customStyle={{
             margin: 0,
             padding: "1rem",

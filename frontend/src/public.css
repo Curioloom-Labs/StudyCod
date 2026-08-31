@@ -4,6 +4,7 @@
 @source "./pages/public/PublicStatusPage.tsx";
 @source "./components/layout/PublicProductNav.tsx";
 @source "./components/Logo.tsx";
+@source "./components/ui/BrandedPageLoader.tsx";
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 

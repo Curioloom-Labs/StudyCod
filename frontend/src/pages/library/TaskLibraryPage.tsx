@@ -1892,7 +1892,7 @@ export const TaskLibraryPage: React.FC = () => {
                           selectTask(task);
                         }
                       }}
-                      className={`group flex min-h-[230px] flex-col rounded-[28px] border bg-white p-5 text-left shadow-[0_20px_55px_-44px_rgba(18,42,26,.55)] transition focus:outline-none focus-visible:ring-4 focus-visible:ring-[#00ff88]/15 dark:bg-[#121b15] ${isSelected ? "border-[#00c96d]/55 ring-4 ring-[#00ff88]/10 dark:border-[#00ff88]/35" : "border-[#142018]/10 hover:-translate-y-1 hover:border-[#00c96d]/30 dark:border-white/10 dark:hover:border-[#00ff88]/25"}`}
+                      className={`group flex min-h-[230px] flex-col rounded-[28px] border bg-white p-5 text-left shadow-[0_20px_55px_-44px_rgba(18,42,26,.55)] transition focus:outline-none focus-visible:ring-4 focus-visible:ring-[#00ff88]/15 dark:bg-[#121b15] ${isSelected ? "border-[#00c96d]/55 ring-4 ring-[#00ff88]/10 dark:border-[#00ff88]/35" : "border-[#142018]/10 hover:-translate-y-1 hover:border-[#00c96d]/30 dark:border-[#294333] dark:hover:border-[#00ff88]/25"}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -2077,7 +2077,7 @@ export const TaskLibraryPage: React.FC = () => {
 
                   <div className="flex flex-wrap gap-2">
                     {details.task.status === "APPROVED" ? (
-                      <Button variant="primary" size="sm" onClick={() => navigate(buildSolvePath(details.task))}>
+                      <Button variant="primary" size="lg" onClick={() => navigate(buildSolvePath(details.task))} className="rounded-xl px-4 text-sm font-bold shadow-[0_10px_24px_-16px_rgba(0,201,109,.9)]">
                         <Play className="mr-2 h-4 w-4" />
                         {tr("Розв’язати", "Solve")}
                       </Button>

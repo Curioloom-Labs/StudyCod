@@ -222,7 +222,7 @@ export const PlaygroundPage: React.FC = () => {
     return String(value);
   };
 
-  const selectCls = "w-full rounded-xl border border-border/70 bg-bg-base/70 px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-primary";
+  const selectCls = "w-full rounded-xl border border-border bg-bg-base/70 px-3 py-3 text-sm text-text-primary outline-none transition-[border-color,background-color,box-shadow] focus:border-primary focus:ring-2 focus:ring-primary/20";
   const statusLabel = running ? tr("Запуск", "Running") : tracing ? tr("Візуалізація", "Tracing") : run ? (run.success ? tr("Успішно", "Success") : tr("Помилка", "Error")) : tr("Готово", "Ready");
   const frames = currentStep?.stack && currentStep.stack.length
     ? currentStep.stack
@@ -330,7 +330,7 @@ export const PlaygroundPage: React.FC = () => {
                 <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">stdin</span>
                 <span className="text-[11px] text-text-secondary">{JUDGE_ENTRY_FILES[language]}</span>
               </div>
-              <label htmlFor="playground-code" className="sr-only">Code</label><textarea id="playground-code" name="code"
+              <label htmlFor="playground-stdin" className="sr-only">{tr("Вхідні дані", "Input")}</label><textarea id="playground-stdin" name="stdin"
                 value={stdin}
                 onChange={(event) => setStdin(event.target.value)}
                 className="min-h-[160px] w-full resize-y rounded-xl border border-border bg-bg-code/80 px-3 py-2 font-mono text-sm text-text-primary outline-none focus:border-primary"
@@ -339,11 +339,11 @@ export const PlaygroundPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="primary" onClick={doRun} disabled={running || tracing} className="justify-center">
+              <Button variant="primary" onClick={doRun} disabled={running || tracing} className="h-12 justify-center rounded-xl px-4 text-base shadow-[0_10px_24px_-16px_rgba(0,217,120,.9)]">
                 <Play className="mr-2 h-4 w-4" />
                 Run
               </Button>
-              <Button variant="secondary" onClick={doTrace} disabled={!canVisualize || running || tracing} className="justify-center">
+              <Button variant="secondary" onClick={doTrace} disabled={!canVisualize || running || tracing} className="h-12 justify-center rounded-xl border border-border bg-bg-hover text-base text-text-primary hover:bg-bg-surface dark:bg-[#16251b] dark:text-[#dcece0] dark:hover:bg-[#203429]">
                 <Microscope className="mr-2 h-4 w-4" />
                 Trace
               </Button>
