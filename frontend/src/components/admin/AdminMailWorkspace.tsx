@@ -642,21 +642,21 @@ export const AdminMailWorkspace: React.FC = () => {
       {composeOpen ? (
         <Card className="p-4">
           <div className="text-sm font-mono text-text-primary mb-3">{composeInReplyTo ? "Reply" : "Compose message"}</div>
-          <input value={composeFrom} onChange={(e) => setComposeFrom(e.target.value)} placeholder="From (default: studycod@studycod.space)" className="w-full mb-3 px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
+          <input type="text" name="from" aria-label="From" autoComplete="off" spellCheck={false} value={composeFrom} onChange={(e) => setComposeFrom(e.target.value)} placeholder="From (default: studycod@studycod.space)" className="w-full mb-3 px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input value={composeTo} onChange={(e) => setComposeTo(e.target.value)} placeholder="To (comma or space separated)" className="px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
-            <input value={composeSubject} onChange={(e) => setComposeSubject(e.target.value)} placeholder="Subject" className="px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
-            <input value={composeCc} onChange={(e) => setComposeCc(e.target.value)} placeholder="Cc (optional)" className="px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
-            <input value={composeBcc} onChange={(e) => setComposeBcc(e.target.value)} placeholder="Bcc (optional)" className="px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
+            <input type="text" name="to" aria-label="To" autoComplete="off" spellCheck={false} value={composeTo} onChange={(e) => setComposeTo(e.target.value)} placeholder="To (comma or space separated)" className="px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
+            <input type="text" name="subject" aria-label="Subject" autoComplete="off" value={composeSubject} onChange={(e) => setComposeSubject(e.target.value)} placeholder="Subject" className="px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
+            <input type="text" name="cc" aria-label="Cc" autoComplete="off" spellCheck={false} value={composeCc} onChange={(e) => setComposeCc(e.target.value)} placeholder="Cc (optional)" className="px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
+            <input type="text" name="bcc" aria-label="Bcc" autoComplete="off" spellCheck={false} value={composeBcc} onChange={(e) => setComposeBcc(e.target.value)} placeholder="Bcc (optional)" className="px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" />
           </div>
-          <textarea value={composeText} onChange={(e) => setComposeText(e.target.value)} rows={10} className="mt-3 w-full px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" placeholder={composeFormatted ? "Message body (Markdown: **bold**, # heading, - list, [link](url))" : "Message body"} />
+          <textarea name="body" aria-label="Message body" autoComplete="off" value={composeText} onChange={(e) => setComposeText(e.target.value)} rows={10} className="mt-3 w-full px-3 py-2 bg-bg-code border border-border text-text-primary text-sm" placeholder={composeFormatted ? "Message body (Markdown: **bold**, # heading, - list, [link](url))" : "Message body"} />
           <label className="mt-2 inline-flex items-center gap-2 text-xs font-mono text-text-secondary cursor-pointer">
             <input type="checkbox" checked={composeFormatted} onChange={(e) => setComposeFormatted(e.target.checked)} />
             Formatted (Markdown → HTML)
           </label>
           <details className="mt-2">
             <summary className="text-xs font-mono text-text-muted cursor-pointer select-none">Signature</summary>
-            <textarea value={signature} onChange={(e) => setSignature(e.target.value)} onBlur={saveSignature} rows={3} placeholder="Your signature…" className="mt-1.5 w-full px-3 py-2 bg-bg-code border border-border text-text-primary text-xs" />
+            <textarea name="signature" aria-label="Signature" autoComplete="off" value={signature} onChange={(e) => setSignature(e.target.value)} onBlur={saveSignature} rows={3} placeholder="Your signature…" className="mt-1.5 w-full px-3 py-2 bg-bg-code border border-border text-text-primary text-xs" />
           </details>
           <div className="mt-2">
             <label className="inline-flex items-center gap-1.5 text-xs font-mono text-text-secondary border border-border rounded-md px-2 py-1.5 cursor-pointer hover:bg-bg-hover transition-fast">

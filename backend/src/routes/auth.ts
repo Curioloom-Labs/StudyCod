@@ -345,7 +345,7 @@ authRouter.post("/logout", async (req: Request, res: Response) => {
   const token = getAuthToken(req);
   if (token) {
     try {
-      const payload = jwt.verify(token, JWT_SECRET) as { jti?: string; userId?: number; iat?: number; exp?: number };
+      const payload = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as { jti?: string; userId?: number; iat?: number; exp?: number };
       if (payload.jti) {
         const ttl = payload.exp && payload.iat ? Math.max(1, payload.exp - Math.floor(Date.now() / 1000)) : 7 * 24 * 60 * 60;
         await revokeJti(payload.jti, ttl);
@@ -949,7 +949,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
     } = validated.data;
     let payload: any;
     try {
-      payload = jwt.verify(setupToken, JWT_SECRET);
+      payload = jwt.verify(setupToken, JWT_SECRET, { algorithms: ["HS256"] });
     } catch {
       return res.status(400).json({
         message: "INVALID_TOKEN"

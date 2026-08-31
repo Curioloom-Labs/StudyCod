@@ -1,0 +1,51 @@
+name: CI
+
+# Quality gate that runs independently of deploy.yml (which only SSHes in and
+# restarts services with no verification). Type-check and production-build
+# every deployable package so broken commits are caught before deployment.
+on:
+  pull_request:
+  push:
+    branches-ignore: []
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [frontend, backend, judge, ai-service, lsp-service]
+    defaults:
+      run:
+        working-directory: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ai-service compiles shared LLM code from ../backend/src and therefore
+      # needs the backend package dependencies available during TypeScript
+      # resolution and the production build.
+      - name: Install backend dependencies for AI service
+        if: matrix.package == 'ai-service'
+        working-directory: backend
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Production build
+        run: npm run build

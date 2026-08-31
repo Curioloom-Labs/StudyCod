@@ -170,25 +170,41 @@ function createSessionStore(): session.Store | undefined {
   }
 }
 
-const serverStartedAt = new Date();
+/**
+ * A production backend must never advertise readiness while its code-execution
+ * dependency is absent. Resolve the same fallbacks used by JudgeClient and fail
+ * before opening the HTTP listener when the effective runtime is unusable.
+ */
+async function assertProductionJudgeConfig(): Promise<void> {
+  if (!IS_PRODUCTION) return;
 
-// Operational visibility: judge misconfiguration should not prevent the backend from booting,
-// but we must make it obvious in logs so it gets fixed quickly.
-if (IS_PRODUCTION) {
   const issues: string[] = [];
-  if (!env.__judgeWorkerEntry) issues.push("JUDGE_WORKER_ENTRY is empty");
-  if (!env.__nsjailConfig) issues.push("NSJAIL_CONFIG is empty");
-  if (!env.__nsjailPath) issues.push("NSJAIL_PATH is empty");
-  // NSJAIL_USE_CONFIG is no longer required in production: judge infers config-mode from NSJAIL_CONFIG.
+  const nsjailPath = env.__nsjailPath.trim();
+  if (!nsjailPath) {
+    issues.push("NSJAIL_PATH is empty");
+  } else {
+    try {
+      fsSync.accessSync(nsjailPath, fsSync.constants.X_OK);
+    } catch {
+      issues.push(`NSJAIL_PATH is missing or not executable: ${nsjailPath}`);
+    }
+  }
 
-  if (issues.length) {
-    logger.error("[startup] judge is misconfigured; submissions/check endpoints will fail", {
-      issues,
-      nsjailUseConfig: env.__nsjailUseConfig ? "1" : "0",
-      workerEntry: env.__judgeWorkerEntry || null,
-      nsjailPath: env.__nsjailPath || null,
-      nsjailConfig: env.__nsjailConfig || null,
-    });
+  try {
+    await resolveJudgeWorkerEntry();
+  } catch (error: any) {
+    issues.push(String(error?.message || "JUDGE_WORKER_ENTRY is unavailable"));
+  }
+
+  try {
+    const configPath = resolveJudgeSandboxConfig();
+    fsSync.accessSync(configPath, fsSync.constants.R_OK);
+  } catch (error: any) {
+    issues.push(String(error?.message || "NSJAIL_CONFIG is unavailable"));
+  }
+
+  if (issues.length > 0) {
+    throw new Error(`JUDGE_INVALID_CONFIGURATION: ${issues.join("; ")}`);
   }
 }
 
@@ -229,7 +245,7 @@ function resolveGlobalRateLimitKey(req: express.Request): string {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Bearer ")) {
     try {
-      const payload = jwt.verify(authHeader.slice("Bearer ".length), JWT_SECRET) as {
+      const payload = jwt.verify(authHeader.slice("Bearer ".length), JWT_SECRET, { algorithms: ["HS256"] }) as {
         userId?: number;
         studentId?: number;
       };
@@ -567,11 +583,6 @@ app.get(["/health", "/api/health"], (_req, res) => {
     status: "ok",
     service: "studycod-backend",
     version: "1.0.0",
-    startedAt: serverStartedAt.toISOString(),
-    buildSha: process.env.BUILD_SHA || process.env.GIT_SHA || process.env.COMMIT_SHA || null,
-    buildTime: process.env.BUILD_TIME || null,
-    nodeEnv: process.env.NODE_ENV || null,
-    isProduction: IS_PRODUCTION
   });
 });
 
@@ -1155,6 +1166,7 @@ async function runStartupMigrations(): Promise<StartupMigrationOutcome> {
 
 async function bootstrap(): Promise<void> {
   try {
+    await assertProductionJudgeConfig();
     await AppDataSource.initialize();
     logger.info("Data Source initialized");
 
@@ -1212,7 +1224,7 @@ async function bootstrap(): Promise<void> {
     }, cacheSweepMs);
     cacheSweepTimer.unref?.();
   } catch (err) {
-    logger.error("Database initialization error", {
+    logger.error("Application bootstrap failed", {
       err
     });
     process.exit(1);

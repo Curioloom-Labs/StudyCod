@@ -8,3 +8,4 @@ export const CORS_ORIGIN = env.CORS_ORIGIN;
 export const PORT = env.PORT;
 export const CORS_ORIGINS = env.__corsOrigins;
 export const TRUST_PROXY = env.__trustProxy;
+export const CRON_SECRET = env.CRON_SECRET;

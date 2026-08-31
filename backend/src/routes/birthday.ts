@@ -1,13 +1,13 @@
 import { Router, Request, Response } from "express";
 import { logger } from "../utils/logger";
 import { sendBirthdayGreetingsForDate } from "../services/birthdayGreetingService";
+import { isCronAuthorized } from "../middleware/cronAuth";
 
 const router = Router();
 
 router.post("/check", async (req: Request, res: Response) => {
   try {
-    const secret = req.headers["x-cron-secret"] || (req as any).body?.secret;
-    if (secret !== process.env.CRON_SECRET) {
+    if (!isCronAuthorized(req)) {
       return res.status(401).json({
         message: "UNAUTHORIZED",
       });

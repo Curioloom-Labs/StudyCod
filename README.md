@@ -544,11 +544,12 @@ All backend configuration is declared and validated in `backend/src/env.ts`. Cre
 |----------|-------|
 | `JUDGE_WORKER_ENTRY` | Path to the judge worker entry |
 | `NSJAIL_PATH` | Default `/usr/bin/nsjail` |
-| `NSJAIL_CONFIG` | Sandbox config path (enables config mode) |
+| `NSJAIL_CONFIG` | Sandbox config path (enables config mode; production must resolve a readable config) |
 | `NSJAIL_USE_CONFIG` | Force config mode (prod always config mode) |
 | `NSJAIL_CWD` | Default `/work` |
 | `NSJAIL_CHROOT` / `_JAVA` / `_CPP` / `_PYTHON` | Per-language chroots |
 | `JUDGE_LOCK_PATH` / `JUDGE_LOCK_STALE_MS` | Judge lock |
+| — | The bundled config maps sandbox root to host uid/gid `1000`; the runner keeps submission directories private with mode `0700`. |
 | `JUDGE_MAX_*` | Input/test/output/file size & count caps |
 
 ### Execution queue & rate limits
@@ -592,7 +593,9 @@ content).
 ### Security / anti-abuse
 
 `TURNSTILE_SECRET_KEY`, `TURNSTILE_VERIFY_URL`, `TURNSTILE_ENFORCE_AUTH`,
-`TURNSTILE_ENFORCE_CONTEST_SUBMIT` (Cloudflare Turnstile), `METRICS_ENABLED`.
+`TURNSTILE_ENFORCE_CONTEST_SUBMIT` (Cloudflare Turnstile), `CRON_SECRET` (required
+and at least 32 characters in production for scheduled maintenance/email jobs),
+`METRICS_ENABLED`.
 
 ### Web tasks
 
@@ -619,6 +622,7 @@ npm install
 # create .env (see Configuration Reference). At minimum for local dev:
 #   DB_HOST / DB_PORT / DB_USER / DB_PASS / DB_NAME (or DATABASE_URL)
 #   JWT_SECRET, SESSION_SECRET   (any value works outside production)
+#   CRON_SECRET                  (required in production; use a random 32+ char value)
 npm run db:migrate        # apply migrations (also runs on startup by default)
 npm run dev               # tsx watch on http://localhost:4000
 ```
@@ -699,7 +703,10 @@ A typical production deployment:
 3. **MySQL + Redis** provisioned; set `SESSION_STORE=redis` and a Redis URL for multi-replica
    setups (also enables the distributed execution queue).
 4. **Judge:** ensure `nsjail` is installed and `JUDGE_WORKER_ENTRY` / `NSJAIL_*` are set;
-   verify via `/health/judge`. In production the judge always runs in config mode.
+   verify via `/health/judge`. In production the backend fails before opening its HTTP
+   listener if the effective worker, nsjail binary, or config is unavailable; the judge
+   always runs in config mode and the service must run as uid 1000 (or root for the
+   runner's safe chown step).
 5. **LiveKit:** for live classrooms, run the SFU behind TLS (`wss://`), open the UDP media
    port range, and set `use_external_ip: true` (or configure TURN) for NAT traversal.
 6. **Secrets:** strong `JWT_SECRET` and `SESSION_SECRET` (≥ 32 chars), real DB credentials,

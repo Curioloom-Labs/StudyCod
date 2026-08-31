@@ -16,7 +16,7 @@
     "test": "cross-env NODE_ENV=test npm run build && cross-env NODE_ENV=test node run-tests.cjs",
     "test:static-contract": "node run-static-contract-test.js",
     "test:browser-contract": "node run-browser-contract-test.js",
-    "test:judge-contract": "node run-judge-contract-test.js",
+    "test:judge-contract": "cross-env NODE_ENV=test node run-judge-contract-test.js",
     "test:db-contract": "node run-db-contract-test.js",
     "loadtest": "node loadtest/run.js",
     "brevo:check": "node brevo-key-check.js",

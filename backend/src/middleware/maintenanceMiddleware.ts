@@ -37,7 +37,7 @@ function tryGetRoleFromBearer(req: AuthRequest): UserRole | null {
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   const token = authHeader.slice("Bearer ".length);
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as {
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as {
       role?: UserRole;
     };
     return payload?.role ?? null;

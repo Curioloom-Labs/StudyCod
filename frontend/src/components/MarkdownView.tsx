@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, memo, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { useId } from "react";
 import type { Components } from "react-markdown";
 import type { Pluggable, PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
@@ -386,6 +387,7 @@ const EmbeddedVideo: React.FC<{
   caption
 }) => {
   const title = String(caption || "").trim() || descriptor.title;
+  const captionId = useId();
 
   return <div className="my-5 overflow-hidden rounded-xl border border-border bg-bg-surface">
       {descriptor.kind === "iframe" ? <div className="relative w-full pb-[56.25%]">
@@ -398,8 +400,8 @@ const EmbeddedVideo: React.FC<{
             allowFullScreen={descriptor.allowFullScreen !== false}
             referrerPolicy="strict-origin-when-cross-origin"
           />
-        </div> : <video controls preload="metadata" className="block w-full bg-bg-code" src={descriptor.sourceUrl} />}
-      {String(caption || "").trim() ? <div className="border-t border-border px-3 py-2 text-xs text-text-secondary">{caption}</div> : null}
+        </div> : <video controls preload="metadata" aria-label={title} aria-describedby={String(caption || "").trim() ? captionId : undefined} className="block w-full bg-bg-code" src={descriptor.sourceUrl} />}
+      {String(caption || "").trim() ? <div id={captionId} className="border-t border-border px-3 py-2 text-xs text-text-secondary">{caption}</div> : null}
     </div>;
 };
 

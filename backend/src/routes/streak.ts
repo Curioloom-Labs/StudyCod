@@ -4,12 +4,12 @@ import { User } from "../entities/User";
 import { emailService } from "../services/emailService";
 import { Not, IsNull } from "typeorm";
 import { logger } from "../utils/logger";
+import { isCronAuthorized } from "../middleware/cronAuth";
 const router = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 router.post("/check", async (req: Request, res: Response) => {
   try {
-    const secret = req.headers["x-cron-secret"] || req.body?.secret;
-    if (secret !== process.env.CRON_SECRET) {
+    if (!isCronAuthorized(req)) {
       return res.status(401).json({
         message: "UNAUTHORIZED"
       });

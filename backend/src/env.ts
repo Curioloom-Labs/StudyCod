@@ -102,6 +102,10 @@ const EnvSchema = z.object({
   TURNSTILE_VERIFY_URL: z.string().optional(),
   TURNSTILE_ENFORCE_CONTEST_SUBMIT: z.string().optional(),
   TURNSTILE_ENFORCE_AUTH: z.string().optional(),
+  // Secret for scheduled maintenance endpoints. It is deliberately validated
+  // here instead of reading process.env inside individual routes so production
+  // cannot silently boot with an unauthenticated cron surface.
+  CRON_SECRET: z.string().optional().transform(v => (v ?? "").trim()),
 
   // EDU SaaS RBAC: when off (default) capability checks run in shadow mode
   // (audit a would-be denial, but allow). Flip on to hard-enforce org roles.
@@ -514,6 +518,13 @@ const EnvSchema = z.object({
         code: z.ZodIssueCode.custom,
         path: ["SESSION_SECRET"],
         message: "SESSION_SECRET must be set and at least 32 characters in production"
+      });
+    }
+    if (!env.CRON_SECRET || env.CRON_SECRET.length < 32) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["CRON_SECRET"],
+        message: "CRON_SECRET must be set and at least 32 characters in production"
       });
     }
     const usingDiscreteDb = !env.DATABASE_URL;

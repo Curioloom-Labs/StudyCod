@@ -210,7 +210,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     });
   }
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as JwtPayload;
     
     // Check if JWT has been revoked
     if (payload.jti && await isJtiRevoked(payload.jti)) {
@@ -261,7 +261,7 @@ export const authOptional = async (req: AuthRequest, _res: Response, next: NextF
     return next();
   }
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as JwtPayload;
     
     // Check if JWT has been revoked
     if (payload.jti && await isJtiRevoked(payload.jti)) {

@@ -389,7 +389,59 @@ const CertificateModal: React.FC<{ details: CertificateTemplate; draft: { name: 
     return `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;min-height:100%;background:#f4f7f4}body{padding:24px;box-sizing:border-box}${String(draft.cssTemplate || "")}</style></head><body>${html}</body></html>`;
   }, [draft.htmlTemplate, draft.cssTemplate]);
   const addField = (fieldKey: string) => setDraft((p: any) => ({ ...p, htmlTemplate: `${String(p.htmlTemplate || "").trim()}\n<span>{{${fieldKey}}}</span>` }));
-  return <ModalFrame close={close} wide><Label>Сертифікат {details.id > 0 ? `#${details.id}` : "· новий"}</Label><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{draft.name}</h2><div className="mt-5 grid gap-3 md:grid-cols-[1fr_180px_140px]"><Field label="Назва" value={draft.name} onChange={(e) => setDraft((p: any) => ({ ...p, name: e.target.value }))} /><Select label="Тип" value={draft.type} onChange={(e) => setDraft((p: any) => ({ ...p, type: e.target.value }))}><option value="custom">custom</option><option value="studycod">studycod</option></Select><label className="mt-8 flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.isActive} onChange={(e) => setDraft((p: any) => ({ ...p, isActive: e.target.checked }))} />Активний</label></div><div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]"><div className="space-y-3"><TextArea label="HTML" rows={12} value={draft.htmlTemplate} onChange={(e) => setDraft((p: any) => ({ ...p, htmlTemplate: e.target.value }))} className="font-mono text-xs" /><TextArea label="CSS" rows={12} value={draft.cssTemplate} onChange={(e) => setDraft((p: any) => ({ ...p, cssTemplate: e.target.value }))} className="font-mono text-xs" /><div><div className="mb-2 text-xs font-semibold uppercase tracking-[.12em] text-[#708075]">Додати поле до макета</div><div className="flex flex-wrap gap-2">{fieldKeys.map((fieldKey) => <button type="button" key={fieldKey} onClick={() => addField(fieldKey)} className="rounded-lg border border-[#152219]/10 px-2.5 py-1.5 text-xs font-semibold dark:border-white/10">{`{{${fieldKey}}}`}</button>)}</div></div></div><div className="min-h-[440px] rounded-2xl border border-[#152219]/10 bg-[#f4f7f4] p-3 dark:border-white/10 dark:bg-white/[.04]"><div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-[.12em] text-[#708075]">Візуальний preview</span><span className="text-xs text-[#708075]">локальний sandbox</span></div><iframe title="Попередній перегляд сертифіката" sandbox="" srcDoc={previewHtml} className="h-[410px] w-full rounded-xl border border-[#152219]/10 bg-white dark:border-white/10" /></div></div><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{fieldKeys.map((fieldKey) => { const current = draft.fields.find((f) => f.fieldKey === fieldKey) ?? { fieldKey, isEnabled: false, isRequired: false }; return <label key={fieldKey} className="rounded-xl bg-[#f5f8f5] p-3 text-sm dark:bg-white/[.04]"><div className="flex items-center justify-between gap-2"><span className="font-semibold">{fieldKey}</span><input type="checkbox" checked={current.isEnabled} onChange={(e) => setDraft((p: any) => ({ ...p, fields: upsertField(p.fields, fieldKey, { isEnabled: e.target.checked, isRequired: e.target.checked ? current.isRequired : false }) }))} /></div><label className="mt-2 flex gap-2 text-xs text-[#708075]"><input type="checkbox" disabled={!current.isEnabled} checked={current.isRequired} onChange={(e) => setDraft((p: any) => ({ ...p, fields: upsertField(p.fields, fieldKey, { isEnabled: current.isEnabled, isRequired: e.target.checked }) }))} />обов’язкове</label></label>; })}</div><div className="mt-5 flex justify-end"><PrimaryButton onClick={save}>{details.id > 0 ? "Зберегти зміни" : "Створити шаблон"}</PrimaryButton></div></ModalFrame>;
+  return (
+    <ModalFrame close={close} wide>
+      <Label>Сертифікат {details.id > 0 ? `#${details.id}` : "· новий"}</Label>
+      <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{draft.name}</h2>
+      <div className="mt-5 grid gap-3 md:grid-cols-[1fr_180px_140px]">
+        <Field label="Назва" value={draft.name} onChange={(e) => setDraft((p: any) => ({ ...p, name: e.target.value }))} />
+        <Select label="Тип" value={draft.type} onChange={(e) => setDraft((p: any) => ({ ...p, type: e.target.value }))}>
+          <option value="custom">custom</option>
+          <option value="studycod">studycod</option>
+        </Select>
+        <label className="mt-8 flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={draft.isActive} onChange={(e) => setDraft((p: any) => ({ ...p, isActive: e.target.checked }))} />
+          Активний
+        </label>
+      </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
+        <div className="space-y-3">
+          <TextArea label="HTML" rows={12} value={draft.htmlTemplate} onChange={(e) => setDraft((p: any) => ({ ...p, htmlTemplate: e.target.value }))} className="font-mono text-xs" />
+          <TextArea label="CSS" rows={12} value={draft.cssTemplate} onChange={(e) => setDraft((p: any) => ({ ...p, cssTemplate: e.target.value }))} className="font-mono text-xs" />
+          <div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-[.12em] text-[#708075]">Додати поле до макета</div>
+            <div className="flex flex-wrap gap-2">
+              {fieldKeys.map((fieldKey) => <button type="button" key={fieldKey} onClick={() => addField(fieldKey)} className="rounded-lg border border-[#152219]/10 px-2.5 py-1.5 text-xs font-semibold dark:border-white/10">{`{{${fieldKey}}}`}</button>)}
+            </div>
+          </div>
+        </div>
+        <div className="min-h-[440px] rounded-2xl border border-[#152219]/10 bg-[#f4f7f4] p-3 dark:border-white/10 dark:bg-white/[.04]">
+          <div className="mb-2 flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-[.12em] text-[#708075]">Візуальний preview</span><span className="text-xs text-[#708075]">локальний sandbox</span></div>
+          <iframe title="Попередній перегляд сертифіката" sandbox="" srcDoc={previewHtml} className="h-[410px] w-full rounded-xl border border-[#152219]/10 bg-white dark:border-white/10" />
+        </div>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {fieldKeys.map((fieldKey) => {
+          const current = draft.fields.find((f) => f.fieldKey === fieldKey) ?? { fieldKey, isEnabled: false, isRequired: false };
+          const enabledId = `certificate-${fieldKey}-enabled`;
+          const requiredId = `certificate-${fieldKey}-required`;
+          return (
+            <div key={fieldKey} className="rounded-xl bg-[#f5f8f5] p-3 text-sm dark:bg-white/[.04]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold">{fieldKey}</span>
+                <input id={enabledId} type="checkbox" aria-label={`Enable ${fieldKey}`} checked={current.isEnabled} onChange={(e) => setDraft((p: any) => ({ ...p, fields: upsertField(p.fields, fieldKey, { isEnabled: e.target.checked, isRequired: e.target.checked ? current.isRequired : false }) }))} />
+              </div>
+              <label htmlFor={requiredId} className="mt-2 flex gap-2 text-xs text-[#708075]">
+                <input id={requiredId} type="checkbox" disabled={!current.isEnabled} checked={current.isRequired} onChange={(e) => setDraft((p: any) => ({ ...p, fields: upsertField(p.fields, fieldKey, { isEnabled: current.isEnabled, isRequired: e.target.checked }) }))} />
+                обов’язкове
+              </label>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-5 flex justify-end"><PrimaryButton onClick={save}>{details.id > 0 ? "Зберегти зміни" : "Створити шаблон"}</PrimaryButton></div>
+    </ModalFrame>
+  );
 };
 
 const ModalFrame: React.FC<{ children: React.ReactNode; close: () => void; wide?: boolean }> = ({ children, close, wide }) => {

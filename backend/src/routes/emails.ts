@@ -7,6 +7,7 @@ import { Student } from "../entities/Student";
 import { JWT_SECRET, FRONTEND_URL } from "../config";
 import { logger } from "../utils/logger";
 import { sendWeeklyTeacherDigestsForDate } from "../services/edu/teacherWeeklyDigestService";
+import { isCronAuthorized } from "../middleware/cronAuth";
 
 const router = Router();
 
@@ -41,7 +42,7 @@ function wantsJson(req: Request): boolean {
 }
 
 function verifyToken(raw: string): EmailPrefToken {
-  const decoded = jwt.verify(raw, JWT_SECRET) as any;
+  const decoded = jwt.verify(raw, JWT_SECRET, { algorithms: ["HS256"] }) as any;
   if (!decoded || decoded.t !== "email-pref") throw new Error("INVALID_TOKEN");
   if (decoded.action !== "unsubscribe" && decoded.action !== "subscribe") throw new Error("INVALID_TOKEN");
   if (decoded.kind !== "user" && decoded.kind !== "student") throw new Error("INVALID_TOKEN");
@@ -137,8 +138,7 @@ router.get("/subscribe", async (req: Request, res: Response) => {
 
 router.post("/teacher-digest/check", async (req: Request, res: Response) => {
   try {
-    const secret = req.headers["x-cron-secret"] || (req as any).body?.secret;
-    if (secret !== process.env.CRON_SECRET) {
+    if (!isCronAuthorized(req)) {
       return res.status(401).json({ message: "UNAUTHORIZED" });
     }
 

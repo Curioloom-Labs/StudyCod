@@ -16,7 +16,9 @@ function hasExecutable(p: string): boolean {
 test(
   "judge worker contract: scoring fields present and consistent",
   {
-    skip: process.env.RUN_JUDGE_CONTRACT_TEST !== "1"
+    // nsjail is a Linux runtime dependency; keep local Windows verification
+    // explicit instead of failing on a path that cannot exist there.
+    skip: process.env.RUN_JUDGE_CONTRACT_TEST !== "1" || process.platform !== "linux"
   },
   async () => {
     const workerEntry = await resolveJudgeWorkerEntry();

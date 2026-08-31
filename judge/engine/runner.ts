@@ -108,12 +108,35 @@ function toDebugCompileArgv(language: LanguageId, argv: string[]): string[] {
 
 type JudgeFile = { path: string; content: string };
 
+// judge/sandbox/nsjail.cfg maps the sandbox's root user to this host identity.
+// Keep host-side submission directories private while still making them writable
+// by the mapped sandbox process. The old 0777 mode allowed local users to read
+// and tamper with submissions and test data.
+const NSJAIL_HOST_UID = 1000;
+const NSJAIL_HOST_GID = 1000;
+
+async function prepareSandboxWritableDir(dir: string): Promise<void> {
+  if (process.platform !== "linux") return;
+
+  const uid = typeof process.getuid === "function" ? process.getuid() : null;
+  if (uid === 0) {
+    await fs.chown(dir, NSJAIL_HOST_UID, NSJAIL_HOST_GID);
+  } else if (uid !== null && uid !== NSJAIL_HOST_UID) {
+    throw new Error(
+      `JUDGE_SANDBOX_USER_MISMATCH: run the judge as uid ${NSJAIL_HOST_UID} ` +
+      `or run the service as root so the sandbox workdir can be chowned safely`
+    );
+  }
+
+  await fs.chmod(dir, 0o700);
+}
+
 function defaultEntryFile(language: LanguageId): string {
   return getLanguage(language).entryFile;
 }
 
 // Persistent Go build cache shared across submissions (bind-mounted into the jail at
-// /gocache). Created once; world-writable so the sandboxed uid can write to it.
+// /gocache). It uses the same private host identity as per-submission workdirs.
 let goCacheDirPromise: Promise<string | null> | null = null;
 function ensureGoCacheDir(): Promise<string | null> {
   if (!goCacheDirPromise) {
@@ -121,7 +144,7 @@ function ensureGoCacheDir(): Promise<string | null> {
       const dir = (process.env.JUDGE_GO_CACHE_DIR || path.join(os.tmpdir(), "studycod-go-cache")).trim();
       try {
         await fs.mkdir(dir, { recursive: true });
-        await fs.chmod(dir, 0o777);
+        await prepareSandboxWritableDir(dir);
         return dir;
       } catch {
         return null;
@@ -418,13 +441,11 @@ export class Runner {
     const chroot = this.resolveChroot(req.language);
     await this.assertChrootAvailable(req.language, chroot);
     const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "studycod-judge-"));
-    // When nsjail runs with uidmap/gidmap (config mode), the sandboxed process may not
-    // map to the same host UID as this Node process. Ensure the bind-mounted /work is
-    // writable from inside the jail.
     try {
-      await fs.chmod(workDir, 0o777);
-    } catch {
-      // Best-effort; if chmod fails, compilation may still succeed depending on uid mapping.
+      await prepareSandboxWritableDir(workDir);
+    } catch (error) {
+      await safeRm(workDir);
+      throw error;
     }
     try {
       const reqFiles = normalizeMultiFiles((req as any).files);

@@ -90,6 +90,9 @@ frontend/.design-sync
 .gitignore
 .agents/
 .github/
+!.github/
+!.github/workflows/
+!.github/workflows/ci.yml
 .claude/
 studycod-video/
 .impeccable.md
