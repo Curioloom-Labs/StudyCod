@@ -52,7 +52,7 @@
     "mailparser": "^3.9.0",
     "morgan": "^1.11.0",
     "multer": "^2.2.0",
-    "mysql2": "^3.17.0",
+    "mysql2": "^3.24.3",
     "nodemailer": "^9.0.5",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
