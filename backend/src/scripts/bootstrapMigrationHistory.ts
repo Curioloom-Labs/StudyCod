@@ -5,12 +5,15 @@ import {
   LEGACY_MIGRATION_HISTORY_BASELINE,
   stampLegacyMigrationHistory,
 } from "../migrations/legacyMigrationHistory";
+import { withMigrationLock } from "../services/migrationLock";
 
 async function main(): Promise<void> {
   await AppDataSource.initialize();
 
   try {
-    const result = await stampLegacyMigrationHistory(AppDataSource);
+    const result = await withMigrationLock(AppDataSource, () =>
+      stampLegacyMigrationHistory(AppDataSource),
+    );
 
     logger.info("[migrations:bootstrap-history] completed", {
       inserted: result.inserted,

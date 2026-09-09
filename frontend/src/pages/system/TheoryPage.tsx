@@ -4,7 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { BookOpen, ChevronRight } from "lucide-react";
 import type { User } from "../../types";
 import { tr } from "../../i18n";
-import { getTheoryTopics, type TheoryTopic } from "../../lib/api/theory";
+import { getTheoryTopic, getTheoryTopics, type TheoryTopic } from "../../lib/api/theory";
 import { MarkdownView } from "../../components/MarkdownView";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
@@ -19,6 +19,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
   const [topics, setTopics] = useState<TheoryTopic[]>([]);
   const [selected, setSelected] = useState<TheoryTopic | null>(null);
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const runtime = user.activeRuntime || "PYTHON";
   const courseLabel = runtime === "JAVA" ? "Java" : runtime === "CPP" ? "C++" : "Python";
@@ -46,6 +47,25 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
     void load();
     return () => { cancelled = true; };
   }, [runtime, i18n.language]);
+
+  useEffect(() => {
+    if (!selected?.theory || selected.theory.content !== null) return;
+    let cancelled = false;
+    setDetailLoading(true);
+    void getTheoryTopic(runtime, selected.id)
+      .then(detail => {
+        if (cancelled || !detail) return;
+        setTopics(current => current.map(topic => topic.id === detail.id ? detail : topic));
+        setSelected(current => current?.id === detail.id ? detail : current);
+      })
+      .catch(error => {
+        console.error("Failed to load theory topic", error);
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [runtime, i18n.language, selected?.id, selected?.theory?.content]);
 
   return (
     <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-3 sm:p-4 md:p-6">
@@ -137,6 +157,10 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
               {selected.theory?.content ? (
                 <div className="text-text-secondary leading-relaxed">
                   <MarkdownView content={selected.theory.content} />
+                </div>
+              ) : detailLoading ? (
+                <div className="py-12 text-center text-sm font-mono text-text-secondary">
+                  {tr("Завантаження теорії…", "Loading theory…")}
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-2 py-12 text-center">

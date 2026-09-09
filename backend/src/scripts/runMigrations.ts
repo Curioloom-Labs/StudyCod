@@ -1,20 +1,23 @@
 import "reflect-metadata";
 import { AppDataSource } from "../data-source";
 import { logger } from "../utils/logger";
+import { withMigrationLock } from "../services/migrationLock";
 
 async function main(): Promise<void> {
   await AppDataSource.initialize();
 
   try {
-    const hadPending = await AppDataSource.showMigrations();
-    const applied = await AppDataSource.runMigrations({
-      transaction: "all"
-    });
+    await withMigrationLock(AppDataSource, async () => {
+      const hadPending = await AppDataSource.showMigrations();
+      const applied = await AppDataSource.runMigrations({
+        transaction: "all"
+      });
 
-    logger.info("[migrations] completed", {
-      hadPending,
-      appliedCount: applied.length,
-      appliedNames: applied.map(m => m.name)
+      logger.info("[migrations] completed", {
+        hadPending,
+        appliedCount: applied.length,
+        appliedNames: applied.map(m => m.name)
+      });
     });
   } finally {
     await AppDataSource.destroy();

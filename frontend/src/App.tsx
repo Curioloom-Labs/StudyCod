@@ -930,7 +930,7 @@ export const App: React.FC = () => {
         <MascotCompanion />
         <AnimatePresence mode="sync">
           <Routes location={location} key={topLevelRouteKey}>
-          {import.meta.env.DEV ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>
+          {(import.meta.env.DEV || import.meta.env.VITE_BROWSER_CONTRACT === "1") ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <DevEditorPage />
                 </AnimatedPage>

@@ -23,14 +23,38 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: "INVALID_LANGUAGE" });
     }
 
-    const topics = await topicRepo().find({
-      where: {
-        language: language as TopicLanguage,
-        class: IsNull()
-      },
-      order: { order: "ASC" },
-      relations: ["theoryBlock"]
-    });
+    const topicIdRaw = String(req.query.topicId ?? "").trim();
+    const topicId = topicIdRaw ? Number(topicIdRaw) : null;
+    if (topicIdRaw && (!Number.isInteger(topicId) || Number(topicId) <= 0)) {
+      return res.status(400).json({ message: "INVALID_TOPIC_ID" });
+    }
+    // The sidebar only needs metadata. Avoid selecting every MEDIUMTEXT theory
+    // block on the first request; the selected topic is fetched lazily below.
+    const summary = String(req.query.summary ?? "").trim() === "1" && !topicId;
+
+    const topics = summary
+      ? await topicRepo()
+        .createQueryBuilder("topic")
+        .leftJoin("topic.theoryBlock", "theoryBlock")
+        .addSelect([
+          "theoryBlock.id",
+          "theoryBlock.title",
+          "theoryBlock.version",
+          "theoryBlock.updatedAt"
+        ])
+        .where("topic.language = :language", { language })
+        .andWhere("topic.class_id IS NULL")
+        .orderBy("topic.order", "ASC")
+        .getMany()
+      : await topicRepo().find({
+        where: {
+          language: language as TopicLanguage,
+          class: IsNull(),
+          ...(topicId ? { id: topicId } : {})
+        },
+        order: { order: "ASC" },
+        relations: ["theoryBlock"]
+      });
 
     // Lazily translate theory blocks for English UI and store once in DB.
     // Translation columns are marked select:false, so we explicitly select them.
@@ -38,7 +62,7 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
     const localizedTopicTitleEnById = wantsEn
       ? await buildLocalizedTopicTitleEnById({ topics, logContext: { requestId: req.requestId, userId: req.userId } })
       : new Map<number, string>();
-    if (wantsEn) {
+    if (wantsEn && !summary) {
       const hasCols = await hasTheoryBlockEnTranslationColumns();
       if (hasCols) {
         const ids = Array.from(
@@ -124,7 +148,7 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
                   !looksLikeTranslationProviderErrorText(String(b.titleEn ?? ""));
                 return ok ? (b!.titleEn as string) : t.theoryBlock!.title;
               })(),
-              content: (() => {
+              content: summary ? null : (() => {
                 if (!wantsEn) return t.theoryBlock!.content;
                 const b = localizedEnById.get(t.theoryBlock!.id);
                 const ok =

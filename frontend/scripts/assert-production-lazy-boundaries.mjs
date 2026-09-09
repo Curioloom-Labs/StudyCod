@@ -10,6 +10,14 @@ if (/monaco-/i.test(html)) {
   throw new Error("Production entry must not preload Monaco assets; keep the editor behind its dynamic import boundary.");
 }
 
+// Keep the entry compatible with the production CSP. Runtime bootstraps must
+// be same-origin files (or module bundles), never anonymous inline scripts that
+// require a brittle hash/nonce in Nginx configuration.
+const inlineScripts = [...html.matchAll(/<script\b(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi)];
+if (inlineScripts.length > 0) {
+  throw new Error(`Production entry contains ${inlineScripts.length} inline script(s); move them to same-origin assets.`);
+}
+
 const entryJavaScript = [...html.matchAll(/(?:href|src)="(\/assets\/[^\"]+\.js)"/g)]
   .map(match => match[1])
   .filter((asset, index, assets) => assets.indexOf(asset) === index);

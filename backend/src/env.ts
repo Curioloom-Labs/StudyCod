@@ -200,6 +200,7 @@ const EnvSchema = z.object({
 
   // Database startup flow
   RUN_MIGRATIONS_ON_STARTUP: z.string().optional(),
+  MIGRATION_LOCK_TIMEOUT_SECONDS: z.string().optional(),
   AUTO_BOOTSTRAP_MIGRATION_HISTORY_ON_STARTUP: z.string().optional(),
   SEED_TOPICS_ON_STARTUP: z.string().optional(),
 
@@ -567,6 +568,12 @@ const EnvSchema = z.object({
       const raw = (env.RUN_MIGRATIONS_ON_STARTUP ?? "").trim();
       if (!raw) return true;
       return parseBoolEnv(raw);
+    })(),
+    __migrationLockTimeoutSeconds: (() => {
+      const raw = (env.MIGRATION_LOCK_TIMEOUT_SECONDS ?? "").trim();
+      if (!raw) return 60;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n >= 1 ? Math.min(n, 300) : 60;
     })(),
     // Auto-stamping silently inserts rows into typeorm_migrations for failed
     // migrations that look like legacy schema drift. That is convenient in

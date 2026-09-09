@@ -67,6 +67,7 @@ import { seedTopicsIfNeeded } from "./utils/seedTopics";
 import { seedLearningCatalogContent } from "./utils/seedLearningCatalog";
 import { checkReadiness, renderPrometheusMetrics } from "./observability/health";
 import { httpMetricsMiddleware } from "./observability/httpMetrics";
+import { withMigrationLock } from "./services/migrationLock";
 const app = express();
 
 type UnknownRecord = Record<string, unknown>;
@@ -1064,34 +1065,35 @@ async function runStartupMigrations(): Promise<StartupMigrationOutcome> {
     };
   }
 
-  const autoBootstrapLegacyHistory = Boolean(env.__autoBootstrapMigrationHistoryOnStartup);
-  const maxRecoveryAttempts = 6;
-  const autoStampedMigrations: string[] = [];
-  const autoStampAttempted = new Set<string>();
+  return withMigrationLock(AppDataSource, async () => {
+    const autoBootstrapLegacyHistory = Boolean(env.__autoBootstrapMigrationHistoryOnStartup);
+    const maxRecoveryAttempts = 6;
+    const autoStampedMigrations: string[] = [];
+    const autoStampAttempted = new Set<string>();
 
-  for (let attempt = 1; attempt <= maxRecoveryAttempts; attempt += 1) {
-    try {
-      const hasPending = await AppDataSource.showMigrations();
-      const applied = await AppDataSource.runMigrations({
-        transaction: "all"
-      });
+    for (let attempt = 1; attempt <= maxRecoveryAttempts; attempt += 1) {
+      try {
+        const hasPending = await AppDataSource.showMigrations();
+        const applied = await AppDataSource.runMigrations({
+          transaction: "all"
+        });
 
-      logger.info("[startup:migrations] completed", {
-        attempt,
-        hadPending: hasPending,
-        appliedCount: applied.length,
-        appliedNames: applied.map(m => m.name),
-        autoStampedMigrations
-      });
+        logger.info("[startup:migrations] completed", {
+          attempt,
+          hadPending: hasPending,
+          appliedCount: applied.length,
+          appliedNames: applied.map(m => m.name),
+          autoStampedMigrations
+        });
 
-      return {
-        attempted: true,
-        succeeded: true,
-        appliedNames: applied.map(m => m.name),
-        attemptCount: attempt,
-        autoStampedMigrations
-      };
-    } catch (error: unknown) {
+        return {
+          attempted: true,
+          succeeded: true,
+          appliedNames: applied.map(m => m.name),
+          attemptCount: attempt,
+          autoStampedMigrations
+        };
+      } catch (error: unknown) {
       const remediationHint = getStartupMigrationRemediationHint(error);
       const failedMigrationName = extractFailedMigrationName(error);
       const failedTableName = extractAlreadyExistingTableName(error);
@@ -1183,16 +1185,17 @@ async function runStartupMigrations(): Promise<StartupMigrationOutcome> {
         remediationHint
       };
     }
-  }
+    }
 
-  return {
-    attempted: true,
-    succeeded: false,
-    appliedNames: [],
-    attemptCount: maxRecoveryAttempts,
-    autoStampedMigrations,
-    errorMessage: "MIGRATION_RECOVERY_ATTEMPTS_EXHAUSTED"
-  };
+    return {
+      attempted: true,
+      succeeded: false,
+      appliedNames: [],
+      attemptCount: maxRecoveryAttempts,
+      autoStampedMigrations,
+      errorMessage: "MIGRATION_RECOVERY_ATTEMPTS_EXHAUSTED"
+    };
+  });
 }
 
 async function bootstrap(): Promise<void> {

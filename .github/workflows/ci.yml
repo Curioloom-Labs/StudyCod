@@ -83,6 +83,8 @@ jobs:
 
       - name: Build frontend
         working-directory: frontend
+        env:
+          VITE_BROWSER_CONTRACT: "1"
         run: npm run build
 
       - name: Install backend dependencies
