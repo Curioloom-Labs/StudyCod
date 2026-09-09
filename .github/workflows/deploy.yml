@@ -126,11 +126,18 @@ jobs:
           has_path '^(ai-service/|package-lock.json$)' && ai_service=1
           has_path '^(lsp-service/|package-lock.json$)' && lsp_service=1
           has_path '^ai-service/cloudflare-ai-worker/' && ai_worker=1
-          has_path '^(frontend/|\.github/workflows/deploy\.yml$)' && frontend=1
+          has_path '^frontend/' && frontend=1
 
+          infra_only=0
+          if ! grep -Evq '^(\.github/workflows/|ops/)' <<< "$changed"; then
+            infra_only=1
+          fi
+
+          # Keep deployment validation for workflow/ops changes, but avoid
+          # rebuilding application packages when no package source changed.
           # A commit outside a known package is treated as a full deploy so
           # shared infrastructure changes cannot silently be skipped.
-          if [[ "$backend$judge$ai_service$lsp_service$ai_worker$frontend" == "000000" ]]; then
+          if [[ "$backend$judge$ai_service$lsp_service$ai_worker$frontend" == "000000" && "$infra_only" == "0" ]]; then
             backend=1
             judge=1
             ai_service=1
