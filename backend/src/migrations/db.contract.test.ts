@@ -63,6 +63,7 @@ test("database contract: critical schema, indexes, and hot-path plans", {
       "classes",
       "courses",
       "students",
+      "topics_new",
       "maintenance_state",
       "edu_grades",
       "summary_grades",
@@ -92,9 +93,10 @@ test("database contract: critical schema, indexes, and hot-path plans", {
     assert.ok(studentRows.some(row => row.Field === "deleted_at"), "students.deleted_at must exist");
     assert.equal(maintenanceRows.find(row => row.Field === "until")?.Null, "YES", "maintenance_state.until must remain nullable");
 
-    const [gradeIndexes, summaryIndexes] = await Promise.all([
+    const [gradeIndexes, summaryIndexes, topicIndexes] = await Promise.all([
       indexNames(connection, "edu_grades"),
       indexNames(connection, "summary_grades"),
+      indexNames(connection, "topics_new"),
     ]);
     for (const name of ["idx_edu_grades_student_task_created", "idx_edu_grades_student_topic_created"]) {
       assert.equal(gradeIndexes.has(name), true, `missing index: edu_grades.${name}`);
@@ -102,6 +104,7 @@ test("database contract: critical schema, indexes, and hot-path plans", {
     for (const name of ["idx_summary_grades_student_created", "idx_summary_grades_class_student_created"]) {
       assert.equal(summaryIndexes.has(name), true, `missing index: summary_grades.${name}`);
     }
+    assert.equal(topicIndexes.has("idx_topics_new_language_class_order"), true, "missing index: topics_new.idx_topics_new_language_class_order");
 
     const [gradePlanRows] = await connection.query<RowDataPacket[]>(
       "EXPLAIN SELECT id FROM edu_grades WHERE student_id = ? AND task_id = ? ORDER BY created_at DESC LIMIT 1",
@@ -116,6 +119,13 @@ test("database contract: critical schema, indexes, and hot-path plans", {
     );
     const summaryPlan = String(summaryPlanRows[0]?.possible_keys ?? "");
     assert.match(summaryPlan, /idx_summary_grades_class_student_created/, "summary grade lookup does not expose the expected composite index");
+
+    const [topicPlanRows] = await connection.query<RowDataPacket[]>(
+      "EXPLAIN SELECT id FROM topics_new WHERE language = ? AND class_id IS NULL ORDER BY `order` ASC",
+      ["PYTHON"],
+    );
+    const topicPlan = String(topicPlanRows[0]?.possible_keys ?? "");
+    assert.match(topicPlan, /idx_topics_new_language_class_order/, "theory topic sidebar lookup does not expose the expected composite index");
   } finally {
     await connection.end();
   }
