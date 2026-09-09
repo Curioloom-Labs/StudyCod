@@ -15,18 +15,7 @@
       html[data-theme="light"], html[data-theme="light"] body { background: #f7f8f5; }
       #root { min-height: 100dvh; background: inherit; }
     </style>
-    <script>
-      (function () {
-        try {
-          var saved = localStorage.getItem('studycod_theme');
-          var theme = saved === 'light' || saved === 'dark'
-            ? saved
-            : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-          document.documentElement.setAttribute('data-theme', theme);
-        } catch (_) {
-        }
-      })();
-    </script>
+    <script src="/theme-bootstrap.js"></script>
     <meta
       name="description"
       content="StudyCod — learn by building. Навчайся програмуванню через коротку теорію, практику, підказки та зрозумілий прогрес."
@@ -67,30 +56,7 @@
       </noscript>
     </div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      (function () {
-        try {
-          var canonicalHref = window.location.origin + window.location.pathname;
-
-          var canonical = document.querySelector('link[rel="canonical"]');
-          if (!canonical) {
-            canonical = document.createElement('link');
-            canonical.setAttribute('rel', 'canonical');
-            document.head.appendChild(canonical);
-          }
-          canonical.setAttribute('href', canonicalHref);
-
-          var ogUrl = document.querySelector('meta[property="og:url"]');
-          if (!ogUrl) {
-            ogUrl = document.createElement('meta');
-            ogUrl.setAttribute('property', 'og:url');
-            document.head.appendChild(ogUrl);
-          }
-          ogUrl.setAttribute('content', canonicalHref);
-        } catch (_) {
-        }
-      })();
-    </script>
+    <script src="/seo-bootstrap.js"></script>
   </body>
 </html>
 

@@ -34,24 +34,14 @@ function manualChunks(id: string): string | undefined {
   if (norm.includes("/node_modules/react-markdown/") || norm.includes("/node_modules/remark-gfm/") || norm.includes("/node_modules/remark-parse/") || norm.includes("/node_modules/remark-rehype/") || norm.includes("/node_modules/rehype-stringify/") || norm.includes("/node_modules/unified/") || norm.includes("/node_modules/vfile/") || norm.includes("/node_modules/vfile-message/") || /\/node_modules\/(micromark|mdast-|hast-|unist-|zwitch|property-information|web-namespaces|space-separated-tokens|comma-separated-tokens|trim-lines|ccount|longest-streak|is-alphabetical|is-alphanumerical|is-decimal|is-hexadecimal|decode-named-character-reference|parse-entities|character-entities|character-entities-legacy|character-reference-invalid|html-url-attributes|markdown-table|hastscript|hast-util-|mdast-util-|micromark-extension-|micromark-factory-|micromark-core-commonmark|micromark-util-)/.test(norm)) return "markdown-core";
   if (norm.includes("/node_modules/react-syntax-highlighter/")) return "syntax-highlighter";
 
-  // Monaco is reached only from the editor route. Language contributions are
-  // split by language and inline completions are isolated so no single editor
-  // chunk exceeds the bundle budget.
+  // Monaco is reached only from the editor route. Language contributions can
+  // stay separate, but the editor API itself must remain one chunk: Monaco's
+  // API intentionally has circular references, and splitting its internals
+  // creates cross-chunk TDZ failures in production.
   if (norm.includes("/node_modules/@monaco-editor/react/")) return "monaco-react";
   const basicLanguageMatch = norm.match(/\/node_modules\/monaco-editor\/esm\/vs\/basic-languages\/([^/]+)\//);
   if (basicLanguageMatch) return `monaco-language-${basicLanguageMatch[1]}`;
-  if (norm.includes("/node_modules/monaco-editor/esm/vs/editor/contrib/clipboard/")) return "monaco-editor-clipboard";
-  const contributionMatch = norm.match(/\/node_modules\/monaco-editor\/esm\/vs\/editor\/contrib\/([^/]+)\//);
-  if (contributionMatch?.[1] === "inlineCompletions") return "monaco-editor-inline-completions";
-  if (contributionMatch) return "monaco-editor-contrib";
-  if (norm.includes("/node_modules/monaco-editor/esm/vs/editor/standalone/")) return "monaco-editor-standalone";
-  if (norm.includes("/node_modules/monaco-editor/esm/vs/editor/browser/")) return "monaco-editor-browser";
-  if (norm.includes("/node_modules/monaco-editor/esm/vs/editor/common/")) return "monaco-editor-common";
-  if (norm.includes("/node_modules/monaco-editor/esm/vs/editor/")) return "monaco-editor-core";
-  if (norm.includes("/node_modules/monaco-editor/esm/vs/language/")) return "monaco-language-services";
-  if (norm.includes("/node_modules/monaco-editor/esm/vs/base/")) return "monaco-base";
-  if (norm.includes("/node_modules/monaco-editor/esm/vs/platform/")) return "monaco-platform";
-  if (norm.includes("/node_modules/monaco-editor/")) return "monaco-runtime";
+  if (norm.includes("/node_modules/monaco-editor/")) return "monaco-editor-runtime";
 
   if (norm.includes("/node_modules/recharts/") || norm.includes("/node_modules/d3-")) return "charts";
   if (norm.includes("/node_modules/i18next/") || norm.includes("/node_modules/react-i18next/")) return "i18n";
@@ -112,8 +102,10 @@ export default defineConfig({
         manualChunks,
       },
     },
-    // All application/vendor chunks remain below the standard warning limit.
-    chunkSizeWarningLimit: 1100,
+    // Monaco's editor API is intentionally one lazy chunk because its module
+    // graph contains circular references. The production contract below keeps
+    // that chunk bounded while the regular app/vendor chunks remain small.
+    chunkSizeWarningLimit: 4500,
     target: "esnext",
     cssCodeSplit: true,
     // Monaco is reached through React.lazy/editor-only dynamic imports. Vite's
