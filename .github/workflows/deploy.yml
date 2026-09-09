@@ -57,7 +57,8 @@ jobs:
         run: npm run test:env-contract
 
       - name: Dependency audit
-        run: npm audit --omit=dev --audit-level=high
+        # Include build/deploy toolchains such as Wrangler and Miniflare.
+        run: npm audit --audit-level=moderate
 
   deploy:
     needs: verify
@@ -68,6 +69,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Setup Node.js for deploy tooling
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ai-service/cloudflare-ai-worker/package-lock.json
 
       - name: Detect deploy scope
         id: scope
@@ -162,7 +170,10 @@ jobs:
             fi
             pm2 stop all || true
             trap 'pm2 restart all --update-env || true' EXIT
-            BUILD_BACKEND=$BUILD_BACKEND BUILD_JUDGE=$BUILD_JUDGE BUILD_AI_SERVICE=$BUILD_AI_SERVICE BUILD_LSP_SERVICE=$BUILD_LSP_SERVICE BUILD_AI_WORKER=$BUILD_AI_WORKER BUILD_FRONTEND=$BUILD_FRONTEND \"\$repo/restart-all.sh\""
+            # The Cloudflare Worker is deployed by the dedicated GitHub step
+            # below. Do not build it on the application server, which may have
+            # a different system Node version from the CI toolchain.
+            BUILD_BACKEND=$BUILD_BACKEND BUILD_JUDGE=$BUILD_JUDGE BUILD_AI_SERVICE=$BUILD_AI_SERVICE BUILD_LSP_SERVICE=$BUILD_LSP_SERVICE BUILD_AI_WORKER=0 BUILD_FRONTEND=$BUILD_FRONTEND \"\$repo/restart-all.sh\""
 
       - name: Warn when the Cloudflare Worker deploy is not configured
         if: steps.scope.outputs.ai_worker == '1' && (env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '')
@@ -177,4 +188,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy --env production
+        run: |
+          npm ci
+          npm run build
+          npx wrangler deploy --env production
