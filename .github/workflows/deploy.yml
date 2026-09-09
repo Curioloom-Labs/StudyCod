@@ -167,17 +167,19 @@ jobs:
           set -euo pipefail
           ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -e
             repo=/var/www/studycod
-            if [[ -n \$(git -C \"\$repo\" status --porcelain) ]]; then
-              echo 'Deploy blocked: the server worktree has local changes.'
+            if [[ -n \$(git -C \"\$repo\" status --porcelain --untracked-files=no) ]]; then
+              echo 'Deploy blocked: the server worktree has tracked local changes.'
               git -C \"\$repo\" status --short
               exit 3
             fi
-            pm2 stop all || true
-            trap 'pm2 restart all --update-env || true' EXIT
+            git -C \"\$repo\" fetch --prune origin
+            deploy_script=/tmp/studycod-restart-all.next
+            git -C \"\$repo\" show origin/main:ops/restart-all.sh > \"\$deploy_script\"
+            chmod 755 \"\$deploy_script\"
+            trap 'rm -f \"\$deploy_script\"' EXIT
             # The Cloudflare Worker is deployed by the dedicated GitHub step
-            # below. Do not build it on the application server, which may have
-            # a different system Node version from the CI toolchain.
-            BUILD_BACKEND=$BUILD_BACKEND BUILD_JUDGE=$BUILD_JUDGE BUILD_AI_SERVICE=$BUILD_AI_SERVICE BUILD_LSP_SERVICE=$BUILD_LSP_SERVICE BUILD_AI_WORKER=0 BUILD_FRONTEND=$BUILD_FRONTEND \"\$repo/restart-all.sh\""
+            # below. Do not build it on the application server.
+            BUILD_BACKEND=$BUILD_BACKEND BUILD_JUDGE=$BUILD_JUDGE BUILD_AI_SERVICE=$BUILD_AI_SERVICE BUILD_LSP_SERVICE=$BUILD_LSP_SERVICE BUILD_AI_WORKER=0 BUILD_FRONTEND=$BUILD_FRONTEND \"\$deploy_script\""
 
       - name: Verify production readiness after deploy
         env:

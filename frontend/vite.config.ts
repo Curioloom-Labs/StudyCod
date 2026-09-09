@@ -83,6 +83,9 @@ export default defineConfig({
     },
   },
   build: {
+    // Deploys can build into a release directory and atomically switch the
+    // Nginx symlink after the complete artifact has passed its checks.
+    outDir: process.env.STUDYCOD_BUILD_OUT_DIR?.trim() || "dist",
     sourcemap: false,
     minify: "esbuild",
     rollupOptions: {

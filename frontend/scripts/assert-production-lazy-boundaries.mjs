@@ -2,7 +2,8 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const entryPath = fileURLToPath(new URL("../dist/index.html", import.meta.url));
+const outputDir = process.env.STUDYCOD_BUILD_OUT_DIR?.trim() || "dist";
+const entryPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", outputDir, "index.html");
 const distPath = path.dirname(entryPath);
 const html = await readFile(entryPath, "utf8");
 

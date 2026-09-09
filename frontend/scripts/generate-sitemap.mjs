@@ -7,7 +7,7 @@ function normalizeBaseUrl(raw) {
 }
 
 async function main() {
-  const distDir = path.resolve(process.cwd(), "dist");
+  const distDir = path.resolve(process.cwd(), process.env.STUDYCOD_BUILD_OUT_DIR?.trim() || "dist");
 
   try {
     const stat = await fs.stat(distDir);

@@ -5,6 +5,10 @@ __pycache__/
 # Build outputs
 **/dist/
 **/build/
+.deploy-backups/
+.deploy-releases/
+.deploy.lock
+frontend/.dist-live*
 tmp-index.js
 tmp-index.map
 
