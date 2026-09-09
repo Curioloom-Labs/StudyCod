@@ -49,7 +49,8 @@ export async function cleanupCompletedPersonalTaskTests(params?: {
       `DELETE FROM test_data WHERE id IN (${ids.map(() => "?").join(",")})`,
       ids
     );
-    const affected = Number((result as any)?.affectedRows ?? 0);
+    const resultRecord = result && typeof result === "object" ? result as Record<string, unknown> : {};
+    const affected = Number(resultRecord.affectedRows ?? 0);
     deleted += affected;
     if (ids.length < CLEANUP_BATCH_SIZE) break;
   }

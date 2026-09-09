@@ -111,8 +111,8 @@ ${theoryMarkdown.slice(0, 3000)}
         content: JSON.stringify(expectedResponse, null, 2)
       }]
     };
-  } catch (err: any) {
-    logger.warn('[dataset] extract failed', { message: err?.message });
+  } catch (err: unknown) {
+    logger.warn('[dataset] extract failed', { message: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }
@@ -132,11 +132,11 @@ export async function collectTrainingDataset(options: {
   const tasks = await taskRepo().find({
     where: languages.map(lang => ({
       lang
-    })) as any,
+    })),
     relations: ['topic', 'grades'],
     order: {
       createdAt: 'DESC'
-    } as any
+    }
   });
   const stats: DatasetStats = {
     totalTasks: tasks.length,
@@ -189,7 +189,12 @@ export async function collectTrainingDataset(options: {
 export function exportToJSONL(examples: TrainingExample[]): string {
   return examples.map(ex => JSON.stringify(ex)).join('\n');
 }
-export function exportToHuggingFaceFormat(examples: TrainingExample[]): any[] {
+export function exportToHuggingFaceFormat(examples: TrainingExample[]): Array<{
+  instruction: string;
+  input: string;
+  output: string;
+  system: string;
+}> {
   return examples.map(ex => ({
     instruction: ex.messages.find(m => m.role === 'user')?.content || '',
     input: '',

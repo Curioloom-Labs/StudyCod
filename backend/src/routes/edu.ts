@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import multer from "multer";
 import { z } from "zod";
+import { UPLOADS_ROOT } from "../config/storagePaths";
 import { AppDataSource } from "../data-source";
 import { User } from "../entities/User";
 import type { CourseRuntime } from "../entities/CourseVariant";
@@ -14,7 +15,7 @@ import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { requireClassCapability, type ClassAccessRequest } from "../middleware/orgContext";
 import { EduLesson, LessonType } from "../entities/EduLesson";
-import { EduTask } from "../entities/EduTask";
+import { EduTask, type EduTaskMode } from "../entities/EduTask";
 import { EduGrade } from "../entities/EduGrade";
 import { SummaryGrade } from "../entities/SummaryGrade";
 import { ControlWork } from "../entities/ControlWork";
@@ -66,7 +67,6 @@ const topicRepo = () => AppDataSource.getRepository(TopicNew);
 function resolveRequestLocale(req: Request): "uk" | "en" {
   return resolveUiLocaleFromHeaders(req.headers, "uk");
 }
-const UPLOADS_ROOT = process.env.UPLOADS_DIR ? String(process.env.UPLOADS_DIR) : path.resolve(process.cwd(), "uploads");
 const STATEMENT_IMAGES_DIR = path.join(UPLOADS_ROOT, "statement-images");
 const ALLOWED_STATEMENT_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/avif", "image/svg+xml"]);
 const statementImageUpload = multer({
@@ -114,6 +114,15 @@ function mimeByExt(fileName: string): string {
   if (ext === ".avif") return "image/avif";
   if (ext === ".svg") return "image/svg+xml";
   return "application/octet-stream";
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" ? error : "";
+}
+
+function errorCode(error: unknown): string {
+  return typeof error === "object" && error !== null && "code" in error ? String(error.code ?? "") : "";
 }
 function normalizeLang(input?: string | null): CourseRuntime {
   const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
@@ -164,9 +173,9 @@ eduRouter.post("/generate-interactive-lesson", authRequired, async (req: AuthReq
       userId: req.userId
     });
     return res.json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu] generate-interactive-lesson failed", { requestId: req.requestId, err: error });
-    return res.status(502).json({ message: error?.message || "AI_GENERATION_FAILED" });
+    return res.status(502).json({ message: errorMessage(error) || "AI_GENERATION_FAILED" });
   }
 });
 
@@ -245,13 +254,13 @@ const createLessonTaskBodySchema = z.object({
 });
 
 eduRouter.post("/statement-images", authRequired, (req: AuthRequest, res: Response, next) => {
-  statementImageUpload.single("image")(req as any, res as any, (err: any) => {
+  statementImageUpload.single("image")(req, res, (err: unknown) => {
     if (err) {
-      const msg = String(err?.message || "UPLOAD_ERROR");
+      const msg = errorMessage(err) || "UPLOAD_ERROR";
       if (msg === "UNSUPPORTED_IMAGE_TYPE") {
         return res.status(400).json({ message: "UNSUPPORTED_IMAGE_TYPE" });
       }
-      if (String(err?.code || "") === "LIMIT_FILE_SIZE") {
+      if (errorCode(err) === "LIMIT_FILE_SIZE") {
         return res.status(400).json({ message: "IMAGE_TOO_LARGE" });
       }
       return res.status(400).json({ message: "INVALID_UPLOAD" });
@@ -263,7 +272,7 @@ eduRouter.post("/statement-images", authRequired, (req: AuthRequest, res: Respon
     if (!req.userId && !req.studentId) {
       return res.status(401).json({ message: "UNAUTHORIZED" });
     }
-    const file = (req as any).file as Express.Multer.File | undefined;
+    const file = req.file;
     if (!file || !file.buffer || !file.size) {
       return res.status(400).json({ message: "IMAGE_REQUIRED" });
     }
@@ -283,7 +292,7 @@ eduRouter.post("/statement-images", authRequired, (req: AuthRequest, res: Respon
       url,
       markdown: `![${alt}](${url})`
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu] failed to upload statement image", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -305,7 +314,7 @@ eduRouter.get("/statement-images/:fileName", async (req: Request, res: Response)
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     res.setHeader("Content-Type", mimeByExt(fileName));
     return res.sendFile(abs);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu] failed to serve statement image", { err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -372,15 +381,15 @@ eduRouter.post("/register-organization", eduOrganizationRegistrationLimiter, asy
       await manager.getRepository(EduRegistrationIntent).save(intent);
     });
     const locale = resolveRequestLocale(req);
-    emailService.sendVerificationEmail(email, verificationToken, username, locale).catch(err => {
-      logger.error("[edu] verification email failed", { requestId: (req as any)?.requestId, err });
+    emailService.sendVerificationEmail(email, verificationToken, username, locale).catch((err: unknown) => {
+      logger.error("[edu] verification email failed", { requestId: req.requestId, err });
     });
     res.status(201).json({
       requiresEmailVerification: true,
       message: "EDU_REGISTRATION_SUCCESSFUL_EMAIL_SENT"
     });
   } catch (error) {
-    logger.error("[edu] Error registering user", { requestId: (req as any)?.requestId, err: error });
+    logger.error("[edu] Error registering user", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -692,10 +701,10 @@ eduRouter.get("/classes/:classId/lessons", authRequired, requireClassCapability(
           title: task.title,
           description: task.description || null,
           template: task.template || null,
-          taskMode: (task as any).taskMode ?? "CODE",
-          projectSpec: (task as any).projectSpec ?? null,
-          webTemplateFiles: (task as any).webTemplateFiles ?? null,
-          webValidationRules: (task as any).webValidationRules ?? null,
+          taskMode: task.taskMode ?? "CODE",
+          projectSpec: task.projectSpec ?? null,
+          webTemplateFiles: task.webTemplateFiles ?? null,
+          webValidationRules: task.webValidationRules ?? null,
           deadline: task.deadline ? task.deadline.toISOString() : null,
           maxAttempts: task.maxAttempts || null,
           isClosed: task.isClosed || false,
@@ -785,7 +794,7 @@ eduRouter.post("/lessons/:lessonId/tasks", authRequired, async (req: AuthRequest
     title,
     description,
     template: normalizedTaskInput.template,
-    taskMode: normalizedTaskInput.taskMode as any,
+    taskMode: normalizedTaskInput.taskMode as EduTaskMode,
     webTemplateFiles: normalizedTaskInput.webTemplateFiles,
     webValidationRules: normalizedTaskInput.webValidationRules,
     webValidationProfile: normalizedTaskInput.webValidationProfile,
@@ -878,14 +887,14 @@ eduRouter.put("/control-works/:controlWorkId/formula", authRequired, async (req:
       message: "FORMULA_UPDATED_AND_GRADES_RECALCULATED",
       controlWorkId
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu] Error updating control work formula", { requestId: req.requestId, err: error });
-    if (error.message === "CONTROL_WORK_NOT_FOUND") {
+    if (errorMessage(error) === "CONTROL_WORK_NOT_FOUND") {
       return res.status(404).json({
         message: "CONTROL_WORK_NOT_FOUND"
       });
     }
-    if (error.message === "ACCESS_DENIED") {
+    if (errorMessage(error) === "ACCESS_DENIED") {
       return res.status(403).json({
         message: "ACCESS_DENIED"
       });

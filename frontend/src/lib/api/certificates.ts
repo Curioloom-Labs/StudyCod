@@ -17,10 +17,26 @@ type CertificateApiErrorData = {
   errors?: CertificateApiValidationIssue[];
 };
 
-function getCertificateApiErrorData(error: any): CertificateApiErrorData | null {
-  const data = error?.response?.data;
+function getCertificateApiErrorData(error: unknown): CertificateApiErrorData | null {
+  if (!error || typeof error !== "object") return null;
+  const response = Reflect.get(error, "response");
+  const data = response && typeof response === "object" ? Reflect.get(response, "data") : undefined;
   if (!data || typeof data !== "object") return null;
   return data as CertificateApiErrorData;
+}
+
+function getCertificateApiStatus(error: unknown): number {
+  if (!error || typeof error !== "object") return 0;
+  const response = Reflect.get(error, "response");
+  if (!response || typeof response !== "object") return 0;
+  const status = Number(Reflect.get(response, "status"));
+  return Number.isFinite(status) ? status : 0;
+}
+
+function getCertificateApiMessage(error: unknown): string {
+  if (!error || typeof error !== "object") return "";
+  const message = Reflect.get(error, "message");
+  return typeof message === "string" ? message : "";
 }
 
 function makeTemplateTooLargeMessage(limit?: number): string {
@@ -47,9 +63,9 @@ function parseInvalidInputMessage(data: CertificateApiErrorData): string | null 
   return `INVALID_INPUT: ${path} — ${msg}`;
 }
 
-function normalizeCertificateApiError(error: any, fallbackMessage: string): Error {
+function normalizeCertificateApiError(error: unknown, fallbackMessage: string): Error {
   const data = getCertificateApiErrorData(error);
-  const status = Number(error?.response?.status ?? 0);
+  const status = getCertificateApiStatus(error);
   const code = String(data?.message ?? data?.error ?? "").trim();
 
   if (code === "TEMPLATE_TOO_LARGE" || status === 413) {
@@ -69,7 +85,7 @@ function normalizeCertificateApiError(error: any, fallbackMessage: string): Erro
     return new Error("ACCESS_DENIED: you do not have permission to modify certificate settings for this contest.");
   }
 
-  const directMessage = String(code || error?.message || "").trim();
+  const directMessage = String(code || getCertificateApiMessage(error)).trim();
   if (directMessage) return new Error(directMessage);
   return new Error(fallbackMessage);
 }
@@ -115,11 +131,10 @@ export async function getCertificateVerification(certificateId: string): Promise
       certificateId: String(certificateId ?? "").trim()
     });
     return res.data as CertificateVerification;
-  } catch (e: any) {
-    const msg = e?.response?.data?.message;
+  } catch (e: unknown) {
+    const msg = getCertificateApiErrorData(e)?.message;
     if (msg === "CERTIFICATE_NOT_FOUND") {
-      const error = new Error("CERTIFICATE_NOT_FOUND");
-      (error as any).code = "CERTIFICATE_NOT_FOUND";
+      const error = Object.assign(new Error("CERTIFICATE_NOT_FOUND"), { code: "CERTIFICATE_NOT_FOUND" });
       throw error;
     }
     throw e;
@@ -158,7 +173,7 @@ export async function createCertificateTemplate(payload: {
   try {
     const res = await api.post("/certificate/template", payload);
     return res.data as { templateId: number };
-  } catch (e: any) {
+  } catch (e: unknown) {
     throw normalizeCertificateApiError(e, "Failed to create certificate template");
   }
 }
@@ -193,7 +208,7 @@ export async function updateCertificateTemplate(
   try {
     const res = await api.put(`/certificate/template/${Number(templateId)}`, payload);
     return res.data as { ok: boolean; templateId: number; version: number };
-  } catch (e: any) {
+  } catch (e: unknown) {
     throw normalizeCertificateApiError(e, "Failed to update certificate template");
   }
 }
@@ -256,11 +271,10 @@ export async function getCertificateTemplateById(templateId: number): Promise<{
         version: number;
       };
     };
-  } catch (e: any) {
-    const msg = e?.response?.data?.message;
+  } catch (e: unknown) {
+    const msg = getCertificateApiErrorData(e)?.message;
     if (msg === "TEMPLATE_NOT_FOUND") {
-      const error = new Error("TEMPLATE_NOT_FOUND");
-      (error as any).code = "TEMPLATE_NOT_FOUND";
+      const error = Object.assign(new Error("TEMPLATE_NOT_FOUND"), { code: "TEMPLATE_NOT_FOUND" });
       throw error;
     }
     throw normalizeCertificateApiError(e, "Failed to load certificate template");
@@ -301,7 +315,7 @@ export async function listCertificateTemplates(params?: {
         version: number;
       }>;
     };
-  } catch (e: any) {
+  } catch (e: unknown) {
     throw normalizeCertificateApiError(e, "Failed to load certificate templates");
   }
 }
@@ -317,7 +331,7 @@ export async function updateContestCertificateSettings(
   try {
     const res = await api.put(`/certificate/contest/${contestId}/settings`, payload);
     return res.data as { ok: boolean };
-  } catch (e: any) {
+  } catch (e: unknown) {
     throw normalizeCertificateApiError(e, "Failed to update contest certificate settings");
   }
 }
@@ -329,7 +343,7 @@ export async function generateContestCertificates(
   try {
     const res = await api.post(`/contests/${contestId}/generate-certificates`, payload ?? {});
     return res.data as { queued: boolean; contestId: number; jobId: number };
-  } catch (e: any) {
+  } catch (e: unknown) {
     throw normalizeCertificateApiError(e, "Failed to queue certificate generation");
   }
 }

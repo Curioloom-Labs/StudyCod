@@ -1,8 +1,9 @@
 import nodemailer from "nodemailer";
 import MailComposer from "nodemailer/lib/mail-composer";
-import { ImapFlow } from "imapflow";
-import { simpleParser } from "mailparser";
+import { ImapFlow, type FetchMessageObject, type ListResponse, type MessageAddressObject } from "imapflow";
+import { simpleParser, type Attachment } from "mailparser";
 import { logger } from "../utils/logger";
+import { env } from "../env";
 
 type MailFolder = {
   path: string;
@@ -65,18 +66,18 @@ type SendMessageParams = {
 };
 
 class StudyCodMailService {
-  private imapHost = String(process.env.STUDYCOD_MAIL_IMAP_HOST || "").trim();
-  private imapPort = Number.parseInt(String(process.env.STUDYCOD_MAIL_IMAP_PORT || "993"), 10);
-  private imapSecure = String(process.env.STUDYCOD_MAIL_IMAP_SECURE || "true").trim().toLowerCase() !== "false";
-  private imapUser = String(process.env.STUDYCOD_MAIL_IMAP_USER || "").trim();
-  private imapPass = String(process.env.STUDYCOD_MAIL_IMAP_PASS || "").trim();
+  private imapHost = String(env.STUDYCOD_MAIL_IMAP_HOST || "").trim();
+  private imapPort = Number.parseInt(String(env.STUDYCOD_MAIL_IMAP_PORT || "993"), 10);
+  private imapSecure = String(env.STUDYCOD_MAIL_IMAP_SECURE || "true").trim().toLowerCase() !== "false";
+  private imapUser = String(env.STUDYCOD_MAIL_IMAP_USER || "").trim();
+  private imapPass = String(env.STUDYCOD_MAIL_IMAP_PASS || "").trim();
 
-  private smtpHost = String(process.env.STUDYCOD_MAIL_SMTP_HOST || process.env.EMAIL_SMTP_HOST || "").trim();
-  private smtpPort = Number.parseInt(String(process.env.STUDYCOD_MAIL_SMTP_PORT || process.env.EMAIL_SMTP_PORT || "465"), 10);
-  private smtpSecure = String(process.env.STUDYCOD_MAIL_SMTP_SECURE || process.env.EMAIL_SMTP_SECURE || "true").trim().toLowerCase() !== "false";
-  private smtpUser = String(process.env.STUDYCOD_MAIL_SMTP_USER || process.env.EMAIL_SMTP_USER || this.imapUser || "").trim();
-  private smtpPass = String(process.env.STUDYCOD_MAIL_SMTP_PASS || process.env.EMAIL_SMTP_PASS || this.imapPass || "").trim();
-  private smtpFrom = String(process.env.STUDYCOD_MAIL_SMTP_FROM || "").trim();
+  private smtpHost = String(env.STUDYCOD_MAIL_SMTP_HOST || env.EMAIL_SMTP_HOST || "").trim();
+  private smtpPort = Number.parseInt(String(env.STUDYCOD_MAIL_SMTP_PORT || env.EMAIL_SMTP_PORT || "465"), 10);
+  private smtpSecure = String(env.STUDYCOD_MAIL_SMTP_SECURE || env.EMAIL_SMTP_SECURE || "true").trim().toLowerCase() !== "false";
+  private smtpUser = String(env.STUDYCOD_MAIL_SMTP_USER || env.EMAIL_SMTP_USER || this.imapUser || "").trim();
+  private smtpPass = String(env.STUDYCOD_MAIL_SMTP_PASS || env.EMAIL_SMTP_PASS || this.imapPass || "").trim();
+  private smtpFrom = String(env.STUDYCOD_MAIL_SMTP_FROM || "").trim();
 
   isConfigured(): { ok: boolean; canRead: boolean; canSend: boolean; issues: string[] } {
     const issues: string[] = [];
@@ -96,12 +97,12 @@ class StudyCodMailService {
     return { ok: canRead && canSend, canRead, canSend, issues };
   }
 
-  private formatAddresses(value: any): string {
+  private formatAddresses(value: MessageAddressObject[] | undefined): string {
     const arr = Array.isArray(value) ? value : [];
     return arr
       .map((a) => {
-        const name = String(a?.name || "").trim();
-        const email = String(a?.address || "").trim();
+        const name = String(a.name || "").trim();
+        const email = String(a.address || "").trim();
         if (!email) return "";
         return name ? `${name} <${email}>` : email;
       })
@@ -109,28 +110,27 @@ class StudyCodMailService {
       .join(", ");
   }
 
-  private mapFolder(box: any): MailFolder {
-    const flags = Array.isArray(box.flags) ? box.flags : Array.from(box.flags || []);
-    const specialUse = flags.find((f: string) => String(f).startsWith("\\")) || null;
+  private mapFolder(box: ListResponse): MailFolder {
+    const specialUse = box.specialUse || Array.from(box.flags).find((flag) => flag.startsWith("\\")) || null;
     return {
-      path: String(box?.path || box?.name || "INBOX"),
-      name: String(box?.name || box?.path || "INBOX"),
+      path: String(box.path || box.name || "INBOX"),
+      name: String(box.name || box.path || "INBOX"),
       specialUse,
     };
   }
 
-  private mapListItem(msg: any): MailListItem {
-    const env = msg?.envelope;
-    const flags: Set<string> = msg?.flags instanceof Set ? msg.flags : new Set<string>();
+  private mapListItem(msg: FetchMessageObject): MailListItem {
+    const envelope = msg.envelope;
+    const flags = msg.flags instanceof Set ? msg.flags : new Set<string>();
     const internalDate = msg?.internalDate;
     const isoDate = internalDate instanceof Date
       ? internalDate.toISOString()
       : (typeof internalDate === "string" ? internalDate : null);
     return {
       uid: Number(msg.uid || 0),
-      subject: String(env?.subject || ""),
-      from: this.formatAddresses(env?.from),
-      to: this.formatAddresses(env?.to),
+      subject: String(envelope?.subject || ""),
+      from: this.formatAddresses(envelope?.from),
+      to: this.formatAddresses(envelope?.to),
       date: isoDate,
       seen: flags.has("\\Seen"),
       flagged: flags.has("\\Flagged"),
@@ -184,9 +184,9 @@ class StudyCodMailService {
     return this.withImap(async (client) => {
       const lock = await client.getMailboxLock(folder);
       try {
-        const mailbox: any = client.mailbox || null;
-        const exists = Number(mailbox?.exists || 0);
-        if (exists <= 0) return { folder, items: [], nextCursorUid: null };
+        const mailbox = client.mailbox;
+        if (!mailbox || mailbox.exists <= 0) return { folder, items: [], nextCursorUid: null };
+        const exists = mailbox.exists;
 
         const beforeUid = Number(params.cursorUid || 0);
         const high = beforeUid > 0 ? beforeUid - 1 : exists;
@@ -258,18 +258,18 @@ class StudyCodMailService {
     return this.withImap(async (client) => {
       const lock = await client.getMailboxLock(folder);
       try {
-        const msg: any = await client.fetchOne(String(id), {
+        const msg = await client.fetchOne(String(id), {
           uid: true,
           envelope: true,
           internalDate: true,
           flags: true,
           source: true,
         });
-        if (!msg?.source) throw new Error("MESSAGE_NOT_FOUND");
+        if (msg === false || !msg.source) throw new Error("MESSAGE_NOT_FOUND");
 
-        const parsed = await simpleParser(msg.source as Buffer);
+        const parsed = await simpleParser(msg.source);
         const env = msg.envelope;
-        const flags: Set<string> = msg?.flags instanceof Set ? msg.flags : new Set<string>();
+        const flags = msg.flags instanceof Set ? msg.flags : new Set<string>();
         const internalDate = msg?.internalDate;
         const isoDate = internalDate instanceof Date
           ? internalDate.toISOString()
@@ -283,17 +283,17 @@ class StudyCodMailService {
           cc: this.formatAddresses(env?.cc),
           bcc: this.formatAddresses(env?.bcc),
           replyTo: this.formatAddresses(env?.replyTo),
-          messageId: String((parsed as any).messageId || env?.messageId || ""),
-          references: Array.isArray((parsed as any).references)
-            ? (parsed as any).references.join(" ")
-            : String((parsed as any).references || ""),
+          messageId: String(parsed.messageId || env?.messageId || ""),
+          references: Array.isArray(parsed.references)
+            ? parsed.references.join(" ")
+            : String(parsed.references || ""),
           date: isoDate,
           seen: flags.has("\\Seen"),
           flagged: flags.has("\\Flagged"),
           text: String(parsed.text || ""),
           html: String(parsed.html || ""),
           attachments: Array.isArray(parsed.attachments)
-            ? parsed.attachments.map((a: any) => ({
+            ? parsed.attachments.map((a: Attachment) => ({
                 filename: a.filename || null,
                 contentType: String(a.contentType || "application/octet-stream"),
                 size: Number(a.size || 0),
@@ -321,15 +321,15 @@ class StudyCodMailService {
     return this.withImap(async (client) => {
       const lock = await client.getMailboxLock(folder);
       try {
-        const msg: any = await client.fetchOne(String(id), { uid: true, source: true });
-        if (!msg?.source) throw new Error("MESSAGE_NOT_FOUND");
-        const parsed = await simpleParser(msg.source as Buffer);
+        const msg = await client.fetchOne(String(id), { uid: true, source: true });
+        if (msg === false || !msg.source) throw new Error("MESSAGE_NOT_FOUND");
+        const parsed = await simpleParser(msg.source);
         const att = Array.isArray(parsed.attachments) ? parsed.attachments[idx] : null;
         if (!att || !att.content) throw new Error("ATTACHMENT_NOT_FOUND");
         return {
           filename: String(att.filename || `attachment-${idx}`),
           contentType: String(att.contentType || "application/octet-stream"),
-          content: att.content as Buffer,
+          content: att.content,
         };
       } finally {
         lock.release();
@@ -430,12 +430,12 @@ class StudyCodMailService {
     return { messageId: info?.messageId || null };
   }
 
-  private async resolveDraftsFolder(client: any): Promise<string> {
+  private async resolveDraftsFolder(client: ImapFlow): Promise<string> {
     try {
       const list = await client.list();
-      const match = (Array.isArray(list) ? list : []).find((f: any) => {
-        const su = String(f.specialUse || "").toLowerCase();
-        const path = String(f.path || "").toLowerCase();
+      const match = list.find((folder) => {
+        const su = String(folder.specialUse || "").toLowerCase();
+        const path = String(folder.path || "").toLowerCase();
         return su === "\\drafts" || path === "drafts";
       });
       return match?.path || "Drafts";

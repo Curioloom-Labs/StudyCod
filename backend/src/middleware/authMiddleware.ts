@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import type { ParamsFlatDictionary } from "express-serve-static-core";
+import type { ParsedQs } from "qs";
 import jwt from 'jsonwebtoken';
 import { JWT_SECRET } from '../config';
 import { AppDataSource } from '../data-source';
@@ -24,7 +25,7 @@ import type { CourseRuntime } from '../entities/CourseVariant';
  * Notably: never delete a Student to "migrate" identity (grades cascade off
  * `student_id`); link in place via `students.user_id` instead.
  */
-export interface AuthRequest extends Request<ParamsFlatDictionary, any, any, any, Record<string, any>> {
+export interface AuthRequest extends Request<ParamsFlatDictionary, unknown, Record<string, unknown>, ParsedQs, Record<string, unknown>> {
   userId?: number;
   studentId?: number;
   userType?: "USER" | "STUDENT";
@@ -90,12 +91,12 @@ async function syncStudentUiLanguage(studentId: number, uiLanguage: UiLocale, re
       [uiLanguage, studentId, uiLanguage]
     );
     void setStudentUiLangMarker(studentId, uiLanguage);
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.warn("[auth] Failed to sync student ui_language", {
       requestId,
       studentId,
       uiLanguage,
-      err: err?.message || err
+      err: err instanceof Error ? err.message : String(err)
     });
   }
 }
@@ -142,11 +143,11 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
   let user: CachedUser | null = null;
   try {
     user = await getCachedUser(userId);
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.warn('[auth] user cache lookup failed, falling back to DB', {
       userId,
       requestId: req.requestId,
-      error: err?.message
+      error: err instanceof Error ? err.message : String(err)
     });
   }
 

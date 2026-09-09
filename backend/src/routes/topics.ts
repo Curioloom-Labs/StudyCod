@@ -18,7 +18,7 @@ import { emailService } from "../services/emailService";
 import { safeAICall, sendAIError } from "../services/ai/safeAICall";
 import { translateSingleTopicTitleUkToEn as translateSingleTopicTitleUkToEnService } from "../services/translation/topicTitleTranslator";
 import multer from "multer";
-import AdmZip from "adm-zip";
+import SafeZipArchive from "../utils/safeZip";
 import { logger } from "../utils/logger";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 import { normalizeAssignedStudentIds, normalizeTargetedAssignmentForStorage } from "../utils/assignmentVisibility";
@@ -26,6 +26,19 @@ import { validateUploadedZip, ZipValidationError, ZipExtractionBudget } from "..
 import { syncControlWorkAssignmentsWithManager, syncTopicTaskAssignmentsWithManager } from "../services/edu/assignmentTargetsService";
 import { authorizeClassForReq } from "../middleware/orgContext";
 import type { LibraryTaskProjectSpec } from "../entities/LibraryTask";
+import { env } from "../env";
+import {
+  assignmentSchema,
+  createControlWorkSchema,
+  createTaskSchema,
+  createTopicSchema,
+  generateQuizSchema,
+  generateTheorySchema,
+  theoryBlockSchema,
+  theoryContentSchema,
+  updateControlWorkSchema,
+  updateTaskSchema,
+} from "./topicContracts";
 const topicsRouter = Router();
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const theoryBlockRepo = () => AppDataSource.getRepository(TheoryBlock);
@@ -41,21 +54,43 @@ const CONTROL_WORK_MAX_TASKS_COUNT = 3;
 const CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT = 1;
 const CONTROL_TASK_MAX_ATTEMPTS = 3;
 
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return String(readProperty(error, "message") ?? "");
+}
+
+function errorStatusCode(error: unknown): number | undefined {
+  const value = readProperty(error, "statusCode");
+  return typeof value === "number" ? value : undefined;
+}
+
 function normalizeProjectSpec(raw: unknown): LibraryTaskProjectSpec | null {
   if (raw === undefined || raw === null || raw === "") return null;
-  if (!raw || typeof raw !== "object") throw new Error("INVALID_PROJECT_SPEC");
-  const value = raw as any;
-  if (value.version !== 1 || value.kind !== "MINI_PROJECT") throw new Error("INVALID_PROJECT_SPEC");
-  const skills = Array.isArray(value.skills) ? value.skills.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 12) : [];
-  const milestones = Array.isArray(value.milestones)
-    ? value.milestones.map((item: any, index: number) => ({
-        id: String(item?.id || `milestone-${index + 1}`).trim(),
-        title: String(item?.title || "").trim(),
-        description: String(item?.description || "").trim(),
-        ...(item?.required === false ? { required: false } : { required: true })
-      })).filter((item: any) => item.id && item.title && item.description).slice(0, 12)
+  if (!isRecord(raw)) throw new Error("INVALID_PROJECT_SPEC");
+  const version = readProperty(raw, "version");
+  const kind = readProperty(raw, "kind");
+  if (version !== 1 || kind !== "MINI_PROJECT") throw new Error("INVALID_PROJECT_SPEC");
+  const skillsRaw = readProperty(raw, "skills");
+  const milestonesRaw = readProperty(raw, "milestones");
+  const skills = Array.isArray(skillsRaw) ? skillsRaw.map(item => String(item).trim()).filter(Boolean).slice(0, 12) : [];
+  const milestones = Array.isArray(milestonesRaw)
+    ? milestonesRaw.map((item, index) => ({
+        id: String(readProperty(item, "id") || `milestone-${index + 1}`).trim(),
+        title: String(readProperty(item, "title") || "").trim(),
+        description: String(readProperty(item, "description") || "").trim(),
+        ...(readProperty(item, "required") === false ? { required: false } : { required: true })
+      })).filter(item => item.id && item.title && item.description).slice(0, 12)
     : [];
-  const estimatedMinutes = Number(value.estimatedMinutes);
+  const estimatedMinutes = Number(readProperty(raw, "estimatedMinutes"));
   if (!Number.isFinite(estimatedMinutes) || estimatedMinutes < 10 || estimatedMinutes > 600 || !skills.length || !milestones.length) {
     throw new Error("INVALID_PROJECT_SPEC");
   }
@@ -65,7 +100,7 @@ function normalizeProjectSpec(raw: unknown): LibraryTaskProjectSpec | null {
     estimatedMinutes: Math.round(estimatedMinutes),
     skills,
     milestones,
-    extensions: Array.isArray(value.extensions) ? value.extensions.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 10) : []
+    extensions: Array.isArray(readProperty(raw, "extensions")) ? (readProperty(raw, "extensions") as unknown[]).map(item => String(item).trim()).filter(Boolean).slice(0, 10) : []
   };
 }
 
@@ -85,14 +120,14 @@ function normalizeTaskMaxAttempts(type: "PRACTICE" | "CONTROL", raw: unknown): n
 async function countControlTasksForControlWork(controlWorkId: number): Promise<number> {
   return await taskRepo().count({
     where: {
-      controlWork: { id: controlWorkId } as any,
-      type: "CONTROL" as any
-    } as any
+      controlWork: { id: controlWorkId },
+      type: "CONTROL"
+    }
   });
 }
 
 function parseAIBudgetMs(envKey: string, fallbackMs: number, minMs = 8_000, maxMs = 55_000): number {
-  const raw = Number(process.env[envKey]);
+  const raw = Number((env as unknown as Record<string, unknown>)[envKey]);
   const value = Number.isFinite(raw) ? Math.floor(raw) : fallbackMs;
   return Math.max(minMs, Math.min(maxMs, value));
 }
@@ -170,7 +205,7 @@ function resolveSelectedStudentsForAssignment(allClassStudents: Student[], reque
   };
 }
 
-const TOPICS_AI_DISABLE_DEADLINE = String(process.env.TOPICS_AI_DISABLE_DEADLINE || "").trim() === "1";
+const TOPICS_AI_DISABLE_DEADLINE = String(env.TOPICS_AI_DISABLE_DEADLINE || "").trim() === "1";
 const TOPICS_AI_BUDGET_MS = parseAIBudgetMs("TOPICS_AI_BUDGET_MS", 25_000);
 const TOPICS_AI_QUIZ_BUDGET_MS = parseAIBudgetMs("TOPICS_AI_QUIZ_BUDGET_MS", 35_000);
 
@@ -196,7 +231,7 @@ function encodeRFC5987ValueChars(str: string): string {
     .replace(/[!'()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
-function readZipJson<T>(zip: AdmZip, name: string, budget?: ZipExtractionBudget): T {
+function readZipJson<T>(zip: SafeZipArchive, name: string, budget?: ZipExtractionBudget): T {
   const entry = zip.getEntry(name);
   if (!entry) {
     throw new Error(`MISSING_${name.toUpperCase().replace(/\W+/g, "_")}`);
@@ -250,7 +285,7 @@ topicsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
         where: {
           class: {
             id: cls.id
-          } as any
+          }
         },
         order: {
           order: "ASC"
@@ -269,7 +304,7 @@ topicsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
     const topics = await topicRepo().find({
       where: {
         language: language as "JAVA" | "PYTHON" | "CPP",
-        class: IsNull() as any
+        class: IsNull()
       },
       order: {
         order: "ASC"
@@ -279,7 +314,7 @@ topicsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
     res.json({
       topics
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error fetching topics", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -331,10 +366,10 @@ topicsRouter.get("/:topicId", authRequired, async (req: AuthRequest, res: Respon
         where: {
           student: {
             id: req.studentId
-          } as any,
+          },
           topic: {
             id: topicId
-          } as any
+          }
         }
       });
     }
@@ -342,7 +377,7 @@ topicsRouter.get("/:topicId", authRequired, async (req: AuthRequest, res: Respon
       topic,
       progress
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error fetching topic", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -351,6 +386,12 @@ topicsRouter.get("/:topicId", authRequired, async (req: AuthRequest, res: Respon
 });
 topicsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = createTopicSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const { title, description, language, classId } = validated.data;
+    const order = validated.data.order;
     const user = await userRepo().findOne({
       where: {
         id: req.userId
@@ -361,20 +402,8 @@ topicsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => 
         message: "ONLY_TEACHERS_CAN_CREATE_TOPICS"
       });
     }
-    const {
-      title,
-      description,
-      order,
-      language,
-      classId
-    } = req.body || {};
-    if (!title || !language || (language !== "JAVA" && language !== "PYTHON" && language !== "CPP")) {
-      return res.status(400).json({
-        message: "INVALID_INPUT"
-      });
-    }
     if (classId) {
-      const access = await authorizeClassForReq(req, Number(classId), "CONTENT_AUTHOR");
+      const access = await authorizeClassForReq(req, classId, "CONTENT_AUTHOR");
       if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
       if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
       const cls = access.cls;
@@ -390,11 +419,11 @@ topicsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => 
         where: classId ? {
           class: {
             id: classId
-          } as any
-        } as any : {
-          language: language as "JAVA" | "PYTHON" | "CPP",
-          class: IsNull() as any
-        } as any,
+          }
+        } : {
+          language,
+          class: IsNull()
+        },
         order: {
           order: "DESC"
         }
@@ -405,16 +434,16 @@ topicsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => 
       title,
       description: description || null,
       order: topicOrder,
-      language: language as "JAVA" | "PYTHON" | "CPP",
+      language,
       class: classId ? {
         id: classId
-      } as any : null
+      } : null
     });
     await topicRepo().save(topic);
     res.json({
       topic
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error creating topic", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -423,6 +452,25 @@ topicsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => 
 });
 topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = createTaskSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const {
+      title,
+      description,
+      template,
+      taskMode,
+      webTemplateFiles,
+      webValidationRules,
+      webValidationProfile,
+      projectSpec,
+      type,
+      order,
+      maxAttempts,
+      deadline,
+      controlWorkId,
+    } = validated.data;
     const topicId = parseInt(req.params.topicId, 10);
     if (isNaN(topicId)) {
       return res.status(400).json({
@@ -455,26 +503,6 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
       if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
-    const {
-      title,
-      description,
-      template,
-      taskMode,
-      webTemplateFiles,
-      webValidationRules,
-      webValidationProfile,
-      projectSpec,
-      type,
-      order,
-      maxAttempts,
-      deadline,
-      controlWorkId
-    } = req.body || {};
-    if (!title || !description || !type || type !== "PRACTICE" && type !== "CONTROL") {
-      return res.status(400).json({
-        message: "INVALID_INPUT"
-      });
-    }
     const normalizedTaskInput = normalizeWebTaskInput({
       taskMode,
       template,
@@ -497,11 +525,11 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
     if (type === "CONTROL" && controlWorkId) {
       controlWork = await controlWorkRepo().findOne({
         where: {
-          id: parseInt(controlWorkId, 10),
+          id: controlWorkId,
           topic: {
             id: topicId
           }
-        } as any,
+        },
         relations: ["topic"]
       });
       if (!controlWork) {
@@ -522,10 +550,10 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
     const task = taskRepo().create({
       topic: {
         id: topicId
-      } as any,
+      },
       controlWork: controlWork ? {
         id: controlWork.id
-      } as any : null,
+      } : null,
       title,
       description,
       template: normalizedTaskInput.template,
@@ -543,8 +571,8 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
     res.json({
       task
     });
-  } catch (error: any) {
-    if (error?.message === "INVALID_PROJECT_SPEC") {
+  } catch (error: unknown) {
+    if (errorMessage(error) === "INVALID_PROJECT_SPEC") {
       return res.status(400).json({ message: "INVALID_PROJECT_SPEC" });
     }
     logger.error("[topics] Error creating task", { requestId: req.requestId, err: error });
@@ -572,7 +600,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       return res.status(403).json({ message: "ONLY_TEACHERS_CAN_CREATE_TASKS" });
     }
 
-    const topic = await topicRepo().findOne({ where: { id: topicId } as any, relations: ["class", "class.teacher"] });
+    const topic = await topicRepo().findOne({ where: { id: topicId }, relations: ["class", "class.teacher"] });
     if (!topic) return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
     if (topic.class) {
       const access = await authorizeClassForReq(req, topic.class.id, "CONTENT_AUTHOR");
@@ -580,21 +608,21 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    const file = (req as any).file as { buffer: Buffer; originalname: string } | undefined;
+    const file = (req).file as { buffer: Buffer; originalname: string } | undefined;
     if (!file?.buffer) return res.status(400).json({ message: "ARCHIVE_REQUIRED" });
 
-    let zip: AdmZip;
+    let zip: SafeZipArchive;
     const zipBudget = new ZipExtractionBudget();
     try {
-      zip = new AdmZip(file.buffer);
+      zip = new SafeZipArchive(file.buffer);
       validateUploadedZip(zip);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (err instanceof ZipValidationError) {
         return res.status(400).json({ message: err.code });
       }
       logger.warn("[topics] archive parse failed", {
         requestId: req.requestId,
-        error: err?.message ?? String(err)
+        error: errorMessage(err) || String(err)
       });
       return res.status(400).json({ message: "ARCHIVE_INVALID" });
     }
@@ -604,7 +632,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       description: string;
       template?: string;
       taskMode?: "CODE" | "WEB";
-      webValidationProfile?: any;
+      webValidationProfile?: unknown;
       webTemplateFiles?: Array<{ path: "index.html" | "styles.css" | "script.js"; content: string }>;
       webValidationRules?: Array<{
         id?: string;
@@ -639,11 +667,11 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
     }
 
     const task = taskRepo().create({
-      topic: { id: topicId } as any,
+      topic: { id: topicId },
       title,
       description,
       template: normalizedTaskInput.template,
-      taskMode: normalizedTaskInput.taskMode as any,
+      taskMode: normalizedTaskInput.taskMode,
       webTemplateFiles: normalizedTaskInput.webTemplateFiles,
       webValidationRules: normalizedTaskInput.webValidationRules,
       webValidationProfile: normalizedTaskInput.webValidationProfile,
@@ -661,7 +689,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       const content = zipBudget.readEntryText(theoryEntry).trim();
       if (content) {
         const theory = theoryRepo().create({
-          topicTask: { id: task.id } as any,
+          topicTask: { id: task.id },
           content
         });
         await theoryRepo().save(theory);
@@ -674,7 +702,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number | string }>>(zip, "tests.json", zipBudget);
       if (Array.isArray(tests) && tests.length > 0) {
         const rows = tests.map(t => testDataRepo().create({
-          topicTask: { id: task.id } as any,
+          topicTask: { id: task.id },
           input: String(t.input ?? ""),
           expectedOutput: String(t.expectedOutput ?? ""),
           isHidden: !!t.isHidden,
@@ -693,16 +721,16 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
         title: task.title
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     // A budgeted decompression that blows the actual-byte cap surfaces here.
-    if (error?.message === "INVALID_PROJECT_SPEC") {
+    if (errorMessage(error) === "INVALID_PROJECT_SPEC") {
       return res.status(400).json({ message: "INVALID_PROJECT_SPEC" });
     }
     if (error instanceof ZipValidationError) {
       return res.status(400).json({ message: error.code });
     }
     logger.error("[topics] import archive failed", { requestId: req.requestId, err: error });
-    return res.status(500).json({ message: error?.message || "INTERNAL_SERVER_ERROR" });
+    return res.status(500).json({ message: errorMessage(error) || "INTERNAL_SERVER_ERROR" });
   }
 });
 
@@ -717,7 +745,7 @@ topicsRouter.get("/:topicId/tasks/:taskId/export-archive", authRequired, async (
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    const topic = await topicRepo().findOne({ where: { id: topicId } as any, relations: ["class", "class.teacher"] });
+    const topic = await topicRepo().findOne({ where: { id: topicId }, relations: ["class", "class.teacher"] });
     if (!topic) return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
     if (topic.class) {
       const access = await authorizeClassForReq(req, topic.class.id, "CLASS_VIEW");
@@ -725,16 +753,16 @@ topicsRouter.get("/:topicId/tasks/:taskId/export-archive", authRequired, async (
       if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    const task = await taskRepo().findOne({ where: { id: taskId, topic: { id: topicId } } as any });
+    const task = await taskRepo().findOne({ where: { id: taskId, topic: { id: topicId } } });
     if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
 
     const tests = await testDataRepo().find({
-      where: { topicTask: { id: task.id } } as any,
+      where: { topicTask: { id: task.id } },
       order: { id: "ASC" }
     });
-    const theory = await theoryRepo().findOne({ where: { topicTask: { id: task.id } } as any });
+    const theory = await theoryRepo().findOne({ where: { topicTask: { id: task.id } } });
 
-    const zip = new AdmZip();
+    const zip = new SafeZipArchive();
     zip.addFile(
       "manifest.json",
       Buffer.from(JSON.stringify({
@@ -750,11 +778,11 @@ topicsRouter.get("/:topicId/tasks/:taskId/export-archive", authRequired, async (
         title: task.title,
         description: task.description,
         template: task.template,
-        taskMode: (task as any).taskMode ?? "CODE",
-        webTemplateFiles: (task as any).webTemplateFiles ?? undefined,
-        webValidationRules: (task as any).webValidationRules ?? undefined,
-        webValidationProfile: (task as any).webValidationProfile ?? undefined,
-        projectSpec: (task as any).projectSpec ?? undefined,
+        taskMode: (task).taskMode ?? "CODE",
+        webTemplateFiles: (task).webTemplateFiles ?? undefined,
+        webValidationRules: (task).webValidationRules ?? undefined,
+        webValidationProfile: (task).webValidationProfile ?? undefined,
+        projectSpec: (task).projectSpec ?? undefined,
         type: task.type,
         order: task.order,
         maxAttempts: task.maxAttempts
@@ -767,7 +795,7 @@ topicsRouter.get("/:topicId/tasks/:taskId/export-archive", authRequired, async (
         expectedOutput: t.expectedOutput,
         isHidden: t.isHidden,
         points: t.points,
-        subtask: (t as any).subtask ?? null
+        subtask: (t).subtask ?? null
       })), null, 2), "utf-8")
     );
     if (theory?.content) {
@@ -782,13 +810,29 @@ topicsRouter.get("/:topicId/tasks/:taskId/export-archive", authRequired, async (
     // Use ASCII fallback + RFC5987 filename* to support Unicode titles safely.
     res.setHeader("Content-Disposition", `attachment; filename="${fallbackFilename}"; filename*=UTF-8''${encoded}`);
     return res.status(200).send(buf);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] export archive failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = updateTaskSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const {
+      title,
+      description,
+      template,
+      taskMode,
+      webTemplateFiles,
+      webValidationRules,
+      webValidationProfile,
+      projectSpec,
+      maxAttempts,
+      deadline,
+    } = validated.data;
     const topicId = parseInt(req.params.topicId, 10);
     const taskId = parseInt(req.params.taskId, 10);
     if (isNaN(topicId) || isNaN(taskId)) {
@@ -812,26 +856,11 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
         topic: {
           id: topicId
         }
-      } as any
+      }
     });
     if (!task) {
       return res.status(404).json({
         message: "TASK_NOT_FOUND"
-      });
-    }
-    const {
-      title,
-      description,
-      template,
-      taskMode,
-      webTemplateFiles,
-      webValidationRules,
-      projectSpec,
-      maxAttempts
-    } = req.body || {};
-    if (!title || !description) {
-      return res.status(400).json({
-        message: "INVALID_INPUT"
       });
     }
     const normalizedTaskInput = normalizeWebTaskInput({
@@ -839,7 +868,7 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
       template,
       webTemplateFiles,
       webValidationRules,
-      webValidationProfile: (req.body || {}).webValidationProfile,
+      webValidationProfile,
     });
     const normalizedProjectSpec = normalizeProjectSpec(projectSpec);
     if (normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
@@ -853,7 +882,7 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
     task.taskMode = normalizedTaskInput.taskMode;
     task.webTemplateFiles = normalizedTaskInput.webTemplateFiles;
     task.webValidationRules = normalizedTaskInput.webValidationRules;
-    (task as any).webValidationProfile = normalizedTaskInput.webValidationProfile;
+    (task).webValidationProfile = normalizedTaskInput.webValidationProfile;
     task.projectSpec = normalizedProjectSpec;
     if (maxAttempts !== undefined) {
       task.maxAttempts = normalizeTaskMaxAttempts(task.type, maxAttempts);
@@ -864,8 +893,8 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
     res.json({
       task
     });
-  } catch (error: any) {
-    if (error?.message === "INVALID_PROJECT_SPEC") {
+  } catch (error: unknown) {
+    if (errorMessage(error) === "INVALID_PROJECT_SPEC") {
       return res.status(400).json({ message: "INVALID_PROJECT_SPEC" });
     }
     logger.error("[topics] Error updating task", { requestId: req.requestId, err: error });
@@ -949,16 +978,17 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
     res.json({
       description: result.data.description
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error generating condition", { requestId: req.requestId, err: error });
-    if (error.statusCode) {
-      return res.status(error.statusCode).json({
-        message: error.message,
-        error: error.error
+    const statusCode = errorStatusCode(error);
+    if (statusCode) {
+      return res.status(statusCode).json({
+        message: errorMessage(error),
+        error: readProperty(error, "error")
       });
     }
     res.status(500).json({
-      message: error.message || "INTERNAL_SERVER_ERROR"
+      message: errorMessage(error) || "INTERNAL_SERVER_ERROR"
     });
   }
 });
@@ -1029,16 +1059,17 @@ topicsRouter.post("/:topicId/tasks/generate-template", authRequired, async (req:
     res.json({
       template: result.data.template
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error generating template", { requestId: req.requestId, err: error });
-    if (error.statusCode) {
-      return res.status(error.statusCode).json({
-        message: error.message,
-        error: error.error
+    const statusCode = errorStatusCode(error);
+    if (statusCode) {
+      return res.status(statusCode).json({
+        message: errorMessage(error),
+        error: readProperty(error, "error")
       });
     }
     res.status(500).json({
-      message: error.message || "INTERNAL_SERVER_ERROR"
+      message: errorMessage(error) || "INTERNAL_SERVER_ERROR"
     });
   }
 });
@@ -1070,9 +1101,9 @@ topicsRouter.get("/control-works/:controlWorkId", authRequired, async (req: Auth
       where: {
         controlWork: {
           id: controlWork.id
-        } as any,
+        },
         type: "CONTROL"
-      } as any,
+      },
       order: {
         order: "ASC"
       }
@@ -1083,7 +1114,7 @@ topicsRouter.get("/control-works/:controlWorkId", authRequired, async (req: Auth
         tasks: controlTasks
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error fetching control work", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -1092,6 +1123,11 @@ topicsRouter.get("/control-works/:controlWorkId", authRequired, async (req: Auth
 });
 topicsRouter.put("/control-works/:controlWorkId", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = updateControlWorkSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const { title, timeLimitMinutes, hasTheory, hasPractice, quizJson } = validated.data;
     const controlWorkId = parseInt(req.params.controlWorkId, 10);
     if (isNaN(controlWorkId)) {
       return res.status(400).json({
@@ -1124,13 +1160,6 @@ topicsRouter.put("/control-works/:controlWorkId", authRequired, async (req: Auth
       if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
       if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
-    const {
-      title,
-      timeLimitMinutes,
-      hasTheory,
-      hasPractice,
-      quizJson
-    } = req.body || {};
     if (title !== undefined) controlWork.title = title;
     if (timeLimitMinutes !== undefined) controlWork.timeLimitMinutes = timeLimitMinutes;
     if (hasTheory !== undefined) controlWork.hasTheory = hasTheory;
@@ -1140,7 +1169,7 @@ topicsRouter.put("/control-works/:controlWorkId", authRequired, async (req: Auth
     res.json({
       controlWork
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error updating control work", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -1149,6 +1178,11 @@ topicsRouter.put("/control-works/:controlWorkId", authRequired, async (req: Auth
 });
 topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = generateQuizSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const { topicTitle, count, responseLanguage, language: requestedLanguage } = validated.data;
     const controlWorkId = parseInt(req.params.controlWorkId, 10);
     if (isNaN(controlWorkId)) {
       return res.status(400).json({
@@ -1176,11 +1210,6 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
         message: "CONTROL_WORK_NOT_FOUND"
       });
     }
-    const {
-      topicTitle,
-      count,
-      responseLanguage
-    } = req.body || {};
     const DEFAULT_QUIZ_COUNT = 12;
     const quizCount = count || DEFAULT_QUIZ_COUNT;
     const quizTopicTitle = topicTitle || controlWork.topic.title;
@@ -1195,7 +1224,7 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
       controlWork.topic.language === "CPP"
         ? controlWork.topic.language
         : "JAVA";
-    const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
+    const userLanguage: "uk" | "en" = requestedLanguage === "en" || req.headers['accept-language']?.includes('en') ? "en" : "uk";
     const aiStartedAt = Date.now();
     const result = await safeAICall('generateQuiz', {
       lang: language,
@@ -1237,15 +1266,20 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
     res.json({
       questions
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error generating quiz", { requestId: req.requestId, err: error });
     res.status(500).json({
-      message: error.message || "INTERNAL_SERVER_ERROR"
+      message: errorMessage(error) || "INTERNAL_SERVER_ERROR"
     });
   }
 });
 topicsRouter.post("/:topicId/control-works", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = createControlWorkSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const { title, timeLimitMinutes, hasTheory, hasPractice } = validated.data;
     const topicId = parseInt(req.params.topicId, 10);
     if (isNaN(topicId)) {
       return res.status(400).json({
@@ -1278,16 +1312,10 @@ topicsRouter.post("/:topicId/control-works", authRequired, async (req: AuthReque
       if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
       if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
-    const {
-      title,
-      timeLimitMinutes,
-      hasTheory,
-      hasPractice
-    } = req.body || {};
     const controlWork = controlWorkRepo().create({
       topic: {
         id: topicId
-      } as any,
+      },
       title: title || null,
       timeLimitMinutes: timeLimitMinutes || null,
       hasTheory: hasTheory || false,
@@ -1298,7 +1326,7 @@ topicsRouter.post("/:topicId/control-works", authRequired, async (req: AuthReque
     res.json({
       controlWork
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error creating control work", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -1335,7 +1363,7 @@ topicsRouter.get("/:topicId/theory-block", authRequired, async (req: AuthRequest
     return res.json({
       theoryBlock: topic.theoryBlock || null
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error getting theory block", { requestId: req.requestId, err: error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -1344,6 +1372,11 @@ topicsRouter.get("/:topicId/theory-block", authRequired, async (req: AuthRequest
 });
 topicsRouter.post("/:topicId/theory-block", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = theoryBlockSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const { title, content, level, tags } = validated.data;
     const topicId = parseInt(req.params.topicId, 10);
     if (isNaN(topicId)) return res.status(400).json({
       message: "INVALID_TOPIC_ID"
@@ -1367,18 +1400,7 @@ topicsRouter.post("/:topicId/theory-block", authRequired, async (req: AuthReques
     if (!topic) return res.status(404).json({
       message: "TOPIC_NOT_FOUND"
     });
-    const {
-      title,
-      content,
-      level,
-      tags
-    } = req.body || {};
-    if (!content || !String(content).trim()) {
-      return res.status(400).json({
-        message: "CONTENT_REQUIRED"
-      });
-    }
-    const normalizedContent = String(content).trim();
+    const normalizedContent = content.trim();
     assertTheoryContentIsPure(normalizedContent);
     const existingBlock = topic.theoryBlock;
     if (existingBlock) {
@@ -1400,15 +1422,13 @@ topicsRouter.post("/:topicId/theory-block", authRequired, async (req: AuthReques
       tags: tags === undefined ? null : tags === null ? null : JSON.stringify(tags)
     });
     const saved = await theoryBlockRepo().save(created);
-    (topic as any).theoryBlock = {
-      id: saved.id
-    };
+    topic.theoryBlock = saved;
     await topicRepo().save(topic);
     return res.json({
       theoryBlock: saved
     });
-  } catch (error: any) {
-    const msg = error?.message || "INTERNAL_SERVER_ERROR";
+  } catch (error: unknown) {
+    const msg = errorMessage(error) || "INTERNAL_SERVER_ERROR";
     if (msg === "THEORY_EMPTY") return res.status(400).json({
       message: "THEORY_EMPTY"
     });
@@ -1426,6 +1446,11 @@ topicsRouter.post("/:topicId/theory-block", authRequired, async (req: AuthReques
 });
 topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = generateTheorySchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const { taskDescription, taskType, difficulty, taskTitle, responseLanguage, language: requestedLanguage } = validated.data;
     const topicId = parseInt(req.params.topicId, 10);
     if (isNaN(topicId)) {
       return res.status(400).json({
@@ -1452,26 +1477,14 @@ topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: A
         message: "TOPIC_NOT_FOUND"
       });
     }
-    const {
-      taskDescription,
-      taskType,
-      difficulty,
-      taskTitle,
-      responseLanguage
-    } = req.body || {};
-    if (!taskDescription || !taskType) {
-      return res.status(400).json({
-        message: "TASK_DESCRIPTION_AND_TYPE_REQUIRED"
-      });
-    }
     const DEFAULT_DIFFICULTY = 3;
-    const difficultyNum = difficulty ? parseInt(difficulty, 10) : DEFAULT_DIFFICULTY;
+    const difficultyNum = difficulty || DEFAULT_DIFFICULTY;
     if (isNaN(difficultyNum) || difficultyNum < 1 || difficultyNum > 5) {
       return res.status(400).json({
         message: "INVALID_DIFFICULTY"
       });
     }
-    const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
+    const userLanguage: "uk" | "en" = requestedLanguage === "en" || req.headers['accept-language']?.includes('en') ? "en" : "uk";
     const aiStartedAt = Date.now();
     const theoryResult = await safeAICall('generateTheory', {
       topicTitle: topic.title,
@@ -1504,21 +1517,27 @@ topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: A
     res.json({
       theory: theoryResult.data.theory
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error generating theory", { requestId: req.requestId, err: error });
-    if (error.statusCode) {
-      return res.status(error.statusCode).json({
-        message: error.message,
-        error: error.error
+    const statusCode = errorStatusCode(error);
+    if (statusCode) {
+      return res.status(statusCode).json({
+        message: errorMessage(error),
+        error: readProperty(error, "error")
       });
     }
     res.status(500).json({
-      message: error.message || "INTERNAL_SERVER_ERROR"
+      message: errorMessage(error) || "INTERNAL_SERVER_ERROR"
     });
   }
 });
 topicsRouter.post("/:topicId/tasks/:taskId/theory", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = theoryContentSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const { content } = validated.data;
     const topicId = parseInt(req.params.topicId, 10);
     const taskId = parseInt(req.params.taskId, 10);
     if (isNaN(topicId) || isNaN(taskId)) {
@@ -1542,7 +1561,7 @@ topicsRouter.post("/:topicId/tasks/:taskId/theory", authRequired, async (req: Au
         topic: {
           id: topicId
         }
-      } as any,
+      },
       relations: ["theory"]
     });
     if (!task) {
@@ -1550,18 +1569,10 @@ topicsRouter.post("/:topicId/tasks/:taskId/theory", authRequired, async (req: Au
         message: "TASK_NOT_FOUND"
       });
     }
-    const {
-      content
-    } = req.body || {};
-    if (!content || !content.trim()) {
-      return res.status(400).json({
-        message: "CONTENT_REQUIRED"
-      });
-    }
     try {
       assertTheoryContentIsPure(content.trim());
-    } catch (e: any) {
-      const msg = e?.message;
+    } catch (e: unknown) {
+      const msg = errorMessage(e);
       if (msg === "THEORY_EMPTY") return res.status(400).json({
         message: "THEORY_EMPTY"
       });
@@ -1583,7 +1594,7 @@ topicsRouter.post("/:topicId/tasks/:taskId/theory", authRequired, async (req: Au
       theory = theoryRepo().create({
         topicTask: {
           id: taskId
-        } as any,
+        },
         content: content.trim()
       });
       await theoryRepo().save(theory);
@@ -1591,7 +1602,7 @@ topicsRouter.post("/:topicId/tasks/:taskId/theory", authRequired, async (req: Au
     res.json({
       theory
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error adding theory", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -1600,6 +1611,11 @@ topicsRouter.post("/:topicId/tasks/:taskId/theory", authRequired, async (req: Au
 });
 topicsRouter.post("/:topicId/tasks/:taskId/assign", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = assignmentSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const { deadline, studentIds } = validated.data;
     const topicId = parseInt(req.params.topicId, 10);
     const taskId = parseInt(req.params.taskId, 10);
     if (isNaN(topicId) || isNaN(taskId)) {
@@ -1623,20 +1639,12 @@ topicsRouter.post("/:topicId/tasks/:taskId/assign", authRequired, async (req: Au
         topic: {
           id: topicId
         }
-      } as any,
+      },
       relations: ["topic", "topic.class"]
     });
     if (!task) {
       return res.status(404).json({
         message: "TASK_NOT_FOUND"
-      });
-    }
-    const {
-      deadline
-    } = req.body || {};
-    if (!deadline) {
-      return res.status(400).json({
-        message: "DEADLINE_REQUIRED"
       });
     }
     const deadlineDate = new Date(deadline);
@@ -1676,10 +1684,10 @@ topicsRouter.post("/:topicId/tasks/:taskId/assign", authRequired, async (req: Au
         class: {
           id: classId
         }
-      } as any
+      }
     });
 
-    const assignmentSelection = resolveSelectedStudentsForAssignment(students, req.body?.studentIds);
+    const assignmentSelection = resolveSelectedStudentsForAssignment(students, studentIds);
     if (assignmentSelection.errorMessage) {
       return res.status(400).json({
         message: assignmentSelection.errorMessage,
@@ -1732,7 +1740,7 @@ topicsRouter.post("/:topicId/tasks/:taskId/assign", authRequired, async (req: Au
       message: "TASK_ASSIGNED_SUCCESSFULLY",
       assignedTo: selectedStudents.length
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error assigning task", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -1796,7 +1804,7 @@ topicsRouter.post("/tasks/:taskId/unassign", authRequired, async (req: AuthReque
       await gradeRepoManager.delete({
         topicTask: {
           id: taskId
-        } as any
+        }
       });
     });
     res.json({
@@ -1811,6 +1819,11 @@ topicsRouter.post("/tasks/:taskId/unassign", authRequired, async (req: AuthReque
 });
 topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = assignmentSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const { deadline, studentIds } = validated.data;
     const controlWorkId = parseInt(req.params.controlWorkId, 10);
     if (isNaN(controlWorkId)) {
       return res.status(400).json({
@@ -1836,14 +1849,6 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
     if (!controlWork) {
       return res.status(404).json({
         message: "CONTROL_WORK_NOT_FOUND"
-      });
-    }
-    const {
-      deadline
-    } = req.body || {};
-    if (!deadline) {
-      return res.status(400).json({
-        message: "DEADLINE_REQUIRED"
       });
     }
     const deadlineDate = new Date(deadline);
@@ -1895,10 +1900,10 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
         class: {
           id: classId
         }
-      } as any
+      }
     });
 
-    const assignmentSelection = resolveSelectedStudentsForAssignment(students, req.body?.studentIds);
+    const assignmentSelection = resolveSelectedStudentsForAssignment(students, studentIds);
     if (assignmentSelection.errorMessage) {
       return res.status(400).json({
         message: assignmentSelection.errorMessage,
@@ -1917,9 +1922,9 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
       where: {
         controlWork: {
           id: controlWork.id
-        } as any,
-        type: "CONTROL" as any
-      } as any,
+        },
+        type: "CONTROL"
+      },
       order: {
         order: "ASC"
       }
@@ -1982,7 +1987,7 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
       message: "CONTROL_WORK_ASSIGNED_SUCCESSFULLY",
       assignedTo: selectedStudents.length
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error assigning control work", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -2049,9 +2054,9 @@ topicsRouter.post("/control-works/:controlWorkId/unassign", authRequired, async 
         where: {
           controlWork: {
             id: controlWorkId
-          } as any,
-          type: "CONTROL" as any
-        } as any
+          },
+          type: "CONTROL"
+        }
       });
 
       if (controlTasksRows.length > 0) {
@@ -2074,7 +2079,7 @@ topicsRouter.post("/control-works/:controlWorkId/unassign", authRequired, async 
       await summaryGradeRepoManager.delete({
         controlWork: {
           id: controlWorkId
-        } as any
+        }
       });
       const controlTasks = (lockedControlWork.topic.tasks || []).filter(t => t.type === "CONTROL");
       const taskIds = controlTasks.map(t => t.id);
@@ -2083,7 +2088,7 @@ topicsRouter.post("/control-works/:controlWorkId/unassign", authRequired, async 
           await gradeRepoManager.delete({
             topicTask: {
               id: taskId
-            } as any
+            }
           });
         }
       }
@@ -2123,7 +2128,7 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
         topic: {
           id: topicId
         }
-      } as any,
+      },
       relations: ["topic", "topic.class", "controlWork"]
     });
     if (!task) {
@@ -2182,7 +2187,7 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
     await gradeRepo().delete({
       topicTask: {
         id: taskId
-      } as any
+      }
     });
     if (task.theory) {
       await theoryRepo().remove(task.theory);
@@ -2191,7 +2196,7 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
     res.json({
       message: "TASK_DELETED"
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error deleting task", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -2260,7 +2265,7 @@ topicsRouter.delete("/control-works/:controlWorkId", authRequired, async (req: A
     await summaryGradeRepo().delete({
       controlWork: {
         id: controlWorkId
-      } as any
+      }
     });
     const controlTasks = (controlWork.topic.tasks || []).filter(t => t.type === "CONTROL");
     const taskIds = controlTasks.map(t => t.id);
@@ -2270,7 +2275,7 @@ topicsRouter.delete("/control-works/:controlWorkId", authRequired, async (req: A
         await gradeRepo().delete({
           topicTask: {
             id: taskId
-          } as any
+          }
         });
       }
     }
@@ -2278,7 +2283,7 @@ topicsRouter.delete("/control-works/:controlWorkId", authRequired, async (req: A
     res.json({
       message: "CONTROL_WORK_DELETED"
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[topics] Error deleting control work", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"

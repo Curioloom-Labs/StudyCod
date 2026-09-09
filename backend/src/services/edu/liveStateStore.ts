@@ -14,6 +14,7 @@
  * The public API is uniformly async so callers don't branch on the mode.
  */
 import { isRedisEnabled, runWithRedis, redisKey, getSharedRedisClient } from "../redis/sharedRedis";
+import { env } from "../../env";
 
 interface MemEntry {
   value: unknown;
@@ -25,7 +26,7 @@ const memStores = new Map<string, Map<string, MemEntry>>();
 
 /** Production live state must be shared across replicas. */
 export async function isLiveStateReady(): Promise<boolean> {
-  if (!isRedisEnabled()) return process.env.NODE_ENV !== "production";
+  if (!isRedisEnabled()) return env.NODE_ENV !== "production";
   return Boolean(await getSharedRedisClient());
 }
 

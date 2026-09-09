@@ -95,7 +95,7 @@ router.post("/classes/:classId/students", authRequired, requireClassCapability("
       } catch (provErr) {
         // Graceful fallback so teacher-add never regresses: legacy shell student
         // (no User), claimable later via POST /edu/students/claim.
-        logger.warn("[edu/classStudents] User provisioning fell back to shell student", { requestId: req.requestId, err: (provErr as any)?.message });
+        logger.warn("[edu/classStudents] User provisioning fell back to shell student", { requestId: req.requestId, err: provErr instanceof Error ? provErr.message : String(provErr) });
         plainPassword = generatePassword();
         const hashedPassword = await hashPassword(plainPassword);
         username = generateUsername(s.firstName, s.lastName, s.middleName);
@@ -151,7 +151,10 @@ router.post("/classes/:classId/students/export", authRequired, requireClassCapab
       }
     });
 
-    const withPasswordsRaw = String((req.body as any)?.withPasswords ?? "");
+    const body = req.body as unknown;
+    const withPasswordsRaw = body && typeof body === "object" && !Array.isArray(body)
+      ? String((body as Record<string, unknown>).withPasswords ?? "")
+      : "";
     const withPasswords = ["1", "true", "yes"].includes(withPasswordsRaw.toLowerCase().trim());
 
     const csvEscape = (value: unknown) => {
@@ -299,7 +302,7 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
         const exists = await studentRepo().count({
           where: {
             generatedUsername: candidate
-          } as any
+          }
         });
         if (!exists) return candidate;
         const suffix = crypto.randomBytes(2).toString("hex");

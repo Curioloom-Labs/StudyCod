@@ -11,9 +11,10 @@
  * UPDATE, so correctness never depends on Redis.
  */
 import { runWithRedis, redisKey } from "../redis/sharedRedis";
+import { env } from "../../env";
 
 const TTL_SECONDS = (() => {
-  const raw = String(process.env.AUTH_STUDENT_UILANG_CACHE_TTL_SECONDS ?? "").trim();
+  const raw = String(env.AUTH_STUDENT_UILANG_CACHE_TTL_SECONDS ?? "").trim();
   if (!raw) return 3600;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) && n > 0 && n <= 86_400 ? n : 3600;

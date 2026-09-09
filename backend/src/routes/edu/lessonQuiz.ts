@@ -21,10 +21,22 @@ const studentRepo = () => AppDataSource.getRepository(Student);
 const attemptRepo = () => AppDataSource.getRepository(QuizAttempt);
 const userRepo = () => AppDataSource.getRepository(User);
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeOptions(raw: unknown): Record<string, string> {
+  if (Array.isArray(raw)) {
+    return Object.fromEntries(raw.map((value, index) => [String.fromCharCode(65 + index), String(value ?? "")]));
+  }
+  if (!isRecord(raw)) return {};
+  return Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, String(value ?? "")]));
+}
+
 function isQuizAttemptDuplicateError(error: unknown): boolean {
-  const code = String((error as any)?.code ?? "").toUpperCase();
+  const code = String(isRecord(error) ? error.code ?? "" : "").toUpperCase();
   if (code === "ER_DUP_ENTRY" || code === "23505") return true;
-  const message = String((error as any)?.message ?? "").toLowerCase();
+  const message = String(isRecord(error) ? error.message ?? "" : "").toLowerCase();
   return message.includes("uq_quiz_lesson_student")
     || message.includes("duplicate entry")
     || message.includes("unique constraint");
@@ -32,15 +44,14 @@ function isQuizAttemptDuplicateError(error: unknown): boolean {
 
 function normalizeLegacyQuiz(raw: unknown): Array<{ question: string; options: Record<string, string>; correct: string }> {
   if (!Array.isArray(raw)) return [];
-  return raw.map((item: any) => {
-    const options = Array.isArray(item?.options)
-      ? Object.fromEntries(item.options.map((value: unknown, index: number) => [String.fromCharCode(65 + index), String(value ?? "")]))
-      : (item?.options && typeof item.options === "object" ? item.options : {});
-    const correctIndex = Number(item?.correctIndex ?? item?.correct);
+  return raw.map((rawItem) => {
+    const item = isRecord(rawItem) ? rawItem : {};
+    const options = normalizeOptions(item.options);
+    const correctIndex = Number(item.correctIndex ?? item.correct);
     const correct = Number.isInteger(correctIndex) && correctIndex >= 0
       ? String.fromCharCode(65 + correctIndex)
-      : String(item?.correct ?? "A");
-    return { question: String(item?.q ?? item?.question ?? ""), options, correct };
+      : String(item.correct ?? "A");
+    return { question: String(item.q ?? item.question ?? ""), options, correct };
   }).filter((item) => item.question.trim() && Object.keys(item.options).length > 0);
 }
 
@@ -74,7 +85,7 @@ router.post("/lessons/:lessonId/generate-quiz", authRequired, async (req: AuthRe
     lesson.hasTheory = true;
     await lessonRepo().save(lesson);
     return res.json({ count: quiz.length, quiz, quizJson: lesson.quizJson });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/lessonQuiz] generate quiz failed", { requestId: req.requestId, err: error });
     return res.status(502).json({ message: "AI_GENERATION_FAILED" });
   }
@@ -92,7 +103,7 @@ router.put("/lessons/:lessonId/quiz", authRequired, async (req: AuthRequest, res
     lesson.hasTheory = true;
     await lessonRepo().save(lesson);
     return res.status(204).send();
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/lessonQuiz] save quiz failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -106,18 +117,18 @@ function parseQuiz(raw: string | null | undefined): Quiz | null {
     // Teacher Studio stores its compact legacy array shape. Convert it at the
     // boundary so the student-facing quiz engine can grade the same payload.
     if (Array.isArray(parsed)) {
-      const questions = parsed.map((item: any, index: number) => {
-        const options = Array.isArray(item?.options)
-          ? item.options.map((value: unknown) => String(value ?? ""))
-          : Object.values(item?.options || {}).map((value) => String(value ?? ""));
-        const correctKey = String(item?.correct ?? "A");
-        const correctIndex = Array.isArray(item?.options)
-          ? Number(item?.correctIndex ?? item?.correct)
-          : Math.max(0, Object.keys(item?.options || {}).indexOf(correctKey));
+      const questions = parsed.map((rawItem, index: number) => {
+        const item = isRecord(rawItem) ? rawItem : {};
+        const optionMap = normalizeOptions(item.options);
+        const options = Object.values(optionMap);
+        const correctKey = String(item.correct ?? "A");
+        const correctIndex = Array.isArray(item.options)
+          ? Number(item.correctIndex ?? item.correct)
+          : Math.max(0, Object.keys(optionMap).indexOf(correctKey));
         return {
-          id: String(item?.id ?? index),
+          id: String(item.id ?? index),
           type: "SINGLE_CHOICE" as const,
-          prompt: String(item?.q ?? item?.question ?? ""),
+          prompt: String(item.q ?? item.question ?? ""),
           options,
           correctIndex: Number.isInteger(correctIndex) && correctIndex >= 0 ? correctIndex : 0
         };
@@ -161,7 +172,7 @@ router.get("/lessons/:lessonId/quiz", authRequired, async (req: AuthRequest, res
         ? { status: attempt.status, autoScore: Number(attempt.autoScore), maxScore: Number(attempt.maxScore), autoPercent: attempt.autoPercent }
         : null
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/lessonQuiz] get quiz failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -209,7 +220,7 @@ router.post("/lessons/:lessonId/quiz/submit", authRequired, async (req: AuthRequ
         results: result.results
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (isQuizAttemptDuplicateError(error)) {
       return res.status(409).json({ message: "QUIZ_ALREADY_SUBMITTED" });
     }
@@ -246,7 +257,7 @@ router.get("/lessons/:lessonId/quiz/attempts", authRequired, async (req: AuthReq
         updatedAt: a.updatedAt
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/lessonQuiz] list attempts failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -293,7 +304,7 @@ router.get("/lessons/:lessonId/quiz/attempts/:studentId", authRequired, async (r
       },
       openQuestions
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/lessonQuiz] attempt detail failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -343,7 +354,7 @@ router.post("/lessons/:lessonId/quiz/attempts/:studentId/grade-manual", authRequ
         ignoredQuestionIds: manual.invalidIds
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/lessonQuiz] manual grade failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

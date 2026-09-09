@@ -67,7 +67,7 @@ router.get("/agenda", authRequired, async (req: AuthRequest, res: Response) => {
     const raw = await getDeadlinesForClasses(classIds, from, to);
     const items = classifyAgenda(raw, now);
     return res.json({ items, summary: summarizeAgenda(items) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/agenda] failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

@@ -1,3 +1,5 @@
+import { env } from "../env";
+
 export type MultiFileSubmissionV1 = {
   version: 1;
   entry: string;
@@ -5,6 +7,10 @@ export type MultiFileSubmissionV1 = {
 };
 
 const PREFIX = "__STUDYCOD_MULTI_FILE_V1__\n";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 export function normalizeSafeCodeFilePath(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -32,8 +38,8 @@ export function encodeMultiFileSubmissionV1(payload: Omit<MultiFileSubmissionV1,
     entry: String(payload.entry || "").trim(),
     files: Array.isArray(payload.files)
       ? payload.files.map(f => ({
-          path: normalizeSafeCodeFilePath((f as any)?.path) ?? "",
-          content: String((f as any)?.content ?? "")
+          path: normalizeSafeCodeFilePath(f.path) ?? "",
+          content: String(f.content ?? "")
         }))
       : []
   };
@@ -46,17 +52,17 @@ export function encodeMultiFileSubmissionV1(payload: Omit<MultiFileSubmissionV1,
 // are deliberately conservative — bump them if a real curriculum task needs
 // more room.
 const MULTI_FILE_MAX_TOTAL_BYTES = (() => {
-  const raw = (process.env.MULTI_FILE_MAX_TOTAL_BYTES ?? "").trim();
+  const raw = (env.MULTI_FILE_MAX_TOTAL_BYTES ?? "").trim();
   const n = raw ? Number.parseInt(raw, 10) : NaN;
   return Number.isFinite(n) && n >= 16 * 1024 ? n : 1_048_576; // 1 MB
 })();
 const MULTI_FILE_MAX_PER_FILE_BYTES = (() => {
-  const raw = (process.env.MULTI_FILE_MAX_PER_FILE_BYTES ?? "").trim();
+  const raw = (env.MULTI_FILE_MAX_PER_FILE_BYTES ?? "").trim();
   const n = raw ? Number.parseInt(raw, 10) : NaN;
   return Number.isFinite(n) && n >= 4 * 1024 ? n : 512 * 1024; // 512 KB
 })();
 const MULTI_FILE_MAX_FILES = (() => {
-  const raw = (process.env.MULTI_FILE_MAX_FILES ?? "").trim();
+  const raw = (env.MULTI_FILE_MAX_FILES ?? "").trim();
   const n = raw ? Number.parseInt(raw, 10) : NaN;
   return Number.isFinite(n) && n > 0 ? n : 64;
 })();
@@ -67,17 +73,20 @@ export function decodeMultiFileSubmissionV1(s: unknown): MultiFileSubmissionV1 |
   // Cheap upfront check before JSON.parse spends CPU on a multi-MB payload.
   if (Buffer.byteLength(raw, "utf8") > MULTI_FILE_MAX_TOTAL_BYTES) return null;
   try {
-    const parsed = JSON.parse(raw) as any;
-    if (!parsed || typeof parsed !== "object") return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) return null;
     if (parsed.version !== 1) return null;
     const entry = normalizeSafeCodeFilePath(parsed.entry) ?? "";
     const filesRaw = Array.isArray(parsed.files) ? parsed.files : [];
     if (filesRaw.length > MULTI_FILE_MAX_FILES) return null;
     const files = filesRaw
-      .map((f: any) => ({
-        path: normalizeSafeCodeFilePath(f?.path) ?? "",
-        content: typeof f?.content === "string" ? f.content : ""
-      }))
+      .map((rawFile: unknown) => {
+        const f = isRecord(rawFile) ? rawFile : {};
+        return {
+          path: normalizeSafeCodeFilePath(f.path) ?? "",
+          content: typeof f.content === "string" ? f.content : ""
+        };
+      })
       .filter((f: { path: string; content: string }) => f.path.length > 0);
     if (!entry || files.length === 0) return null;
     if (!files.some((f: { path: string; content: string }) => f.path === entry)) return null;

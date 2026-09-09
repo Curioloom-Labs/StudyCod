@@ -1,9 +1,14 @@
+import { env } from "../../env";
+import type {
+  AiTaskGenerationResult,
+} from "../llm/LLMOrchestrator";
+
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 export interface AIRequest {
   mode: AIMode;
-  params: any;
+  params: unknown;
 }
-export interface AIResponse<T = any> {
+export interface AIResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -12,10 +17,10 @@ export class AIClient {
   private baseUrl: string;
   private timeout: number;
   constructor() {
-    this.baseUrl = process.env.AI_SERVICE_URL || 'http://localhost:3001';
-    this.timeout = parseInt(process.env.AI_SERVICE_TIMEOUT || '30000', 10);
+    this.baseUrl = env.AI_SERVICE_URL || 'http://localhost:3001';
+    this.timeout = parseInt(env.AI_SERVICE_TIMEOUT || '30000', 10);
   }
-  private async request<T>(mode: AIMode, params: any): Promise<T> {
+  private async request<T>(mode: AIMode, params: unknown): Promise<T> {
     const url = `${this.baseUrl}/api/v1/${mode}`;
     try {
       const controller = new AbortController();
@@ -40,15 +45,17 @@ export class AIClient {
       if (!result.success) {
         throw new Error(result.error || 'AI Service returned error');
       }
-      if (!result.data) {
+      if (result.data === undefined || result.data === null) {
         throw new Error('AI Service returned empty data');
       }
       return result.data;
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      const errorName = error instanceof Error ? error.name : "";
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorName === 'AbortError') {
         throw new Error('AI_GENERATION_FAILED: Request timeout');
       }
-      throw new Error(`AI_GENERATION_FAILED: ${error.message || 'Unknown error'}`);
+      throw new Error(`AI_GENERATION_FAILED: ${errorMessage || 'Unknown error'}`);
     }
   }
   async generateTask(params: {
@@ -62,8 +69,8 @@ export class AIClient {
     prevTopics?: string;
     userId?: number;
     topicId?: number;
-  }): Promise<any> {
-    return this.request('generateTask', params);
+  }): Promise<AiTaskGenerationResult> {
+    return this.request<AiTaskGenerationResult>('generateTask', params);
   }
   async generateTheory(params: {
     topicTitle: string;

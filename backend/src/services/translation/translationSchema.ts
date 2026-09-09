@@ -59,10 +59,10 @@ async function hasColumns(tableName: string, columnNames: string[]): Promise<boo
     cache[key] = { value, at: Date.now() };
     await setRedisCache(key, value);
     return value;
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.warn("[translate] failed to check translation columns", {
       tableName,
-      err: err?.message ?? String(err)
+      err: err instanceof Error ? err.message : String(err)
     });
     cache[key] = { value: false, at: Date.now() };
     await setRedisCache(key, false);

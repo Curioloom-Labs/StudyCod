@@ -3,15 +3,16 @@ import fs from "fs";
 import { CertificateRenderInput } from "./types";
 import { CertificateTemplateEngine } from "./CertificateTemplateEngine";
 import { logger } from "../../utils/logger";
+import { env } from "../../env";
 
 let sharedBrowser: Browser | null = null;
 
 function resolveExecutableCandidates(configuredExecutable: string): string[] {
   const envCandidates = [
     configuredExecutable,
-    String(process.env.CHROME_BIN || "").trim(),
-    String(process.env.GOOGLE_CHROME_BIN || "").trim(),
-    String(process.env.PUPPETEER_EXECUTABLE_PATH || "").trim(),
+    String(env.CHROME_BIN || "").trim(),
+    String(env.GOOGLE_CHROME_BIN || "").trim(),
+    String(env.PUPPETEER_EXECUTABLE_PATH || "").trim(),
   ].filter(Boolean);
 
   const linuxCandidates = process.platform === "linux"
@@ -45,7 +46,7 @@ function resolveExecutableCandidates(configuredExecutable: string): string[] {
 }
 
 function isMissingExecutableError(error: unknown): boolean {
-  const message = String((error as any)?.message ?? error ?? "");
+  const message = error instanceof Error ? error.message : String(error ?? "");
   return (
     message.includes("Executable doesn't exist") ||
     message.includes("Please run the following command to download new browsers") ||
@@ -56,9 +57,9 @@ function isMissingExecutableError(error: unknown): boolean {
 async function getBrowser(): Promise<Browser> {
   if (sharedBrowser) return sharedBrowser;
   const configuredExecutable = String(
-    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
-      || process.env.PLAYWRIGHT_EXECUTABLE_PATH
-      || process.env.CHROMIUM_PATH
+    env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+      || env.PLAYWRIGHT_EXECUTABLE_PATH
+      || env.CHROMIUM_PATH
       || ""
   ).trim();
 

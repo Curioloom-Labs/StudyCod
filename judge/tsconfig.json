@@ -12,7 +12,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["index.ts", "engine/**/*.ts", "languages/**/*.ts", "checkers/**/*.ts"]
+  "include": ["index.ts", "config.ts", "config.test.ts", "engine/**/*.ts", "languages/**/*.ts", "checkers/**/*.ts"]
 }
 
 

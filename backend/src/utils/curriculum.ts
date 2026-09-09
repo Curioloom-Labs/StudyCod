@@ -2,6 +2,7 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import YAML from "yaml";
+import { env } from "../env";
 
 export type CurriculumRuntime = "JAVA" | "PYTHON" | "CPP";
 export type CurriculumLevel = "FOUNDATION" | "SPECIALIZATION" | "ADVANCED";
@@ -163,11 +164,12 @@ function contractCases(profile: string): Array<[string, string]> {
   return profileContractCases(profile);
 }
 
-function materializeContract(raw: any, locale: CurriculumLocale, key: string): { inputFormat: string; outputFormat: string; tests: MiniProjectContractCase[] } | null {
-  if (!raw || typeof raw !== "object") return null;
+function materializeContract(raw: unknown, locale: CurriculumLocale, key: string): { inputFormat: string; outputFormat: string; tests: MiniProjectContractCase[] } | null {
+  if (!isRecord(raw)) return null;
   const profile = String(raw.profile || "");
-  const localized = raw[locale] && typeof raw[locale] === "object" ? raw[locale] : raw.uk;
-  if (!profile || !localized || typeof localized !== "object") return null;
+  const localizedValue = raw[locale];
+  const localized = isRecord(localizedValue) ? localizedValue : raw.uk;
+  if (!profile || !isRecord(localized)) return null;
   const pairs = contractCases(profile);
   return {
     inputFormat: String(localized.inputFormat || "").trim(),
@@ -238,7 +240,7 @@ const SPECIALIZATION_COURSE_KEYS = new Set([
 const FORBIDDEN_LESSON_MARKUP_RE = /(?:STUDYCOD_LEARNING_META|exercise_focus:|^###\s+(?:Крок за кроком|Перед вправою|Підготовка до мініпроєкту)\b)/im;
 const PLACEHOLDER_RE = /\b(?:TODO|TBD|FIXME|lorem ipsum)\b/i;
 
-function isRecord(value: unknown): value is Record<string, any> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
@@ -262,7 +264,7 @@ function interactiveIssues(content: string, courseKey: string, topicKey: string)
   const issues: CurriculumQualityIssue[] = [];
   const blocks = [...content.matchAll(/```interactive\s*\n([\s\S]*?)\n```/gi)];
   for (const [index, block] of blocks.entries()) {
-    let spec: any;
+    let spec: unknown;
     try {
       spec = JSON.parse(block[1]);
     } catch {
@@ -277,27 +279,37 @@ function interactiveIssues(content: string, courseKey: string, topicKey: string)
     }
 
     if (spec.type === "prediction") {
+      const options = Array.isArray(spec.options) ? spec.options : [];
+      const answer = typeof spec.answer === "number" ? spec.answer : Number.NaN;
       if (typeof spec.question !== "string" || !spec.question.trim()) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs a question` });
-      if (!Array.isArray(spec.options) || spec.options.length < 2) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs at least two options` });
-      if (!Number.isInteger(spec.answer) || spec.answer < 0 || !Array.isArray(spec.options) || spec.answer >= spec.options.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} has an answer outside the option range` });
+      if (options.length < 2) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs at least two options` });
+      if (!Number.isInteger(answer) || answer < 0 || answer >= options.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} has an answer outside the option range` });
       if (typeof spec.explanation !== "string" || !spec.explanation.trim()) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs an explanation` });
     } else if (spec.type === "spot-the-bug") {
-      if (!Array.isArray(spec.lines) || spec.lines.length < 2) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs at least two lines` });
-      if (!Number.isInteger(spec.buggyLine) || spec.buggyLine < 1 || !Array.isArray(spec.lines) || spec.buggyLine > spec.lines.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} has an invalid buggyLine` });
+      const lines = Array.isArray(spec.lines) ? spec.lines : [];
+      const buggyLine = typeof spec.buggyLine === "number" ? spec.buggyLine : Number.NaN;
+      if (lines.length < 2) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs at least two lines` });
+      if (!Number.isInteger(buggyLine) || buggyLine < 1 || buggyLine > lines.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} has an invalid buggyLine` });
       if (typeof spec.explanation !== "string" || !spec.explanation.trim()) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs an explanation` });
     } else if (spec.type === "trace") {
-      if (!Array.isArray(spec.code) || !spec.code.length || !Array.isArray(spec.steps) || !spec.steps.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs code and trace steps` });
-      if (Array.isArray(spec.code) && Array.isArray(spec.steps) && spec.steps.some((step: any) => !Number.isInteger(step?.line) || step.line < 1 || step.line > spec.code.length)) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} contains a step outside the code range` });
+      const code = Array.isArray(spec.code) ? spec.code : [];
+      const steps = Array.isArray(spec.steps) ? spec.steps : [];
+      if (!code.length || !steps.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs code and trace steps` });
+      if (code.length && steps.length && steps.some((step: unknown) => !isRecord(step) || !Number.isInteger(step.line) || Number(step.line) < 1 || Number(step.line) > code.length)) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} contains a step outside the code range` });
     } else if (spec.type === "memory") {
       if (!Array.isArray(spec.stack) && !Array.isArray(spec.heap)) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs stack or heap boxes` });
     } else if (spec.type === "dispatch") {
       if (typeof spec.call !== "string" || !spec.call.trim() || !Array.isArray(spec.cases) || !spec.cases.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs a call and at least one case` });
     } else if (spec.type === "quiz") {
-      if (!Array.isArray(spec.questions) || !spec.questions.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs at least one question` });
-      for (const [questionIndex, question] of (spec.questions || []).entries()) {
-        if (!isRecord(question) || typeof question.question !== "string" || !Array.isArray(question.options) || !Number.isInteger(question.answer) || question.answer < 0 || question.answer >= question.options.length) {
+      const questions = Array.isArray(spec.questions) ? spec.questions : [];
+      if (!questions.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs at least one question` });
+      for (const [questionIndex, question] of questions.entries()) {
+        const questionRecord = isRecord(question) ? question : null;
+        const options = questionRecord && Array.isArray(questionRecord.options) ? questionRecord.options : [];
+        const answer = questionRecord && typeof questionRecord.answer === "number" ? questionRecord.answer : Number.NaN;
+        if (!questionRecord || typeof questionRecord.question !== "string" || options.length === 0 || !Number.isInteger(answer) || answer < 0 || answer >= options.length) {
           issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} question #${questionIndex + 1} is malformed` });
-        } else if (typeof question.explanation !== "string" || !question.explanation.trim()) {
+        } else if (typeof questionRecord.explanation !== "string" || !questionRecord.explanation.trim()) {
           issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} question #${questionIndex + 1} needs an explanation` });
         }
       }
@@ -308,19 +320,21 @@ function interactiveIssues(content: string, courseKey: string, topicKey: string)
   return issues;
 }
 
-function topicQualityIssues(courseKey: string, topic: any, index: number): CurriculumQualityIssue[] {
-  const title = String(topic?.title || "").trim();
-  const topicKey = String(topic?.key || slug(title));
+function topicQualityIssues(courseKey: string, topic: unknown, index: number): CurriculumQualityIssue[] {
+  const topicRecord = isRecord(topic) ? topic : {};
+  const title = String(topicRecord.title || "").trim();
+  const topicKey = String(topicRecord.key || slug(title));
   const issues: CurriculumQualityIssue[] = [];
   const add = (severity: "error" | "warning", message: string) => issues.push({ severity, courseKey, topicKey, message });
-  const theory = typeof topic?.theory === "string" ? topic.theory : topic?.theory?.content;
+  const theoryValue = topicRecord.theory;
+  const theory = typeof theoryValue === "string" ? theoryValue : isRecord(theoryValue) ? theoryValue.content : undefined;
   const content = typeof theory === "string" ? theory.trim() : "";
 
   if (!title) add("error", `topic #${index + 1} has no title`);
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(topicKey)) add("error", "topic key is not a stable kebab-case key");
-  if (!Number.isInteger(Number(topic?.order)) || Number(topic.order) < 1) add("error", "order must be a positive integer");
-  if (!String(topic?.description || "").trim()) add("warning", "description is empty");
-  if (String(topic?.exerciseFocus || "").trim().length < 20) add("error", "exerciseFocus must describe a concrete practice outcome");
+  if (!Number.isInteger(Number(topicRecord.order)) || Number(topicRecord.order) < 1) add("error", "order must be a positive integer");
+  if (!String(topicRecord.description || "").trim()) add("warning", "description is empty");
+  if (String(topicRecord.exerciseFocus || "").trim().length < 20) add("error", "exerciseFocus must describe a concrete practice outcome");
   if (content.length < 1400) add("error", "theory is too short");
   if (FORBIDDEN_LESSON_MARKUP_RE.test(content)) add("error", "theory contains hidden metadata or a removed template section");
   const entries = headingEntries(content);
@@ -360,16 +374,18 @@ export function auditCurriculum(root = repoRoot()): CurriculumQualityReport {
   const courses = manifest.courses.map((course) => {
     const relative = path.normalize(course.source);
     const filePath = path.join(root, relative);
-    const parsed = YAML.parse(fs.readFileSync(filePath, "utf8")) as any;
-    const topics = Array.isArray(parsed?.topics) ? parsed.topics : [];
+    const parsed = YAML.parse(fs.readFileSync(filePath, "utf8")) as unknown;
+    const parsedRecord = isRecord(parsed) ? parsed : {};
+    const topics = Array.isArray(parsedRecord.topics) ? parsedRecord.topics : [];
     if (SPECIALIZATION_COURSE_KEYS.has(course.key)) {
-      if (String(parsed?.course || "") !== course.key) issues.push({ severity: "error", courseKey: course.key, topicKey: "_source", message: "source course metadata must match manifest" });
-      if (String(parsed?.language || "") !== course.runtime) issues.push({ severity: "error", courseKey: course.key, topicKey: "_source", message: "source language metadata must match manifest" });
+      if (String(parsedRecord.course || "") !== course.key) issues.push({ severity: "error", courseKey: course.key, topicKey: "_source", message: "source course metadata must match manifest" });
+      if (String(parsedRecord.language || "") !== course.runtime) issues.push({ severity: "error", courseKey: course.key, topicKey: "_source", message: "source language metadata must match manifest" });
     }
     const seenKeys = new Set<string>();
     for (const [index, topic] of topics.entries()) {
       const topicIssues = topicQualityIssues(course.key, topic, index);
-      const topicKey = String(topic?.key || slug(String(topic?.title || "").trim()));
+      const topicRecord = isRecord(topic) ? topic : {};
+      const topicKey = String(topicRecord.key || slug(String(topicRecord.title || "").trim()));
       if (seenKeys.has(topicKey)) issues.push({ severity: "error", courseKey: course.key, topicKey, message: "duplicate topic key" });
       seenKeys.add(topicKey);
       issues.push(...topicIssues);
@@ -386,7 +402,7 @@ export function auditCurriculum(root = repoRoot()): CurriculumQualityReport {
 }
 
 function repoRoot(): string {
-  const candidates = [process.env.REPO_ROOT, process.env.STUDYCOD_REPO_ROOT, process.cwd(), path.resolve(__dirname, "../../.."), path.resolve(__dirname, "../../../.."), path.resolve(__dirname, "../../../../../")] 
+  const candidates = [env.REPO_ROOT, env.STUDYCOD_REPO_ROOT, process.cwd(), path.resolve(__dirname, "../../.."), path.resolve(__dirname, "../../../.."), path.resolve(__dirname, "../../../../../")]
     .filter(Boolean)
     .map((value) => path.resolve(String(value)));
   return candidates.find((candidate) => fs.existsSync(path.join(candidate, "curriculum", "catalog.yml"))) || process.cwd();
@@ -451,56 +467,71 @@ export function loadCurriculumMiniProjects(courseKey: string, root = repoRoot(),
   assert(!relative.startsWith("..") && !path.isAbsolute(relative), "unsafe projectsSource path");
   const filePath = path.join(root, relative);
   assert(fs.existsSync(filePath), `projects source file not found: ${manifest.projectsSource}`);
-  const parsed = YAML.parse(fs.readFileSync(filePath, "utf8")) as any;
+  const parsed = YAML.parse(fs.readFileSync(filePath, "utf8")) as unknown;
   const contractPath = path.join(root, "curriculum", "mini_project_contracts.yml");
-  const contractCatalog = fs.existsSync(contractPath) ? YAML.parse(fs.readFileSync(contractPath, "utf8")) as any : null;
-  const source = Array.isArray(parsed?.courses?.[courseKey]) ? parsed.courses[courseKey] : [];
+  const contractCatalog = fs.existsSync(contractPath) ? YAML.parse(fs.readFileSync(contractPath, "utf8")) as unknown : null;
+  const parsedRecord = isRecord(parsed) ? parsed : {};
+  const parsedCourses = isRecord(parsedRecord.courses) ? parsedRecord.courses : {};
+  const sourceValue = parsedCourses[courseKey];
+  const source = Array.isArray(sourceValue) ? sourceValue : [];
+  const contractCatalogRecord = isRecord(contractCatalog) ? contractCatalog : {};
+  const contractProjects = isRecord(contractCatalogRecord.projects) ? contractCatalogRecord.projects : {};
+  const contractProfiles = isRecord(contractCatalogRecord.profiles) ? contractCatalogRecord.profiles : {};
   const keys = new Set<string>();
-  return source.map((project: any, index: number) => {
-    const key = String(project?.key || "").trim();
+  return source.map((project: unknown, index: number) => {
+    const projectRecord = isRecord(project) ? project : {};
+    const key = String(projectRecord.key || "").trim();
     assert(key && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key), `${courseKey}: invalid mini-project key at #${index + 1}`);
     assert(!keys.has(key), `${courseKey}: duplicate mini-project key ${key}`);
-    const title = String(project?.title || "").trim();
-    const description = String(project?.description || "").trim();
+    const title = String(projectRecord.title || "").trim();
+    const description = String(projectRecord.description || "").trim();
     assert(title && description, `${courseKey}/${key}: mini-project title and description are required`);
-    const estimatedMinutes = Number(project?.estimatedMinutes);
+    const estimatedMinutes = Number(projectRecord.estimatedMinutes);
     assert(Number.isFinite(estimatedMinutes) && estimatedMinutes > 0, `${courseKey}/${key}: estimatedMinutes must be positive`);
-    const skills = Array.isArray(project?.skills) ? project.skills.map(String).filter(Boolean) : [];
-    const requiredTopicKeys = Array.isArray(project?.requiredTopicKeys)
-      ? project.requiredTopicKeys.map(String).map((value: string) => value.trim()).filter(Boolean)
+    const skills = Array.isArray(projectRecord.skills) ? projectRecord.skills.map(String).filter(Boolean) : [];
+    const requiredTopicKeys = Array.isArray(projectRecord.requiredTopicKeys)
+      ? projectRecord.requiredTopicKeys.map(String).map((value: string) => value.trim()).filter(Boolean)
       : [];
-    const contractProfile = contractCatalog?.projects?.[key];
-    const contract = contractProfile ? materializeContract({ profile: contractProfile, ...(contractCatalog?.profiles?.[contractProfile] || {}) }, locale, key) : null;
-    const tests = contract?.tests || (Array.isArray(project?.tests) ? project.tests.map((test: any) => ({
-      input: String(test?.input ?? ""),
-      expectedOutput: String(test?.expectedOutput ?? test?.output ?? ""),
-      ...(test?.points != null ? { points: Number(test.points) } : {}),
-      ...(test?.hidden != null ? { hidden: Boolean(test.hidden) } : {}),
-      ...(test?.group ? { group: String(test.group) } : {}),
-    })) : undefined);
-    const inputFormat = String(contract?.inputFormat || project?.inputFormat || "").trim();
-    const outputFormat = String(contract?.outputFormat || project?.outputFormat || "").trim();
+    const contractProfile = contractProjects[key];
+    const contractProfileRecord = typeof contractProfile === "string" && isRecord(contractProfiles[contractProfile]) ? contractProfiles[contractProfile] : {};
+    const contract = typeof contractProfile === "string" ? materializeContract({ profile: contractProfile, ...contractProfileRecord }, locale, key) : null;
+    const tests = contract?.tests || (Array.isArray(projectRecord.tests) ? projectRecord.tests.map((test: unknown) => {
+      const testRecord = isRecord(test) ? test : {};
+      return {
+        input: String(testRecord.input ?? ""),
+        expectedOutput: String(testRecord.expectedOutput ?? testRecord.output ?? ""),
+        ...(testRecord.points != null ? { points: Number(testRecord.points) } : {}),
+        ...(testRecord.hidden != null ? { hidden: Boolean(testRecord.hidden) } : {}),
+        ...(testRecord.group ? { group: String(testRecord.group) } : {}),
+      };
+    }) : undefined);
+    const inputFormat = String(contract?.inputFormat || projectRecord.inputFormat || "").trim();
+    const outputFormat = String(contract?.outputFormat || projectRecord.outputFormat || "").trim();
     assert(inputFormat && outputFormat, `${courseKey}/${key}: inputFormat and outputFormat are required`);
     assert(tests && tests.length >= 15, `${courseKey}/${key}: at least 15 contract tests are required`);
-    assert(tests.every((test: any) => test.input !== undefined && test.expectedOutput !== undefined), `${courseKey}/${key}: every contract test needs input and expectedOutput`);
-    const milestones = Array.isArray(project?.milestones) ? project.milestones.map((milestone: any) => ({
-      id: String(milestone?.id || "").trim(),
-      title: String(milestone?.title || "").trim(),
-      description: String(milestone?.description || "").trim(),
-    })) : [];
+    assert(tests.every((test) => test.input !== undefined && test.expectedOutput !== undefined), `${courseKey}/${key}: every contract test needs input and expectedOutput`);
+    const milestones = Array.isArray(projectRecord.milestones) ? projectRecord.milestones.map((milestone: unknown) => {
+      const milestoneRecord = isRecord(milestone) ? milestone : {};
+      return {
+        id: String(milestoneRecord.id || "").trim(),
+        title: String(milestoneRecord.title || "").trim(),
+        description: String(milestoneRecord.description || "").trim(),
+      };
+    }) : [];
     assert(skills.length >= 2 && milestones.length >= 1, `${courseKey}/${key}: mini-project needs skills and milestones`);
     assert(requiredTopicKeys.length >= 1, `${courseKey}/${key}: requiredTopicKeys is required`);
-    assert(milestones.every((milestone: any) => milestone.id && milestone.title && milestone.description), `${courseKey}/${key}: invalid milestone`);
-    const acceptanceCriteria = Array.isArray(project?.acceptanceCriteria) ? project.acceptanceCriteria.map(String).filter(Boolean) : [];
+    assert(milestones.every((milestone) => milestone.id && milestone.title && milestone.description), `${courseKey}/${key}: invalid milestone`);
+    const acceptanceCriteria = Array.isArray(projectRecord.acceptanceCriteria) ? projectRecord.acceptanceCriteria.map(String).filter(Boolean) : [];
     assert(acceptanceCriteria.length >= 1, `${courseKey}/${key}: acceptanceCriteria is required`);
     keys.add(key);
-    const checkSpec = project?.checkSpec && typeof project.checkSpec === "object" ? {
-      kind: String(project.checkSpec.kind || "") as "flask" | "fastapi" | "computer-vision",
-      ...(project.checkSpec.module ? { module: String(project.checkSpec.module) } : {}),
-      ...(Array.isArray(project.checkSpec.probePaths) ? { probePaths: project.checkSpec.probePaths.map(String) } : {}),
-      ...(Array.isArray(project.checkSpec.files) ? { files: project.checkSpec.files.map(String) } : {}),
+    const checkSpecRecord = isRecord(projectRecord.checkSpec) ? projectRecord.checkSpec : null;
+    const checkSpec = checkSpecRecord ? {
+      kind: String(checkSpecRecord.kind || "") as "flask" | "fastapi" | "computer-vision",
+      ...(checkSpecRecord.module ? { module: String(checkSpecRecord.module) } : {}),
+      ...(Array.isArray(checkSpecRecord.probePaths) ? { probePaths: checkSpecRecord.probePaths.map(String) } : {}),
+      ...(Array.isArray(checkSpecRecord.files) ? { files: checkSpecRecord.files.map(String) } : {}),
     } : undefined;
-    return { key, title, description, inputFormat, outputFormat, estimatedMinutes, skills, template: String(project?.template || ""), requiredTopicKeys, tests, ...(checkSpec ? { checkSpec } : {}), milestones, acceptanceCriteria } satisfies CurriculumMiniProject;
+    return { key, title, description, inputFormat, outputFormat, estimatedMinutes, skills, template: String(projectRecord.template || ""), requiredTopicKeys, tests, ...(checkSpec ? { checkSpec } : {}), milestones, acceptanceCriteria } satisfies CurriculumMiniProject;
   });
 }
 
@@ -510,22 +541,25 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
   const filePath = path.join(root, relative);
   assert(fs.existsSync(filePath), `${course.key}: source file not found: ${course.source}`);
   const raw = fs.readFileSync(filePath, "utf8");
-  const parsed = YAML.parse(raw) as any;
+  const parsed = YAML.parse(raw) as unknown;
+  const parsedRecord = isRecord(parsed) ? parsed : {};
   if (SPECIALIZATION_COURSE_KEYS.has(course.key)) {
-    assert(String(parsed?.course || "") === course.key, `${course.key}: source course metadata must match manifest`);
-    assert(String(parsed?.language || "") === course.runtime, `${course.key}: source language metadata must match manifest`);
+    assert(String(parsedRecord.course || "") === course.key, `${course.key}: source course metadata must match manifest`);
+    assert(String(parsedRecord.language || "") === course.runtime, `${course.key}: source language metadata must match manifest`);
   }
-  assert(Array.isArray(parsed?.topics) && parsed.topics.length > 0, `${course.key}: source has no topics`);
+  assert(Array.isArray(parsedRecord.topics) && parsedRecord.topics.length > 0, `${course.key}: source has no topics`);
   const keys = new Set<string>();
-  return parsed.topics.map((topic: any, index: number) => {
-    const theory = typeof topic?.theory === "string" ? topic.theory : topic?.theory?.content;
-    const title = String(topic?.title || "").trim();
-    const key = String(topic?.key || slug(title));
+  return parsedRecord.topics.map((topic: unknown, index: number) => {
+    const topicRecord = isRecord(topic) ? topic : {};
+    const theoryValue = topicRecord.theory;
+    const theory = typeof theoryValue === "string" ? theoryValue : isRecord(theoryValue) ? theoryValue.content : undefined;
+    const title = String(topicRecord.title || "").trim();
+    const key = String(topicRecord.key || slug(title));
     if (locale === "uk" && SPECIALIZATION_COURSE_KEYS.has(course.key)) {
       const qualityError = topicQualityIssues(course.key, topic, index).find((issue) => issue.severity === "error");
       assert(!qualityError, `${course.key}/${key}: ${qualityError?.message || "quality check failed"}`);
     }
-    const exerciseFocus = String(topic?.exerciseFocus || "").trim();
+    const exerciseFocus = String(topicRecord.exerciseFocus || "").trim();
     assert(title, `${course.key}: topic #${index + 1} has no title`);
     assert(key && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key), `${course.key}: invalid topic key at #${index + 1}: ${JSON.stringify(key)}`);
     assert(!keys.has(key), `${course.key}: duplicate topic key ${key}`);
@@ -548,13 +582,13 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
     const interactiveBlocks = [...content.matchAll(/```interactive\s*\n([\s\S]*?)\n```/gi)];
     assert(interactiveBlocks.length > 0, `${course.key}/${key}: at least one interactive block is required`);
     for (const block of interactiveBlocks) {
-      let spec: any;
+      let spec: unknown;
       try {
         spec = JSON.parse(block[1]);
       } catch {
         throw new Error(`CURRICULUM_INVALID: ${course.key}/${key}: interactive block contains invalid JSON`);
       }
-      assert(["prediction", "spot-the-bug", "trace", "memory", "dispatch", "quiz"].includes(spec?.type), `${course.key}/${key}: unsupported interactive block type`);
+      assert(isRecord(spec) && typeof spec.type === "string" && ["prediction", "spot-the-bug", "trace", "memory", "dispatch", "quiz"].includes(spec.type), `${course.key}/${key}: unsupported interactive block type`);
     }
     if (locale === "uk" && ["flask", "fastapi", "computer-vision"].includes(course.key)) {
       // Authoring metadata is stored next to the topic in YAML, not inside the
@@ -569,7 +603,7 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
     return {
       key,
       title,
-      description: String(topic?.description || "").trim(),
+      description: String(topicRecord.description || "").trim(),
       exerciseFocus,
       content,
       sourcePath: course.source,

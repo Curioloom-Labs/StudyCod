@@ -26,7 +26,7 @@ export function encodeSnapshot(value: unknown): string {
   return encoded.length < json.length ? encoded : json;
 }
 
-export function parseSnapshot<T = any>(stored: string | null | undefined): T {
+export function parseSnapshot<T = unknown>(stored: string | null | undefined): T {
   const s = String(stored ?? "null");
   if (s.startsWith(GZIP_PREFIX)) {
     const buf = Buffer.from(s.slice(GZIP_PREFIX.length), "base64");

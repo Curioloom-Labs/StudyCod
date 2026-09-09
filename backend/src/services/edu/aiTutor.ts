@@ -38,10 +38,13 @@ export function buildTutorPrompt(question: string, context: string): string {
 }
 
 /** Pure: coerce a raw LLM response into a safe tutor answer. */
-export function normalizeTutorAnswer(raw: any): TutorAnswer {
-  const answer = String(raw?.answer ?? "").trim().slice(0, 4000);
-  const tips = Array.isArray(raw?.tips)
-    ? raw.tips.map((t: any) => String(t ?? "").trim()).filter((t: string) => t.length > 0).slice(0, 6)
+export function normalizeTutorAnswer(raw: unknown): TutorAnswer {
+  const value = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : {};
+  const answer = String(value.answer ?? "").trim().slice(0, 4000);
+  const tips = Array.isArray(value.tips)
+    ? value.tips.map((t: unknown) => String(t ?? "").trim()).filter((t: string) => t.length > 0).slice(0, 6)
     : [];
   return { answer, tips };
 }
@@ -70,8 +73,8 @@ export async function askTutor(params: { question: string; context: string }): P
       { timeout: 30000, temperature: 0.4, maxTokens: 1200 }
     );
     return normalizeTutorAnswer(raw);
-  } catch (error: any) {
-    logger.warn("[edu/aiTutor] provider failed", { message: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[edu/aiTutor] provider failed", { message: error instanceof Error ? error.message : String(error) });
     throw new Error("AI_UNAVAILABLE");
   }
 }

@@ -744,8 +744,9 @@ export const LibraryTaskSolvePage: React.FC = () => {
         void scoreProctoring({ ...proctoring.getSignals(codeLen), taskKind: "LIBRARY", taskId: effectiveTaskId });
         const tp = Number(r.testsPassed ?? 0);
         const tt = Number(r.testsTotal ?? 0);
-        const conceptKey = ((task as any)?.section
-          ? `lib-section:${String((task as any).section)}`
+        const section = task ? Reflect.get(task, "section") : undefined;
+        const conceptKey = (typeof section === "string" && section.trim()
+          ? `lib-section:${section}`
           : `lib-task:${task.id}`).slice(0, 191);
         void recordConceptReview({
           conceptKey,

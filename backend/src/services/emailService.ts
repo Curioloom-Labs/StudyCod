@@ -1,4 +1,4 @@
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 import * as https from "https";
 import type { IncomingMessage } from "http";
 import jwt from "jsonwebtoken";
@@ -6,6 +6,7 @@ import { logger } from "../utils/logger";
 import { BACKEND_PUBLIC_URL, JWT_SECRET } from "../config";
 import { DEFAULT_GRADING_SYSTEM, type GradingSystem } from "../types/GradingSystem";
 import { formatGradeForSystem as formatGradeForGradingSystem, gradingSystemDisplayLabel, normalizeScaleMode, type GradeScaleMode } from "../utils/gradingScale";
+import { env } from "../env";
 
 /**
  * Production Email Service
@@ -14,7 +15,7 @@ import { formatGradeForSystem as formatGradeForGradingSystem, gradingSystemDispl
  * - brevo-api (Brevo Transactional Email API)
  */
 class EmailService {
-  private transporter: nodemailer.Transporter | null = null;
+  private transporter: Transporter | null = null;
   private provider: "smtp" | "brevo-api" | "log" = "smtp";
 
   private readonly fromEmail: string;
@@ -23,10 +24,10 @@ class EmailService {
 
   constructor() {
     this.fromEmail =
-      process.env.EMAIL_FROM || "StudyCod <noreply@studycod.space>";
+      env.EMAIL_FROM || "StudyCod <noreply@studycod.space>";
 
     this.notificationsFromEmail =
-      process.env.EMAIL_FROM_NOTIFICATIONS || this.fromEmail;
+      env.EMAIL_FROM_NOTIFICATIONS || this.fromEmail;
 
     this.supportFromEmail =
       "StudyCod <studycod@studycod.space>";
@@ -43,7 +44,7 @@ class EmailService {
     // EMAIL_PROVIDER setting still wins, while test mode defaults to the
     // existing no-op/log provider instead of failing during module import.
     const providerRaw = String(
-      process.env.EMAIL_PROVIDER || (process.env.NODE_ENV === "test" ? "log" : "smtp")
+      env.EMAIL_PROVIDER || (env.NODE_ENV === "test" ? "log" : "smtp")
     ).trim().toLowerCase();
     this.provider = (providerRaw === "brevo-api" || providerRaw === "brevo_api")
       ? "brevo-api"
@@ -55,7 +56,7 @@ class EmailService {
       // No SMTP transporter needed.
       this.transporter = null;
 
-      const apiKey = String(process.env.BREVO_API_KEY || "").trim();
+      const apiKey = String(env.BREVO_API_KEY || "").trim();
       if (!apiKey) {
         throw new Error("[EmailService] EMAIL_PROVIDER=brevo-api requires BREVO_API_KEY (Brevo REST API key)");
       }
@@ -73,10 +74,10 @@ class EmailService {
 
     // ❗ Fail fast — no silent fallbacks
     if (
-      !process.env.SMTP_HOST ||
-      !process.env.SMTP_PORT ||
-      !process.env.SMTP_USER ||
-      !process.env.SMTP_PASSWORD
+      !env.SMTP_HOST ||
+      !env.SMTP_PORT ||
+      !env.SMTP_USER ||
+      !env.SMTP_PASSWORD
     ) {
       throw new Error(
         "[EmailService] SMTP configuration is incomplete"
@@ -84,12 +85,12 @@ class EmailService {
     }
 
     this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,          // smtp-relay.brevo.com
-      port: Number(process.env.SMTP_PORT),  // 587
-      secure: process.env.SMTP_SECURE === "true", // false = STARTTLS
+      host: env.SMTP_HOST,          // smtp-relay.brevo.com
+      port: Number(env.SMTP_PORT),  // 587
+      secure: env.SMTP_SECURE === "true", // false = STARTTLS
       auth: {
-        user: process.env.SMTP_USER,        // apikey
-        pass: process.env.SMTP_PASSWORD,    // SMTP API key
+        user: env.SMTP_USER,        // apikey
+        pass: env.SMTP_PASSWORD,    // SMTP API key
       },
       connectionTimeout: 10_000,
       greetingTimeout: 10_000,
@@ -102,7 +103,7 @@ class EmailService {
      ========================= */
 
   private getFrontendUrl(): string {
-    return process.env.FRONTEND_URL || "http://localhost:5173";
+    return env.FRONTEND_URL || "http://localhost:5173";
   }
 
   private normalizeLocale(locale?: string | null): "uk" | "en" {
@@ -115,7 +116,7 @@ class EmailService {
   }
 
   private getBackendPublicUrl(): string {
-    return process.env.BACKEND_PUBLIC_URL || BACKEND_PUBLIC_URL || "http://localhost:4000";
+    return env.BACKEND_PUBLIC_URL || BACKEND_PUBLIC_URL || "http://localhost:4000";
   }
 
   private buildEmailPreferenceToken(params: {
@@ -125,7 +126,7 @@ class EmailService {
     email: string;
   }): string {
     // JWT_SECRET can be empty in non-production setups; still allow token generation.
-    const secret = JWT_SECRET || process.env.JWT_SECRET || "dev-secret-change-me";
+    const secret = JWT_SECRET || env.JWT_SECRET || "dev-secret-change-me";
     return jwt.sign({
       t: "email-pref",
       action: params.action,
@@ -506,7 +507,7 @@ ${feedbackHtml}`;
       contentType?: string;
     }>;
   }): Promise<void> {
-    const apiKey = String(process.env.BREVO_API_KEY || "").trim();
+    const apiKey = String(env.BREVO_API_KEY || "").trim();
     if (!apiKey) {
       throw new Error("[EmailService] BREVO_API_KEY is missing (required for brevo-api)");
     }
@@ -516,7 +517,14 @@ ${feedbackHtml}`;
 
     const sender = this.parseFromHeader(opts.fromOverride || this.fromEmail);
 
-    const payload: any = {
+    const payload: {
+      sender: { name?: string; email: string };
+      to: Array<{ email: string }>;
+      subject: string;
+      htmlContent: string;
+      headers?: Record<string, string>;
+      attachment?: Array<{ name: string; content: string }>;
+    } = {
       sender,
       to: [{ email: opts.to }],
       subject: opts.subject,
@@ -625,8 +633,8 @@ ${feedbackHtml}`;
             }))
           : undefined,
       });
-    } catch (err: any) {
-      logger.error('[email] send failed', { message: err?.message });
+    } catch (err: unknown) {
+      logger.error('[email] send failed', { message: err instanceof Error ? err.message : String(err) });
       throw err;
     }
   }

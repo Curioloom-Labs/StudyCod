@@ -4,6 +4,7 @@ import { BookOpen, CheckCircle2, ChevronRight, LoaderCircle, LockKeyhole, Refres
 import { useNavigate } from "react-router-dom";
 import { getLearningCatalog, getLearningMe, enrollInCatalogCourse, type CatalogCourse, type CatalogVariant, type LearningMe } from "../../lib/api/learningCatalog";
 import { tr } from "../../i18n";
+import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 function levelLabel(level: CatalogCourse["level"]): string {
   if (level === "FOUNDATION") return tr("База", "Foundation");
@@ -45,8 +46,8 @@ export const LearningCatalogPage: React.FC = () => {
       await enrollInCatalogCourse(course.id, variant.id);
       await reload();
       navigate(`/learning/course/${course.id}`);
-    } catch (caught: any) {
-      setError(caught?.response?.data?.message === "PREREQUISITES_INCOMPLETE"
+    } catch (caught: unknown) {
+      setError(getErrorMessageFromUnknown(caught, "") === "PREREQUISITES_INCOMPLETE"
         ? tr("Спочатку завершіть обов’язкові базові курси.", "Complete the required foundation courses first.")
         : tr("Не вдалося відкрити курс.", "Could not open the course."));
     } finally {

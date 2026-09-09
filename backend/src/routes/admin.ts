@@ -67,6 +67,15 @@ const createUserSchema = z.object({
   role: z.enum(["USER", "TEACHER", "SUPPORT", "SYSTEM_ADMIN"]).optional(),
   emailVerified: z.boolean().optional()
 });
+const updateUserSchema = z.object({
+  username: z.string().min(3).max(50).optional(),
+  email: z.string().email().or(z.literal('')).nullable().optional(),
+  password: z.string().min(8).optional(),
+  firstName: z.string().nullable().optional(),
+  lastName: z.string().nullable().optional(),
+  userMode: z.enum(['PERSONAL', 'EDUCATIONAL', 'CONTEST']).optional(),
+  emailVerified: z.boolean().optional(),
+});
 const updateUserRoleSchema = z.object({
   role: z.enum(["USER", "TEACHER", "SUPPORT", "SYSTEM_ADMIN"])
 });
@@ -137,7 +146,7 @@ adminRouter.post("/users", authRequired, systemAdminGuard, async (req: AuthReque
       message: "User created successfully",
       user: buildUserDto(user)
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] POST /users error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -179,7 +188,7 @@ adminRouter.get("/users", authRequired, systemAdminGuard, async (req: AuthReques
         totalPages: Math.ceil(total / limit)
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] GET /users error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -207,7 +216,7 @@ adminRouter.get("/users/:id", authRequired, systemAdminGuard, async (req: AuthRe
     return res.json({
       user: buildUserDto(user)
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] GET /users/:id error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -251,7 +260,7 @@ adminRouter.patch("/users/:id/role", authRequired, systemAdminGuard, async (req:
       message: "User role updated successfully",
       user: buildUserDto(user)
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] PATCH /users/:id/role error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -260,6 +269,11 @@ adminRouter.patch("/users/:id/role", authRequired, systemAdminGuard, async (req:
 });
 adminRouter.patch("/users/:id", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
   try {
+    const validated = updateUserSchema.safeParse(req.body);
+    if (!validated.success) {
+      return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
+    }
+    const data = validated.data;
     const userId = parseInt(req.params.id);
     if (isNaN(userId)) {
       return res.status(400).json({
@@ -276,10 +290,10 @@ adminRouter.patch("/users/:id", authRequired, systemAdminGuard, async (req: Auth
         message: "USER_NOT_FOUND"
       });
     }
-    if (req.body.username && req.body.username !== user.username) {
+    if (data.username && data.username !== user.username) {
       const existing = await userRepo().findOne({
         where: {
-          username: req.body.username
+          username: data.username
         }
       });
       if (existing) {
@@ -287,13 +301,13 @@ adminRouter.patch("/users/:id", authRequired, systemAdminGuard, async (req: Auth
           message: "USERNAME_ALREADY_EXISTS"
         });
       }
-      user.username = req.body.username;
+      user.username = data.username;
     }
-    if (req.body.email !== undefined) {
-      if (req.body.email && req.body.email !== user.email) {
+    if (data.email !== undefined) {
+      if (data.email && data.email !== user.email) {
         const existing = await userRepo().findOne({
           where: {
-            email: req.body.email
+            email: data.email
           }
         });
         if (existing) {
@@ -302,15 +316,15 @@ adminRouter.patch("/users/:id", authRequired, systemAdminGuard, async (req: Auth
           });
         }
       }
-      user.email = req.body.email || null;
+      user.email = data.email || null;
     }
-    if (req.body.firstName !== undefined) user.firstName = req.body.firstName || null;
-    if (req.body.lastName !== undefined) user.lastName = req.body.lastName || null;
-    if (req.body.userMode) user.userMode = req.body.userMode;
-    if (req.body.emailVerified !== undefined) user.emailVerified = req.body.emailVerified;
-    const securityChanged = Boolean(req.body.password || req.body.userMode);
-    if (req.body.password) {
-      user.password = await bcrypt.hash(req.body.password, 10);
+    if (data.firstName !== undefined) user.firstName = data.firstName || null;
+    if (data.lastName !== undefined) user.lastName = data.lastName || null;
+    if (data.userMode) user.userMode = data.userMode;
+    if (data.emailVerified !== undefined) user.emailVerified = data.emailVerified;
+    const securityChanged = Boolean(data.password || data.userMode);
+    if (data.password) {
+      user.password = await bcrypt.hash(data.password, 10);
     }
     await userRepo().save(user);
     if (securityChanged) await revokeUserTokensBeforeTime(user.id, Date.now());
@@ -318,7 +332,7 @@ adminRouter.patch("/users/:id", authRequired, systemAdminGuard, async (req: Auth
       message: "User updated successfully",
       user: buildUserDto(user)
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] PATCH /users/:id error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -352,7 +366,7 @@ adminRouter.delete("/users/:id", authRequired, systemAdminGuard, async (req: Aut
     return res.json({
       message: "User deleted successfully"
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] DELETE /users/:id error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -398,7 +412,7 @@ adminRouter.post("/classes", authRequired, systemAdminGuard, async (req: AuthReq
         createdAt: cls.createdAt
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] POST /classes error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -425,7 +439,7 @@ adminRouter.get("/classes", authRequired, systemAdminGuard, async (req: AuthRequ
         updatedAt: cls.updatedAt
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] GET /classes error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -488,7 +502,7 @@ adminRouter.patch("/classes/:id", authRequired, systemAdminGuard, async (req: Au
         updatedAt: cls.updatedAt
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] PATCH /classes/:id error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -517,7 +531,7 @@ adminRouter.delete("/classes/:id", authRequired, systemAdminGuard, async (req: A
     return res.json({
       message: "Class deleted successfully"
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] DELETE /classes/:id error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -556,7 +570,7 @@ adminRouter.get("/stats", authRequired, systemAdminGuard, async (req: AuthReques
         total: totalClasses
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] GET /stats error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -588,7 +602,7 @@ adminRouter.get("/judge/load", authRequired, systemAdminGuard, async (req: AuthR
       started: metrics.started,
       sampledAt: new Date().toISOString(),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] GET /judge/load error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -609,7 +623,7 @@ adminRouter.get("/judge/dead-letter", authRequired, systemAdminGuard, async (req
       limit,
       sampledAt: new Date().toISOString(),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] GET /judge/dead-letter error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -619,7 +633,7 @@ adminRouter.get("/judge/dead-letter", authRequired, systemAdminGuard, async (req
 
 adminRouter.post("/judge/dead-letter/replay", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
   try {
-    const bodyLimit = Number.parseInt(String((req.body as any)?.limit ?? ""), 10);
+    const bodyLimit = Number.parseInt(String(req.body?.limit ?? ""), 10);
     const limit = Number.isFinite(bodyLimit)
       ? Math.max(1, Math.min(500, bodyLimit))
       : 20;
@@ -629,7 +643,7 @@ adminRouter.post("/judge/dead-letter/replay", authRequired, systemAdminGuard, as
       ...result,
       replayedAt: new Date().toISOString(),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin] POST /judge/dead-letter/replay error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"

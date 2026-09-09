@@ -75,14 +75,14 @@ export async function notifyStudentGradeChange(params: {
       studentName: formatStudentName(params.student) || null,
       locale
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[grade-notify] Failed to send grade notification", {
       requestId: params.requestId,
       studentId: params.student.id,
       email,
       event: params.event,
       kind: params.kind,
-      err: err?.message || err
+      err: err instanceof Error ? err.message : String(err)
     });
   }
 }

@@ -10,6 +10,10 @@ export interface PageContent {
   text?: unknown;
   body?: unknown;
   videoUrl?: unknown;
+  /** Optional WebVTT/SRT-compatible caption track for direct media URLs. */
+  videoCaptionUrl?: unknown;
+  videoCaptionLang?: unknown;
+  videoCaptionLabel?: unknown;
   docUrl?: unknown;
   docLabel?: unknown;
 }
@@ -26,17 +30,55 @@ export function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Return the URL only if it is a well-formed http(s) URL; else null. */
+/** Return only a well-formed public http(s) URL; local/private targets are rejected. */
 export function safeHttpUrl(raw: unknown): string | null {
   const s = str(raw).trim();
   if (!s) return null;
   try {
     const u = new URL(s);
-    if (u.protocol === "http:" || u.protocol === "https:") return u.toString();
-    return null;
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    if (isPrivateOrLocalHost(u.hostname)) return null;
+    return u.toString();
   } catch {
     return null;
   }
+}
+
+function isPrivateOrLocalHost(rawHostname: string): boolean {
+  const hostname = rawHostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (
+    hostname === "localhost"
+    || hostname.endsWith(".localhost")
+    || hostname.endsWith(".local")
+    || hostname.endsWith(".internal")
+    || hostname === "metadata.google.internal"
+  ) return true;
+
+  if (hostname.includes(":")) {
+    // Loopback, unspecified, link-local and unique-local IPv6 ranges.
+    return hostname === "::1"
+      || hostname === "::"
+      || hostname.startsWith("fe8")
+      || hostname.startsWith("fe9")
+      || hostname.startsWith("fea")
+      || hostname.startsWith("feb")
+      || hostname.startsWith("fc")
+      || hostname.startsWith("fd");
+  }
+
+  const octets = hostname.split(".").map(Number);
+  if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  const [a, b] = octets;
+  return a === 0
+    || a === 10
+    || a === 127
+    || (a === 100 && b >= 64 && b <= 127)
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 0)
+    || (a === 192 && b === 168)
+    || (a === 198 && b >= 18 && b <= 19)
+    || a >= 224;
 }
 
 /** YouTube watch/short URL → privacy-friendly embed URL, or null if not YouTube. */
@@ -58,15 +100,25 @@ export function youtubeEmbedUrl(url: string): string | null {
   }
 }
 
-function renderVideo(rawUrl: unknown): string {
+function safeCaptionLanguage(raw: unknown): string {
+  const value = str(raw).trim();
+  return /^[a-z]{2,3}(?:-[A-Z]{2})?$/i.test(value) ? value : "uk";
+}
+
+function renderVideo(rawUrl: unknown, content: PageContent): string {
   const url = safeHttpUrl(rawUrl);
   if (!url) return "";
   const yt = youtubeEmbedUrl(url);
   if (yt) {
-    return `<div class="sc-video"><iframe src="${escapeHtml(yt)}" frameborder="0" allowfullscreen loading="lazy"></iframe></div>`;
+    return `<div class="sc-video"><iframe src="${escapeHtml(yt)}" title="Embedded video" frameborder="0" allowfullscreen loading="lazy"></iframe></div>`;
   }
   if (/\.(mp4|webm|ogg)(\?|$)/i.test(url)) {
-    return `<div class="sc-video"><video controls src="${escapeHtml(url)}"></video></div>`;
+    const captionUrl = safeHttpUrl(content.videoCaptionUrl);
+    const captionLabel = str(content.videoCaptionLabel).trim() || "Українські субтитри";
+    const track = captionUrl
+      ? `<track kind="captions" src="${escapeHtml(captionUrl)}" srclang="${escapeHtml(safeCaptionLanguage(content.videoCaptionLang))}" label="${escapeHtml(captionLabel)}" default>`
+      : "";
+    return `<div class="sc-video"><video controls aria-label="Embedded video" src="${escapeHtml(url)}">${track}</video></div>`;
   }
   // Unknown provider → safe external link.
   return `<p><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a></p>`;
@@ -88,7 +140,7 @@ export function renderPageContent(title: string, content: PageContent | null | u
   const parts: string[] = [];
   const body = str(c.html) || str(c.text) || str(c.body);
   if (body) parts.push(body);
-  parts.push(renderVideo(c.videoUrl));
+  parts.push(renderVideo(c.videoUrl, c));
   parts.push(renderDoc(c.docUrl, c.docLabel));
 
   const inner = parts.filter(Boolean).join("\n");

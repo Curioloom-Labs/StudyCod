@@ -5,6 +5,7 @@ import { Student } from "../../entities/Student";
 import { User } from "../../entities/User";
 import { Membership } from "../../entities/Membership";
 import { ensureMembership } from "./membership";
+import type { EntityManager } from "typeorm";
 
 /**
  * Class self-enrolment via join code (Student↔User unification, dual-mode). A
@@ -106,7 +107,7 @@ export async function enrollViaJoinCode(userId: number, rawCode: string): Promis
 
 // ensureMembership uses the global repo; inside a tx we replicate its upsert via
 // the transaction manager to keep the enrolment atomic.
-async function ensureMembershipInTx(manager: any, userId: number, orgId: number): Promise<void> {
+async function ensureMembershipInTx(manager: EntityManager, userId: number, orgId: number): Promise<void> {
   const repo = manager.getRepository(Membership);
   const existing = await repo.findOne({ where: { user: { id: userId }, organization: { id: orgId } } });
   if (existing) return; // never downgrade an existing higher role

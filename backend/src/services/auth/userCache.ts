@@ -14,6 +14,7 @@
 import { UserMode, UserRole } from "../../entities/User";
 import { runWithRedis, redisKey } from "../redis/sharedRedis";
 import { logger } from "../../utils/logger";
+import { env } from "../../env";
 
 export type CachedUser = {
   id: number;
@@ -23,7 +24,7 @@ export type CachedUser = {
 };
 
 const USER_CACHE_TTL_SECONDS = (() => {
-  const raw = String(process.env.AUTH_USER_CACHE_TTL_SECONDS ?? "").trim();
+  const raw = String(env.AUTH_USER_CACHE_TTL_SECONDS ?? "").trim();
   if (!raw) return 30;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) && n > 0 && n <= 600 ? n : 30;
@@ -43,8 +44,8 @@ export async function getCachedUser(userId: number): Promise<CachedUser | null> 
     const parsed = JSON.parse(raw) as CachedUser;
     if (!parsed || typeof parsed !== "object" || parsed.id !== userId) return null;
     return parsed;
-  } catch (err: any) {
-    logger.warn("[authUserCache] parse error, ignoring entry", { userId, error: err?.message });
+  } catch (err: unknown) {
+    logger.warn("[authUserCache] parse error, ignoring entry", { userId, error: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }

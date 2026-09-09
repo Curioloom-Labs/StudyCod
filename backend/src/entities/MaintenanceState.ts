@@ -17,8 +17,7 @@ export class MaintenanceState {
   })
   title!: string;
   @Column({
-    type: "text",
-    default: ""
+    type: "text"
   })
   message!: string;
   @Column({

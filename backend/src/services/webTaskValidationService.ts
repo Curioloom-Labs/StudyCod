@@ -1,5 +1,11 @@
 export type WebTaskMode = "CODE" | "WEB";
 
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export type WebTaskProfileId =
   | "FREE_WEB"
   | "HTML_ONLY"
@@ -205,10 +211,10 @@ export function normalizeWebTaskFiles(input: unknown): WebTaskFile[] {
   const out = new Map<WebTaskFile["path"], string>();
   if (Array.isArray(input)) {
     for (const item of input) {
-      if (!item || typeof item !== "object") continue;
-      const path = String((item as any).path ?? "").trim() as WebTaskFile["path"];
+      if (!isRecord(item)) continue;
+      const path = String(item.path ?? "").trim() as WebTaskFile["path"];
       if (!WEB_FILE_ORDER.includes(path)) continue;
-      const content = typeof (item as any).content === "string" ? (item as any).content : "";
+      const content = typeof item.content === "string" ? item.content : "";
       out.set(path, content);
     }
   }
@@ -224,8 +230,8 @@ function normalizeRules(input: unknown): WebTaskValidationRule[] {
   if (!Array.isArray(input)) return [];
   const out: WebTaskValidationRule[] = [];
   for (const raw of input) {
-    if (!raw || typeof raw !== "object") continue;
-    const type = String((raw as any).type ?? "").trim() as WebTaskRuleType;
+    if (!isRecord(raw)) continue;
+    const type = String(raw.type ?? "").trim() as WebTaskRuleType;
     if (
       type !== "required_selector" &&
       type !== "forbidden_selector" &&
@@ -241,22 +247,22 @@ function normalizeRules(input: unknown): WebTaskValidationRule[] {
       continue;
     }
 
-    const pointsRaw = Number((raw as any).points ?? 1);
+    const pointsRaw = Number(raw.points ?? 1);
     const points = Number.isFinite(pointsRaw) ? Math.max(0, Math.round(pointsRaw)) : 1;
 
     out.push({
-      id: typeof (raw as any).id === "string" ? (raw as any).id : undefined,
+      id: typeof raw.id === "string" ? raw.id : undefined,
       type,
       points,
-      message: typeof (raw as any).message === "string" ? (raw as any).message : undefined,
-      selector: typeof (raw as any).selector === "string" ? (raw as any).selector : undefined,
-      attribute: typeof (raw as any).attribute === "string" ? (raw as any).attribute : undefined,
-      value: typeof (raw as any).value === "string" ? (raw as any).value : undefined,
-      valuePattern: typeof (raw as any).valuePattern === "string" ? (raw as any).valuePattern : undefined,
-      property: typeof (raw as any).property === "string" ? (raw as any).property : undefined,
-      text: typeof (raw as any).text === "string" ? (raw as any).text : undefined,
-      pattern: typeof (raw as any).pattern === "string" ? (raw as any).pattern : undefined,
-      flags: typeof (raw as any).flags === "string" ? (raw as any).flags : undefined,
+      message: typeof raw.message === "string" ? raw.message : undefined,
+      selector: typeof raw.selector === "string" ? raw.selector : undefined,
+      attribute: typeof raw.attribute === "string" ? raw.attribute : undefined,
+      value: typeof raw.value === "string" ? raw.value : undefined,
+      valuePattern: typeof raw.valuePattern === "string" ? raw.valuePattern : undefined,
+      property: typeof raw.property === "string" ? raw.property : undefined,
+      text: typeof raw.text === "string" ? raw.text : undefined,
+      pattern: typeof raw.pattern === "string" ? raw.pattern : undefined,
+      flags: typeof raw.flags === "string" ? raw.flags : undefined,
     });
   }
   return out;

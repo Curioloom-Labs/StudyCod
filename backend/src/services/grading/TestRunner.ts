@@ -59,7 +59,7 @@ export class TestRunner implements ITestRunner {
     let res: JudgeResponse;
     try {
       res = await judgeWithSemaphore(req);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : String(e);
       for (let i = 0; i < testData.length; i++) {
         testResults.push({
@@ -101,16 +101,16 @@ export class TestRunner implements ITestRunner {
       };
     }
 
-    const byId = new Map<number, (JudgeResponse["tests"][number] & any)>();
+    const byId = new Map<number, JudgeResponse["tests"][number]>();
     for (const t of res.tests || []) {
-      const n = Number((t as any).test_id);
-      if (Number.isFinite(n)) byId.set(n, t as any);
+      const n = Number(t.test_id);
+      if (Number.isFinite(n)) byId.set(n, t);
     }
 
     for (let i = 0; i < testData.length; i++) {
       const expected = testData[i]?.output ?? "";
       const input = testData[i]?.input ?? "";
-      const r: any = byId.get(i + 1);
+      const r = byId.get(i + 1);
       // The judge may return fewer results than tests (crash/timeout after test N).
       // A missing result is a system error, not a wrong answer — don't let it be
       // silently reported as a failed test.

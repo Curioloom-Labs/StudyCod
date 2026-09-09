@@ -71,16 +71,24 @@ const REVIEW_SCHEMA = {
  * submission, defaults unknown severities, drops empty messages, caps count, and
  * sorts by line (general comments — null line — last).
  */
-export function normalizeReviewResult(raw: any, lineCount: number): CodeReviewResult {
-  const summary = String(raw?.summary ?? "").trim().slice(0, 2000);
-  const rawComments = Array.isArray(raw?.comments) ? raw.comments : [];
+export function normalizeReviewResult(raw: unknown, lineCount: number): CodeReviewResult {
+  const value = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : {};
+  const summary = String(value.summary ?? "").trim().slice(0, 2000);
+  const rawComments = Array.isArray(value.comments) ? value.comments : [];
   const comments: ReviewComment[] = [];
   for (const c of rawComments) {
-    const message = String(c?.message ?? "").trim();
+    const comment = c && typeof c === "object" && !Array.isArray(c)
+      ? c as Record<string, unknown>
+      : {};
+    const message = String(comment.message ?? "").trim();
     if (!message) continue;
-    const severity: ReviewSeverity = SEVERITIES.includes(c?.severity) ? c.severity : "suggestion";
+    const severity: ReviewSeverity = SEVERITIES.includes(comment.severity as ReviewSeverity)
+      ? comment.severity as ReviewSeverity
+      : "suggestion";
     let line: number | null = null;
-    const n = Number(c?.line);
+    const n = Number(comment.line);
     if (Number.isInteger(n) && n >= 1 && (lineCount <= 0 || n <= lineCount)) line = n;
     comments.push({ line, severity, message: message.slice(0, 1000) });
     if (comments.length >= MAX_COMMENTS) break;
@@ -104,8 +112,8 @@ export async function reviewCode(params: { code: string; language: string; taskD
       { timeout: 30000, temperature: 0.3, maxTokens: 1500 }
     );
     return normalizeReviewResult(raw, lineCount);
-  } catch (error: any) {
-    logger.warn("[edu/aiCodeReview] provider failed", { message: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[edu/aiCodeReview] provider failed", { message: error instanceof Error ? error.message : String(error) });
     throw new Error("AI_UNAVAILABLE");
   }
 }

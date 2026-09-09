@@ -1,11 +1,53 @@
 import { AppDataSource } from "../../data-source";
 import { logger } from "../../utils/logger";
 import { certificateService } from "./CertificateService";
+import { env } from "../../env";
 
 type QueueName = "generate_batch" | "pdf_render" | "email_send";
+type SqlRow = Record<string, unknown>;
+type QueueJob = {
+  id: number;
+  payload: SqlRow;
+};
+
+function isRecord(value: unknown): value is SqlRow {
+  return typeof value === "object" && value !== null;
+}
+
+function sqlRows(value: unknown): SqlRow[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function batchPayload(value: SqlRow): { contestId: number; forceRegenerate?: boolean } | null {
+  const contestId = Number(value.contestId);
+  return Number.isFinite(contestId) && contestId > 0
+    ? { contestId, forceRegenerate: Boolean(value.forceRegenerate) }
+    : null;
+}
+
+function renderPayload(value: SqlRow): { contestId: number; participantId: number; forceRegenerate?: boolean } | null {
+  const contestId = Number(value.contestId);
+  const participantId = Number(value.participantId);
+  return Number.isFinite(contestId) && contestId > 0 && Number.isFinite(participantId) && participantId > 0
+    ? { contestId, participantId, forceRegenerate: Boolean(value.forceRegenerate) }
+    : null;
+}
+
+function emailPayload(value: SqlRow): { contestId: number; participantId: number; certificateId: string } | null {
+  const contestId = Number(value.contestId);
+  const participantId = Number(value.participantId);
+  const certificateId = typeof value.certificateId === "string" ? value.certificateId.trim() : "";
+  return Number.isFinite(contestId) && contestId > 0 && Number.isFinite(participantId) && participantId > 0 && certificateId
+    ? { contestId, participantId, certificateId }
+    : null;
+}
 
 function readInt(name: string, fallback: number): number {
-  const n = Number.parseInt(String(process.env[name] ?? "").trim(), 10);
+  const n = Number.parseInt(String((env as unknown as Record<string, unknown>)[name] ?? "").trim(), 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
@@ -19,7 +61,7 @@ let runningPdf = 0;
 let runningEmail = 0;
 let runningBatch = 0;
 
-async function reserveJob(queueName: QueueName): Promise<null | { id: number; payload: any }> {
+async function reserveJob(queueName: QueueName): Promise<QueueJob | null> {
   const qr = AppDataSource.createQueryRunner();
   await qr.connect();
   await qr.startTransaction();
@@ -36,9 +78,10 @@ async function reserveJob(queueName: QueueName): Promise<null | { id: number; pa
       FOR UPDATE
       `,
       [queueName]
-    )) as Array<any>;
+    ));
+    const typedRows = sqlRows(rows);
 
-    const row = rows[0];
+    const row = typedRows[0];
     if (!row) {
       await qr.commitTransaction();
       await qr.release();
@@ -56,9 +99,10 @@ async function reserveJob(queueName: QueueName): Promise<null | { id: number; pa
     await qr.commitTransaction();
     await qr.release();
 
-    let payload: any = {};
+    let payload: SqlRow = {};
     try {
-      payload = JSON.parse(String(row.payloadJson ?? "{}"));
+      const parsed: unknown = JSON.parse(String(row.payloadJson ?? "{}"));
+      payload = isRecord(parsed) ? parsed : {};
     } catch {
       payload = {};
     }
@@ -86,9 +130,10 @@ async function failJob(id: number, error: unknown): Promise<void> {
   const rows = (await AppDataSource.query(
     `SELECT attempts, max_attempts FROM certificate_job_queue WHERE id = ? LIMIT 1`,
     [id]
-  )) as Array<any>;
-  const attempts = Number(rows[0]?.attempts ?? 0) + 1;
-  const maxAttempts = Number(rows[0]?.max_attempts ?? 3) || 3;
+  ));
+  const typedRows = sqlRows(rows);
+  const attempts = Number(typedRows[0]?.attempts ?? 0) + 1;
+  const maxAttempts = Number(typedRows[0]?.max_attempts ?? 3) || 3;
 
   if (attempts >= maxAttempts) {
     await AppDataSource.query(
@@ -97,7 +142,7 @@ async function failJob(id: number, error: unknown): Promise<void> {
       SET status = 'failed', attempts = ?, last_error = ?, updated_at = NOW()
       WHERE id = ?
       `,
-      [attempts, String((error as any)?.message ?? error ?? "JOB_FAILED").slice(0, 4000), id]
+      [attempts, errorMessage(error).slice(0, 4000), id]
     );
     return;
   }
@@ -112,7 +157,7 @@ async function failJob(id: number, error: unknown): Promise<void> {
         updated_at = NOW()
     WHERE id = ?
     `,
-    [attempts, String((error as any)?.message ?? error ?? "JOB_FAILED").slice(0, 4000), attempts, id]
+    [attempts, errorMessage(error).slice(0, 4000), attempts, id]
   );
 }
 
@@ -122,7 +167,9 @@ async function tickBatch(): Promise<void> {
   if (!job) return;
   runningBatch++;
   try {
-    await certificateService.processBatchJob(job.payload);
+    const payload = batchPayload(job.payload);
+    if (!payload) throw new Error("INVALID_CERTIFICATE_BATCH_PAYLOAD");
+    await certificateService.processBatchJob(payload);
     await finishJob(job.id);
   } catch (error) {
     logger.error("[certificates] batch job failed", { jobId: job.id, err: error });
@@ -139,7 +186,9 @@ async function tickPdf(): Promise<void> {
     runningPdf++;
     void (async () => {
       try {
-        await certificateService.processRenderJob(job.payload);
+        const payload = renderPayload(job.payload);
+        if (!payload) throw new Error("INVALID_CERTIFICATE_RENDER_PAYLOAD");
+        await certificateService.processRenderJob(payload);
         await finishJob(job.id);
       } catch (error) {
         logger.error("[certificates] render job failed", { jobId: job.id, err: error });
@@ -158,7 +207,9 @@ async function tickEmail(): Promise<void> {
     runningEmail++;
     void (async () => {
       try {
-        await certificateService.processEmailJob(job.payload);
+        const payload = emailPayload(job.payload);
+        if (!payload) throw new Error("INVALID_CERTIFICATE_EMAIL_PAYLOAD");
+        await certificateService.processEmailJob(payload);
         await finishJob(job.id);
       } catch (error) {
         logger.error("[certificates] email job failed", { jobId: job.id, err: error });

@@ -1,4 +1,5 @@
 import type { CompilePlan, LanguageId, RunPlan } from "./types";
+import { readToolPath } from "../config";
 
 /**
  * A selectable compiler/runtime "profile" — the user picks not just a language but a
@@ -25,8 +26,7 @@ export interface CompilerProfile {
 
 /** Read a binary/home path from env with a sane install-location fallback. */
 function envPath(name: string, fallback: string): string {
-  const v = (process.env[name] ?? "").trim();
-  return v || fallback;
+  return readToolPath(name, fallback);
 }
 
 // ---- Java -------------------------------------------------------------------

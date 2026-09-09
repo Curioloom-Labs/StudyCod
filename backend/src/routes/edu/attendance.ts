@@ -49,7 +49,7 @@ router.get("/classes/:classId/attendance", authRequired, async (req: AuthRequest
       records: records.map(r => ({ studentId: r.studentId, status: r.status })),
       summary: summarizeAttendance(records)
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/attendance] get failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -88,7 +88,7 @@ router.post("/classes/:classId/attendance", authRequired, async (req: AuthReques
       records: records.map(r => ({ studentId: r.studentId, status: r.status })),
       summary: summarizeAttendance(records)
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/attendance] set failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

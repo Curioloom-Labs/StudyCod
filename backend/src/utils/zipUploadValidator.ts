@@ -1,4 +1,5 @@
-import type AdmZip from "adm-zip";
+import type SafeZipArchive from "./safeZip";
+import type { SafeZipEntry } from "./safeZip";
 
 // Limits for uploaded ZIP archives. Defends against zip-slip and zip-bomb
 // attacks. Upstream multer limits cap the COMPRESSED size; without these
@@ -17,7 +18,7 @@ export class ZipValidationError extends Error {
   }
 }
 
-export function validateUploadedZip(zip: AdmZip): void {
+export function validateUploadedZip(zip: SafeZipArchive): void {
   const entries = zip.getEntries();
   if (entries.length > ZIP_MAX_ENTRIES) {
     throw new ZipValidationError("ARCHIVE_TOO_MANY_ENTRIES");
@@ -38,8 +39,9 @@ export function validateUploadedZip(zip: AdmZip): void {
     ) {
       throw new ZipValidationError("ARCHIVE_UNSAFE_PATH");
     }
-    const uncompressed = Number((entry.header as any)?.size ?? 0);
-    const compressed = Number((entry.header as any)?.compressedSize ?? 0);
+    const header = entry.header as unknown as Record<string, unknown>;
+    const uncompressed = Number(header.size ?? 0);
+    const compressed = Number(header.compressedSize ?? 0);
     if (!Number.isFinite(uncompressed) || uncompressed < 0) {
       throw new ZipValidationError("ARCHIVE_INVALID_ENTRY");
     }
@@ -72,9 +74,8 @@ export function validateUploadedZip(zip: AdmZip): void {
 // is exceeded — before the inflated buffers are handed to downstream consumers
 // (JSON.parse, DB writes, etc.).
 //
-// NOTE: a single catastrophic entry is still inflated once by adm-zip (it has
-// no streaming API), but the per-entry header cap in `validateUploadedZip`
-// plus this running total bound the realistic blast radius.
+// NOTE: the safe reader applies a hard per-entry output cap before inflation;
+// this running total bound additionally limits cumulative decompression.
 export class ZipExtractionBudget {
   private totalBytes = 0;
 
@@ -87,7 +88,7 @@ export class ZipExtractionBudget {
    * Decompress one entry and charge its real size against the budget.
    * Throws ZipValidationError if the actual bytes exceed per-entry/total caps.
    */
-  readEntry(entry: AdmZip.IZipEntry): Buffer {
+  readEntry(entry: SafeZipEntry): Buffer {
     const buf = entry.getData();
     const len = buf?.length ?? 0;
     if (len > this.maxPerEntryBytes) {
@@ -101,7 +102,7 @@ export class ZipExtractionBudget {
   }
 
   /** Convenience for text entries (utf-8). */
-  readEntryText(entry: AdmZip.IZipEntry): string {
+  readEntryText(entry: SafeZipEntry): string {
     return this.readEntry(entry).toString("utf-8");
   }
 

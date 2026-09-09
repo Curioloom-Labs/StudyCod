@@ -146,13 +146,11 @@ export class Task {
   } | null;
   @Column({
     type: "text",
-    default: "",
     name: "draft_code"
   })
   draftCode!: string;
   @Column({
     type: "text",
-    default: "",
     name: "final_code"
   })
   finalCode!: string;

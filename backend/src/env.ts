@@ -69,6 +69,14 @@ const EnvSchema = z.object({
   FRONTEND_URL: nonEmptyString("http://localhost:5173"),
   BACKEND_PUBLIC_URL: nonEmptyString("http://localhost:4000"),
   CORS_ORIGIN: nonEmptyString("http://localhost:5173"),
+  API_BODY_LIMIT: z.string().optional(),
+  BODY_LIMIT: z.string().optional(),
+  BODY_LIMIT_DEFAULT: z.string().optional(),
+  BODY_LIMIT_LARGE: z.string().optional(),
+  COOKIE_DOMAIN: z.string().optional(),
+  AUTH_COOKIE_SAMESITE: z.string().optional(),
+  AUTH_COOKIE_SECURE: z.string().optional(),
+  METRICS_ENABLED: z.string().optional(),
   JWT_SECRET: requiredInProduction("JWT_SECRET").optional().transform(v => (v ?? "").trim()),
   SESSION_SECRET: requiredInProduction("SESSION_SECRET").optional().transform(v => (v ?? "").trim()),
   DATABASE_URL: z.string().optional(),
@@ -81,6 +89,8 @@ const EnvSchema = z.object({
   DB_CONNECT_TIMEOUT_MS: z.string().optional(),
   DB_ACQUIRE_TIMEOUT_MS: z.string().optional(),
   DB_POOL_QUEUE_LIMIT: z.string().optional(),
+  DB_SLOW_QUERY_MS: z.string().optional(),
+  DB_PATCHES_ENABLED: z.string().optional(),
   TRUST_PROXY: z.string().optional(),
   SESSION_STORE: z.string().optional(),
   REDIS_URL: z.string().optional(),
@@ -95,9 +105,13 @@ const EnvSchema = z.object({
   OPENROUTER_FALLBACK_MODELS: z.string().optional(),
   OPENROUTER_MODEL_FALLBACKS: z.string().optional(),
   OPENROUTER_LOG_MODEL_CANDIDATES: z.string().optional(),
+  OPENROUTER_DISABLE_TIMEOUT: z.string().optional(),
+  OPENROUTER_DISABLE_TIMEOUTS: z.string().optional(),
   EXPOSE_INTERNAL_AI_DIAGNOSTICS: z.string().optional(),
   OPENROUTER_URL: z.string().optional(),
   OPENROUTER_REFERER: z.string().optional(),
+  AI_SERVICE_URL: z.string().optional(),
+  AI_SERVICE_TIMEOUT: z.string().optional(),
   TURNSTILE_SECRET_KEY: z.string().optional(),
   TURNSTILE_VERIFY_URL: z.string().optional(),
   TURNSTILE_ENFORCE_CONTEST_SUBMIT: z.string().optional(),
@@ -110,6 +124,12 @@ const EnvSchema = z.object({
   // EDU SaaS RBAC: when off (default) capability checks run in shadow mode
   // (audit a would-be denial, but allow). Flip on to hard-enforce org roles.
   EDU_RBAC_ENFORCE: z.string().optional(),
+  EDU_APPEAL_WINDOW_DAYS: z.string().optional(),
+  EDU_MAX_ACTIVE_APPEALS_PER_STUDENT: z.string().optional(),
+  EDU_APPEAL_SLA_HOURS: z.string().optional(),
+  EDU_APPEAL_SLA_WARNING_HOURS: z.string().optional(),
+  EDU_APPEAL_ESCALATION_HOURS: z.string().optional(),
+  EDU_TEACHER_DIGEST_WINDOW_DAYS: z.string().optional(),
 
   // Geo-blocking: deny access from sanctioned/aggressor states (RU, BY by
   // default). Detection is hybrid — a trusted proxy country header (Cloudflare
@@ -145,6 +165,9 @@ const EnvSchema = z.object({
   NSJAIL_CHROOT_PYTHON: z.string().optional(),
   JUDGE_LOCK_PATH: z.string().optional(),
   JUDGE_LOCK_STALE_MS: z.string().optional(),
+  JUDGE_HEALTH_CACHE_TTL_MS: z.string().optional(),
+  JUDGE_HEALTH_TIMEOUT_MS: z.string().optional(),
+  JUDGE_TEST_CACHE_SWEEP_MS: z.string().optional(),
 
   // Execution load control (backend -> judge)
   MAX_CONCURRENT_EXECUTIONS: z.string().optional(),
@@ -166,19 +189,137 @@ const EnvSchema = z.object({
   RATE_LIMIT_SHORT_MAX: z.string().optional(),
   RATE_LIMIT_LONG_WINDOW_MS: z.string().optional(),
   RATE_LIMIT_LONG_MAX: z.string().optional(),
+  RATE_LIMIT_INFLIGHT_MAX: z.string().optional(),
+  RATE_LIMIT_INFLIGHT_TTL_MS: z.string().optional(),
 
   // Retry-After header for overload responses
   OVERLOAD_RETRY_AFTER_SECONDS: z.string().optional(),
+  SHUTDOWN_DRAIN_TIMEOUT_MS: z.string().optional(),
+  UNHANDLED_REJECTION_WINDOW_MS: z.string().optional(),
+  UNHANDLED_REJECTION_FATAL_THRESHOLD: z.string().optional(),
 
   // Database startup flow
   RUN_MIGRATIONS_ON_STARTUP: z.string().optional(),
   AUTO_BOOTSTRAP_MIGRATION_HISTORY_ON_STARTUP: z.string().optional(),
+  SEED_TOPICS_ON_STARTUP: z.string().optional(),
 
   // Web task feature flags/limits
   WEB_TASKS_ENABLED: z.string().optional(),
   WEB_TASK_MAX_FILE_SIZE: z.string().optional(),
   WEB_TASK_MAX_TOTAL_SIZE: z.string().optional(),
   WEB_TASK_PREVIEW_RATE_LIMIT: z.string().optional(),
+  UPLOADS_DIR: z.string().optional(),
+  LSP_PROXY_URL: z.string().optional(),
+  LSP_PROXY_SECRET: z.string().optional(),
+  MULTI_FILE_MAX_TOTAL_BYTES: z.string().optional(),
+  MULTI_FILE_MAX_PER_FILE_BYTES: z.string().optional(),
+  MULTI_FILE_MAX_FILES: z.string().optional(),
+
+  // Compatibility variables retained for integrations and legacy modules.
+  APP_ROOT: z.string().optional(),
+  AUTH_GOOGLE_EXCHANGE_COOKIE_SAMESITE: z.string().optional(),
+  AUTH_GOOGLE_EXCHANGE_COOKIE_SECURE: z.string().optional(),
+  AUTH_GOOGLE_EXCHANGE_HEALTH_ENABLED: z.string().optional(),
+  AUTH_STUDENT_UILANG_CACHE_TTL_SECONDS: z.string().optional(),
+  AUTH_TURNSTILE_HEALTH_ENABLED: z.string().optional(),
+  BREVO_API_KEY: z.string().optional(),
+  CERTIFICATES_STORAGE_DIR: z.string().optional(),
+  CHROME_BIN: z.string().optional(),
+  CHROMIUM_PATH: z.string().optional(),
+  DISABLED_JUDGE_LANGUAGES: z.string().optional(),
+  DOTNET_CLI_HOME: z.string().optional(),
+  DOTNET_CLI_TELEMETRY_OPTOUT: z.string().optional(),
+  DOTNET_GCC: z.string().optional(),
+  DOTNET_GCConserveMemory: z.string().optional(),
+  DOTNET_NOLOGO: z.string().optional(),
+  DOTNET_ROOT: z.string().optional(),
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: z.string().optional(),
+  EDU_HINTS_AB_ENABLED: z.string().optional(),
+  EDU_HINTS_AB_ROLLOUT_PERCENT: z.string().optional(),
+  EDU_QA_STUDENT_USERNAME: z.string().optional(),
+  EDU_TESTDATA_AI_DISABLE_DEADLINE: z.string().optional(),
+  EMAIL_FROM: z.string().optional(),
+  EMAIL_FROM_NOTIFICATIONS: z.string().optional(),
+  EMAIL_PROVIDER: z.string().optional(),
+  EMAIL_SMTP_HOST: z.string().optional(),
+  EMAIL_SMTP_PASS: z.string().optional(),
+  EMAIL_SMTP_PORT: z.string().optional(),
+  EMAIL_SMTP_SECURE: z.string().optional(),
+  EMAIL_SMTP_USER: z.string().optional(),
+  GOOGLE_CALLBACK_URL: z.string().optional(),
+  GOOGLE_CHROME_BIN: z.string().optional(),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  JUDGE_BACKEND_TIMEOUT_CAP_MS: z.string().optional(),
+  JUDGE_BACKEND_TIMEOUT_MS: z.string().optional(),
+  JUDGE_CLIENT_TIMEOUT_CAP_MS: z.string().optional(),
+  JUDGE_DISABLED_LANGUAGES: z.string().optional(),
+  JUDGE_LOG_SLOW_MS: z.string().optional(),
+  JUDGE_LOG_SPAWN: z.string().optional(),
+  JUDGE_MAX_INPUT_BYTES: z.string().optional(),
+  JUDGE_MAX_TEST_INPUT_BYTES: z.string().optional(),
+  JUDGE_MAX_TEST_OUTPUT_BYTES: z.string().optional(),
+  JUDGE_MAX_TESTS: z.string().optional(),
+  CERTIFICATE_WORKER_INTERVAL_MS: z.string().optional(),
+  CERTIFICATE_PDF_WORKER_CONCURRENCY: z.string().optional(),
+  CERTIFICATE_EMAIL_WORKER_CONCURRENCY: z.string().optional(),
+  JUDGE_TEST_CACHE_DIR: z.string().optional(),
+  JUDGE_TEST_CACHE_TTL_MS: z.string().optional(),
+  JUDGE_TESTS_MODE: z.string().optional(),
+  LIBRARY_ARCHIVE_UPLOAD_MAX_FILES: z.string().optional(),
+  LIBRARY_ARCHIVE_UPLOAD_MAX_MB: z.string().optional(),
+  LIBRARY_CHECK_PUBLIC_COMPACT_LIMIT: z.string().optional(),
+  LIBRARY_CHECK_PUBLIC_RESULTS_LIMIT: z.string().optional(),
+  LLM_MEMORY_CACHE_MAX_ENTRIES: z.string().optional(),
+  LLM_PROVIDER: z.string().optional(),
+  LOCAL_LLM_API_KEY: z.string().optional(),
+  LOCAL_LLM_MODEL: z.string().optional(),
+  LOCAL_LLM_URL: z.string().optional(),
+  LOCAL_LLM_TIMEOUT_MS: z.string().optional(),
+  MAIL_SIGNATURE_FILE: z.string().optional(),
+  NUGET_PACKAGES: z.string().optional(),
+  OPENROUTER_ADMIN_MODEL: z.string().optional(),
+  OPENROUTER_KEY_DISABLE_MS: z.string().optional(),
+  OPENROUTER_RATE_LIMIT_COOLDOWN_MS: z.string().optional(),
+  OPENROUTER_RETRY_BASE_DELAY_MS: z.string().optional(),
+  OPENROUTER_RETRY_MAX_DELAY_MS: z.string().optional(),
+  OPENROUTER_SERVER_ERROR_COOLDOWN_MS: z.string().optional(),
+  OPENROUTER_TRANSPORT_TIMEOUT_MS: z.string().optional(),
+  PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: z.string().optional(),
+  PLAYWRIGHT_EXECUTABLE_PATH: z.string().optional(),
+  PUPPETEER_EXECUTABLE_PATH: z.string().optional(),
+  REPO_ROOT: z.string().optional(),
+  SEED_TOPICS_FORCE_SYNC: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_SECURE: z.string().optional(),
+  SMTP_USER: z.string().optional(),
+  STUDYCOD_MAIL_IMAP_HOST: z.string().optional(),
+  STUDYCOD_MAIL_IMAP_PASS: z.string().optional(),
+  STUDYCOD_MAIL_IMAP_PORT: z.string().optional(),
+  STUDYCOD_MAIL_IMAP_SECURE: z.string().optional(),
+  STUDYCOD_MAIL_IMAP_USER: z.string().optional(),
+  STUDYCOD_MAIL_SMTP_FROM: z.string().optional(),
+  STUDYCOD_MAIL_SMTP_HOST: z.string().optional(),
+  STUDYCOD_MAIL_SMTP_PASS: z.string().optional(),
+  STUDYCOD_MAIL_SMTP_PORT: z.string().optional(),
+  STUDYCOD_MAIL_SMTP_SECURE: z.string().optional(),
+  STUDYCOD_MAIL_SMTP_USER: z.string().optional(),
+  STUDYCOD_REPO_ROOT: z.string().optional(),
+  TASKS_GENERATE_BUDGET_MS: z.string().optional(),
+  TASKS_GENERATE_COOLDOWN_MAX_MS: z.string().optional(),
+  TASKS_GENERATE_COOLDOWN_MIN_MS: z.string().optional(),
+  TASKS_GENERATE_DISABLE_DEADLINE: z.string().optional(),
+  TASKS_GENERATE_QUIZ_BUDGET_MS: z.string().optional(),
+  TASKS_GENERATE_TASK_BUDGET_MS: z.string().optional(),
+  TASKS_HINT_TIMEOUT_MS: z.string().optional(),
+  TASKS_FORCE_STDIN_AFTER_INPUT: z.string().optional(),
+  TASKS_FORCE_STDIN_FROM_TOPIC_INDEX: z.string().optional(),
+  TASKS_STRICT_TEST_CONSISTENCY: z.string().optional(),
+  TASKS_TEST_CONSISTENCY_RETRY_ATTEMPTS: z.string().optional(),
+  TASKS_TEST_DATA_MAX_ATTEMPTS: z.string().optional(),
+  TOPICS_AI_DISABLE_DEADLINE: z.string().optional(),
 
   // LLM task orchestrator tunables
   LLM_TASK_TIMEOUT_MS: z.string().optional(),
@@ -403,6 +544,18 @@ const EnvSchema = z.object({
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 20;
     })(),
+    __rateLimitInFlightMax: (() => {
+      const raw = (env.RATE_LIMIT_INFLIGHT_MAX ?? "").trim();
+      if (!raw) return undefined;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    })(),
+    __rateLimitInFlightTtlMs: (() => {
+      const raw = (env.RATE_LIMIT_INFLIGHT_TTL_MS ?? "").trim();
+      if (!raw) return undefined;
+      const n = Number.parseInt(raw, 10);
+      return Number.isFinite(n) && n > 0 ? n : undefined;
+    })(),
     __overloadRetryAfterSeconds: (() => {
       const raw = (env.OVERLOAD_RETRY_AFTER_SECONDS ?? "").trim();
       if (!raw) return 3;
@@ -557,4 +710,21 @@ const EnvSchema = z.object({
   }
 });
 export type AppEnv = z.infer<typeof EnvSchema>;
-export const env: AppEnv = EnvSchema.parse(process.env);
+const parsedEnv = EnvSchema.parse(process.env);
+
+// Keep one typed configuration boundary while allowing test suites and local
+// maintenance scripts to change optional string settings between operations.
+// Derived values (for example __redisEnabled) remain stable for the process;
+// only declared raw string variables are refreshed from the runtime environment.
+export const env: AppEnv = new Proxy(parsedEnv, {
+  get(target, property, receiver) {
+    if (typeof property === "string") {
+      const targetValue = (target as unknown as Record<string, unknown>)[property];
+      const runtimeValue = process.env[property];
+      if ((typeof targetValue === "string" || targetValue === undefined) && runtimeValue !== undefined) {
+        return runtimeValue;
+      }
+    }
+    return Reflect.get(target, property, receiver);
+  },
+});

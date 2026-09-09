@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { effectiveClassRole, decideClassAccess, type ClassAccessFacts } from "./classAccess";
+import { CAPABILITIES, roleCan } from "./rbac";
 
 const facts = (isOwner: boolean, orgRole: ClassAccessFacts["orgRole"]): ClassAccessFacts => ({
   isOwner,
@@ -61,4 +62,19 @@ test("a STUDENT org role grants no management capability on the class", () => {
   assert.equal(effectiveClassRole(f), "STUDENT");
   assert.equal(decideClassAccess(f, "CONTENT_AUTHOR"), false);
   assert.equal(decideClassAccess(f, "GRADE_EDIT"), false);
+});
+
+test("authorization matrix denies every cross-class staff action and preserves role boundaries", () => {
+  for (const capability of CAPABILITIES) {
+    assert.equal(decideClassAccess(facts(false, "TEACHER"), capability), false, `non-owner teacher: ${capability}`);
+    assert.equal(decideClassAccess(facts(false, "ASSISTANT"), capability), false, `non-owner assistant: ${capability}`);
+  }
+
+  for (const capability of CAPABILITIES) {
+    assert.equal(roleCan("ORG_ADMIN", capability), true, `org admin: ${capability}`);
+  }
+  for (const capability of ["MEMBER_MANAGE", "ORG_SETTINGS"] as const) {
+    assert.equal(roleCan("TEACHER", capability), false, `teacher boundary: ${capability}`);
+    assert.equal(roleCan("ASSISTANT", capability), false, `assistant boundary: ${capability}`);
+  }
 });

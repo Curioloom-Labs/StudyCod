@@ -18,8 +18,9 @@ import {
   type LearningCourseItem,
   type LearningProject,
 } from "../../lib/api/learningCatalog";
-import type { CodeFile } from "../../lib/api/library";
+import type { CodeFile, LibraryTaskProjectSpec } from "../../lib/api/library";
 import { tr } from "../../i18n";
+import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 const kindLabel = (kind: LearningCourseItem["kind"]): string => {
   switch (kind) {
@@ -47,6 +48,18 @@ const projectMarkdown = (item: LearningCourseItem): string => {
     .replace(/^##\s+[^\n]+\n*/i, "")
     .trim();
 };
+
+function toIdeProjectSpec(spec: NonNullable<LearningProject["projectSpec"]>): LibraryTaskProjectSpec {
+  return {
+    version: 1,
+    kind: "MINI_PROJECT",
+    estimatedMinutes: Number(spec.estimatedMinutes ?? 30),
+    skills: spec.skills ?? [],
+    inputFormat: spec.inputFormat,
+    outputFormat: spec.outputFormat,
+    milestones: spec.milestones,
+  };
+}
 
 type CourseProjectPracticeProps = {
   courseId: string;
@@ -88,8 +101,8 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
         setMilestoneIds(loaded.progress.milestoneIds || []);
         setError(null);
       })
-      .catch((caught: any) => {
-        if (!cancelled) setError(caught?.response?.data?.message === "COURSE_SEQUENCE_LOCKED"
+      .catch((caught: unknown) => {
+        if (!cancelled) setError(getErrorMessageFromUnknown(caught, "") === "COURSE_SEQUENCE_LOCKED"
           ? tr("Спочатку заверши попередні теми курсу.", "Complete the previous course topics first.")
           : tr("Не вдалося завантажити мініпроєкт.", "Could not load the mini-project."));
       })
@@ -120,8 +133,8 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
       if (response?.project) setProject((current) => current ? { ...current, ...response.project } : current);
       setMessage(tr("Мініпроєкт подано й зараховано.", "Mini-project submitted and completed."));
       setError(null);
-    } catch (caught: any) {
-      setError(caught?.response?.data?.message === "PROJECT_REQUIREMENTS_INCOMPLETE"
+    } catch (caught: unknown) {
+      setError(getErrorMessageFromUnknown(caught, "") === "PROJECT_REQUIREMENTS_INCOMPLETE"
         ? tr("Спочатку пройди перевірку, відміть усі milestones і збережи код.", "Run a check, complete every milestone, and save the code first.")
         : tr("Не вдалося подати мініпроєкт.", "Could not submit the mini-project."));
     }
@@ -134,9 +147,16 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
     setError(null);
     try {
       const result = await runCatalogProject(item.id, files, stdin);
-      setRunResult(result);
-    } catch (caught: any) {
-      setError(caught?.response?.data?.message === "JUDGE_UNAVAILABLE"
+      setRunResult(result ? {
+        stdout: result.stdout ?? "",
+        stderr: result.stderr ?? "",
+        exitCode: result.exitCode ?? (result.success ? 0 : 1),
+        success: result.success ?? false,
+        timeMs: result.timeMs,
+        memoryKb: result.memoryKb,
+      } : null);
+    } catch (caught: unknown) {
+      setError(getErrorMessageFromUnknown(caught, "") === "JUDGE_UNAVAILABLE"
         ? tr("Перевіряльник тимчасово недоступний.", "The judge is temporarily unavailable.")
         : tr("Не вдалося запустити код.", "Could not run the code."));
     } finally {
@@ -157,7 +177,7 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
         testsTotal: Number(result?.testsTotal || 0),
         score: Number(result?.score || 0),
         maxScore: Number(result?.maxScore || 100),
-        publicTestResults: Array.isArray(result?.tests) ? result.tests.map((test: any, index: number) => ({
+        publicTestResults: Array.isArray(result?.tests) ? result.tests.map((test, index) => ({
           testId: Number(test.test_id || index + 1),
           input: test.input,
           expectedOutput: test.expected,
@@ -173,8 +193,8 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
       setMessage(result?.passed
         ? tr(`Оцінка: ${nextCheck.score}/${nextCheck.maxScore}. Код пройшов перевірку — тепер зафіксуй докази й подай проєкт.`, `Score: ${nextCheck.score}/${nextCheck.maxScore}. Code check passed — complete the evidence and submit the project.`)
         : tr(`Оцінка: ${nextCheck.score}/${nextCheck.maxScore}. Виправ код і спробуй ще раз.`, `Score: ${nextCheck.score}/${nextCheck.maxScore}. Fix the code and try again.`));
-    } catch (caught: any) {
-      setError(caught?.response?.data?.message === "PROJECT_CHECK_NOT_CONFIGURED"
+    } catch (caught: unknown) {
+      setError(getErrorMessageFromUnknown(caught, "") === "PROJECT_CHECK_NOT_CONFIGURED"
         ? tr("Для цього мініпроєкту ще не налаштовані тести.", "Tests are not configured for this mini-project yet.")
         : tr("Не вдалося перевірити мініпроєкт.", "Could not check the mini-project."));
     } finally {
@@ -188,7 +208,7 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
     title: projectTitle(item.title),
     description: projectMarkdown(item),
     section: tr("Мініпроєкт курсу", "Course mini-project"),
-    projectSpec: project.projectSpec as any,
+    projectSpec: project.projectSpec ? toIdeProjectSpec(project.projectSpec) : null,
   } : null;
 
   return <main className="min-h-full bg-bg-base px-3 py-4 text-text-primary sm:px-5 sm:py-6 lg:px-8">

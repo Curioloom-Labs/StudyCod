@@ -65,8 +65,8 @@ function extractTaskExample(task: Task, topicTitle: string): TaskExample | null 
       }],
       codeTemplate: task.template
     };
-  } catch (err: any) {
-    logger.warn('[task-examples] extract failed', { message: err?.message });
+  } catch (err: unknown) {
+    logger.warn('[task-examples] extract failed', { message: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }
@@ -82,10 +82,10 @@ export async function getTaskExamples(params: {
       where: {
         lang: params.lang,
         completed: 1
-      } as any,
+      },
       order: {
         createdAt: 'DESC'
-      } as any,
+      },
       take: 20
     });
     const examples: TaskExample[] = [];
@@ -104,8 +104,8 @@ export async function getTaskExamples(params: {
       }
     }
     return examples;
-  } catch (err: any) {
-    logger.warn('[task-examples] query failed', { message: err?.message });
+  } catch (err: unknown) {
+    logger.warn('[task-examples] query failed', { message: err instanceof Error ? err.message : String(err) });
     return [];
   }
 }

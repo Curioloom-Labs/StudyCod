@@ -2,9 +2,10 @@ import { Router, type Request, type Response } from "express";
 import axios, { AxiosError } from "axios";
 import { authRequired } from "../middleware/authMiddleware";
 import { logger } from "../utils/logger";
+import { env } from "../env";
 
 const router = Router();
-const bridgeUrl = String(process.env.LSP_PROXY_URL || "http://127.0.0.1:4010").replace(/\/+$/, "");
+const bridgeUrl = String(env.LSP_PROXY_URL || "http://127.0.0.1:4010").replace(/\/+$/, "");
 
 function proxyPath(req: Request): string {
   const suffix = req.path.replace(/^\/lsp(?=\/|$)/, "");
@@ -20,7 +21,7 @@ router.use(async (req: Request, res: Response) => {
       params: req.query,
       data: req.body,
       headers: {
-        "x-studycod-lsp-secret": String(process.env.LSP_PROXY_SECRET || ""),
+        "x-studycod-lsp-secret": String(env.LSP_PROXY_SECRET || ""),
         accept: "application/json"
       },
       timeout: 35_000,

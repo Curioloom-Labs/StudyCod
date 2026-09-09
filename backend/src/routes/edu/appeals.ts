@@ -23,6 +23,13 @@ import {
   saveControlSummaryGradeForNewSystemWithManager,
 } from "../../services/edu/controlWorkGrading";
 import { logger } from "../../utils/logger";
+import {
+  EDU_APPEAL_ESCALATION_HOURS,
+  EDU_APPEAL_SLA_HOURS,
+  EDU_APPEAL_SLA_WARNING_HOURS,
+  EDU_APPEAL_WINDOW_DAYS,
+  EDU_MAX_ACTIVE_APPEALS_PER_STUDENT,
+} from "../../config/eduConfig";
 
 const router = Router();
 
@@ -33,28 +40,18 @@ const summaryGradeRepo = () => AppDataSource.getRepository(SummaryGrade);
 const appealRepo = () => AppDataSource.getRepository(GradeAppeal);
 const appealMessageRepo = () => AppDataSource.getRepository(GradeAppealMessage);
 
-const APPEAL_WINDOW_DAYS = Number.isFinite(Number(process.env.EDU_APPEAL_WINDOW_DAYS))
-  ? Math.max(1, Math.floor(Number(process.env.EDU_APPEAL_WINDOW_DAYS)))
-  : 7;
+const APPEAL_WINDOW_DAYS = EDU_APPEAL_WINDOW_DAYS;
 const APPEAL_WINDOW_MS = APPEAL_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
-const MAX_ACTIVE_APPEALS_PER_STUDENT = Number.isFinite(Number(process.env.EDU_MAX_ACTIVE_APPEALS_PER_STUDENT))
-  ? Math.max(1, Math.floor(Number(process.env.EDU_MAX_ACTIVE_APPEALS_PER_STUDENT)))
-  : 5;
+const MAX_ACTIVE_APPEALS_PER_STUDENT = EDU_MAX_ACTIVE_APPEALS_PER_STUDENT;
 
 const ACTIVE_APPEAL_STATUSES: GradeAppealStatus[] = ["SUBMITTED", "IN_REVIEW", "NEEDS_INFO"];
 
-const APPEAL_SLA_HOURS = Number.isFinite(Number(process.env.EDU_APPEAL_SLA_HOURS))
-  ? Math.max(1, Math.floor(Number(process.env.EDU_APPEAL_SLA_HOURS)))
-  : 48;
+const APPEAL_SLA_HOURS = EDU_APPEAL_SLA_HOURS;
 
-const APPEAL_SLA_WARNING_HOURS = Number.isFinite(Number(process.env.EDU_APPEAL_SLA_WARNING_HOURS))
-  ? Math.max(1, Math.floor(Number(process.env.EDU_APPEAL_SLA_WARNING_HOURS)))
-  : 8;
+const APPEAL_SLA_WARNING_HOURS = EDU_APPEAL_SLA_WARNING_HOURS;
 
-const APPEAL_ESCALATION_HOURS = Number.isFinite(Number(process.env.EDU_APPEAL_ESCALATION_HOURS))
-  ? Math.max(APPEAL_SLA_HOURS, Math.floor(Number(process.env.EDU_APPEAL_ESCALATION_HOURS)))
-  : 72;
+const APPEAL_ESCALATION_HOURS = EDU_APPEAL_ESCALATION_HOURS;
 
 const createAppealBodySchema = z.object({
   targetType: z.enum(GRADE_APPEAL_TARGET_TYPES),
@@ -344,9 +341,9 @@ router.post("/appeals", authRequired, async (req: AuthRequest, res: Response) =>
 
     const activeAppealsCount = await appealRepo().count({
       where: {
-        student: { id: student.id } as any,
-        status: In(ACTIVE_APPEAL_STATUSES as any),
-      } as any,
+        student: { id: student.id },
+        status: In(ACTIVE_APPEAL_STATUSES),
+      },
     });
 
     if (activeAppealsCount >= MAX_ACTIVE_APPEALS_PER_STUDENT) {
@@ -410,7 +407,7 @@ router.post("/appeals", authRequired, async (req: AuthRequest, res: Response) =>
       message: "APPEAL_CREATED",
       appeal: fullAppeal ? serializeAppeal(fullAppeal) : serializeAppeal(appeal),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/appeals] failed to create appeal", { requestId: req.requestId, studentId: req.studentId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -438,7 +435,7 @@ router.get("/appeals/mine", authRequired, async (req: AuthRequest, res: Response
       .getMany();
 
     return res.json({ appeals: appeals.map(serializeAppeal) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/appeals] failed to list student appeals", { requestId: req.requestId, studentId: req.studentId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -470,7 +467,7 @@ router.get("/appeals/:appealId", authRequired, async (req: AuthRequest, res: Res
 
     const messages = await loadAppealMessages(appealId);
     return res.json({ appeal: serializeAppeal(appeal), messages: messages.map(serializeAppealMessage) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/appeals] failed to get appeal detail", { requestId: req.requestId, studentId: req.studentId, userId: req.userId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -521,7 +518,7 @@ router.post("/appeals/:appealId/messages", authRequired, async (req: AuthRequest
     await appealRepo().save(appeal);
 
     return res.status(201).json({ message: "APPEAL_MESSAGE_POSTED", item: serializeAppealMessage(message) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/appeals] failed to post student appeal message", { requestId: req.requestId, studentId: req.studentId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -575,7 +572,7 @@ router.patch("/appeals/:appealId/cancel", authRequired, async (req: AuthRequest,
     await appealMessageRepo().save(systemMessage);
 
     return res.json({ message: "APPEAL_CANCELLED", appeal: serializeAppeal(appeal) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/appeals] failed to cancel appeal", { requestId: req.requestId, studentId: req.studentId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -620,7 +617,7 @@ router.get("/classes/:classId/appeals", authRequired, async (req: AuthRequest, r
     const appeals = await qb.getMany();
 
     return res.json({ appeals: appeals.map(serializeAppeal) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/appeals] failed to list class appeals", { requestId: req.requestId, userId: req.userId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -649,7 +646,7 @@ router.get("/classes/:classId/appeals/:appealId", authRequired, async (req: Auth
 
     const messages = await loadAppealMessages(appealId);
     return res.json({ appeal: serializeAppeal(appeal), messages: messages.map(serializeAppealMessage) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/appeals] failed to get class appeal detail", { requestId: req.requestId, userId: req.userId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -707,7 +704,7 @@ router.patch("/classes/:classId/appeals/:appealId/status", authRequired, async (
     }
 
     return res.json({ message: "APPEAL_STATUS_UPDATED", appeal: serializeAppeal(appeal) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/appeals] failed to update appeal status", { requestId: req.requestId, userId: req.userId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -756,7 +753,7 @@ router.post("/classes/:classId/appeals/:appealId/messages", authRequired, async 
     await appealRepo().save(appeal);
 
     return res.status(201).json({ message: "APPEAL_MESSAGE_POSTED", item: serializeAppealMessage(message) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/appeals] failed to post teacher appeal message", { requestId: req.requestId, userId: req.userId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -896,7 +893,7 @@ router.post("/classes/:classId/appeals/:appealId/resolve", authRequired, async (
     }
 
     return res.json({ message: "APPEAL_RESOLVED", appeal: serializeAppeal(updatedAppeal) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof Error && error.message === "APPEAL_NOT_FOUND") {
       return res.status(404).json({ message: "APPEAL_NOT_FOUND" });
     }

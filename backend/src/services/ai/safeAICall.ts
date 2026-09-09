@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { getLLMOrchestrator } from '../llm/LLMOrchestrator';
+import { getLLMOrchestrator, type LLMTaskLanguage } from '../llm/LLMOrchestrator';
 import { AIResponseValidator, AIValidationError, makeAIValidationError } from '../llm/AIResponseValidator';
 import { logger } from '../../utils/logger';
 import { getCurriculumPolicyViolationForGeneratedTask, rewriteNonJudgeablePracticalTaskToJudgeable } from './curriculumPolicy';
@@ -9,7 +9,66 @@ export interface AIError {
   statusCode: number;
   message: string;
   error?: string;
-  details?: any;
+  details?: Record<string, unknown>;
+}
+
+type JsonObject = Record<string, unknown>;
+
+function asJsonObject(value: unknown): JsonObject {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error) return String(error.message);
+  return String(error ?? "");
+}
+
+type TaskIoType = "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
+type TaskType = "PRACTICE" | "CONTROL";
+
+function requiredString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${field} is required and must be a non-empty string`);
+  }
+  return value;
+}
+
+function requiredTaskLanguage(value: unknown): LLMTaskLanguage {
+  if (value === "JAVA" || value === "PYTHON" || value === "CPP") return value;
+  throw new Error('language must be "JAVA", "PYTHON" or "CPP"');
+}
+
+function requiredTaskType(value: unknown): TaskType {
+  if (value === "PRACTICE" || value === "CONTROL") return value;
+  throw new Error('taskType must be "PRACTICE" or "CONTROL"');
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function optionalTaskIoTypes(value: unknown): TaskIoType[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const allowed: TaskIoType[] = ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"];
+  const values = value.filter((item): item is TaskIoType =>
+    typeof item === "string" && allowed.includes(item as TaskIoType)
+  );
+  return values.length > 0 ? values : undefined;
+}
+
+function optionalTaskIoType(value: unknown): TaskIoType | undefined {
+  return value === "STDIN_STDOUT" || value === "NO_INPUT_FIXED_OUTPUT" || value === "NO_INPUT_FREE_OUTPUT"
+    ? value
+    : undefined;
 }
 
 function computeDefaultRetryAfterMs(statusCode: number): number {
@@ -117,10 +176,8 @@ function setSimilarityMetrics(aTokens: string[], bTokens: string[]): { jaccard: 
   return { jaccard, overlap, intersection: inter, aSize: aSet.size, bSize: bSet.size };
 }
 
-function sanitizeParams(mode: AIMode, params: any): any {
-  const p = params && typeof params === 'object' ? {
-    ...params
-  } : {};
+function sanitizeParams(mode: AIMode, params: unknown): JsonObject {
+  const p: JsonObject = { ...asJsonObject(params) };
 
   if ('topicTitle' in p) p.topicTitle = sanitizeText(p.topicTitle, 200);
   if ('theory' in p) p.theory = sanitizeText(p.theory, 12_000);
@@ -137,28 +194,40 @@ function sanitizeParams(mode: AIMode, params: any): any {
 
     if (typeof p.previousTasks === 'string') p.previousTasks = sanitizeText(p.previousTasks, 4000);
 
-    if (Array.isArray(p.previousTaskPractices)) {
-      p.previousTaskPractices = p.previousTaskPractices
-        .map((s: any) => sanitizeText(s, 2000))
-        .filter((s: string) => s.trim().length > 0)
+    const previousTaskPractices = Array.isArray(p.previousTaskPractices)
+      ? p.previousTaskPractices as unknown[]
+      : undefined;
+    if (previousTaskPractices) {
+      const sanitizedPreviousTaskPractices = previousTaskPractices
+        .map(s => sanitizeText(s, 2000))
+        .filter(s => s.trim().length > 0)
         .slice(0, 8);
-      if (p.previousTaskPractices.length === 0) delete p.previousTaskPractices;
+      if (sanitizedPreviousTaskPractices.length === 0) delete p.previousTaskPractices;
+      else p.previousTaskPractices = sanitizedPreviousTaskPractices;
     }
-    if (Array.isArray(p.previousTaskTitles)) {
-      p.previousTaskTitles = p.previousTaskTitles
-        .map((s: any) => sanitizeText(s, 200))
-        .filter((s: string) => s.trim().length > 0)
+    const previousTaskTitles = Array.isArray(p.previousTaskTitles)
+      ? p.previousTaskTitles as unknown[]
+      : undefined;
+    if (previousTaskTitles) {
+      const sanitizedPreviousTaskTitles = previousTaskTitles
+        .map(s => sanitizeText(s, 200))
+        .filter(s => s.trim().length > 0)
         .slice(0, 12);
-      if (p.previousTaskTitles.length === 0) delete p.previousTaskTitles;
+      if (sanitizedPreviousTaskTitles.length === 0) delete p.previousTaskTitles;
+      else p.previousTaskTitles = sanitizedPreviousTaskTitles;
     }
 
-    if (Array.isArray(p.allowedIoTypes)) {
-      const allowed = new Set(["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"]);
-      p.allowedIoTypes = p.allowedIoTypes
-        .map((s: any) => typeof s === 'string' ? s.trim() : '')
-        .filter((s: string) => allowed.has(s))
+    const allowedIoTypes = Array.isArray(p.allowedIoTypes)
+      ? p.allowedIoTypes as unknown[]
+      : undefined;
+    if (allowedIoTypes) {
+      const allowed = new Set<TaskIoType>(["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"]);
+      const sanitizedAllowedIoTypes = allowedIoTypes
+        .map(s => typeof s === 'string' ? s.trim() : '')
+        .filter((s): s is TaskIoType => allowed.has(s as TaskIoType))
         .slice(0, 3);
-      if (p.allowedIoTypes.length === 0) delete p.allowedIoTypes;
+      if (sanitizedAllowedIoTypes.length === 0) delete p.allowedIoTypes;
+      else p.allowedIoTypes = sanitizedAllowedIoTypes;
     }
   }
   if (mode === 'generateQuiz') {
@@ -202,7 +271,7 @@ function isSemanticValidationError(errorMessage: string): boolean {
     msg.includes('ANCHOR_TOO_VAGUE') ||
     msg.includes('TOPIC_MISMATCH_HARD_FAIL');
 }
-function validateInputParams(mode: AIMode, params: any): void {
+function validateInputParams(mode: AIMode, params: JsonObject): void {
   switch (mode) {
     case 'generateTask':
       if (!params.topicTitle || typeof params.topicTitle !== 'string' || !params.topicTitle.trim()) {
@@ -211,7 +280,7 @@ function validateInputParams(mode: AIMode, params: any): void {
       if (!params.theory || typeof params.theory !== 'string' || !params.theory.trim()) {
         throw new Error('theory is required and must be a non-empty string');
       }
-      if (!params.lang || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
+      if (typeof params.lang !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
         throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       if (typeof params.numInTopic !== 'number' || params.numInTopic < 1) {
@@ -231,12 +300,12 @@ function validateInputParams(mode: AIMode, params: any): void {
       if (!params.topicTitle || typeof params.topicTitle !== 'string' || !params.topicTitle.trim()) {
         throw new Error('topicTitle is required and must be a non-empty string');
       }
-      if (!params.lang || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
+      if (typeof params.lang !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
         throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       break;
     case 'generateQuiz':
-      if (!params.lang || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
+      if (typeof params.lang !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
         throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       if (!params.prevTopics || typeof params.prevTopics !== 'string' || !params.prevTopics.trim()) {
@@ -250,10 +319,10 @@ function validateInputParams(mode: AIMode, params: any): void {
       if (!params.topicTitle || typeof params.topicTitle !== 'string' || !params.topicTitle.trim()) {
         throw new Error('topicTitle is required and must be a non-empty string');
       }
-      if (!params.taskType || !['PRACTICE', 'CONTROL'].includes(params.taskType)) {
+      if (typeof params.taskType !== 'string' || !['PRACTICE', 'CONTROL'].includes(params.taskType)) {
         throw new Error('taskType is required and must be "PRACTICE" or "CONTROL"');
       }
-      if (!params.language || !['JAVA', 'PYTHON', 'CPP'].includes(params.language)) {
+      if (typeof params.language !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.language)) {
         throw new Error('language is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       if (params.difficulty !== undefined && (typeof params.difficulty !== 'number' || params.difficulty < 1 || params.difficulty > 5)) {
@@ -264,7 +333,7 @@ function validateInputParams(mode: AIMode, params: any): void {
       if (!params.topicTitle || typeof params.topicTitle !== 'string' || !params.topicTitle.trim()) {
         throw new Error('topicTitle is required and must be a non-empty string');
       }
-      if (!params.language || !['JAVA', 'PYTHON', 'CPP'].includes(params.language)) {
+      if (typeof params.language !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.language)) {
         throw new Error('language is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       break;
@@ -275,7 +344,7 @@ function validateInputParams(mode: AIMode, params: any): void {
       if (!params.taskTitle || typeof params.taskTitle !== 'string' || !params.taskTitle.trim()) {
         throw new Error('taskTitle is required and must be a non-empty string');
       }
-      if (!params.lang || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
+      if (typeof params.lang !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
         throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
       }
       if (typeof params.count !== 'number' || params.count < 1) {
@@ -286,28 +355,29 @@ function validateInputParams(mode: AIMode, params: any): void {
       throw new Error(`Unknown AI mode: ${mode}`);
   }
 }
-function validateResultBeforeSave(mode: AIMode, result: any): void {
+function validateResultBeforeSave(mode: AIMode, result: unknown): void {
+  const resultObject = asJsonObject(result);
   switch (mode) {
     case 'generateTask':
-      if (!result.title || !result.practicalTask || !result.codeTemplate) {
+      if (!resultObject.title || !resultObject.practicalTask || !resultObject.codeTemplate) {
         throw new Error('Generated task is missing required fields');
       }
-      if (!result.examples || !Array.isArray(result.examples) || result.examples.length === 0) {
+      if (!resultObject.examples || !Array.isArray(resultObject.examples) || resultObject.examples.length === 0) {
         throw new Error('Generated task must have at least one example');
       }
       break;
     case 'generateTheory':
-      if (!result.theory || typeof result.theory !== 'string' || !result.theory.trim()) {
+      if (!resultObject.theory || typeof resultObject.theory !== 'string' || !resultObject.theory.trim()) {
         throw new Error('Generated theory is empty or invalid');
       }
       break;
     case 'generateQuiz':
-      if (!result.quizJson) {
+      if (typeof resultObject.quizJson !== 'string' || !resultObject.quizJson) {
         throw new Error('Generated quiz is missing quizJson');
       }
-      let quiz: any;
+      let quiz: unknown;
       try {
-        quiz = JSON.parse(result.quizJson);
+        quiz = JSON.parse(resultObject.quizJson);
       } catch (e) {
         throw new Error('Generated quiz JSON is invalid');
       }
@@ -316,12 +386,12 @@ function validateResultBeforeSave(mode: AIMode, result: any): void {
       }
       break;
     case 'generateTaskCondition':
-      if (!result.description || typeof result.description !== 'string' || !result.description.trim()) {
+      if (!resultObject.description || typeof resultObject.description !== 'string' || !resultObject.description.trim()) {
         throw new Error('Generated task condition is empty or invalid');
       }
       break;
     case 'generateTaskTemplate':
-      if (!result.template || typeof result.template !== 'string' || !result.template.trim()) {
+      if (!resultObject.template || typeof resultObject.template !== 'string' || !resultObject.template.trim()) {
         throw new Error('Generated task template is empty or invalid');
       }
       break;
@@ -330,17 +400,18 @@ function validateResultBeforeSave(mode: AIMode, result: any): void {
         throw new Error('Generated test data is empty');
       }
       for (const test of result) {
-        if (typeof test?.input !== 'string') {
+        const testObject = asJsonObject(test);
+        if (typeof testObject.input !== 'string') {
           throw new Error('Generated test data contains invalid entries: input must be a string');
         }
-        if (typeof test?.output !== 'string' || !test.output.trim()) {
+        if (typeof testObject.output !== 'string' || !testObject.output.trim()) {
           throw new Error('Generated test data contains invalid entries: output must be a non-empty string');
         }
       }
       break;
   }
 }
-export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
+export async function safeAICall<T = any>(mode: AIMode, params: unknown, options?: {
   expectedCount?: number;
   logRawResponse?: boolean;
   language?: "uk" | "en";
@@ -377,7 +448,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
 
     const orchestrator = getLLMOrchestrator();
     const language: "uk" | "en" = options?.language === "en" ? "en" : "uk";
-    let result: any;
+    let result: unknown;
     const startedAt = getNowMs();
 
     const maxAttempts = typeof options?.maxAttempts === 'number' && Number.isFinite(options.maxAttempts)
@@ -388,7 +459,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
       ? Math.max(500, Math.floor(options.totalTimeoutMs))
       : null;
 
-    const AbortControllerCtor = (globalThis as any).AbortController as (new () => { abort: () => void; signal: any }) | undefined;
+    const AbortControllerCtor = globalThis.AbortController as (new () => AbortController) | undefined;
     const controller = totalTimeoutMs && AbortControllerCtor ? new AbortControllerCtor() : null;
     const timeoutId = totalTimeoutMs && controller ? setTimeout(() => controller.abort(), totalTimeoutMs) : null;
     // For rate limiting (429), a short retry often hits the same window.
@@ -402,60 +473,70 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
           }
           switch (mode) {
           case 'generateTask':
+            const taskTopicTitle = requiredString(sanitizedParams.topicTitle, 'topicTitle');
+            const taskTheory = requiredString(sanitizedParams.theory, 'theory');
+            const taskLanguage = requiredTaskLanguage(sanitizedParams.lang);
+            const taskAllowedIoTypes = optionalTaskIoTypes(sanitizedParams.allowedIoTypes);
             result = await orchestrator.generateTaskWithAI({
-              ...sanitizedParams,
+              topicTitle: taskTopicTitle,
+              theory: taskTheory,
+              lang: taskLanguage,
+              topicIndex: optionalNumber(sanitizedParams.topicIndex),
+              numInTopic: Number(sanitizedParams.numInTopic),
+              isFirstTask: sanitizedParams.isFirstTask === true,
+              difus: optionalNumber(sanitizedParams.difus),
+              isControl: optionalBoolean(sanitizedParams.isControl),
+              prevTopics: optionalString(sanitizedParams.prevTopics),
+              previousTasks: optionalString(sanitizedParams.previousTasks),
+              allowedIoTypes: taskAllowedIoTypes,
+              userId: optionalNumber(sanitizedParams.userId),
+              topicId: optionalNumber(sanitizedParams.topicId),
               language,
               signal: controller?.signal,
-              requestId: options?.requestId
+              requestId: options?.requestId,
+              semanticRetries: optionalNumber(sanitizedParams.semanticRetries)
             });
-            result = AIResponseValidator.validateGenerateTask(
+            const taskResult = AIResponseValidator.validateGenerateTask(
               result,
-              typeof (sanitizedParams as any).topicTitle === 'string'
-                ? String((sanitizedParams as any).topicTitle)
-                : undefined,
-              typeof (sanitizedParams as any).topicIndex === 'number'
-                ? Number((sanitizedParams as any).topicIndex)
-                : undefined,
-              Array.isArray((sanitizedParams as any).allowedIoTypes)
-                ? (sanitizedParams as any).allowedIoTypes
-                : undefined
+              taskTopicTitle,
+              optionalNumber(sanitizedParams.topicIndex),
+              taskAllowedIoTypes
             );
+            result = taskResult;
 
             // Curriculum stage policy enforcement (e.g., prevent tasks requiring concepts not taught yet).
             {
               let violation = getCurriculumPolicyViolationForGeneratedTask({
-                lang: (sanitizedParams as any).lang,
-                topicIndex: (sanitizedParams as any).topicIndex,
-                topicTitle: (sanitizedParams as any).topicTitle,
-                title: (result as any)?.title,
-                practicalTask: (result as any)?.practicalTask
+                lang: taskLanguage,
+                topicIndex: optionalNumber(sanitizedParams.topicIndex),
+                topicTitle: optionalString(sanitizedParams.topicTitle),
+                title: taskResult.title,
+                practicalTask: taskResult.practicalTask
               });
 
               if (violation && violation.includes('NON_JUDGEABLE_TASK')) {
-                const originalPracticalTask = typeof (result as any)?.practicalTask === 'string'
-                  ? String((result as any).practicalTask)
-                  : '';
+                const originalPracticalTask = taskResult.practicalTask;
                 const rewrittenPracticalTask = rewriteNonJudgeablePracticalTaskToJudgeable(originalPracticalTask);
 
                 if (rewrittenPracticalTask && rewrittenPracticalTask !== originalPracticalTask) {
                   const rewrittenViolation = getCurriculumPolicyViolationForGeneratedTask({
-                    lang: (sanitizedParams as any).lang,
-                    topicIndex: (sanitizedParams as any).topicIndex,
-                    topicTitle: (sanitizedParams as any).topicTitle,
-                    title: (result as any)?.title,
+                    lang: taskLanguage,
+                    topicIndex: optionalNumber(sanitizedParams.topicIndex),
+                    topicTitle: optionalString(sanitizedParams.topicTitle),
+                    title: taskResult.title,
                     practicalTask: rewrittenPracticalTask
                   });
 
                   if (!rewrittenViolation) {
-                    (result as any).practicalTask = rewrittenPracticalTask;
+                    taskResult.practicalTask = rewrittenPracticalTask;
                     violation = null;
                     logger.info('[ai] auto-rewrote non-judgeable practicalTask', {
                       mode,
                       requestId: options?.requestId ?? null,
                       attempt,
-                      lang: (sanitizedParams as any).lang,
-                      topicIndex: (sanitizedParams as any).topicIndex,
-                      title: (result as any)?.title,
+                      lang: taskLanguage,
+                      topicIndex: optionalNumber(sanitizedParams.topicIndex),
+                      title: taskResult.title,
                       beforePreview: sanitizeText(originalPracticalTask, 220),
                       afterPreview: sanitizeText(rewrittenPracticalTask, 220)
                     });
@@ -467,18 +548,18 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
 
               if (violation) {
                 throw makeAIValidationError('generateTask', `Task generation validation failed: ${violation}`, {
-                  topicIndex: (sanitizedParams as any).topicIndex,
-                  lang: (sanitizedParams as any).lang,
-                  title: (result as any)?.title,
-                  practicalTask: (result as any)?.practicalTask
+                  topicIndex: optionalNumber(sanitizedParams.topicIndex),
+                  lang: taskLanguage,
+                  title: taskResult.title,
+                  practicalTask: taskResult.practicalTask
                 });
               }
             }
 
             // Optional policy enforcement (e.g., forbid stdin before it's taught).
-            if (Array.isArray((sanitizedParams as any).allowedIoTypes) && (sanitizedParams as any).allowedIoTypes.length > 0) {
-              const allowed = new Set((sanitizedParams as any).allowedIoTypes as string[]);
-              const ioType = typeof (result as any)?.ioType === 'string' ? String((result as any).ioType).trim() : 'STDIN_STDOUT';
+            if (taskAllowedIoTypes && taskAllowedIoTypes.length > 0) {
+              const allowed = new Set(taskAllowedIoTypes);
+              const ioType = taskResult.ioType ?? 'STDIN_STDOUT';
               if (!allowed.has(ioType)) {
                 const isNoInputTask = ioType === 'NO_INPUT_FIXED_OUTPUT' || ioType === 'NO_INPUT_FREE_OUTPUT';
                 const isStdinOnlyPreference = allowed.size === 1 && allowed.has('STDIN_STDOUT');
@@ -497,15 +578,15 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
             // Optional policy enforcement: ensure tasks within a topic are meaningfully different.
             // This is best-effort and bounded by safeAICall retries.
             {
-              const prevPractices = Array.isArray((sanitizedParams as any).previousTaskPractices)
-                ? ((sanitizedParams as any).previousTaskPractices as string[])
+              const prevPractices = Array.isArray(sanitizedParams.previousTaskPractices)
+                ? sanitizedParams.previousTaskPractices.filter((value): value is string => typeof value === "string")
                 : [];
-              const prevTitles = Array.isArray((sanitizedParams as any).previousTaskTitles)
-                ? ((sanitizedParams as any).previousTaskTitles as string[])
+              const prevTitles = Array.isArray(sanitizedParams.previousTaskTitles)
+                ? sanitizedParams.previousTaskTitles.filter((value): value is string => typeof value === "string")
                 : [];
 
-              const candPractice = typeof (result as any)?.practicalTask === 'string' ? String((result as any).practicalTask) : '';
-              const candTitle = typeof (result as any)?.title === 'string' ? String((result as any).title) : '';
+              const candPractice = taskResult.practicalTask;
+              const candTitle = taskResult.title;
 
               const candTitleNorm = stripNumericTitlePrefix(candTitle).toLowerCase();
               const prevTitleNorms = prevTitles.map(t => stripNumericTitlePrefix(t).toLowerCase()).filter(Boolean);
@@ -555,7 +636,16 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
             break;
           case 'generateTheory':
             result = await orchestrator.generateTheoryWithAI({
-              ...sanitizedParams,
+              topicTitle: requiredString(sanitizedParams.topicTitle, 'topicTitle'),
+              lang: requiredTaskLanguage(sanitizedParams.lang),
+              taskDescription: optionalString(sanitizedParams.taskDescription),
+              taskType: sanitizedParams.taskType === "PRACTICE" || sanitizedParams.taskType === "CONTROL"
+                ? sanitizedParams.taskType
+                : undefined,
+              difficulty: optionalNumber(sanitizedParams.difficulty),
+              responseLanguage: optionalString(sanitizedParams.responseLanguage),
+              userId: optionalNumber(sanitizedParams.userId),
+              topicId: optionalNumber(sanitizedParams.topicId),
               language,
               signal: controller?.signal
             });
@@ -563,16 +653,28 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
             break;
           case 'generateQuiz':
             result = await orchestrator.generateQuizWithAI({
-              ...sanitizedParams,
+              lang: requiredTaskLanguage(sanitizedParams.lang),
+              prevTopics: requiredString(sanitizedParams.prevTopics, 'prevTopics'),
+              count: optionalNumber(sanitizedParams.count),
+              responseLanguage: optionalString(sanitizedParams.responseLanguage),
+              userId: optionalNumber(sanitizedParams.userId),
+              topicId: optionalNumber(sanitizedParams.topicId),
               language,
               signal: controller?.signal
             });
-            const expectedCount = options?.expectedCount || sanitizedParams.count || 12;
+            const expectedCount = options?.expectedCount || optionalNumber(sanitizedParams.count) || 12;
             result = AIResponseValidator.validateGenerateQuiz(result, expectedCount);
             break;
           case 'generateTaskCondition':
             result = await orchestrator.generateTaskCondition({
-              ...sanitizedParams,
+              topicTitle: requiredString(sanitizedParams.topicTitle, 'topicTitle'),
+              taskTitle: optionalString(sanitizedParams.taskTitle),
+              taskType: requiredTaskType(sanitizedParams.taskType),
+              difficulty: optionalNumber(sanitizedParams.difficulty),
+              language: requiredTaskLanguage(sanitizedParams.language),
+              responseLanguage: optionalString(sanitizedParams.responseLanguage),
+              userId: optionalNumber(sanitizedParams.userId),
+              topicId: optionalNumber(sanitizedParams.topicId),
               userLanguage: language,
               signal: controller?.signal
             });
@@ -580,7 +682,13 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
             break;
           case 'generateTaskTemplate':
             result = await orchestrator.generateTaskTemplate({
-              ...sanitizedParams,
+              topicTitle: requiredString(sanitizedParams.topicTitle, 'topicTitle'),
+              taskTitle: optionalString(sanitizedParams.taskTitle),
+              language: requiredTaskLanguage(sanitizedParams.language),
+              description: optionalString(sanitizedParams.description),
+              responseLanguage: optionalString(sanitizedParams.responseLanguage),
+              userId: optionalNumber(sanitizedParams.userId),
+              topicId: optionalNumber(sanitizedParams.topicId),
               userLanguage: language,
               signal: controller?.signal
             });
@@ -588,12 +696,17 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
             break;
           case 'generateTestData':
             result = await orchestrator.generateTestDataWithAI({
-              ...sanitizedParams,
+              taskDescription: requiredString(sanitizedParams.taskDescription, 'taskDescription'),
+              taskTitle: requiredString(sanitizedParams.taskTitle, 'taskTitle'),
+              lang: requiredTaskLanguage(sanitizedParams.lang),
+              count: Number(sanitizedParams.count),
+              ioType: optionalTaskIoType(sanitizedParams.ioType),
+              userId: optionalNumber(sanitizedParams.userId),
               language,
               signal: controller?.signal
             });
             const expectedTestCount = options?.expectedCount
-              || (sanitizedParams.ioType && sanitizedParams.ioType !== 'STDIN_STDOUT' ? 1 : sanitizedParams.count)
+              || (sanitizedParams.ioType && sanitizedParams.ioType !== 'STDIN_STDOUT' ? 1 : optionalNumber(sanitizedParams.count))
               || 12;
             result = AIResponseValidator.validateGenerateTestData(result, expectedTestCount);
             break;
@@ -602,11 +715,11 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
         }
         await recordAiCircuitSuccess(mode);
         break;
-        } catch (error: any) {
-        const errorMsg = String(error?.message ?? error ?? '');
+        } catch (error) {
+        const errorMsg = errorMessage(error);
         const looksLikeValidationError =
           error instanceof AIValidationError ||
-          String(error?.name ?? '') === 'AIValidationError' ||
+          String(error && typeof error === 'object' && 'name' in error ? error.name : '') === 'AIValidationError' ||
           /validation failed/i.test(errorMsg) ||
           isSemanticValidationError(errorMsg);
 
@@ -620,7 +733,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
               requestId: options?.requestId ?? null,
               attempt,
               maxAttempts,
-              error: error.message
+              error: errorMsg
             });
           } else {
             logger.warn('[ai] invalid response', {
@@ -628,11 +741,11 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
               requestId: options?.requestId ?? null,
               attempt,
               maxAttempts,
-              error: error.message
+              error: errorMsg
             });
           }
 
-          if (options?.logRawResponse && error.rawResponse) {
+          if (options?.logRawResponse && error instanceof AIValidationError && error.rawResponse) {
             logger.debug('[ai] raw response', {
               mode,
               requestId: options?.requestId ?? null,
@@ -659,7 +772,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
                       requestId: options?.requestId || null,
                       attempt,
                       elapsedMs: getNowMs() - startedAt,
-                      validationError: error.message
+                      validationError: errorMsg
                     }
                   }
                 };
@@ -675,18 +788,18 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
             error: {
               statusCode: 400,
               message: 'AI_GENERATION_FAILED: Invalid response structure',
-              error: error.message,
+                error: errorMsg,
               details: {
                 mode,
                 requestId: options?.requestId || null,
-                validationError: error.message
+                validationError: errorMsg
               }
             }
           };
         }
 
-        const errorMessage = errorMsg;
-        const statusCode = classifyAIProviderStatus(errorMessage);
+        const providerErrorMessage = errorMsg;
+        const statusCode = classifyAIProviderStatus(providerErrorMessage);
         const retryable = statusCode === 429 || statusCode === 503 || statusCode === 504;
         const canRetry = attempt < maxAttempts && retryable;
 
@@ -697,7 +810,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
           maxAttempts,
           statusCode,
           retryable,
-          error: errorMessage
+          error: providerErrorMessage
         });
         if (retryable) {
           await recordAiCircuitFailure(mode);
@@ -745,7 +858,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
           error: {
             statusCode,
             message: 'AI_GENERATION_FAILED: AI provider error',
-            error: errorMessage,
+            error: providerErrorMessage,
             details: {
               mode,
               requestId: options?.requestId || null,
@@ -795,14 +908,15 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
     }
     try {
       validateResultBeforeSave(mode, result);
-    } catch (validationError: any) {
-      logger.warn('[ai] invalid result', { mode, requestId: options?.requestId ?? null, error: validationError.message });
+    } catch (validationError) {
+      const validationErrorMessage = errorMessage(validationError);
+      logger.warn('[ai] invalid result', { mode, requestId: options?.requestId ?? null, error: validationErrorMessage });
       return {
         success: false,
         error: {
           statusCode: 400,
           message: 'AI_GENERATION_FAILED: Generated data is invalid',
-          error: validationError.message,
+          error: validationErrorMessage,
           details: {
             mode,
             requestId: options?.requestId || null
@@ -814,19 +928,19 @@ export async function safeAICall<T = any>(mode: AIMode, params: any, options?: {
       success: true,
       data: result as T
     };
-  } catch (error: any) {
-    const errorMessage = error.message || String(error);
-    logger.error('[ai] unexpected error', { mode, requestId: options?.requestId ?? null, error: errorMessage });
+  } catch (error) {
+    const unexpectedErrorMessage = errorMessage(error);
+    logger.error('[ai] unexpected error', { mode, requestId: options?.requestId ?? null, error: unexpectedErrorMessage });
     let statusCode = 400;
-    if (errorMessage.includes('AI_GENERATION_FAILED') || errorMessage.includes('timeout') || errorMessage.includes('network')) {
-      statusCode = classifyAIProviderStatus(errorMessage);
+    if (unexpectedErrorMessage.includes('AI_GENERATION_FAILED') || unexpectedErrorMessage.includes('timeout') || unexpectedErrorMessage.includes('network')) {
+      statusCode = classifyAIProviderStatus(unexpectedErrorMessage);
     }
     return {
       success: false,
       error: {
         statusCode,
-        message: errorMessage.includes('required') || errorMessage.includes('must be') ? `Invalid input: ${errorMessage}` : 'AI_GENERATION_FAILED: Unexpected error',
-        error: errorMessage,
+        message: unexpectedErrorMessage.includes('required') || unexpectedErrorMessage.includes('must be') ? `Invalid input: ${unexpectedErrorMessage}` : 'AI_GENERATION_FAILED: Unexpected error',
+        error: unexpectedErrorMessage,
         details: {
           mode,
           requestId: options?.requestId || null
@@ -839,7 +953,10 @@ export function sendAIError(res: Response, error: AIError): void {
   const statusCode = Number.isInteger(error.statusCode) && error.statusCode >= 400 && error.statusCode < 600
     ? error.statusCode
     : 502;
-  const retryAfterMs = Number(error?.details?.retryAfterMs);
+  const details = error.details && typeof error.details === 'object'
+    ? error.details as Record<string, unknown>
+    : {};
+  const retryAfterMs = Number(details.retryAfterMs);
 
   if (statusCode === 429) {
     const normalizedRetryAfterMs = Number.isFinite(retryAfterMs) && retryAfterMs > 0

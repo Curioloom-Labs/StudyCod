@@ -5,6 +5,11 @@ export interface ParsedGradeComparisonFeedback {
 
 const AI_COMPARISON_FEEDBACK_TYPE = "AI_COMPARISON_FEEDBACK_V1";
 
+function readProperty(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object") return undefined;
+  return (value as Record<string, unknown>)[key];
+}
+
 export function encodeAiComparisonFeedback(params: {
   comparisonFeedback?: string | null;
   aiUnavailableFallback?: boolean;
@@ -46,10 +51,12 @@ export function parseGradeComparisonFeedback(raw: string | null | undefined): Pa
   }
 
   try {
-    const parsed = JSON.parse(trimmed) as any;
-    if (parsed && typeof parsed === "object" && parsed.type === AI_COMPARISON_FEEDBACK_TYPE) {
-      const comparisonFeedback = typeof parsed.comparisonFeedback === "string" && parsed.comparisonFeedback.trim().length > 0 ? parsed.comparisonFeedback : null;
-      const aiUnavailableFallback = Boolean(parsed.meta?.aiUnavailableFallback ?? parsed.aiUnavailableFallback);
+    const parsed = JSON.parse(trimmed) as unknown;
+    const meta = readProperty(parsed, "meta");
+    if (readProperty(parsed, "type") === AI_COMPARISON_FEEDBACK_TYPE) {
+      const rawFeedback = readProperty(parsed, "comparisonFeedback");
+      const comparisonFeedback = typeof rawFeedback === "string" && rawFeedback.trim().length > 0 ? rawFeedback : null;
+      const aiUnavailableFallback = Boolean(readProperty(meta, "aiUnavailableFallback") ?? readProperty(parsed, "aiUnavailableFallback"));
       return {
         comparisonFeedback,
         aiUnavailableFallback

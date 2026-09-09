@@ -1,5 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
+import { env } from "../../env";
 export class JudgeBusyError extends Error {
   constructor(message = "JUDGE_BUSY") {
     super(message);
@@ -12,8 +13,8 @@ export interface SemaphoreHandle {
 export class GlobalFileSemaphore {
   constructor(private lockPath: string, private staleAfterMs: number) {}
   static fromEnv(): GlobalFileSemaphore {
-    const lockPath = process.env.JUDGE_LOCK_PATH || path.join("/tmp", "studycod_judge.lock");
-    const staleMs = Number(process.env.JUDGE_LOCK_STALE_MS || 120_000);
+    const lockPath = env.JUDGE_LOCK_PATH || path.join("/tmp", "studycod_judge.lock");
+    const staleMs = Number(env.JUDGE_LOCK_STALE_MS || 120_000);
     return new GlobalFileSemaphore(lockPath, Number.isFinite(staleMs) ? staleMs : 120_000);
   }
   async tryAcquire(): Promise<SemaphoreHandle> {
@@ -34,8 +35,9 @@ export class GlobalFileSemaphore {
             } catch {}
           }
         };
-      } catch (e: any) {
-        if (e?.code !== "EEXIST") throw e;
+      } catch (e: unknown) {
+        const code = e && typeof e === "object" ? (e as Record<string, unknown>).code : undefined;
+        if (code !== "EEXIST") throw e;
         const staleCleaned = await this.tryCleanupStale();
         if (!staleCleaned || attempt === 1) {
           throw new JudgeBusyError();
@@ -67,9 +69,12 @@ export class GlobalFileSemaphore {
     }
   }
 }
-function safeParse(s: string): any {
+function safeParse(s: string): Record<string, unknown> | null {
   try {
-    return JSON.parse(s);
+    const value: unknown = JSON.parse(s);
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
   } catch {
     return null;
   }

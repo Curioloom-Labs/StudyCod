@@ -17,6 +17,21 @@ const snippetRepo = () => AppDataSource.getRepository(PlaygroundSnippet);
 const MAX_CODE = 100_000;
 const MAX_STDIN = 100_000;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function errorMessage(error: unknown): string {
+  return isRecord(error) && typeof error.message === "string" ? error.message : "";
+}
+
+function errorStatus(error: unknown): number {
+  if (!isRecord(error)) return 503;
+  const candidate = error.statusCode ?? error.status;
+  const numeric = typeof candidate === "number" || typeof candidate === "string" ? Number(candidate) : NaN;
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 503;
+}
+
 // Languages runnable via the playground "/run" endpoint. Accepts the legacy uppercase
 // trio (JAVA/PYTHON/CPP) and every lower-case judge family. Snippet storage stays on the
 // legacy trio to avoid a DB enum migration.
@@ -66,10 +81,10 @@ router.post("/run", authRequired, submissionRateLimitMiddleware, async (req: Aut
       timeMs: result.timeMs ?? null,
       memoryKb: result.memoryKb ?? null,
     });
-  } catch (error: any) {
-    const status = Number(error?.statusCode ?? error?.status ?? 503);
-    logger.warn("[playground] run failed", { requestId: req.requestId, error: error?.message });
-    return res.status(Number.isFinite(status) ? status : 503).json({ message: error?.message || "RUN_FAILED" });
+  } catch (error: unknown) {
+    const status = errorStatus(error);
+    logger.warn("[playground] run failed", { requestId: req.requestId, error: errorMessage(error) });
+    return res.status(status).json({ message: errorMessage(error) || "RUN_FAILED" });
   }
 });
 
@@ -109,7 +124,7 @@ router.post("/trace", authRequired, submissionRateLimitMiddleware, async (req: A
       // give a generous per-test time budget.
       const judgeReq: WorkerJudgeRequest = {
         submission_id: `pg_trace_${family}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        language: family as any,
+        language: family,
         source: code,
         tests: [{ id: 1, input: stdin, output: "", hidden: false, group: "trace", weight: 1 }],
         limits: { time_limit_ms: 20_000, memory_limit_mb: 512, output_limit_kb: 1024 },
@@ -123,7 +138,7 @@ router.post("/trace", authRequired, submissionRateLimitMiddleware, async (req: A
         const combined = [jr.compile.stderr, jr.compile.stdout].filter(Boolean).join("\n").trim();
         return res.json({ ok: false, steps: [], truncated: false, programOutput: "", stderr: combined || "Compilation error" });
       }
-      const t0: any = jr.tests?.[0];
+      const t0 = jr.tests?.[0];
       traceStdout = String(t0?.actual ?? "");
       traceStderr = String(t0?.stderr ?? "");
     } else {
@@ -144,10 +159,10 @@ router.post("/trace", authRequired, submissionRateLimitMiddleware, async (req: A
       programOutput: trace.programOutput,
       stderr: result.stderr,
     });
-  } catch (error: any) {
-    const status = Number(error?.statusCode ?? error?.status ?? 503);
-    logger.warn("[playground] trace failed", { requestId: req.requestId, error: error?.message });
-    return res.status(Number.isFinite(status) ? status : 503).json({ message: error?.message || "TRACE_FAILED" });
+  } catch (error: unknown) {
+    const status = errorStatus(error);
+    logger.warn("[playground] trace failed", { requestId: req.requestId, error: errorMessage(error) });
+    return res.status(status).json({ message: errorMessage(error) || "TRACE_FAILED" });
   }
 });
 
@@ -158,16 +173,16 @@ router.get("/snippets", authRequired, async (req: AuthRequest, res: Response) =>
     const principalId = req.principalId ?? (req.userType === "STUDENT" ? req.studentId : req.userId) ?? null;
     if (principalId == null) return res.json({ snippets: [] });
     const rows = await snippetRepo().find({
-      where: { principalType, principalId: Number(principalId) } as any,
-      order: { createdAt: "DESC" } as any,
+      where: { principalType, principalId: Number(principalId) },
+      order: { createdAt: "DESC" },
       take: 100,
-      select: { shareId: true, language: true, title: true, createdAt: true } as any,
+      select: { shareId: true, language: true, title: true, createdAt: true },
     });
     return res.json({
       snippets: rows.map(r => ({ shareId: r.shareId, language: r.language, title: r.title ?? null, createdAt: r.createdAt })),
     });
-  } catch (error: any) {
-    logger.warn("[playground] snippet list failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[playground] snippet list failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "LIST_FAILED" });
   }
 });
@@ -197,8 +212,8 @@ router.post("/snippets", authRequired, async (req: AuthRequest, res: Response) =
     });
     await snippetRepo().save(snippet);
     return res.status(201).json({ shareId: snippet.shareId });
-  } catch (error: any) {
-    logger.warn("[playground] snippet save failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[playground] snippet save failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "SAVE_FAILED" });
   }
 });
@@ -208,7 +223,7 @@ router.get("/snippets/:shareId", authOptional, async (req: AuthRequest, res: Res
   try {
     const shareId = String(req.params.shareId ?? "");
     if (!isValidShareId(shareId)) return res.status(400).json({ message: "INVALID_SHARE_ID" });
-    const snippet = await snippetRepo().findOne({ where: { shareId } as any });
+    const snippet = await snippetRepo().findOne({ where: { shareId } });
     if (!snippet) return res.status(404).json({ message: "NOT_FOUND" });
     return res.json({
       shareId: snippet.shareId,
@@ -218,8 +233,8 @@ router.get("/snippets/:shareId", authOptional, async (req: AuthRequest, res: Res
       title: snippet.title ?? null,
       createdAt: snippet.createdAt,
     });
-  } catch (error: any) {
-    logger.warn("[playground] snippet load failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[playground] snippet load failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "LOAD_FAILED" });
   }
 });

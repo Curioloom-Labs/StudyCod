@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getLLMProvider } from "../llm/provider";
 import { redisKey, runWithRedis } from "../redis/sharedRedis";
+import { env } from "../../env";
 
 export type AIDetectorLikelihood = "unlikely" | "possible" | "likely";
 
@@ -97,7 +98,7 @@ export async function detectAICode(params: {
     }
   }
 
-  const model = (process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini").trim() || "openai/gpt-4o-mini";
+  const model = (env.OPENROUTER_MODEL || "openai/gpt-4o-mini").trim() || "openai/gpt-4o-mini";
 
   const system = `Ти інструмент для вчителя: оціни ймовірність того, що код учня написаний з суттєвою допомогою AI (ChatGPT/LLM), а не самостійно.\n\nВАЖЛИВО: прості задачі часто дають дуже схожі рішення у всіх. Не карай за "очевидність". Якщо завдання просте або шаблон коду сильно задає структуру — знижуй впевненість.\n\nВідповідай ТІЛЬКИ JSON без пояснень.`;
 

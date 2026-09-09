@@ -27,9 +27,10 @@ export function normalizeRubric(raw: unknown): RubricCriterion[] {
   const seen = new Set<string>();
   for (const c of raw) {
     if (!c || typeof c !== "object") continue;
-    const id = String((c as any).id ?? "").trim();
-    const label = String((c as any).label ?? "").trim();
-    const maxPoints = Math.floor(Number((c as any).maxPoints));
+    const criterion = c as Record<string, unknown>;
+    const id = String(criterion.id ?? "").trim();
+    const label = String(criterion.label ?? "").trim();
+    const maxPoints = Math.floor(Number(criterion.maxPoints));
     if (!id || seen.has(id) || !label || !Number.isFinite(maxPoints) || maxPoints <= 0) continue;
     seen.add(id);
     out.push({ id, label, maxPoints });

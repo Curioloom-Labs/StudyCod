@@ -83,7 +83,7 @@ function resolveFromGeoip(ip: string): string | null {
     const code = String(hit?.country ?? "").trim().toUpperCase();
     return isValidCountryCode(code) ? code : null;
   } catch (err) {
-    logger.warn("[geoblock] geoip lookup failed", { err: (err as any)?.message });
+    logger.warn("[geoblock] geoip lookup failed", { err: err instanceof Error ? err.message : String(err) });
     return null;
   }
 }

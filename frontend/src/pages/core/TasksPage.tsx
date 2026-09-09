@@ -325,12 +325,13 @@ export const TasksPage: React.FC<Props> = ({
 
     const retryAfterHeader = apiErr?.response?.headers?.["retry-after"];
     const retryAfterSecondsFromHeader = retryAfterHeader ? Number(retryAfterHeader) : NaN;
-    const retryAfterMsFromBody = Number((dataObj?.details as any)?.retryAfterMs ?? NaN);
+    const detailsObj = asRecord(dataObj?.details);
+    const retryAfterMsFromBody = Number(detailsObj?.retryAfterMs ?? NaN);
     const retryAfterSeconds = Number.isFinite(retryAfterSecondsFromHeader) ? retryAfterSecondsFromHeader : Number.isFinite(retryAfterMsFromBody) ? Math.ceil(retryAfterMsFromBody / 1000) : null;
 
     if (status === 429) {
       const wait = retryAfterSeconds && retryAfterSeconds > 0 ? tr(`Спробуйте ще раз через ${retryAfterSeconds} с.`, `Try again in ${retryAfterSeconds}s.`) : tr("Спробуйте ще раз трохи пізніше.", "Please try again a bit later.");
-      const isAi429 = !!(dataObj?.details as any)?.mode;
+      const isAi429 = !!detailsObj?.mode;
       const isGlobalRateLimit = String(dataObj?.message ?? "") === "RATE_LIMIT";
       if (isGlobalRateLimit) {
         return tr("Занадто багато запитів до сервера. ", "Too many requests to the server. ") + wait;

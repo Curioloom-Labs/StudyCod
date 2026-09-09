@@ -3,7 +3,7 @@ import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { authorizeClassForReq } from "../../middleware/orgContext";
 import { EduGrade } from "../../entities/EduGrade";
-import { buildSimilarityPairs, markSharedLines, type SimilaritySubmission } from "../../services/edu/similarity";
+import { buildSimilarityPairs, markSharedLines, type SimilarityPair, type SimilaritySubmission } from "../../services/edu/similarity";
 import { logger } from "../../utils/logger";
 
 /**
@@ -14,6 +14,12 @@ const router = Router();
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
 
 const MIN_SIMILARITY = 0.7;
+
+type SimilarityPairView = {
+  a: { id: number; name: string };
+  b: { id: number; name: string };
+  similarity: SimilarityPair["similarity"];
+};
 
 router.get("/classes/:classId/similarity", authRequired, async (req: AuthRequest, res: Response) => {
   try {
@@ -57,7 +63,7 @@ router.get("/classes/:classId/similarity", authRequired, async (req: AuthRequest
       if (!nameById.has(studentId)) nameById.set(studentId, `${r.lastName || ""} ${r.firstName || ""}`.trim() || `#${studentId}`);
     }
 
-    const groups: Array<{ taskId: number; taskTitle: string; pairs: any[] }> = [];
+    const groups: Array<{ taskId: number; taskTitle: string; pairs: SimilarityPairView[] }> = [];
     for (const [taskId, { title, subs }] of byTask) {
       if (subs.size < 2) continue;
       const list: SimilaritySubmission[] = Array.from(subs, ([studentId, code]) => ({ studentId, code }));
@@ -75,7 +81,7 @@ router.get("/classes/:classId/similarity", authRequired, async (req: AuthRequest
     }
 
     return res.json({ minSimilarity: MIN_SIMILARITY, groups });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/similarity] failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -131,7 +137,7 @@ router.get("/classes/:classId/similarity/compare", authRequired, async (req: Aut
       b: { studentId: bId, name: b.name, code: b.code },
       shared
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/similarity] compare failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

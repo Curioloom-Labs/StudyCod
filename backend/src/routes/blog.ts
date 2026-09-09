@@ -22,12 +22,11 @@ import {
   type PrincipalRef,
   type PrincipalType
 } from "../utils/blogPrincipals";
+import { UPLOADS_ROOT } from "../config/storagePaths";
 
 const router = Router();
 
-export const BLOG_UPLOADS_ROOT = process.env.UPLOADS_DIR
-  ? path.join(String(process.env.UPLOADS_DIR), "blog")
-  : path.resolve(process.cwd(), "uploads", "blog");
+export const BLOG_UPLOADS_ROOT = path.join(UPLOADS_ROOT, "blog");
 
 /** Browser-facing prefix for blog media — resolved via /api in dev (proxy) and prod (nginx). */
 export const MEDIA_URL_PREFIX = "/api/blog/media/";

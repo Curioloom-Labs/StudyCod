@@ -16,8 +16,23 @@ import { resolveHintStrategyVariant, type HintStrategyVariant } from "../../serv
 import { syncTopicTaskAssignmentsWithManager } from "../../services/edu/assignmentTargetsService";
 import { authorizeClassAction } from "../../services/edu/classAccess";
 import type { Capability } from "../../services/edu/rbac";
+import {
+  EDU_APPEAL_ESCALATION_HOURS,
+  EDU_APPEAL_SLA_HOURS,
+  EDU_TEACHER_DIGEST_WINDOW_DAYS,
+} from "../../config/eduConfig";
 
 type UiLocale = "uk" | "en";
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
 type MasteryStatus = "NOT_STARTED" | "IN_PROGRESS" | "MASTERED";
 type RecommendedDifficulty = "EASY" | "MEDIUM" | "HARD";
 type CopilotPriority = "high" | "medium" | "low";
@@ -184,22 +199,16 @@ const appealRepo = () => AppDataSource.getRepository(GradeAppeal);
 const hintFeedbackRepo = () => AppDataSource.getRepository(EduHintFeedback);
 
 const ACTIVE_APPEAL_STATUSES: GradeAppealStatus[] = ["SUBMITTED", "IN_REVIEW", "NEEDS_INFO"];
-const APPEAL_SLA_HOURS = Number.isFinite(Number(process.env.EDU_APPEAL_SLA_HOURS))
-  ? Math.max(1, Math.floor(Number(process.env.EDU_APPEAL_SLA_HOURS)))
-  : 48;
-const APPEAL_ESCALATION_HOURS = Number.isFinite(Number(process.env.EDU_APPEAL_ESCALATION_HOURS))
-  ? Math.max(APPEAL_SLA_HOURS, Math.floor(Number(process.env.EDU_APPEAL_ESCALATION_HOURS)))
-  : 72;
-const DIGEST_WINDOW_DAYS = Number.isFinite(Number(process.env.EDU_TEACHER_DIGEST_WINDOW_DAYS))
-  ? Math.max(1, Math.floor(Number(process.env.EDU_TEACHER_DIGEST_WINDOW_DAYS)))
-  : 7;
+const APPEAL_SLA_HOURS = EDU_APPEAL_SLA_HOURS;
+const APPEAL_ESCALATION_HOURS = EDU_APPEAL_ESCALATION_HOURS;
+const DIGEST_WINDOW_DAYS = EDU_TEACHER_DIGEST_WINDOW_DAYS;
 
 function tr(locale: UiLocale, uk: string, en: string): string {
   return locale === "en" ? en : uk;
 }
 
 function resolveResponseLocale(req: AuthRequest, fallback: UiLocale = "uk"): UiLocale {
-  const queryLocaleRaw = String((req.query as any)?.responseLanguage ?? "").trim().toLowerCase();
+  const queryLocaleRaw = String((req.query)?.responseLanguage ?? "").trim().toLowerCase();
   if (queryLocaleRaw.startsWith("en")) return "en";
   if (queryLocaleRaw.startsWith("uk")) return "uk";
   return resolveUiLocaleFromHeaders(req.headers, fallback);
@@ -222,10 +231,17 @@ function clampInt(raw: unknown, fallback: number, min: number, max: number): num
   return Math.max(min, Math.min(max, n));
 }
 
+function parseOptionalInt(raw: unknown): number | undefined {
+  if (typeof raw === "number") return Number.isFinite(raw) ? Math.trunc(raw) : undefined;
+  if (typeof raw !== "string" || raw.trim() === "") return undefined;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function isHintFeedbackTableMissingError(error: unknown): boolean {
-  const code = String((error as any)?.code ?? "").toUpperCase();
+  const code = String(readProperty(error, "code") ?? "").toUpperCase();
   if (code === "ER_NO_SUCH_TABLE" || code === "42P01") return true;
-  const message = String((error as any)?.message ?? "").toLowerCase();
+  const message = String(readProperty(error, "message") ?? "").toLowerCase();
   return message.includes("doesn't exist") || message.includes("no such table") || (message.includes("relation") && message.includes("does not exist"));
 }
 
@@ -313,14 +329,14 @@ function resolveEstimatedEffort(task: TopicTask): "short" | "medium" | "long" {
 }
 
 function isTaskVisibleToStudent(task: TopicTask, studentId: number): boolean {
-  if (isAssignedToStudent(task.isAssigned, (task as any).assignedStudentIds, studentId)) {
+  if (isAssignedToStudent(task.isAssigned, (task).assignedStudentIds, studentId)) {
     return true;
   }
 
   if (task.type === "CONTROL" && task.controlWork) {
     return isAssignedToStudent(
       task.controlWork.isAssigned,
-      (task.controlWork as any).assignedStudentIds,
+      (task.controlWork).assignedStudentIds,
       studentId
     );
   }
@@ -983,7 +999,7 @@ router.get("/students/me/mastery-path", authRequired, async (req: AuthRequest, r
     const payload = await buildStudentMasteryPayload(student, locale);
 
     return res.json(payload);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/insights] failed to build mastery path", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1035,7 +1051,7 @@ router.get("/students/me/skill-graph", authRequired, async (req: AuthRequest, re
       recommendedPath,
       generatedAt: payload.generatedAt
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/insights] failed to build skill graph", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1067,7 +1083,7 @@ router.get("/students/me/next-task", authRequired, async (req: AuthRequest, res:
       alternatives: payload.nextRecommendations.slice(1, 4),
       generatedAt: payload.generatedAt
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/insights] failed to build next-task recommendation", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1088,7 +1104,7 @@ router.get("/classes/:classId/cohort-analytics", authRequired, async (req: AuthR
     const locale = resolveResponseLocale(req, "uk");
     const analytics = await buildCohortAnalytics(access.cls, locale);
     return res.json(analytics);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/insights] failed to build cohort analytics", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1124,7 +1140,7 @@ router.get("/classes/:classId/teacher-copilot", authRequired, async (req: AuthRe
       suggestions,
       generatedAt: analytics.generatedAt
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/insights] failed to build teacher copilot", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1399,7 +1415,7 @@ router.get("/classes/:classId/hints-quality", authRequired, async (req: AuthRequ
     const windowDays = clampInt(req.query.days, 14, 1, 90);
     const payload = await buildHintsQualityForClass(classId, locale, windowDays);
     return res.json(payload);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/insights] failed to build hints quality", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1443,7 +1459,7 @@ router.get("/classes/:classId/teacher-digest", authRequired, async (req: AuthReq
     };
 
     return res.json(payload);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/insights] failed to build teacher digest", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1463,10 +1479,10 @@ router.get("/classes/:classId/risk-interventions", authRequired, async (req: Aut
 
     const locale = resolveResponseLocale(req, "uk");
     const plan = await buildRiskInterventionPlan(access.cls, locale, {
-      limitStudents: req.query.limitStudents,
-      maxTasksPerStudent: req.query.maxTasksPerStudent,
-      topicId: req.query.topicId,
-      deadlineDays: req.query.deadlineDays,
+      limitStudents: parseOptionalInt(req.query.limitStudents),
+      maxTasksPerStudent: parseOptionalInt(req.query.maxTasksPerStudent),
+      topicId: parseOptionalInt(req.query.topicId),
+      deadlineDays: parseOptionalInt(req.query.deadlineDays),
     });
 
     const payload: RiskInterventionPlanPayload = {
@@ -1482,7 +1498,7 @@ router.get("/classes/:classId/risk-interventions", authRequired, async (req: Aut
     };
 
     return res.json(payload);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/insights] failed to plan risk interventions", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1502,13 +1518,13 @@ router.post("/classes/:classId/risk-interventions/apply", authRequired, async (r
 
     const locale = resolveResponseLocale(req, "uk");
     const plan = await buildRiskInterventionPlan(access.cls, locale, {
-      limitStudents: (req.body as any)?.limitStudents,
-      maxTasksPerStudent: (req.body as any)?.maxTasksPerStudent,
-      topicId: (req.body as any)?.topicId,
-      deadlineDays: (req.body as any)?.deadlineDays,
+      limitStudents: parseOptionalInt(readProperty(req.body, "limitStudents")),
+      maxTasksPerStudent: parseOptionalInt(readProperty(req.body, "maxTasksPerStudent")),
+      topicId: parseOptionalInt(readProperty(req.body, "topicId")),
+      deadlineDays: parseOptionalInt(readProperty(req.body, "deadlineDays")),
     });
 
-    const dryRun = Boolean((req.body as any)?.dryRun);
+    const dryRun = readProperty(req.body, "dryRun") === true;
     if (plan.studentsTargeted.length === 0 || plan.tasksSelected.length === 0 || dryRun) {
       const payload: RiskInterventionPlanPayload = {
         locale,
@@ -1538,10 +1554,10 @@ router.post("/classes/:classId/risk-interventions/apply", authRequired, async (r
         .getMany();
 
       for (const task of rows) {
-        const existingAssigned = normalizeAssignedStudentIds((task as any).assignedStudentIds);
+        const existingAssigned = normalizeAssignedStudentIds((task).assignedStudentIds);
         const merged = [...new Set([...existingAssigned, ...targetedStudentIds])];
         task.isAssigned = true;
-        (task as any).assignedStudentIds = normalizeTargetedAssignmentForStorage(merged, allClassStudentIds);
+        (task).assignedStudentIds = normalizeTargetedAssignmentForStorage(merged, allClassStudentIds);
 
         if (plan.deadlineAt) {
           if (!task.deadline || task.deadline.getTime() > plan.deadlineAt.getTime()) {
@@ -1553,7 +1569,7 @@ router.post("/classes/:classId/risk-interventions/apply", authRequired, async (r
       await manager.getRepository(TopicTask).save(rows);
 
       for (const task of rows) {
-        const normalizedStored = normalizeAssignedStudentIds((task as any).assignedStudentIds);
+        const normalizedStored = normalizeAssignedStudentIds((task).assignedStudentIds);
         const effectiveAssignedStudentIds = normalizedStored.length > 0
           ? normalizedStored
           : allClassStudentIds;
@@ -1579,7 +1595,7 @@ router.post("/classes/:classId/risk-interventions/apply", authRequired, async (r
     };
 
     return res.json(payload);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/insights] failed to apply risk interventions", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

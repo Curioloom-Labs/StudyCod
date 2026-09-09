@@ -35,6 +35,8 @@ export interface QuizQuestion {
   blanks?: Array<{ accept: string[]; caseSensitive?: boolean }>;
   // MATCHING: correct[i] = index of the right-side item matching left item i
   correctMatches?: number[];
+  /** Student-safe metadata for rendering matching inputs. */
+  pairCount?: number;
 }
 
 export interface Quiz {
@@ -241,7 +243,7 @@ export function stripQuizForStudent(quiz: Quiz | null | undefined): Quiz {
       }
       if (q.type === "MATCHING" && Array.isArray(q.correctMatches)) {
         // Expose the number of pairs only.
-        (safe as any).pairCount = q.correctMatches.length;
+        safe.pairCount = q.correctMatches.length;
       }
       return safe;
     })

@@ -3,6 +3,11 @@ import type { MigrationInterface, QueryRunner } from "typeorm";
 /**
  * Recorded solve sessions for replay (bounded snapshot list per session).
  * Idempotent: re-running on an existing table is a no-op.
+ *
+ * The filename timestamp is unique because the historical registry also used
+ * 1748400000000 for the live-session migration. Keep the class/name identity
+ * unchanged so databases that already recorded this migration do not see a
+ * second TypeORM migration after the registry cleanup.
  */
 export class AddSolveSessions1748400000000 implements MigrationInterface {
   name = "AddSolveSessions1748400000000";

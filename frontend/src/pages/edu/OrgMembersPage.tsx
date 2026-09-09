@@ -254,7 +254,7 @@ export const OrgMembersPage: React.FC = () => {
           placeholder={tr("email викладача", "teacher email")}
           className={controlClass + " flex-1 min-w-[200px]"}
         />
-        <select value={role} onChange={e => setRole(e.target.value as any)} className={controlClass}>
+        <select value={role} onChange={e => { const next = e.target.value; if ((ROLES as readonly string[]).includes(next)) setRole(next as typeof role); }} className={controlClass}>
           {ROLES.map(r => (
             <option key={r} value={r}>{roleLabel(r)}</option>
           ))}

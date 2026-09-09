@@ -1,13 +1,19 @@
-import rateLimit, { RateLimitRequestHandler } from "express-rate-limit";
+import rateLimit, { RateLimitRequestHandler, type Options } from "express-rate-limit";
 import { RedisStore as RedisRateLimitStore } from "rate-limit-redis";
-import type { Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { IS_PRODUCTION } from "../config";
 import type { AuthRequest } from "./authMiddleware";
 import { logger } from "../utils/logger";
 import { createRedisSendCommand, getRedisKeyPrefix, isRedisEnabled } from "../services/redis/sharedRedis";
 
-function getRetryAfterSeconds(req: any, fallbackSeconds: number): number {
-  const resetTime = req?.rateLimit?.resetTime as Date | undefined;
+type RateLimitRequest = AuthRequest & {
+  rateLimit?: {
+    resetTime?: Date;
+  };
+};
+
+function getRetryAfterSeconds(req: RateLimitRequest, fallbackSeconds: number): number {
+  const resetTime = req.rateLimit?.resetTime;
   if (resetTime instanceof Date) {
     const deltaMs = resetTime.getTime() - Date.now();
     return Math.max(1, Math.ceil(deltaMs / 1000));
@@ -22,16 +28,17 @@ function keyByPrincipalOrIp(req: AuthRequest): string {
 }
 
 function jsonRateLimitHandler(message: string, fallbackWindowSeconds: number) {
-  return (req: any, res: Response, _next: any, options: any) => {
-    const retryAfterSeconds = getRetryAfterSeconds(req, fallbackWindowSeconds);
+  return (req: Request, res: Response, _next: NextFunction, options: Options) => {
+    const rateLimitReq = req as RateLimitRequest;
+    const retryAfterSeconds = getRetryAfterSeconds(rateLimitReq, fallbackWindowSeconds);
     res.setHeader("Retry-After", String(retryAfterSeconds));
 
     logger.warn("Rate limit", {
       path: req.originalUrl,
       method: req.method,
-      key: keyByPrincipalOrIp(req as AuthRequest),
+      key: keyByPrincipalOrIp(rateLimitReq),
       retryAfterSeconds,
-      requestId: (req as any)?.requestId
+      requestId: rateLimitReq.requestId
     });
 
     res.status(options.statusCode).json({
@@ -71,9 +78,9 @@ export type RouteLimiterOptions = {
 export function createRouteLimiter(opts: RouteLimiterOptions): RateLimitRequestHandler {
   const enabled = opts.enabled ?? IS_PRODUCTION;
   if (!enabled) {
-    const noop = ((_req: any, _res: any, next: any) => next()) as RateLimitRequestHandler;
-    (noop as any).resetKey = () => {};
-    (noop as any).getKey = () => undefined;
+    const noop = ((_req: Request, _res: Response, next: NextFunction) => next()) as RateLimitRequestHandler;
+    noop.resetKey = (_key: string) => {};
+    noop.getKey = (_key: string) => undefined;
     return noop;
   }
 

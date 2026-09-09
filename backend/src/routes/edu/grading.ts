@@ -33,6 +33,20 @@ const gradeRepo = () => AppDataSource.getRepository(EduGrade);
 const summaryGradeRepo = () => AppDataSource.getRepository(SummaryGrade);
 const controlWorkRepo = () => AppDataSource.getRepository(ControlWork);
 
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return String(readProperty(error, "message") ?? "");
+}
+
 // AI-heavy endpoint: protect against bursts.
 const aiDetectLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 10, message: "RATE_LIMIT" });
 
@@ -57,7 +71,7 @@ function messageForGradeBodyError(err: z.ZodError, missingMessage: string, inval
     const path = issue.path.join(".");
     if (path === "total" || path === "grade") {
       // missing required value
-      if (issue.code === "invalid_type" && (issue as any).received === "undefined") return missingMessage;
+      if (issue.code === "invalid_type" && readProperty(issue, "received") === "undefined") return missingMessage;
       // wrong type / out of range
       return invalidMessage;
     }
@@ -202,11 +216,11 @@ router.post("/tasks/:taskId/grades/:studentId", authRequired, async (req: AuthRe
           await saveControlSummaryGradeForNewSystemWithManager(manager, task.controlWork!.id, studentId, null);
           await markControlWorkAttemptCompletedIfReadyWithManager(manager, task.controlWork!.id, studentId);
         });
-      } catch (e: any) {
+      } catch (e: unknown) {
         logger.error("Failed to recalculate control work grade after manual grading", { requestId: req.requestId, err: e });
       }
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error creating/updating grade", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -256,7 +270,7 @@ router.delete("/tasks/:taskId/grades/:studentId", authRequired, async (req: Auth
     await gradeRepo().remove(existing);
 
     return res.json({ message: "GRADE_DELETED", deleted: existing.length });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error deleting task grades", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -312,48 +326,48 @@ router.get("/tasks/pending-review", authRequired, async (req: AuthRequest, res: 
       .getMany();
 
     const pendingReviews = pendingGrades.map(grade => {
-      const taskClass = (grade as any).task?.lesson?.class;
-      const topicClass = (grade as any).topicTask?.topic?.class;
+      const taskClass = (grade).task?.lesson?.class;
+      const topicClass = (grade).topicTask?.topic?.class;
       const reviewClass = taskClass || topicClass || null;
       return ({
         gradeId: grade.id,
         classId: reviewClass?.id ?? null,
         className: reviewClass?.name ?? null,
         student: {
-          id: (grade as any).student.id,
-          firstName: (grade as any).student.firstName,
-          lastName: (grade as any).student.lastName,
-          middleName: (grade as any).student.middleName || undefined,
-          email: (grade as any).student.email
+          id: (grade).student.id,
+          firstName: (grade).student.firstName,
+          lastName: (grade).student.lastName,
+          middleName: (grade).student.middleName || undefined,
+          email: (grade).student.email
         },
-        task: (grade as any).task
+        task: (grade).task
           ? {
-              id: (grade as any).task.id,
-              title: (grade as any).task.title,
-              rubric: normalizeRubric((grade as any).task.rubric),
-              lesson: (grade as any).task.lesson
+              id: (grade).task.id,
+              title: (grade).task.title,
+              rubric: normalizeRubric((grade).task.rubric),
+              lesson: (grade).task.lesson
                 ? {
-                    id: (grade as any).task.lesson.id,
-                    title: (grade as any).task.lesson.title,
-                    type: (grade as any).task.lesson.type
+                    id: (grade).task.lesson.id,
+                    title: (grade).task.lesson.title,
+                    type: (grade).task.lesson.type
                   }
                 : undefined
             }
-          : (grade as any).topicTask
+          : (grade).topicTask
             ? {
-                id: (grade as any).topicTask.id,
-                title: (grade as any).topicTask.title,
+                id: (grade).topicTask.id,
+                title: (grade).topicTask.title,
                 lesson: undefined
               }
             : null,
         submittedCode: grade.submittedCode,
         submittedAt: grade.createdAt.toISOString(),
-        system: (grade as any).task ? ("old" as const) : ("new" as const)
+        system: (grade).task ? ("old" as const) : ("new" as const)
       });
     });
 
     res.json({ pendingReviews });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error fetching pending reviews", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -465,7 +479,7 @@ router.put("/control-works/:controlWorkId/students/:studentId/grade", authRequir
       fallbackLocale: resolveRequestLocale(req),
       requestId: req.requestId
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error updating control work grade", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -597,7 +611,7 @@ router.get("/topic-tasks/:taskId/students/:studentId/work", authRequired, async 
       hasMore,
       nextCursor
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error getting topic task student work", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -644,8 +658,8 @@ router.get("/topic-tasks/:taskId/students/:studentId/ai-detect", authRequired, a
     }
 
     const latest = await gradeRepo().findOne({
-      where: { student: { id: studentId } as any, topicTask: { id: taskId } as any } as any,
-      order: { createdAt: "DESC" as any } as any
+      where: { student: { id: studentId }, topicTask: { id: taskId } },
+      order: { createdAt: "DESC" }
     });
 
     if (!latest || !latest.submittedCode || !latest.submittedCode.trim()) {
@@ -664,7 +678,7 @@ router.get("/topic-tasks/:taskId/students/:studentId/ai-detect", authRequired, a
       taskDescription: topicTask.description,
       template: topicTask.template,
       submittedCode: latest.submittedCode,
-      requestId: (req as any).requestId,
+      requestId: (req).requestId,
       userId: user.id,
       topicTaskId: topicTask.id
     });
@@ -676,7 +690,7 @@ router.get("/topic-tasks/:taskId/students/:studentId/ai-detect", authRequired, a
       createdAt: latest.createdAt ? latest.createdAt.toISOString() : null,
       detection
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error running AI detector", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -723,13 +737,13 @@ router.get("/control-works/:controlWorkId/students/:studentId/work", authRequire
     }
 
     const summaryGrade = await summaryGradeRepo().findOne({
-      where: { student: { id: studentId } as any, controlWork: { id: controlWorkId } as any } as any
+      where: { student: { id: studentId }, controlWork: { id: controlWorkId } }
     });
 
-    let quizReview: any | null = null;
-    if ((summaryGrade as any)?.quizResultsJson) {
+    let quizReview: unknown = null;
+    if ((summaryGrade)?.quizResultsJson) {
       try {
-        quizReview = JSON.parse((summaryGrade as any).quizResultsJson);
+        quizReview = JSON.parse((summaryGrade).quizResultsJson);
       } catch {
         quizReview = null;
       }
@@ -737,11 +751,11 @@ router.get("/control-works/:controlWorkId/students/:studentId/work", authRequire
 
     const practiceTasks = await topicTaskRepo().find({
       where: {
-        topic: { id: controlWork.topic.id } as any,
-        type: "CONTROL" as any,
-        controlWork: { id: controlWorkId } as any
-      } as any,
-      order: { order: "ASC" as any, id: "ASC" as any }
+        topic: { id: controlWork.topic.id },
+        type: "CONTROL",
+        controlWork: { id: controlWorkId }
+      },
+      order: { order: "ASC", id: "ASC" }
     });
 
     const taskIds = practiceTasks.map(t => t.id);
@@ -780,8 +794,8 @@ router.get("/control-works/:controlWorkId/students/:studentId/work", authRequire
       summaryGrade: summaryGrade
         ? {
             id: summaryGrade.id,
-            grade: (summaryGrade as any).grade,
-            theoryGrade: (summaryGrade as any).theoryGrade,
+            grade: (summaryGrade).grade,
+            theoryGrade: (summaryGrade).theoryGrade,
             createdAt: summaryGrade.createdAt ? summaryGrade.createdAt.toISOString() : null
           }
         : null,
@@ -803,7 +817,7 @@ router.get("/control-works/:controlWorkId/students/:studentId/work", authRequire
         };
       })
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error getting control work student work", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -896,14 +910,14 @@ router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Respo
       fallbackLocale: resolveRequestLocale(req),
       requestId: req.requestId
     });
-  } catch (error: any) {
-    if (error?.message === "GRADE_NOT_FOUND") {
+  } catch (error: unknown) {
+    if (errorMessage(error) === "GRADE_NOT_FOUND") {
       return res.status(404).json({ message: "GRADE_NOT_FOUND" });
     }
-    if (error?.message === "ACCESS_DENIED") {
+    if (errorMessage(error) === "ACCESS_DENIED") {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
-    if (error?.message === "INVALID_GRADE_VALUE") {
+    if (errorMessage(error) === "INVALID_GRADE_VALUE") {
       return res.status(400).json({ message: "INVALID_GRADE_VALUE" });
     }
 
@@ -951,7 +965,7 @@ router.get("/tasks/:taskId/rubric", authRequired, async (req: AuthRequest, res: 
     const task = await ownedEduTaskOr403(req, res);
     if (!task) return;
     return res.json({ rubric: normalizeRubric(task.rubric) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/rubric] get failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -962,13 +976,13 @@ router.put("/tasks/:taskId/rubric", authRequired, async (req: AuthRequest, res: 
   try {
     const task = await ownedEduTaskOr403(req, res);
     if (!task) return;
-    const parsed = z.object({ rubric: z.array(z.any()) }).safeParse(req.body ?? {});
+    const parsed = z.object({ rubric: z.array(z.unknown()) }).safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
     const rubric = normalizeRubric(parsed.data.rubric);
     task.rubric = rubric.length ? rubric : null;
     await eduTaskRepo().save(task);
     return res.json({ rubric });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/rubric] put failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1036,7 +1050,7 @@ router.post("/grades/:gradeId/rubric", authRequired, async (req: AuthRequest, re
       fallbackLocale: resolveRequestLocale(req),
       requestId: req.requestId
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/rubric] grade failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1072,13 +1086,13 @@ router.post("/grades/:gradeId/ai-review", authRequired, aiDetectLimiter, async (
         taskDescription: grade.task?.description || undefined
       });
       return res.json({ review });
-    } catch (e: any) {
-      if (String(e?.message) === "AI_UNAVAILABLE") {
+    } catch (e: unknown) {
+      if (errorMessage(e) === "AI_UNAVAILABLE") {
         return res.status(503).json({ message: "AI_UNAVAILABLE" });
       }
       throw e;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/aiCodeReview] route failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

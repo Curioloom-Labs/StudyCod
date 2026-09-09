@@ -1,4 +1,5 @@
 import type { Response } from "express";
+import { env } from "../env";
 
 export const AUTH_COOKIE_NAME = "__studycod_token";
 
@@ -17,14 +18,14 @@ function normalizeSameSite(raw: unknown): "lax" | "strict" | "none" {
   return "lax";
 }
 
-const authCookieSameSite = normalizeSameSite(process.env.AUTH_COOKIE_SAMESITE);
+const authCookieSameSite = normalizeSameSite(env.AUTH_COOKIE_SAMESITE);
 const authCookieSecure = parseBool(
-  process.env.AUTH_COOKIE_SECURE,
-  process.env.NODE_ENV === "production" || authCookieSameSite === "none"
+  env.AUTH_COOKIE_SECURE,
+  env.NODE_ENV === "production" || authCookieSameSite === "none"
 );
 
 function getCookieDomain(): string | undefined {
-  return (process.env.COOKIE_DOMAIN || "").trim() || undefined;
+  return (env.COOKIE_DOMAIN || "").trim() || undefined;
 }
 
 function clearCookieVariants(res: Response): void {

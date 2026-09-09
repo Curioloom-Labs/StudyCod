@@ -160,7 +160,7 @@ async function executeViaJudge(code: string, language: ExecLanguage, input: stri
   let res: JudgeResponse;
   try {
     res = await judgeWithSemaphore(req);
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof HttpError) throw e;
     throw judgeUnavailable(e);
   }
@@ -168,7 +168,7 @@ async function executeViaJudge(code: string, language: ExecLanguage, input: stri
     const combined = [res.compile.stderr, res.compile.stdout].filter(Boolean).join("\n").trim();
     return { stdout: "", stderr: combined || "Compilation error", exitCode: 1, success: false, timeMs: res.compile.time_ms ?? null, memoryKb: res.compile.memory_kb ?? null };
   }
-  const t0: any = res.tests?.[0];
+  const t0 = res.tests?.[0];
   const stdout = String(t0?.actual ?? "");
   const stderr = String(t0?.stderr ?? "");
   const verdict = String(t0?.verdict ?? "");
@@ -198,7 +198,7 @@ export async function executeCodeWithInput(
   }
   try {
     return await executeViaJudge(code, language, input, timeout, options.compiler);
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof HttpError) throw e;
     const msg = e instanceof Error ? e.message : String(e);
     logger.error("executeCodeWithInput judge failed", { language, timeout, err: msg });
@@ -312,12 +312,12 @@ export interface CompareOutputOptions {
 
 /** Map a judge CheckerSpec to the equivalent local comparison mode. */
 export function compareModeFromChecker(checker?: CheckerSpec | null): CompareOutputOptions {
-  if (!checker || typeof (checker as any).type !== "string") return { mode: "lenient" };
+  if (!checker) return { mode: "lenient" };
   switch (checker.type) {
     case "exact": return { mode: "exact" };
     case "whitespace": return { mode: "whitespace" };
     case "nonempty": return { mode: "nonempty" };
-    case "float": return { mode: "float", epsilon: (checker as any).epsilon ?? 1e-6 };
+    case "float": return { mode: "float", epsilon: checker.epsilon ?? 1e-6 };
     default: return { mode: "lenient" };
   }
 }

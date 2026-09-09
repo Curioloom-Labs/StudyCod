@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useDataChannel } from "@livekit/components-react";
+import type * as Monaco from "monaco-editor";
 import { tr } from "../i18n";
 import { CodeEditor } from "./CodeEditor";
 
@@ -37,8 +38,8 @@ export const LiveCodeBoard: React.FC<{ isTeacher: boolean }> = ({ isTeacher }) =
   langRef.current = lang;
 
   // Student-side Monaco handles for applying the teacher's pointer decoration.
-  const stuEditorRef = useRef<any>(null);
-  const stuMonacoRef = useRef<any>(null);
+  const stuEditorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+  const stuMonacoRef = useRef<typeof Monaco | null>(null);
   const decoIdsRef = useRef<string[]>([]);
 
   const applyTeacherLine = useCallback((line: number) => {
@@ -121,10 +122,10 @@ export const LiveCodeBoard: React.FC<{ isTeacher: boolean }> = ({ isTeacher }) =
   // refs so incoming pointer updates can be decorated.
   const cursorThrottleRef = useRef<number | null>(null);
   const handleEditorMount = useCallback(
-    (editor: any, monaco: any) => {
+    (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
       if (isTeacher) {
-        editor.onDidChangeCursorPosition((e: any) => {
-          lineRef.current = e?.position?.lineNumber ?? 1;
+        editor.onDidChangeCursorPosition((event) => {
+          lineRef.current = event.position?.lineNumber ?? 1;
           if (cursorThrottleRef.current) return;
           cursorThrottleRef.current = window.setTimeout(() => {
             cursorThrottleRef.current = null;

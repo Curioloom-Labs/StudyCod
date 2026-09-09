@@ -111,13 +111,14 @@ function clampInt(n: number, min: number, max: number): number {
 }
 
 function getClientKey(req: AuthRequest): string {
-  const pid = (req as any)?.principalId;
+  const pid = req.principalId;
   if (typeof pid === "number" && Number.isFinite(pid) && pid > 0) return `user:${pid}`;
 
-  const ip = String((req as any)?.ip ?? "").trim();
+  const ip = String(req.ip ?? "").trim();
   if (ip) return `ip:${ip}`;
 
-  const xfwd = String((req.headers["x-forwarded-for"] as any) ?? "");
+  const forwardedFor = req.headers["x-forwarded-for"];
+  const xfwd = Array.isArray(forwardedFor) ? forwardedFor.join(",") : String(forwardedFor ?? "");
   const first = xfwd.split(",")[0]?.trim();
   if (first) return `ip:${first}`;
 
@@ -206,9 +207,6 @@ function attachResponseRelease(
   res: Response,
   release: () => Promise<void> | void,
 ): boolean {
-  const on = (res as any)?.on;
-  if (typeof on !== "function") return false;
-
   let released = false;
   const onDone = () => {
     if (released) return;
@@ -216,30 +214,26 @@ function attachResponseRelease(
     void release();
   };
 
-  try {
-    on.call(res, "finish", onDone);
-    on.call(res, "close", onDone);
-    return true;
-  } catch {
-    return false;
-  }
+  res.on("finish", onDone);
+  res.on("close", onDone);
+  return true;
 }
 
 export async function submissionRateLimitMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const key = getClientKey(req);
   const now = nowMs();
 
-  const shortWindowMs = clampInt((env as any).__rateLimitShortWindowMs ?? 10_000, 250, 10 * 60_000);
-  const longWindowMs = clampInt((env as any).__rateLimitLongWindowMs ?? 60_000, 1000, 60 * 60_000);
+  const shortWindowMs = clampInt(env.__rateLimitShortWindowMs ?? 10_000, 250, 10 * 60_000);
+  const longWindowMs = clampInt(env.__rateLimitLongWindowMs ?? 60_000, 1000, 60 * 60_000);
 
   // Don't let a single key dominate the global execution queue.
-  const maxQueueSize = clampInt((env as any).__maxExecutionQueueSize ?? 50, 0, 1_000_000);
+  const maxQueueSize = clampInt(env.__maxExecutionQueueSize ?? 50, 0, 1_000_000);
   const fairCap = maxQueueSize > 0 ? Math.max(1, Math.floor(maxQueueSize * 0.5)) : 1;
 
-  const shortMaxCfg = clampInt((env as any).__rateLimitShortMax ?? 5, 1, 1_000_000);
-  const longMaxCfg = clampInt((env as any).__rateLimitLongMax ?? 20, 1, 1_000_000);
+  const shortMaxCfg = clampInt(env.__rateLimitShortMax ?? 5, 1, 1_000_000);
+  const longMaxCfg = clampInt(env.__rateLimitLongMax ?? 20, 1, 1_000_000);
   const inFlightMaxCfg = clampInt(
-    (env as any).__rateLimitInFlightMax ?? Math.max(1, Math.floor(fairCap * 0.5)),
+    env.__rateLimitInFlightMax ?? Math.max(1, Math.floor(fairCap * 0.5)),
     1,
     1_000_000,
   );
@@ -248,11 +242,11 @@ export async function submissionRateLimitMiddleware(req: AuthRequest, res: Respo
   const longMax = Math.min(longMaxCfg, fairCap);
   const inFlightMax = Math.min(inFlightMaxCfg, fairCap);
   const inFlightTtlMs = clampInt(
-    (env as any).__rateLimitInFlightTtlMs ?? Math.max(longWindowMs * 2, 120_000),
+    env.__rateLimitInFlightTtlMs ?? Math.max(longWindowMs * 2, 120_000),
     1_000,
     24 * 60 * 60 * 1000,
   );
-  const trackInflight = typeof (res as any)?.on === "function";
+  const trackInflight = typeof res.on === "function";
 
   ensureCleanupTimer(longWindowMs);
 

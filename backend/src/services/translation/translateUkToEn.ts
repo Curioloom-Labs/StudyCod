@@ -6,6 +6,10 @@ type Masked = {
   restore: (s: string) => string;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 export function looksLikeTranslationProviderErrorText(input: string): boolean {
   const s = String(input ?? "").trim();
   if (!s) return false;
@@ -194,13 +198,14 @@ async function translateViaLibreTranslate(text: string, timeoutMs: number): Prom
       throw new Error(`LibreTranslate unexpected content-type '${ct || "(missing)"}': ${body.slice(0, 500)}`);
     }
 
-    const data = (await resp.json()) as any;
-    const apiErr = data?.error ?? data?.message;
+    const parsed: unknown = await resp.json();
+    const data = isRecord(parsed) ? parsed : {};
+    const apiErr = data.error ?? data.message;
     if (apiErr) {
       throw new Error(`LibreTranslate error: ${String(apiErr).slice(0, 300)}`);
     }
 
-    const out = String(data?.translatedText ?? "");
+    const out = String(data.translatedText ?? "");
     if (!out) throw new Error("LibreTranslate returned empty response");
     if (looksLikeTranslationProviderErrorText(out)) {
       throw new Error(`LibreTranslate returned provider-error-like text: ${out.slice(0, 200)}`);
@@ -246,14 +251,16 @@ async function translateViaMyMemory(text: string, timeoutMs: number): Promise<st
       const body = await resp.text().catch(() => "");
       throw new Error(`MyMemory HTTP ${resp.status}: ${body.slice(0, 300)}`);
     }
-    const data = (await resp.json()) as any;
-    const status = Number(data?.responseStatus ?? 200);
-    const details = String(data?.responseDetails ?? "");
+    const parsed: unknown = await resp.json();
+    const data = isRecord(parsed) ? parsed : {};
+    const status = Number(data.responseStatus ?? 200);
+    const details = String(data.responseDetails ?? "");
     if (status !== 200) {
       throw new Error(`MyMemory API error ${status}: ${details.slice(0, 300)}`);
     }
 
-    const out = String(data?.responseData?.translatedText ?? "");
+    const responseData = isRecord(data.responseData) ? data.responseData : {};
+    const out = String(responseData.translatedText ?? "");
     if (!out) throw new Error("MyMemory returned empty response");
     if (looksLikeTranslationProviderErrorText(out)) {
       throw new Error(`MyMemory returned provider-error-like text: ${out.slice(0, 200)}`);
@@ -308,9 +315,9 @@ export async function translateTextUkToEn(text: string): Promise<string> {
       // Always go through chunked path for stability against per-instance limits.
       const translatedCore = await translateViaLibreTranslateChunked(core, timeoutMs);
       return `${prefix}${translatedCore}${suffix}`;
-    } catch (err) {
+    } catch (err: unknown) {
       logger.warn("[translate] configured translator failed", {
-        err: (err as any)?.message ?? String(err),
+        err: err instanceof Error ? err.message : String(err),
         willTryPublicFallback: allowPublicFallback
       });
     }

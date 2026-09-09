@@ -34,13 +34,13 @@ export async function placementGate(req: AuthRequest, res: Response, next: NextF
     if (user.role === "SYSTEM_ADMIN") return next();
     if (user.userMode !== "PERSONAL") return next();
 
-    if (Boolean((user as any).placementDone)) return next();
+    if (user.placementDone) return next();
 
     return res.status(403).json({
       message: "PLACEMENT_REQUIRED"
     });
-  } catch (err: any) {
-    logger.error('[placementGate] failed', { message: err?.message });
+  } catch (err: unknown) {
+    logger.error('[placementGate] failed', { message: err instanceof Error ? err.message : String(err) });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });

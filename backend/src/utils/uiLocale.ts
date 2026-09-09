@@ -54,13 +54,14 @@ export function resolveUiLocaleFromHeaders(
   headers: IncomingHttpHeaders | Record<string, unknown> | undefined,
   fallback: UiLocale = "uk"
 ): UiLocale {
+  const source = headers ?? {};
   // Explicit app header wins over Accept-Language.
   const explicit = matchSupported(
-    String((headers as any)?.["x-ui-language"] ?? (headers as any)?.["x-lang"] ?? "")
+    String(source["x-ui-language"] ?? source["x-lang"] ?? "")
   );
   if (explicit) return explicit;
 
-  const ranked = parseAcceptLanguage(String((headers as any)?.["accept-language"] ?? ""));
+  const ranked = parseAcceptLanguage(String(source["accept-language"] ?? ""));
   if (ranked.length > 0) return ranked[0];
 
   return fallback;

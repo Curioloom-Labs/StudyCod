@@ -2,7 +2,7 @@ import type * as Monaco from "monaco-editor";
 import { api } from "./api/client";
 
 type LspLanguage = "java" | "cpp" | "c" | "python";
-type JsonObject = Record<string, any>;
+type JsonObject = Record<string, unknown>;
 type LspRequestOptions = {
   timeout?: number;
   cancelPrevious?: boolean;
@@ -37,33 +37,46 @@ function requestConfig(options: { signal?: AbortSignal; timeout?: number } = {})
   return { headers: { "X-Skip-Auth-Redirect": "1" }, ...options };
 }
 
-function toPosition(value: any): Monaco.IPosition {
-  return { lineNumber: Number(value?.line ?? 0) + 1, column: Number(value?.character ?? 0) + 1 };
+function asJsonObject(value: unknown): JsonObject {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : {};
 }
 
-function toRange(value: any): Monaco.IRange {
-  const start = toPosition(value?.start);
-  const end = toPosition(value?.end);
+function toPosition(value: unknown): Monaco.IPosition {
+  const position = asJsonObject(value);
+  return { lineNumber: Number(position.line ?? 0) + 1, column: Number(position.character ?? 0) + 1 };
+}
+
+function toRange(value: unknown): Monaco.IRange {
+  const range = asJsonObject(value);
+  const start = toPosition(range.start);
+  const end = toPosition(range.end);
   return { startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column };
 }
 
-function formatMarkup(contents: any): string {
+function formatMarkup(contents: unknown): string {
   if (typeof contents === "string") return contents;
-  if (contents?.value) return String(contents.value);
+  const object = asJsonObject(contents);
+  if (object.value) return String(object.value);
   if (Array.isArray(contents)) return contents.map(formatMarkup).filter(Boolean).join("\n\n");
   return String(contents ?? "");
 }
 
-function applyDiagnostics(monaco: typeof Monaco, model: Monaco.editor.ITextModel, diagnostics: any[]): void {
-  const markers = diagnostics.map(diagnostic => ({
-    severity: Number(diagnostic?.severity) === 1 ? monaco.MarkerSeverity.Error : Number(diagnostic?.severity) === 2 ? monaco.MarkerSeverity.Warning : monaco.MarkerSeverity.Info,
-    message: String(diagnostic?.message || "Language server diagnostic"),
-    startLineNumber: Math.max(1, Number(diagnostic?.range?.start?.line ?? 0) + 1),
-    startColumn: Math.max(1, Number(diagnostic?.range?.start?.character ?? 0) + 1),
-    endLineNumber: Math.max(1, Number(diagnostic?.range?.end?.line ?? diagnostic?.range?.start?.line ?? 0) + 1),
-    endColumn: Math.max(1, Number(diagnostic?.range?.end?.character ?? diagnostic?.range?.start?.character ?? 0) + 1),
-    source: String(diagnostic?.source || "LSP")
-  }));
+function applyDiagnostics(monaco: typeof Monaco, model: Monaco.editor.ITextModel, diagnostics: unknown[]): void {
+  const markers = diagnostics.map(rawDiagnostic => {
+    const diagnostic = asJsonObject(rawDiagnostic);
+    const range = asJsonObject(diagnostic.range);
+    const start = asJsonObject(range.start);
+    const end = asJsonObject(range.end);
+    return {
+      severity: Number(diagnostic.severity) === 1 ? monaco.MarkerSeverity.Error : Number(diagnostic.severity) === 2 ? monaco.MarkerSeverity.Warning : monaco.MarkerSeverity.Info,
+      message: String(diagnostic.message || "Language server diagnostic"),
+      startLineNumber: Math.max(1, Number(start.line ?? 0) + 1),
+      startColumn: Math.max(1, Number(start.character ?? 0) + 1),
+      endLineNumber: Math.max(1, Number(end.line ?? start.line ?? 0) + 1),
+      endColumn: Math.max(1, Number(end.character ?? start.character ?? 0) + 1),
+      source: String(diagnostic.source || "LSP")
+    };
+  });
   monaco.editor.setModelMarkers(model, "studycod-lsp", markers);
 }
 
@@ -79,10 +92,11 @@ function registerProviders(monaco: typeof Monaco, language: LspLanguage): void {
         textDocument: { uri: model.uri.toString() },
         position: { line: position.lineNumber - 1, character: position.column - 1 }
       });
-      if (!response?.result) return undefined;
-      const contents = formatMarkup(response.result.contents);
+      const hover = asJsonObject(response?.result);
+      if (!hover.contents) return undefined;
+      const contents = formatMarkup(hover.contents);
       if (!contents) return undefined;
-      return { range: response.result.range ? toRange(response.result.range) : undefined, contents: [{ value: contents }] };
+      return { range: hover.range ? toRange(hover.range) : undefined, contents: [{ value: contents }] };
     }
   });
 
@@ -95,7 +109,8 @@ function registerProviders(monaco: typeof Monaco, language: LspLanguage): void {
         position: { line: position.lineNumber - 1, character: position.column - 1 }
       });
       const locations = Array.isArray(response?.result) ? response.result : response?.result ? [response.result] : [];
-      return locations.map((location: any) => {
+      return locations.map((rawLocation) => {
+        const location = asJsonObject(rawLocation);
         const uri = String(location.uri || location.targetUri || model.uri.toString());
         const range = location.range || location.targetSelectionRange;
         return { uri: monaco.Uri.parse(uri), range: toRange(range) };
@@ -112,10 +127,13 @@ function registerProviders(monaco: typeof Monaco, language: LspLanguage): void {
         position: { line: position.lineNumber - 1, character: position.column - 1 },
         context
       });
-      return (Array.isArray(response?.result) ? response.result : []).map((location: any) => ({
-        uri: monaco.Uri.parse(String(location.uri || model.uri.toString())),
-        range: toRange(location.range)
-      }));
+      return (Array.isArray(response?.result) ? response.result : []).map((rawLocation) => {
+        const location = asJsonObject(rawLocation);
+        return {
+          uri: monaco.Uri.parse(String(location.uri || model.uri.toString())),
+          range: toRange(location.range)
+        };
+      });
     }
   });
 
@@ -129,17 +147,31 @@ function registerProviders(monaco: typeof Monaco, language: LspLanguage): void {
         position: { line: position.lineNumber - 1, character: position.column - 1 },
         context: { triggerKind: 1 }
       }, { timeout: COMPLETION_TIMEOUT_MS, cancelPrevious: true });
-      const items = Array.isArray(response?.result) ? response.result : Array.isArray(response?.result?.items) ? response.result.items : [];
+      const completionResult = asJsonObject(response?.result);
+      const items = Array.isArray(response?.result) ? response.result : Array.isArray(completionResult.items) ? completionResult.items : [];
       return {
-        suggestions: items.map((item: any) => ({
-          label: item.label,
-          kind: Number(item.kind || 1),
-          detail: item.detail,
-          documentation: typeof item.documentation === "string" ? item.documentation : formatMarkup(item.documentation),
-          insertText: item.insertText || item.label,
-          insertTextRules: item.insertTextFormat === 2 ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet : undefined,
-          range: item.textEdit?.range ? toRange(item.textEdit.range) : undefined
-        }))
+        suggestions: items.map((rawItem) => {
+          const item = asJsonObject(rawItem);
+          const textEdit = asJsonObject(item.textEdit);
+          const range = item.textEdit ? toRange(textEdit.range) : (() => {
+            const word = model.getWordUntilPosition(position);
+            return {
+              startLineNumber: position.lineNumber,
+              startColumn: word.startColumn,
+              endLineNumber: position.lineNumber,
+              endColumn: word.endColumn
+            };
+          })();
+          return {
+            label: String(item.label ?? ""),
+            kind: Number(item.kind || 1),
+            detail: typeof item.detail === "string" ? item.detail : undefined,
+            documentation: typeof item.documentation === "string" ? item.documentation : formatMarkup(item.documentation),
+            insertText: String(item.insertText || item.label || ""),
+            insertTextRules: item.insertTextFormat === 2 ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet : undefined,
+            range
+          };
+        })
       };
     }
   });
@@ -153,11 +185,12 @@ function registerProviders(monaco: typeof Monaco, language: LspLanguage): void {
         position: { line: position.lineNumber - 1, character: position.column - 1 },
         newName
       });
-      const changes = response?.result?.changes || {};
+      const changes = asJsonObject(asJsonObject(response?.result).changes);
       const edits: Monaco.languages.IWorkspaceTextEdit[] = [];
       for (const [uri, uriEdits] of Object.entries(changes)) {
         for (const edit of (Array.isArray(uriEdits) ? uriEdits : [])) {
-          edits.push({ resource: monaco.Uri.parse(uri), versionId: 0, textEdit: { range: toRange((edit as any).range), text: String((edit as any).newText || "") } });
+          const editObject = asJsonObject(edit);
+          edits.push({ resource: monaco.Uri.parse(uri), versionId: 0, textEdit: { range: toRange(editObject.range), text: String(editObject.newText || "") } });
         }
       }
       return { edits };
@@ -203,7 +236,7 @@ class SemanticLspConnection {
     const created = await api.post<{ sessionId: string }>("/lsp/session", { language: this.language }, requestConfig());
     if (this.disposed) return;
     this.sessionId = created.data.sessionId;
-    const opened = await api.post<{ uri: string; diagnostics?: any[] }>(`/lsp/session/${this.sessionId}/open`, {
+    const opened = await api.post<{ uri: string; diagnostics?: unknown[] }>(`/lsp/session/${this.sessionId}/open`, {
       path: this.filePath,
       languageId: this.language,
       version: this.version,
@@ -225,7 +258,7 @@ class SemanticLspConnection {
     try {
       await this.ready;
       if (this.disposed || this.startFailed || !this.sessionId) return null;
-      const response = await api.post(`/lsp/session/${this.sessionId}/request`, { method, params: { ...params, textDocument: params.textDocument ? { ...params.textDocument, uri: this.serverUri } : params.textDocument }, uri: this.serverUri }, requestConfig({ signal: abortController?.signal, timeout: options.timeout }));
+      const response = await api.post<{ diagnostics?: unknown[]; result?: unknown }>(`/lsp/session/${this.sessionId}/request`, { method, params: { ...params, textDocument: params.textDocument ? { ...params.textDocument as JsonObject, uri: this.serverUri } : params.textDocument }, uri: this.serverUri }, requestConfig({ signal: abortController?.signal, timeout: options.timeout }));
       applyDiagnostics(this.monaco, this.model, response.data?.diagnostics || []);
       return response.data || null;
     } catch (error) {
@@ -268,7 +301,7 @@ class SemanticLspConnection {
     const text = this.model.getValue();
     this.changeInFlight = true;
     try {
-      const response = await api.post(`/lsp/session/${this.sessionId}/change`, { path: this.filePath, version, text }, requestConfig());
+      const response = await api.post<{ diagnostics?: unknown[] }>(`/lsp/session/${this.sessionId}/change`, { path: this.filePath, version, text }, requestConfig());
       // Do not paint diagnostics for an older snapshot over newer editor text.
       if (!this.disposed && version === this.requestedVersion) {
         applyDiagnostics(this.monaco, this.model, response.data?.diagnostics || []);
@@ -290,7 +323,7 @@ class SemanticLspConnection {
       try {
         if (!this.sessionId || this.disposed || this.startFailed || Date.now() < lspRateLimitedUntil) return;
         const uri = encodeURIComponent(this.serverUri);
-        const response = await api.get(`/lsp/session/${this.sessionId}/diagnostics?uri=${uri}`, requestConfig());
+        const response = await api.get<{ diagnostics?: unknown[] }>(`/lsp/session/${this.sessionId}/diagnostics?uri=${uri}`, requestConfig());
         applyDiagnostics(this.monaco, this.model, response.data?.diagnostics || []);
       } catch (error) { markLspRateLimited(error); }
     }, DIAGNOSTICS_DEBOUNCE_MS);

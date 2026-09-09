@@ -89,9 +89,9 @@ export function getIadReasonKeyByGrade(gradeRaw: number):
 export const getDifusReasonKeyByGrade = getIadReasonKeyByGrade;
 
 export function getUserIadForLang(user: User, lang: IadLang): number {
-  if (lang === "PYTHON") return clampIad(Number((user as any).iadPython ?? (user as any).difusPython ?? 0));
-  if (lang === "CPP") return clampIad(Number((user as any).iadCpp ?? (user as any).difusCpp ?? 0));
-  return clampIad(Number((user as any).iadJava ?? (user as any).difusJava ?? 0));
+  if (lang === "PYTHON") return clampIad(Number(user.iadPython ?? 0));
+  if (lang === "CPP") return clampIad(Number(user.iadCpp ?? 0));
+  return clampIad(Number(user.iadJava ?? 0));
 }
 
 export const getUserDifusForLang = getUserIadForLang;
@@ -99,27 +99,27 @@ export const getUserDifusForLang = getUserIadForLang;
 export function setUserIadForLang(user: User, lang: IadLang, value: number): void {
   const next = clampIad(value);
   if (lang === "PYTHON") {
-    (user as any).iadPython = next;
-    (user as any).difusPython = next;
+    user.iadPython = next;
+    user.difusPython = next;
     return;
   }
   if (lang === "CPP") {
-    (user as any).iadCpp = next;
-    (user as any).difusCpp = next;
+    user.iadCpp = next;
+    user.difusCpp = next;
     return;
   }
-  (user as any).iadJava = next;
-  (user as any).difusJava = next;
+  user.iadJava = next;
+  user.difusJava = next;
 }
 
 export const setUserDifusForLang = setUserIadForLang;
 
 export function getLastProcessedGradeIdForLang(user: User, lang: IadLang): number | null {
   const raw = lang === "PYTHON"
-    ? ((user as any).lastIadGradeIdPython ?? (user as any).lastDifusGradeIdPython)
+    ? user.lastIadGradeIdPython
     : lang === "CPP"
-      ? ((user as any).lastIadGradeIdCpp ?? (user as any).lastDifusGradeIdCpp)
-      : ((user as any).lastIadGradeIdJava ?? (user as any).lastDifusGradeIdJava);
+      ? user.lastIadGradeIdCpp
+      : user.lastIadGradeIdJava;
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.floor(n);
@@ -131,17 +131,17 @@ export function setLastProcessedGradeIdForLang(user: User, lang: IadLang, gradeI
     : null;
 
   if (lang === "PYTHON") {
-    (user as any).lastIadGradeIdPython = normalized;
-    (user as any).lastDifusGradeIdPython = normalized;
+    user.lastIadGradeIdPython = normalized;
+    user.lastDifusGradeIdPython = normalized;
     return;
   }
   if (lang === "CPP") {
-    (user as any).lastIadGradeIdCpp = normalized;
-    (user as any).lastDifusGradeIdCpp = normalized;
+    user.lastIadGradeIdCpp = normalized;
+    user.lastDifusGradeIdCpp = normalized;
     return;
   }
-  (user as any).lastIadGradeIdJava = normalized;
-  (user as any).lastDifusGradeIdJava = normalized;
+  user.lastIadGradeIdJava = normalized;
+  user.lastDifusGradeIdJava = normalized;
 }
 
 export function getUserActiveIad(user: User): number {

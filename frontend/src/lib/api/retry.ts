@@ -4,6 +4,10 @@
 
 import { AxiosError, InternalAxiosRequestConfig } from "axios";
 
+type RetryRequestConfig = InternalAxiosRequestConfig & {
+  __retryCount?: number;
+};
+
 export interface RetryConfig {
   maxRetries: number;
   initialDelayMs: number;
@@ -34,12 +38,12 @@ export function sleep(ms: number): Promise<void> {
  * Track retry count on axios request config
  */
 export function getRetryCount(config: InternalAxiosRequestConfig): number {
-  return (config as any).__retryCount ?? 0;
+  return (config as RetryRequestConfig).__retryCount ?? 0;
 }
 
 /**
  * Set retry count on axios request config
  */
 export function setRetryCount(config: InternalAxiosRequestConfig, count: number): void {
-  (config as any).__retryCount = count;
+  (config as RetryRequestConfig).__retryCount = count;
 }

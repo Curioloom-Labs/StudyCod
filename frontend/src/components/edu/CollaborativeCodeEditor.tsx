@@ -53,7 +53,7 @@ export const CollaborativeCodeEditor: React.FC<Props> = ({
           theme={theme === "light" ? "studycod-light" : "studycod-dark"}
           defaultValue=""
           options={{ readOnly, minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false, automaticLayout: true }}
-          beforeMount={(monaco: any) => ensureStudyCodMonacoThemes(monaco)}
+          beforeMount={(monaco: typeof Monaco) => ensureStudyCodMonacoThemes(monaco)}
           onMount={(editor: Monaco.editor.IStandaloneCodeEditor) => {
             const model = editor.getModel();
             if (!model) return;

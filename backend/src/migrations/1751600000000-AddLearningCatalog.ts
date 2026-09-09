@@ -65,16 +65,31 @@ export class AddLearningCatalog1751600000000 implements MigrationInterface {
 
     const courseCount = await queryRunner.query("SELECT COUNT(*) AS total FROM `courses` WHERE `catalog_key` IS NOT NULL");
     if (Number(courseCount?.[0]?.total ?? 0) === 0) {
-      await queryRunner.query(`
-        INSERT INTO \`courses\` (\`org_id\`, \`title\`, \`description\`, \`language\`, \`catalog_key\`, \`level\`, \`is_base\`, \`status\`)
-        VALUES
-          (NULL, 'Python Core', 'Повна фундаментальна база Python: синтаксис, дані, керування потоком, функції, модулі, ООП та робота з помилками.', 'PYTHON', 'python-core', 'FOUNDATION', 1, 'PUBLISHED'),
-          (NULL, 'Java Core', 'Фундаментальна база Java від синтаксису до об’єктно-орієнтованого програмування та колекцій.', 'JAVA', 'java-core', 'FOUNDATION', 1, 'PUBLISHED'),
-          (NULL, 'C++ Core', 'Фундаментальна база C++: типи, керування пам’яттю, функції, класи та стандартна бібліотека.', 'CPP', 'cpp-core', 'FOUNDATION', 1, 'PUBLISHED'),
-          (NULL, 'Flask', 'Створення вебзастосунків на Flask після повного Python Core.', 'PYTHON', 'flask', 'SPECIALIZATION', 0, 'PUBLISHED'),
-          (NULL, 'FastAPI', 'Створення сучасних API на FastAPI після повного Python Core.', 'PYTHON', 'fastapi', 'SPECIALIZATION', 0, 'PUBLISHED'),
-          (NULL, 'Computer Vision', 'Обробка зображень та комп’ютерний зір після Python Core і профільної теорії.', 'PYTHON', 'computer-vision', 'ADVANCED', 0, 'DRAFT')
-      `);
+      const seedValues = `
+        (NULL, 'Python Core', 'Повна фундаментальна база Python: синтаксис, дані, керування потоком, функції, модулі, ООП та робота з помилками.', 'PYTHON', 'python-core', 'FOUNDATION', 1, 'PUBLISHED'),
+        (NULL, 'Java Core', 'Фундаментальна база Java від синтаксису до об’єктно-орієнтованого програмування та колекцій.', 'JAVA', 'java-core', 'FOUNDATION', 1, 'PUBLISHED'),
+        (NULL, 'C++ Core', 'Фундаментальна база C++: типи, керування пам’яттю, функції, класи та стандартна бібліотека.', 'CPP', 'cpp-core', 'FOUNDATION', 1, 'PUBLISHED'),
+        (NULL, 'Flask', 'Створення вебзастосунків на Flask після повного Python Core.', 'PYTHON', 'flask', 'SPECIALIZATION', 0, 'PUBLISHED'),
+        (NULL, 'FastAPI', 'Створення сучасних API на FastAPI після повного Python Core.', 'PYTHON', 'fastapi', 'SPECIALIZATION', 0, 'PUBLISHED'),
+        (NULL, 'Computer Vision', 'Обробка зображень та комп’ютерний зір після Python Core і профільної теорії.', 'PYTHON', 'computer-vision', 'ADVANCED', 0, 'DRAFT')
+      `;
+      if (await hasColumn("courses", "language")) {
+        await queryRunner.query(`
+          INSERT INTO \`courses\` (\`org_id\`, \`title\`, \`description\`, \`language\`, \`catalog_key\`, \`level\`, \`is_base\`, \`status\`)
+          VALUES ${seedValues}
+        `);
+      } else {
+        await queryRunner.query(`
+          INSERT INTO \`courses\` (\`org_id\`, \`title\`, \`description\`, \`catalog_key\`, \`level\`, \`is_base\`, \`status\`)
+          VALUES
+            (NULL, 'Python Core', 'Повна фундаментальна база Python: синтаксис, дані, керування потоком, функції, модулі, ООП та робота з помилками.', 'python-core', 'FOUNDATION', 1, 'PUBLISHED'),
+            (NULL, 'Java Core', 'Фундаментальна база Java від синтаксису до об’єктно-орієнтованого програмування та колекцій.', 'java-core', 'FOUNDATION', 1, 'PUBLISHED'),
+            (NULL, 'C++ Core', 'Фундаментальна база C++: типи, керування пам’яттю, функції, класи та стандартна бібліотека.', 'cpp-core', 'FOUNDATION', 1, 'PUBLISHED'),
+            (NULL, 'Flask', 'Створення вебзастосунків на Flask після повного Python Core.', 'flask', 'SPECIALIZATION', 0, 'PUBLISHED'),
+            (NULL, 'FastAPI', 'Створення сучасних API на FastAPI після повного Python Core.', 'fastapi', 'SPECIALIZATION', 0, 'PUBLISHED'),
+            (NULL, 'Computer Vision', 'Обробка зображень та комп’ютерний зір після Python Core і профільної теорії.', 'computer-vision', 'ADVANCED', 0, 'DRAFT')
+        `);
+      }
     }
 
     const catalogRuntimes: Array<[string, string, string]> = [

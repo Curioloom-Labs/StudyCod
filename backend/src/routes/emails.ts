@@ -22,6 +22,22 @@ type EmailPrefToken = {
   email: string;
 };
 
+type JsonBody = Record<string, unknown>;
+type RequestWithContext = Request & { requestId?: string };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function requestBody(req: Request): JsonBody {
+  const body: unknown = req.body;
+  return isRecord(body) ? body : {};
+}
+
 function frontendEmailPrefsUrl(params: {
   action: "subscribe" | "unsubscribe";
   ok: boolean;
@@ -42,13 +58,18 @@ function wantsJson(req: Request): boolean {
 }
 
 function verifyToken(raw: string): EmailPrefToken {
-  const decoded = jwt.verify(raw, JWT_SECRET, { algorithms: ["HS256"] }) as any;
-  if (!decoded || decoded.t !== "email-pref") throw new Error("INVALID_TOKEN");
-  if (decoded.action !== "unsubscribe" && decoded.action !== "subscribe") throw new Error("INVALID_TOKEN");
-  if (decoded.kind !== "user" && decoded.kind !== "student") throw new Error("INVALID_TOKEN");
-  if (typeof decoded.id !== "number" || !Number.isFinite(decoded.id)) throw new Error("INVALID_TOKEN");
-  if (typeof decoded.email !== "string" || !decoded.email.includes("@")) throw new Error("INVALID_TOKEN");
-  return decoded as EmailPrefToken;
+  const decoded = jwt.verify(raw, JWT_SECRET, { algorithms: ["HS256"] });
+  if (!isRecord(decoded) || decoded.t !== "email-pref") throw new Error("INVALID_TOKEN");
+
+  const action = decoded.action;
+  const kind = decoded.kind;
+  const id = decoded.id;
+  const email = decoded.email;
+  if (action !== "unsubscribe" && action !== "subscribe") throw new Error("INVALID_TOKEN");
+  if (kind !== "user" && kind !== "student") throw new Error("INVALID_TOKEN");
+  if (typeof id !== "number" || !Number.isFinite(id)) throw new Error("INVALID_TOKEN");
+  if (typeof email !== "string" || !email.includes("@")) throw new Error("INVALID_TOKEN");
+  return { t: "email-pref", action, kind, id, email };
 }
 
 async function applyPreference(token: EmailPrefToken): Promise<{ email: string; enabled: boolean } | null> {
@@ -97,8 +118,8 @@ router.get("/unsubscribe", async (req: Request, res: Response) => {
     }
 
     return res.json({ ok: true, ...updated, frontend: FRONTEND_URL });
-  } catch (err: any) {
-    logger.warn("[emails] unsubscribe failed", { err: err?.message || err });
+  } catch (err: unknown) {
+    logger.warn("[emails] unsubscribe failed", { err: errorMessage(err) });
     if (wantsJson(req)) return res.status(400).json({ message: "INVALID_TOKEN" });
     return res.redirect(302, frontendEmailPrefsUrl({ action: "unsubscribe", ok: false, reason: "INVALID_TOKEN" }));
   }
@@ -129,8 +150,8 @@ router.get("/subscribe", async (req: Request, res: Response) => {
     }
 
     return res.json({ ok: true, ...updated, frontend: FRONTEND_URL });
-  } catch (err: any) {
-    logger.warn("[emails] subscribe failed", { err: err?.message || err });
+  } catch (err: unknown) {
+    logger.warn("[emails] subscribe failed", { err: errorMessage(err) });
     if (wantsJson(req)) return res.status(400).json({ message: "INVALID_TOKEN" });
     return res.redirect(302, frontendEmailPrefsUrl({ action: "subscribe", ok: false, reason: "INVALID_TOKEN" }));
   }
@@ -142,10 +163,11 @@ router.post("/teacher-digest/check", async (req: Request, res: Response) => {
       return res.status(401).json({ message: "UNAUTHORIZED" });
     }
 
-    const rawDate = String((req as any).body?.date ?? "").trim();
-    const dryRun = Boolean((req as any).body?.dryRun);
-    const rawLimitClasses = (req as any).body?.limitClasses;
-    const rawWindowDays = (req as any).body?.windowDays;
+    const body = requestBody(req);
+    const rawDate = String(body.date ?? "").trim();
+    const dryRun = Boolean(body.dryRun);
+    const rawLimitClasses = body.limitClasses;
+    const rawWindowDays = body.windowDays;
 
     const date = rawDate ? new Date(rawDate) : new Date();
     if (Number.isNaN(date.getTime())) {
@@ -169,10 +191,10 @@ router.post("/teacher-digest/check", async (req: Request, res: Response) => {
       success: true,
       ...result,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[emails] POST /emails/teacher-digest/check error", {
-      requestId: (req as any).requestId,
-      message: err?.message,
+      requestId: (req as RequestWithContext).requestId,
+      message: errorMessage(err),
     });
 
     return res.status(500).json({ message: "Internal server error" });

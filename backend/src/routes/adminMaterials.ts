@@ -7,13 +7,14 @@ import { TopicNew, TopicLanguage } from "../entities/TopicNew";
 import { Topic } from "../entities/Topic";
 import { Task } from "../entities/Task";
 import { TheoryBlock } from "../entities/TheoryBlock";
-import { IsNull, Not } from "typeorm";
+import { EntityManager, IsNull, Not } from "typeorm";
 import { logger } from "../utils/logger";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import * as fs from "fs";
 import * as path from "path";
 import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
 import { hasTheoryBlockEnTranslationColumns } from "../services/translation/translationSchema";
+import { env } from "../env";
 
 const adminMaterialsRouter = Router();
 
@@ -26,19 +27,52 @@ const taskRepo = () => AppDataSource.getRepository(Task);
 
 type MaterialsLanguage = "JAVA" | "PYTHON" | "CPP";
 type TheoryBlockRevisionAction = "CREATE" | "UPDATE" | "ROLLBACK" | "AUTO";
+type UnknownRecord = Record<string, unknown>;
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+type AdminTopicDto = {
+  id: number;
+  title: string;
+  description: null;
+  order: number;
+  language: TopicLanguage;
+  theoryBlock: {
+    id: number;
+    title: string;
+    content: string;
+    version: number;
+    level: number | null;
+    tags: JsonValue | string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  } | null;
+};
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  const message = readProperty(error, "message");
+  return message instanceof Error ? message.message : String(message ?? "");
+}
 
 function isEduLanguage(lang: string): lang is TopicLanguage {
   return lang === "JAVA" || lang === "PYTHON" || lang === "CPP";
 }
 
-function buildAdminTopicDtoFromLegacy(t: Topic): any {
-  const block = (t as any).theoryBlock as TheoryBlock | null | undefined;
+function buildAdminTopicDtoFromLegacy(t: Topic): AdminTopicDto {
+  const block = t.theoryBlock;
   return {
     id: t.id,
     title: t.title,
     description: null,
-    order: Number((t as any).topicIndex ?? 0) + 1,
-    language: (t as any).lang,
+    order: Number(t.topicIndex ?? 0) + 1,
+    language: t.lang,
     theoryBlock: block
       ? {
           id: block.id,
@@ -57,29 +91,29 @@ function buildAdminTopicDtoFromLegacy(t: Topic): any {
 async function syncGlobalTopicNewFromLegacy(params: { legacy: Topic }): Promise<void> {
   try {
     const legacy = params.legacy;
-    const languageRaw = String((legacy as any).lang ?? "").toUpperCase().trim();
+    const languageRaw = String(legacy.lang ?? "").toUpperCase().trim();
     if (!isEduLanguage(languageRaw)) return;
     const language = languageRaw as TopicLanguage;
 
-    const order = Number((legacy as any).topicIndex ?? NaN);
+    const order = Number(legacy.topicIndex ?? NaN);
     const order1 = Number.isFinite(order) ? Math.max(1, Math.floor(order) + 1) : null;
-    const titleNorm = String((legacy as any).title ?? "").trim().toLowerCase();
+    const titleNorm = String(legacy.title ?? "").trim().toLowerCase();
 
     const repo = topicNewRepo();
     let global: TopicNew | null = null;
     if (order1 !== null) {
       global = await repo.findOne({
-        where: { language, order: order1, class: IsNull() as any } as any,
-        relations: ["theoryBlock"] as any
+        where: { language, order: order1, class: IsNull() },
+        relations: { theoryBlock: true }
       });
     }
     if (!global && titleNorm) {
-      const globals = await repo.find({ where: { language, class: IsNull() as any } as any, relations: ["theoryBlock"] as any });
-      global = globals.find((t: TopicNew) => String((t as any)?.title ?? "").trim().toLowerCase() === titleNorm) ?? null;
+      const globals = await repo.find({ where: { language, class: IsNull() }, relations: { theoryBlock: true } });
+      global = globals.find(t => String(t.title ?? "").trim().toLowerCase() === titleNorm) ?? null;
     }
 
-    const blockId = Number((legacy as any).theoryBlock?.id ?? (legacy as any).theoryBlockId ?? 0) || null;
-    const nextTitle = String((legacy as any).title ?? "").trim();
+    const blockId = Number(legacy.theoryBlock?.id ?? legacy.theoryBlockId ?? 0) || null;
+    const nextTitle = String(legacy.title ?? "").trim();
 
     if (!global) {
       if (order1 === null) return;
@@ -89,43 +123,43 @@ async function syncGlobalTopicNewFromLegacy(params: { legacy: Topic }): Promise<
         order: order1,
         language,
         class: null,
-        theoryBlock: blockId ? ({ id: blockId } as any) : null
-      } as any) as unknown as TopicNew;
-      await repo.save(created as any);
+        theoryBlock: blockId ? { id: blockId } : null
+      });
+      await repo.save(created);
       return;
     }
 
     let changed = false;
-    if (nextTitle && String((global as any).title ?? "").trim() !== nextTitle) {
-      (global as any).title = nextTitle;
+    if (nextTitle && String(global.title ?? "").trim() !== nextTitle) {
+      global.title = nextTitle;
       changed = true;
     }
-    if (order1 !== null && Number((global as any).order ?? 0) !== order1) {
-      (global as any).order = order1 as any;
+    if (order1 !== null && Number(global.order ?? 0) !== order1) {
+      global.order = order1;
       changed = true;
     }
-    if ((global as any).language !== language) {
-      (global as any).language = language;
+    if (global.language !== language) {
+      global.language = language;
       changed = true;
     }
-    const currentBlockId = Number((global as any).theoryBlock?.id ?? (global as any).theoryBlockId ?? 0) || null;
+    const currentBlockId = Number(global.theoryBlock?.id ?? global.theoryBlockId ?? 0) || null;
     if (currentBlockId !== blockId) {
-      (global as any).theoryBlock = blockId ? ({ id: blockId } as any) : null;
+      global.theoryBlock = blockId ? ({ id: blockId } as unknown as TheoryBlock) : null;
       changed = true;
     }
 
     if (changed) {
-      await repo.save(global as any);
+      await repo.save(global);
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.warn("[admin/materials] Failed to sync topics_new from legacy", {
-      legacyTopicId: (params.legacy as any)?.id,
-      error: error?.message || error
+      legacyTopicId: params.legacy.id,
+      error: errorMessage(error) || error
     });
   }
 }
 
-function parseMaybeJsonTags(tags: string | null | undefined): any {
+function parseMaybeJsonTags(tags: string | null | undefined): JsonValue | string | null {
   if (tags === null || tags === undefined) return null;
   const s = String(tags);
   if (!s.trim()) return null;
@@ -137,7 +171,7 @@ function parseMaybeJsonTags(tags: string | null | undefined): any {
 }
 
 async function writeTheoryRevisionTx(params: {
-  manager: any;
+  manager: EntityManager;
   theoryBlock: TheoryBlock;
   action: TheoryBlockRevisionAction;
   comment: string;
@@ -149,13 +183,13 @@ async function writeTheoryRevisionTx(params: {
   // CREATE should usually stay at version=1; UPDATE/AUTO/ROLLBACK always bumps.
   void comment;
   void createdByUserId;
-  const cur = Number((theoryBlock as any).version ?? 0);
+  const cur = Number(theoryBlock.version ?? 0);
   const nextVersion = action === "CREATE"
     ? Math.max(1, cur || 1)
     : Math.max(1, cur || 1) + 1;
 
-  (theoryBlock as any).version = nextVersion;
-  return (await manager.getRepository(TheoryBlock).save(theoryBlock as any)) as any as TheoryBlock;
+  theoryBlock.version = nextVersion;
+  return manager.getRepository(TheoryBlock).save(theoryBlock);
 }
 
 async function tryStoreTheoryRevision(params: {
@@ -199,7 +233,7 @@ const createTopicSchema = z.object({
       title: z.string().min(1).max(255).optional(),
       content: z.string().min(1),
       level: z.number().int().nullable().optional(),
-      tags: z.any().optional()
+      tags: z.unknown().optional()
     })
     .nullable()
     .optional()
@@ -215,7 +249,7 @@ const updateTopicSchema = z.object({
       title: z.string().min(1).max(255).optional(),
       content: z.string().min(1),
       level: z.number().int().nullable().optional(),
-      tags: z.any().optional()
+      tags: z.unknown().optional()
     })
     .nullable()
     .optional(),
@@ -255,30 +289,30 @@ type ImportYamlTopic = {
         title?: string;
         content: string;
         level?: number | null;
-        tags?: any;
+        tags?: unknown;
       }
     | string
     | null;
 };
 
-function normalizeImportTopic(raw: any, index: number): ImportYamlTopic {
-  if (!raw || typeof raw !== "object") {
+function normalizeImportTopic(raw: unknown, index: number): ImportYamlTopic {
+  if (!isRecord(raw)) {
     throw new Error(`INVALID_TOPIC_AT_${index}`);
   }
 
-  const title = String((raw as any).title ?? "").trim();
+  const title = String(raw.title ?? "").trim();
   if (!title) throw new Error(`TOPIC_TITLE_REQUIRED_AT_${index}`);
 
-  const descriptionRaw = (raw as any).description;
+  const descriptionRaw = raw.description;
   const description = descriptionRaw === undefined ? undefined : descriptionRaw === null ? null : String(descriptionRaw);
 
-  const orderRaw = (raw as any).order;
+  const orderRaw = raw.order;
   const order = orderRaw === undefined || orderRaw === null || orderRaw === "" ? undefined : Number(orderRaw);
   if (order !== undefined && (!Number.isFinite(order) || order < 0 || !Number.isInteger(order))) {
     throw new Error(`TOPIC_ORDER_INVALID_AT_${index}`);
   }
 
-  const theoryRaw = (raw as any).theory;
+  const theoryRaw = raw.theory;
   let theory: ImportYamlTopic["theory"] = undefined;
   if (theoryRaw === undefined) {
     theory = undefined;
@@ -287,9 +321,10 @@ function normalizeImportTopic(raw: any, index: number): ImportYamlTopic {
   } else if (typeof theoryRaw === "string") {
     theory = theoryRaw;
   } else if (typeof theoryRaw === "object") {
-    const content = String((theoryRaw as any).content ?? "");
-    const ttitle = (theoryRaw as any).title === undefined ? undefined : String((theoryRaw as any).title ?? "");
-    const levelRaw = (theoryRaw as any).level;
+    if (!isRecord(theoryRaw)) throw new Error(`THEORY_INVALID_AT_${index}`);
+    const content = String(theoryRaw.content ?? "");
+    const ttitle = theoryRaw.title === undefined ? undefined : String(theoryRaw.title ?? "");
+    const levelRaw = theoryRaw.level;
     const level = levelRaw === undefined ? undefined : levelRaw === null ? null : Number(levelRaw);
     if (level !== undefined && level !== null && (!Number.isFinite(level) || !Number.isInteger(level))) {
       throw new Error(`THEORY_LEVEL_INVALID_AT_${index}`);
@@ -297,8 +332,8 @@ function normalizeImportTopic(raw: any, index: number): ImportYamlTopic {
     theory = {
       title: ttitle,
       content,
-      level: level as any,
-      tags: (theoryRaw as any).tags
+      level,
+      tags: theoryRaw.tags
     };
   } else {
     throw new Error(`THEORY_INVALID_AT_${index}`);
@@ -314,25 +349,29 @@ function normalizeImportTopic(raw: any, index: number): ImportYamlTopic {
 
 function parseImportYamlPayload(yamlText: string): { language?: MaterialsLanguage; topics: ImportYamlTopic[] } {
   class YamlParseError extends Error {
-    details?: any;
-    constructor(message: string, details?: any) {
+    details?: UnknownRecord;
+    constructor(message: string, details?: UnknownRecord) {
       super(message);
       this.name = "YamlParseError";
       this.details = details;
     }
   }
 
-  let doc: any;
+  let doc: unknown;
   try {
     doc = parseYaml(String(yamlText ?? ""));
-  } catch (err: any) {
+  } catch (err: unknown) {
     // The `yaml` library usually provides useful location info; bubble it up.
-    const details: any = {};
+    const details: UnknownRecord = {};
     try {
-      if (err?.message) details.parseMessage = String(err.message);
-      if (err?.linePos) details.linePos = err.linePos;
-      if (err?.source) details.source = err.source;
-      if (err?.name) details.name = String(err.name);
+      const message = readProperty(err, "message");
+      const linePos = readProperty(err, "linePos");
+      const source = readProperty(err, "source");
+      const name = readProperty(err, "name");
+      if (message) details.parseMessage = String(message);
+      if (linePos) details.linePos = linePos;
+      if (source) details.source = source;
+      if (name) details.name = String(name);
     } catch {
       // ignore
     }
@@ -346,21 +385,21 @@ function parseImportYamlPayload(yamlText: string): { language?: MaterialsLanguag
   // Allow either:
   // - { language: JAVA, topics: [...] }
   // - [...] (topics array) with language taken from request
-  const langRaw = typeof doc === "object" && !Array.isArray(doc) ? (doc as any).language : undefined;
+  const langRaw = isRecord(doc) ? doc.language : undefined;
   const language = langRaw ? String(langRaw).toUpperCase().trim() : undefined;
   const parsedLanguage = (language === "JAVA" || language === "PYTHON" || language === "CPP")
     ? (language as MaterialsLanguage)
     : undefined;
 
-  const topicsRaw = Array.isArray(doc) ? doc : (doc as any).topics;
+  const topicsRaw = Array.isArray(doc) ? doc : isRecord(doc) ? doc.topics : undefined;
   if (!Array.isArray(topicsRaw)) {
-    const details: any = {};
+    const details: UnknownRecord = {};
     try {
       details.rootType = Array.isArray(doc) ? "array" : typeof doc;
-      if (typeof doc === "object" && !Array.isArray(doc)) {
+      if (isRecord(doc)) {
         details.rootKeys = Object.keys(doc).slice(0, 50);
         details.hasTopicsKey = Object.prototype.hasOwnProperty.call(doc, "topics");
-        details.topicsType = (doc as any).topics === null ? "null" : typeof (doc as any).topics;
+        details.topicsType = doc.topics === null ? "null" : typeof doc.topics;
       }
     } catch {
       // ignore
@@ -368,7 +407,7 @@ function parseImportYamlPayload(yamlText: string): { language?: MaterialsLanguag
     throw new YamlParseError("INVALID_YAML_STRUCTURE", Object.keys(details).length ? details : undefined);
   }
 
-  const topics: ImportYamlTopic[] = topicsRaw.map((t: any, idx: number) => normalizeImportTopic(t, idx));
+  const topics: ImportYamlTopic[] = topicsRaw.map((t: unknown, idx: number) => normalizeImportTopic(t, idx));
   return { language: parsedLanguage, topics };
 }
 
@@ -382,9 +421,9 @@ function findRepoTheoryFile(language: MaterialsLanguage): string | null {
   const backendRootFromThisFile = path.resolve(__dirname, "..", "..", "..");
   const repoRootFromThisFile = path.resolve(__dirname, "..", "..", "..", "..");
   const envRepoRoots = [
-    process.env.REPO_ROOT,
-    process.env.STUDYCOD_REPO_ROOT,
-    process.env.APP_ROOT
+    env.REPO_ROOT,
+    env.STUDYCOD_REPO_ROOT,
+    env.APP_ROOT
   ].filter(Boolean) as string[];
 
   // Prefer explicit repo root + inferred repo root from this file.
@@ -434,9 +473,9 @@ function findRepoTheoryYamlFile(language: MaterialsLanguage): string | null {
   const backendRootFromThisFile = path.resolve(__dirname, "..", "..", "..");
   const repoRootFromThisFile = path.resolve(__dirname, "..", "..", "..", "..");
   const envRepoRoots = [
-    process.env.REPO_ROOT,
-    process.env.STUDYCOD_REPO_ROOT,
-    process.env.APP_ROOT
+    env.REPO_ROOT,
+    env.STUDYCOD_REPO_ROOT,
+    env.APP_ROOT
   ].filter(Boolean) as string[];
 
   const bases = [
@@ -476,9 +515,9 @@ function findRepoTopicsListFile(language: MaterialsLanguage): string | null {
   const backendRootFromThisFile = path.resolve(__dirname, "..", "..", "..");
   const repoRootFromThisFile = path.resolve(__dirname, "..", "..", "..", "..");
   const envRepoRoots = [
-    process.env.REPO_ROOT,
-    process.env.STUDYCOD_REPO_ROOT,
-    process.env.APP_ROOT
+    env.REPO_ROOT,
+    env.STUDYCOD_REPO_ROOT,
+    env.APP_ROOT
   ].filter(Boolean) as string[];
 
   const bases = [
@@ -508,7 +547,7 @@ function findRepoTopicsListFile(language: MaterialsLanguage): string | null {
 function parseLegacyTheoryMap(text: string): Record<string, string> | null {
   // Legacy shape: { "Topic title": "markdown", ... }
   // (stored historically as JSON, but YAML parser also accepts JSON syntax)
-  let doc: any;
+  let doc: unknown;
   try {
     doc = parseYaml(String(text ?? ""));
   } catch {
@@ -519,7 +558,7 @@ function parseLegacyTheoryMap(text: string): Record<string, string> | null {
     }
   }
 
-  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return null;
+  if (!isRecord(doc)) return null;
   if (Object.prototype.hasOwnProperty.call(doc, "topics")) return null;
   if (Object.prototype.hasOwnProperty.call(doc, "language")) return null;
 
@@ -528,12 +567,12 @@ function parseLegacyTheoryMap(text: string): Record<string, string> | null {
   if (!keys.length) return null;
 
   for (const k of keys) {
-    const v = (doc as any)[k];
+    const v = doc[k];
     if (typeof v === "string") {
       out[String(k)] = v;
-    } else if (v && typeof v === "object" && typeof (v as any).content === "string") {
+    } else if (isRecord(v) && typeof v.content === "string") {
       // tolerate { content: "..." }
-      out[String(k)] = String((v as any).content);
+      out[String(k)] = v.content;
     } else {
       out[String(k)] = "";
     }
@@ -544,21 +583,21 @@ function parseLegacyTheoryMap(text: string): Record<string, string> | null {
 
 adminMaterialsRouter.get("/topics", authRequired, systemAdminGuard, async (req: AuthRequest, res: Response) => {
   try {
-    const language = String((req.query as any).language ?? "").toUpperCase().trim();
+    const language = String(req.query.language ?? "").toUpperCase().trim();
     if (language && language !== "JAVA" && language !== "PYTHON" && language !== "CPP") {
       return res.status(400).json({ message: "INVALID_LANGUAGE" });
     }
 
     const topics = await legacyTopicRepo().find({
       where: {
-        ...(language ? { lang: language as any } : {})
-      } as any,
-      order: { topicIndex: "ASC" } as any,
-      relations: ["theoryBlock"] as any
+        ...(language ? { lang: language as MaterialsLanguage } : {})
+      },
+      order: { topicIndex: "ASC" },
+      relations: { theoryBlock: true }
     });
 
     return res.json({ topics: topics.map(buildAdminTopicDtoFromLegacy) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin/materials] GET /topics error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -574,33 +613,34 @@ adminMaterialsRouter.get("/export/yaml", authRequired, systemAdminGuard, async (
 
     const topics = await legacyTopicRepo().find({
       where: {
-        lang: language as any
-      } as any,
-      order: { topicIndex: "ASC" } as any,
-      relations: ["theoryBlock"] as any
+        lang: language as MaterialsLanguage
+      },
+      order: { topicIndex: "ASC" },
+      relations: { theoryBlock: true }
     });
 
-    const payload: any = {
+    const payload: UnknownRecord = {
       language,
       topics: topics.map(t => {
-        const base: any = {
+        const base: UnknownRecord = {
           title: t.title,
           description: null,
-          order: Number((t as any).topicIndex ?? 0) + 1
+          order: Number(t.topicIndex ?? 0) + 1
         };
 
-        const block = (t as any).theoryBlock as TheoryBlock | null | undefined;
+        const block = t.theoryBlock;
         if (block) {
-          base.theory = {
+          const theory: UnknownRecord = {
             title: String(block.title ?? "").trim() || undefined,
             content: String(block.content ?? ""),
             level: block.level === undefined ? null : (block.level ?? null),
             tags: parseMaybeJsonTags(block.tags)
           };
+          base.theory = theory;
 
           // Remove undefined title to keep YAML clean.
-          if (base.theory.title === undefined) delete base.theory.title;
-          if (base.theory.tags === null) delete base.theory.tags;
+          if (theory.title === undefined) delete theory.title;
+          if (theory.tags === null) delete theory.tags;
         }
 
         return base;
@@ -617,8 +657,8 @@ adminMaterialsRouter.get("/export/yaml", authRequired, systemAdminGuard, async (
     res.setHeader("Content-Type", "text/yaml; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename=${filename}`);
     return res.send(yaml);
-  } catch (error: any) {
-    logger.error("[admin/materials] GET /export/yaml error", { requestId: (req as any).requestId, userId: (req as any).userId, error });
+  } catch (error: unknown) {
+    logger.error("[admin/materials] GET /export/yaml error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -634,8 +674,8 @@ adminMaterialsRouter.patch("/topics/reorder", authRequired, systemAdminGuard, as
     const { language, orderedIds } = validated.data;
 
     const topics = await legacyTopicRepo().find({
-      where: { lang: language as any } as any,
-      order: { topicIndex: "ASC" } as any
+      where: { lang: language },
+      order: { topicIndex: "ASC" }
     });
 
     const existingIds = new Set(topics.map(t => t.id));
@@ -658,14 +698,14 @@ adminMaterialsRouter.patch("/topics/reorder", authRequired, systemAdminGuard, as
     await AppDataSource.transaction(async manager => {
       for (let i = 0; i < finalOrder.length; i++) {
         const id = finalOrder[i];
-        await manager.update(Topic, { id } as any, { topicIndex: i } as any);
+        await manager.update(Topic, { id }, { topicIndex: i });
       }
     });
 
     const updated = await legacyTopicRepo().find({
-      where: { lang: language as any } as any,
-      order: { topicIndex: "ASC" } as any,
-      relations: ["theoryBlock"] as any
+      where: { lang: language },
+      order: { topicIndex: "ASC" },
+      relations: { theoryBlock: true }
     });
 
     // Keep global topics_new aligned for EDU (best-effort).
@@ -674,7 +714,7 @@ adminMaterialsRouter.patch("/topics/reorder", authRequired, systemAdminGuard, as
     }
 
     return res.json({ topics: updated.map(buildAdminTopicDtoFromLegacy) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin/materials] PATCH /topics/reorder error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -690,10 +730,10 @@ adminMaterialsRouter.post("/topics", authRequired, systemAdminGuard, async (req:
     const data = validated.data;
 
     const maxIdx = await legacyTopicRepo().findOne({
-      where: { lang: data.language as any } as any,
-      order: { topicIndex: "DESC" } as any
+      where: { lang: data.language },
+      order: { topicIndex: "DESC" }
     });
-    const nextDefaultIndex = Number((maxIdx as any)?.topicIndex ?? -1) + 1;
+    const nextDefaultIndex = Number(maxIdx?.topicIndex ?? -1) + 1;
     const desiredIndex = data.order === undefined || data.order === null ? nextDefaultIndex : Math.max(0, Math.floor(Number(data.order) - 1));
 
     let theoryBlock: TheoryBlock | null = null;
@@ -723,34 +763,34 @@ adminMaterialsRouter.post("/topics", authRequired, systemAdminGuard, async (req:
       await manager
         .createQueryBuilder()
         .update(Topic)
-        .set({ topicIndex: () => "topic_index + 1" } as any)
+        .set({ topicIndex: () => "topic_index + 1" })
         .where("lang = :lang", { lang: data.language })
         .andWhere("topic_index >= :idx", { idx: desiredIndex })
         .execute();
 
       const legacy = manager.getRepository(Topic).create({
         title: data.title.trim(),
-        lang: data.language as any,
+        lang: data.language,
         topicIndex: desiredIndex,
-        theoryBlock: theoryBlock ? ({ id: theoryBlock.id } as any) : null,
+        theoryBlock: theoryBlock ? ({ id: theoryBlock.id } as unknown as TheoryBlock) : null,
         theoryMarkdown: theoryBlock ? String(theoryBlock.content ?? "").trim() : null,
         isControl: false
-      } as any);
-      return (await manager.getRepository(Topic).save(legacy as any)) as any;
+      });
+      return manager.getRepository(Topic).save(legacy);
     });
 
-    const savedId = Array.isArray(saved) ? (saved as any[])[0]?.id : (saved as any)?.id;
+    const savedId = saved.id;
 
     const full = savedId
-      ? await legacyTopicRepo().findOne({ where: { id: savedId } as any, relations: ["theoryBlock"] as any })
+      ? await legacyTopicRepo().findOne({ where: { id: savedId }, relations: { theoryBlock: true } })
       : null;
     if (full) {
       await syncGlobalTopicNewFromLegacy({ legacy: full });
     }
 
-    return res.status(201).json({ topic: full ? buildAdminTopicDtoFromLegacy(full) : buildAdminTopicDtoFromLegacy(saved as any) });
-  } catch (error: any) {
-    const msg = error?.message || "INTERNAL_SERVER_ERROR";
+    return res.status(201).json({ topic: buildAdminTopicDtoFromLegacy(full ?? saved) });
+  } catch (error: unknown) {
+    const msg = errorMessage(error) || "INTERNAL_SERVER_ERROR";
     if (msg === "THEORY_EMPTY") return res.status(400).json({ message: "THEORY_EMPTY" });
     if (msg === "THEORY_CONTAINS_PRACTICE") return res.status(400).json({ message: "THEORY_CONTAINS_PRACTICE" });
     if (msg === "THEORY_CONTAINS_TASK_INSTRUCTIONS") return res.status(400).json({ message: "THEORY_CONTAINS_TASK_INSTRUCTIONS" });
@@ -787,12 +827,12 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
       const tRepo = manager.getRepository(Topic);
       const bRepo = manager.getRepository(TheoryBlock);
 
-      const existingTasks = await manager.getRepository(Task).count({ where: { lang: language as any } as any });
+      const existingTasks = await manager.getRepository(Task).count({ where: { lang: language } });
 
       const existingTopics = await tRepo.find({
-        where: { lang: language as any } as any,
-        relations: ["theoryBlock"] as any,
-        order: { topicIndex: "ASC" } as any
+        where: { lang: language },
+        relations: { theoryBlock: true },
+        order: { topicIndex: "ASC" }
       });
 
       if (importMode === "replace") {
@@ -805,16 +845,16 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
       const existingByTitle = new Map<string, Topic>();
       const existingByIndex = new Map<number, Topic>();
       // NOTE: keep the variable name for minimal diff; it now stores legacy Topic objects.
-      for (const t of afterDeleteExisting as any[]) {
-        const key = String((t as any).title ?? "").trim().toLowerCase();
-        if (key && !existingByTitle.has(key)) existingByTitle.set(key, t as any);
+      for (const t of afterDeleteExisting) {
+        const key = String(t.title ?? "").trim().toLowerCase();
+        if (key && !existingByTitle.has(key)) existingByTitle.set(key, t);
 
-        const idx = Number((t as any).topicIndex ?? NaN);
-        if (Number.isFinite(idx) && !existingByIndex.has(idx)) existingByIndex.set(idx, t as any);
+        const idx = Number(t.topicIndex ?? NaN);
+        if (Number.isFinite(idx) && !existingByIndex.has(idx)) existingByIndex.set(idx, t);
       }
 
       // Determine next topicIndex when not provided.
-      const maxIndex = (afterDeleteExisting as any[]).reduce((acc, t) => Math.max(acc, Number((t as any).topicIndex ?? -1)), -1);
+      const maxIndex = afterDeleteExisting.reduce((acc, t) => Math.max(acc, Number(t.topicIndex ?? -1)), -1);
       let nextIndex = maxIndex + 1;
 
       let created = 0;
@@ -829,7 +869,7 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
           continue;
         }
 
-        const targetIndex = Math.max(0, Math.floor(Number((it.order ?? (nextIndex + 1)) as any) - 1));
+        const targetIndex = Math.max(0, Math.floor(Number(it.order ?? (nextIndex + 1)) - 1));
         if (it.order === undefined || it.order === null) nextIndex++;
         const nextDescription = it.description === undefined ? undefined : it.description;
 
@@ -860,8 +900,8 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
           // legacy topics do not have description.
           void nextDescription;
 
-          if (Number((existing as any).topicIndex ?? 0) !== Number(targetIndex)) {
-            (existing as any).topicIndex = targetIndex as any;
+          if (Number(existing.topicIndex ?? 0) !== Number(targetIndex)) {
+            existing.topicIndex = targetIndex;
             changed = true;
           }
 
@@ -870,10 +910,10 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
             const normalizedContent = String(theoryObj.content).trim();
             assertTheoryContentIsPure(normalizedContent);
 
-            const block = (existing as any).theoryBlock as TheoryBlock | null;
+            const block = existing.theoryBlock;
             const nextTitle = String(theoryObj.title || existing.title).trim();
-            const nextLevel = (theoryObj as any).level === undefined ? (block?.level ?? null) : ((theoryObj as any).level ?? null);
-            const nextTags = (theoryObj as any).tags === undefined ? (block?.tags ?? null) : JSON.stringify((theoryObj as any).tags);
+            const nextLevel = theoryObj.level === undefined ? (block?.level ?? null) : (theoryObj.level ?? null);
+            const nextTags = theoryObj.tags === undefined ? (block?.tags ?? null) : JSON.stringify(theoryObj.tags);
 
             if (block) {
               const needsUpdate =
@@ -900,11 +940,11 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
                   title: nextTitle,
                   content: normalizedContent,
                   version: 1,
-                  level: (theoryObj as any).level === undefined ? null : ((theoryObj as any).level ?? null),
-                  tags: (theoryObj as any).tags === undefined ? null : JSON.stringify((theoryObj as any).tags)
+                  level: theoryObj.level === undefined ? null : (theoryObj.level ?? null),
+                  tags: theoryObj.tags === undefined ? null : JSON.stringify(theoryObj.tags)
                 })
               );
-              (existing as any).theoryBlock = { id: createdBlock.id } as any;
+              existing.theoryBlock = { id: createdBlock.id } as unknown as TheoryBlock;
               await writeTheoryRevisionTx({
                 manager,
                 theoryBlock: createdBlock,
@@ -915,7 +955,7 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
             }
 
             // Mirror for compatibility.
-            (existing as any).theoryMarkdown = normalizedContent;
+            existing.theoryMarkdown = normalizedContent;
           }
 
           if (changed) {
@@ -933,8 +973,8 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
                 title: String(theoryObj.title || it.title).trim(),
                 content: normalizedContent,
                 version: 1,
-                level: (theoryObj as any).level === undefined ? null : ((theoryObj as any).level ?? null),
-                tags: (theoryObj as any).tags === undefined ? null : JSON.stringify((theoryObj as any).tags)
+                level: theoryObj.level === undefined ? null : (theoryObj.level ?? null),
+                tags: theoryObj.tags === undefined ? null : JSON.stringify(theoryObj.tags)
               })
             );
             theoryBlock = createdBlock;
@@ -947,16 +987,16 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
             });
           }
 
-          const createdTopic = (await tRepo.save(
+          const createdTopic = await tRepo.save(
             tRepo.create({
               title: it.title,
-              lang: language as any,
+              lang: language,
               topicIndex: targetIndex,
               isControl: false,
-              theoryBlock: theoryBlock ? ({ id: theoryBlock.id } as any) : null,
-              theoryMarkdown: theoryBlock ? String((theoryBlock as any).content ?? "").trim() : null
-            } as any)
-          )) as any as Topic;
+              theoryBlock: theoryBlock ? ({ id: theoryBlock.id } as unknown as TheoryBlock) : null,
+              theoryMarkdown: theoryBlock ? String(theoryBlock.content ?? "").trim() : null
+            })
+          );
 
           existingByTitle.set(key, createdTopic);
           created++;
@@ -964,32 +1004,32 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
       }
 
       // Normalize ordering (0..N-1) to avoid duplicates/gaps after import.
-      const finalList = await tRepo.find({ where: { lang: language as any } as any, order: { topicIndex: "ASC" } as any });
+      const finalList = await tRepo.find({ where: { lang: language }, order: { topicIndex: "ASC" } });
       for (let i = 0; i < finalList.length; i++) {
-        const t: any = finalList[i];
+        const t = finalList[i];
         if (Number(t.topicIndex ?? 0) !== i) {
-          await tRepo.update({ id: t.id } as any, { topicIndex: i } as any);
+          await tRepo.update({ id: t.id }, { topicIndex: i });
           t.topicIndex = i;
         }
       }
 
-      const refreshed = await tRepo.find({ where: { lang: language as any } as any, order: { topicIndex: "ASC" } as any, relations: ["theoryBlock"] as any });
+      const refreshed = await tRepo.find({ where: { lang: language }, order: { topicIndex: "ASC" }, relations: { theoryBlock: true } });
 
       return { created, updated, skipped, topics: refreshed };
     });
 
     if (Array.isArray(result?.topics)) {
       for (const t of result.topics) {
-        await syncGlobalTopicNewFromLegacy({ legacy: t as any });
+        await syncGlobalTopicNewFromLegacy({ legacy: t });
       }
     }
 
-    return res.json({ ...result, topics: Array.isArray(result?.topics) ? (result.topics as any[]).map(buildAdminTopicDtoFromLegacy) : result?.topics });
-  } catch (error: any) {
+    return res.json({ ...result, topics: result.topics.map(buildAdminTopicDtoFromLegacy) });
+  } catch (error: unknown) {
     // Common infra/DB issue: TEXT column overflow when importing big theory markdown.
     // Return a helpful client error instead of generic 500.
-    const rawMsg = String(error?.message || "");
-    const rawCode = String(error?.code || "");
+    const rawMsg = errorMessage(error);
+    const rawCode = String(readProperty(error, "code") ?? "");
     if (/data too long/i.test(rawMsg) || /ER_DATA_TOO_LONG/i.test(rawCode)) {
       return res.status(400).json({
         message: "THEORY_TOO_LARGE",
@@ -997,9 +1037,9 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
       });
     }
 
-    const msg = error?.message || "INTERNAL_SERVER_ERROR";
+    const msg = rawMsg || "INTERNAL_SERVER_ERROR";
     if (msg === "INVALID_YAML" || msg === "INVALID_YAML_STRUCTURE") {
-      return res.status(400).json({ message: msg, details: error?.details });
+      return res.status(400).json({ message: msg, details: readProperty(error, "details") });
     }
     if (msg === "TOPIC_NOT_EMPTY") {
       return res.status(400).json({
@@ -1016,7 +1056,7 @@ adminMaterialsRouter.post("/import/yaml", authRequired, systemAdminGuard, async 
       return res.status(400).json({ message: "INVALID_YAML_TOPIC", detail: msg });
     }
 
-    logger.error("[admin/materials] POST /import/yaml error", { requestId: (req as any).requestId, userId: (req as any).userId, error });
+    logger.error("[admin/materials] POST /import/yaml error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -1057,11 +1097,11 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
     let yamlText = "";
     try {
       yamlText = fs.readFileSync(filePath, "utf8");
-    } catch (e: any) {
+    } catch (e: unknown) {
       return res.status(500).json({
         message: "REPO_THEORY_FILE_READ_ERROR",
         filePath,
-        code: e?.code || null
+        code: readProperty(e, "code") ?? null
       });
     }
 
@@ -1071,8 +1111,8 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
     let parsed: { language?: MaterialsLanguage; topics: ImportYamlTopic[] } | null = null;
     try {
       parsed = parseImportYamlPayload(yamlText);
-    } catch (e: any) {
-      if (String(e?.message || "") === "INVALID_YAML_STRUCTURE" && String(filePath).toLowerCase().endsWith("_theory.json")) {
+    } catch (e: unknown) {
+      if (errorMessage(e) === "INVALID_YAML_STRUCTURE" && String(filePath).toLowerCase().endsWith("_theory.json")) {
         const legacyMap = parseLegacyTheoryMap(yamlText);
         if (legacyMap) {
           const effectiveLanguage = language as MaterialsLanguage;
@@ -1082,7 +1122,7 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
             try {
               const raw = fs.readFileSync(topicsListPath, "utf8");
               const arr = JSON.parse(raw);
-              if (Array.isArray(arr)) orderedTitles = arr.map(x => String(x));
+              if (Array.isArray(arr)) orderedTitles = arr.map((x: unknown) => String(x));
             } catch {
               // ignore
             }
@@ -1125,12 +1165,12 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
       const tRepo = manager.getRepository(Topic);
       const bRepo = manager.getRepository(TheoryBlock);
 
-      const existingTasks = await manager.getRepository(Task).count({ where: { lang: effectiveLanguage as any } as any });
+      const existingTasks = await manager.getRepository(Task).count({ where: { lang: effectiveLanguage } });
 
       const existingTopics = await tRepo.find({
-        where: { lang: effectiveLanguage as any } as any,
-        relations: ["theoryBlock"] as any,
-        order: { topicIndex: "ASC" } as any
+        where: { lang: effectiveLanguage },
+        relations: { theoryBlock: true },
+        order: { topicIndex: "ASC" }
       });
 
       if (importMode === "replace") {
@@ -1141,15 +1181,15 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
       const afterDeleteExisting = importMode === "replace" ? [] : existingTopics;
       const existingByTitle = new Map<string, Topic>();
       const existingByIndex = new Map<number, Topic>();
-      for (const t of afterDeleteExisting as any[]) {
-        const key = String((t as any).title ?? "").trim().toLowerCase();
-        if (key && !existingByTitle.has(key)) existingByTitle.set(key, t as any);
+      for (const t of afterDeleteExisting) {
+        const key = String(t.title ?? "").trim().toLowerCase();
+        if (key && !existingByTitle.has(key)) existingByTitle.set(key, t);
 
-        const idx = Number((t as any).topicIndex ?? NaN);
-        if (Number.isFinite(idx) && !existingByIndex.has(idx)) existingByIndex.set(idx, t as any);
+        const idx = Number(t.topicIndex ?? NaN);
+        if (Number.isFinite(idx) && !existingByIndex.has(idx)) existingByIndex.set(idx, t);
       }
 
-      const maxIndex = (afterDeleteExisting as any[]).reduce((acc, t) => Math.max(acc, Number((t as any).topicIndex ?? -1)), -1);
+      const maxIndex = afterDeleteExisting.reduce((acc, t) => Math.max(acc, Number(t.topicIndex ?? -1)), -1);
       let nextIndex = maxIndex + 1;
 
       let created = 0;
@@ -1164,7 +1204,7 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
           continue;
         }
 
-        const targetIndex = Math.max(0, Math.floor(Number((it.order ?? (nextIndex + 1)) as any) - 1));
+        const targetIndex = Math.max(0, Math.floor(Number(it.order ?? (nextIndex + 1)) - 1));
         if (it.order === undefined || it.order === null) nextIndex++;
         const nextDescription = it.description === undefined ? undefined : it.description;
 
@@ -1186,25 +1226,25 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
         if (existing) {
           let changed = false;
 
-          if ((existing as any).title !== it.title) {
-            (existing as any).title = it.title;
+          if (existing.title !== it.title) {
+            existing.title = it.title;
             changed = true;
           }
           void nextDescription;
 
-          if (Number((existing as any).topicIndex ?? 0) !== Number(targetIndex)) {
-            (existing as any).topicIndex = targetIndex as any;
+          if (Number(existing.topicIndex ?? 0) !== Number(targetIndex)) {
+            existing.topicIndex = targetIndex;
             changed = true;
           }
 
-          if (theoryObj && typeof (theoryObj as any).content === "string" && String((theoryObj as any).content).trim()) {
-            const normalizedContent = String((theoryObj as any).content).trim();
+          if (theoryObj && typeof theoryObj.content === "string" && theoryObj.content.trim()) {
+            const normalizedContent = theoryObj.content.trim();
             assertTheoryContentIsPure(normalizedContent);
 
-            const block = (existing as any).theoryBlock as TheoryBlock | null;
-            const nextTitle = String((theoryObj as any).title || (existing as any).title).trim();
-            const nextLevel = (theoryObj as any).level === undefined ? (block?.level ?? null) : ((theoryObj as any).level ?? null);
-            const nextTags = (theoryObj as any).tags === undefined ? (block?.tags ?? null) : JSON.stringify((theoryObj as any).tags);
+            const block = existing.theoryBlock;
+            const nextTitle = String(theoryObj.title || existing.title).trim();
+            const nextLevel = theoryObj.level === undefined ? (block?.level ?? null) : (theoryObj.level ?? null);
+            const nextTags = theoryObj.tags === undefined ? (block?.tags ?? null) : JSON.stringify(theoryObj.tags);
 
             if (block) {
               const needsUpdate =
@@ -1235,7 +1275,7 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
                   tags: nextTags
                 })
               );
-              (existing as any).theoryBlock = { id: createdBlock.id } as any;
+              existing.theoryBlock = { id: createdBlock.id } as unknown as TheoryBlock;
               await writeTheoryRevisionTx({
                 manager,
                 theoryBlock: createdBlock,
@@ -1245,26 +1285,26 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
               });
             }
 
-            (existing as any).theoryMarkdown = normalizedContent;
+            existing.theoryMarkdown = normalizedContent;
             changed = true;
           }
 
           if (changed) {
-            await tRepo.save(existing as any);
+            await tRepo.save(existing);
           }
           updated++;
         } else {
           let theoryBlock: TheoryBlock | null = null;
-          if (theoryObj && typeof (theoryObj as any).content === "string" && String((theoryObj as any).content).trim()) {
-            const normalizedContent = String((theoryObj as any).content).trim();
+          if (theoryObj && typeof theoryObj.content === "string" && theoryObj.content.trim()) {
+            const normalizedContent = theoryObj.content.trim();
             assertTheoryContentIsPure(normalizedContent);
             const createdBlock = await bRepo.save(
               bRepo.create({
-                title: String((theoryObj as any).title || it.title).trim(),
+                title: String(theoryObj.title || it.title).trim(),
                 content: normalizedContent,
                 version: 1,
-                level: (theoryObj as any).level === undefined ? null : ((theoryObj as any).level ?? null),
-                tags: (theoryObj as any).tags === undefined ? null : JSON.stringify((theoryObj as any).tags)
+                level: theoryObj.level === undefined ? null : (theoryObj.level ?? null),
+                tags: theoryObj.tags === undefined ? null : JSON.stringify(theoryObj.tags)
               })
             );
             theoryBlock = createdBlock;
@@ -1277,16 +1317,16 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
             });
           }
 
-          const createdTopic = (await tRepo.save(
+          const createdTopic = await tRepo.save(
             tRepo.create({
               title: it.title,
-              lang: effectiveLanguage as any,
+              lang: effectiveLanguage,
               topicIndex: targetIndex,
               isControl: false,
-              theoryBlock: theoryBlock ? ({ id: theoryBlock.id } as any) : null,
-              theoryMarkdown: theoryBlock ? String((theoryBlock as any).content ?? "").trim() : null
-            } as any)
-          )) as any as Topic;
+              theoryBlock: theoryBlock ? ({ id: theoryBlock.id } as unknown as TheoryBlock) : null,
+              theoryMarkdown: theoryBlock ? String(theoryBlock.content ?? "").trim() : null
+            })
+          );
 
           existingByTitle.set(key, createdTopic);
           existingByIndex.set(targetIndex, createdTopic);
@@ -1294,22 +1334,22 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
         }
       }
 
-      const finalList = await tRepo.find({ where: { lang: effectiveLanguage as any } as any, order: { topicIndex: "ASC" } as any });
+      const finalList = await tRepo.find({ where: { lang: effectiveLanguage }, order: { topicIndex: "ASC" } });
       for (let i = 0; i < finalList.length; i++) {
-        const t: any = finalList[i];
+        const t = finalList[i];
         if (Number(t.topicIndex ?? 0) !== i) {
-          await tRepo.update({ id: t.id } as any, { topicIndex: i } as any);
+          await tRepo.update({ id: t.id }, { topicIndex: i });
           t.topicIndex = i;
         }
       }
 
-      const refreshed = await tRepo.find({ where: { lang: effectiveLanguage as any } as any, order: { topicIndex: "ASC" } as any, relations: ["theoryBlock"] as any });
+      const refreshed = await tRepo.find({ where: { lang: effectiveLanguage }, order: { topicIndex: "ASC" }, relations: { theoryBlock: true } });
       return { created, updated, skipped, topics: refreshed };
     });
 
     if (Array.isArray(result?.topics)) {
       for (const t of result.topics) {
-        await syncGlobalTopicNewFromLegacy({ legacy: t as any });
+        await syncGlobalTopicNewFromLegacy({ legacy: t });
       }
     }
 
@@ -1321,11 +1361,11 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
         preferredYamlPath,
         selectedWasLegacyJson
       },
-      topics: Array.isArray(result?.topics) ? (result.topics as any[]).map(buildAdminTopicDtoFromLegacy) : result?.topics
+      topics: result.topics.map(buildAdminTopicDtoFromLegacy)
     });
-  } catch (error: any) {
-    const rawMsg = String(error?.message || "");
-    const rawCode = String(error?.code || "");
+  } catch (error: unknown) {
+    const rawMsg = errorMessage(error);
+    const rawCode = String(readProperty(error, "code") ?? "");
     if (/data too long/i.test(rawMsg) || /ER_DATA_TOO_LONG/i.test(rawCode)) {
       return res.status(400).json({
         message: "THEORY_TOO_LARGE",
@@ -1340,13 +1380,14 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
         filePath: sourceFilePath,
         preferredYamlPath,
         selectedWasLegacyJson,
-        details: (error as any)?.details
+        details: readProperty(error, "details")
       });
     }
 
     // DB unique constraints, etc.
-    const driverCode = String(error?.driverError?.code || "");
-    const driverMsg = String(error?.driverError?.sqlMessage || "");
+    const driverError = readProperty(error, "driverError");
+    const driverCode = String(readProperty(driverError, "code") ?? "");
+    const driverMsg = String(readProperty(driverError, "sqlMessage") ?? "");
     if (rawCode === "ER_DUP_ENTRY" || driverCode === "ER_DUP_ENTRY" || /duplicate entry/i.test(rawMsg) || /duplicate entry/i.test(driverMsg)) {
       return res.status(409).json({
         message: "DUPLICATE_ENTRY",
@@ -1354,7 +1395,7 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
       });
     }
 
-    const msg = error?.message || "INTERNAL_SERVER_ERROR";
+    const msg = rawMsg || "INTERNAL_SERVER_ERROR";
     if (msg === "TOPIC_NOT_EMPTY") {
       return res.status(400).json({
         message: "TOPIC_NOT_EMPTY",
@@ -1368,7 +1409,7 @@ adminMaterialsRouter.post("/sync/repo", authRequired, systemAdminGuard, async (r
       return res.status(400).json({ message: "INVALID_YAML_TOPIC", detail: msg });
     }
 
-    logger.error("[admin/materials] POST /sync/repo error", { requestId: (req as any).requestId, userId: (req as any).userId, error });
+    logger.error("[admin/materials] POST /sync/repo error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -1386,8 +1427,8 @@ adminMaterialsRouter.get("/diagnostics", authRequired, systemAdminGuard, async (
       ? await topicNewRepo().count({
           where: {
             language: language as TopicLanguage,
-            class: IsNull() as any
-          } as any
+            class: IsNull()
+          }
         })
       : 0;
 
@@ -1395,15 +1436,15 @@ adminMaterialsRouter.get("/diagnostics", authRequired, systemAdminGuard, async (
       ? await topicNewRepo().count({
           where: {
             language: language as TopicLanguage,
-            class: Not(IsNull()) as any
-          } as any
+            class: Not(IsNull())
+          }
         })
       : 0;
 
     const legacyTopics = await legacyTopicRepo().count({
       where: {
-        lang: language as any
-      } as any
+        lang: language as MaterialsLanguage
+      }
     });
 
     return res.json({
@@ -1412,7 +1453,7 @@ adminMaterialsRouter.get("/diagnostics", authRequired, systemAdminGuard, async (
       topicsNewClass,
       legacyTopics
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[admin/materials] GET /diagnostics error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1431,9 +1472,9 @@ adminMaterialsRouter.post("/import/legacy-topics", authRequired, systemAdminGuar
     const importMode = mode ?? "merge";
 
     const legacy = await AppDataSource.getRepository(Topic).find({
-      where: { lang: language } as any,
-      order: { topicIndex: "ASC" } as any,
-      relations: ["theoryBlock"] as any
+      where: { lang: language },
+      order: { topicIndex: "ASC" },
+      relations: { theoryBlock: true }
     });
 
     if (!legacy.length) {
@@ -1447,16 +1488,16 @@ adminMaterialsRouter.post("/import/legacy-topics", authRequired, systemAdminGuar
 
       // Load existing global topics for the language.
       const existingTopics = await tRepo.find({
-        where: { language, class: IsNull() as any } as any,
-        relations: ["theoryBlock", "tasks", "controlWorks", "class"] as any,
-        order: { order: "ASC" } as any
+        where: { language, class: IsNull() },
+        relations: { theoryBlock: true, tasks: true, controlWorks: true, class: true },
+        order: { order: "ASC" }
       });
 
       if (importMode === "replace") {
         // Safety: block deletion if global topic already has tasks/control works.
         for (const t of existingTopics) {
-          if ((t as any).class) continue;
-          if ((t as any).tasks?.length || (t as any).controlWorks?.length) {
+          if (t.class) continue;
+          if (t.tasks?.length || t.controlWorks?.length) {
             throw new Error("TOPIC_NOT_EMPTY");
           }
         }
@@ -1484,19 +1525,19 @@ adminMaterialsRouter.post("/import/legacy-topics", authRequired, systemAdminGuar
 
       for (let i = 0; i < legacy.length; i++) {
         const src = legacy[i];
-        const title = String((src as any).title ?? "").trim();
+        const title = String(src.title ?? "").trim();
         if (!title) {
           skipped++;
           continue;
         }
 
-        const orderRaw = (src as any).topicIndex;
+        const orderRaw = src.topicIndex;
         const targetOrder = Number.isFinite(Number(orderRaw)) ? Math.max(0, Math.floor(Number(orderRaw))) : i + 1;
 
-        const legacyBlock = ((src as any).theoryBlock as TheoryBlock | null) ?? null;
-        const legacyBlockId = Number((src as any).theoryBlockId ?? legacyBlock?.id ?? 0) || null;
+        const legacyBlock = src.theoryBlock ?? null;
+        const legacyBlockId = Number(src.theoryBlockId ?? legacyBlock?.id ?? 0) || null;
 
-        const contentCandidate = String((src as any).theoryMarkdown ?? "").trim();
+        const contentCandidate = String(src.theoryMarkdown ?? "").trim();
         const content = contentCandidate ? contentCandidate : "";
 
         const key = title.toLowerCase();
@@ -1505,17 +1546,17 @@ adminMaterialsRouter.post("/import/legacy-topics", authRequired, systemAdminGuar
         const upsertTheory = async (topic: TopicNew) => {
           // Prefer attaching an already-migrated legacy theory block (topics.theory_block_id).
           if (legacyBlockId) {
-            const existingBlock = (topic as any).theoryBlock as TheoryBlock | null;
+            const existingBlock = topic.theoryBlock;
 
             // In merge mode, only attach legacy block if the topic has no theory yet.
             // In replace mode, prefer legacy block as the source of truth.
             const shouldAttach = importMode === "replace" ? true : !existingBlock;
             if (shouldAttach) {
-              (topic as any).theoryBlock = { id: legacyBlockId } as any;
-              (topic as any).theoryBlockId = legacyBlockId;
+              topic.theoryBlock = { id: legacyBlockId } as unknown as TheoryBlock;
+              topic.theoryBlockId = legacyBlockId;
 
               // Ensure at least one revision exists so History UI is not empty.
-              const blockEntity = legacyBlock ?? (await bRepo.findOne({ where: { id: legacyBlockId } as any }));
+              const blockEntity = legacyBlock ?? (await bRepo.findOne({ where: { id: legacyBlockId } }));
               if (blockEntity) {
                 await ensureRevisionExists(blockEntity, "import:legacy-link");
               }
@@ -1529,7 +1570,7 @@ adminMaterialsRouter.post("/import/legacy-topics", authRequired, systemAdminGuar
           // NOTE: We intentionally do NOT validate legacy theory with assertTheoryContentIsPure().
           // Old data may include practice/tasks sections; importing should still work so admins can clean it up.
 
-          const block = (topic as any).theoryBlock as TheoryBlock | null;
+          const block = topic.theoryBlock;
           const nextTitle = title;
 
           if (block) {
@@ -1555,8 +1596,8 @@ adminMaterialsRouter.post("/import/legacy-topics", authRequired, systemAdminGuar
                 tags: null
               })
             );
-            (topic as any).theoryBlock = createdBlock;
-            (topic as any).theoryBlockId = createdBlock.id;
+            topic.theoryBlock = createdBlock;
+            topic.theoryBlockId = createdBlock.id;
             try {
               await ensureRevisionExists(createdBlock, "import:legacy");
             } catch {
@@ -1572,7 +1613,7 @@ adminMaterialsRouter.post("/import/legacy-topics", authRequired, systemAdminGuar
             changed = true;
           }
           if (Number(existing.order ?? 0) !== Number(targetOrder)) {
-            existing.order = targetOrder as any;
+            existing.order = targetOrder;
             changed = true;
           }
 
@@ -1600,21 +1641,21 @@ adminMaterialsRouter.post("/import/legacy-topics", authRequired, systemAdminGuar
 
       // Normalize order to 1..N
       const all = await tRepo.find({
-        where: { language, class: IsNull() as any } as any,
-        order: { order: "ASC" } as any
+        where: { language, class: IsNull() },
+        order: { order: "ASC" }
       });
       for (let i = 0; i < all.length; i++) {
         const id = all[i].id;
         const desired = i + 1;
         if (Number(all[i].order ?? 0) !== desired) {
-          await manager.update(TopicNew, { id }, { order: desired } as any);
+          await manager.update(TopicNew, { id }, { order: desired });
         }
       }
 
       const topics = await tRepo.find({
-        where: { language, class: IsNull() as any } as any,
-        order: { order: "ASC" } as any,
-        relations: ["theoryBlock"] as any
+        where: { language, class: IsNull() },
+        order: { order: "ASC" },
+        relations: { theoryBlock: true }
       });
 
       // Touch legacy repo to avoid unused warning in some TS configurations.
@@ -1624,8 +1665,8 @@ adminMaterialsRouter.post("/import/legacy-topics", authRequired, systemAdminGuar
     });
 
     return res.json(result);
-  } catch (error: any) {
-    const msg = error?.message || "INTERNAL_SERVER_ERROR";
+  } catch (error: unknown) {
+    const msg = errorMessage(error) || "INTERNAL_SERVER_ERROR";
     if (msg === "TOPIC_NOT_EMPTY") return res.status(409).json({ message: "TOPIC_NOT_EMPTY" });
     if (msg === "THEORY_EMPTY") return res.status(400).json({ message: "THEORY_EMPTY" });
     if (msg === "THEORY_CONTAINS_PRACTICE") return res.status(400).json({ message: "THEORY_CONTAINS_PRACTICE" });
@@ -1648,13 +1689,13 @@ adminMaterialsRouter.patch("/topics/:id", authRequired, systemAdminGuard, async 
 
     const data = validated.data;
 
-    const topic = await legacyTopicRepo().findOne({ where: { id: topicId } as any, relations: ["theoryBlock"] as any });
+    const topic = await legacyTopicRepo().findOne({ where: { id: topicId }, relations: { theoryBlock: true } });
     if (!topic) return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
 
-    const prevLang = String((topic as any).lang ?? "").toUpperCase().trim() as MaterialsLanguage;
-    const prevIndex = Number((topic as any).topicIndex ?? 0);
+    const prevLang = topic.lang;
+    const prevIndex = Number(topic.topicIndex ?? 0);
 
-    const nextLang = String((data.language !== undefined ? data.language : (topic as any).lang) ?? "").toUpperCase().trim() as MaterialsLanguage;
+    const nextLang = data.language ?? topic.lang;
     const nextIndex = data.order !== undefined ? Math.max(0, Math.floor(Number(data.order) - 1)) : prevIndex;
 
     await AppDataSource.transaction(async manager => {
@@ -1664,7 +1705,7 @@ adminMaterialsRouter.patch("/topics/:id", authRequired, systemAdminGuard, async 
         await manager
           .createQueryBuilder()
           .update(Topic)
-          .set({ topicIndex: () => "topic_index - 1" } as any)
+          .set({ topicIndex: () => "topic_index - 1" })
           .where("lang = :lang", { lang: prevLang })
           .andWhere("topic_index > :idx", { idx: prevIndex })
           .execute();
@@ -1673,19 +1714,19 @@ adminMaterialsRouter.patch("/topics/:id", authRequired, systemAdminGuard, async 
         await manager
           .createQueryBuilder()
           .update(Topic)
-          .set({ topicIndex: () => "topic_index + 1" } as any)
+          .set({ topicIndex: () => "topic_index + 1" })
           .where("lang = :lang", { lang: nextLang })
           .andWhere("topic_index >= :idx", { idx: nextIndex })
           .execute();
 
-        await manager.update(Topic, { id: topicId } as any, { lang: nextLang as any, topicIndex: nextIndex } as any);
+        await manager.update(Topic, { id: topicId }, { lang: nextLang, topicIndex: nextIndex });
       } else if (nextIndex !== prevIndex) {
         // Move within same language.
         if (nextIndex > prevIndex) {
           await manager
             .createQueryBuilder()
             .update(Topic)
-            .set({ topicIndex: () => "topic_index - 1" } as any)
+            .set({ topicIndex: () => "topic_index - 1" })
             .where("lang = :lang", { lang: nextLang })
             .andWhere("topic_index > :from", { from: prevIndex })
             .andWhere("topic_index <= :to", { to: nextIndex })
@@ -1694,25 +1735,25 @@ adminMaterialsRouter.patch("/topics/:id", authRequired, systemAdminGuard, async 
           await manager
             .createQueryBuilder()
             .update(Topic)
-            .set({ topicIndex: () => "topic_index + 1" } as any)
+            .set({ topicIndex: () => "topic_index + 1" })
             .where("lang = :lang", { lang: nextLang })
             .andWhere("topic_index >= :to", { to: nextIndex })
             .andWhere("topic_index < :from", { from: prevIndex })
             .execute();
         }
-        await manager.update(Topic, { id: topicId } as any, { topicIndex: nextIndex } as any);
+        await manager.update(Topic, { id: topicId }, { topicIndex: nextIndex });
       }
 
       if (data.title !== undefined) {
-        await manager.update(Topic, { id: topicId } as any, { title: data.title.trim() } as any);
+        await manager.update(Topic, { id: topicId }, { title: data.title.trim() });
       }
       if (data.language !== undefined) {
-        await manager.update(Topic, { id: topicId } as any, { lang: data.language as any } as any);
+        await manager.update(Topic, { id: topicId }, { lang: data.language });
       }
 
       // Theory changes (block + mirror).
       if (data.clearTheory) {
-        await manager.update(Topic, { id: topicId } as any, { theoryBlock: null as any, theoryMarkdown: null as any } as any);
+        await manager.update(Topic, { id: topicId }, { theoryBlock: null, theoryMarkdown: null });
       }
 
       if (data.theory && data.theory.content) {
@@ -1722,10 +1763,10 @@ adminMaterialsRouter.patch("/topics/:id", authRequired, systemAdminGuard, async 
         const revisionAction: TheoryBlockRevisionAction = data.theoryRevisionAction === "AUTO" ? "AUTO" : "UPDATE";
         const revisionComment = data.theoryRevisionComment?.trim() || null;
 
-        const current = await manager.getRepository(Topic).findOne({ where: { id: topicId } as any, relations: ["theoryBlock"] as any });
-        const existing = (current as any)?.theoryBlock as TheoryBlock | null | undefined;
+        const current = await manager.getRepository(Topic).findOne({ where: { id: topicId }, relations: { theoryBlock: true } });
+        const existing = current?.theoryBlock;
         if (existing) {
-          const nextTitle = String(data.theory.title || existing.title || (current as any).title).trim();
+          const nextTitle = String(data.theory.title || existing.title || current?.title).trim();
           const nextLevel = data.theory.level === undefined ? (existing.level ?? null) : data.theory.level;
           const nextTags = data.theory.tags === undefined ? (existing.tags ?? null) : JSON.stringify(data.theory.tags);
           const changed =
@@ -1746,17 +1787,17 @@ adminMaterialsRouter.patch("/topics/:id", authRequired, systemAdminGuard, async 
               createdByUserId: req.userId ?? null
             });
           }
-          await manager.update(Topic, { id: topicId } as any, { theoryMarkdown: normalizedContent } as any);
+          await manager.update(Topic, { id: topicId }, { theoryMarkdown: normalizedContent });
         } else {
           const created = manager.getRepository(TheoryBlock).create({
-            title: String(data.theory.title || (current as any).title).trim(),
+            title: String(data.theory.title || current?.title).trim(),
             content: normalizedContent,
             version: 1,
             level: data.theory.level === undefined ? null : data.theory.level,
             tags: data.theory.tags === undefined ? null : JSON.stringify(data.theory.tags)
           });
           const savedBlock = await manager.getRepository(TheoryBlock).save(created);
-          await manager.update(Topic, { id: topicId } as any, { theoryBlock: { id: savedBlock.id } as any, theoryMarkdown: normalizedContent } as any);
+          await manager.update(Topic, { id: topicId }, { theoryBlock: { id: savedBlock.id } as unknown as TheoryBlock, theoryMarkdown: normalizedContent });
           await writeTheoryRevisionTx({
             manager,
             theoryBlock: savedBlock,
@@ -1770,23 +1811,23 @@ adminMaterialsRouter.patch("/topics/:id", authRequired, systemAdminGuard, async 
       // Normalize ordering for the affected language(s) (best-effort).
       const langs = new Set<MaterialsLanguage>([prevLang, nextLang]);
       for (const l of langs) {
-        const rows = await manager.getRepository(Topic).find({ where: { lang: l as any } as any, order: { topicIndex: "ASC" } as any });
+        const rows = await manager.getRepository(Topic).find({ where: { lang: l }, order: { topicIndex: "ASC" } });
         for (let i = 0; i < rows.length; i++) {
-          const r: any = rows[i];
+          const r = rows[i];
           if (Number(r.topicIndex ?? 0) !== i) {
-            await manager.update(Topic, { id: r.id } as any, { topicIndex: i } as any);
+            await manager.update(Topic, { id: r.id }, { topicIndex: i });
           }
         }
       }
     });
 
-    const full = await legacyTopicRepo().findOne({ where: { id: topicId } as any, relations: ["theoryBlock"] as any });
+    const full = await legacyTopicRepo().findOne({ where: { id: topicId }, relations: { theoryBlock: true } });
     if (full) {
       await syncGlobalTopicNewFromLegacy({ legacy: full });
     }
     return res.json({ topic: full ? buildAdminTopicDtoFromLegacy(full) : null });
-  } catch (error: any) {
-    const msg = error?.message || "INTERNAL_SERVER_ERROR";
+  } catch (error: unknown) {
+    const msg = errorMessage(error) || "INTERNAL_SERVER_ERROR";
     if (msg === "THEORY_EMPTY") return res.status(400).json({ message: "THEORY_EMPTY" });
     if (msg === "THEORY_CONTAINS_PRACTICE") return res.status(400).json({ message: "THEORY_CONTAINS_PRACTICE" });
     if (msg === "THEORY_CONTAINS_TASK_INSTRUCTIONS") return res.status(400).json({ message: "THEORY_CONTAINS_TASK_INSTRUCTIONS" });
@@ -1807,7 +1848,7 @@ adminMaterialsRouter.get(
 
       // History is disabled (theory_block_revisions table was dropped).
       return res.json({ revisions: [] });
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("[admin/materials] GET /theory-blocks/:id/revisions error", {
         requestId: req.requestId,
         userId: req.userId,
@@ -1830,7 +1871,7 @@ adminMaterialsRouter.get(
 
       // History is disabled (theory_block_revisions table was dropped).
       return res.status(410).json({ message: "THEORY_REVISIONS_DISABLED" });
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("[admin/materials] GET /theory-blocks/:id/revisions/:version error", {
         requestId: req.requestId,
         userId: req.userId,
@@ -1859,8 +1900,8 @@ adminMaterialsRouter.post(
       void id;
       void version;
       return res.status(410).json({ message: "THEORY_REVISIONS_DISABLED" });
-    } catch (error: any) {
-      const msg = error?.message || "INTERNAL_SERVER_ERROR";
+    } catch (error: unknown) {
+      const msg = errorMessage(error) || "INTERNAL_SERVER_ERROR";
       if (msg === "THEORY_EMPTY") return res.status(400).json({ message: "THEORY_EMPTY" });
       if (msg === "THEORY_CONTAINS_PRACTICE") return res.status(400).json({ message: "THEORY_CONTAINS_PRACTICE" });
       if (msg === "THEORY_CONTAINS_TASK_INSTRUCTIONS") return res.status(400).json({ message: "THEORY_CONTAINS_TASK_INSTRUCTIONS" });
@@ -1927,13 +1968,13 @@ adminMaterialsRouter.post(
 
       const translatedAt = new Date();
       await theoryBlockRepo().update(
-        { id: block.id } as any,
+        { id: block.id },
         {
           titleEn,
           contentEn,
           translationVersionEn: Number(block.version ?? 1),
           translatedAtEn: translatedAt
-        } as any
+        }
       );
 
       return res.json({
@@ -1945,8 +1986,8 @@ adminMaterialsRouter.post(
           translatedAtEn: translatedAt
         }
       });
-    } catch (error: any) {
-      const msg = String(error?.message ?? "");
+    } catch (error: unknown) {
+      const msg = errorMessage(error);
       if (msg.includes("MyMemory HTTP 429") || msg.includes("YOU USED ALL AVAILABLE FREE TRANSLATIONS FOR TODAY")) {
         return res.status(429).json({ message: "TRANSLATION_QUOTA_EXCEEDED" });
       }
@@ -1966,28 +2007,28 @@ adminMaterialsRouter.delete("/topics/:id", authRequired, systemAdminGuard, async
     const topicId = parseInt(req.params.id, 10);
     if (isNaN(topicId)) return res.status(400).json({ message: "INVALID_TOPIC_ID" });
 
-    const topic = await legacyTopicRepo().findOne({ where: { id: topicId } as any });
+    const topic = await legacyTopicRepo().findOne({ where: { id: topicId } });
     if (!topic) return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
 
-    const countTasks = await taskRepo().count({ where: { topic: { id: topicId } as any } as any });
+    const countTasks = await taskRepo().count({ where: { topic: { id: topicId } } });
     if (countTasks > 0) {
       return res.status(400).json({ message: "TOPIC_NOT_EMPTY" });
     }
 
-    const lang = String((topic as any).lang ?? "").toUpperCase().trim() as MaterialsLanguage;
+    const lang = topic.lang;
     await legacyTopicRepo().remove(topic);
 
     // Normalize ordering after delete.
-    const rows = await legacyTopicRepo().find({ where: { lang: lang as any } as any, order: { topicIndex: "ASC" } as any });
+    const rows = await legacyTopicRepo().find({ where: { lang }, order: { topicIndex: "ASC" } });
     for (let i = 0; i < rows.length; i++) {
-      const r: any = rows[i];
+      const r = rows[i];
       if (Number(r.topicIndex ?? 0) !== i) {
-        await legacyTopicRepo().update({ id: r.id } as any, { topicIndex: i } as any);
+        await legacyTopicRepo().update({ id: r.id }, { topicIndex: i });
       }
     }
 
     return res.json({ ok: true });
-  } catch (error: any) {
+    } catch (error: unknown) {
     logger.error("[admin/materials] DELETE /topics/:id error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

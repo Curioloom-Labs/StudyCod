@@ -48,6 +48,10 @@ function clampGradeToInt(raw: unknown): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 const THEMATIC_CANONICAL_NAME = "THEMATIC";
 
 function isThematicSummaryName(raw: unknown): boolean {
@@ -215,7 +219,7 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
         .where("grade.student_id IN (:...studentIds)", { studentIds })
         .getMany();
       for (const g of allGradesForClass) {
-        const sid = (g.student as any)?.id;
+        const sid = g.student?.id;
         if (sid == null) continue;
         const bucket = gradesByStudent.get(sid);
         if (bucket) bucket.push(g);
@@ -231,7 +235,7 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
         .where("summaryGrade.student_id IN (:...studentIds)", { studentIds })
         .getMany();
       for (const sg of allSummaryForClass) {
-        const sid = (sg.student as any)?.id;
+        const sid = sg.student?.id;
         if (sid == null) continue;
         const bucket = summaryByStudent.get(sid);
         if (bucket) bucket.push(sg);
@@ -260,7 +264,7 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
           });
         } else if (lesson.type === "SUMMARY") {
           const topicId = lesson.parentId || lesson.id;
-          const thematic = summaryGrades.find((sg: any) => sg.topic && sg.topic.id === topicId && sg.assessmentType === AssessmentType.INTERMEDIATE && isThematicSummaryName(sg.name));
+          const thematic = summaryGrades.find((sg) => sg.topic && sg.topic.id === topicId && sg.assessmentType === AssessmentType.INTERMEDIATE && isThematicSummaryName(sg.name));
           flatGrades.push({
             taskId: topicId,
             taskTitle: thematicLabel,
@@ -273,7 +277,7 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
             isSummaryGrade: true
           });
         } else if (lesson.type === "SEMESTER") {
-          const semesterGrade = summaryGrades.find((sg: any) => sg.assessmentType === AssessmentType.SEMESTER && Number(sg.semester) === lesson.id);
+          const semesterGrade = summaryGrades.find((sg) => sg.assessmentType === AssessmentType.SEMESTER && Number(sg.semester) === lesson.id);
           flatGrades.push({
             taskId: lesson.id,
             taskTitle: lesson.title,
@@ -352,7 +356,13 @@ router.get("/classes/:classId/summary-grades", authRequired, async (req: AuthReq
       }
     });
 
-    const groups: Record<string, any[]> = {};
+    const groups: Record<string, Array<{
+      id: number;
+      studentId: number;
+      studentName: string;
+      grade: number;
+      createdAt: string;
+    }>> = {};
     allSummaryGrades.forEach(sg => {
       const canonicalName = canonicalizeSummaryGradeName(sg.name);
       const displayName = canonicalName === THEMATIC_CANONICAL_NAME ? thematicLabel : String(sg.name || "").trim();
@@ -413,9 +423,14 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
       });
     }
 
+    const topicIdNumber = Number.parseInt(String(topicId), 10);
+    if (!Number.isFinite(topicIdNumber)) {
+      return res.status(400).json({ message: "INVALID_TOPIC_ID" });
+    }
+
     const topic = await topicRepo().findOne({
       where: {
-        id: parseInt(topicId, 10),
+        id: topicIdNumber,
         class: {
           id: classId
         }
@@ -743,8 +758,8 @@ router.delete("/classes/:classId/topics/:topicId/thematic", authRequired, async 
         id: topicId,
         class: {
           id: classId
-        } as any
-      } as any
+        }
+      }
     });
 
     if (!topic) {
@@ -776,7 +791,7 @@ router.delete("/classes/:classId/topics/:topicId/thematic", authRequired, async 
       message: "THEMATIC_DELETED",
       deleted: result.affected || 0
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/gradebook] Error deleting thematic", { requestId: req.requestId, err: error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -890,7 +905,7 @@ router.put("/classes/:classId/topics/:topicId/thematic-formula", authRequired, a
     const cls = await loadTeacherClassForConfig(req, res, classId);
     if (!cls) return;
 
-    const topic = await topicRepo().findOne({ where: { id: topicId, class: { id: classId } as any } as any });
+    const topic = await topicRepo().findOne({ where: { id: topicId, class: { id: classId } } });
     if (!topic) {
       return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
     }
@@ -916,7 +931,7 @@ router.put("/classes/:classId/topics/:topicId/semester", authRequired, async (re
     const cls = await loadTeacherClassForConfig(req, res, classId);
     if (!cls) return;
 
-    const topic = await topicRepo().findOne({ where: { id: topicId, class: { id: classId } as any } as any });
+    const topic = await topicRepo().findOne({ where: { id: topicId, class: { id: classId } } });
     if (!topic) {
       return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
     }
@@ -1076,7 +1091,7 @@ router.get("/classes/:classId/topic-tasks/:taskId/live", authRequired, async (re
 
     disableCache(res);
     return res.json(buildLiveSnapshot(roster, attempts, Date.now()));
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/gradebook] live monitor failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1121,7 +1136,7 @@ async function computePracticeMasteryByTopic(
   const result = new Map<number, { practiceAverage: number | null; started: boolean; closed: boolean }>();
   for (const topic of topics) {
     const tasks = (topic.tasks || []).filter((t) =>
-      isAssignedToStudent(t.isAssigned, (t as any).assignedStudentIds, studentId)
+      isAssignedToStudent(t.isAssigned, t.assignedStudentIds, studentId)
     );
     if (tasks.length === 0) {
       result.set(topic.id, { practiceAverage: null, started: false, closed: false });
@@ -1153,7 +1168,7 @@ router.get("/my/skill-tree", authRequired, async (req: AuthRequest, res: Respons
       return res.status(403).json({ message: "ONLY_STUDENTS" });
     }
 
-    const student = await studentRepo().findOne({ where: { id: req.studentId } as any, relations: ["class"] });
+    const student = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
     if (!student?.class) return res.status(404).json({ message: "NO_CLASS" });
     const classId = student.class.id;
 
@@ -1180,7 +1195,7 @@ router.get("/my/skill-tree", authRequired, async (req: AuthRequest, res: Respons
 
     disableCache(res);
     return res.json(buildSkillTree(inputs));
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/gradebook] skill-tree failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1192,7 +1207,7 @@ router.get("/my/progress-report.pdf", authRequired, async (req: AuthRequest, res
     if (req.userType !== "STUDENT" || !req.studentId) {
       return res.status(403).json({ message: "ONLY_STUDENTS" });
     }
-    const student = await studentRepo().findOne({ where: { id: req.studentId } as any, relations: ["class"] });
+    const student = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
     if (!student?.class) return res.status(404).json({ message: "NO_CLASS" });
 
     const topics = await topicRepo()
@@ -1205,7 +1220,7 @@ router.get("/my/progress-report.pdf", authRequired, async (req: AuthRequest, res
 
     const model = buildProgressReportModel({
       studentName: `${student.lastName ?? ""} ${student.firstName ?? ""}`.trim() || `#${student.id}`,
-      className: (student.class as any).name ?? null,
+      className: student.class.name ?? null,
       generatedAt: new Date(),
       topics: topics.map((t) => {
         const m = masteryByTopic.get(t.id);
@@ -1228,11 +1243,11 @@ router.get("/my/progress-report.pdf", authRequired, async (req: AuthRequest, res
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", 'inline; filename="progress-report.pdf"');
       return res.send(pdf);
-    } catch (renderErr: any) {
-      logger.warn("[edu/gradebook] progress-report PDF render unavailable", { requestId: req.requestId, error: renderErr?.message });
+    } catch (renderErr: unknown) {
+      logger.warn("[edu/gradebook] progress-report PDF render unavailable", { requestId: req.requestId, error: errorMessage(renderErr) });
       return res.status(503).json({ message: "PDF_RENDER_UNAVAILABLE" });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/gradebook] progress-report failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

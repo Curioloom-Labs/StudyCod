@@ -96,12 +96,12 @@ export async function buildLocalizedTopicTitleEnById(params: {
   const unique = new Map<number, { title: string; titleEn: string | null }>();
 
   for (const topic of params.topics) {
-    const topicId = Number((topic as any)?.id);
+    const topicId = Number(topic?.id);
     if (!Number.isFinite(topicId) || topicId <= 0) continue;
-    const title = String((topic as any)?.title ?? "").trim();
+    const title = String(topic?.title ?? "").trim();
     if (!title) continue;
     if (unique.has(topicId)) continue;
-    const titleEnRaw = (topic as any)?.titleEn;
+    const titleEnRaw = topic?.titleEn;
     const titleEn = typeof titleEnRaw === "string" ? titleEnRaw.trim() : null;
     unique.set(topicId, { title, titleEn });
   }
@@ -134,12 +134,12 @@ export async function buildLocalizedTopicTitleEnById(params: {
         persistTopicTitleEnInBackground(topicId, normalized);
         continue;
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.warn("[translation] topic title uk->en failed", {
         requestId: params.logContext?.requestId,
         userId: params.logContext?.userId,
         topicId,
-        error: error?.message ?? String(error),
+      error: error instanceof Error ? error.message : String(error),
       });
     }
 
@@ -236,12 +236,12 @@ export async function translateAndPersistTheoryBlock(params: {
       });
       return translated;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.warn("[translation] theory uk->en failed", {
       requestId: params.logContext?.requestId,
       userId: params.logContext?.userId,
       theoryBlockId: params.theoryBlockId,
-      error: error?.message ?? String(error),
+      error: error instanceof Error ? error.message : String(error),
     });
   }
   return raw;
@@ -266,12 +266,12 @@ export async function translateTopicTheoryUkToEn(params: {
     if (normalized && !looksLikeTranslationProviderErrorText(normalized)) {
       return translated;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.warn("[translation] topic theory uk->en failed", {
       requestId: params.logContext?.requestId,
       userId: params.logContext?.userId,
       topicId: params.topicId ?? null,
-      error: error?.message ?? String(error),
+      error: error instanceof Error ? error.message : String(error),
     });
   }
   return raw;
@@ -301,12 +301,12 @@ export async function translateSingleTopicTitleUkToEn(params: {
       persistTopicTitleEnInBackground(params.topicId, normalized);
       return normalized;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.warn("[translation] topic title uk->en failed", {
       requestId: params.logContext?.requestId,
       userId: params.logContext?.userId,
       topicId: params.topicId,
-      error: error?.message ?? String(error),
+      error: error instanceof Error ? error.message : String(error),
     });
   }
   return raw;

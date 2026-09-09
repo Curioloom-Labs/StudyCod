@@ -1,5 +1,6 @@
 const baseUrl = process.env.BROWSER_CONTRACT_BASE_URL;
 const required = process.env.BROWSER_CONTRACT_REQUIRED === "1";
+const executablePath = String(process.env.BROWSER_CONTRACT_EXECUTABLE_PATH || "").trim();
 
 if (!baseUrl) {
   console.log("BROWSER CONTRACT UNVERIFIED: set BROWSER_CONTRACT_BASE_URL to run against a live frontend");
@@ -9,7 +10,10 @@ if (!baseUrl) {
 (async () => {
   try {
     const { chromium } = require("playwright");
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({
+      headless: true,
+      ...(executablePath ? { executablePath } : {})
+    });
     const page = await browser.newPage();
     const response = await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
     if (!response || response.status() >= 500) throw new Error(`frontend returned ${response?.status() ?? "no response"}`);

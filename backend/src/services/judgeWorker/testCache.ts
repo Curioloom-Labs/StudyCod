@@ -7,6 +7,7 @@ import { In } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { TestData } from "../../entities/TestData";
 import { logger } from "../../utils/logger";
+import { env } from "../../env";
 
 /**
  * Content-addressed on-disk cache for stored test data.
@@ -24,14 +25,14 @@ import { logger } from "../../utils/logger";
 
 /** Test-delivery mode. `refs` (default) materialises tests to files; `inline` is legacy. */
 export function judgeTestsMode(): "refs" | "inline" {
-  return String(process.env.JUDGE_TESTS_MODE ?? "").trim().toLowerCase() === "inline" ? "inline" : "refs";
+  return String(env.JUDGE_TESTS_MODE ?? "").trim().toLowerCase() === "inline" ? "inline" : "refs";
 }
 
 let resolvedDir: string | null = null;
 
 export function resolveTestCacheDir(): string {
   if (resolvedDir) return resolvedDir;
-  const fromEnv = (process.env.JUDGE_TEST_CACHE_DIR || "").trim();
+  const fromEnv = (env.JUDGE_TEST_CACHE_DIR || "").trim();
   const candidates = [fromEnv, "/var/lib/studycod/judge-cache", path.join(process.cwd(), ".judge-cache")].filter(Boolean);
   for (const dir of candidates) {
     try {
@@ -88,7 +89,7 @@ async function ensureCached(content: string, hash: string): Promise<string> {
   await fs.writeFile(tmpPath, content, { encoding: "utf8" });
   try {
     await fs.rename(tmpPath, finalPath);
-  } catch (e: any) {
+  } catch (e: unknown) {
     // Another worker may have created it concurrently; tolerate that.
     if (!(await fileExists(finalPath))) {
       try {
@@ -184,7 +185,7 @@ export async function materializeTests(
 export async function sweepTestCache(ttlMs?: number): Promise<{ removed: number; scanned: number }> {
   const dir = resolveTestCacheDir();
   const ttl = ttlMs === undefined
-    ? Math.max(60 * 60 * 1000, parseInt(String(process.env.JUDGE_TEST_CACHE_TTL_MS ?? ""), 10) || 14 * 24 * 60 * 60 * 1000)
+    ? Math.max(60 * 60 * 1000, parseInt(String(env.JUDGE_TEST_CACHE_TTL_MS ?? ""), 10) || 14 * 24 * 60 * 60 * 1000)
     : Math.max(0, ttlMs);
   const cutoff = Date.now() - ttl;
   let scanned = 0;
@@ -274,8 +275,8 @@ export async function loadTestContentByIds(
   if (numeric.length === 0) return m;
   const repo = AppDataSource.getRepository(TestData);
   const rows = await repo.find({
-    where: { id: In(numeric) } as any,
-    select: { id: true, input: true, expectedOutput: true } as any
+        where: { id: In(numeric) },
+        select: { id: true, input: true, expectedOutput: true }
   });
   for (const r of rows) m.set(String(r.id), { input: r.input || "", output: r.expectedOutput || "" });
   return m;
@@ -289,11 +290,13 @@ async function persistTestHashes(updates: TestHashUpdate[]): Promise<void> {
     // Group by (inputHash,outputHash) is unnecessary — ids are unique; update per row.
     await Promise.all(
       updates.map(u =>
-        repo.update({ id: Number(u.id) } as any, { inputSha256: u.inputHash, outputSha256: u.outputHash } as any)
+        repo.update({ id: Number(u.id) }, { inputSha256: u.inputHash, outputSha256: u.outputHash })
       )
     );
-  } catch (e: any) {
-    logger.warn("[judge] failed to persist test hashes", { error: e?.message || String(e) });
+  } catch (e: unknown) {
+    logger.warn("[judge] failed to persist test hashes", {
+      error: e instanceof Error ? e.message : String(e)
+    });
   }
 }
 
@@ -359,8 +362,10 @@ export async function buildJudgeTests<T extends { id: number | string }>(
     });
     void persistTestHashes(hashUpdates);
     return { tests, mode: "refs" };
-  } catch (e: any) {
-    logger.warn("[judge] refs materialisation failed; falling back to inline tests", { error: e?.message || String(e) });
+  } catch (e: unknown) {
+    logger.warn("[judge] refs materialisation failed; falling back to inline tests", {
+      error: e instanceof Error ? e.message : String(e)
+    });
     return { tests: await buildInline(), mode: "inline" };
   }
 }

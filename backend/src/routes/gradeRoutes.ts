@@ -13,7 +13,7 @@ const gradeRepo = () => AppDataSource.getRepository(Grade);
 
 function isPersonalControlQuizTask(task: Task | null | undefined): boolean {
   if (!task) return false;
-  return task.type === "CONTROL" && String((task as any).subtitle ?? "").includes("|QUIZ|");
+  return task.type === "CONTROL" && String(task.subtitle ?? "").includes("|QUIZ|");
 }
 
 function mapTaskToDto(task: Task | null | undefined) {
@@ -51,7 +51,7 @@ router.get("/", authRequired, async (req: AuthRequest, res) => {
         message: "UNAUTHORIZED"
       });
     }
-    const where: any = {
+    const where = {
       user: {
         id: req.userId
       }
@@ -94,8 +94,8 @@ router.get("/", authRequired, async (req: AuthRequest, res) => {
       .filter((grade) => {
         if (courseItemIds == null) return true;
         const subtitle = String(grade.task?.subtitle ?? "");
-        const explicitEnrollmentId = Number((grade.task as any)?.courseEnrollmentId ?? (grade.task as any)?.courseEnrollment?.id ?? 0);
-        const explicitItemId = Number((grade.task as any)?.courseItemId ?? (grade.task as any)?.courseItem?.id ?? 0);
+        const explicitEnrollmentId = Number(grade.task?.courseEnrollmentId ?? grade.task?.courseEnrollment?.id ?? 0);
+        const explicitItemId = Number(grade.task?.courseItemId ?? grade.task?.courseItem?.id ?? 0);
         if (courseEnrollmentId != null && explicitEnrollmentId > 0) return explicitEnrollmentId === courseEnrollmentId;
         if (explicitItemId > 0) return courseItemIds.includes(explicitItemId);
         return courseItemIds.some((itemId) => subtitle.startsWith(`CATALOG_ITEM:${itemId}|`));

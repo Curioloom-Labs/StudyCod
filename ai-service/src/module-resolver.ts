@@ -1,8 +1,11 @@
 import Module from 'module';
 import path from 'path';
 import fs from 'fs';
-const originalResolveFilename = (Module as any)._resolveFilename;
-(Module as any)._resolveFilename = function (request: string, parent: any, isMain: boolean, options: any) {
+type ResolveFilename = (request: string, parent: NodeModule | null, isMain: boolean, options?: unknown) => string;
+type ModuleWithResolveFilename = typeof Module & { _resolveFilename: ResolveFilename };
+const runtimeModule = Module as ModuleWithResolveFilename;
+const originalResolveFilename = runtimeModule._resolveFilename;
+runtimeModule._resolveFilename = function (request: string, parent: NodeModule | null, isMain: boolean, options?: unknown) {
   if (request.startsWith('../') || request.startsWith('./')) {
     const parentFilename = parent?.filename || parent?.id;
     if (parentFilename && parentFilename.includes('backend/src')) {

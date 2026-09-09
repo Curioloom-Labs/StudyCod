@@ -38,12 +38,15 @@ export const GradebookConfigPage: React.FC = () => {
         const cfg = data?.config;
         if (cfg?.categories?.length) {
           setCategories(
-            cfg.categories.map((c: any) => ({
-              id: String(c.id),
-              name: String(c.name ?? ""),
-              weight: Number(c.weight) || 1,
-              dropLowest: Number(c.dropLowest) || 0
-            }))
+            cfg.categories.map((raw: unknown) => {
+              const c = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+              return {
+                id: String(c.id ?? ""),
+                name: String(c.name ?? ""),
+                weight: Number(c.weight) || 1,
+                dropLowest: Number(c.dropLowest) || 0,
+              };
+            })
           );
         }
       } catch (error) {

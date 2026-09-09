@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import { logger } from '../../utils/logger';
+import { env } from '../../env';
 export type LLMCacheMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 interface CacheEntry<T> {
   data: T;
@@ -10,15 +11,33 @@ interface CacheAdapter {
   set<T>(key: string, value: T, ttlSeconds: number): Promise<void>;
   delete(key: string): Promise<void>;
 }
+
+interface RedisClientLike {
+  get(key: string): Promise<string | null>;
+  setEx(key: string, ttlSeconds: number, value: string): Promise<unknown>;
+  del(key: string): Promise<unknown>;
+  connect(): Promise<unknown>;
+  on(event: "error", listener: (error: Error) => void): RedisClientLike;
+  on(event: "connect", listener: () => void): RedisClientLike;
+}
+
+interface RedisModuleLike {
+  createClient(options: { url: string }): RedisClientLike;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 class MemoryCacheAdapter implements CacheAdapter {
-  private cache = new Map<string, CacheEntry<any>>();
+  private cache = new Map<string, CacheEntry<unknown>>();
   private cleanupInterval: NodeJS.Timeout | null = null;
   // Hard cap on entries so a single instance can't grow unbounded within the TTL
   // window (large LLM JSON values × high prompt cardinality could exhaust RAM on a
   // memory-constrained box). Map keeps insertion order, so we evict the oldest
   // entry (LRU: get() refreshes recency by re-inserting).
   private readonly maxEntries: number = (() => {
-    const n = Number.parseInt(String(process.env.LLM_MEMORY_CACHE_MAX_ENTRIES ?? ""), 10);
+    const n = Number.parseInt(String(env.LLM_MEMORY_CACHE_MAX_ENTRIES ?? ""), 10);
     return Number.isFinite(n) && n > 0 ? n : 500;
   })();
   constructor() {
@@ -73,7 +92,7 @@ class MemoryCacheAdapter implements CacheAdapter {
   }
 }
 class RedisCacheAdapter implements CacheAdapter {
-  private client: any = null;
+  private client: RedisClientLike | null = null;
   public isConnected: boolean = false;
   public initPromise: Promise<void>;
   constructor() {
@@ -81,18 +100,18 @@ class RedisCacheAdapter implements CacheAdapter {
   }
   private async initializeRedis(): Promise<void> {
     try {
-      let redis: any = null;
+      let redis: Partial<RedisModuleLike> | null = null;
       try {
-        redis = require('redis');
+        redis = require("redis") as Partial<RedisModuleLike>;
       } catch {
         this.isConnected = false;
         return;
       }
-      if (!redis || !redis.createClient) {
+      if (!redis?.createClient) {
         this.isConnected = false;
         return;
       }
-      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+      const redisUrl = env.REDIS_URL || 'redis://localhost:6379';
       this.client = redis.createClient({
         url: redisUrl
       });
@@ -105,9 +124,9 @@ class RedisCacheAdapter implements CacheAdapter {
         logger.info('[llm-cache] redis connected');
       });
       await this.client.connect();
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.isConnected = false;
-      logger.debug('[llm-cache] redis unavailable', { message: error?.message });
+      logger.debug('[llm-cache] redis unavailable', { message: errorMessage(error) });
     }
   }
   async get<T>(key: string): Promise<T | null> {
@@ -116,8 +135,8 @@ class RedisCacheAdapter implements CacheAdapter {
       const value = await this.client.get(key);
       if (!value) return null;
       return JSON.parse(value) as T;
-    } catch (error: any) {
-      logger.warn('[llm-cache] redis get failed', { message: error?.message });
+    } catch (error: unknown) {
+      logger.warn('[llm-cache] redis get failed', { message: errorMessage(error) });
       return null;
     }
   }
@@ -125,16 +144,16 @@ class RedisCacheAdapter implements CacheAdapter {
     if (!this.isConnected || !this.client) return;
     try {
       await this.client.setEx(key, ttlSeconds, JSON.stringify(value));
-    } catch (error: any) {
-      logger.warn('[llm-cache] redis set failed', { message: error?.message });
+    } catch (error: unknown) {
+      logger.warn('[llm-cache] redis set failed', { message: errorMessage(error) });
     }
   }
   async delete(key: string): Promise<void> {
     if (!this.isConnected || !this.client) return;
     try {
       await this.client.del(key);
-    } catch (error: any) {
-      logger.warn('[llm-cache] redis delete failed', { message: error?.message });
+    } catch (error: unknown) {
+      logger.warn('[llm-cache] redis delete failed', { message: errorMessage(error) });
     }
   }
 }
@@ -143,7 +162,7 @@ export class LLMCacheService {
   private cachePrefix = 'llm:';
   constructor() {
     this.adapter = new MemoryCacheAdapter();
-    if (process.env.REDIS_URL) {
+    if (env.REDIS_URL) {
       const redisAdapter = new RedisCacheAdapter();
       (async () => {
         try {
@@ -168,21 +187,24 @@ export class LLMCacheService {
     };
     return ttlMap[mode] || 6 * 60 * 60;
   }
-  private generateCacheKey(mode: LLMCacheMode, params: any): string {
-    const cleaned: any = {};
-    for (const key of Object.keys(params).sort()) {
-      const value = params[key];
+  private generateCacheKey(mode: LLMCacheMode, params: unknown): string {
+    const source = params && typeof params === "object"
+      ? params as Record<string, unknown>
+      : {};
+    const cleaned: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) {
+      const value = source[key];
       if (value !== undefined) {
         cleaned[key] = value;
       }
     }
-    const normalized = JSON.stringify(cleaned);
+    const normalized = JSON.stringify(cleaned) ?? "{}";
     const hash = crypto.createHash('sha256').update(`${mode}:${normalized}`).digest('hex').substring(0, 16);
     const key = `${this.cachePrefix}${mode}:${hash}`;
     logger.debug('[llm-cache] key', { mode, key, paramsKeys: Object.keys(cleaned) });
     return key;
   }
-  async get<T>(mode: LLMCacheMode, params: any): Promise<T | null> {
+  async get<T>(mode: LLMCacheMode, params: unknown): Promise<T | null> {
     try {
       const key = this.generateCacheKey(mode, params);
       const cached = await this.adapter.get<T>(key);
@@ -192,28 +214,28 @@ export class LLMCacheService {
       }
       logger.debug('[llm-cache] miss', { mode });
       return null;
-    } catch (error: any) {
-      logger.warn('[llm-cache] get failed', { mode, message: error?.message });
+    } catch (error: unknown) {
+      logger.warn('[llm-cache] get failed', { mode, message: errorMessage(error) });
       return null;
     }
   }
-  async set<T>(mode: LLMCacheMode, params: any, value: T): Promise<void> {
+  async set<T>(mode: LLMCacheMode, params: unknown, value: T): Promise<void> {
     try {
       const key = this.generateCacheKey(mode, params);
       const ttl = this.getTTL(mode);
       await this.adapter.set(key, value, ttl);
       logger.debug('[llm-cache] set', { mode, ttlSeconds: ttl });
-    } catch (error: any) {
-      logger.warn('[llm-cache] set failed', { mode, message: error?.message });
+    } catch (error: unknown) {
+      logger.warn('[llm-cache] set failed', { mode, message: errorMessage(error) });
     }
   }
-  async invalidate(mode: LLMCacheMode, params: any): Promise<void> {
+  async invalidate(mode: LLMCacheMode, params: unknown): Promise<void> {
     try {
       const key = this.generateCacheKey(mode, params);
       await this.adapter.delete(key);
       logger.debug('[llm-cache] invalidate', { mode });
-    } catch (error: any) {
-      logger.warn('[llm-cache] invalidate failed', { mode, message: error?.message });
+    } catch (error: unknown) {
+      logger.warn('[llm-cache] invalidate failed', { mode, message: errorMessage(error) });
     }
   }
   async clearAll(): Promise<void> {

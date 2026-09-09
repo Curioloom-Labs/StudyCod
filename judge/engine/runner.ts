@@ -15,6 +15,15 @@ import { getLanguage, isLanguageId } from "../languages/registry";
 import { resolveProfile } from "../languages/profiles";
 import { buildGdbDriver } from "./gdbTracer";
 import type { LanguageId } from "../languages/types";
+import {
+  disabledJudgeLanguagesRaw,
+  readCompileMemoryFloorBytes,
+  readJudgeGoCacheDir,
+  readJudgeTestCacheDir,
+  readPositiveIntEnv,
+  readReferencedTestInputLimit,
+  readReferencedTestOutputLimit
+} from "../config";
 
 // Native families whose compiled binary (`./app`) step-traces cleanly under gdb (verified:
 // clear user call stacks + locals). Rust/D/Swift are excluded — their runtimes ship debug
@@ -141,7 +150,7 @@ let goCacheDirPromise: Promise<string | null> | null = null;
 function ensureGoCacheDir(): Promise<string | null> {
   if (!goCacheDirPromise) {
     goCacheDirPromise = (async () => {
-      const dir = (process.env.JUDGE_GO_CACHE_DIR || path.join(os.tmpdir(), "studycod-go-cache")).trim();
+      const dir = readJudgeGoCacheDir(path.join(os.tmpdir(), "studycod-go-cache"));
       try {
         await fs.mkdir(dir, { recursive: true });
         await prepareSandboxWritableDir(dir);
@@ -159,18 +168,13 @@ function ensureGoCacheDir(): Promise<string | null> {
 // Large stored-test suites pass test data by file reference instead of inline, so the
 // worker streams input (constant memory) and reads expected output lazily.
 
-function intEnv(name: string, fallback: number): number {
-  const v = parseInt(String(process.env[name] ?? ""), 10);
-  return Number.isFinite(v) && v > 0 ? v : fallback;
-}
-
 /** Upper bound for a referenced input file (streamed, never fully held in RAM). */
 function maxTestInputFileBytes(): number {
-  return intEnv("JUDGE_MAX_TEST_INPUT_FILE_BYTES", 256 * 1024 * 1024);
+  return readReferencedTestInputLimit();
 }
 /** Upper bound for a referenced expected-output file (read into RAM for the checker). */
 function maxTestOutputFileBytes(): number {
-  return intEnv("JUDGE_MAX_TEST_OUTPUT_FILE_BYTES", 64 * 1024 * 1024);
+  return readReferencedTestOutputLimit();
 }
 
 function testHasRefInput(t: { input_path?: string }): boolean {
@@ -187,7 +191,7 @@ function testHasRefOutput(t: { output_path?: string }): boolean {
  */
 function assertSafeTestPath(p: string): void {
   const resolved = path.resolve(p);
-  const root = (process.env.JUDGE_TEST_CACHE_DIR || "").trim();
+  const root = readJudgeTestCacheDir();
   if (root) {
     const r = path.resolve(root);
     if (resolved !== r && !resolved.startsWith(r + path.sep)) {
@@ -265,8 +269,8 @@ function normalizeMultiFiles(input: unknown): JudgeFile[] {
   const out: JudgeFile[] = [];
   for (const f of input) {
     if (!f || typeof f !== "object") continue;
-    const pathRaw = (f as any).path;
-    const contentRaw = (f as any).content;
+    const pathRaw = Reflect.get(f, "path");
+    const contentRaw = Reflect.get(f, "content");
     if (!isSafeRootRelativeFilePath(pathRaw)) continue;
     if (typeof contentRaw !== "string") continue;
     out.push({ path: pathRaw.trim().replace(/\\/g, "/"), content: contentRaw });
@@ -405,7 +409,7 @@ function buildCompilePlanForFiles(language: LanguageId, files: JudgeFile[]): { a
 }
 
 function parseDisabledLanguagesEnv(): Set<LanguageId> {
-  const raw = String(process.env.JUDGE_DISABLED_LANGUAGES ?? process.env.DISABLED_JUDGE_LANGUAGES ?? "").trim();
+  const raw = disabledJudgeLanguagesRaw();
   if (!raw) return new Set();
   const parts = raw
     .split(/[,\s]+/g)
@@ -435,7 +439,7 @@ export class Runner {
     await validateTestRefs(req);
     const adapter = getLanguage(req.language);
     // Optional compiler/version selection. Falls back to the family default.
-    const profile = resolveProfile(req.language, (req as any).compiler);
+    const profile = resolveProfile(req.language, Reflect.get(req, "compiler"));
     const limits = validateAndResolveLimits(req.language, req.limits);
     const checker = normalizeChecker(req.checker);
     const chroot = this.resolveChroot(req.language);
@@ -448,9 +452,10 @@ export class Runner {
       throw error;
     }
     try {
-      const reqFiles = normalizeMultiFiles((req as any).files);
+      const reqFiles = normalizeMultiFiles(Reflect.get(req, "files"));
       const wantsFiles = reqFiles.length > 0;
-      const entry = ((req as any).entry && typeof (req as any).entry === "string" ? String((req as any).entry).trim() : "") || defaultEntryFile(req.language);
+      const entryRaw = Reflect.get(req, "entry");
+      const entry = (typeof entryRaw === "string" ? entryRaw.trim() : "") || defaultEntryFile(req.language);
 
       if (wantsFiles) {
         if (entry !== defaultEntryFile(req.language)) {
@@ -469,7 +474,7 @@ export class Runner {
           await writeFilesToWorkDir(workDir, reqFiles);
         }
       } else {
-        const source = (req as any).source;
+        const source = Reflect.get(req, "source");
         await adapter.writeSource(workDir, String(source ?? ""));
       }
 
@@ -480,7 +485,7 @@ export class Runner {
 
       // Execution-visualizer trace mode (Tier-B): for gdb-traceable native families, compile
       // with debug info + no optimisation and run the program under gdb instead of normally.
-      const traceReq = (req as any).trace;
+      const traceReq = Reflect.get(req, "trace");
       const wantsTrace = !!traceReq && traceReq.mode === "step" && GDB_TRACEABLE.has(req.language);
       let traceRunPlan: { argv: string[]; display: string } | null = null;
       if (wantsTrace && compilePlan) {
@@ -523,8 +528,7 @@ export class Runner {
       // program's runtime limit. Give the COMPILE step a generous memory floor so a task
       // with a small run-time memory limit doesn't fail to build. Configurable.
       const compileMemFloorBytes = (() => {
-        const mb = parseInt(String(process.env.JUDGE_COMPILE_MEMORY_FLOOR_MB ?? ""), 10);
-        return (Number.isFinite(mb) && mb > 0 ? mb : 768) * 1024 * 1024;
+        return readCompileMemoryFloorBytes();
       })();
       const compileMemoryBytes = Math.max(limits.memoryLimitBytes, compileMemFloorBytes);
       const compileAddressSpaceBytes = addressSpaceLimitBytes ?? compileMemoryBytes + 256 * 1024 * 1024;
@@ -865,7 +869,7 @@ function normalizeChecker(spec?: CheckerSpec): CheckerSpec {
   };
   if (spec.type === "nonempty") return { type: "nonempty" };
   if (spec.type === "float") {
-    const eps = Number((spec as any).epsilon);
+    const eps = Number(Reflect.get(spec, "epsilon"));
     if (!Number.isFinite(eps) || eps <= 0 || eps > 1) return {
       type: "float",
       epsilon: 1e-6
@@ -908,7 +912,7 @@ function validateRequest(req: JudgeRequest) {
   if (!isLanguageId(req.language)) {
     throw new Error("INVALID_REQUEST: unsupported language");
   }
-  const compiler = (req as any).compiler;
+  const compiler = Reflect.get(req, "compiler");
   if (compiler !== undefined && compiler !== null && typeof compiler !== "string") {
     throw new Error("INVALID_REQUEST: compiler must be a string");
   }
@@ -918,9 +922,9 @@ function validateRequest(req: JudgeRequest) {
     throw new Error(`INVALID_REQUEST: language disabled: ${req.language}`);
   }
 
-  const files = normalizeMultiFiles((req as any).files);
+  const files = normalizeMultiFiles(Reflect.get(req, "files"));
   const hasFiles = files.length > 0;
-  const source = (req as any).source;
+  const source = Reflect.get(req, "source");
   const hasSource = typeof source === "string" && source.length > 0;
 
   if (!hasFiles && !hasSource) throw new Error("INVALID_REQUEST: source or files required");
@@ -928,7 +932,8 @@ function validateRequest(req: JudgeRequest) {
 
   if (hasFiles) {
     const entryDefault = defaultEntryFile(req.language);
-    const entry = ((req as any).entry && typeof (req as any).entry === "string" ? String((req as any).entry).trim() : "") || entryDefault;
+    const entryRaw = Reflect.get(req, "entry");
+    const entry = (typeof entryRaw === "string" ? entryRaw.trim() : "") || entryDefault;
     if (entry !== entryDefault) {
       throw new Error(`INVALID_REQUEST: entry must be ${entryDefault} for language ${req.language}`);
     }
@@ -940,30 +945,26 @@ function validateRequest(req: JudgeRequest) {
     const totalBytes = files.reduce((sum, f) => sum + Buffer.byteLength(f.content || "", "utf8"), 0);
     if (totalBytes > 1024 * 1024) throw new Error("INVALID_REQUEST: files too large");
 
-    const maxFilesRaw = parseInt(String(process.env.JUDGE_MAX_FILES ?? ""), 10);
-    const maxFiles = Number.isFinite(maxFilesRaw) && maxFilesRaw > 0 ? maxFilesRaw : 64;
+    const maxFiles = readPositiveIntEnv("JUDGE_MAX_FILES", 64);
     if (files.length > maxFiles) throw new Error(`INVALID_REQUEST: too many files (max ${maxFiles})`);
   }
   if (!Array.isArray(req.tests) || req.tests.length === 0) throw new Error("INVALID_REQUEST: tests required");
 
-  const maxTestsRaw = parseInt(String(process.env.JUDGE_MAX_TESTS ?? ""), 10);
-  const maxTests = Number.isFinite(maxTestsRaw) && maxTestsRaw > 0 ? maxTestsRaw : 5000;
+  const maxTests = readPositiveIntEnv("JUDGE_MAX_TESTS", 5000);
   if (req.tests.length > maxTests) throw new Error(`INVALID_REQUEST: too many tests (max ${maxTests})`);
 
-  const maxTestInputBytesRaw = parseInt(String(process.env.JUDGE_MAX_TEST_INPUT_BYTES ?? ""), 10);
-  const maxTestOutputBytesRaw = parseInt(String(process.env.JUDGE_MAX_TEST_OUTPUT_BYTES ?? ""), 10);
-  const maxTestInputBytes =
-    Number.isFinite(maxTestInputBytesRaw) && maxTestInputBytesRaw > 0 ? maxTestInputBytesRaw : 1024 * 1024;
-  const maxTestOutputBytes =
-    Number.isFinite(maxTestOutputBytesRaw) && maxTestOutputBytesRaw > 0 ? maxTestOutputBytesRaw : 1024 * 1024;
+  const maxTestInputBytes = readPositiveIntEnv("JUDGE_MAX_TEST_INPUT_BYTES", 1024 * 1024);
+  const maxTestOutputBytes = readPositiveIntEnv("JUDGE_MAX_TEST_OUTPUT_BYTES", 1024 * 1024);
   for (const t of req.tests) {
     if (!t) throw new Error("INVALID_REQUEST: bad test");
     const hasRefInput = testHasRefInput(t);
     const hasRefOutput = testHasRefOutput(t);
-    if ((t as any).input_path !== undefined && typeof (t as any).input_path !== "string") {
+    const inputPath = Reflect.get(t, "input_path");
+    const outputPath = Reflect.get(t, "output_path");
+    if (inputPath !== undefined && typeof inputPath !== "string") {
       throw new Error("INVALID_REQUEST: test.input_path must be string");
     }
-    if ((t as any).output_path !== undefined && typeof (t as any).output_path !== "string") {
+    if (outputPath !== undefined && typeof outputPath !== "string") {
       throw new Error("INVALID_REQUEST: test.output_path must be string");
     }
     // Expected output may be inline OR referenced by file.

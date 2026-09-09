@@ -1,64 +1,32 @@
-export const GRADING_SYSTEMS = ["PERCENT_100", "POINTS_12", "POINTS_10", "LETTER_AF", "ECTS_AF", "GPA_4"] as const;
+import {
+  DEFAULT_GRADE_SCALE_MODE,
+  DEFAULT_GRADING_SYSTEM,
+  ECTS_TO_PERCENT,
+  GRADE_SCALE_MODES,
+  GRADING_SYSTEMS,
+  LETTER_AF_TO_PERCENT,
+  clampRaw100,
+  formatGpa,
+  normalizeGradingSystem as normalizeSharedGradingSystem,
+  normalizeScaleMode,
+  percentToEcts,
+  percentToLetterAF,
+  percentToPoints12Mon,
+  percentToPointsLinear,
+  points12ToPercentMon,
+} from "../../../shared/utils/gradingScaleContract";
+import type {
+  GradeScaleMode,
+  GradingSystem,
+} from "../../../shared/utils/gradingScaleContract";
 
-export type ClassGradingSystem = (typeof GRADING_SYSTEMS)[number];
+export { DEFAULT_GRADE_SCALE_MODE, DEFAULT_GRADING_SYSTEM, GRADE_SCALE_MODES, GRADING_SYSTEMS, normalizeScaleMode };
+export type ClassGradingSystem = GradingSystem;
+export type { GradeScaleMode };
 export type GradeTone = "muted" | "error" | "warning" | "warn" | "success";
 
-export const DEFAULT_GRADING_SYSTEM: ClassGradingSystem = "PERCENT_100";
-
-export const GRADE_SCALE_MODES = ["LINEAR", "MON"] as const;
-export type GradeScaleMode = (typeof GRADE_SCALE_MODES)[number];
-export const DEFAULT_GRADE_SCALE_MODE: GradeScaleMode = "LINEAR";
-
-export function normalizeScaleMode(value: unknown): GradeScaleMode {
-  return value === "MON" ? "MON" : "LINEAR";
-}
-
-// Official Ukrainian (МОН) 12-point band table. `anchor` is the percent stored
-// when a teacher enters that point value (band upper bound → stable round-trip).
-// Mirror of backend/src/utils/gradingScale.ts — keep both in sync.
-const MON_12_BANDS: Array<{ point: number; min: number; anchor: number }> = [
-  { point: 12, min: 98, anchor: 100 },
-  { point: 11, min: 95, anchor: 97 },
-  { point: 10, min: 90, anchor: 94 },
-  { point: 9, min: 82, anchor: 89 },
-  { point: 8, min: 74, anchor: 81 },
-  { point: 7, min: 64, anchor: 73 },
-  { point: 6, min: 55, anchor: 63 },
-  { point: 5, min: 45, anchor: 54 },
-  { point: 4, min: 35, anchor: 44 },
-  { point: 3, min: 25, anchor: 34 },
-  { point: 2, min: 10, anchor: 24 },
-  { point: 1, min: 1, anchor: 9 }
-];
-
-function percentToPoints12Mon(score: number): number {
-  if (score <= 0) return 0;
-  for (const band of MON_12_BANDS) {
-    if (score >= band.min) return band.point;
-  }
-  return 1;
-}
-
-function points12ToPercentMon(point: number): number {
-  const p = Math.max(0, Math.min(12, Math.round(point)));
-  if (p <= 0) return 0;
-  const band = MON_12_BANDS.find(b => b.point === p);
-  return band ? band.anchor : 0;
-}
-
-// LINEAR point mapping that never collapses a positive score to 0.
-function percentToPointsLinear(score: number, max: number): number {
-  if (score <= 0) return 0;
-  const points = Math.round((score / 100) * max);
-  return points <= 0 ? 1 : points;
-}
-
 export function normalizeGradingSystem(value: unknown): ClassGradingSystem {
-  if (typeof value !== "string") return DEFAULT_GRADING_SYSTEM;
-  if ((GRADING_SYSTEMS as readonly string[]).includes(value)) {
-    return value as ClassGradingSystem;
-  }
-  return DEFAULT_GRADING_SYSTEM;
+  return normalizeSharedGradingSystem(value);
 }
 
 export function gradingSystemLabel(system: ClassGradingSystem, isEn: boolean): string {
@@ -103,10 +71,6 @@ function toNumber(raw: string): number {
   return Number(raw.replace(",", ".").trim());
 }
 
-function clamp100(value: number): number {
-  return Math.max(0, Math.min(100, Math.round(value)));
-}
-
 function numericToneFromBands(value: number, bands: {
   success: number;
   warn: number;
@@ -119,40 +83,6 @@ function numericToneFromBands(value: number, bands: {
   return "error";
 }
 
-function percentToLetterAF(percent: number): "A" | "B" | "C" | "D" | "F" {
-  if (percent >= 90) return "A";
-  if (percent >= 80) return "B";
-  if (percent >= 70) return "C";
-  if (percent >= 60) return "D";
-  return "F";
-}
-
-function percentToEcts(percent: number): "A" | "B" | "C" | "D" | "E" | "F" {
-  if (percent >= 90) return "A";
-  if (percent >= 82) return "B";
-  if (percent >= 74) return "C";
-  if (percent >= 64) return "D";
-  if (percent >= 60) return "E";
-  return "F";
-}
-
-const letterAfToPercent: Record<string, number> = {
-  A: 95,
-  B: 85,
-  C: 75,
-  D: 65,
-  F: 50
-};
-
-const ectsToPercent: Record<string, number> = {
-  A: 95,
-  B: 86,
-  C: 78,
-  D: 69,
-  E: 62,
-  F: 50
-};
-
 export function formatGradeForSystem(
   rawScore: number | null | undefined,
   system: ClassGradingSystem,
@@ -162,7 +92,7 @@ export function formatGradeForSystem(
     return "-";
   }
 
-  const score = clamp100(Number(rawScore));
+  const score = clampRaw100(Number(rawScore));
   switch (system) {
     case "PERCENT_100":
       return String(score);
@@ -175,9 +105,7 @@ export function formatGradeForSystem(
     case "ECTS_AF":
       return percentToEcts(score);
     case "GPA_4": {
-      const gpa = score / 25;
-      const fixed = gpa.toFixed(2);
-      return fixed.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+      return formatGpa(score);
     }
     default:
       return String(score);
@@ -193,7 +121,7 @@ export function getGradeToneForSystem(
     return "muted";
   }
 
-  const score = clamp100(Number(rawScore));
+  const score = clampRaw100(Number(rawScore));
 
   switch (system) {
     case "PERCENT_100":
@@ -261,31 +189,31 @@ export function parseGradeInputToRaw100(
     case "PERCENT_100": {
       const n = toNumber(value);
       if (!Number.isFinite(n) || n < 0 || n > 100) return null;
-      return clamp100(n);
+      return clampRaw100(n);
     }
     case "POINTS_12": {
       const n = toNumber(value);
       if (!Number.isFinite(n) || n < 0 || n > 12) return null;
-      if (scaleMode === "MON") return clamp100(points12ToPercentMon(n));
-      return clamp100(n / 12 * 100);
+      if (scaleMode === "MON") return clampRaw100(points12ToPercentMon(n));
+      return clampRaw100(n / 12 * 100);
     }
     case "POINTS_10": {
       const n = toNumber(value);
       if (!Number.isFinite(n) || n < 0 || n > 10) return null;
-      return clamp100(n / 10 * 100);
+      return clampRaw100(n / 10 * 100);
     }
     case "GPA_4": {
       const n = toNumber(value);
       if (!Number.isFinite(n) || n < 0 || n > 4) return null;
-      return clamp100(n / 4 * 100);
+      return clampRaw100(n / 4 * 100);
     }
     case "LETTER_AF": {
       const key = value.toUpperCase();
-      return key in letterAfToPercent ? letterAfToPercent[key] : null;
+      return key in LETTER_AF_TO_PERCENT ? LETTER_AF_TO_PERCENT[key] : null;
     }
     case "ECTS_AF": {
       const key = value.toUpperCase();
-      return key in ectsToPercent ? ectsToPercent[key] : null;
+      return key in ECTS_TO_PERCENT ? ECTS_TO_PERCENT[key] : null;
     }
     default:
       return null;

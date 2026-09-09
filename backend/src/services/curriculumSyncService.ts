@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { AppDataSource } from "../data-source";
+import type { Repository } from "typeorm";
 import { Course } from "../entities/Course";
 import { CourseDependency } from "../entities/CourseDependency";
 import { CourseItem } from "../entities/CourseItem";
@@ -35,6 +36,11 @@ function extractExerciseFocus(markdown: string): string | null {
   const match = markdown.match(/exercise_focus:\s*([^\n]+)/i);
   return match?.[1]?.trim() || null;
 }
+
+type CourseItemSyncInput = Omit<Pick<CourseItem, "contentKey" | "title" | "order" | "sourceHash" | "sourcePath" | "content" | "kind">, "contentKey"> & {
+  contentKey: string;
+  legacyContentKeys?: string[];
+};
 
 function starterCode(runtime: CurriculumCourseDefinition["runtime"]): string {
   if (runtime === "JAVA") return "public class Main {\n    public static void main(String[] args) {\n        // Напишіть розв’язання тут\n    }\n}";
@@ -261,7 +267,7 @@ function finalAssessmentItem(course: CurriculumCourseDefinition, order: number) 
   };
 }
 
-async function saveCourseItem(itemRepo: ReturnType<typeof AppDataSource.getRepository<CourseItem>>, module: CourseModule, input: any, report: CurriculumSyncReport, dryRun: boolean, preserveExisting = false): Promise<CourseItem> {
+async function saveCourseItem(itemRepo: Repository<CourseItem>, module: CourseModule, input: CourseItemSyncInput, report: CurriculumSyncReport, dryRun: boolean, preserveExisting = false): Promise<CourseItem> {
   let item = await itemRepo.findOne({ where: { module: { id: module.id }, contentKey: input.contentKey } });
   if (!item && input.legacyContentKeys?.length) {
     for (const legacyContentKey of input.legacyContentKeys) {
@@ -277,8 +283,14 @@ async function saveCourseItem(itemRepo: ReturnType<typeof AppDataSource.getRepos
   // Existing generated tasks remain stable, but the learning contract itself
   // is platform policy rather than learner work. Upgrade old v1 practice
   // rows in place so new readiness rules reach existing enrollments too.
-  if (item && preserveExisting && Number((item.content as any)?.exercise?.learningContract?.version || 0) >= 2) return item;
-  if (!item) item = itemRepo.create({ module: { id: module.id } as any, contentKey: input.contentKey });
+  const exercise = item?.content && typeof item.content.exercise === "object" && item.content.exercise !== null
+    ? item.content.exercise as Record<string, unknown>
+    : null;
+  const learningContract = exercise && typeof exercise.learningContract === "object" && exercise.learningContract !== null
+    ? exercise.learningContract as Record<string, unknown>
+    : null;
+  if (item && preserveExisting && Number(learningContract?.version || 0) >= 2) return item;
+  if (!item) item = itemRepo.create({ module: { id: module.id }, contentKey: input.contentKey });
   item.contentKey = input.contentKey;
   const changed = created || item.sourceHash !== input.sourceHash || item.title !== input.title || JSON.stringify(item.content) !== JSON.stringify(input.content);
   item.kind = input.kind;
@@ -332,7 +344,7 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
 
       let variant = await txVariantRepo.findOne({ where: { course: { id: course.id }, runtime: definition.runtime } });
       if (!variant) {
-        variant = txVariantRepo.create({ course: { id: course.id } as any, runtime: definition.runtime, title: definition.runtime === "CPP" ? "C++" : definition.runtime === "JAVA" ? "Java" : "Python", status: "PUBLISHED" });
+        variant = txVariantRepo.create({ course: { id: course.id }, runtime: definition.runtime, title: definition.runtime === "CPP" ? "C++" : definition.runtime === "JAVA" ? "Java" : "Python", status: "PUBLISHED" });
         await txVariantRepo.save(variant);
         report.variantsCreated += 1;
       } else if (variant.status !== "PUBLISHED") {
@@ -348,7 +360,7 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
         let module = await txModuleRepo.findOne({ where: { course: { id: course.id }, contentKey: topicModuleKey } });
         const wasCreated = !module;
         if (!module) {
-          module = txModuleRepo.create({ course: { id: course.id } as any, contentKey: topicModuleKey, title: topic.title, order: courseTopics.indexOf(topic), sourceHash: topic.sourceHash });
+          module = txModuleRepo.create({ course: { id: course.id }, contentKey: topicModuleKey, title: topic.title, order: courseTopics.indexOf(topic), sourceHash: topic.sourceHash });
           report.modulesCreated += 1;
         } else {
           module.title = topic.title;
@@ -382,7 +394,7 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
       const projectsModuleKey = `${definition.key}.projects`;
       let projectsModule = await txModuleRepo.findOne({ where: { course: { id: course.id }, contentKey: projectsModuleKey } });
       if (!projectsModule) {
-        projectsModule = txModuleRepo.create({ course: { id: course.id } as any, contentKey: projectsModuleKey, title: "Проєкти та фінальна робота", order: courseTopics.length, sourceHash });
+        projectsModule = txModuleRepo.create({ course: { id: course.id }, contentKey: projectsModuleKey, title: "Проєкти та фінальна робота", order: courseTopics.length, sourceHash });
         report.modulesCreated += 1;
       } else {
         projectsModule.title = "Проєкти та фінальна робота";
@@ -454,7 +466,7 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
         if (!prerequisite) throw new Error(`CURRICULUM_INVALID: missing course ${prerequisiteKey}`);
         const existing = await txDependencyRepo.findOne({ where: { course: { id: course.id }, prerequisiteCourse: { id: prerequisite.id } } });
         if (!existing) {
-          await txDependencyRepo.save(txDependencyRepo.create({ course: { id: course.id } as any, prerequisiteCourse: { id: prerequisite.id } as any, requiredCompletionPercent: 100 }));
+          await txDependencyRepo.save(txDependencyRepo.create({ course: { id: course.id }, prerequisiteCourse: { id: prerequisite.id }, requiredCompletionPercent: 100 }));
           report.dependenciesCreated += 1;
         }
       }

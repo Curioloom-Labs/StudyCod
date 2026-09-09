@@ -1,4 +1,5 @@
 import passport from "passport";
+import type { Request } from "express";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { AppDataSource } from "../data-source";
 import { User } from "../entities/User";
@@ -7,14 +8,32 @@ import { logger } from "../utils/logger";
 const getUserRepository = () => AppDataSource.getRepository(User);
 
 type GoogleBirthday = {
-  date?: {
-    day?: number;
-    month?: number;
-  };
-  metadata?: {
-    primary?: boolean;
+  date?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+};
+
+type GoogleOAuthRequest = Request & {
+  session?: {
+    googleLinkUserId?: unknown;
   };
 };
+
+type GooglePassportUser = {
+  id?: number;
+  googleId?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function toGoogleBirthday(value: unknown): GoogleBirthday | null {
+  if (!isRecord(value)) return null;
+  return {
+    date: isRecord(value.date) ? value.date : undefined,
+    metadata: isRecord(value.metadata) ? value.metadata : undefined
+  };
+}
 
 async function readGoogleBirthday(accessToken: string): Promise<{ birthDay: number; birthMonth: number } | null> {
   try {
@@ -28,8 +47,9 @@ async function readGoogleBirthday(accessToken: string): Promise<{ birthDay: numb
       return null;
     }
 
-    const payload = await response.json() as { birthdays?: GoogleBirthday[] };
-    const birthdays = Array.isArray(payload.birthdays) ? payload.birthdays : [];
+    const payload: unknown = await response.json();
+    const rawBirthdays = isRecord(payload) && Array.isArray(payload.birthdays) ? payload.birthdays : [];
+    const birthdays = rawBirthdays.map(toGoogleBirthday).filter((item): item is GoogleBirthday => item !== null);
     const birthday = [...birthdays].sort((a, b) => Number(Boolean(b.metadata?.primary)) - Number(Boolean(a.metadata?.primary)))
       .find(item => {
         const day = Number(item.date?.day);
@@ -42,8 +62,10 @@ async function readGoogleBirthday(accessToken: string): Promise<{ birthDay: numb
       birthDay: Number(birthday.date.day),
       birthMonth: Number(birthday.date.month)
     };
-  } catch (error: any) {
-    logger.warn("[auth] Google birthday lookup failed", { message: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[auth] Google birthday lookup failed", {
+      message: error instanceof Error ? error.message : String(error)
+    });
     return null;
   }
 }
@@ -60,7 +82,7 @@ export function setupGoogleStrategy() {
     clientSecret: clientSecret,
     callbackURL: callbackUrl,
     passReqToCallback: true
-  }, async (req: any, accessToken, _refreshToken, profile, done) => {
+  }, async (req: GoogleOAuthRequest, accessToken, _refreshToken, profile, done) => {
     try {
       const googleId = profile.id;
       const email = profile.emails?.[0]?.value || null;
@@ -69,9 +91,10 @@ export function setupGoogleStrategy() {
       const avatarUrl = profile.photos?.[0]?.value || null;
       let birthDay: number | null = null;
       let birthMonth: number | null = null;
-      const profileJson = profile._json as any;
-      if (profileJson?.birthday) {
-        const birthday = new Date(profileJson.birthday);
+      const profileJson = profile._json as unknown as Record<string, unknown>;
+      const rawBirthday = profileJson.birthday;
+      if (typeof rawBirthday === "string" || typeof rawBirthday === "number") {
+        const birthday = new Date(rawBirthday);
         if (!isNaN(birthday.getTime())) {
           birthDay = birthday.getDate();
           birthMonth = birthday.getMonth() + 1;
@@ -82,7 +105,7 @@ export function setupGoogleStrategy() {
         birthDay = birthday?.birthDay ?? null;
         birthMonth = birthday?.birthMonth ?? null;
       }
-      const linkUserId = Number((req?.session as any)?.googleLinkUserId ?? 0);
+      const linkUserId = Number(req.session?.googleLinkUserId ?? 0);
       if (Number.isFinite(linkUserId) && linkUserId > 0) {
         return done(null, {
           googleId,
@@ -133,13 +156,16 @@ export function setupGoogleStrategy() {
         birthMonth,
         isNewUser: true
       });
-    } catch (error: any) {
-      logger.error('[auth] google oauth error', { message: error?.message });
+    } catch (error: unknown) {
+      logger.error('[auth] google oauth error', {
+        message: error instanceof Error ? error.message : String(error)
+      });
       return done(error, false);
     }
   }));
-  passport.serializeUser((user: any, done) => {
-    done(null, user.id ?? user.googleId);
+  passport.serializeUser((user, done) => {
+    const passportUser = user as unknown as GooglePassportUser;
+    done(null, passportUser.id ?? passportUser.googleId);
   });
   passport.deserializeUser(async (id: string | number, done) => {
     try {

@@ -17,7 +17,7 @@ const theoryBlockRepo = () => AppDataSource.getRepository(TheoryBlock);
 theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const language = String(req.query.language || "").toUpperCase().trim();
-    const uiLang = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+    const uiLang = String(req.query.uiLang ?? "").toLowerCase().trim();
     const wantsEn = uiLang.startsWith("en");
     if (language !== "JAVA" && language !== "PYTHON" && language !== "CPP") {
       return res.status(400).json({ message: "INVALID_LANGUAGE" });
@@ -26,8 +26,8 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
     const topics = await topicRepo().find({
       where: {
         language: language as TopicLanguage,
-        class: IsNull() as any
-      } as any,
+        class: IsNull()
+      },
       order: { order: "ASC" },
       relations: ["theoryBlock"]
     });
@@ -84,12 +84,12 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
               b.translatedAtEn = new Date();
               await theoryBlockRepo().save(b);
               localizedEnById.set(b.id, b);
-            } catch (error: any) {
+            } catch (error: unknown) {
               logger.warn("[theory] translate uk->en failed", {
                 requestId: req.requestId,
                 userId: req.userId,
                 theoryBlockId: b.id,
-                error: error?.message ?? String(error)
+                error: error instanceof Error ? error.message : String(error)
               });
               // Best-effort: fall back to Ukrainian content.
             }
@@ -140,7 +140,7 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
           : null
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[theory] GET / error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

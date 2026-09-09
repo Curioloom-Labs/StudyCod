@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import { IsNull } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { OrgInvitation } from "../../entities/OrgInvitation";
 import { User } from "../../entities/User";
@@ -50,10 +51,10 @@ export async function createInvitation(input: CreateInvitationInput): Promise<Or
 
   const existing = await inviteRepo().findOne({
     where: {
-      organization: { id: input.orgId } as any,
+      organization: { id: input.orgId },
       email,
       role: input.role,
-      studentId: studentId as any,
+      studentId: studentId === null ? IsNull() : studentId,
       status: "PENDING"
     }
   });
@@ -63,7 +64,7 @@ export async function createInvitation(input: CreateInvitationInput): Promise<Or
   }
 
   const invite = inviteRepo().create({
-    organization: { id: input.orgId } as any,
+    organization: { id: input.orgId },
     email,
     role: input.role,
     studentId,

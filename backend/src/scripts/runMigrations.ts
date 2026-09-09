@@ -21,10 +21,10 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: any) => {
+main().catch((error: unknown) => {
   logger.error("[migrations] failed", {
-    message: error?.message,
-    code: error?.code
+    message: error instanceof Error ? error.message : String(error),
+    code: error && typeof error === "object" ? (error as Record<string, unknown>).code : undefined
   });
   process.exit(1);
 });

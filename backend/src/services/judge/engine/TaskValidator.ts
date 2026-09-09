@@ -42,8 +42,8 @@ export function validateTaskConfig(task: Task): void {
     try {
       const flags = task.regexFlags || "";
       new RegExp(task.regexPattern, flags);
-    } catch (error: any) {
-      throw new TaskValidationError(`Invalid regex pattern: ${error.message}`, "regexPattern");
+    } catch (error: unknown) {
+      throw new TaskValidationError(`Invalid regex pattern: ${error instanceof Error ? error.message : String(error)}`, "regexPattern");
     }
   }
   if (task.judgeMode === "CUSTOM") {

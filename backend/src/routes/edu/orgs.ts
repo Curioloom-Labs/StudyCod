@@ -31,6 +31,10 @@ const router = Router();
 // org-admin account can't be used to spam arbitrary inboxes.
 const inviteLimiter = createRouteLimiter({ windowMs: 60 * 60 * 1000, limit: 20, message: "RATE_LIMIT" });
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** Best-effort invitation email with the accept link (no-op if SMTP is off). */
 function sendInviteEmail(email: string, role: string, token: string): void {
   const link = `${FRONTEND_URL}/invite/${token}`;
@@ -44,7 +48,7 @@ function sendInviteEmail(email: string, role: string, token: string): void {
       contentHtml: `<p>Вас запросили приєднатися як ${roleUk}. Перейдіть за посиланням, щоб прийняти запрошення:</p><p><a href="${link}">${link}</a></p><hr><p>You've been invited to StudyCod. Open the link to accept the invitation:</p><p><a href="${link}">${link}</a></p>`,
       text: `Запрошення до StudyCod / StudyCod invitation: ${link}`
     })
-    .catch((err: any) => logger.warn("[edu/orgs] invite email failed", { message: err?.message }));
+    .catch((err: unknown) => logger.warn("[edu/orgs] invite email failed", { message: errorMessage(err) }));
 }
 const studentRepo = () => AppDataSource.getRepository(Student);
 const classRepo = () => AppDataSource.getRepository(Class);
@@ -75,7 +79,7 @@ async function requireOrgCapability(
   return true;
 }
 
-// Self-signup: any authenticated user can create an org and becomes its ORG_ADMIN.
+// Self-signup: every authenticated user can create an org and becomes its ORG_ADMIN.
 router.post("/orgs", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (!requireUser(req, res)) return;
@@ -97,7 +101,7 @@ router.post("/orgs", authRequired, async (req: AuthRequest, res: Response) => {
       ip: req.ip
     });
     return res.status(201).json({ org: { id: org.id, name: org.name, slug: org.slug, institutionType: org.institutionType } });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] create org failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -117,7 +121,7 @@ router.get("/orgs", authRequired, async (req: AuthRequest, res: Response) => {
         institutionType: m.organization?.institutionType ?? "OTHER"
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] list orgs failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -141,7 +145,7 @@ router.get("/orgs/:orgId/members", authRequired, async (req: AuthRequest, res: R
         email: m.user?.email ?? null
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] list members failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -171,7 +175,7 @@ router.patch("/orgs/:orgId", authRequired, async (req: AuthRequest, res: Respons
       ip: req.ip
     });
     return res.json({ ok: true, orgId, name });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] rename org failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -243,7 +247,7 @@ router.post("/orgs/:orgId/users", authRequired, async (req: AuthRequest, res: Re
       user: { id: user.id, username: user.username, email: user.email, firstName: user.firstName, lastName: user.lastName, role: data.role },
       credentials: { username: user.username, email: user.email, password: data.password, role: data.role }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] create staff account failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -294,7 +298,7 @@ router.patch("/orgs/:orgId/classes/:classId", authRequired, async (req: AuthRequ
       ip: req.ip
     });
     return res.json({ ok: true, classId, teacherId: primaryTeacherId, teacherIds });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] assign class teacher failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -330,7 +334,7 @@ router.patch("/orgs/:orgId/members/:userId/role", authRequired, async (req: Auth
       ip: req.ip
     });
     return res.json({ ok: true, userId: targetUserId, role });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] change member role failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -362,7 +366,7 @@ router.delete("/orgs/:orgId/members/:userId", authRequired, async (req: AuthRequ
       ip: req.ip
     });
     return res.json({ ok: true, userId: targetUserId });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] remove member failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -411,7 +415,7 @@ router.post("/orgs/:orgId/invites", authRequired, inviteLimiter, async (req: Aut
         expiresAt: invite.expiresAt
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] create invite failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -437,7 +441,7 @@ router.get("/orgs/:orgId/invites", authRequired, async (req: AuthRequest, res: R
         createdAt: i.createdAt
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] list invites failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -457,7 +461,7 @@ router.post("/orgs/:orgId/invites/:invitationId/revoke", authRequired, async (re
     const ok = await revokeInvitation(invitationId, orgId);
     if (!ok) return res.status(404).json({ message: "INVITE_NOT_FOUND" });
     return res.json({ ok: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] revoke invite failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -504,7 +508,7 @@ router.post("/orgs/:orgId/parent-invites", authRequired, inviteLimiter, async (r
     return res.status(201).json({
       invite: { id: invite.id, email: invite.email, role: invite.role, token: invite.token, expiresAt: invite.expiresAt }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] create parent invite failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -523,7 +527,7 @@ router.get("/parent/children", authRequired, async (req: AuthRequest, res: Respo
         classId: s.class?.id ?? null
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] list children failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -549,7 +553,7 @@ router.post("/invites/:token/accept", authRequired, async (req: AuthRequest, res
       ip: req.ip
     });
     return res.json({ orgId: result.orgId, role: result.role });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof Error && error.message === "INVALID_INVITE") {
       return res.status(400).json({ message: "INVALID_INVITE" });
     }
@@ -615,7 +619,7 @@ router.get("/orgs/:orgId/overview", authRequired, async (req: AuthRequest, res: 
       },
       classes: classSummaries
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/orgs] overview failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

@@ -46,6 +46,15 @@ const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0
 const GOOGLE_LINK_SESSION_KEY = "googleLinkUserId";
 const GOOGLE_AUTH_MODE_SESSION_KEY = "googleAuthUserMode";
 type GoogleAuthUserMode = "PERSONAL" | "EDUCATIONAL" | "CONTEST";
+type UnknownRecord = Record<string, unknown>;
+type AuthSessionState = UnknownRecord & {
+  regenerate?: (callback: (error?: unknown) => void) => void;
+  passport?: unknown;
+};
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 function parseBool(raw: unknown, fallback: boolean): boolean {
   const s = String(raw ?? "").trim().toLowerCase();
@@ -60,18 +69,18 @@ function normalizeSameSite(raw: unknown): "lax" | "strict" | "none" {
   return "lax";
 }
 
-const googleExchangeCookieSameSite = normalizeSameSite(process.env.AUTH_GOOGLE_EXCHANGE_COOKIE_SAMESITE);
+const googleExchangeCookieSameSite = normalizeSameSite(env.AUTH_GOOGLE_EXCHANGE_COOKIE_SAMESITE);
 const googleExchangeCookieSecure = parseBool(
-  process.env.AUTH_GOOGLE_EXCHANGE_COOKIE_SECURE,
-  process.env.NODE_ENV === "production" || googleExchangeCookieSameSite === "none"
+  env.AUTH_GOOGLE_EXCHANGE_COOKIE_SECURE,
+  env.NODE_ENV === "production" || googleExchangeCookieSameSite === "none"
 );
 const googleExchangeHealthEnabled = parseBool(
-  process.env.AUTH_GOOGLE_EXCHANGE_HEALTH_ENABLED,
-  process.env.NODE_ENV !== "production"
+  env.AUTH_GOOGLE_EXCHANGE_HEALTH_ENABLED,
+  env.NODE_ENV !== "production"
 );
 const authTurnstileHealthEnabled = parseBool(
-  process.env.AUTH_TURNSTILE_HEALTH_ENABLED,
-  process.env.NODE_ENV !== "production"
+  env.AUTH_TURNSTILE_HEALTH_ENABLED,
+  env.NODE_ENV !== "production"
 );
 
 function resolveRequestLocale(req: Request): "uk" | "en" {
@@ -151,7 +160,7 @@ async function verifyTurnstileToken(params: {
       body: body.toString(),
     });
     if (!response.ok) return { success: false, errorCodes: [`HTTP_${response.status}`] };
-    const data = (await response.json()) as any;
+    const data = (await response.json()) as unknown as Record<string, unknown>;
     const errorCodes = Array.isArray(data?.["error-codes"])
       ? data["error-codes"].map((x: unknown) => String(x ?? "").trim()).filter(Boolean)
       : [];
@@ -359,14 +368,14 @@ authRouter.post("/logout", async (req: Request, res: Response) => {
 });
 
 function getGoogleLinkUserIdFromSession(req: Request): number | null {
-  const raw = Number((req.session as any)?.[GOOGLE_LINK_SESSION_KEY] ?? 0);
+  const raw = Number((req.session as unknown as Record<string, unknown>)?.[GOOGLE_LINK_SESSION_KEY] ?? 0);
   if (!Number.isFinite(raw) || raw <= 0) return null;
   return raw;
 }
 
 function clearGoogleLinkSession(req: Request): void {
   if (req.session) {
-    delete (req.session as any)[GOOGLE_LINK_SESSION_KEY];
+    delete (req.session as unknown as Record<string, unknown>)[GOOGLE_LINK_SESSION_KEY];
   }
 }
 
@@ -378,12 +387,12 @@ function normalizeGoogleAuthMode(raw: unknown): GoogleAuthUserMode {
 }
 
 function getGoogleAuthModeFromSession(req: Request): GoogleAuthUserMode {
-  return normalizeGoogleAuthMode((req.session as any)?.[GOOGLE_AUTH_MODE_SESSION_KEY]);
+  return normalizeGoogleAuthMode((req.session as unknown as Record<string, unknown>)?.[GOOGLE_AUTH_MODE_SESSION_KEY]);
 }
 
 function clearGoogleAuthModeSession(req: Request): void {
   if (req.session) {
-    delete (req.session as any)[GOOGLE_AUTH_MODE_SESSION_KEY];
+    delete (req.session as unknown as Record<string, unknown>)[GOOGLE_AUTH_MODE_SESSION_KEY];
   }
 }
 
@@ -428,16 +437,16 @@ function buildUserDto(user: User) {
     lastName: user.lastName ?? null,
     middleName: user.middleName ?? null,
     email: user.email ?? null,
-    placementDone: Boolean((user as any).placementDone),
-    placementLevel: (user as any).placementLevel ?? null,
-    placementScore: (user as any).placementScore ?? null,
-    placementMasteredUntilTopicIndexJava: (user as any).placementMasteredUntilTopicIndexJava ?? null,
-    placementMasteredUntilTopicIndexPython: (user as any).placementMasteredUntilTopicIndexPython ?? null,
-    placementCodingPassed: Boolean((user as any).placementCodingPassed),
-    placementCodingLevel: (user as any).placementCodingLevel ?? null,
-    placementCodingTaskId: (user as any).placementCodingTaskId ?? null,
-    placementCodingScore: (user as any).placementCodingScore ?? null,
-    placementCodingDoneAt: (user as any).placementCodingDoneAt ?? null
+    placementDone: Boolean((user as unknown as Record<string, unknown>).placementDone),
+    placementLevel: (user as unknown as Record<string, unknown>).placementLevel ?? null,
+    placementScore: (user as unknown as Record<string, unknown>).placementScore ?? null,
+    placementMasteredUntilTopicIndexJava: (user as unknown as Record<string, unknown>).placementMasteredUntilTopicIndexJava ?? null,
+    placementMasteredUntilTopicIndexPython: (user as unknown as Record<string, unknown>).placementMasteredUntilTopicIndexPython ?? null,
+    placementCodingPassed: Boolean((user as unknown as Record<string, unknown>).placementCodingPassed),
+    placementCodingLevel: (user as unknown as Record<string, unknown>).placementCodingLevel ?? null,
+    placementCodingTaskId: (user as unknown as Record<string, unknown>).placementCodingTaskId ?? null,
+    placementCodingScore: (user as unknown as Record<string, unknown>).placementCodingScore ?? null,
+    placementCodingDoneAt: (user as unknown as Record<string, unknown>).placementCodingDoneAt ?? null
   };
 }
 const registerSchema = z.object({
@@ -611,7 +620,7 @@ authRouter.post("/google/link-session", authRequired, async (req: AuthRequest, r
     if (!isGoogleOAuthEnabled()) {
       return res.status(503).json({ message: "GOOGLE_OAUTH_DISABLED" });
     }
-    (req.session as any)[GOOGLE_LINK_SESSION_KEY] = req.userId;
+    (req.session as unknown as Record<string, unknown>)[GOOGLE_LINK_SESSION_KEY] = req.userId;
     await new Promise<void>((resolve, reject) => {
       req.session.save((err) => {
         if (err) reject(err);
@@ -639,7 +648,7 @@ authRouter.get("/google", async (req: Request, res: Response, next) => {
     if (isLinkFlow) {
       clearGoogleAuthModeSession(req);
     } else {
-      (req.session as any)[GOOGLE_AUTH_MODE_SESSION_KEY] = normalizeGoogleAuthMode(
+      (req.session as unknown as Record<string, unknown>)[GOOGLE_AUTH_MODE_SESSION_KEY] = normalizeGoogleAuthMode(
         req.query.mode ?? req.query.userMode ?? req.query.surface
       );
     }
@@ -648,7 +657,7 @@ authRouter.get("/google", async (req: Request, res: Response, next) => {
       req.session.save((err) => {
         if (err) {
           logger.warn("[auth] Google auth mode session save failed (continuing)", {
-            requestId: (req as any).requestId,
+            requestId: (req as unknown as Record<string, unknown>).requestId,
             error: err?.message
           });
         }
@@ -712,17 +721,18 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
     // user state. We preserve passport's stored user payload across the
     // regeneration. Best-effort: callback flow continues even if no session
     // is attached (e.g. if session middleware is skipped for this path).
-    if (typeof (req.session as any)?.regenerate === "function") {
-      const passportState = (req.session as any)?.passport;
+    const session = req.session as unknown as AuthSessionState;
+    if (typeof session?.regenerate === "function") {
+      const passportState = session.passport;
       await new Promise<void>(resolve => {
-        (req.session as any).regenerate((err: any) => {
+        session.regenerate!((err: unknown) => {
           if (err) {
             logger.warn("[auth] session regenerate failed (continuing)", {
-              requestId: (req as any).requestId,
-              error: err?.message
+              requestId: (req as unknown as { requestId?: string }).requestId,
+              error: err instanceof Error ? err.message : String(err)
             });
           } else if (passportState && req.session) {
-            (req.session as any).passport = passportState;
+            session.passport = passportState;
           }
           resolve();
         });
@@ -805,7 +815,7 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
 
     return res.redirect(`${FRONTEND_URL}/auth/google/success?code=${encodeURIComponent(code)}`);
   } catch (err) {
-    logger.error("[auth] Google callback error", { requestId: (req as any).requestId, err });
+    logger.error("[auth] Google callback error", { requestId: (req as unknown as Record<string, unknown>).requestId, err });
     return res.redirect(`${FRONTEND_URL}/auth/google/error`);
   }
 });
@@ -947,9 +957,11 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       birthDay,
       birthMonth
     } = validated.data;
-    let payload: any;
+    let payload: Record<string, unknown>;
     try {
-      payload = jwt.verify(setupToken, JWT_SECRET, { algorithms: ["HS256"] });
+      const verified = jwt.verify(setupToken, JWT_SECRET, { algorithms: ["HS256"] });
+      if (!isRecord(verified)) throw new Error("INVALID_TOKEN");
+      payload = verified;
     } catch {
       return res.status(400).json({
         message: "INVALID_TOKEN"
@@ -960,9 +972,9 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
         message: "INVALID_TOKEN"
       });
     }
-    const googleId: string | null = payload.googleId || null;
-    const email: string | null = payload.email ? String(payload.email).trim().toLowerCase() : null;
-    const avatarUrl: string | null = payload.avatarUrl || null;
+    const googleId: string | null = typeof payload.googleId === "string" ? payload.googleId : null;
+    const email: string | null = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : null;
+    const avatarUrl: string | null = typeof payload.avatarUrl === "string" ? payload.avatarUrl : null;
     const requestedUserMode = normalizeGoogleAuthMode(userMode ?? payload.userMode);
     if (!googleId) {
       return res.status(400).json({

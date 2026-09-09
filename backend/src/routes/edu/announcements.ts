@@ -51,7 +51,7 @@ router.get("/classes/:classId/announcements", authRequired, async (req: AuthRequ
     }
 
     const items = await announcementRepo().find({
-      where: { class: { id: classId } as any },
+      where: { class: { id: classId } },
       relations: ["author"],
       order: { pinned: "DESC", createdAt: "DESC" }
     });
@@ -92,7 +92,7 @@ router.get("/students/me/announcements", authRequired, async (req: AuthRequest, 
     }
 
     const items = await announcementRepo().find({
-      where: { class: { id: student.class.id } as any },
+      where: { class: { id: student.class.id } },
       relations: ["author"],
       order: { pinned: "DESC", createdAt: "DESC" },
       take: 50
@@ -154,7 +154,7 @@ router.post("/classes/:classId/announcements", authRequired, async (req: AuthReq
     // Fire-and-forget notifications.
     try {
       const students = await studentRepo().find({
-        where: { class: { id: classId } as any },
+        where: { class: { id: classId } },
         relations: ["class"]
       });
 
@@ -196,7 +196,7 @@ router.put("/classes/:classId/announcements/:id", authRequired, async (req: Auth
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
 
     const ann = await announcementRepo().findOne({
-      where: { id, class: { id: classId } as any },
+      where: { id, class: { id: classId } },
       relations: ["class", "class.teacher"]
     });
 
@@ -231,7 +231,7 @@ router.delete("/classes/:classId/announcements/:id", authRequired, async (req: A
     if (isNaN(classId) || isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
 
     const ann = await announcementRepo().findOne({
-      where: { id, class: { id: classId } as any },
+      where: { id, class: { id: classId } },
       relations: ["class", "class.teacher"]
     });
 

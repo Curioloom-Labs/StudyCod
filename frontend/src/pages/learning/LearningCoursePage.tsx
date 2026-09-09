@@ -26,6 +26,7 @@ import {
 import { MarkdownView } from "../../components/MarkdownView";
 import { Modal } from "../../components/ui/Modal";
 import { tr } from "../../i18n";
+import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 type RoadmapNode = {
   id: string;
@@ -158,8 +159,8 @@ export const LearningCoursePage: React.FC = () => {
       setCourse(loaded);
       setError(null);
       return loaded;
-    } catch (caught: any) {
-      const code = caught?.response?.data?.message;
+    } catch (caught: unknown) {
+      const code = getErrorMessageFromUnknown(caught, "");
       setError(code === "PREREQUISITES_INCOMPLETE"
         ? tr("Спочатку заверши необхідні базові курси.", "Complete the required foundation courses first.")
         : code === "COURSE_NOT_ENROLLED"
@@ -196,8 +197,8 @@ export const LearningCoursePage: React.FC = () => {
         throw new Error("COURSE_ACTIVATION_NOT_CONFIRMED");
       }
       setMessage(tr("Курс активовано. Тепер можна рухатися roadmap і генерувати практику.", "Course activated. You can now follow the roadmap and generate practice."));
-    } catch (caught: any) {
-      setError(caught?.response?.data?.message === "PREREQUISITES_INCOMPLETE"
+    } catch (caught: unknown) {
+      setError(getErrorMessageFromUnknown(caught, "") === "PREREQUISITES_INCOMPLETE"
         ? tr("Спочатку завершiть необхідні базові курси.", "Complete the required foundation courses first.")
         : tr("Не вдалося активувати курс.", "Could not activate the course."));
     } finally {
@@ -312,8 +313,8 @@ export const LearningCoursePage: React.FC = () => {
       await completeCatalogItem(item.id);
       await load();
       setMessage(tr("Елемент курсу зараховано.", "Course item completed."));
-    } catch (caught: any) {
-      setError(caught?.response?.data?.message === "THEORY_REQUIRED_BEFORE_PRACTICE"
+    } catch (caught: unknown) {
+      setError(getErrorMessageFromUnknown(caught, "") === "THEORY_REQUIRED_BEFORE_PRACTICE"
         ? tr("Спочатку прочитай теорію цієї теми.", "Read this topic's theory first.")
         : tr("Не вдалося зарахувати елемент.", "Could not complete this item."));
     } finally {

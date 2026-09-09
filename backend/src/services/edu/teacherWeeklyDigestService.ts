@@ -6,20 +6,19 @@ import { EduHintFeedback } from "../../entities/EduHintFeedback";
 import { TopicTask } from "../../entities/TopicTask";
 import { emailService } from "../emailService";
 import { logger } from "../../utils/logger";
+import {
+  EDU_APPEAL_ESCALATION_HOURS,
+  EDU_APPEAL_SLA_HOURS,
+  EDU_TEACHER_DIGEST_WINDOW_DAYS,
+} from "../../config/eduConfig";
 
 const ACTIVE_APPEAL_STATUSES: GradeAppealStatus[] = ["SUBMITTED", "IN_REVIEW", "NEEDS_INFO"];
 
-const DEFAULT_WINDOW_DAYS = Number.isFinite(Number(process.env.EDU_TEACHER_DIGEST_WINDOW_DAYS))
-  ? Math.max(1, Math.floor(Number(process.env.EDU_TEACHER_DIGEST_WINDOW_DAYS)))
-  : 7;
+const DEFAULT_WINDOW_DAYS = EDU_TEACHER_DIGEST_WINDOW_DAYS;
 
-const DEFAULT_SLA_HOURS = Number.isFinite(Number(process.env.EDU_APPEAL_SLA_HOURS))
-  ? Math.max(1, Math.floor(Number(process.env.EDU_APPEAL_SLA_HOURS)))
-  : 48;
+const DEFAULT_SLA_HOURS = EDU_APPEAL_SLA_HOURS;
 
-const DEFAULT_ESCALATION_HOURS = Number.isFinite(Number(process.env.EDU_APPEAL_ESCALATION_HOURS))
-  ? Math.max(DEFAULT_SLA_HOURS, Math.floor(Number(process.env.EDU_APPEAL_ESCALATION_HOURS)))
-  : 72;
+const DEFAULT_ESCALATION_HOURS = EDU_APPEAL_ESCALATION_HOURS;
 
 const classRepo = () => AppDataSource.getRepository(Class);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
@@ -50,10 +49,15 @@ function escapeHtml(input: unknown): string {
 }
 
 function isHintFeedbackTableMissingError(error: unknown): boolean {
-  const code = String((error as any)?.code ?? "").toUpperCase();
-  if (code === "ER_NO_SUCH_TABLE" || code === "42P01") return true;
-  const message = String((error as any)?.message ?? "").toLowerCase();
+  const code = errorProperty(error, "code");
+  const normalizedCode = String(code ?? "").toUpperCase();
+  if (normalizedCode === "ER_NO_SUCH_TABLE" || normalizedCode === "42P01") return true;
+  const message = String(errorProperty(error, "message") ?? "").toLowerCase();
   return message.includes("doesn't exist") || message.includes("no such table") || (message.includes("relation") && message.includes("does not exist"));
+}
+
+function errorProperty(error: unknown, key: string): unknown {
+  return typeof error === "object" && error !== null ? (error as Record<string, unknown>)[key] : undefined;
 }
 
 function isGradeCompleted(grade: EduGrade | null): boolean {
@@ -446,16 +450,16 @@ async function reserveWeeklyDelivery(params: {
   windowDays: number;
 }): Promise<number | null> {
   try {
-    const result: any = await AppDataSource.query(
+    const result: unknown = await AppDataSource.query(
       "INSERT INTO `teacher_digest_deliveries` (`class_id`, `teacher_user_id`, `week_key`, `window_days`, `status`, `created_at`, `updated_at`) VALUES (?, ?, ?, ?, 'RESERVED', NOW(6), NOW(6))",
       [params.classId, params.teacherUserId, params.weekKey, params.windowDays]
     );
 
-    const insertId = Number(result?.insertId ?? 0);
+    const insertId = Number(errorProperty(result, "insertId") ?? 0);
     return Number.isFinite(insertId) && insertId > 0 ? insertId : null;
-  } catch (error: any) {
-    const code = String(error?.code ?? "").toUpperCase();
-    const errno = Number(error?.errno ?? 0);
+  } catch (error: unknown) {
+    const code = String(errorProperty(error, "code") ?? "").toUpperCase();
+    const errno = Number(errorProperty(error, "errno") ?? 0);
     if (code === "ER_DUP_ENTRY" || errno === 1062) {
       return null;
     }
@@ -588,9 +592,9 @@ export async function sendWeeklyTeacherDigestsForDate(
 
       await markDeliverySent(deliveryId, snapshot);
       sent += 1;
-    } catch (error: any) {
+    } catch (error: unknown) {
       failed += 1;
-      const message = String(error?.message || error || "unknown digest send failure");
+      const message = error instanceof Error ? error.message : String(error || "unknown digest send failure");
       logger.error("[teacher-digest] failed to send weekly digest", {
         classId: snapshot.classId,
         className: snapshot.className,
@@ -601,11 +605,11 @@ export async function sendWeeklyTeacherDigestsForDate(
 
       try {
         await releaseDeliveryOnFailure(deliveryId, message);
-      } catch (releaseError: any) {
+      } catch (releaseError: unknown) {
         logger.error("[teacher-digest] failed to release reserved digest slot", {
           classId: snapshot.classId,
           deliveryId,
-          message: String(releaseError?.message || releaseError || "unknown release failure"),
+          message: releaseError instanceof Error ? releaseError.message : String(releaseError || "unknown release failure"),
         });
       }
     }

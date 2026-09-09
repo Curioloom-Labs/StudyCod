@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [frontend, backend, judge, ai-service, lsp-service]
+        package: [frontend, backend, judge, ai-service, lsp-service, ai-service/cloudflare-ai-worker]
     defaults:
       run:
         working-directory: ${{ matrix.package }}
@@ -29,7 +29,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: ${{ matrix.package }}/package-lock.json
 
@@ -45,7 +45,120 @@ jobs:
         run: npm ci
 
       - name: Type-check
-        run: npx tsc --noEmit
+        run: npm run typecheck --if-present
 
       - name: Production build
         run: npm run build
+
+      - name: Run package tests
+        run: npm run test --if-present
+
+      - name: Verify backend env contract
+        if: matrix.package == 'backend'
+        run: npm run test:env-contract
+
+      - name: Dependency audit
+        # Audit the complete install, including build/test toolchains. The
+        # Cloudflare worker's Wrangler/Miniflare dependencies are dev-only but
+        # still execute in CI and must remain vulnerability-free.
+        run: npm audit --audit-level=moderate
+
+  browser-contract:
+    name: browser contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        working-directory: backend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start frontend preview
+        working-directory: frontend
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 > "$RUNNER_TEMP/studycod-frontend.log" 2>&1 &
+
+      - name: Wait for frontend preview
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/studycod-frontend.log"
+          exit 1
+
+      - name: Run browser contract
+        working-directory: backend
+        env:
+          BROWSER_CONTRACT_BASE_URL: http://127.0.0.1:4173/
+          BROWSER_CONTRACT_REQUIRED: "1"
+        run: npm run test:browser-contract
+
+  db-contract:
+    name: database schema contract
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: studycod_contract
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Build backend
+        working-directory: backend
+        run: npm run build
+
+      - name: Bootstrap disposable schema
+        working-directory: backend
+        env:
+          DB_CONTRACT_DATABASE_URL: mysql://root:root@127.0.0.1:3306/studycod_contract
+          DB_CONTRACT_BOOTSTRAP_SCHEMA: "1"
+        run: npm run db:contract:bootstrap
+
+      - name: Run database contract
+        working-directory: backend
+        env:
+          DB_CONTRACT_DATABASE_URL: mysql://root:root@127.0.0.1:3306/studycod_contract
+          DB_CONTRACT_REQUIRED: "1"
+        run: npm run test:db-contract

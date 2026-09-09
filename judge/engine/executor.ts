@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { createReadStream } from "fs";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { allowInsecureSandboxFallback, isProductionEnvironment, readJudgeSandboxPath } from "../config";
 export interface ExecOptions {
   nsjailPath: string;
   nsjailConfigPath: string;
@@ -73,8 +74,8 @@ export class NsJailExecutor {
       // misnamed config can never silently downgrade isolation and let submitted code
       // exfiltrate or SSRF from the judge host. Set JUDGE_ALLOW_INSECURE_FALLBACK=1 to
       // explicitly opt in (trusted, non-production environments only).
-      const allowInsecureFallback = process.env.JUDGE_ALLOW_INSECURE_FALLBACK === "1";
-      if (process.env.NODE_ENV === "production" && !allowInsecureFallback) {
+      const allowInsecureFallback = allowInsecureSandboxFallback();
+      if (isProductionEnvironment() && !allowInsecureFallback) {
         throw new Error(
           "judge sandbox: refusing to execute without an nsjail config in production " +
           "(network isolation would be disabled). Provide NSJAIL_CONFIG/useConfig, or set " +
@@ -91,7 +92,7 @@ export class NsJailExecutor {
     // go→its linker) fail with "cc/ld not found" unless PATH is set. gcc/g++ work without
     // this only because our adapters pass `-B/usr/bin`. HOME=/work gives toolchains a
     // writable home (the per-submission bind mount).
-    const sandboxPath = (process.env.JUDGE_SANDBOX_PATH || "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin").trim();
+    const sandboxPath = readJudgeSandboxPath();
     nsArgs.push(
       "--env",
       `PATH=${sandboxPath}`,

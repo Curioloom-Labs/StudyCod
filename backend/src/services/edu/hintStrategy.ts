@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { env } from "../../env";
 
 export type HintStrategyVariant = "A" | "B";
 
@@ -30,8 +31,8 @@ export function getHintStrategyConfig(): {
   rolloutPercent: number;
 } {
   return {
-    enabled: parseBoolean(process.env.EDU_HINTS_AB_ENABLED),
-    rolloutPercent: parseRolloutPercent(process.env.EDU_HINTS_AB_ROLLOUT_PERCENT),
+    enabled: parseBoolean(env.EDU_HINTS_AB_ENABLED),
+    rolloutPercent: parseRolloutPercent(env.EDU_HINTS_AB_ROLLOUT_PERCENT),
   };
 }
 

@@ -10,6 +10,7 @@ type LegacyTaskRow = {
   completed: number;
   bestScore: number;
   createdAt: Date;
+  title: string | null;
 };
 
 type CourseItemRow = {
@@ -27,9 +28,9 @@ function normalizeTitle(value: unknown): string {
     .toLocaleLowerCase("uk-UA");
 }
 
-function parseJson(value: unknown): Record<string, any> {
+function parseJson(value: unknown): Record<string, unknown> {
   if (!value) return {};
-  if (typeof value === "object") return value as Record<string, any>;
+  if (typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
   try {
     const parsed = JSON.parse(String(value));
     return parsed && typeof parsed === "object" ? parsed : {};
@@ -39,7 +40,7 @@ function parseJson(value: unknown): Record<string, any> {
 }
 
 function practiceSequence(task: LegacyTaskRow): number {
-  const match = String((task as any).title ?? "").match(/^\s*\((\d+)\//);
+  const match = String(task.title ?? "").match(/^\s*\((\d+)\//);
   const parsed = Number(match?.[1] ?? task.numInTopic ?? 1);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
 }
@@ -147,8 +148,14 @@ export class MigrateLegacyLearningProgress1752000000000 implements MigrationInte
       }
       for (const group of practicesByTheory.values()) {
         group.sort((left, right) => {
-          const leftSequence = Number(parseJson(left.content).exercise?.sequence ?? 0);
-          const rightSequence = Number(parseJson(right.content).exercise?.sequence ?? 0);
+          const leftExercise = parseJson(left.content).exercise;
+          const rightExercise = parseJson(right.content).exercise;
+          const leftSequence = leftExercise && typeof leftExercise === "object"
+            ? Number((leftExercise as Record<string, unknown>).sequence ?? 0)
+            : 0;
+          const rightSequence = rightExercise && typeof rightExercise === "object"
+            ? Number((rightExercise as Record<string, unknown>).sequence ?? 0)
+            : 0;
           return leftSequence - rightSequence || left.id - right.id;
         });
       }

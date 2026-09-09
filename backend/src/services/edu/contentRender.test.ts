@@ -10,6 +10,10 @@ test("safeHttpUrl accepts http/https, rejects everything else", () => {
   assert.equal(safeHttpUrl("not a url"), null);
   assert.equal(safeHttpUrl(""), null);
   assert.equal(safeHttpUrl(undefined), null);
+  assert.equal(safeHttpUrl("http://127.0.0.1:4000/health"), null);
+  assert.equal(safeHttpUrl("http://169.254.169.254/latest/meta-data"), null);
+  assert.equal(safeHttpUrl("http://[::1]:4000/health"), null);
+  assert.equal(safeHttpUrl("http://service.internal/private"), null);
 });
 
 test("youtubeEmbedUrl handles watch, short, youtu.be, embed; rejects non-youtube", () => {
@@ -28,7 +32,30 @@ test("renderPageContent embeds a YouTube video as a no-cookie iframe", () => {
 
 test("renderPageContent uses a <video> tag for direct media files", () => {
   const html = renderPageContent("V", { videoUrl: "https://cdn.example.com/clip.mp4" });
-  assert.match(html, /<video controls src="https:\/\/cdn\.example\.com\/clip\.mp4">/);
+  assert.match(html, /<video controls aria-label="Embedded video" src="https:\/\/cdn\.example\.com\/clip\.mp4">/);
+});
+
+test("renderPageContent adds an optional caption track for direct media", () => {
+  const html = renderPageContent("V", {
+    videoUrl: "https://cdn.example.com/clip.mp4",
+    videoCaptionUrl: "https://cdn.example.com/clip.uk.vtt",
+    videoCaptionLang: "uk-UA",
+    videoCaptionLabel: "Українські субтитри",
+  });
+  assert.match(html, /<track kind="captions"/);
+  assert.match(html, /src="https:\/\/cdn\.example\.com\/clip\.uk\.vtt"/);
+  assert.match(html, /srclang="uk-UA"/);
+  assert.match(html, /label="Українські субтитри"/);
+  assert.match(html, /default>/);
+});
+
+test("renderPageContent drops an unsafe caption URL", () => {
+  const html = renderPageContent("V", {
+    videoUrl: "https://cdn.example.com/clip.mp4",
+    videoCaptionUrl: "javascript:alert(1)",
+  });
+  assert.equal(html.includes("<track"), false);
+  assert.equal(html.includes("javascript:"), false);
 });
 
 test("renderPageContent renders a document link with a label", () => {

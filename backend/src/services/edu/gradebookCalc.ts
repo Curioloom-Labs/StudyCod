@@ -155,21 +155,25 @@ export function computeClassWeightedFinals(
 /** Validate/normalize a class gradebook config: unique non-empty ids, positive weights. */
 export function normalizeGradebookConfig(input: unknown): GradebookConfig | null {
   if (!input || typeof input !== "object") return null;
-  const cats = (input as any).categories;
+  const inputRecord = input as Record<string, unknown>;
+  const cats = inputRecord.categories;
   if (!Array.isArray(cats)) return null;
   const seen = new Set<string>();
   const categories: GradebookCategory[] = [];
-  for (const c of cats) {
-    const id = String(c?.id ?? "").trim();
+  for (const value of cats) {
+    const c = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+    const id = String(c.id ?? "").trim();
     if (!id || seen.has(id)) return null;
-    const weight = Number(c?.weight);
+    const weight = Number(c.weight);
     if (!Number.isFinite(weight) || weight <= 0) return null;
     seen.add(id);
     categories.push({
       id,
-      name: typeof c?.name === "string" ? c.name : undefined,
+      name: typeof c.name === "string" ? c.name : undefined,
       weight,
-      dropLowest: Number.isFinite(Number(c?.dropLowest)) ? Math.max(0, Math.floor(Number(c.dropLowest))) : 0
+      dropLowest: Number.isFinite(Number(c.dropLowest)) ? Math.max(0, Math.floor(Number(c.dropLowest))) : 0
     });
   }
   if (categories.length === 0) return null;

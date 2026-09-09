@@ -24,7 +24,19 @@ const certificateFieldKeySchema = z.enum([
   "qr_code",
 ]);
 
-function certificateTemplateValidationError(parsed: z.ZodSafeParseError<any>, res: Response) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function rows(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function errorProperty(error: unknown, key: string): unknown {
+  return isRecord(error) ? error[key] : undefined;
+}
+
+function certificateTemplateValidationError(parsed: z.ZodSafeParseError<unknown>, res: Response) {
   const tooLargeIssue = parsed.error.issues.find((issue: z.ZodIssue) => {
     const key = String(issue.path?.[0] ?? "");
     return issue.code === "too_big" && (key === "htmlTemplate" || key === "cssTemplate");
@@ -81,14 +93,14 @@ certificateRouter.post("/template", authRequired, async (req: AuthRequest, res: 
     });
 
     return res.json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[certificate] failed to create template", {
       userId: req.userId ?? null,
       userType: req.userType ?? null,
-      code: error?.code,
-      errno: error?.errno,
-      sqlState: error?.sqlState,
-      message: error?.message,
+      code: errorProperty(error, "code"),
+      errno: errorProperty(error, "errno"),
+      sqlState: errorProperty(error, "sqlState"),
+      message: error instanceof Error ? error.message : String(error),
     });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -103,7 +115,7 @@ certificateRouter.put("/template/:templateId", authRequired, async (req: AuthReq
       return res.status(400).json({ message: "INVALID_TEMPLATE_ID" });
     }
 
-    const templateRows = (await AppDataSource.query(
+    const templateRows = rows(await AppDataSource.query(
       `
       SELECT
         t.id,
@@ -116,7 +128,7 @@ certificateRouter.put("/template/:templateId", authRequired, async (req: AuthReq
       LIMIT 1
       `,
       [templateId]
-    )) as Array<any>;
+    ));
     const templateRow = templateRows[0];
     if (!templateRow) return res.status(404).json({ message: "TEMPLATE_NOT_FOUND" });
 
@@ -161,18 +173,19 @@ certificateRouter.put("/template/:templateId", authRequired, async (req: AuthReq
     });
 
     return res.json({ ok: true, ...result });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[certificate] failed to update template", {
       templateId: req.params.templateId,
       userId: req.userId ?? null,
       userType: req.userType ?? null,
-      code: error?.code,
-      errno: error?.errno,
-      sqlState: error?.sqlState,
-      message: error?.message,
+      code: errorProperty(error, "code"),
+      errno: errorProperty(error, "errno"),
+      sqlState: errorProperty(error, "sqlState"),
+      message: error instanceof Error ? error.message : String(error),
     });
-    if (error?.message === "TEMPLATE_NOT_FOUND") return res.status(404).json({ message: "TEMPLATE_NOT_FOUND" });
-    if (error?.message === "INVALID_TEMPLATE_ID") return res.status(400).json({ message: "INVALID_TEMPLATE_ID" });
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === "TEMPLATE_NOT_FOUND") return res.status(404).json({ message: "TEMPLATE_NOT_FOUND" });
+    if (message === "INVALID_TEMPLATE_ID") return res.status(400).json({ message: "INVALID_TEMPLATE_ID" });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -269,10 +282,10 @@ certificateRouter.put("/contest/:contestId/settings", authRequired, async (req: 
     const contestId = Number(req.params.contestId);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_CONTEST_ID" });
 
-    const manageRows = (await AppDataSource.query(
+    const manageRows = rows(await AppDataSource.query(
       `SELECT created_by_user_id as createdByUserId FROM contests WHERE id = ? LIMIT 1`,
       [contestId]
-    )) as Array<any>;
+    ));
     const contestRow = manageRows[0];
     if (!contestRow) return res.status(404).json({ message: "CONTEST_NOT_FOUND" });
 
@@ -303,7 +316,8 @@ certificateRouter.put("/contest/:contestId/settings", authRequired, async (req: 
 
 certificateRouter.post("/verify", authOptional, async (req: AuthRequest, res: Response) => {
   try {
-    const certificateId = String((req.body as any)?.certificateId ?? "").trim();
+    const body = isRecord(req.body) ? req.body : {};
+    const certificateId = String(body.certificateId ?? "").trim();
     if (!certificateId) return res.status(400).json({ message: "INVALID_CERTIFICATE_ID" });
 
     const payload = await verificationService.getByCertificateId(certificateId);

@@ -88,6 +88,37 @@ export interface LearningProject {
   itemStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 }
 
+export interface CatalogProjectTestResult {
+  test_id?: number | string;
+  input?: string;
+  expected?: string;
+  actual?: string;
+  verdict?: string;
+  message?: string;
+  stderr?: string;
+}
+
+export interface CatalogProjectCheckResult {
+  verdict?: string;
+  passed?: boolean;
+  testsPassed?: number;
+  testsTotal?: number;
+  score?: number;
+  maxScore?: number;
+  tests?: CatalogProjectTestResult[];
+  progress?: Partial<LearningProjectProgress>;
+  itemStatus?: LearningProject["itemStatus"];
+}
+
+export interface CatalogProjectRunResult {
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+  success?: boolean;
+  timeMs?: number;
+  memoryKb?: number;
+}
+
 export interface LearningCourse {
   id: number;
   key: string | null;
@@ -180,12 +211,12 @@ export async function submitCatalogProject(itemId: number, input: Omit<LearningP
   return response.data;
 }
 
-export async function checkCatalogProject(itemId: number, files: LearningProjectCheckFile[]) {
+export async function checkCatalogProject(itemId: number, files: LearningProjectCheckFile[]): Promise<CatalogProjectCheckResult | null> {
   const response = await api.post(`/learning/items/${itemId}/project/check`, { files });
-  return response.data?.check;
+  return response.data?.check as CatalogProjectCheckResult | null;
 }
 
-export async function runCatalogProject(itemId: number, files: LearningProjectCheckFile[], stdin: string) {
+export async function runCatalogProject(itemId: number, files: LearningProjectCheckFile[], stdin: string): Promise<CatalogProjectRunResult | null> {
   const response = await api.post(`/learning/items/${itemId}/project/run`, { files, stdin });
-  return response.data?.result;
+  return response.data?.result as CatalogProjectRunResult | null;
 }

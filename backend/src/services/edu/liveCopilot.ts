@@ -192,8 +192,8 @@ Refer to students by group/situation, not by name.
 
     if (!headline || !diagnosis || actions.length === 0) return fallback;
     return { headline, diagnosis, actions, source: "ai" };
-  } catch (err: any) {
-    logger.warn("[edu/live] AI briefing failed, using rule fallback", { error: err?.message });
+  } catch (err: unknown) {
+    logger.warn("[edu/live] AI briefing failed, using rule fallback", { error: err instanceof Error ? err.message : String(err) });
     return fallback;
   }
 }

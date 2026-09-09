@@ -12,16 +12,16 @@ function redactValue(v: unknown): unknown {
   // Error objects have non-enumerable fields (message/stack), so Object.entries() would drop them.
   // Serialize them explicitly so logs remain useful.
   if (v instanceof Error) {
-    const anyErr = v as any;
+    const errorRecord = v as Error & Record<string, unknown>;
     return {
       name: v.name,
       message: truncateString(String(v.message || "")),
       stack: v.stack ? truncateString(String(v.stack), 16_384) : undefined,
-      code: anyErr?.code,
-      errno: anyErr?.errno,
-      sqlState: anyErr?.sqlState,
+      code: errorRecord.code,
+      errno: errorRecord.errno,
+      sqlState: errorRecord.sqlState,
       // Common nested driver error in TypeORM.
-      driverError: anyErr?.driverError ? redactValue(anyErr.driverError) : undefined
+      driverError: errorRecord.driverError ? redactValue(errorRecord.driverError) : undefined
     };
   }
   if (typeof v === "string") {

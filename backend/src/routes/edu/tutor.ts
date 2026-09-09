@@ -46,11 +46,11 @@ router.post("/tutor", authRequired, tutorLimiter, async (req: AuthRequest, res: 
     try {
       const tutor = await askTutor({ question: parsed.data.question, context: buildTutorContext(history) });
       return res.json({ tutor });
-    } catch (e: any) {
-      if (String(e?.message) === "AI_UNAVAILABLE") return res.status(503).json({ message: "AI_UNAVAILABLE" });
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message === "AI_UNAVAILABLE") return res.status(503).json({ message: "AI_UNAVAILABLE" });
       throw e;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/tutor] failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

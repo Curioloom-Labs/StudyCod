@@ -8,7 +8,8 @@ import { EduLesson } from "../../entities/EduLesson";
 import { EduTask } from "../../entities/EduTask";
 import { TestData } from "../../entities/TestData";
 import { CourseAssignment, type OriginEntry } from "../../entities/CourseAssignment";
-import { renderPageContent } from "./contentRender";
+import { renderPageContent, type PageContent } from "./contentRender";
+import { normalizeWebTaskInput } from "../../utils/normalizeWebTaskInput";
 
 /**
  * Fork-on-assign planning (P2.2). Pure logic that turns a course template tree
@@ -24,10 +25,10 @@ export interface PlannedTask {
   title: string;
   description: string;
   template: string;
-  taskMode: "CODE" | "WEB" | "MANUAL";
-  webTemplateFiles?: unknown;
-  webValidationRules?: unknown;
-  webValidationProfile?: unknown;
+  taskMode: EduTask["taskMode"];
+  webTemplateFiles?: EduTask["webTemplateFiles"];
+  webValidationRules?: EduTask["webValidationRules"];
+  webValidationProfile?: EduTask["webValidationProfile"];
   tests?: Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }>;
 }
 
@@ -43,6 +44,10 @@ export interface ForkPlan {
   lessons: PlannedLesson[];
   /** Course-item kinds the fork could not map (e.g. MANUAL until P2 manual tasks land). */
   skipped: Array<{ sourceItemId: number; kind: CourseItemKind }>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Stable hash of an item's authored payload, order-independent for object keys. */
@@ -90,22 +95,42 @@ function asString(v: unknown, fallback = ""): string {
 
 /** Map a single task-bearing course item (CODE_TASK/WEB_TASK/MANUAL) to EduTask fields. */
 export function planTaskFromItem(item: Pick<CourseItem, "id" | "kind" | "title" | "content">): PlannedTask {
-  const content = (item.content ?? {}) as Record<string, unknown>;
-  const taskMode: "CODE" | "WEB" | "MANUAL" =
+  const content: Record<string, unknown> = item.content ?? {};
+  const taskMode: EduTask["taskMode"] =
     item.kind === "WEB_TASK" ? "WEB" : item.kind === "MANUAL" ? "MANUAL" : "CODE";
+  const normalizedWeb = taskMode === "WEB"
+    ? normalizeWebTaskInput({
+        taskMode,
+        template: content.template,
+        webTemplateFiles: content.webTemplateFiles,
+        webValidationRules: content.webValidationRules,
+        webValidationProfile: content.webValidationProfile
+      })
+    : null;
+  const tests = Array.isArray(content.tests)
+    ? content.tests
+        .filter((test): test is Record<string, unknown> =>
+          isRecord(test) && typeof test.input === "string" && typeof test.expectedOutput === "string"
+        )
+        .map((test) => ({
+          input: String(test.input),
+          expectedOutput: String(test.expectedOutput),
+          ...(typeof test.isHidden === "boolean" ? { isHidden: test.isHidden } : {}),
+          ...(typeof test.points === "number" ? { points: test.points } : {})
+        }))
+        .slice(0, 500)
+    : [];
   return {
     sourceItemId: item.id,
     sourceHash: hashCourseItem(item),
     title: item.title,
     description: asString(content.description),
-    template: asString(content.template),
+    template: normalizedWeb?.template ?? asString(content.template),
     taskMode,
-    webTemplateFiles: content.webTemplateFiles,
-    webValidationRules: content.webValidationRules,
-    webValidationProfile: content.webValidationProfile,
-    tests: Array.isArray(content.tests)
-      ? content.tests.filter((test): test is { input: string; expectedOutput: string; isHidden?: boolean; points?: number } => Boolean(test && typeof test === "object" && typeof (test as any).input === "string" && typeof (test as any).expectedOutput === "string")).slice(0, 500)
-      : []
+    webTemplateFiles: normalizedWeb?.webTemplateFiles,
+    webValidationRules: normalizedWeb?.webValidationRules,
+    webValidationProfile: normalizedWeb?.webValidationProfile,
+    tests
   };
 }
 
@@ -133,7 +158,7 @@ export function planForkFromCourse(course: Pick<Course, "modules">): ForkPlan {
       switch (item.kind) {
         case "THEORY":
         case "PAGE": {
-          const rendered = renderPageContent(item.title, content as any);
+          const rendered = renderPageContent(item.title, content as PageContent);
           if (rendered) theoryChunks.push(rendered);
           break;
         }
@@ -233,10 +258,10 @@ export async function assignCourseToClass(input: {
           title: plannedTask.title,
           description: plannedTask.description,
           template: plannedTask.template,
-          taskMode: plannedTask.taskMode as any,
-          webTemplateFiles: plannedTask.webTemplateFiles as any,
-          webValidationRules: plannedTask.webValidationRules as any,
-          webValidationProfile: plannedTask.webValidationProfile as any,
+          taskMode: plannedTask.taskMode,
+          webTemplateFiles: plannedTask.webTemplateFiles,
+          webValidationRules: plannedTask.webValidationRules,
+          webValidationProfile: plannedTask.webValidationProfile,
           maxAttempts: 1,
           isClosed: false
         });

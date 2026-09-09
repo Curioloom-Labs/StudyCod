@@ -7,16 +7,44 @@ import { FRONTEND_URL } from "../../config";
 import { logger } from "../../utils/logger";
 import { CertificateEmailService } from "./CertificateEmailService";
 import { CertificateRenderer } from "./CertificateRenderer";
+import { env } from "../../env";
 import {
   CertificateFieldRecord,
   CertificateMode,
   CertificatePayload,
   CertificateRenderInput,
   CertificateTemplateRecord,
+  CertificateVariableKey,
 } from "./types";
 
-const CERTIFICATES_ROOT = process.env.CERTIFICATES_STORAGE_DIR
-  ? String(process.env.CERTIFICATES_STORAGE_DIR)
+type SqlRow = Record<string, unknown>;
+
+function isRecord(value: unknown): value is SqlRow {
+  return typeof value === "object" && value !== null;
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+function isCertificateVariableKey(value: string): value is CertificateVariableKey {
+  return [
+    "contest_name",
+    "name",
+    "full_name",
+    "place",
+    "score",
+    "max_score",
+    "date",
+    "organizer",
+    "signature",
+    "certificate_id",
+    "qr_code",
+  ].includes(value);
+}
+
+const CERTIFICATES_ROOT = env.CERTIFICATES_STORAGE_DIR
+  ? String(env.CERTIFICATES_STORAGE_DIR)
   : path.resolve(process.cwd(), "uploads", "certificates");
 
 function ensureDir(p: string): void {
@@ -76,7 +104,7 @@ export class CertificateService {
       LIMIT ${limit}
     `;
 
-    const rows = (await AppDataSource.query(sql, args)) as Array<any>;
+    const rows = (await AppDataSource.query(sql, args)) as SqlRow[];
     return rows.map((row) => this.mapTemplate(row));
   }
 
@@ -99,7 +127,7 @@ export class CertificateService {
       LIMIT 1
       `,
       [id]
-    )) as Array<any>;
+    )) as SqlRow[];
 
     const row = rows[0];
     if (!row) return null;
@@ -115,7 +143,7 @@ export class CertificateService {
     cssTemplate?: string | null;
     fields?: Array<{ fieldKey: string; isEnabled?: boolean; isRequired?: boolean }>;
   }): Promise<{ templateId: number }> {
-    const result: any = await AppDataSource.query(
+    const result = await AppDataSource.query(
       `
       INSERT INTO certificate_templates (
         contest_id, name, type, html_template, css_template, is_active, version, created_by_user_id, created_at, updated_at
@@ -130,7 +158,7 @@ export class CertificateService {
         params.createdByUserId,
       ]
     );
-    const templateId = Number(result?.insertId ?? 0);
+    const templateId = Number(readProperty(result, "insertId") ?? 0);
 
     const fields = Array.isArray(params.fields) ? params.fields : [];
     for (const f of fields) {
@@ -165,7 +193,7 @@ export class CertificateService {
     const currentRows = (await AppDataSource.query(
       `SELECT id, version FROM certificate_templates WHERE id = ? LIMIT 1`,
       [templateId]
-    )) as Array<any>;
+    )) as SqlRow[];
     if (!currentRows[0]) {
       throw new Error("TEMPLATE_NOT_FOUND");
     }
@@ -232,7 +260,7 @@ export class CertificateService {
     const nextRows = (await AppDataSource.query(
       `SELECT version FROM certificate_templates WHERE id = ? LIMIT 1`,
       [templateId]
-    )) as Array<any>;
+    )) as SqlRow[];
     return { templateId, version: Number(nextRows[0]?.version ?? currentRows[0]?.version ?? 1) || 1 };
   }
 
@@ -270,7 +298,7 @@ export class CertificateService {
     const settingsRows = (await AppDataSource.query(
       `SELECT certificate_mode as mode FROM contest_certificate_settings WHERE contest_id = ? LIMIT 1`,
       [params.contestId]
-    )) as Array<any>;
+    )) as SqlRow[];
     const mode = normalizeMode(settingsRows[0]?.mode);
     if (mode === "none") {
       throw new Error("CERTIFICATES_DISABLED_FOR_CONTEST");
@@ -282,7 +310,7 @@ export class CertificateService {
       forceRegenerate: Boolean(params.forceRegenerate),
     };
 
-    const result: any = await AppDataSource.query(
+    const result = await AppDataSource.query(
       `
       INSERT INTO certificate_job_queue (
         queue_name, status, payload_json, attempts, max_attempts, available_at, created_at, updated_at
@@ -296,7 +324,7 @@ export class CertificateService {
       [params.contestId]
     );
 
-    return { jobId: Number(result?.insertId ?? 0) };
+    return { jobId: Number(readProperty(result, "insertId") ?? 0) };
   }
 
   async processBatchJob(payload: { contestId: number; forceRegenerate?: boolean }): Promise<void> {
@@ -317,7 +345,7 @@ export class CertificateService {
       ORDER BY p.id ASC
       `,
       [contestId]
-    )) as Array<any>;
+    )) as SqlRow[];
 
     for (const row of participants) {
       const participantId = Number(row.participantId);
@@ -367,7 +395,7 @@ export class CertificateService {
       LIMIT 1
       `,
       [contestId, participantId]
-    )) as Array<any>;
+    )) as SqlRow[];
     const ctx = contextRows[0];
     if (!ctx) return;
 
@@ -377,7 +405,7 @@ export class CertificateService {
     const existingRows = (await AppDataSource.query(
       `SELECT id, status FROM certificates WHERE contest_id = ? AND participant_id = ? LIMIT 1`,
       [contestId, participantId]
-    )) as Array<any>;
+    )) as SqlRow[];
     const existingId = Number(existingRows[0]?.id ?? 0) || null;
     if (existingId && !payload.forceRegenerate) {
       return;
@@ -399,7 +427,7 @@ export class CertificateService {
       ) t
       `,
       [contestId, participantId]
-    )) as Array<any>;
+    )) as SqlRow[];
 
     const contestMaxRows = (await AppDataSource.query(
       `
@@ -416,7 +444,7 @@ export class CertificateService {
       WHERE cp.contest_id = ?
       `,
       [contestId, contestId]
-    )) as Array<any>;
+    )) as SqlRow[];
 
     const totalScore = Number(scoreRows[0]?.totalScore ?? 0) || 0;
     const totalMaxScore =
@@ -574,7 +602,7 @@ export class CertificateService {
       LIMIT 1
       `,
       [contestId, participantId, payload.certificateId]
-    )) as Array<any>;
+    )) as SqlRow[];
 
     const row = rows[0];
     if (!row) return;
@@ -634,7 +662,7 @@ export class CertificateService {
         LIMIT 1
         `,
         [defaultTemplateId]
-      )) as Array<any>;
+      )) as SqlRow[];
       const row = rows[0];
       if (row) return this.mapTemplate(row);
     }
@@ -657,20 +685,20 @@ export class CertificateService {
       LIMIT 1
       `,
       [mode === "custom" ? "custom" : "studycod", contestId]
-    )) as Array<any>;
+    )) as SqlRow[];
 
     const row = rows[0];
     if (row) return this.mapTemplate(row);
 
     if (mode === "studycod") {
-      const insert: any = await AppDataSource.query(
+      const insert = await AppDataSource.query(
         `
         INSERT INTO certificate_templates (
           contest_id, name, type, html_template, css_template, is_active, version, created_by_user_id, created_at, updated_at
         ) VALUES (NULL, 'StudyCod Default', 'studycod', NULL, NULL, 1, 1, NULL, NOW(), NOW())
         `
       );
-      const id = Number(insert?.insertId ?? 0);
+      const id = Number(readProperty(insert, "insertId") ?? 0);
       return {
         id,
         contestId: null,
@@ -686,7 +714,7 @@ export class CertificateService {
     return null;
   }
 
-  private mapTemplate(row: any): CertificateTemplateRecord {
+  private mapTemplate(row: SqlRow): CertificateTemplateRecord {
     return {
       id: Number(row.id),
       contestId: row.contestId == null ? null : Number(row.contestId),
@@ -724,7 +752,7 @@ export class CertificateService {
       ORDER BY id ASC
       `,
       [templateId]
-    )) as Array<any>;
+    )) as SqlRow[];
 
     if (!rows.length) {
       return [
@@ -736,11 +764,15 @@ export class CertificateService {
       ];
     }
 
-    return rows.map((r) => ({
-      fieldKey: String(r.fieldKey) as any,
-      isEnabled: Number(r.isEnabled ?? 1) === 1,
-      isRequired: Number(r.isRequired ?? 0) === 1,
-    }));
+    return rows.flatMap((r): CertificateFieldRecord[] => {
+      const fieldKey = String(r.fieldKey ?? "");
+      if (!isCertificateVariableKey(fieldKey)) return [];
+      return [{
+        fieldKey,
+        isEnabled: Number(r.isEnabled ?? 1) === 1,
+        isRequired: Number(r.isRequired ?? 0) === 1,
+      }];
+    });
   }
 
   private async resolvePlace(contestId: number, participantId: number): Promise<string | null> {
@@ -773,7 +805,7 @@ export class CertificateService {
       LIMIT 1
       `,
       [contestId, contestId, participantId]
-    )) as Array<any>;
+    )) as SqlRow[];
 
     const rank = Number(rows[0]?.rankPos ?? 0);
     if (!Number.isFinite(rank) || rank <= 0) return null;

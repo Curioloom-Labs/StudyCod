@@ -1,14 +1,14 @@
 import { env } from "../env";
 
 export function getGoogleClientId(): string {
-  return (process.env.GOOGLE_CLIENT_ID || "").trim();
+  return (env.GOOGLE_CLIENT_ID || "").trim();
 }
 export function getGoogleClientSecret(): string {
-  return (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+  return (env.GOOGLE_CLIENT_SECRET || "").trim();
 }
 export function getGoogleCallbackUrl(): string {
-  if (process.env.GOOGLE_CALLBACK_URL) {
-    return process.env.GOOGLE_CALLBACK_URL.trim();
+  if (env.GOOGLE_CALLBACK_URL) {
+    return env.GOOGLE_CALLBACK_URL.trim();
   }
 
   // In development (localhost), we MUST use the frontend port (typically 5173) for the callback URL

@@ -28,6 +28,15 @@ const progressRepo = () => AppDataSource.getRepository(CourseItemProgress);
 const taskRepo = () => AppDataSource.getRepository(Task);
 
 type LearningLocale = CurriculumLocale;
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
 
 function percent(value: unknown): number {
   const n = Number(value ?? 0);
@@ -40,12 +49,13 @@ function runtimeLabel(runtime: string): string {
 }
 
 function isMiniProject(item: CourseItem): boolean {
-  const content = (item.content || {}) as any;
-  return item.kind === "MANUAL" && content.project === true && content.projectSpec != null;
+  const content = item.content || {};
+  return item.kind === "MANUAL" && readProperty(content, "project") === true && readProperty(content, "projectSpec") != null;
 }
 
-function projectSpecFor(item: CourseItem): any {
-  return ((item.content || {}) as any).projectSpec || null;
+function projectSpecFor(item: CourseItem): UnknownRecord | null {
+  const projectSpec = readProperty(item.content || {}, "projectSpec");
+  return isRecord(projectSpec) ? projectSpec : null;
 }
 
 function projectFilesHash(files: JudgeFile[] | undefined): string {
@@ -94,7 +104,7 @@ function projectStarterCode(runtime: "JAVA" | "PYTHON" | "CPP"): string {
 }
 
 function projectTemplatePaths(item: CourseItem, runtime: "JAVA" | "PYTHON" | "CPP"): string[] {
-  const raw = String(projectSpecFor(item)?.template || "");
+  const raw = String(readProperty(projectSpecFor(item), "template") || "");
   const extension = runtime === "JAVA" ? ".java" : runtime === "CPP" ? ".cpp" : ".py";
   const paths = raw
     .split(/[\r\n]+/)
@@ -132,9 +142,9 @@ function learnerProjectSpec(item: CourseItem): Record<string, unknown> | null {
 }
 
 function projectMilestoneIds(item: CourseItem): string[] {
-  const milestones = projectSpecFor(item)?.milestones;
+  const milestones = readProperty(projectSpecFor(item), "milestones");
   if (!Array.isArray(milestones)) return [];
-  return milestones.map((milestone: any) => String(milestone?.id || "").trim()).filter(Boolean);
+  return milestones.map(milestone => String(readProperty(milestone, "id") || "").trim()).filter(Boolean);
 }
 
 function projectProgressOrDefault(progress?: CourseItemProgress | null): CourseProjectProgressData {
@@ -143,7 +153,7 @@ function projectProgressOrDefault(progress?: CourseItemProgress | null): CourseP
     milestoneIds: Array.isArray(data.milestoneIds) ? data.milestoneIds.map(String) : [],
     draft: typeof data.draft === "string" ? data.draft : "",
     files: Array.isArray(data.files)
-      ? data.files.filter((file: any) => file && typeof file.path === "string" && typeof file.content === "string").map((file: any) => ({ path: file.path, content: file.content }))
+      ? data.files.filter(file => typeof file.path === "string" && typeof file.content === "string").map(file => ({ path: file.path, content: file.content }))
       : undefined,
     lastCheck: data.lastCheck && typeof data.lastCheck === "object" ? {
       score: percent(data.lastCheck.score),
@@ -166,7 +176,7 @@ function enrollmentPriority(status: EnrollmentStatus): number {
 }
 
 function requiredItem(item: CourseItem): boolean {
-  return (item.content as any)?.required !== false;
+  return readProperty(item.content, "required") !== false;
 }
 
 function nextActionForItems(items: CourseItem[], progressByItem: Map<number, CourseItemProgress>) {
@@ -213,19 +223,19 @@ function normalizedTitle(value: unknown): string {
     .toLocaleLowerCase("uk-UA");
 }
 
-function jsonContent(value: unknown): Record<string, any> {
+function jsonContent(value: unknown): UnknownRecord {
   if (!value) return {};
-  if (typeof value === "object") return value as Record<string, any>;
+  if (isRecord(value)) return value;
   try {
     const parsed = JSON.parse(String(value));
-    return parsed && typeof parsed === "object" ? parsed : {};
+    return isRecord(parsed) ? parsed : {};
   } catch {
     return {};
   }
 }
 
 function projectRequiredTopicKeys(item: CourseItem): string[] {
-  const rawKeys = jsonContent(item.content).projectSpec?.requiredTopicKeys;
+  const rawKeys = readProperty(readProperty(jsonContent(item.content), "projectSpec"), "requiredTopicKeys");
   if (!Array.isArray(rawKeys)) return [];
   return rawKeys
     .filter((key): key is string => typeof key === "string" && key.trim().length > 0)
@@ -247,9 +257,9 @@ async function assertMiniProjectAccess(
   courseId: number,
   item: CourseItem,
 ): Promise<void> {
-  const projectSpec = jsonContent(item.content).projectSpec;
+  const projectSpec = readProperty(jsonContent(item.content), "projectSpec");
   const requiredKeys = projectRequiredTopicKeys(item);
-  if (!requiredKeys.length || projectSpec?.kind === "FINAL_ASSESSMENT") {
+  if (!requiredKeys.length || readProperty(projectSpec, "kind") === "FINAL_ASSESSMENT") {
     await assertSequentialAccess(enrollmentId, courseId, item.id);
     return;
   }
@@ -341,7 +351,7 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
     }
   }
   for (const group of practicesByTheory.values()) {
-    group.sort((left, right) => Number(jsonContent(left.content).exercise?.sequence ?? 0) - Number(jsonContent(right.content).exercise?.sequence ?? 0) || left.id - right.id);
+    group.sort((left, right) => Number(readProperty(readProperty(jsonContent(left.content), "exercise"), "sequence") ?? 0) - Number(readProperty(readProperty(jsonContent(right.content), "exercise"), "sequence") ?? 0) || left.id - right.id);
   }
   if (!theoryByTitle.size && !theoryByIndex.size) return;
 
@@ -391,7 +401,7 @@ async function syncLegacyPersonalProgress(userId: number, course: Course, enroll
       : practice ? [practice] : [theory];
 
     for (const item of targets) {
-      const existing = progressByItem.get(item.id) || progressRepo().create({ enrollment: { id: enrollment.id } as any, item: { id: item.id } as any });
+      const existing = progressByItem.get(item.id) || progressRepo().create({ enrollment: { id: enrollment.id }, item: { id: item.id } });
       if (passed) {
         if (existing.status === "COMPLETED" && Number(existing.score ?? -1) >= Number(score ?? -1)) continue;
         existing.status = "COMPLETED";
@@ -454,7 +464,7 @@ async function recalculateEnrollmentProgress(enrollment: UserCourseEnrollment): 
     .where("module.course_id = :courseId", { courseId: enrollment.courseId })
     .andWhere("item.is_active = 1")
     .getMany();
-  const requiredItems = items.filter((candidate) => (candidate.content as any)?.required !== false);
+  const requiredItems = items.filter(requiredItem);
   const progress = await progressRepo().find({ where: { enrollment: { id: enrollment.id } } });
   const progressByItem = new Map(progress.map((entry) => [entry.itemId, entry]));
   const scoredTotal = requiredItems.reduce((total, item) => {
@@ -480,9 +490,9 @@ async function ensureBaseEnrollments(userId: number, baseVariants: CourseVariant
   for (const variant of baseVariants) {
     if (byVariant.has(variant.id)) continue;
     const created = enrollmentRepo().create({
-      user: { id: userId } as any,
-      course: { id: variant.courseId } as any,
-      variant: { id: variant.id } as any,
+      user: { id: userId },
+      course: { id: variant.courseId },
+      variant: { id: variant.id },
       status: "AVAILABLE",
       completionPercent: 0,
       masteryScore: 0,
@@ -658,9 +668,9 @@ export async function enrollInCourseVariant(userId: number, variantId: number, e
       }
     } else {
       const created = enrollments.create({
-        user: { id: userId } as any,
-        course: { id: variant.courseId } as any,
-        variant: { id: variantId } as any,
+        user: { id: userId },
+        course: { id: variant.courseId },
+        variant: { id: variantId },
         status: "IN_PROGRESS",
         completionPercent: 0,
         masteryScore: 0,
@@ -760,7 +770,7 @@ export async function getCoursePracticeContext(userId: number, itemId: number, l
   if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {
     throw Object.assign(new Error("COURSE_NOT_ACTIVE"), { statusCode: 409 });
   }
-  const content = (item.content || {}) as any;
+  const content = (item.content || {});
   const theoryItemId = Number(content.theoryItemId ?? 0);
   await assertSequentialAccess(
     enrollment.id,
@@ -792,8 +802,8 @@ export async function getCoursePracticeContext(userId: number, itemId: number, l
     course: item.module.course,
     enrollment,
     progress,
-    theoryMarkdown: typeof (localizedTheoryItem?.content as any)?.markdown === "string"
-      ? String((localizedTheoryItem?.content as any).markdown)
+    theoryMarkdown: typeof readProperty(localizedTheoryItem?.content, "markdown") === "string"
+      ? String(readProperty(localizedTheoryItem?.content, "markdown"))
       : "",
   };
 }
@@ -803,8 +813,8 @@ export async function startCourseItem(userId: number, itemId: number): Promise<v
   const context = await getCoursePracticeContext(userId, itemId);
   if (context.progress?.status === "COMPLETED") return;
   const progress = context.progress || progressRepo().create({
-    enrollment: { id: context.enrollment.id } as any,
-    item: { id: context.item.id } as any,
+    enrollment: { id: context.enrollment.id },
+    item: { id: context.item.id },
   });
   progress.status = "IN_PROGRESS";
   await progressRepo().save(progress);
@@ -835,8 +845,8 @@ export async function completeCourseItem(
     throw Object.assign(new Error("PREREQUISITES_INCOMPLETE"), { statusCode: 423, prerequisites: dependencyState.prerequisites });
   }
 
-  const requiredTheoryItemId = Number((item.content as any)?.theoryItemId ?? 0);
-  if (requiredTheoryItemId > 0 && (item.content as any)?.generatedAfterTheory === true) {
+  const requiredTheoryItemId = Number(readProperty(item.content, "theoryItemId") ?? 0);
+  if (requiredTheoryItemId > 0 && readProperty(item.content, "generatedAfterTheory") === true) {
     const theoryProgress = await progressRepo().findOne({ where: { enrollment: { id: enrollment.id }, item: { id: requiredTheoryItemId }, status: "COMPLETED" } });
     if (!theoryProgress) {
       throw Object.assign(new Error("THEORY_REQUIRED_BEFORE_PRACTICE"), { statusCode: 409, theoryItemId: requiredTheoryItemId });
@@ -844,7 +854,7 @@ export async function completeCourseItem(
   }
 
   const progress = await progressRepo().findOne({ where: { enrollment: { id: enrollment.id }, item: { id: item.id } } })
-    || progressRepo().create({ enrollment: { id: enrollment.id } as any, item: { id: item.id } as any });
+    || progressRepo().create({ enrollment: { id: enrollment.id }, item: { id: item.id } });
   const wasCompleted = progress.status === "COMPLETED";
   const normalizedScore = score == null ? null : percent(score);
   const previousScoreValue = Number(progress.score);
@@ -873,7 +883,7 @@ export async function getCourseProject(userId: number, itemId: number, locale: L
   return {
     itemId: item.id,
     enrollmentId: enrollment.id,
-    projectKey: (localizedItem.content as any)?.projectKey || null,
+    projectKey: (localizedItem.content)?.projectKey || null,
     projectSpec: {
       ...(learnerProjectSpec(localizedItem) || {}),
       entryFile: projectEntryFile(runtime),
@@ -901,7 +911,7 @@ function normalizeProjectCheckFiles(value: unknown): JudgeFile[] {
   const files: JudgeFile[] = [];
   let totalBytes = 0;
   for (const candidate of value) {
-    const file = candidate as any;
+    const file = candidate;
     const filePath = typeof file?.path === "string" ? file.path.trim() : "";
     const content = typeof file?.content === "string" ? file.content : null;
     if (!filePath || content == null || filePath.startsWith("/") || filePath.includes("\\") || filePath.split("/").some((part: string) => part === "..")) {
@@ -918,13 +928,13 @@ function normalizeProjectCheckFiles(value: unknown): JudgeFile[] {
   return files;
 }
 
-function buildProjectCheckHarness(spec: any): string {
-  const kind = String(spec?.kind || "");
+function buildProjectCheckHarness(spec: UnknownRecord): string {
+  const kind = String(readProperty(spec, "kind") || "");
   if (kind === "flask") {
     return [
       "import json, sys",
       "import importlib",
-      "module = importlib.import_module(" + JSON.stringify(String(spec.module || "app")) + ")",
+      "module = importlib.import_module(" + JSON.stringify(String(readProperty(spec, "module") || "app")) + ")",
       "factory = getattr(module, 'create_app', None)",
       "if factory is not None:",
       "    try:",
@@ -952,7 +962,7 @@ function buildProjectCheckHarness(spec: any): string {
       "import json, sys",
       "import importlib",
       "from fastapi.testclient import TestClient",
-      "module = importlib.import_module(" + JSON.stringify(String(spec.module || "app.main")) + ")",
+      "module = importlib.import_module(" + JSON.stringify(String(readProperty(spec, "module") || "app.main")) + ")",
       "factory = getattr(module, 'create_app', None)",
       "if factory is not None:",
       "    try:",
@@ -975,7 +985,8 @@ function buildProjectCheckHarness(spec: any): string {
     ].join("\n");
   }
   if (kind === "computer-vision") {
-    const files = Array.isArray(spec.files) ? spec.files.map(String) : [];
+    const rawFiles = readProperty(spec, "files");
+    const files = Array.isArray(rawFiles) ? rawFiles.map(String) : [];
     return [
       "import json, sys",
       "from pathlib import Path",
@@ -1001,22 +1012,24 @@ export async function checkCourseProject(userId: number, itemId: number, rawFile
   const spec = projectSpecFor(item) || {};
   const studentFiles = normalizeProjectCheckFiles(rawFiles);
   const runtime = projectRuntime(enrollment);
-  const checkSpec = spec.checkSpec;
-  const usesHarness = Boolean(checkSpec && ["flask", "fastapi", "computer-vision"].includes(String(checkSpec.kind)));
-  const authoredTests = Array.isArray(spec.tests)
-    ? spec.tests.map((test: any, index: number) => ({
+  const checkSpec = readProperty(spec, "checkSpec");
+  const harnessSpec = isRecord(checkSpec) ? checkSpec : null;
+  const usesHarness = Boolean(harnessSpec && ["flask", "fastapi", "computer-vision"].includes(String(readProperty(harnessSpec, "kind"))));
+  const authoredTestsRaw = readProperty(spec, "tests");
+  const authoredTests = Array.isArray(authoredTestsRaw)
+    ? authoredTestsRaw.map((test, index: number) => ({
         id: `project-${index + 1}`,
-        input: String(test?.input ?? ""),
-        output: String(test?.expectedOutput ?? test?.output ?? ""),
-        hidden: Boolean(test?.hidden),
-        group: typeof test?.group === "string" ? test.group : "project",
-        weight: Number.isFinite(Number(test?.points)) ? Number(test.points) : 1,
+        input: String(readProperty(test, "input") ?? ""),
+        output: String(readProperty(test, "expectedOutput") ?? readProperty(test, "output") ?? ""),
+        hidden: Boolean(readProperty(test, "hidden")),
+        group: typeof readProperty(test, "group") === "string" ? String(readProperty(test, "group")) : "project",
+        weight: Number.isFinite(Number(readProperty(test, "points"))) ? Number(readProperty(test, "points")) : 1,
       }))
     : [];
   const files: JudgeFile[] = !usesHarness && authoredTests.length > 0
     ? studentFiles
     : usesHarness
-      ? [...studentFiles, { path: "main.py", content: buildProjectCheckHarness(checkSpec) }]
+      ? [...studentFiles, { path: "main.py", content: buildProjectCheckHarness(harnessSpec!) }]
       : [];
   if (!usesHarness && authoredTests.length > 0 && !files.some((file) => file.path === projectEntryFile(runtime))) {
     projectCheckError("PROJECT_ENTRY_FILE_REQUIRED");
@@ -1036,7 +1049,7 @@ export async function checkCourseProject(userId: number, itemId: number, rawFile
     debug: false,
   };
   const result = await judgeWithSemaphore(request, { timeoutMs: 12_000 });
-  const hiddenIds = new Set(tests.filter((test: any) => test.hidden).map((test: any) => String(test.id)));
+  const hiddenIds = new Set(tests.filter(test => test.hidden).map(test => String(test.id)));
   const safeTests = result.tests
     .filter((test) => !hiddenIds.has(String(test.test_id)))
     .map((test) => ({
@@ -1104,7 +1117,7 @@ async function recordCourseProjectScore(
   testsTotal: number,
 ) {
   const { item, enrollment, progress: existing } = await getEnrolledItemContext(userId, itemId);
-  const progress = existing || progressRepo().create({ enrollment: { id: enrollment.id } as any, item: { id: item.id } as any });
+  const progress = existing || progressRepo().create({ enrollment: { id: enrollment.id }, item: { id: item.id } });
   const normalizedScore = percent(score);
   const previousScoreValue = Number(progress.score);
   const previousScore = Number.isFinite(previousScoreValue) ? percent(previousScoreValue) : 0;
@@ -1137,13 +1150,14 @@ async function saveProjectProgress(userId: number, itemId: number, input: { mile
   const allowedIds = new Set(projectMilestoneIds(item));
   const milestoneIds = [...new Set(input.milestoneIds.map((id) => String(id).trim()).filter((id) => allowedIds.has(id)))];
   const requiredIds = projectMilestoneIds(item);
-  const assessment = projectSpecFor(item)?.assessment;
+  const assessment = readProperty(projectSpecFor(item), "assessment");
+  const assessmentRecord = isRecord(assessment) ? assessment : null;
   const lastCheck = projectProgressOrDefault(existing).lastCheck;
   const savedFiles = input.files?.length ? normalizeProjectCheckFiles(input.files) : projectProgressOrDefault(existing).files;
-  if (submit && (requiredIds.some((id) => !milestoneIds.includes(id)) || !input.draft.trim() || (assessment?.checkBeforeSubmit !== false && (!lastCheck || lastCheck.score < 60 || lastCheck.filesHash !== projectFilesHash(savedFiles))))) {
+  if (submit && (requiredIds.some((id) => !milestoneIds.includes(id)) || !input.draft.trim() || (readProperty(assessmentRecord, "checkBeforeSubmit") !== false && (!lastCheck || lastCheck.score < 60 || lastCheck.filesHash !== projectFilesHash(savedFiles))))) {
     throw Object.assign(new Error("PROJECT_REQUIREMENTS_INCOMPLETE"), { statusCode: 422 });
   }
-  const progress = existing || progressRepo().create({ enrollment: { id: enrollment.id } as any, item: { id: item.id } as any });
+  const progress = existing || progressRepo().create({ enrollment: { id: enrollment.id }, item: { id: item.id } });
   progress.projectData = {
     milestoneIds,
     draft: input.draft,
@@ -1157,7 +1171,7 @@ async function saveProjectProgress(userId: number, itemId: number, input: { mile
   progress.completedAt = submit ? new Date() : null;
   await progressRepo().save(progress);
   const updatedEnrollment = await recalculateEnrollmentProgress(enrollment);
-  if (submit && (item.content as any)?.finalAssessment === true) {
+  if (submit && readProperty(item.content, "finalAssessment") === true) {
     updatedEnrollment.finalAssessmentPassed = true;
     updatedEnrollment.status = "COMPLETED";
     updatedEnrollment.completionPercent = 100;
@@ -1169,7 +1183,7 @@ async function saveProjectProgress(userId: number, itemId: number, input: { mile
     project: {
       itemId: item.id,
       enrollmentId: enrollment.id,
-      projectKey: (item.content as any)?.projectKey || null,
+      projectKey: readProperty(item.content, "projectKey") || null,
       projectSpec: {
         ...(learnerProjectSpec(item) || {}),
         entryFile: projectEntryFile(projectRuntime(enrollment)),
@@ -1203,7 +1217,7 @@ export async function passFinalAssessment(userId: number, enrollmentId: number):
     where: { module: { course: { id: enrollment.courseId } }, isActive: true },
     relations: ["module"],
     order: { order: "DESC", id: "DESC" },
-  })).find((item) => Boolean((item.content as any)?.finalAssessment));
+  })).find((item) => readProperty(item.content, "finalAssessment") === true);
   if (!finalAssessment) {
     throw Object.assign(new Error("FINAL_WORK_REQUIRED"), { statusCode: 409 });
   }

@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from "express";
 import { z } from "zod";
-import AdmZip from "adm-zip";
+import SafeZipArchive from "../utils/safeZip";
 import { validateUploadedZip, ZipValidationError, ZipExtractionBudget, ZIP_MAX_TOTAL_UNCOMPRESSED_BYTES } from "../utils/zipUploadValidator";
 import multer from "multer";
 import { createHash } from "crypto";
@@ -43,17 +43,36 @@ import { normalizeWebTaskTemplate } from "../utils/webTaskPayload";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 import { getSkillEvidence, recordLearningEvent } from "../services/learning/failureToSkillEngine";
 import { compareLibraryJudgeGroups, hasLibrarySubtasks, libraryTestGroup, normalizeLibraryGroupScores } from "../services/libraryTaskScoring";
+import {
+  ALL_JUDGE_LANGUAGES,
+  filterEnabledJudgeLanguages,
+  getDisabledJudgeLanguages,
+} from "../config/judgeLanguages";
 
 const libraryRouter = Router();
 
 type ApiCodeFile = { path: string; content: string };
+type UnknownRecord = Record<string, unknown>;
+
+function readProperty(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object") return undefined;
+  return (value as UnknownRecord)[key];
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  const message = readProperty(error, "message");
+  return typeof message === "string" && message ? message : String(error);
+}
+
 function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   if (!Array.isArray(raw)) return [];
   const out: ApiCodeFile[] = [];
   for (const f of raw) {
     if (!f || typeof f !== "object") continue;
-    const p = normalizeSafeCodeFilePath((f as any).path) ?? "";
-    const c = typeof (f as any).content === "string" ? (f as any).content : "";
+    const p = normalizeSafeCodeFilePath(readProperty(f, "path")) ?? "";
+    const rawContent = readProperty(f, "content");
+    const c = typeof rawContent === "string" ? rawContent : "";
     if (!p) continue;
     out.push({ path: p, content: c });
   }
@@ -88,8 +107,8 @@ function normalizeWebProfile(raw: unknown): WebTaskValidationProfile {
 }
 
 function assertLibraryWebFilesWithinLimits(files: ReturnType<typeof normalizeWebTaskFiles>) {
-  const maxFileSize = Number((env as any).__webTaskMaxFileSize ?? 200_000);
-  const maxTotalSize = Number((env as any).__webTaskMaxTotalSize ?? 500_000);
+  const maxFileSize = Number(env.__webTaskMaxFileSize ?? 200_000);
+  const maxTotalSize = Number(env.__webTaskMaxTotalSize ?? 500_000);
   let total = 0;
   for (const f of files) {
     const size = Buffer.byteLength(String(f.content ?? ""), "utf8");
@@ -151,8 +170,8 @@ const parsePositiveInt = (raw: string | undefined, fallback: number): number => 
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
 
-const LIBRARY_ARCHIVE_UPLOAD_MAX_MB = parsePositiveInt(process.env.LIBRARY_ARCHIVE_UPLOAD_MAX_MB, 120);
-const LIBRARY_ARCHIVE_UPLOAD_MAX_FILES = parsePositiveInt(process.env.LIBRARY_ARCHIVE_UPLOAD_MAX_FILES, 100);
+const LIBRARY_ARCHIVE_UPLOAD_MAX_MB = parsePositiveInt(env.LIBRARY_ARCHIVE_UPLOAD_MAX_MB, 120);
+const LIBRARY_ARCHIVE_UPLOAD_MAX_FILES = parsePositiveInt(env.LIBRARY_ARCHIVE_UPLOAD_MAX_FILES, 100);
 const LIBRARY_ARCHIVE_UPLOAD_MAX_BYTES = LIBRARY_ARCHIVE_UPLOAD_MAX_MB * 1024 * 1024;
 
 const archiveUpload = multer({
@@ -165,7 +184,7 @@ const archiveUpload = multer({
 
 const archiveUploadAny = archiveUpload.any();
 const archiveUploadMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
-  archiveUploadAny(req as any, res as any, (error: any) => {
+  archiveUploadAny(req, res, (error: unknown) => {
     if (!error) return next();
 
     if (error instanceof multer.MulterError) {
@@ -243,8 +262,8 @@ libraryRouter.get("/learning/evidence", authRequired, async (req: AuthRequest, r
     if (!principal) return res.status(401).json({ message: "UNAUTHORIZED" });
     const evidence = await getSkillEvidence(principal.principalType, principal.principalId);
     return res.json(evidence);
-  } catch (error: any) {
-    logger.warn("[learning] evidence read failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[learning] evidence read failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -279,8 +298,8 @@ libraryRouter.post("/learning/events", authRequired, async (req: AuthRequest, re
       dedupeKey,
     });
     return res.status(event ? 201 : 202).json({ ok: true, eventId: event?.id ?? null, deduped: event == null });
-  } catch (error: any) {
-    logger.warn("[learning] event write failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[learning] event write failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -292,9 +311,9 @@ type LibraryTaskQuality = {
   score: number;
 };
 
-function isProblemCodeDuplicateError(error: any): boolean {
-  const msg = String(error?.message ?? "");
-  return error?.code === "ER_DUP_ENTRY" && (msg.includes("uq_library_tasks_problem_code") || msg.includes("problem_code"));
+function isProblemCodeDuplicateError(error: unknown): boolean {
+  const msg = errorMessage(error);
+  return readProperty(error, "code") === "ER_DUP_ENTRY" && (msg.includes("uq_library_tasks_problem_code") || msg.includes("problem_code"));
 }
 
 async function allocateUniqueProblemCode(base: string, excludeTaskId?: number): Promise<string> {
@@ -304,8 +323,8 @@ async function allocateUniqueProblemCode(base: string, excludeTaskId?: number): 
   let i = 1;
   while (i <= 2000) {
     const where = excludeTaskId
-      ? ({ problemCode: candidate, id: Not(excludeTaskId) } as any)
-      : ({ problemCode: candidate } as any);
+      ? { problemCode: candidate, id: Not(excludeTaskId) }
+      : { problemCode: candidate };
     const existing = await libraryRepo().findOne({ where });
     if (!existing) return candidate;
     const suffix = `_${i}`;
@@ -316,14 +335,8 @@ async function allocateUniqueProblemCode(base: string, excludeTaskId?: number): 
   return `${baseCode.slice(0, 56)}_${Date.now().toString().slice(-7)}`;
 }
 
-const JUDGE_LANGUAGES: readonly JudgeLanguage[] = [
-  "java", "python", "cpp", "c", "csharp", "kotlin",
-  "js", "go", "rust", "pascal",
-  "d", "dart", "haskell", "lisp", "lua", "perl", "php", "ruby", "swift"
-];
-
 // Every task accepts every supported language — no per-task language restriction.
-const ALL_JUDGE_LANGS: JudgeLanguage[] = [...JUDGE_LANGUAGES];
+const ALL_JUDGE_LANGS: JudgeLanguage[] = [...ALL_JUDGE_LANGUAGES];
 
 // Optional compiler/version id (e.g. "pypy3", "java21", "cpp23"). The judge validates that
 // it belongs to the language family; here we only sanity-check the shape.
@@ -332,27 +345,7 @@ function normCompilerId(raw: unknown): string | undefined {
   return /^[a-z0-9_+-]{1,32}$/i.test(s) ? s : undefined;
 }
 
-function parseDisabledJudgeLanguagesEnv(): Set<JudgeLanguage> {
-  const raw = String(process.env.JUDGE_DISABLED_LANGUAGES ?? process.env.DISABLED_JUDGE_LANGUAGES ?? "").trim();
-  if (!raw) return new Set();
-  const parts = raw
-    .split(/[,\s]+/g)
-    .map(s => s.trim().toLowerCase())
-    .filter(Boolean);
-  const disabled = new Set<JudgeLanguage>();
-  for (const p of parts) {
-    const lang = normalizeJudgeLanguage(p);
-    if (lang) disabled.add(lang);
-  }
-  return disabled;
-}
-
-const DISABLED_JUDGE_LANGS = parseDisabledJudgeLanguagesEnv();
-
-function filterEnabledJudgeLanguages(langs: JudgeLanguage[]): JudgeLanguage[] {
-  if (DISABLED_JUDGE_LANGS.size === 0) return langs;
-  return langs.filter(l => !DISABLED_JUDGE_LANGS.has(l));
-}
+const DISABLED_JUDGE_LANGS = getDisabledJudgeLanguages(ALL_JUDGE_LANGUAGES);
 
 const DEFAULT_LIMITS_BY_LANG: Record<JudgeLanguage, { time_limit_ms: number; memory_limit_mb: number; output_limit_kb: number }> = {
   java: { time_limit_ms: 1200, memory_limit_mb: 256, output_limit_kb: 64 },
@@ -377,7 +370,7 @@ const DEFAULT_LIMITS_BY_LANG: Record<JudgeLanguage, { time_limit_ms: number; mem
   swift: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 },
 };
 
-function normalizeLang(input: any): LibraryTaskLang {
+function normalizeLang(input: unknown): LibraryTaskLang {
   const raw = String(input ?? "").toUpperCase().trim();
   if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   return raw.startsWith("PY") ? "PYTHON" : "JAVA";
@@ -388,15 +381,15 @@ function defaultJudgeLanguageFromTask(task: LibraryTask): JudgeLanguage {
   return (allowed[0] || "java") as JudgeLanguage;
 }
 
-function normalizeJudgeLanguage(input: any): JudgeLanguage | null {
+function normalizeJudgeLanguage(input: unknown): JudgeLanguage | null {
   const raw = String(input ?? "").trim().toLowerCase();
-  return (JUDGE_LANGUAGES as readonly string[]).includes(raw) ? (raw as JudgeLanguage) : null;
+  return (ALL_JUDGE_LANGUAGES as readonly string[]).includes(raw) ? (raw as JudgeLanguage) : null;
 }
 
 function getAllowedJudgeLanguages(_task: LibraryTask): JudgeLanguage[] {
   // No per-task restriction: every task accepts every globally-enabled language.
   // (A task's stored `allowedLanguages` is intentionally ignored here.)
-  const filteredAll = filterEnabledJudgeLanguages(ALL_JUDGE_LANGS);
+  const filteredAll = filterEnabledJudgeLanguages(ALL_JUDGE_LANGS, DISABLED_JUDGE_LANGS);
   return filteredAll.length > 0 ? filteredAll : ["java"];
 }
 
@@ -409,25 +402,25 @@ function ensureJudgeConfigDefaults(task: LibraryTask, tests: TestData[]): boolea
   const maxMem = Math.max(...allowed.map(l => DEFAULT_LIMITS_BY_LANG[l].memory_limit_mb));
   const maxOut = Math.max(...allowed.map(l => DEFAULT_LIMITS_BY_LANG[l].output_limit_kb));
 
-  const time = Number((task as any).timeLimitMs);
+  const time = Number(task.timeLimitMs);
   if (!Number.isFinite(time) || time <= 0) {
-    (task as any).timeLimitMs = maxTime;
+    task.timeLimitMs = maxTime;
     dirty = true;
   }
-  const mem = Number((task as any).memoryLimitMb);
+  const mem = Number(task.memoryLimitMb);
   if (!Number.isFinite(mem) || mem <= 0) {
-    (task as any).memoryLimitMb = maxMem;
+    task.memoryLimitMb = maxMem;
     dirty = true;
   }
-  const out = Number((task as any).outputLimitKb);
+  const out = Number(task.outputLimitKb);
   if (!Number.isFinite(out) || out <= 0) {
-    (task as any).outputLimitKb = maxOut;
+    task.outputLimitKb = maxOut;
     dirty = true;
   }
 
-  const checker = (task as any).checkerSpec as CheckerSpec | null | undefined;
-  if (!checker || typeof checker !== "object" || typeof (checker as any).type !== "string") {
-    (task as any).checkerSpec = chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || ""));
+  const checker = task.checkerSpec;
+  if (!checker || typeof checker !== "object" || typeof checker.type !== "string") {
+    task.checkerSpec = chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || ""));
     dirty = true;
   }
 
@@ -437,7 +430,7 @@ function ensureJudgeConfigDefaults(task: LibraryTask, tests: TestData[]): boolea
 function canReadTask(task: LibraryTask, userId: number | null, userRole: string | null): boolean {
   if (task.status === "APPROVED") return true;
   if (userRole === "SYSTEM_ADMIN") return true;
-  if (userId && (task as any)?.author?.id === userId) return true;
+  if (userId && task.author?.id === userId) return true;
   return false;
 }
 
@@ -474,13 +467,13 @@ async function computeTaskQualityMap(taskIds: number[]): Promise<Map<number, Lib
     .andWhere("a.last_tests_total IS NOT NULL")
     .andWhere("a.last_tests_total > 0")
     .groupBy("a.library_task_id")
-    .getRawMany<Array<{ taskId: string | number; attempts: string | number; solved: string | number; avgScoreRatio: string | number | null }>>();
+    .getRawMany<{ taskId: string | number; attempts: string | number; solved: string | number; avgScoreRatio: string | number | null }>();
 
-  for (const row of rows as any) {
-    const taskId = Number((row as any).taskId ?? 0);
-    const attempts = Number((row as any).attempts ?? 0) || 0;
-    const solved = Number((row as any).solved ?? 0) || 0;
-    const avgScoreRatio = clamp01(Number((row as any).avgScoreRatio ?? 0) || 0);
+  for (const row of rows) {
+    const taskId = Number(row.taskId ?? 0);
+    const attempts = Number(row.attempts ?? 0) || 0;
+    const solved = Number(row.solved ?? 0) || 0;
+    const avgScoreRatio = clamp01(Number(row.avgScoreRatio ?? 0) || 0);
     if (!Number.isFinite(taskId) || taskId <= 0 || attempts <= 0) continue;
     const solvedRate = clamp01(solved / attempts);
     const qualityScore = Math.round((0.7 * solvedRate + 0.3 * avgScoreRatio) * 100);
@@ -496,37 +489,37 @@ async function computeTaskQualityMap(taskIds: number[]): Promise<Map<number, Lib
 }
 
 function buildTaskDto(task: LibraryTask, quality: LibraryTaskQuality | null = null) {
-  const taskMode = String((task as any).taskMode ?? "CODE") === "WEB" ? "WEB" : "CODE";
-  const normalizedWeb = taskMode === "WEB" ? normalizeWebTaskTemplate((task as any).template) : null;
+  const taskMode = task.taskMode === "WEB" ? "WEB" : "CODE";
+  const normalizedWeb = taskMode === "WEB" ? normalizeWebTaskTemplate(task.template) : null;
   const template = task.lang === "JAVA" ? normalizeJavaStarterTemplate(task.template) : task.template;
-  const templatesByLanguage = (task as any).templatesByLanguage
-    ? Object.fromEntries(Object.entries((task as any).templatesByLanguage).map(([lang, value]) => [
+  const templatesByLanguage = task.templatesByLanguage
+    ? Object.fromEntries(Object.entries(task.templatesByLanguage).map(([lang, value]) => [
         lang,
         String(lang).toLowerCase() === "java" ? normalizeJavaStarterTemplate(String(value ?? "")) : value,
       ]))
     : null;
   return {
     id: task.id,
-    problemCode: (task as any).problemCode ?? null,
-    slug: (task as any).slug ?? null,
+    problemCode: task.problemCode ?? null,
+    slug: task.slug ?? null,
     title: task.title,
     description: task.description,
     template,
     taskMode,
-    projectSpec: (task as any).projectSpec ?? null,
-    webTemplateFiles: taskMode === "WEB" ? normalizeWebTaskFiles((task as any).webTemplateFiles ?? normalizedWeb?.files ?? []) : null,
-    webValidationRules: taskMode === "WEB" ? normalizeWebRules((task as any).webValidationRules ?? normalizedWeb?.rules ?? []) : null,
-    webValidationProfile: taskMode === "WEB" ? normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB") : null,
+    projectSpec: task.projectSpec ?? null,
+    webTemplateFiles: taskMode === "WEB" ? normalizeWebTaskFiles(task.webTemplateFiles ?? normalizedWeb?.files ?? []) : null,
+    webValidationRules: taskMode === "WEB" ? normalizeWebRules(task.webValidationRules ?? normalizedWeb?.rules ?? []) : null,
+    webValidationProfile: taskMode === "WEB" ? normalizeWebProfile(task.webValidationProfile ?? "FREE_WEB") : null,
     templatesByLanguage,
     lang: task.lang,
-    difficulty: (task as any).difficulty ?? null,
-    tags: (task as any).tags ?? null,
-    section: (task as any).section ?? null,
+    difficulty: task.difficulty ?? null,
+    tags: task.tags ?? null,
+    section: task.section ?? null,
     maxAttempts: task.maxAttempts,
-    timeLimitMs: (task as any).timeLimitMs ?? null,
-    memoryLimitMb: (task as any).memoryLimitMb ?? null,
-    outputLimitKb: (task as any).outputLimitKb ?? null,
-    checkerSpec: (task as any).checkerSpec ?? null,
+    timeLimitMs: task.timeLimitMs ?? null,
+    memoryLimitMb: task.memoryLimitMb ?? null,
+    outputLimitKb: task.outputLimitKb ?? null,
+    checkerSpec: task.checkerSpec ?? null,
     // Always return a resolved list (and apply global disables), so the UI stays consistent.
     allowedLanguages: getAllowedJudgeLanguages(task),
     status: task.status,
@@ -536,10 +529,10 @@ function buildTaskDto(task: LibraryTask, quality: LibraryTaskQuality | null = nu
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     quality,
-    author: (task as any)?.author
+    author: task.author
       ? {
-          id: (task as any).author.id,
-          username: (task as any).author.username,
+          id: task.author.id,
+          username: task.author.username,
         }
       : null,
   };
@@ -555,12 +548,12 @@ function computeLibraryTaskEnSourceHash(task: Pick<LibraryTask, "title" | "descr
 }
 
 function isLibraryTaskEnFresh(taskWithEn: LibraryTask, expectedSourceHash: string): boolean {
-  const titleEn = String((taskWithEn as any).titleEn ?? "");
-  const descEn = String((taskWithEn as any).descriptionEn ?? "");
+  const titleEn = String(taskWithEn.titleEn ?? "");
+  const descEn = String(taskWithEn.descriptionEn ?? "");
   const okTitle = titleEn.trim().length > 0 && !looksLikeTranslationProviderErrorText(titleEn);
   const okDesc = descEn.trim().length > 0 && !looksLikeTranslationProviderErrorText(descEn);
-  const okHash = String((taskWithEn as any).translationSourceHashEn ?? "").trim() === expectedSourceHash;
-  const okVer = Number((taskWithEn as any).translationVersionEn ?? 0) === LIBRARY_TASK_EN_TRANSLATION_VERSION;
+  const okHash = String(taskWithEn.translationSourceHashEn ?? "").trim() === expectedSourceHash;
+  const okVer = Number(taskWithEn.translationVersionEn ?? 0) === LIBRARY_TASK_EN_TRANSLATION_VERSION;
   return okTitle && okDesc && okHash && okVer;
 }
 
@@ -576,7 +569,7 @@ async function localizeLibraryTasksToEn(
   if (!hasCols) {
     logger.warn("[library] EN translation requested but DB columns are missing; serving uk content", {
       requestId: req.requestId,
-      userId: (req as any).userId ?? null
+      userId: req.userId ?? null
     });
     return out;
   }
@@ -605,8 +598,8 @@ async function localizeLibraryTasksToEn(
     const sourceHash = computeLibraryTaskEnSourceHash(t);
     if (isLibraryTaskEnFresh(t, sourceHash)) {
       out.set(id, {
-        title: (t as any).titleEn as string,
-        description: (t as any).descriptionEn as string,
+        title: t.titleEn as string,
+        description: t.descriptionEn as string,
       });
       continue;
     }
@@ -629,18 +622,18 @@ async function localizeLibraryTasksToEn(
         [titleEn, descriptionEn, sourceHash, LIBRARY_TASK_EN_TRANSLATION_VERSION, new Date(), id]
       );
 
-      (t as any).titleEn = titleEn;
-      (t as any).descriptionEn = descriptionEn;
-      (t as any).translationSourceHashEn = sourceHash;
-      (t as any).translationVersionEn = LIBRARY_TASK_EN_TRANSLATION_VERSION;
-      (t as any).translatedAtEn = new Date();
+      t.titleEn = titleEn;
+      t.descriptionEn = descriptionEn;
+      t.translationSourceHashEn = sourceHash;
+      t.translationVersionEn = LIBRARY_TASK_EN_TRANSLATION_VERSION;
+      t.translatedAtEn = new Date();
       out.set(id, { title: titleEn, description: descriptionEn });
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.warn("[library] translate uk->en failed", {
         requestId: req.requestId,
-        userId: (req as any).userId ?? null,
+        userId: req.userId ?? null,
         libraryTaskId: id,
-        error: error?.message ?? String(error)
+        error: errorMessage(error)
       });
       // Best-effort: fall back to Ukrainian content.
     }
@@ -844,7 +837,7 @@ libraryRouter.get("/tasks", authOptional, async (req: AuthRequest, res: Response
     const lang = req.query.lang ? normalizeLang(req.query.lang) : null;
     const judgeLanguage = req.query.judgeLanguage ? normalizeJudgeLanguage(req.query.judgeLanguage) : null;
     const q = String(req.query.q ?? "").trim();
-    const uiLang = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+    const uiLang = String(req.query.uiLang ?? "").toLowerCase().trim();
     const wantsEn = uiLang.startsWith("en");
 
     const pageRaw = parseInt(String(req.query.page ?? "1"), 10);
@@ -882,13 +875,13 @@ libraryRouter.get("/tasks", authOptional, async (req: AuthRequest, res: Response
           where: {
             user: { id: req.userId },
             libraryTask: { id: In(ids) }
-          } as any,
+          },
           relations: ["libraryTask"]
         })
       : [];
     const attemptByTaskId = new Map<number, LibraryTaskAttempt>();
     for (const a of attempts) {
-      const tid = (a as any)?.libraryTask?.id;
+      const tid = a.libraryTask?.id;
       if (typeof tid === "number") attemptByTaskId.set(tid, a);
     }
 
@@ -896,20 +889,22 @@ libraryRouter.get("/tasks", authOptional, async (req: AuthRequest, res: Response
 
     return res.json({
       tasks: tasks.map(t => {
-        const dto: any = buildTaskDto(t, qualityByTaskId.get(t.id) ?? null);
+        const dto = {
+          ...buildTaskDto(t, qualityByTaskId.get(t.id) ?? null),
+          attempt: buildAttemptSummary(attemptByTaskId.get(t.id) ?? null),
+        };
         const en = enById.get(t.id);
         if (en) {
           dto.title = en.title;
           dto.description = en.description;
         }
-        dto.attempt = buildAttemptSummary(attemptByTaskId.get(t.id) ?? null);
         return dto;
       }),
       total,
       page,
       pageSize,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] GET /tasks error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -920,11 +915,11 @@ libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: 
   try {
     const key = String(req.params.key ?? "").trim();
     if (!key) return res.status(400).json({ message: "INVALID_KEY" });
-    const uiLang = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+    const uiLang = String(req.query.uiLang ?? "").toLowerCase().trim();
     const wantsEn = uiLang.startsWith("en");
 
     const task = await libraryRepo().findOne({
-      where: [{ problemCode: key } as any, { slug: key } as any],
+      where: [{ problemCode: key }, { slug: key }],
       relations: ["author", "theory"],
     });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
@@ -933,7 +928,7 @@ libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: 
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const tests = await testDataRepo().find({
-      where: { libraryTask: { id: task.id } } as any,
+      where: { libraryTask: { id: task.id } },
       order: { id: "ASC" },
     });
 
@@ -941,13 +936,13 @@ libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: 
     const visibleTests = isPrivileged
       ? tests
       : tests.filter(t => {
-          const kind = (t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE");
+          const kind = t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE");
           return kind === "SAMPLE";
         });
 
     const enById = wantsEn ? await localizeLibraryTasksToEn([task], req) : new Map<number, { title: string; description: string }>();
     const qualityByTaskId = await computeTaskQualityMap([task.id]);
-    const dto: any = buildTaskDto(task, qualityByTaskId.get(task.id) ?? null);
+    const dto = buildTaskDto(task, qualityByTaskId.get(task.id) ?? null);
     const en = enById.get(task.id);
     if (en) {
       dto.title = en.title;
@@ -962,12 +957,12 @@ libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: 
         input: t.input,
         expectedOutput: t.expectedOutput,
         isHidden: !!t.isHidden,
-        kind: ((t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE")) as any,
+        kind: t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
         points: t.points,
-        subtask: (t as any).subtask ?? null,
+        subtask: t.subtask ?? null,
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] GET /tasks/by/:key error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -978,11 +973,11 @@ libraryRouter.get("/tasks/mine", authRequired, async (req: AuthRequest, res: Res
     if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
     const user = await userRepo().findOne({ where: { id: req.userId } });
     if (!user) return res.status(401).json({ message: "UNAUTHORIZED" });
-    const uiLang = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+    const uiLang = String(req.query.uiLang ?? "").toLowerCase().trim();
     const wantsEn = uiLang.startsWith("en");
 
     const tasks = await libraryRepo().find({
-      where: { author: { id: user.id }, isHiddenFromLibrary: false } as any,
+      where: { author: { id: user.id }, isHiddenFromLibrary: false },
       relations: ["author"],
       order: { updatedAt: "DESC" },
       take: 200,
@@ -994,13 +989,13 @@ libraryRouter.get("/tasks/mine", authRequired, async (req: AuthRequest, res: Res
           where: {
             user: { id: user.id },
             libraryTask: { id: In(ids) }
-          } as any,
+          },
           relations: ["libraryTask"]
         })
       : [];
     const attemptByTaskId = new Map<number, LibraryTaskAttempt>();
     for (const a of attempts) {
-      const tid = (a as any)?.libraryTask?.id;
+      const tid = a.libraryTask?.id;
       if (typeof tid === "number") attemptByTaskId.set(tid, a);
     }
 
@@ -1010,17 +1005,19 @@ libraryRouter.get("/tasks/mine", authRequired, async (req: AuthRequest, res: Res
 
     return res.json({
       tasks: tasks.map(t => {
-        const dto: any = buildTaskDto(t, qualityByTaskId.get(t.id) ?? null);
+        const dto = {
+          ...buildTaskDto(t, qualityByTaskId.get(t.id) ?? null),
+          attempt: buildAttemptSummary(attemptByTaskId.get(t.id) ?? null),
+        };
         const en = enById.get(t.id);
         if (en) {
           dto.title = en.title;
           dto.description = en.description;
         }
-        dto.attempt = buildAttemptSummary(attemptByTaskId.get(t.id) ?? null);
         return dto;
       })
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] GET /tasks/mine error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1030,11 +1027,11 @@ libraryRouter.get("/tasks/:id", authOptional, async (req: AuthRequest, res: Resp
   try {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
-    const uiLang = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+    const uiLang = String(req.query.uiLang ?? "").toLowerCase().trim();
     const wantsEn = uiLang.startsWith("en");
 
     const task = await libraryRepo().findOne({
-      where: { id } as any,
+      where: { id },
       relations: ["author", "theory"],
     });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
@@ -1043,7 +1040,7 @@ libraryRouter.get("/tasks/:id", authOptional, async (req: AuthRequest, res: Resp
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const tests = await testDataRepo().find({
-      where: { libraryTask: { id: task.id } } as any,
+      where: { libraryTask: { id: task.id } },
       order: { id: "ASC" },
     });
 
@@ -1051,13 +1048,13 @@ libraryRouter.get("/tasks/:id", authOptional, async (req: AuthRequest, res: Resp
     const visibleTests = isPrivileged
       ? tests
       : tests.filter(t => {
-          const kind = (t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE");
+          const kind = t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE");
           return kind === "SAMPLE";
         });
 
     const enById = wantsEn ? await localizeLibraryTasksToEn([task], req) : new Map<number, { title: string; description: string }>();
     const qualityByTaskId = await computeTaskQualityMap([task.id]);
-    const dto: any = buildTaskDto(task, qualityByTaskId.get(task.id) ?? null);
+    const dto = buildTaskDto(task, qualityByTaskId.get(task.id) ?? null);
     const en = enById.get(task.id);
     if (en) {
       dto.title = en.title;
@@ -1072,12 +1069,12 @@ libraryRouter.get("/tasks/:id", authOptional, async (req: AuthRequest, res: Resp
         input: t.input,
         expectedOutput: t.expectedOutput,
         isHidden: !!t.isHidden,
-        kind: ((t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE")) as any,
+        kind: t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
         points: t.points,
-        subtask: (t as any).subtask ?? null,
+        subtask: t.subtask ?? null,
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] GET /tasks/:id error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1090,7 +1087,7 @@ libraryRouter.get("/tasks/:id/attempt", authRequired, async (req: AuthRequest, r
     const principalId = req.userId ?? req.studentId ?? null;
     if (!principalId) return res.status(401).json({ message: "UNAUTHORIZED" });
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
@@ -1106,15 +1103,15 @@ libraryRouter.get("/tasks/:id/attempt", authRequired, async (req: AuthRequest, r
       where: {
         user: { id: req.userId },
         libraryTask: { id: task.id }
-      } as any
+      }
     });
 
     const requestedLang = normalizeJudgeLanguage(req.query.language);
     const lang = requestedLang ?? defaultJudgeLanguageFromTask(task);
     const draftByLang = attempt?.draftCodeByLanguage ?? null;
     const submittedByLang = attempt?.lastSubmittedCodeByLanguage ?? null;
-    const selectedDraft = draftByLang && typeof draftByLang === "object" ? (draftByLang as any)[lang] : null;
-    const selectedSubmitted = submittedByLang && typeof submittedByLang === "object" ? (submittedByLang as any)[lang] : null;
+    const selectedDraft = draftByLang?.[lang] ?? null;
+    const selectedSubmitted = submittedByLang?.[lang] ?? null;
 
     const draftDecoded = decodeMultiFileSubmissionV1(selectedDraft ?? attempt?.draftCode ?? "");
     const submittedDecoded = decodeMultiFileSubmissionV1(selectedSubmitted ?? attempt?.lastSubmittedCode ?? null);
@@ -1142,7 +1139,7 @@ libraryRouter.get("/tasks/:id/attempt", authRequired, async (req: AuthRequest, r
           }
         : null
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] GET /tasks/:id/attempt error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1172,7 +1169,7 @@ libraryRouter.put("/tasks/:id/attempt", authRequired, async (req: AuthRequest, r
       return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
     }
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
@@ -1187,7 +1184,7 @@ libraryRouter.put("/tasks/:id/attempt", authRequired, async (req: AuthRequest, r
       where: {
         user: { id: req.userId },
         libraryTask: { id: task.id }
-      } as any
+      }
     });
 
     const lang = normalizeJudgeLanguage(validated.data.language) ?? defaultJudgeLanguageFromTask(task);
@@ -1196,15 +1193,15 @@ libraryRouter.put("/tasks/:id/attempt", authRequired, async (req: AuthRequest, r
       return res.status(400).json({ message: "LANGUAGE_NOT_ALLOWED", allowedLanguages: allowedLangs });
     }
 
-    const normalizedFiles = normalizeApiFiles((validated.data as any).files);
+    const normalizedFiles = normalizeApiFiles(validated.data.files);
     const entryFile = entryFileForJudgeLanguage(lang);
     const persistedDraft = normalizedFiles.length
       ? encodeMultiFileSubmissionV1({ entry: entryFile, files: normalizedFiles })
-      : String((validated.data as any).draftCode ?? "");
+      : String(validated.data.draftCode ?? "");
     if (!attempt) {
       attempt = attemptRepo().create({
-        user: { id: req.userId } as any,
-        libraryTask: { id: task.id } as any,
+        user: { id: req.userId },
+        libraryTask: { id: task.id },
         draftCode: persistedDraft
       });
     } else {
@@ -1217,7 +1214,7 @@ libraryRouter.put("/tasks/:id/attempt", authRequired, async (req: AuthRequest, r
 
     await attemptRepo().save(attempt);
     return res.json({ ok: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] PUT /tasks/:id/attempt error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1225,30 +1222,30 @@ libraryRouter.put("/tasks/:id/attempt", authRequired, async (req: AuthRequest, r
 
 libraryRouter.get("/tasks/:id/web-template", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
-    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+    if (task.taskMode !== "WEB") {
       return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
     }
 
-    const normalized = normalizeWebTaskTemplate((task as any).template);
+    const normalized = normalizeWebTaskTemplate(task.template);
     return res.json({
       taskId: task.id,
       taskMode: "WEB",
-      files: normalizeWebTaskFiles((task as any).webTemplateFiles ?? normalized.files),
-      rules: normalizeWebRules((task as any).webValidationRules ?? normalized.rules),
-      profile: normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB"),
+      files: normalizeWebTaskFiles(task.webTemplateFiles ?? normalized.files),
+      rules: normalizeWebRules(task.webValidationRules ?? normalized.rules),
+      profile: normalizeWebProfile(task.webValidationProfile ?? "FREE_WEB"),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] GET /tasks/:id/web-template error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1256,22 +1253,22 @@ libraryRouter.get("/tasks/:id/web-template", authRequired, async (req: AuthReque
 
 libraryRouter.put("/tasks/:id/web-draft", authRequired, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
-    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+    if (task.taskMode !== "WEB") {
       return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
     }
 
-    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    const files = normalizeWebTaskFiles(req.body?.files ?? []);
     assertLibraryWebFilesWithinLimits(files);
 
     // For EDU students (no userId) accept request without DB persistence, matching existing behavior.
@@ -1283,14 +1280,14 @@ libraryRouter.put("/tasks/:id/web-draft", authRequired, submissionRateLimitMiddl
       where: {
         user: { id: req.userId },
         libraryTask: { id: task.id }
-      } as any
+      }
     });
 
     const serialized = JSON.stringify({ mode: "WEB", version: 1, files });
     if (!attempt) {
       attempt = attemptRepo().create({
-        user: { id: req.userId } as any,
-        libraryTask: { id: task.id } as any,
+        user: { id: req.userId },
+        libraryTask: { id: task.id },
         draftCode: serialized
       });
     } else {
@@ -1298,7 +1295,7 @@ libraryRouter.put("/tasks/:id/web-draft", authRequired, submissionRateLimitMiddl
     }
     await attemptRepo().save(attempt);
     return res.json({ ok: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
@@ -1309,26 +1306,26 @@ libraryRouter.put("/tasks/:id/web-draft", authRequired, submissionRateLimitMiddl
 
 libraryRouter.post("/tasks/:id/web-check", authRequired, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
-    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+    if (task.taskMode !== "WEB") {
       return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
     }
 
-    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    const files = normalizeWebTaskFiles(req.body?.files ?? []);
     assertLibraryWebFilesWithinLimits(files);
-    const rules = normalizeWebRules((task as any).webValidationRules ?? []);
-    const profile = normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB");
-    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (task as any).webTemplateFiles ?? [] });
+    const rules = normalizeWebRules(task.webValidationRules ?? []);
+    const profile = normalizeWebProfile(task.webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: task.webTemplateFiles ?? [] });
     const rawMaxScore = check.maxScore > 0 ? check.maxScore : check.totalRules;
     const normalizedScore = normalizeScoreTo100(check.score, rawMaxScore);
 
@@ -1353,7 +1350,7 @@ libraryRouter.post("/tasks/:id/web-check", authRequired, submissionRateLimitMidd
         errorKind: r.passed ? null : "web_rule"
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
@@ -1364,36 +1361,36 @@ libraryRouter.post("/tasks/:id/web-check", authRequired, submissionRateLimitMidd
 
 libraryRouter.post("/tasks/:id/web-submit", authRequired, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
-    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+    if (task.taskMode !== "WEB") {
       return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
     }
 
-    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    const files = normalizeWebTaskFiles(req.body?.files ?? []);
     assertLibraryWebFilesWithinLimits(files);
-    const rules = normalizeWebRules((task as any).webValidationRules ?? []);
-    const profile = normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB");
-    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (task as any).webTemplateFiles ?? [] });
+    const rules = normalizeWebRules(task.webValidationRules ?? []);
+    const profile = normalizeWebProfile(task.webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: task.webTemplateFiles ?? [] });
     const rawMaxScore = check.maxScore > 0 ? check.maxScore : check.totalRules;
     const normalizedScore = normalizeScoreTo100(check.score, rawMaxScore);
 
     if (req.userId) {
-      let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } as any });
+      let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } });
       const serialized = JSON.stringify({ mode: "WEB", version: 1, files });
       if (!attempt) {
         attempt = attemptRepo().create({
-          user: { id: req.userId } as any,
-          libraryTask: { id: task.id } as any,
+          user: { id: req.userId },
+          libraryTask: { id: task.id },
           draftCode: serialized,
           lastSubmittedCode: serialized,
         });
@@ -1425,7 +1422,7 @@ libraryRouter.post("/tasks/:id/web-submit", authRequired, submissionRateLimitMid
         errorKind: r.passed ? null : "web_rule"
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
@@ -1460,21 +1457,21 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
       return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
     }
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const selectedLang = normalizeJudgeLanguage(validated.data.language) ?? defaultJudgeLanguageFromTask(task);
-    const selectedCompiler = normCompilerId((validated.data as any).compiler);
+    const selectedCompiler = normCompilerId(validated.data.compiler);
     const allowedLangs = getAllowedJudgeLanguages(task);
     if (!allowedLangs.includes(selectedLang)) {
       return res.status(400).json({ message: "LANGUAGE_NOT_ALLOWED", allowedLanguages: allowedLangs });
     }
 
-    const normalizedFiles = normalizeApiFiles((validated.data as any).files);
-    const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
+    const normalizedFiles = normalizeApiFiles(validated.data.files);
+    const providedCode = typeof validated.data.code === "string" ? validated.data.code : "";
     const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
     const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(selectedLang);
     let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
@@ -1488,9 +1485,9 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
     // Persist as draft for convenience (does not affect grades).
     if (req.userId) {
       try {
-        let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } as any });
+        let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } });
         if (!attempt) {
-          attempt = attemptRepo().create({ user: { id: req.userId } as any, libraryTask: { id: task.id } as any, draftCode: persistedDraft });
+          attempt = attemptRepo().create({ user: { id: req.userId }, libraryTask: { id: task.id }, draftCode: persistedDraft });
         } else {
           attempt.draftCode = persistedDraft;
         }
@@ -1505,10 +1502,10 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
     // For Java/Python we can run locally for single-file submissions; for multi-file always use judge worker.
     if (!isMultiFile && (selectedLang === "java" || selectedLang === "python")) {
       const localLang = selectedLang === "java" ? "JAVA" : "PYTHON";
-      const r = await executeCodeWithInput(sourceText, localLang as any, validated.data.input ?? "", 10000, { compiler: selectedCompiler });
+      const r = await executeCodeWithInput(sourceText, localLang, validated.data.input ?? "", 10000, { compiler: selectedCompiler });
       return res.json({
         stdout: r.stdout,
-        stderr: filterStderrWithLang(r.stderr, localLang as any),
+        stderr: filterStderrWithLang(r.stderr, localLang),
         exitCode: r.exitCode,
         success: r.success
       });
@@ -1532,13 +1529,13 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
         }
       ],
       limits: {
-        time_limit_ms: Number.isFinite((task as any).timeLimitMs) && (task as any).timeLimitMs > 0 ? (task as any).timeLimitMs : 5000,
+        time_limit_ms: typeof task.timeLimitMs === "number" && Number.isFinite(task.timeLimitMs) && task.timeLimitMs > 0 ? task.timeLimitMs : 5000,
         memory_limit_mb: normalizeJudgeMemoryMb(
           selectedLang,
-          (task as any).memoryLimitMb,
+          task.memoryLimitMb,
           DEFAULT_LIMITS_BY_LANG[selectedLang].memory_limit_mb,
         ),
-        output_limit_kb: Number.isFinite((task as any).outputLimitKb) && (task as any).outputLimitKb > 0 ? (task as any).outputLimitKb : 256,
+        output_limit_kb: typeof task.outputLimitKb === "number" && Number.isFinite(task.outputLimitKb) && task.outputLimitKb > 0 ? task.outputLimitKb : 256,
       },
       checker: { type: "exact" },
       debug: true,
@@ -1565,11 +1562,11 @@ libraryRouter.post("/tasks/:id/run", authRequired, submissionRateLimitMiddleware
       return res.json({ stdout: "", stderr: truncateText(combined || fallbackHint, 40_000), exitCode: 1, success: false });
     }
     const t0 = workerRes.tests?.[0];
-    const stdout = (t0 as any)?.actual ?? "";
-    const stderr = (t0 as any)?.stderr ?? "";
+    const stdout = t0?.actual ?? "";
+    const stderr = t0?.stderr ?? "";
     const success = workerRes.verdict === "AC" || workerRes.verdict === "WA";
     return res.json({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode: success ? 0 : 1, success });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ error: error.message, status: error.statusCode });
     }
@@ -1603,7 +1600,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
       return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
     }
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
@@ -1613,7 +1610,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     // lazily (only for cache misses) during materialisation, so a warm cache reads no input
     // blobs. `expected_output` is kept for checker auto-selection (typically small).
     const tests = await testDataRepo().find({
-      where: { libraryTask: { id: task.id } } as any,
+      where: { libraryTask: { id: task.id } },
       order: { id: "ASC" },
       select: {
         id: true,
@@ -1624,12 +1621,12 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
         expectedOutput: true,
         inputSha256: true,
         outputSha256: true
-      } as any
+      }
     });
     if (!tests.length) return res.status(400).json({ message: "NO_TESTS_DEFINED_FOR_THIS_TASK" });
 
     const isSample = (t: TestData): boolean => {
-      const kind = (t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE");
+      const kind = t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE");
       return kind === "SAMPLE";
     };
     const isJudge = (t: TestData): boolean => !isSample(t);
@@ -1638,14 +1635,14 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     const requested = normalizeJudgeLanguage(validated.data.language);
     const allowedLangs = getAllowedJudgeLanguages(task);
     const judgeLang: JudgeLanguage = (requested ?? defaultJudgeLanguageFromTask(task));
-    const selectedCompiler = normCompilerId((validated.data as any).compiler);
+    const selectedCompiler = normCompilerId(validated.data.compiler);
     if (!allowedLangs.includes(judgeLang)) {
       return res.status(400).json({ message: "LANGUAGE_NOT_ALLOWED", allowedLanguages: allowedLangs });
     }
     const taskLimits = {
-      time_limit_ms: Number.isFinite((task as any).timeLimitMs) && (task as any).timeLimitMs > 0 ? (task as any).timeLimitMs : undefined,
-      memory_limit_mb: Number.isFinite((task as any).memoryLimitMb) && (task as any).memoryLimitMb > 0 ? (task as any).memoryLimitMb : undefined,
-      output_limit_kb: Number.isFinite((task as any).outputLimitKb) && (task as any).outputLimitKb > 0 ? (task as any).outputLimitKb : undefined,
+      time_limit_ms: typeof task.timeLimitMs === "number" && Number.isFinite(task.timeLimitMs) && task.timeLimitMs > 0 ? task.timeLimitMs : undefined,
+      memory_limit_mb: typeof task.memoryLimitMb === "number" && Number.isFinite(task.memoryLimitMb) && task.memoryLimitMb > 0 ? task.memoryLimitMb : undefined,
+      output_limit_kb: typeof task.outputLimitKb === "number" && Number.isFinite(task.outputLimitKb) && task.outputLimitKb > 0 ? task.outputLimitKb : undefined,
     };
     const effectiveLimits = {
       time_limit_ms: taskLimits.time_limit_ms ?? DEFAULT_LIMITS_BY_LANG[judgeLang].time_limit_ms,
@@ -1657,14 +1654,14 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
       output_limit_kb: taskLimits.output_limit_kb ?? DEFAULT_LIMITS_BY_LANG[judgeLang].output_limit_kb,
     };
 
-    const explicitChecker = (task as any).checkerSpec as CheckerSpec | null | undefined;
+    const explicitChecker = task.checkerSpec;
     const effectiveChecker = explicitChecker ?? chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || ""));
 
     const maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
     const hasSubtasks = hasLibrarySubtasks(tests);
 
-    const normalizedFiles = normalizeApiFiles((validated.data as any).files);
-    const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
+    const normalizedFiles = normalizeApiFiles(validated.data.files);
+    const providedCode = typeof validated.data.code === "string" ? validated.data.code : "";
     const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
     const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
     let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
@@ -1713,9 +1710,9 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     let compileError: string | null = null;
     let compileErrorKind: string | null = null;
     // Detailed results are intentionally capped to keep HTTP response small.
-    const publicResultsLimit = Math.max(0, Math.min(200, parseInt(String(process.env.LIBRARY_CHECK_PUBLIC_RESULTS_LIMIT ?? "25"), 10) || 25));
+    const publicResultsLimit = Math.max(0, Math.min(200, parseInt(String(env.LIBRARY_CHECK_PUBLIC_RESULTS_LIMIT ?? "25"), 10) || 25));
     // Compact results contain only statuses (no large input/output) and can safely include many tests.
-    const publicCompactLimit = Math.max(0, Math.min(20000, parseInt(String(process.env.LIBRARY_CHECK_PUBLIC_COMPACT_LIMIT ?? "5000"), 10) || 5000));
+    const publicCompactLimit = Math.max(0, Math.min(20000, parseInt(String(env.LIBRARY_CHECK_PUBLIC_COMPACT_LIMIT ?? "5000"), 10) || 5000));
     const publicResults: Array<{ testId: number; input: string; actualOutput: string; passed: boolean; skipped?: boolean; verdict?: string | null; error?: string | null; errorKind?: string | null }> = [];
     const publicResultsCompact: Array<{ testId: number; passed: boolean; skipped?: boolean; verdict?: string | null; errorKind?: string | null }> = [];
 
@@ -1768,7 +1765,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
               passed,
               ...(skipped ? { skipped: true } : {}),
               verdict: skipped ? "SKIPPED" : r?.verdict ?? null,
-              errorKind: (r as any)?.error_kind ?? null
+              errorKind: r?.error_kind ?? null
             });
           }
 
@@ -1782,7 +1779,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
               ...(skipped ? { skipped: true } : {}),
               verdict: skipped ? "SKIPPED" : r?.verdict ?? null,
               error: passed || skipped ? null : (r?.stderr ? truncateText(r.stderr, 20_000) : null),
-              errorKind: (r as any)?.error_kind ?? null
+              errorKind: r?.error_kind ?? null
             });
           }
         }
@@ -1798,11 +1795,11 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
     // Upsert attempt (draft + last check summary).
     if (req.userId) {
       try {
-        let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } as any });
+        let attempt = await attemptRepo().findOne({ where: { user: { id: req.userId }, libraryTask: { id: task.id } } });
         if (!attempt) {
           attempt = attemptRepo().create({
-            user: { id: req.userId } as any,
-            libraryTask: { id: task.id } as any,
+            user: { id: req.userId },
+            libraryTask: { id: task.id },
             draftCode: persistedSubmitted
           });
         } else {
@@ -1861,7 +1858,7 @@ libraryRouter.post("/tasks/:id/check", authRequired, submissionRateLimitMiddlewa
         firstFailure,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] POST /tasks/:id/check error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1889,29 +1886,29 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
       assertLibraryWebFilesWithinLimits(normalizedWebFiles ?? normalizeWebTaskFiles([]));
     }
 
-    if (Array.isArray((data as any).allowedLanguages) && (data as any).allowedLanguages.some((l: any) => DISABLED_JUDGE_LANGS.has(l))) {
+    if (data.allowedLanguages?.some((language) => DISABLED_JUDGE_LANGS.has(language))) {
       return res.status(400).json({
         message: "LANGUAGE_DISABLED",
         disabledLanguages: Array.from(DISABLED_JUDGE_LANGS)
       });
     }
-    const allowedLanguages = (Array.isArray((data as any).allowedLanguages) ? ((data as any).allowedLanguages as JudgeLangId[]) : null);
+    const allowedLanguages = data.allowedLanguages ?? null;
     const templatesByLanguage = normalizeTemplatesByLanguage({
       baseTemplate: normalizedTaskInput.template,
       allowedLanguages,
-      raw: (data as any).templatesByLanguage,
+      raw: data.templatesByLanguage,
     });
 
     const task = libraryRepo().create({
-      author: { id: user.id } as any,
+      author: { id: user.id },
       title: data.title.trim(),
       problemCode: data.problemCode?.trim() ?? null,
       slug: data.slug?.trim() ?? null,
       difficulty: data.difficulty ?? null,
       tags: data.tags ?? null,
       section: data.section?.trim() ?? null,
-      taskMode: taskMode as any,
-      projectSpec: (data as any).projectSpec ?? null,
+      taskMode,
+      projectSpec: data.projectSpec ?? null,
       webTemplateFiles: normalizedWebFiles,
       webValidationRules: normalizedWebRules,
       webValidationProfile: normalizedWebProfile,
@@ -1923,7 +1920,7 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
       timeLimitMs: data.timeLimitMs ?? null,
       memoryLimitMb: data.memoryLimitMb ?? null,
       outputLimitKb: data.outputLimitKb ?? null,
-      checkerSpec: (data.checkerSpec as any) ?? null,
+      checkerSpec: data.checkerSpec ?? null,
       allowedLanguages: data.allowedLanguages ?? null,
       status: "DRAFT",
       rejectionReason: null,
@@ -1935,21 +1932,21 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
 
     // Auto-generate stable identifiers if not provided.
     let dirty = false;
-    if (!(task as any).problemCode) {
-      (task as any).problemCode = await allocateUniqueProblemCode(`LIB${task.id}`, task.id);
+    if (!task.problemCode) {
+      task.problemCode = await allocateUniqueProblemCode(`LIB${task.id}`, task.id);
       dirty = true;
     }
-    if (!(task as any).slug) {
+    if (!task.slug) {
       const base = String(task.title || "task").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "task";
-      (task as any).slug = `${base}-${task.id}`;
+      task.slug = `${base}-${task.id}`;
       dirty = true;
     }
     if (dirty) {
       try {
         await libraryRepo().save(task);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isProblemCodeDuplicateError(err)) {
-          (task as any).problemCode = await allocateUniqueProblemCode(String((task as any).problemCode || `LIB${task.id}`), task.id);
+          task.problemCode = await allocateUniqueProblemCode(String(task.problemCode || `LIB${task.id}`), task.id);
           await libraryRepo().save(task);
         } else {
           throw err;
@@ -1959,7 +1956,7 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
 
     if (data.theory && data.theory.trim()) {
       const th = theoryRepo().create({
-        libraryTask: { id: task.id } as any,
+        libraryTask: { id: task.id },
         content: data.theory.trim(),
       });
       await theoryRepo().save(th);
@@ -1968,23 +1965,23 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
     if (Array.isArray(data.tests) && data.tests.length > 0) {
       const rows = data.tests.map(t =>
         testDataRepo().create({
-          libraryTask: { id: task.id } as any,
+          libraryTask: { id: task.id },
           input: String(t.input ?? ""),
           expectedOutput: String(t.expectedOutput ?? ""),
           isHidden: !!t.isHidden,
-          kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
+          kind: t.isHidden ? "JUDGE" : "SAMPLE",
           source: "LIBRARY_IMPORTED",
           points: t.points ?? 1,
-          subtask: typeof (t as any).subtask === "number" ? String((t as any).subtask) : null,
+          subtask: t.subtask != null ? String(t.subtask) : null,
         })
       );
       await testDataRepo().save(rows);
     }
 
-    const full = await libraryRepo().findOne({ where: { id: task.id } as any, relations: ["author", "theory"] });
+    const full = await libraryRepo().findOne({ where: { id: task.id }, relations: ["author", "theory"] });
 
     return res.status(201).json({ task: full ? buildTaskDto(full) : buildTaskDto(task) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] POST /tasks error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2001,7 +1998,7 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
       return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
     }
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author", "theory"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author", "theory"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const isAdmin = req.userRole === "SYSTEM_ADMIN";
@@ -2014,7 +2011,7 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
 
     const data = validated.data;
 
-    if ((data as any).allowedLanguages !== undefined && Array.isArray((data as any).allowedLanguages) && (data as any).allowedLanguages.some((l: any) => DISABLED_JUDGE_LANGS.has(l))) {
+    if (data.allowedLanguages?.some((language) => DISABLED_JUDGE_LANGS.has(language))) {
       return res.status(400).json({
         message: "LANGUAGE_DISABLED",
         disabledLanguages: Array.from(DISABLED_JUDGE_LANGS)
@@ -2022,71 +2019,74 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
     }
 
     if (typeof data.title === "string") task.title = data.title.trim();
-    if (typeof (data as any).problemCode === "string") (task as any).problemCode = (data as any).problemCode.trim();
-    if (typeof (data as any).slug === "string") (task as any).slug = (data as any).slug.trim();
-    if ((data as any).difficulty !== undefined) (task as any).difficulty = (data as any).difficulty ?? null;
-    if ((data as any).tags !== undefined) (task as any).tags = (data as any).tags ?? null;
-    if ((data as any).section !== undefined) (task as any).section = String((data as any).section ?? "").trim() || null;
+    if (typeof data.problemCode === "string") task.problemCode = data.problemCode.trim();
+    if (typeof data.slug === "string") task.slug = data.slug.trim();
+    if (data.difficulty !== undefined) task.difficulty = data.difficulty ?? null;
+    if (data.tags !== undefined) task.tags = data.tags ?? null;
+    if (data.section !== undefined) task.section = String(data.section ?? "").trim() || null;
     if (typeof data.description === "string") task.description = data.description.trim();
-    if ((data as any).projectSpec !== undefined) (task as any).projectSpec = (data as any).projectSpec ?? null;
-    const effectiveTaskMode = String(((data as any).taskMode ?? (task as any).taskMode ?? "CODE")) === "WEB" ? "WEB" : "CODE";
+    if (data.projectSpec !== undefined) task.projectSpec = data.projectSpec ?? null;
+    const effectiveTaskMode = data.taskMode ?? task.taskMode;
     const normalizedTaskInput = normalizeWebTaskInput(
       {
-        taskMode: (data as any).taskMode,
+        taskMode: data.taskMode,
         template: data.template,
-        webTemplateFiles: (data as any).webTemplateFiles,
-        webValidationRules: (data as any).webValidationRules,
-        webValidationProfile: (data as any).webValidationProfile,
+        webTemplateFiles: data.webTemplateFiles,
+        webValidationRules: data.webValidationRules,
+        webValidationProfile: data.webValidationProfile,
       },
       {
-        taskMode: (task as any).taskMode,
+        taskMode: task.taskMode,
         template: task.template,
-        webTemplateFiles: (task as any).webTemplateFiles,
-        webValidationRules: (task as any).webValidationRules,
-        webValidationProfile: (task as any).webValidationProfile,
+        webTemplateFiles: task.webTemplateFiles,
+        webValidationRules: task.webValidationRules,
+        webValidationProfile: task.webValidationProfile,
       }
     );
-    (task as any).taskMode = normalizedTaskInput.taskMode;
+    task.taskMode = normalizedTaskInput.taskMode;
     task.template = normalizedTaskInput.template;
-    if ((data as any).templatesByLanguage !== undefined) {
-      const effectiveAllowed = ((data as any).allowedLanguages !== undefined)
-        ? ((data as any).allowedLanguages ?? null)
-        : ((task as any).allowedLanguages ?? null);
+    if (data.templatesByLanguage !== undefined) {
+      const effectiveAllowedRaw = data.allowedLanguages !== undefined
+        ? (data.allowedLanguages ?? null)
+        : (task.allowedLanguages ?? null);
+      const effectiveAllowed = Array.isArray(effectiveAllowedRaw)
+        ? effectiveAllowedRaw.filter((language): language is JudgeLangId => JUDGE_LANG_SET.has(language))
+        : null;
       const effectiveBaseTemplate = (typeof data.template === "string") ? data.template : task.template;
-      (task as any).templatesByLanguage = normalizeTemplatesByLanguage({
+      task.templatesByLanguage = normalizeTemplatesByLanguage({
         baseTemplate: effectiveBaseTemplate,
-        allowedLanguages: Array.isArray(effectiveAllowed) ? (effectiveAllowed as JudgeLangId[]) : null,
-        raw: (data as any).templatesByLanguage,
+        allowedLanguages: effectiveAllowed,
+        raw: data.templatesByLanguage,
       });
-    } else if ((data as any).allowedLanguages !== undefined) {
+    } else if (data.allowedLanguages !== undefined) {
       // allowedLanguages changed but templatesByLanguage wasn't explicitly updated: keep existing but ensure every allowed lang has a template.
-      const effectiveAllowed = (data as any).allowedLanguages ?? null;
+      const effectiveAllowed = data.allowedLanguages ?? null;
       if (Array.isArray(effectiveAllowed) && effectiveAllowed.length > 0) {
-        (task as any).templatesByLanguage = normalizeTemplatesByLanguage({
+        task.templatesByLanguage = normalizeTemplatesByLanguage({
           baseTemplate: task.template,
-          allowedLanguages: effectiveAllowed as JudgeLangId[],
-          raw: (task as any).templatesByLanguage,
+          allowedLanguages: effectiveAllowed,
+          raw: task.templatesByLanguage,
         });
       }
     }
     if (data.lang) task.lang = normalizeLang(data.lang);
     if (typeof data.maxAttempts === "number") task.maxAttempts = data.maxAttempts;
-    if ((data as any).timeLimitMs !== undefined) (task as any).timeLimitMs = (data as any).timeLimitMs ?? null;
-    if ((data as any).memoryLimitMb !== undefined) (task as any).memoryLimitMb = (data as any).memoryLimitMb ?? null;
-    if ((data as any).outputLimitKb !== undefined) (task as any).outputLimitKb = (data as any).outputLimitKb ?? null;
-    if ((data as any).checkerSpec !== undefined) (task as any).checkerSpec = (data as any).checkerSpec ?? null;
-    if ((data as any).allowedLanguages !== undefined) (task as any).allowedLanguages = (data as any).allowedLanguages ?? null;
+    if (data.timeLimitMs !== undefined) task.timeLimitMs = data.timeLimitMs ?? null;
+    if (data.memoryLimitMb !== undefined) task.memoryLimitMb = data.memoryLimitMb ?? null;
+    if (data.outputLimitKb !== undefined) task.outputLimitKb = data.outputLimitKb ?? null;
+    if (data.checkerSpec !== undefined) task.checkerSpec = data.checkerSpec ?? null;
+    if (data.allowedLanguages !== undefined) task.allowedLanguages = data.allowedLanguages ?? null;
 
     if (effectiveTaskMode === "WEB") {
       const effectiveWebFiles = normalizedTaskInput.webTemplateFiles ?? normalizeWebTaskFiles([]);
       assertLibraryWebFilesWithinLimits(effectiveWebFiles);
-      (task as any).webTemplateFiles = effectiveWebFiles;
-      (task as any).webValidationRules = normalizedTaskInput.webValidationRules ?? [];
-      (task as any).webValidationProfile = normalizedTaskInput.webValidationProfile ?? normalizeWebProfile("FREE_WEB");
+      task.webTemplateFiles = effectiveWebFiles;
+      task.webValidationRules = normalizedTaskInput.webValidationRules ?? [];
+      task.webValidationProfile = normalizedTaskInput.webValidationProfile ?? normalizeWebProfile("FREE_WEB");
     } else {
-      (task as any).webTemplateFiles = null;
-      (task as any).webValidationRules = null;
-      (task as any).webValidationProfile = null;
+      task.webTemplateFiles = null;
+      task.webValidationRules = null;
+      task.webValidationProfile = null;
     }
 
     // Editing resets rejection reason.
@@ -2095,7 +2095,7 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
     await libraryRepo().save(task);
 
     if (data.theory !== undefined) {
-      const existing = await theoryRepo().findOne({ where: { libraryTask: { id: task.id } } as any });
+      const existing = await theoryRepo().findOne({ where: { libraryTask: { id: task.id } } });
       const next = String(data.theory ?? "").trim();
       if (!next) {
         if (existing) await theoryRepo().remove(existing);
@@ -2105,7 +2105,7 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
           await theoryRepo().save(existing);
         } else {
           await theoryRepo().save(
-            theoryRepo().create({ libraryTask: { id: task.id } as any, content: next })
+            theoryRepo().create({ libraryTask: { id: task.id }, content: next })
           );
         }
       }
@@ -2117,23 +2117,23 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
       if (Array.isArray(data.tests) && data.tests.length > 0) {
         const rows = data.tests.map(t =>
           testDataRepo().create({
-            libraryTask: { id: task.id } as any,
+            libraryTask: { id: task.id },
             input: String(t.input ?? ""),
             expectedOutput: String(t.expectedOutput ?? ""),
             isHidden: !!t.isHidden,
-            kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
+            kind: t.isHidden ? "JUDGE" : "SAMPLE",
             source: "LIBRARY_IMPORTED",
             points: t.points ?? 1,
-            subtask: typeof (t as any).subtask === "number" ? String((t as any).subtask) : null,
+            subtask: t.subtask != null ? String(t.subtask) : null,
           })
         );
         await testDataRepo().save(rows);
       }
     }
 
-    const full = await libraryRepo().findOne({ where: { id: task.id } as any, relations: ["author", "theory"] });
+    const full = await libraryRepo().findOne({ where: { id: task.id }, relations: ["author", "theory"] });
     return res.json({ task: full ? buildTaskDto(full) : buildTaskDto(task) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] PATCH /tasks/:id error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2145,7 +2145,7 @@ libraryRouter.delete("/tasks/:id", authRequired, async (req: AuthRequest, res: R
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
     if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const isAdmin = req.userRole === "SYSTEM_ADMIN";
@@ -2167,7 +2167,7 @@ libraryRouter.delete("/tasks/:id", authRequired, async (req: AuthRequest, res: R
     });
 
     return res.json({ ok: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] DELETE /tasks/:id error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2179,7 +2179,7 @@ libraryRouter.post("/tasks/:id/submit", authRequired, async (req: AuthRequest, r
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
     if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const isAdmin = req.userRole === "SYSTEM_ADMIN";
@@ -2193,8 +2193,8 @@ libraryRouter.post("/tasks/:id/submit", authRequired, async (req: AuthRequest, r
     // Auto-fill judge configuration defaults (limits + checker) so moderation always sees a fully configured task.
     // If the author explicitly set values, we keep them.
     const tests = await testDataRepo().find({
-      where: { libraryTask: { id: task.id } } as any,
-      order: { id: "ASC" } as any,
+      where: { libraryTask: { id: task.id } },
+      order: { id: "ASC" },
     });
     if (ensureJudgeConfigDefaults(task, tests)) {
       await libraryRepo().save(task);
@@ -2205,9 +2205,9 @@ libraryRouter.post("/tasks/:id/submit", authRequired, async (req: AuthRequest, r
     task.rejectionReason = null;
     await libraryRepo().save(task);
 
-    const full = await libraryRepo().findOne({ where: { id: task.id } as any, relations: ["author"] });
+    const full = await libraryRepo().findOne({ where: { id: task.id }, relations: ["author"] });
     return res.json({ task: full ? buildTaskDto(full) : buildTaskDto(task) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] POST /tasks/:id/submit error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2234,7 +2234,7 @@ libraryRouter.post("/tasks/:id/copy-to-topic", authRequired, teacherOrAdminGuard
     }
 
     const topic = await topicRepo().findOne({
-      where: { id: validated.data.topicId } as any,
+      where: { id: validated.data.topicId },
       relations: ["class", "class.teacher"],
     });
     if (!topic) return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
@@ -2243,7 +2243,7 @@ libraryRouter.post("/tasks/:id/copy-to-topic", authRequired, teacherOrAdminGuard
     }
 
     const libTask = await libraryRepo().findOne({
-      where: { id: libraryTaskId } as any,
+      where: { id: libraryTaskId },
       relations: ["author", "theory"],
     });
     if (!libTask) return res.status(404).json({ message: "LIBRARY_TASK_NOT_FOUND" });
@@ -2252,13 +2252,13 @@ libraryRouter.post("/tasks/:id/copy-to-topic", authRequired, teacherOrAdminGuard
     }
 
     const newTopicTask = topicTaskRepo().create({
-      topic: { id: topic.id } as any,
+      topic: { id: topic.id },
       title: libTask.title,
       description: libTask.description,
       template: libTask.template,
-      taskMode: (String((libTask as any).taskMode ?? "CODE") === "WEB" ? "WEB" : "CODE") as any,
-      webTemplateFiles: normalizeWebTaskFiles((libTask as any).webTemplateFiles ?? []),
-      webValidationRules: normalizeWebRules((libTask as any).webValidationRules ?? []),
+      taskMode: libTask.taskMode,
+      webTemplateFiles: normalizeWebTaskFiles(libTask.webTemplateFiles ?? []),
+      webValidationRules: normalizeWebRules(libTask.webValidationRules ?? []),
       type: "PRACTICE",
       order: 0,
       maxAttempts: libTask.maxAttempts ?? 3,
@@ -2268,28 +2268,28 @@ libraryRouter.post("/tasks/:id/copy-to-topic", authRequired, teacherOrAdminGuard
 
     if (libTask.theory?.content) {
       const th = theoryRepo().create({
-        topicTask: { id: newTopicTask.id } as any,
+        topicTask: { id: newTopicTask.id },
         content: libTask.theory.content,
       });
       await theoryRepo().save(th);
     }
 
     const tests = await testDataRepo().find({
-      where: { libraryTask: { id: libTask.id } } as any,
+      where: { libraryTask: { id: libTask.id } },
       order: { id: "ASC" },
     });
 
     if (tests.length > 0) {
       const rows = tests.map(t =>
         testDataRepo().create({
-          topicTask: { id: newTopicTask.id } as any,
+          topicTask: { id: newTopicTask.id },
           input: t.input,
           expectedOutput: t.expectedOutput,
           isHidden: !!t.isHidden,
-          kind: (((t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE")) as any),
+          kind: t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
           source: "LIBRARY_IMPORTED",
           points: t.points,
-          subtask: (t as any).subtask ?? null,
+          subtask: t.subtask ?? null,
         })
       );
       await testDataRepo().save(rows);
@@ -2299,13 +2299,13 @@ libraryRouter.post("/tasks/:id/copy-to-topic", authRequired, teacherOrAdminGuard
       ok: true,
       topicTask: { id: newTopicTask.id, title: newTopicTask.title },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] POST /tasks/:id/copy-to-topic error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 
-function readZipJson<T>(zip: AdmZip, path: string, budget?: ZipExtractionBudget): T {
+function readZipJson<T>(zip: SafeZipArchive, path: string, budget?: ZipExtractionBudget): T {
   const entry = zip.getEntry(path);
   if (!entry) throw new Error(`Missing ${path}`);
   // Decompress through the budget so a lying-header zip-bomb is bounded by the
@@ -2315,14 +2315,19 @@ function readZipJson<T>(zip: AdmZip, path: string, budget?: ZipExtractionBudget)
 }
 
 type UploadArchiveFile = { buffer: Buffer; originalname: string; fieldname?: string };
+type ArchiveUploadRequest = AuthRequest & {
+  file?: UploadArchiveFile;
+  files?: UploadArchiveFile[] | Record<string, UploadArchiveFile[]>;
+};
 
 function normalizeImportArchiveFiles(req: AuthRequest): UploadArchiveFile[] {
   const out: UploadArchiveFile[] = [];
 
-  const one = (req as any).file as UploadArchiveFile | undefined;
+  const uploadReq = req as ArchiveUploadRequest;
+  const one = uploadReq.file;
   if (one?.buffer) out.push(one);
 
-  const many = (req as any).files as UploadArchiveFile[] | Record<string, UploadArchiveFile[]> | undefined;
+  const many = uploadReq.files;
   if (Array.isArray(many)) {
     for (const f of many) {
       if (f?.buffer) out.push(f);
@@ -2356,7 +2361,7 @@ function normalizeImportArchiveFiles(req: AuthRequest): UploadArchiveFile[] {
 
 function extractTaskArchiveCandidates(file: UploadArchiveFile): Array<{ sourceName: string; buffer: Buffer }> {
   const sourceName = String(file.originalname || "archive.zip");
-  const primaryZip = new AdmZip(file.buffer);
+  const primaryZip = new SafeZipArchive(file.buffer);
   // Reject zip-slip / oversized / suspicious-ratio archives up front, on header
   // metadata. Per-task content is additionally bounded by actual decompressed
   // bytes inside importSingleLibraryArchive.
@@ -2406,7 +2411,7 @@ async function importSingleLibraryArchive(params: {
   buffer: Buffer;
 }): Promise<LibraryTask> {
   const { user, hideFromLibrary, buffer } = params;
-  const zip = new AdmZip(buffer);
+  const zip = new SafeZipArchive(buffer);
   // Defence in depth: validate header metadata (zip-slip / caps / ratio) and
   // charge every decompressed entry against a per-task actual-byte budget.
   validateUploadedZip(zip);
@@ -2546,7 +2551,7 @@ async function importSingleLibraryArchive(params: {
     templatesByLanguage: z.record(z.string(), z.string()).optional(),
   });
 
-  const taskJsonRaw = readZipJson<any>(zip, "task.json", zipBudget);
+  const taskJsonRaw = readZipJson<unknown>(zip, "task.json", zipBudget);
   const parsedTaskJson = archiveTaskSchema.safeParse(taskJsonRaw);
   if (!parsedTaskJson.success) {
     const err = new Error("INVALID_TASK_JSON") as Error & { issues?: unknown[] };
@@ -2562,7 +2567,7 @@ async function importSingleLibraryArchive(params: {
     throw err;
   }
 
-  if (Array.isArray((taskJson as any).allowedLanguages) && (taskJson as any).allowedLanguages.some((l: any) => DISABLED_JUDGE_LANGS.has(l))) {
+  if (taskJson.allowedLanguages?.some((language) => DISABLED_JUDGE_LANGS.has(language))) {
     const err = new Error("LANGUAGE_DISABLED") as Error & { disabledLanguages?: string[] };
     err.disabledLanguages = Array.from(DISABLED_JUDGE_LANGS);
     throw err;
@@ -2577,7 +2582,7 @@ async function importSingleLibraryArchive(params: {
 
   const incomingProblemCode = taskJson.problemCode?.trim() ?? null;
   if (!hideFromLibrary && incomingProblemCode) {
-    const exists = await libraryRepo().findOne({ where: { problemCode: incomingProblemCode } as any });
+    const exists = await libraryRepo().findOne({ where: { problemCode: incomingProblemCode } });
     if (exists) {
       const err = new Error("PROBLEM_CODE_TAKEN") as Error & { problemCode?: string };
       err.problemCode = incomingProblemCode;
@@ -2587,8 +2592,8 @@ async function importSingleLibraryArchive(params: {
 
   const normalizedTemplatesByLanguage = normalizeTemplatesByLanguage({
     baseTemplate: template,
-    allowedLanguages: Array.isArray((taskJson as any).allowedLanguages) ? ((taskJson as any).allowedLanguages as JudgeLangId[]) : null,
-    raw: (taskJson as any).templatesByLanguage,
+    allowedLanguages: taskJson.allowedLanguages ?? null,
+    raw: taskJson.templatesByLanguage,
   });
 
   if (normalizedTaskInput.taskMode === "WEB") {
@@ -2597,15 +2602,15 @@ async function importSingleLibraryArchive(params: {
   }
 
   const task = libraryRepo().create({
-    author: { id: user.id } as any,
+    author: { id: user.id },
     title,
     problemCode: hideFromLibrary ? null : incomingProblemCode,
     slug: hideFromLibrary ? null : (taskJson.slug?.trim() ?? null),
-    difficulty: (taskJson as any).difficulty ?? null,
-    tags: (taskJson as any).tags ?? null,
+    difficulty: taskJson.difficulty ?? null,
+    tags: taskJson.tags ?? null,
     section: taskJson.section?.trim() ?? null,
-    taskMode: normalizedTaskInput.taskMode as any,
-    projectSpec: (taskJson as any).projectSpec ?? null,
+    taskMode: normalizedTaskInput.taskMode,
+    projectSpec: taskJson.projectSpec ?? null,
     webTemplateFiles: normalizedTaskInput.webTemplateFiles,
     webValidationRules: normalizedTaskInput.webValidationRules,
     webValidationProfile: normalizedTaskInput.webValidationProfile,
@@ -2613,11 +2618,11 @@ async function importSingleLibraryArchive(params: {
     template,
     templatesByLanguage: normalizedTemplatesByLanguage,
     maxAttempts,
-    timeLimitMs: (taskJson as any).timeLimitMs ?? null,
-    memoryLimitMb: (taskJson as any).memoryLimitMb ?? null,
-    outputLimitKb: (taskJson as any).outputLimitKb ?? null,
-    checkerSpec: (taskJson as any).checkerSpec ?? null,
-    allowedLanguages: (taskJson as any).allowedLanguages ?? null,
+    timeLimitMs: taskJson.timeLimitMs ?? null,
+    memoryLimitMb: taskJson.memoryLimitMb ?? null,
+    outputLimitKb: taskJson.outputLimitKb ?? null,
+    checkerSpec: taskJson.checkerSpec ?? null,
+    allowedLanguages: taskJson.allowedLanguages ?? null,
     isHiddenFromLibrary: hideFromLibrary,
     status: "DRAFT",
     rejectionReason: null,
@@ -2631,7 +2636,7 @@ async function importSingleLibraryArchive(params: {
   if (theoryEntry) {
     const content = zipBudget.readEntryText(theoryEntry).trim();
     if (content) {
-      await theoryRepo().save(theoryRepo().create({ libraryTask: { id: task.id } as any, content }));
+      await theoryRepo().save(theoryRepo().create({ libraryTask: { id: task.id }, content }));
     }
   }
 
@@ -2641,11 +2646,11 @@ async function importSingleLibraryArchive(params: {
     if (Array.isArray(tests) && tests.length > 0) {
       const rows = tests.map(t =>
         testDataRepo().create({
-          libraryTask: { id: task.id } as any,
+          libraryTask: { id: task.id },
           input: String(t.input ?? ""),
           expectedOutput: String(t.expectedOutput ?? ""),
           isHidden: !!t.isHidden,
-          kind: (!!t.isHidden ? "JUDGE" : "SAMPLE") as any,
+          kind: t.isHidden ? "JUDGE" : "SAMPLE",
           source: "LIBRARY_IMPORTED",
           points: Number.isFinite(Number(t.points)) ? Math.max(1, Math.floor(Number(t.points))) : 1,
           subtask: t.subtask == null ? null : String(t.subtask),
@@ -2655,7 +2660,7 @@ async function importSingleLibraryArchive(params: {
     }
   }
 
-  const full = await libraryRepo().findOne({ where: { id: task.id } as any, relations: ["author"] });
+  const full = await libraryRepo().findOne({ where: { id: task.id }, relations: ["author"] });
   return full ?? task;
 }
 
@@ -2678,11 +2683,11 @@ libraryRouter.post("/tasks/import-archive", authRequired, archiveUploadMiddlewar
 
     const files = normalizeImportArchiveFiles(req);
     if (!files.length) return res.status(400).json({ message: "ARCHIVE_REQUIRED" });
-    const hideFromLibraryRaw = String((req.body as any)?.hideFromLibrary ?? "").trim().toLowerCase();
+    const hideFromLibraryRaw = String(req.body?.hideFromLibrary ?? "").trim().toLowerCase();
     const hideFromLibrary = hideFromLibraryRaw === "1" || hideFromLibraryRaw === "true" || hideFromLibraryRaw === "yes";
 
     const candidates = files.flatMap(extractTaskArchiveCandidates);
-    const importedTasks: any[] = [];
+    const importedTasks: Array<ReturnType<typeof buildTaskDto>> = [];
     const failures: Array<{ source: string; message: string; errors?: unknown[]; disabledLanguages?: string[]; problemCode?: string }> = [];
 
     for (const candidate of candidates) {
@@ -2693,14 +2698,14 @@ libraryRouter.post("/tasks/import-archive", authRequired, archiveUploadMiddlewar
           buffer: candidate.buffer,
         });
         importedTasks.push(buildTaskDto(imported));
-      } catch (error: any) {
-        const msg = String(error?.message || "INTERNAL_SERVER_ERROR");
+      } catch (error: unknown) {
+        const msg = errorMessage(error) || "INTERNAL_SERVER_ERROR";
         failures.push({
           source: candidate.sourceName,
           message: msg,
-          errors: Array.isArray(error?.issues) ? error.issues : undefined,
-          disabledLanguages: Array.isArray(error?.disabledLanguages) ? error.disabledLanguages : undefined,
-          problemCode: typeof error?.problemCode === "string" ? error.problemCode : undefined,
+          errors: Array.isArray(readProperty(error, "issues")) ? readProperty(error, "issues") as unknown[] : undefined,
+          disabledLanguages: Array.isArray(readProperty(error, "disabledLanguages")) ? readProperty(error, "disabledLanguages") as string[] : undefined,
+          problemCode: typeof readProperty(error, "problemCode") === "string" ? readProperty(error, "problemCode") as string : undefined,
         });
       }
     }
@@ -2732,13 +2737,13 @@ libraryRouter.post("/tasks/import-archive", authRequired, archiveUploadMiddlewar
       failedCount: failures.length,
       failures,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Archive-level rejection (zip-slip / oversized / lying-header bomb).
     if (error instanceof ZipValidationError) {
       return res.status(400).json({ message: error.code });
     }
     logger.error("[library] import archive failed", { requestId: req.requestId, err: error });
-    return res.status(500).json({ message: error?.message || "INTERNAL_SERVER_ERROR" });
+    return res.status(500).json({ message: errorMessage(error) || "INTERNAL_SERVER_ERROR" });
   }
 });
 
@@ -2755,7 +2760,7 @@ libraryRouter.get("/daily-challenge", authRequired, async (req: AuthRequest, res
     const pick = pickDailyChallenge(ids, new Date(), lang);
     if (!pick) return res.json({ available: false });
 
-    const task = await libraryRepo().findOne({ where: { id: pick.item } as any });
+    const task = await libraryRepo().findOne({ where: { id: pick.item } });
     if (!task) return res.json({ available: false });
 
     return res.json({
@@ -2764,14 +2769,14 @@ libraryRouter.get("/daily-challenge", authRequired, async (req: AuthRequest, res
       task: {
         id: task.id,
         title: task.title,
-        difficulty: (task as any).difficulty ?? null,
-        problemCode: (task as any).problemCode ?? null,
-        slug: (task as any).slug ?? null,
-        section: (task as any).section ?? null,
+        difficulty: task.difficulty ?? null,
+        problemCode: task.problemCode ?? null,
+        slug: task.slug ?? null,
+        section: task.section ?? null,
       },
     });
-  } catch (error: any) {
-    logger.warn("[library] daily-challenge failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[library] daily-challenge failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -2782,14 +2787,14 @@ libraryRouter.get("/tasks/:id/difficulty-suggestion", authRequired, async (req: 
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const isAuthor = task.author?.id === req.userId;
     const isAdmin = req.userRole === "SYSTEM_ADMIN";
     if (!isAuthor && !isAdmin) return res.status(403).json({ message: "ACCESS_DENIED" });
 
-    const attempts = await attemptRepo().find({ where: { libraryTask: { id } } as any });
+    const attempts = await attemptRepo().find({ where: { libraryTask: { id } } });
     const distinctUsers = attempts.length;
     const solved = attempts.filter((a) => String(a.lastVerdict ?? "").toUpperCase() === "AC");
     const solvedUsers = solved.length;
@@ -2798,7 +2803,7 @@ libraryRouter.get("/tasks/:id/difficulty-suggestion", authRequired, async (req: 
       : undefined;
 
     const rec = recommendDifficulty({ distinctUsers, solvedUsers, avgAttemptsToSolve });
-    const current = ((task as any).difficulty ?? null) as "EASY" | "MEDIUM" | "HARD" | null;
+    const current = task.difficulty ?? null;
 
     return res.json({
       current,
@@ -2806,8 +2811,8 @@ libraryRouter.get("/tasks/:id/difficulty-suggestion", authRequired, async (req: 
       shouldRecalibrate: shouldRecalibrate(current, rec),
       sample: { distinctUsers, solvedUsers, avgAttemptsToSolve: avgAttemptsToSolve ?? null },
     });
-  } catch (error: any) {
-    logger.warn("[library] difficulty-suggestion failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[library] difficulty-suggestion failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -2818,7 +2823,7 @@ libraryRouter.get("/tasks/:id/integrity-events", authRequired, async (req: AuthR
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
     const isAuthor = task.author?.id === req.userId;
     const isAdmin = req.userRole === "SYSTEM_ADMIN";
@@ -2826,8 +2831,8 @@ libraryRouter.get("/tasks/:id/integrity-events", authRequired, async (req: AuthR
 
     const limit = Math.max(1, Math.min(200, parseInt(String(req.query.limit ?? "50"), 10) || 50));
     const events = await AppDataSource.getRepository(SubmissionIntegrity).find({
-      where: { taskKind: "LIBRARY", taskId: id } as any,
-      order: { createdAt: "DESC" } as any,
+      where: { taskKind: "LIBRARY", taskId: id },
+      order: { createdAt: "DESC" },
       take: limit,
     });
 
@@ -2842,8 +2847,8 @@ libraryRouter.get("/tasks/:id/integrity-events", authRequired, async (req: AuthR
         createdAt: e.createdAt,
       })),
     });
-  } catch (error: any) {
-    logger.warn("[library] integrity-events failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[library] integrity-events failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -2853,15 +2858,15 @@ libraryRouter.get("/tasks/:id/export-archive", authRequired, async (req: AuthReq
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const task = await libraryRepo().findOne({ where: { id } as any, relations: ["author", "theory"] });
+    const task = await libraryRepo().findOne({ where: { id }, relations: ["author", "theory"] });
     if (!task) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = canReadTask(task, req.userType === "USER" ? (req.userId ?? null) : null, req.userRole ?? null);
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
-    const tests = await testDataRepo().find({ where: { libraryTask: { id: task.id } } as any, order: { id: "ASC" } });
+    const tests = await testDataRepo().find({ where: { libraryTask: { id: task.id } }, order: { id: "ASC" } });
 
-    const zip = new AdmZip();
+    const zip = new SafeZipArchive();
     zip.addFile(
       "manifest.json",
       Buffer.from(
@@ -2884,25 +2889,25 @@ libraryRouter.get("/tasks/:id/export-archive", authRequired, async (req: AuthReq
         JSON.stringify(
           {
             title: task.title,
-            problemCode: (task as any).problemCode ?? undefined,
-            slug: (task as any).slug ?? undefined,
-            difficulty: (task as any).difficulty ?? undefined,
-            tags: (task as any).tags ?? undefined,
-            section: (task as any).section ?? undefined,
-            taskMode: (task as any).taskMode ?? "CODE",
-            projectSpec: (task as any).projectSpec ?? undefined,
-            webTemplateFiles: (task as any).webTemplateFiles ?? undefined,
-            webValidationRules: (task as any).webValidationRules ?? undefined,
-            webValidationProfile: (task as any).webValidationProfile ?? undefined,
+            problemCode: task.problemCode ?? undefined,
+            slug: task.slug ?? undefined,
+            difficulty: task.difficulty ?? undefined,
+            tags: task.tags ?? undefined,
+            section: task.section ?? undefined,
+            taskMode: task.taskMode ?? "CODE",
+            projectSpec: task.projectSpec ?? undefined,
+            webTemplateFiles: task.webTemplateFiles ?? undefined,
+            webValidationRules: task.webValidationRules ?? undefined,
+            webValidationProfile: task.webValidationProfile ?? undefined,
             description: task.description,
             template: task.template,
             maxAttempts: task.maxAttempts,
-            timeLimitMs: (task as any).timeLimitMs ?? undefined,
-            memoryLimitMb: (task as any).memoryLimitMb ?? undefined,
-            outputLimitKb: (task as any).outputLimitKb ?? undefined,
-            checkerSpec: (task as any).checkerSpec ?? undefined,
-            allowedLanguages: (task as any).allowedLanguages ?? undefined,
-            templatesByLanguage: (task as any).templatesByLanguage ?? undefined,
+            timeLimitMs: task.timeLimitMs ?? undefined,
+            memoryLimitMb: task.memoryLimitMb ?? undefined,
+            outputLimitKb: task.outputLimitKb ?? undefined,
+            checkerSpec: task.checkerSpec ?? undefined,
+            allowedLanguages: task.allowedLanguages ?? undefined,
+            templatesByLanguage: task.templatesByLanguage ?? undefined,
           },
           null,
           2
@@ -2921,7 +2926,7 @@ libraryRouter.get("/tasks/:id/export-archive", authRequired, async (req: AuthReq
               expectedOutput: t.expectedOutput,
               isHidden: !!t.isHidden,
               points: t.points,
-              subtask: (t as any).subtask ?? null,
+              subtask: t.subtask ?? null,
             })),
             null,
             2
@@ -2943,7 +2948,7 @@ libraryRouter.get("/tasks/:id/export-archive", authRequired, async (req: AuthReq
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename=\"${fallbackFilename}\"; filename*=UTF-8''${encoded}`);
     return res.send(buffer);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[library] export archive failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

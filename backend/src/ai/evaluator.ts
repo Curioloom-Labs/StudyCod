@@ -18,6 +18,24 @@ interface AiScoreResult {
     }>;
   };
 }
+
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null;
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+function normalizeChangeCategory(value: unknown): "work" | "optimization" | "integrity" {
+  return value === "optimization" || value === "integrity" ? value : "work";
+}
+
+function errorMessage(error: unknown): string {
+  return isRecord(error) && typeof error.message === "string" ? error.message : String(error);
+}
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const GRADE_SCALE_MAX = 100;
 export async function evaluateCodeWithAI(params: {
@@ -121,34 +139,45 @@ ${params.code}
     required: ["work", "optimization", "integrity", "feedback"]
   };
   try {
-    const parsed = await provider.generateJSON<any>(userPrompt, schema, systemPrompt, {
+    const parsed = await provider.generateJSON<unknown>(userPrompt, schema, systemPrompt, {
       temperature: 0.1
     });
-    const work = clamp(Number(parsed.work ?? 0), 0, 5);
-    const optimization = clamp(Number(parsed.optimization ?? parsed.opt ?? 0), 0, 4);
-    const integrity = clamp(Number(parsed.integrity ?? 0), 0, 3);
+    const parsedRecord = isRecord(parsed) ? parsed : {};
+    const work = clamp(Number(readProperty(parsedRecord, "work") ?? 0), 0, 5);
+    const optimization = clamp(
+      Number(readProperty(parsedRecord, "optimization") ?? readProperty(parsedRecord, "opt") ?? 0),
+      0,
+      4
+    );
+    const integrity = clamp(Number(readProperty(parsedRecord, "integrity") ?? 0), 0, 3);
     const cleanFeedback = (text: string) => String(text).replace(/```json/gi, "").replace(/```/g, "").trim();
     const result: AiScoreResult = {
       work,
       optimization,
       integrity,
-      feedback: cleanFeedback(parsed.feedback ?? "").slice(0, 2000)
+      feedback: cleanFeedback(String(readProperty(parsedRecord, "feedback") ?? "")).slice(0, 2000)
     };
-    if (hasPrevious && parsed.comparison) {
+    const comparison = readProperty(parsedRecord, "comparison");
+    if (hasPrevious && isRecord(comparison)) {
+      const changes = readProperty(comparison, "changes");
       result.comparison = {
         hasPrevious: true,
         previousGrade: params.previousGrade ?? null,
-        changes: (parsed.comparison.changes || []).map((c: any) => ({
-          category: c.category || "work",
-          delta: Number(c.delta || 0),
-          reason: String(c.reason || ""),
-          codeLine: c.codeLine ? Number(c.codeLine) : undefined
-        }))
+        changes: Array.isArray(changes)
+          ? changes.filter(isRecord).map((change) => ({
+            category: normalizeChangeCategory(readProperty(change, "category")),
+            delta: Number(readProperty(change, "delta") || 0),
+            reason: String(readProperty(change, "reason") || ""),
+            codeLine: readProperty(change, "codeLine")
+              ? Number(readProperty(change, "codeLine"))
+              : undefined
+          }))
+          : []
       };
     }
     return result;
-  } catch (error: any) {
-    logger.warn('[ai-eval] failed', { message: error?.message });
+  } catch (error: unknown) {
+    logger.warn('[ai-eval] failed', { message: errorMessage(error) });
     return {
       // Conservative fallback: avoid artificially inflated grades when AI is unavailable.
       // computeTotalFromParts(1,1,1) -> 25/100, a temporary conservative score until retry.

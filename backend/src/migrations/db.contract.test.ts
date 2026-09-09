@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import { createConnection, type RowDataPacket } from "mysql2/promise";
 
@@ -11,6 +13,11 @@ type ColumnRow = RowDataPacket & {
 
 type IndexRow = RowDataPacket & {
   Key_name: string;
+};
+
+type MigrationRow = RowDataPacket & {
+  timestamp: string | number;
+  name: string;
 };
 
 async function hasTable(connection: Awaited<ReturnType<typeof createConnection>>, table: string): Promise<boolean> {
@@ -29,6 +36,18 @@ async function columns(connection: Awaited<ReturnType<typeof createConnection>>,
 async function indexNames(connection: Awaited<ReturnType<typeof createConnection>>, table: string): Promise<Set<string>> {
   const [rows] = await connection.query<IndexRow[]>(`SHOW INDEX FROM \`${table}\``);
   return new Set(rows.map(row => String(row.Key_name)));
+}
+
+function expectedMigrationNames(): Set<string> {
+  return new Set(
+    fs.readdirSync(__dirname)
+      .filter(file => /^\d+-.+\.js$/.test(file))
+      .map(file => {
+        const source = fs.readFileSync(path.join(__dirname, file), "utf8");
+        return source.match(/class (\w+\d+)\s*\{/i)?.[1] ?? "";
+      })
+      .filter(Boolean),
+  );
 }
 
 test("database contract: critical schema, indexes, and hot-path plans", {
@@ -50,6 +69,18 @@ test("database contract: critical schema, indexes, and hot-path plans", {
     ];
     for (const table of requiredTables) {
       assert.equal(await hasTable(connection, table), true, `missing required table: ${table}`);
+    }
+
+    const [migrationRows] = await connection.query<MigrationRow[]>(
+      "SELECT timestamp, name FROM migrations ORDER BY timestamp ASC",
+    );
+    const appliedMigrationNames = new Set(migrationRows.map(row => String(row.name)));
+    for (const name of expectedMigrationNames()) {
+      assert.equal(
+        appliedMigrationNames.has(name),
+        true,
+        `tracked migration ${name} was not applied in the contract database`,
+      );
     }
 
     const classOrg = columns(connection, "classes");

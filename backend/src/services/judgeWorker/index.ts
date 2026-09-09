@@ -10,6 +10,7 @@ import {
   type DistributedDeadLetterReplayResult,
 } from "../execution/DistributedJudgeQueue";
 import type { ExecutionSchedulerSnapshot } from "../execution/ExecutionScheduler";
+import { env } from "../../env";
 const client = new JudgeClient();
 export interface JudgeWithSemaphoreOptions {
   /**
@@ -26,15 +27,15 @@ function toJudgeUnavailable(err: unknown): HttpError {
   const isJudgeClientError = err instanceof Error && err.name === "JudgeClientError";
   const judgeClientDetails = (() => {
     if (!isJudgeClientError) return undefined;
-    const anyErr = err as any;
-    if (typeof anyErr?.toDebugJSON === "function") {
+    const debuggableError = err as Error & { toDebugJSON?: () => unknown };
+    if (typeof debuggableError.toDebugJSON === "function") {
       try {
-        return anyErr.toDebugJSON();
+        return debuggableError.toDebugJSON();
       } catch {
-        return { name: anyErr?.name, message: msg };
+        return { name: err.name, message: msg };
       }
     }
-    return { name: anyErr?.name, message: msg };
+    return { name: err.name, message: msg };
   })();
   const tooLarge =
     /INPUT_TOO_LARGE/i.test(msg) ||
@@ -54,8 +55,8 @@ function toJudgeUnavailable(err: unknown): HttpError {
     return new HttpError(500, "JUDGE_INVALID_CONFIGURATION", {
       code: "JUDGE_INVALID_CONFIGURATION",
       expose: true,
-      details: process.env.NODE_ENV === "production"
-        ? { kind: (judgeClientDetails as any)?.kind, exitCode: (judgeClientDetails as any)?.exitCode }
+      details: env.NODE_ENV === "production"
+        ? productionJudgeDetails(judgeClientDetails)
         : (judgeClientDetails ?? msg.slice(0, 2000)),
       cause: err
     });
@@ -74,8 +75,8 @@ function toJudgeUnavailable(err: unknown): HttpError {
     code: "JUDGE_UNAVAILABLE",
     expose: true,
     // Keep public surface small in production, but include structured kind/exitCode to aid support.
-    details: process.env.NODE_ENV === "production"
-      ? (judgeClientDetails ? { kind: (judgeClientDetails as any).kind, exitCode: (judgeClientDetails as any).exitCode } : undefined)
+    details: env.NODE_ENV === "production"
+      ? productionJudgeDetails(judgeClientDetails)
       : (judgeClientDetails ?? msg.slice(0, 2000)),
     cause: err
   });
@@ -85,10 +86,11 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
   const startedAt = Date.now();
   try {
     const enqueueLabel = `judge submission=${req.submission_id} lang=${req.language} tests=${req.tests?.length ?? 0}`;
-    const timeoutMsRaw = Number(process.env.JUDGE_BACKEND_TIMEOUT_MS ?? "");
+    const timeoutMsRaw = Number(env.JUDGE_BACKEND_TIMEOUT_MS ?? "");
     const dynamicTimeoutMs = estimateBackendHardTimeoutMs(req);
-    const timeoutMs = Number.isFinite(options.timeoutMs) && (options.timeoutMs as number) > 0
-      ? (options.timeoutMs as number)
+    const requestedTimeoutMs = options.timeoutMs;
+    const timeoutMs = typeof requestedTimeoutMs === "number" && Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0
+      ? requestedTimeoutMs
       : Number.isFinite(timeoutMsRaw) && timeoutMsRaw > 0
         ? timeoutMsRaw
         : dynamicTimeoutMs;
@@ -101,9 +103,9 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
     let detachExternalAbort = () => undefined;
     if (options.signal) {
       if (options.signal.aborted) {
-        controller.abort((options.signal as any).reason ?? new Error("JUDGE_ABORTED"));
+        controller.abort(options.signal.reason ?? new Error("JUDGE_ABORTED"));
       } else {
-        const onAbort = () => controller.abort((options.signal as any).reason ?? new Error("JUDGE_ABORTED"));
+        const onAbort = () => controller.abort(options.signal?.reason ?? new Error("JUDGE_ABORTED"));
         try {
           options.signal.addEventListener("abort", onAbort, { once: true });
           detachExternalAbort = () => {
@@ -148,7 +150,7 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
       } else {
         res = await scheduleLocal();
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/JUDGE_TIMEOUT/i.test(msg) || /JUDGE_ABORTED/i.test(msg)) {
         logger.error("[judge] timeout", {
@@ -173,7 +175,7 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
       detachExternalAbort();
     }
     const finishedAt = Date.now();
-    const slowMs = Number(process.env.JUDGE_LOG_SLOW_MS || 1500);
+    const slowMs = Number(env.JUDGE_LOG_SLOW_MS || 1500);
     if (Number.isFinite(slowMs) && finishedAt - startedAt >= slowMs) {
       const totalMs = finishedAt - startedAt;
       const snap = getJudgeExecutionMetrics();
@@ -190,7 +192,7 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
       });
     }
     return res;
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (e instanceof HttpError) throw e;
     throw toJudgeUnavailable(e);
   }
@@ -337,8 +339,14 @@ function estimateBackendHardTimeoutMs(req: JudgeRequest): number {
   // Small fixed margin for scheduler/process overhead.
   const estimatedMs = baseMs + compileHeadroomMs + 3_000;
 
-  const capRaw = Number.parseInt(String(process.env.JUDGE_BACKEND_TIMEOUT_CAP_MS ?? ""), 10);
+  const capRaw = Number.parseInt(String(env.JUDGE_BACKEND_TIMEOUT_CAP_MS ?? ""), 10);
   const capMs = Number.isFinite(capRaw) && capRaw > 0 ? capRaw : 120_000;
 
   return Math.min(capMs, Math.max(15_000, estimatedMs));
+}
+
+function productionJudgeDetails(value: unknown): { kind?: unknown; exitCode?: unknown } | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const details = value as Record<string, unknown>;
+  return { kind: details.kind, exitCode: details.exitCode };
 }

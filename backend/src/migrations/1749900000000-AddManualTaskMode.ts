@@ -1,5 +1,7 @@
 import type { MigrationInterface, QueryRunner } from "typeorm";
 
+type ColumnRow = Record<string, unknown>;
+
 /**
  * Widen edu_tasks.task_mode to include MANUAL (hand-graded text/file tasks —
  * Phase 2 table-stakes). Idempotent: only alters the enum if MANUAL is absent.
@@ -11,7 +13,7 @@ export class AddManualTaskMode1749900000000 implements MigrationInterface {
     const tables = await queryRunner.query("SHOW TABLES LIKE 'edu_tasks'");
     if (!Array.isArray(tables) || tables.length === 0) return;
     const col = await queryRunner.query("SHOW COLUMNS FROM `edu_tasks` LIKE 'task_mode'");
-    const def = Array.isArray(col) && col.length > 0 ? String((col[0] as any).Type || "") : "";
+    const def = Array.isArray(col) && col.length > 0 ? String((col[0] as ColumnRow).Type || "") : "";
     if (def && !/MANUAL/i.test(def)) {
       await queryRunner.query(
         "ALTER TABLE `edu_tasks` MODIFY COLUMN `task_mode` ENUM('CODE','WEB','MANUAL') NOT NULL DEFAULT 'CODE'"

@@ -89,7 +89,7 @@ export class JudgeClient {
     const spawnArgs = [workerEntry];
 
     if (runOptions.signal?.aborted) {
-      const reason = (runOptions.signal as any)?.reason;
+      const reason = runOptions.signal.reason;
       const msg = reason instanceof Error ? reason.message : String(reason ?? "aborted");
       throw new Error(`JUDGE_ABORTED: ${msg}`);
     }
@@ -98,18 +98,18 @@ export class JudgeClient {
     const childEnv = {
       ...process.env,
       // dotnet inside chroot: make framework discovery and caches deterministic.
-      DOTNET_ROOT: process.env.DOTNET_ROOT || "/usr/share/dotnet",
-      DOTNET_CLI_HOME: process.env.DOTNET_CLI_HOME || "/tmp",
-      NUGET_PACKAGES: process.env.NUGET_PACKAGES || "/tmp/nuget",
-      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: process.env.DOTNET_SKIP_FIRST_TIME_EXPERIENCE || "1",
-      DOTNET_NOLOGO: process.env.DOTNET_NOLOGO || "1",
-      DOTNET_CLI_TELEMETRY_OPTOUT: process.env.DOTNET_CLI_TELEMETRY_OPTOUT || "1",
-      DOTNET_GCConserveMemory: process.env.DOTNET_GCConserveMemory || "9",
+      DOTNET_ROOT: env.DOTNET_ROOT || "/usr/share/dotnet",
+      DOTNET_CLI_HOME: env.DOTNET_CLI_HOME || "/tmp",
+      NUGET_PACKAGES: env.NUGET_PACKAGES || "/tmp/nuget",
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: env.DOTNET_SKIP_FIRST_TIME_EXPERIENCE || "1",
+      DOTNET_NOLOGO: env.DOTNET_NOLOGO || "1",
+      DOTNET_CLI_TELEMETRY_OPTOUT: env.DOTNET_CLI_TELEMETRY_OPTOUT || "1",
+      DOTNET_GCConserveMemory: env.DOTNET_GCConserveMemory || "9",
       NSJAIL_PATH: this.opts.nsjailPath || env.NSJAIL_PATH || "/usr/bin/nsjail",
       NSJAIL_CONFIG: nsjailConfig,
       // Production should always run in config-mode.
       // In non-production, allow opting into CLI-mode via NSJAIL_USE_CONFIG.
-      NSJAIL_USE_CONFIG: process.env.NODE_ENV === "production" ? "1" : (env.__nsjailUseConfig ? "1" : "0"),
+      NSJAIL_USE_CONFIG: env.NODE_ENV === "production" ? "1" : (env.__nsjailUseConfig ? "1" : "0"),
       NSJAIL_CWD: env.__nsjailCwd || "/work",
       // Keep chroot vars available for CLI-mode fallback and for older judge builds.
       NSJAIL_CHROOT: env.__nsjailChroot || "",
@@ -118,13 +118,13 @@ export class JudgeClient {
       NSJAIL_CHROOT_PYTHON: env.__nsjailChrootPython || "",
       // Defaults that enable large libraries tasks even if the host environment
       // doesn't explicitly configure them.
-      JUDGE_MAX_INPUT_BYTES: process.env.JUDGE_MAX_INPUT_BYTES || String(inferredMaxInputBytes),
-      JUDGE_MAX_TESTS: process.env.JUDGE_MAX_TESTS || "5000",
-      JUDGE_MAX_TEST_INPUT_BYTES: process.env.JUDGE_MAX_TEST_INPUT_BYTES || String(1024 * 1024),
-      JUDGE_MAX_TEST_OUTPUT_BYTES: process.env.JUDGE_MAX_TEST_OUTPUT_BYTES || String(1024 * 1024)
+      JUDGE_MAX_INPUT_BYTES: env.JUDGE_MAX_INPUT_BYTES || String(inferredMaxInputBytes),
+      JUDGE_MAX_TESTS: env.JUDGE_MAX_TESTS || "5000",
+      JUDGE_MAX_TEST_INPUT_BYTES: env.JUDGE_MAX_TEST_INPUT_BYTES || String(1024 * 1024),
+      JUDGE_MAX_TEST_OUTPUT_BYTES: env.JUDGE_MAX_TEST_OUTPUT_BYTES || String(1024 * 1024)
     };
 
-    const wantsSpawnLog = String(process.env.JUDGE_LOG_SPAWN ?? "").trim() === "1";
+    const wantsSpawnLog = String(env.JUDGE_LOG_SPAWN ?? "").trim() === "1";
     if (wantsSpawnLog || payloadBytes >= 8 * 1024 * 1024) {
       // Avoid logging payload contents.
       logger.warn("[judge] spawn", {
@@ -269,7 +269,7 @@ export class JudgeClient {
     }
 
     if (aborted) {
-      const reason = (signal as any)?.reason;
+      const reason = signal?.reason;
       const msg = reason instanceof Error ? reason.message : String(reason ?? "aborted");
       const message = `JUDGE_ABORTED: ${msg}`;
       logFailureContext("ABORTED", message);
@@ -345,11 +345,11 @@ export class JudgeClient {
         stderr
       });
     }
-    let parsed: any;
+    let parsed: unknown;
     try {
       parsed = JSON.parse(stdout);
-    } catch (e: any) {
-      const message = `JUDGE_BAD_JSON: ${e?.message || "parse error"}`;
+    } catch (e: unknown) {
+      const message = `JUDGE_BAD_JSON: ${e instanceof Error ? e.message : "parse error"}`;
       logFailureContext("BAD_JSON", message);
       throw new JudgeClientError({
         kind: "BAD_JSON",
@@ -363,7 +363,7 @@ export class JudgeClient {
         stderr
       });
     }
-    if (parsed && typeof parsed === "object" && typeof parsed.error === "string") {
+    if (isRecord(parsed) && typeof parsed.error === "string") {
       const message = `JUDGE_ERROR: ${parsed.error}`;
       logFailureContext("JUDGE_ERROR", message);
       throw new JudgeClientError({
@@ -396,6 +396,11 @@ export class JudgeClient {
     return parsed as JudgeResponse;
   }
 }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 function truncate(s: string, max: number): string {
   if (!s) return "";
   if (s.length <= max) return s;
@@ -417,7 +422,7 @@ function estimateOverallTimeoutMs(req: JudgeRequest): number {
   const base = tests * (perTest + 80);
   const compileHeadroom = CLIENT_COMPILE_HEADROOM_MS[req.language] ?? 3000;
 
-  const capRaw = parseInt(String(process.env.JUDGE_CLIENT_TIMEOUT_CAP_MS ?? ""), 10);
+  const capRaw = parseInt(String(env.JUDGE_CLIENT_TIMEOUT_CAP_MS ?? ""), 10);
   const cap = Number.isFinite(capRaw) && capRaw > 0 ? capRaw : 60_000;
   return Math.min(cap, Math.max(2_000, base + compileHeadroom));
 }

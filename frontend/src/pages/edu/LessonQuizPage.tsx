@@ -18,15 +18,17 @@ interface Question {
   blanks?: Array<{ accept: string[] }>;
   pairCount?: number;
 }
-interface AttemptInfo { status: string; autoScore: number; maxScore: number; autoPercent: number; }
+interface AttemptInfo { status: string; autoScore: number; maxScore: number; autoPercent: number; needsManual?: boolean; }
+type QuizAnswer = string | number | boolean | number[] | string[] | undefined;
+type QuizResult = { autoPercent?: number; needsManual?: boolean };
 
 export const LessonQuizPage: React.FC = () => {
   const { lessonId } = useParams<{ lessonId: string }>();
   const navigate = useNavigate();
   const [questions, setQuestions] = useState<Question[] | null>(null);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [answers, setAnswers] = useState<Record<string, QuizAnswer>>({});
   const [attempt, setAttempt] = useState<AttemptInfo | null>(null);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<QuizResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -44,7 +46,7 @@ export const LessonQuizPage: React.FC = () => {
     })();
   }, [lessonId]);
 
-  const setAnswer = (qid: string, value: any) => setAnswers(prev => ({ ...prev, [qid]: value }));
+  const setAnswer = (qid: string, value: QuizAnswer) => setAnswers(prev => ({ ...prev, [qid]: value }));
 
   const submit = async () => {
     setBusy(true);
@@ -101,7 +103,7 @@ export const LessonQuizPage: React.FC = () => {
   );
 };
 
-const QuestionInput: React.FC<{ q: Question; value: any; onChange: (v: any) => void }> = ({ q, value, onChange }) => {
+const QuestionInput: React.FC<{ q: Question; value: QuizAnswer; onChange: (v: QuizAnswer) => void }> = ({ q, value, onChange }) => {
   switch (q.type) {
     case "SINGLE_CHOICE":
       return (
@@ -114,7 +116,7 @@ const QuestionInput: React.FC<{ q: Question; value: any; onChange: (v: any) => v
         </div>
       );
     case "MULTIPLE_CHOICE": {
-      const arr: number[] = Array.isArray(value) ? value : [];
+      const arr: number[] = Array.isArray(value) ? value.filter((item): item is number => typeof item === "number") : [];
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {(q.options ?? []).map((opt, i) => (
@@ -143,7 +145,7 @@ const QuestionInput: React.FC<{ q: Question; value: any; onChange: (v: any) => v
       );
     case "FILL_BLANK": {
       const blanks = q.blanks ?? [];
-      const arr: string[] = Array.isArray(value) ? value : [];
+      const arr: string[] = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
       return (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {blanks.map((_, i) => (
@@ -164,7 +166,7 @@ const QuestionInput: React.FC<{ q: Question; value: any; onChange: (v: any) => v
     }
     case "MATCHING": {
       const n = q.pairCount ?? 0;
-      const arr: number[] = Array.isArray(value) ? value : [];
+      const arr: number[] = Array.isArray(value) ? value.filter((item): item is number => typeof item === "number") : [];
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {Array.from({ length: n }).map((_, i) => (
@@ -189,7 +191,7 @@ const QuestionInput: React.FC<{ q: Question; value: any; onChange: (v: any) => v
     case "OPEN_TEXT":
       return (
         <textarea
-          value={value ?? ""}
+          value={typeof value === "string" ? value : ""}
           onChange={e => onChange(e.target.value)}
           rows={4}
           style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)", boxSizing: "border-box" }}
@@ -199,7 +201,7 @@ const QuestionInput: React.FC<{ q: Question; value: any; onChange: (v: any) => v
     default:
       return (
         <input
-          value={value ?? ""}
+          value={typeof value === "string" ? value : ""}
           onChange={e => onChange(e.target.value)}
           style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)", boxSizing: "border-box" }}
         />

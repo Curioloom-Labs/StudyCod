@@ -16,7 +16,7 @@ export class LibraryTaskAttempt {
   @JoinColumn({ name: "library_task_id" })
   libraryTask!: LibraryTask;
 
-  @Column({ type: "mediumtext", name: "draft_code", default: "" })
+  @Column({ type: "mediumtext", name: "draft_code" })
   draftCode!: string;
 
   // JSON map: { [judgeLanguage: string]: code }

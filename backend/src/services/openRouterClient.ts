@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../utils/logger';
+import { env } from '../env';
 export interface OpenRouterRequest {
   model: string;
   messages: Array<{
@@ -123,8 +124,8 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
     topicId,
     traceId = `trace-${randomUUID()}`
   } = options;
-  const model = request.model || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
-  const url = process.env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';
+  const model = request.model || env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+  const url = env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';
   const adaptedMessages = adaptMessagesForModel(request.messages, model);
   const adaptedRequest = {
     ...request,
@@ -133,19 +134,19 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
   if (shouldRemoveJsonMode(model) && adaptedRequest.response_format) {
     delete adaptedRequest.response_format;
   }
-  const primary = (process.env.OPENROUTER_API_KEY || '').trim();
-  const backups = (process.env.OPENROUTER_BACKUP_API_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const primary = (env.OPENROUTER_API_KEY || '').trim();
+  const backups = (env.OPENROUTER_BACKUP_API_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
   const allKeys = [primary, ...backups].filter(Boolean);
   if (allKeys.length === 0) {
     throw new Error('AI_GENERATION_FAILED: No OpenRouter API keys configured');
   }
   const retryBaseDelayMs = (() => {
-    const raw = String(process.env.OPENROUTER_RETRY_BASE_DELAY_MS || '').trim();
+    const raw = String(env.OPENROUTER_RETRY_BASE_DELAY_MS || '').trim();
     const n = Number.parseInt(raw, 10);
     return Number.isFinite(n) && n > 0 ? n : 4_000;
   })();
   const retryMaxDelayMs = (() => {
-    const raw = String(process.env.OPENROUTER_RETRY_MAX_DELAY_MS || '').trim();
+    const raw = String(env.OPENROUTER_RETRY_MAX_DELAY_MS || '').trim();
     const n = Number.parseInt(raw, 10);
     return Number.isFinite(n) && n > 0 ? n : 30_000;
   })();
@@ -184,7 +185,7 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
           headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': process.env.OPENROUTER_REFERER || 'https://studycod.app',
+            'HTTP-Referer': env.OPENROUTER_REFERER || 'https://studycod.app',
             'X-Title': 'StudyCod Task Generator'
           },
           body: JSON.stringify({
@@ -203,13 +204,21 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
             status: response.status,
             error: errorText
           });
-          let parsedError: any = null;
+          let parsedError: unknown = null;
           try {
             parsedError = JSON.parse(errorText);
           } catch {
             parsedError = null;
           }
-          const errorMessage = parsedError?.error?.message || errorText;
+          const parsedErrorRecord = parsedError && typeof parsedError === "object"
+            ? parsedError as Record<string, unknown>
+            : {};
+          const errorPayload = parsedErrorRecord.error && typeof parsedErrorRecord.error === "object"
+            ? parsedErrorRecord.error as Record<string, unknown>
+            : {};
+          const errorMessage = typeof errorPayload.message === "string"
+            ? errorPayload.message
+            : errorText;
           const isInvalidArgument = response.status === 400 && (errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled'));
           const isRateLimit = response.status === 429 || errorMessage.includes('rate limit') || errorMessage.includes('rate-limited') || errorMessage.toLowerCase().includes('temporarily rate-limited');
           if (isInvalidArgument) {
@@ -284,9 +293,11 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
           responseId
         });
         return data;
-      } catch (err: any) {
-        lastError = err;
-        if (err.name === 'AbortError' || err.message?.includes('timeout')) {
+      } catch (err: unknown) {
+        const errorRecord = err && typeof err === "object" ? err as Record<string, unknown> : {};
+        const message = typeof errorRecord.message === "string" ? errorRecord.message : String(err);
+        lastError = err instanceof Error ? err : new Error(message);
+        if (errorRecord.name === 'AbortError' || message.includes('timeout')) {
           logger.warn("OpenRouter request timeout", {
             traceId,
             userId,
@@ -295,13 +306,13 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
           });
           throw new Error('AI_GENERATION_FAILED: Request timeout (30s exceeded)');
         }
-        if (err.message?.includes('Invalid request for model')) {
+        if (message.includes('Invalid request for model')) {
           throw err;
         }
-        if (err.message?.includes('Rate limit exceeded')) {
+        if (message.includes('Rate limit exceeded')) {
           throw err;
         }
-        if (err.message?.includes('AI_GENERATION_FAILED')) {
+        if (message.includes('AI_GENERATION_FAILED')) {
           throw err;
         }
         if (attempt >= maxRetries) {

@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate as useRouterNavigate } from "react-router-dom";
+import { useNavigate as useRouterNavigate, type NavigateOptions, type To } from "react-router-dom";
 import { ArrowRight, BookOpen, CheckCircle2, CircleDot, ClipboardList, Compass, FileDown, KeyRound, Lock, Megaphone, Sparkles, Target } from "lucide-react";
 import { api } from "../../lib/api/client";
 import { getMyAnnouncements, getMyStudentInfo, getStudentLessons, type Lesson } from "../../lib/api/edu";
@@ -7,13 +7,15 @@ import { downloadProgressReport, getConceptsDue, getDailyChallenge, getMySkillTr
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
+type NavigateTarget = To | number;
+
 const useNavigate = () => {
   const navigate = useRouterNavigate();
-  return React.useCallback((to: any, options?: any) => {
+  return React.useCallback((to: NavigateTarget, options?: NavigateOptions) => {
     if (typeof to === "string" && to.startsWith("/edu/lessons/") && preview() && !to.includes("preview=")) {
       to += `${to.includes("?") ? "&" : "?"}preview=true`;
     }
-    return navigate(to, options);
+    return typeof to === "number" ? navigate(to) : navigate(to, options);
   }, [navigate]);
 };
 const lessonSample: Lesson[] = [

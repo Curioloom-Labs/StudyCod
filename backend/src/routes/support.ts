@@ -1,4 +1,4 @@
-import { Router, Response } from "express";
+import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
 import { SupportTicket } from "../entities/SupportTicket";
@@ -14,6 +14,7 @@ import path from "path";
 import crypto from "crypto";
 import { logger } from "../utils/logger";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
+import { UPLOADS_ROOT } from "../config/storagePaths";
 const router = Router();
 const supportRepo = () => AppDataSource.getRepository(SupportTicket);
 const convRepo = () => AppDataSource.getRepository(SupportConversation);
@@ -75,7 +76,6 @@ const closeConversationSchema = z.object({
   reason: z.string().trim().max(2000).optional()
 });
 
-const UPLOADS_ROOT = process.env.UPLOADS_DIR ? String(process.env.UPLOADS_DIR) : path.resolve(process.cwd(), "uploads");
 // Generous allowlist for support attachments. Files are stored via memoryStorage
 // (no path traversal) and served with `res.download` (attachment disposition, so no
 // inline render), so this is defense-in-depth: it keeps out script/markup types that
@@ -120,7 +120,7 @@ type SavedSupportAttachment = {
   sizeBytes: number;
 };
 
-async function saveSupportAttachments(message: SupportMessage, files: any[]): Promise<SavedSupportAttachment[]> {
+async function saveSupportAttachments(message: SupportMessage, files: Express.Multer.File[]): Promise<SavedSupportAttachment[]> {
   const saved: SavedSupportAttachment[] = [];
   if (!Array.isArray(files) || files.length === 0) return saved;
   const messageDirectory = path.posix.join("support", String(message.conversation.id), String(message.id));
@@ -145,13 +145,13 @@ async function saveSupportAttachments(message: SupportMessage, files: any[]): Pr
   return saved;
 }
 
-const maybeParseMultipartFiles = (req: any, res: any, next: any) => {
+const maybeParseMultipartFiles = (req: Request, res: Response, next: NextFunction) => {
   const ct = String(req.headers["content-type"] || "");
   if (ct.includes("multipart/form-data")) {
-    return supportUpload.array("files", 5)(req, res, (err: any) => {
+    return supportUpload.array("files", 5)(req, res, (err: unknown) => {
       if (err) {
         const code = err instanceof multer.MulterError ? err.code : undefined;
-        const message = err?.message === "UNSUPPORTED_MEDIA_TYPE"
+        const message = (err instanceof Error ? err.message : String(err)) === "UNSUPPORTED_MEDIA_TYPE"
           ? "UNSUPPORTED_MEDIA_TYPE"
           : code === "LIMIT_FILE_SIZE"
             ? "FILE_TOO_LARGE"
@@ -172,10 +172,11 @@ router.get("/chat/conversations", authRequired, async (req: AuthRequest, res: Re
     if (req.userType === "USER" && !req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
     if (req.userType === "STUDENT" && !req.studentId) return res.status(401).json({ message: "UNAUTHORIZED" });
 
-    const where: any = {};
+    const where: { student?: { id: number }; user?: { id: number } } = {};
     if (req.userType === "STUDENT" && req.studentId) {
       where.student = { id: req.studentId };
     } else {
+      if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
       where.user = { id: req.userId };
     }
 
@@ -202,7 +203,7 @@ router.get("/chat/conversations", authRequired, async (req: AuthRequest, res: Re
       total,
       hasMore: offset + conversations.length < total
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[support chat] failed to list conversations", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -223,7 +224,7 @@ router.post("/chat/conversations", authRequired, maybeParseMultipartFiles, async
     if (req.userType === "STUDENT" && !req.studentId) return res.status(401).json({ message: "UNAUTHORIZED" });
 
     const { subject, message } = validated.data;
-    const files = (req as any).files as any[] | undefined;
+    const files = req.files as Express.Multer.File[] | undefined;
     if (!message && (!Array.isArray(files) || files.length === 0)) {
       return res.status(400).json({ message: "TEXT_OR_FILES_REQUIRED" });
     }
@@ -262,7 +263,7 @@ router.post("/chat/conversations", authRequired, maybeParseMultipartFiles, async
     await msgRepo().save(firstMsg);
     const attachments = await saveSupportAttachments(firstMsg, files || []);
 
-    await convRepo().update({ id: conversation.id }, { lastMessageAt: firstMsg.createdAt } as any);
+    await convRepo().update({ id: conversation.id }, { lastMessageAt: firstMsg.createdAt });
 
     return res.status(201).json({
       ok: true,
@@ -275,7 +276,7 @@ router.post("/chat/conversations", authRequired, maybeParseMultipartFiles, async
         attachments
       }
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[support chat] failed to create conversation", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -292,16 +293,16 @@ router.get("/chat/conversations/:id", authRequired, async (req: AuthRequest, res
     }
 
     const conversation = await convRepo().findOne({
-      where: { id: conversationId } as any,
+      where: { id: conversationId },
       relations: ["user", "student"]
     });
     if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
 
-    const isOwner = req.userType === "STUDENT" && req.studentId ? (conversation.student as any)?.id === req.studentId : (conversation.user as any)?.id === req.userId;
+    const isOwner = req.userType === "STUDENT" && req.studentId ? (conversation.student)?.id === req.studentId : (conversation.user)?.id === req.userId;
     if (!isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const messages = await msgRepo().find({
-      where: { conversation: { id: conversation.id } } as any,
+      where: { conversation: { id: conversation.id } },
       order: { createdAt: "ASC" },
       relations: ["attachments"]
     });
@@ -328,7 +329,7 @@ router.get("/chat/conversations/:id", authRequired, async (req: AuthRequest, res
         }))
       }))
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[support chat] failed to get conversation", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -351,16 +352,16 @@ router.patch("/chat/conversations/:id/close", authRequired, async (req: AuthRequ
     }
 
     const conversation = await convRepo().findOne({
-      where: { id: conversationId } as any,
+      where: { id: conversationId },
       relations: ["user", "student"]
     });
     if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
 
-    const isOwner = req.userType === "STUDENT" && req.studentId ? (conversation.student as any)?.id === req.studentId : (conversation.user as any)?.id === req.userId;
+    const isOwner = req.userType === "STUDENT" && req.studentId ? (conversation.student)?.id === req.studentId : (conversation.user)?.id === req.userId;
     if (!isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     if (conversation.status !== "CLOSED") {
-      await convRepo().update({ id: conversation.id }, { status: "CLOSED" } as any);
+      await convRepo().update({ id: conversation.id }, { status: "CLOSED" });
 
       const reason = String(validated.data.reason ?? "").trim();
       const text = reason
@@ -373,10 +374,10 @@ router.patch("/chat/conversations/:id/close", authRequired, async (req: AuthRequ
         text
       } as Partial<SupportMessage>);
       await msgRepo().save(sys);
-      await convRepo().update({ id: conversation.id }, { lastMessageAt: sys.createdAt } as any);
+      await convRepo().update({ id: conversation.id }, { lastMessageAt: sys.createdAt });
     }
 
-    const updated = await convRepo().findOne({ where: { id: conversation.id } as any });
+    const updated = await convRepo().findOne({ where: { id: conversation.id } });
     return res.json({
       ok: true,
       conversation: {
@@ -388,7 +389,7 @@ router.patch("/chat/conversations/:id/close", authRequired, async (req: AuthRequ
         lastMessageAt: updated?.lastMessageAt ?? conversation.lastMessageAt
       }
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[support chat] failed to close conversation", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -402,22 +403,22 @@ router.patch("/chat/conversations/:id/reopen", authRequired, async (req: AuthReq
 
     const conversationId = Number.parseInt(String(req.params.id), 10);
     if (!Number.isFinite(conversationId) || conversationId <= 0) return res.status(400).json({ message: "INVALID_CONVERSATION_ID" });
-    const conversation = await convRepo().findOne({ where: { id: conversationId } as any, relations: ["user", "student"] });
+    const conversation = await convRepo().findOne({ where: { id: conversationId }, relations: ["user", "student"] });
     if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
 
     const isOwner = req.userType === "STUDENT" && req.studentId
-      ? (conversation.student as any)?.id === req.studentId
-      : (conversation.user as any)?.id === req.userId;
+      ? (conversation.student)?.id === req.studentId
+      : (conversation.user)?.id === req.userId;
     if (!isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     if (conversation.status !== "OPEN") {
-      await convRepo().update({ id: conversation.id }, { status: "OPEN" } as any);
+      await convRepo().update({ id: conversation.id }, { status: "OPEN" });
       const systemMessage = msgRepo().create({ conversation, senderType: "SYSTEM", text: "Conversation reopened by user." } as Partial<SupportMessage>);
       await msgRepo().save(systemMessage);
-      await convRepo().update({ id: conversation.id }, { lastMessageAt: systemMessage.createdAt } as any);
+      await convRepo().update({ id: conversation.id }, { lastMessageAt: systemMessage.createdAt });
     }
 
-    const updated = await convRepo().findOne({ where: { id: conversation.id } as any });
+    const updated = await convRepo().findOne({ where: { id: conversation.id } });
     return res.json({
       ok: true,
       conversation: {
@@ -429,7 +430,7 @@ router.patch("/chat/conversations/:id/reopen", authRequired, async (req: AuthReq
         lastMessageAt: updated?.lastMessageAt ?? conversation.lastMessageAt
       }
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[support chat] failed to reopen conversation", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -446,17 +447,17 @@ router.post("/chat/conversations/:id/messages", authRequired, maybeParseMultipar
     }
 
     const conversation = await convRepo().findOne({
-      where: { id: conversationId } as any,
+      where: { id: conversationId },
       relations: ["user", "student"]
     });
     if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
 
-    const isOwner = req.userType === "STUDENT" && req.studentId ? (conversation.student as any)?.id === req.studentId : (conversation.user as any)?.id === req.userId;
+    const isOwner = req.userType === "STUDENT" && req.studentId ? (conversation.student)?.id === req.studentId : (conversation.user)?.id === req.userId;
     if (!isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
     if (conversation.status === "CLOSED") return res.status(409).json({ message: "CONVERSATION_CLOSED" });
 
-    const files = (req as any).files as any[] | undefined;
-    const rawText = (req as any).body?.text;
+    const files = req.files as Express.Multer.File[] | undefined;
+    const rawText = (req).body?.text;
     const text = typeof rawText === "string" ? rawText.trim() : "";
     const hasFiles = Array.isArray(files) && files.length > 0;
     if (!text && !hasFiles) {
@@ -485,7 +486,7 @@ router.post("/chat/conversations/:id/messages", authRequired, maybeParseMultipar
 
     const savedAttachments = await saveSupportAttachments(msg, files || []);
 
-    await convRepo().update({ id: conversation.id }, { lastMessageAt: msg.createdAt } as any);
+    await convRepo().update({ id: conversation.id }, { lastMessageAt: msg.createdAt });
 
     return res.status(201).json({
       ok: true,
@@ -497,7 +498,7 @@ router.post("/chat/conversations/:id/messages", authRequired, maybeParseMultipar
         attachments: savedAttachments
       }
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[support chat] failed to post message", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -510,14 +511,14 @@ router.get("/chat/attachments/:attachmentId/download", authRequired, async (req:
       return res.status(400).json({ message: "INVALID_ATTACHMENT_ID" });
     }
     const attachment = await attRepo().findOne({
-      where: { id: attachmentId } as any,
+      where: { id: attachmentId },
       relations: ["message", "message.conversation", "message.conversation.user", "message.conversation.student"]
     });
     if (!attachment) return res.status(404).json({ message: "ATTACHMENT_NOT_FOUND" });
 
-    const conversation = (attachment.message as any)?.conversation as SupportConversation;
+    const conversation = (attachment.message)?.conversation as SupportConversation;
     const isSupportAgent = req.userRole === "SYSTEM_ADMIN" || req.userRole === "SUPPORT";
-    const isOwner = req.userType === "STUDENT" && req.studentId ? (conversation.student as any)?.id === req.studentId : (conversation.user as any)?.id === req.userId;
+    const isOwner = req.userType === "STUDENT" && req.studentId ? (conversation.student)?.id === req.studentId : (conversation.user)?.id === req.userId;
     if (!isSupportAgent && !isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const abs = path.join(UPLOADS_ROOT, ...String(attachment.storageKey).split("/"));
@@ -525,7 +526,7 @@ router.get("/chat/attachments/:attachmentId/download", authRequired, async (req:
 
     res.setHeader("Content-Type", attachment.mimeType || "application/octet-stream");
     return res.download(abs, attachment.originalName);
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[support chat] failed to download attachment", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

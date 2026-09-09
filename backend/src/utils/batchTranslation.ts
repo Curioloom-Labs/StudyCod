@@ -32,13 +32,13 @@ export async function batchTranslateMarkdownUkToEn(
         if (translated.trim().length > 0 && !looksLikeTranslationProviderErrorText(translated)) {
           out.set(item.id, translated);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.warn("[batch-translate] Translation failed", {
           requestId: options?.requestId,
           userId: options?.userId,
           context: options?.context,
           itemId: item.id,
-          error: error?.message ?? String(error)
+          error: error instanceof Error ? error.message : String(error)
         });
       }
     });

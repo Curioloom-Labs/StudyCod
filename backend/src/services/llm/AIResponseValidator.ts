@@ -24,6 +24,14 @@ const TaskGenerationSchema = z.object({
   codeTemplate: z.string().min(1, 'codeTemplate must be a non-empty string'),
 });
 
+type JsonRecord = Record<string, unknown>;
+
+function asJsonRecord(value: unknown): JsonRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as JsonRecord
+    : null;
+}
+
 function looksLikeEmptyOutputTemplate(text: string): boolean {
   const s = String(text ?? '').trim();
   if (!s) return true;
@@ -446,7 +454,7 @@ function unknownErr(err: unknown): string {
 }
 
 function emptyZod(): z.ZodError {
-  return new z.ZodError([] as any);
+  return new z.ZodError([]);
 }
 export class AIValidationError extends Error {
   public rawResponse?: unknown;
@@ -661,10 +669,10 @@ export class AIResponseValidator {
       const validated = TaskGenerationSchema.parse(fixed);
 
       // Conditional IO semantics validation.
-      const ioType = (validated as any).ioType as ("STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT");
+      const ioType = validated.ioType;
       const firstExample = Array.isArray(validated.examples) && validated.examples.length ? validated.examples[0] : null;
-      const exInput = String((firstExample as any)?.input ?? '').trim();
-      const exOutput = String((firstExample as any)?.output ?? '').trim();
+      const exInput = String(firstExample?.input ?? '').trim();
+      const exOutput = String(firstExample?.output ?? '').trim();
 
       const practical = String(validated.practicalTask ?? '').trim();
       const outFmt = String(validated.outputFormat ?? '').trim();
@@ -675,7 +683,7 @@ export class AIResponseValidator {
       // fail the whole generation.
       if (ioType !== 'STDIN_STDOUT' && !mentionsNoInput(validated.inputFormat)) {
         const practicalHasCyrillic = /[а-яіїєґ]/i.test(practical);
-        (validated as any).inputFormat = defaultNoInputFormat(practicalHasCyrillic);
+        validated.inputFormat = defaultNoInputFormat(practicalHasCyrillic);
       }
 
       const inFmt = String(validated.inputFormat ?? '').trim();
@@ -705,7 +713,7 @@ export class AIResponseValidator {
 
       if (expectedTopic) {
         const expectedTopicLower = expectedTopic.toLowerCase().trim();
-        let out: any = validated;
+        let out = validated;
         const validatedTopicLower = validated.topic.toLowerCase().trim();
         if (validatedTopicLower !== expectedTopicLower) {
           out = {
@@ -741,25 +749,27 @@ export class AIResponseValidator {
     }
   }
   private static fixTaskGenerationData(
-    data: any,
+    data: unknown,
     allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">
-  ): any {
-    if (!data || typeof data !== 'object') return data;
+  ): unknown {
+    const source = asJsonRecord(data);
+    if (!source) return data;
 
-    const fixed = { ...data };
+    const fixed: JsonRecord = { ...source };
 
-    fixed.ioType = normalizeIoType(fixed.ioType, {
-      practicalTask: fixed.practicalTask,
-      inputFormat: fixed.inputFormat,
-      outputFormat: fixed.outputFormat,
+    const normalizedIoType = normalizeIoType(fixed.ioType, {
+      practicalTask: typeof fixed.practicalTask === "string" ? fixed.practicalTask : undefined,
+      inputFormat: typeof fixed.inputFormat === "string" ? fixed.inputFormat : undefined,
+      outputFormat: typeof fixed.outputFormat === "string" ? fixed.outputFormat : undefined,
     });
+    fixed.ioType = normalizedIoType;
 
     const allowed = Array.isArray(allowedIoTypes) ? allowedIoTypes : [];
     let coercedToNoInput = false;
-    if (allowed.length > 0 && !allowed.includes(fixed.ioType)) {
+    if (allowed.length > 0 && !allowed.includes(normalizedIoType)) {
       const noInputOptions = allowed.filter((value) => value !== 'STDIN_STDOUT');
       const semanticText = `${String(fixed.practicalTask ?? '')}\n${String(fixed.inputFormat ?? '')}`;
-      const canSafelyUseNoInput = fixed.ioType === 'STDIN_STDOUT'
+      const canSafelyUseNoInput = normalizedIoType === 'STDIN_STDOUT'
         && noInputOptions.length > 0
         && !looksLikeInputRequirement(semanticText);
       if (canSafelyUseNoInput) {
@@ -794,37 +804,37 @@ export class AIResponseValidator {
     };
 
     if (Array.isArray(fixed.examples)) {
-      fixed.examples = fixed.examples
-        .filter((ex: any) => {
-          if (!ex || typeof ex !== 'object') return false;
+      let normalizedExamples = fixed.examples
+        .filter((raw): raw is JsonRecord => asJsonRecord(raw) !== null)
+        .map(raw => asJsonRecord(raw)!)
+        .filter(ex => {
           const output = String(ex.output || '').trim();
           // For NO_INPUT_* tasks, empty input is required and must be preserved.
           // For STDIN_STDOUT tasks, input may still be empty in broken model outputs; let semantic validator handle it.
           return output.length > 0;
         })
-        .map((ex: any) => ({
+        .map(ex => ({
           input: String(ex.input ?? '').trim(),
           output: String(ex.output || '').trim(),
           explanation: String(ex.explanation || '').trim() || 'Example',
         }));
 
       if (coercedToNoInput) {
-        fixed.examples = fixed.examples.map((ex: any) => ({ ...ex, input: '' }));
+        normalizedExamples = normalizedExamples.map(example => ({ ...example, input: '' }));
       }
 
-      if (fixed.examples.length === 0) {
-        fixed.examples = [defaultExample];
-      }
+      fixed.examples = normalizedExamples.length > 0 ? normalizedExamples : [defaultExample];
     } else {
       fixed.examples = [defaultExample];
     }
 
+    const normalizedExamples = fixed.examples as JsonRecord[];
     if (
       ioTypeHint === 'STDIN_STDOUT'
-      && fixed.examples.length > 0
-      && fixed.examples.every((ex: any) => String(ex?.input ?? '').trim().length === 0)
+      && normalizedExamples.length > 0
+      && normalizedExamples.every(ex => String(ex.input ?? '').trim().length === 0)
     ) {
-      fixed.examples[0].input = '1';
+      normalizedExamples[0].input = '1';
     }
 
     const stringFields = ['title', 'theoryMarkdown', 'practicalTask', 'codeTemplate'] as const;
@@ -887,7 +897,7 @@ export class AIResponseValidator {
       if (Array.isArray(data)) {
         questions = QuizResponseSchema.parse(data);
       } else if (typeof data === 'object' && data !== null && 'quizJson' in data) {
-        const quizJson = (data as any).quizJson;
+        const quizJson = (data as JsonRecord).quizJson;
         if (typeof quizJson === 'string') {
           const parsed = JSON.parse(quizJson);
           questions = QuizResponseSchema.parse(parsed);
@@ -978,9 +988,9 @@ export class AIResponseValidator {
           TestDataItemSchema.parse(test);
         } catch (err) {
           if (err instanceof z.ZodError) {
-            const errorMessages = (err.issues || []).map((e: any) => {
-              const path = e?.path ? e.path.join('.') : 'unknown';
-              const message = e?.message || 'unknown error';
+            const errorMessages = (err.issues || []).map(e => {
+              const path = e.path ? e.path.join('.') : 'unknown';
+              const message = e.message || 'unknown error';
               return `${path}: ${message}`;
             }).join('; ');
             throw new AIValidationError('generateTestData', err, `Test ${idx + 1} validation failed: ${errorMessages}`);
@@ -1036,9 +1046,9 @@ export class AIResponseValidator {
         throw error;
       }
       if (error instanceof z.ZodError) {
-        const errorMessages = (error.issues || []).map((e: any) => {
-          const path = e?.path ? e.path.join('.') : 'unknown';
-          const message = e?.message || 'unknown error';
+        const errorMessages = (error.issues || []).map(e => {
+          const path = e.path ? e.path.join('.') : 'unknown';
+          const message = e.message || 'unknown error';
           return `${path}: ${message}`;
         }).join('; ');
         throw new AIValidationError('generateTestData', error, `Test data validation failed: ${errorMessages}`);
@@ -1046,11 +1056,10 @@ export class AIResponseValidator {
       throw new AIValidationError('generateTestData', emptyZod(), `Test data validation failed: ${unknownErr(error)}`);
     }
   }
-  private static normalizeTestDataContainer(data: any): any {
+  private static normalizeTestDataContainer(data: unknown): unknown {
     if (Array.isArray(data)) return data;
-    if (typeof data === 'object' && data !== null) {
-      if ('tests' in data && Array.isArray((data as any).tests)) return (data as any).tests;
-    }
+    const record = asJsonRecord(data);
+    if (record && Array.isArray(record.tests)) return record.tests;
     return data;
   }
 }

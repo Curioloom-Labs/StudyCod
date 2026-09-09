@@ -6,6 +6,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import { logger } from '../../backend/src/utils/logger';
+import { readAIServiceConfig } from './config';
 
 // IMPORTANT: Load env only from ai-service/.env.
 // We intentionally do NOT load ../.env or ../backend/.env to avoid “external .env” surprises.
@@ -33,13 +34,21 @@ const aiServiceRoot = findAIServiceRoot(__dirname) ?? process.cwd();
 const envPath = path.join(aiServiceRoot, '.env');
 dotenv.config({ path: fs.existsSync(envPath) ? envPath : undefined, override: false });
 import { getLLMOrchestrator } from '../../backend/src/services/llm/LLMOrchestrator';
-const PORT = process.env.AI_SERVICE_PORT ? parseInt(process.env.AI_SERVICE_PORT, 10) : 3001;
-const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const { port: PORT, isProduction: IS_PRODUCTION, corsOrigins } = readAIServiceConfig();
 const app = express();
-const corsOrigins = String(process.env.CORS_ORIGIN || (IS_PRODUCTION ? '' : 'http://localhost:5173'))
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+
+function readProperty(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object") return undefined;
+  return (value as Record<string, unknown>)[key];
+}
+
+function errorMessage(error: unknown, fallback = ""): string {
+  const message = readProperty(error, "message");
+  if (typeof message === "string" && message.trim()) return message;
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback || String(error);
+}
+
 function safePreview(value: unknown, max = 200): string {
   try {
     const raw = typeof value === 'string' ? value : JSON.stringify(value);
@@ -95,7 +104,7 @@ app.post('/', async (req: Request, res: Response) => {
       });
     }
     const orchestrator = getLLMOrchestrator();
-    let result: any;
+    let result: unknown;
     const parsedParams = typeof params === 'string' ? JSON.parse(params) : params;
     if (language) {
       parsedParams.userLanguage = language;
@@ -112,10 +121,11 @@ app.post('/', async (req: Request, res: Response) => {
         break;
       case 'generate-task-condition':
         result = await orchestrator.generateTaskCondition(parsedParams);
+        const description = readProperty(result, "description");
         logger.info('[AI Service] generateTaskCondition result', {
-          hasDescription: !!result?.description,
-          descriptionType: typeof result?.description,
-          descriptionLength: result?.description?.length,
+          hasDescription: typeof description === "string" && description.length > 0,
+          descriptionType: typeof description,
+          descriptionLength: typeof description === "string" ? description.length : undefined,
           fullResult: safePreview(result)
         });
         break;
@@ -174,11 +184,11 @@ app.post('/', async (req: Request, res: Response) => {
       success: true,
       data: result
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('[AI Service] Unified endpoint error', { error });
     res.status(500).json({
       success: false,
-      error: error.message || 'AI generation failed'
+      error: errorMessage(error, 'AI generation failed')
     });
   }
 });
@@ -199,11 +209,11 @@ app.post('/api/v1/generate-task', async (req: Request, res: Response) => {
       success: true,
       data: result
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('[AI Service] generateTask error', { error });
     res.status(500).json({
       success: false,
-      error: error.message || 'AI generation failed'
+      error: errorMessage(error, 'AI generation failed')
     });
   }
 });
@@ -224,11 +234,11 @@ app.post('/api/v1/generate-theory', async (req: Request, res: Response) => {
       success: true,
       data: result
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('[AI Service] generateTheory error', { error });
     res.status(500).json({
       success: false,
-      error: error.message || 'AI generation failed'
+      error: errorMessage(error, 'AI generation failed')
     });
   }
 });
@@ -249,11 +259,11 @@ app.post('/api/v1/generate-quiz', async (req: Request, res: Response) => {
       success: true,
       data: result
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('[AI Service] generateQuiz error', { error });
     res.status(500).json({
       success: false,
-      error: error.message || 'AI generation failed'
+      error: errorMessage(error, 'AI generation failed')
     });
   }
 });
@@ -274,11 +284,11 @@ app.post('/api/v1/generate-task-condition', async (req: Request, res: Response) 
       success: true,
       data: result
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('[AI Service] generateTaskCondition error', { error });
     res.status(500).json({
       success: false,
-      error: error.message || 'AI generation failed'
+      error: errorMessage(error, 'AI generation failed')
     });
   }
 });
@@ -299,11 +309,11 @@ app.post('/api/v1/generate-task-template', async (req: Request, res: Response) =
       success: true,
       data: result
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('[AI Service] generateTaskTemplate error', { error });
     res.status(500).json({
       success: false,
-      error: error.message || 'AI generation failed'
+      error: errorMessage(error, 'AI generation failed')
     });
   }
 });
@@ -324,19 +334,19 @@ app.post('/api/v1/generate-test-data', async (req: Request, res: Response) => {
       success: true,
       data: result
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error('[AI Service] generateTestData error', { error });
     res.status(500).json({
       success: false,
-      error: error.message || 'AI generation failed'
+      error: errorMessage(error, 'AI generation failed')
     });
   }
 });
-app.use((err: any, _req: Request, res: Response, _next: express.NextFunction) => {
+app.use((err: unknown, _req: Request, res: Response, _next: express.NextFunction) => {
   logger.error('[AI Service] Unhandled error', { err });
   res.status(500).json({
     success: false,
-    error: IS_PRODUCTION ? 'Internal server error' : err.message
+    error: IS_PRODUCTION ? 'Internal server error' : errorMessage(err, 'AI generation failed')
   });
 });
 app.listen(PORT, () => {

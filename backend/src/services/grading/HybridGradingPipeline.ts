@@ -22,7 +22,7 @@ export class HybridGradingPipeline implements IHybridGradingPipeline {
         if (error instanceof Error && error.message.includes("not yet implemented")) {
           astAnalysis = this.createNeutralASTResult();
         } else {
-          logger.warn('[grading] ast analysis failed', { message: (error as any)?.message });
+          logger.warn('[grading] ast analysis failed', { message: error instanceof Error ? error.message : String(error) });
           astAnalysis = this.createNeutralASTResult();
         }
       }
@@ -33,8 +33,8 @@ export class HybridGradingPipeline implements IHybridGradingPipeline {
       if (!config.llmCritique.onlyIfTestsPass || testResults.passed) {
         try {
           llmCritique = await this.llmCritic.critique(submission, taskDescription);
-        } catch (error: any) {
-          logger.warn('[grading] llm critique failed', { message: error?.message });
+        } catch (error: unknown) {
+          logger.warn('[grading] llm critique failed', { message: error instanceof Error ? error.message : String(error) });
           llmCritique = this.createNeutralLLMResult();
         }
       }

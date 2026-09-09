@@ -77,7 +77,7 @@ async function calculateControlGradeForNewSystemWithManager(
 
     const latestByTaskId = new Map<number, EduGrade>();
     for (const g of allTaskGrades) {
-      const tid = (g as any).topicTask?.id;
+      const tid = g.topicTask?.id;
       if (!tid) continue;
       if (!latestByTaskId.has(tid)) {
         latestByTaskId.set(tid, g);
@@ -197,11 +197,11 @@ export async function saveControlSummaryGradeForNewSystemWithManager(
     .getOne();
 
   if (summaryGrade) {
-    summaryGrade.controlWork = { id: controlWorkId } as any;
-    summaryGrade.topic = { id: controlWork.topic.id } as any;
+    summaryGrade.controlWork = controlWork;
+    summaryGrade.topic = controlWork.topic;
     summaryGrade.assessmentType = AssessmentType.CONTROL;
     if (controlWork.topic.class?.id) {
-      summaryGrade.class = { id: controlWork.topic.class.id } as any;
+      summaryGrade.class = controlWork.topic.class;
     }
     if (!summaryGrade.name) {
       summaryGrade.name = controlWork.title || `Контрольна робота #${controlWorkId}`;
@@ -220,10 +220,10 @@ export async function saveControlSummaryGradeForNewSystemWithManager(
     }
 
     summaryGrade = summaryGradeRepoManager.create({
-      student: { id: studentId } as any,
-      class: { id: controlWork.topic.class.id } as any,
-      controlWork: { id: controlWorkId } as any,
-      topic: { id: controlWork.topic.id } as any,
+      student: { id: studentId },
+      class: { id: controlWork.topic.class.id },
+      controlWork: { id: controlWorkId },
+      topic: { id: controlWork.topic.id },
       name: controlWork.title || `Контрольна робота #${controlWorkId}`,
       assessmentType: AssessmentType.CONTROL,
       grade: gradeData.finalGrade,
@@ -291,7 +291,7 @@ export async function markControlWorkAttemptCompletedIfReadyWithManager(
       const attemptsByTaskId = new Map<number, number>();
 
       for (const grade of allTaskGrades) {
-        const topicTaskId = (grade as any).topicTask?.id;
+        const topicTaskId = grade.topicTask?.id;
         if (!topicTaskId) continue;
         if (!latestByTaskId.has(topicTaskId)) {
           latestByTaskId.set(topicTaskId, grade);

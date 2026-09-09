@@ -21,6 +21,11 @@ import { logger } from "../../utils/logger";
  * computed from real grades via services/edu/gradebookCalc.ts.
  */
 const router = Router();
+type RawGradebookRow = Record<string, unknown>;
+
+function isRecord(value: unknown): value is RawGradebookRow {
+  return typeof value === "object" && value !== null;
+}
 const classRepo = () => AppDataSource.getRepository(Class);
 const taskRepo = () => AppDataSource.getRepository(EduTask);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
@@ -48,7 +53,7 @@ router.get("/classes/:classId/gradebook-config", authRequired, async (req: AuthR
     const cls = await loadOwnedClass(req);
     if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
     return res.json({ config: cls.gradebookConfig ?? null });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/gradebookConfig] get failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -72,7 +77,7 @@ router.put("/classes/:classId/gradebook-config", authRequired, async (req: AuthR
     cls.gradebookConfig = normalized;
     await classRepo().save(cls);
     return res.json({ config: normalized });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/gradebookConfig] put failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -86,14 +91,14 @@ router.post("/classes/:classId/gradebook-config/preview", authRequired, async (r
     if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
     if (!cls.gradebookConfig) return res.status(409).json({ message: "NO_GRADEBOOK_CONFIG" });
 
-    const grades = Array.isArray(req.body?.grades) ? req.body.grades : [];
+    const grades: unknown[] = Array.isArray(req.body?.grades) ? req.body.grades : [];
     const sanitized = grades
-      .filter((g: any) => g && typeof g.categoryId === "string")
-      .map((g: any) => ({ categoryId: g.categoryId, percent: Number(g.percent) }));
+      .filter((g): g is RawGradebookRow => isRecord(g) && typeof g.categoryId === "string")
+      .map((g) => ({ categoryId: String(g.categoryId), percent: Number(g.percent) }));
 
     const result = computeWeightedGrade(cls.gradebookConfig, sanitized);
     return res.json({ result });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/gradebookConfig] preview failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -106,17 +111,21 @@ router.get("/classes/:classId/gradebook/tasks", authRequired, async (req: AuthRe
     const cls = await loadOwnedClass(req);
     if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
 
-    const rows = await taskRepo()
+    const rows = (await taskRepo()
       .createQueryBuilder("task")
       .innerJoin("task.lesson", "lesson")
       .where("lesson.class_id = :classId", { classId: cls.id })
       .select(["task.id AS id", "task.title AS title", "task.gradebook_category_id AS categoryId"])
-      .getRawMany();
+      .getRawMany()) as RawGradebookRow[];
 
     return res.json({
-      tasks: rows.map((r: any) => ({ id: Number(r.id), title: r.title, categoryId: r.categoryId ?? null }))
+      tasks: rows.map((r) => ({
+        id: Number(r.id),
+        title: typeof r.title === "string" ? r.title : String(r.title ?? ""),
+        categoryId: typeof r.categoryId === "string" ? r.categoryId : r.categoryId == null ? null : String(r.categoryId)
+      }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/gradebookConfig] list tasks failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -150,7 +159,7 @@ router.put("/tasks/:taskId/gradebook-category", authRequired, async (req: AuthRe
     task.gradebookCategoryId = categoryId || null;
     await taskRepo().save(task);
     return res.json({ taskId: task.id, gradebookCategoryId: task.gradebookCategoryId });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/gradebookConfig] tag task failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -167,7 +176,7 @@ router.get("/classes/:classId/gradebook/student/:studentId/final", authRequired,
     if (!Number.isFinite(studentId)) return res.status(400).json({ message: "INVALID_ID" });
 
     // Graded tasks (with a category) in this class for this student.
-    const rows = await gradeRepo()
+    const rows = (await gradeRepo()
       .createQueryBuilder("grade")
       .innerJoin("grade.task", "task")
       .innerJoin("task.lesson", "lesson")
@@ -176,10 +185,13 @@ router.get("/classes/:classId/gradebook/student/:studentId/final", authRequired,
       .andWhere("task.gradebook_category_id IS NOT NULL")
       .andWhere("grade.total IS NOT NULL")
       .select(["grade.total AS total", "task.gradebook_category_id AS categoryId"])
-      .getRawMany();
+      .getRawMany()) as RawGradebookRow[];
 
     const categoryGrades = mapGradesToCategoryGrades(
-      rows.map((r: any) => ({ categoryId: r.categoryId, total: Number(r.total) }))
+      rows.map((r) => ({
+        categoryId: typeof r.categoryId === "string" ? r.categoryId : r.categoryId == null ? null : String(r.categoryId),
+        total: Number(r.total)
+      }))
     );
     const result = computeWeightedGrade(cls.gradebookConfig, categoryGrades);
     const display =
@@ -188,7 +200,7 @@ router.get("/classes/:classId/gradebook/student/:studentId/final", authRequired,
         : formatGradeForSystem(result.final, cls.gradingSystem || DEFAULT_GRADING_SYSTEM, normalizeScaleMode(cls.gradeScaleMode));
 
     return res.json({ final: result.final, display, categories: result.categories });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/gradebookConfig] student final failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -211,10 +223,10 @@ router.get("/classes/:classId/gradebook/finals", authRequired, async (req: AuthR
     const studentIds = students.map((s) => s.id);
 
     // Graded, category-tagged tasks in this class for the whole roster.
-    const rows =
+    const rows: RawGradebookRow[] =
       studentIds.length === 0
         ? []
-        : await gradeRepo()
+        : (await gradeRepo()
             .createQueryBuilder("grade")
             .innerJoin("grade.task", "task")
             .innerJoin("task.lesson", "lesson")
@@ -222,11 +234,15 @@ router.get("/classes/:classId/gradebook/finals", authRequired, async (req: AuthR
             .andWhere("task.gradebook_category_id IS NOT NULL")
             .andWhere("grade.total IS NOT NULL")
             .select(["grade.student_id AS studentId", "grade.total AS total", "task.gradebook_category_id AS categoryId"])
-            .getRawMany();
+            .getRawMany()) as RawGradebookRow[];
 
     const finals = computeClassWeightedFinals(
       cls.gradebookConfig,
-      rows.map((r: any) => ({ studentId: Number(r.studentId), categoryId: r.categoryId, total: Number(r.total) })),
+      rows.map((r) => ({
+        studentId: Number(r.studentId),
+        categoryId: typeof r.categoryId === "string" ? r.categoryId : r.categoryId == null ? null : String(r.categoryId),
+        total: Number(r.total)
+      })),
       studentIds
     );
     const finalById = new Map(finals.map((f) => [f.studentId, f]));
@@ -246,7 +262,7 @@ router.get("/classes/:classId/gradebook/finals", authRequired, async (req: AuthR
         };
       })
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/gradebookConfig] class finals failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

@@ -27,11 +27,11 @@ export type ScheduleOptions = {
   label?: string;
 };
 
-type QueuedTask<T> = {
+type QueuedTask = {
   enqueuedAt: number;
   options: ScheduleOptions;
-  run: () => Promise<T>;
-  resolve: (v: T) => void;
+  run: () => Promise<unknown>;
+  resolve: (v: unknown) => void;
   reject: (e: unknown) => void;
   onAbort?: () => void;
 };
@@ -48,7 +48,7 @@ export class ExecutionScheduler {
   private active = 0;
   private peakActive = 0;
   private peakQueueLength = 0;
-  private readonly queue: Array<QueuedTask<any>> = [];
+  private readonly queue: QueuedTask[] = [];
 
   private started = 0;
   private completed = 0;
@@ -100,7 +100,7 @@ export class ExecutionScheduler {
           maxQueueSize: s.maxQueueSize,
         });
       }, interval);
-      (this.logTimer as any).unref?.();
+      this.logTimer.unref?.();
     }
   }
 
@@ -142,7 +142,7 @@ export class ExecutionScheduler {
   schedule<T>(run: () => Promise<T>, options: ScheduleOptions = {}): Promise<T> {
     const signal = options.signal;
     if (signal?.aborted) {
-      const reason = (signal as any)?.reason;
+      const reason = signal.reason;
       return Promise.reject(reason ?? new Error("ABORTED"));
     }
 
@@ -165,11 +165,11 @@ export class ExecutionScheduler {
     }
 
     return new Promise<T>((resolve, reject) => {
-      const task: QueuedTask<T> = {
+      const task: QueuedTask = {
         enqueuedAt: nowMs(),
         options,
-        run,
-        resolve,
+        run: async () => run(),
+        resolve: value => resolve(value as T),
         reject,
       };
 
@@ -177,7 +177,7 @@ export class ExecutionScheduler {
         const onAbort = () => {
           const idx = this.queue.indexOf(task);
           if (idx >= 0) this.queue.splice(idx, 1);
-          reject((signal as any)?.reason ?? new Error("ABORTED"));
+          reject(signal.reason ?? new Error("ABORTED"));
         };
         task.onAbort = onAbort;
         try {
@@ -203,7 +203,7 @@ export class ExecutionScheduler {
     return (async () => {
       try {
         if (signal?.aborted) {
-          const reason = (signal as any)?.reason;
+          const reason = signal.reason;
           throw reason ?? new Error("ABORTED");
         }
         return await run();
@@ -243,7 +243,7 @@ export class ExecutionScheduler {
       }
 
       if (task.options.signal?.aborted) {
-        const reason = (task.options.signal as any)?.reason;
+        const reason = task.options.signal.reason;
         task.reject(reason ?? new Error("ABORTED"));
         continue;
       }

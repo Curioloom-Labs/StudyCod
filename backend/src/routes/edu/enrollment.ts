@@ -14,6 +14,10 @@ import { logger } from "../../utils/logger";
  */
 const router = Router();
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 // Teacher reads their class's current join code.
 router.get("/classes/:classId/join-code", authRequired, async (req: AuthRequest, res: Response) => {
   try {
@@ -26,7 +30,7 @@ router.get("/classes/:classId/join-code", authRequired, async (req: AuthRequest,
     if (!access || !access.allowed) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
     const cls = access.cls;
     return res.json({ joinCode: cls.joinCode ?? null });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/enrollment] get join code failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -59,7 +63,7 @@ router.post("/classes/:classId/join-code", authRequired, async (req: AuthRequest
       ip: req.ip
     });
     return res.json({ joinCode: code });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/enrollment] set join code failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -89,13 +93,13 @@ router.post("/classes/join", authRequired, async (req: AuthRequest, res: Respons
         });
       }
       return res.status(result.alreadyEnrolled ? 200 : 201).json({ enrollment: result });
-    } catch (e: any) {
-      const msg = String(e?.message || "");
+    } catch (e: unknown) {
+      const msg = errorMessage(e);
       if (msg === "INVALID_CODE") return res.status(404).json({ message: "INVALID_CODE" });
       if (msg === "USER_NOT_FOUND") return res.status(401).json({ message: "UNAUTHORIZED" });
       throw e;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/enrollment] enroll failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -130,15 +134,15 @@ router.post("/students/claim", authRequired, async (req: AuthRequest, res: Respo
         });
       }
       return res.status(result.alreadyClaimed ? 200 : 201).json({ claim: result });
-    } catch (e: any) {
-      const msg = String(e?.message || "");
+    } catch (e: unknown) {
+      const msg = errorMessage(e);
       if (msg === "INVALID_CREDENTIALS") return res.status(401).json({ message: "INVALID_CREDENTIALS" });
       if (msg === "ALREADY_CLAIMED") return res.status(409).json({ message: "ALREADY_CLAIMED" });
       if (msg === "INVALID_INPUT") return res.status(400).json({ message: "INVALID_INPUT" });
       if (msg === "USER_NOT_FOUND") return res.status(401).json({ message: "UNAUTHORIZED" });
       throw e;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/enrollment] claim failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

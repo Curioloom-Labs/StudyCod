@@ -4,6 +4,7 @@ import { ArrowRight, BookOpen, CheckCircle2, Clock3, GraduationCap, NotebookTabs
 import { getStudentGrades, getStudentLessons, type Grade, type Lesson } from "../../lib/api/edu";
 import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, gradingSystemLabel, normalizeGradingSystem, normalizeScaleMode, type ClassGradingSystem, type GradeScaleMode } from "../../lib/gradingSystems";
 import type { User } from "../../types";
+import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
       setSummaryGrades((nextGrades.summaryGrades || []) as typeof summaryGrades);
       setGradingSystem(normalizeGradingSystem(nextGrades.gradingSystem || DEFAULT_GRADING_SYSTEM));
       setScaleMode(normalizeScaleMode(nextGrades.gradeScaleMode));
-    }).catch((cause: any) => {
+    }).catch((cause: unknown) => {
       if (!active) return;
       if (isPreview) {
         setLessons([
@@ -43,7 +44,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
         ]);
         setSummaryGrades([{ id: -1, name: "Тематична · Колекції", grade: 83, topicTitle: "Колекції та словники" }]);
       } else {
-        setError(String(cause?.response?.data?.message || cause?.message || "Не вдалося завантажити журнал."));
+        setError(getErrorMessageFromUnknown(cause, "Не вдалося завантажити журнал."));
       }
     }).finally(() => active && setLoading(false));
 

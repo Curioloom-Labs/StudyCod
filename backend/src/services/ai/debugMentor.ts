@@ -126,8 +126,8 @@ ${transcript || "Учень: (ще нічого не написав)"}
     const raw = await provider.generateText(prompt, SYSTEM_PROMPT, { temperature: 0.3, maxTokens: 320 });
     const reply = stripCodeFromMentorReply(raw).slice(0, 1200).trim();
     if (reply) return { reply, source: "ai" };
-  } catch (err: any) {
-    logger.debug("[debugMentor] AI reply failed, using deterministic fallback", { error: err?.message });
+  } catch (err: unknown) {
+    logger.debug("[debugMentor] AI reply failed, using deterministic fallback", { error: err instanceof Error ? err.message : String(err) });
   }
   return { reply: deterministicReply(params.context, history), source: "deterministic" };
 }

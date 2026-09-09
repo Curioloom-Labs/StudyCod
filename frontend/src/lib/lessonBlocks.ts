@@ -29,41 +29,52 @@ const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const cleanList = (v: unknown): string[] =>
   Array.isArray(v) ? v.map(x => (typeof x === "string" ? x.trim() : "")).filter(Boolean) : [];
 
-function normalizeBlock(raw: any): LessonBlock | null {
-  if (!raw || typeof raw !== "object") return null;
-  switch (raw.type) {
+function recordOf(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function normalizeBlock(raw: unknown): LessonBlock | null {
+  const block = recordOf(raw);
+  if (!block) return null;
+  switch (block.type) {
     case "prose": {
-      const markdown = str(raw.markdown).trim();
+      const markdown = str(block.markdown).trim();
       return markdown ? { type: "prose", markdown } : null;
     }
     case "callout": {
-      const markdown = str(raw.markdown).trim();
+      const markdown = str(block.markdown).trim();
       if (!markdown) return null;
-      const variant = raw.variant === "tip" || raw.variant === "warning" ? raw.variant : "info";
+      const variant = block.variant === "tip" || block.variant === "warning" ? block.variant : "info";
       return { type: "callout", variant, markdown };
     }
     case "code": {
-      const code = str(raw.code);
+      const code = str(block.code);
       if (!code.trim()) return null;
-      return { type: "code", language: str(raw.language) || "text", code, caption: str(raw.caption) || undefined };
+      return { type: "code", language: str(block.language) || "text", code, caption: str(block.caption) || undefined };
     }
     case "keypoints": {
-      const items = cleanList(raw.items);
+      const items = cleanList(block.items);
       return items.length ? { type: "keypoints", items } : null;
     }
     case "runnable": {
-      const code = str(raw.code);
+      const code = str(block.code);
       if (!code.trim()) return null;
-      const language = RUNNABLE_LANGS.includes(raw.language) ? (raw.language as RunnableLanguage) : "PYTHON";
-      return { type: "runnable", language, code, prompt: str(raw.prompt).trim() || undefined };
+      const language = typeof block.language === "string" && RUNNABLE_LANGS.includes(block.language as RunnableLanguage)
+        ? block.language as RunnableLanguage
+        : "PYTHON";
+      return { type: "runnable", language, code, prompt: str(block.prompt).trim() || undefined };
     }
     case "check": {
-      const question = str(raw.question).trim();
-      const options = cleanList(raw.options);
+      const question = str(block.question).trim();
+      const options = cleanList(block.options);
       if (!question || options.length < 2) return null;
       const correct =
-        Number.isInteger(raw.correct) && raw.correct >= 0 && raw.correct < options.length ? raw.correct : 0;
-      return { type: "check", question, options, correct, explanation: str(raw.explanation).trim() || undefined };
+        Number.isInteger(block.correct) && Number(block.correct) >= 0 && Number(block.correct) < options.length
+          ? Number(block.correct)
+          : 0;
+      return { type: "check", question, options, correct, explanation: str(block.explanation).trim() || undefined };
     }
     default:
       return null;
@@ -76,7 +87,7 @@ function normalizeBlock(raw: any): LessonBlock | null {
  * back to legacy markdown theory.
  */
 export function normalizeInteractiveLesson(raw: unknown): InteractiveLesson | null {
-  let obj: any = raw;
+  let obj: unknown = raw;
   if (typeof raw === "string") {
     const trimmed = raw.trim();
     if (!trimmed.startsWith("{")) return null;
@@ -86,17 +97,19 @@ export function normalizeInteractiveLesson(raw: unknown): InteractiveLesson | nu
       return null;
     }
   }
-  if (!obj || typeof obj !== "object") return null;
+  const root = recordOf(obj);
+  if (!root) return null;
 
   const sections: LessonSection[] = [];
-  for (const s of Array.isArray(obj.sections) ? obj.sections : []) {
-    if (!s || typeof s !== "object") continue;
-    const blocks = (Array.isArray(s.blocks) ? s.blocks : [])
+  for (const rawSection of Array.isArray(root.sections) ? root.sections : []) {
+    const section = recordOf(rawSection);
+    if (!section) continue;
+    const blocks = (Array.isArray(section.blocks) ? section.blocks : [])
       .map(normalizeBlock)
       .filter((b: LessonBlock | null): b is LessonBlock => b !== null);
-    if (blocks.length) sections.push({ heading: str(s.heading).trim(), blocks });
+    if (blocks.length) sections.push({ heading: str(section.heading).trim(), blocks });
   }
   if (sections.length === 0) return null;
 
-  return { objectives: cleanList(obj.objectives), sections, summary: cleanList(obj.summary) };
+  return { objectives: cleanList(root.objectives), sections, summary: cleanList(root.summary) };
 }

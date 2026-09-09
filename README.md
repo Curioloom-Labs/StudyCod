@@ -339,6 +339,23 @@ npm run db:migrate                      # apply pending migrations
 npm run db:bootstrap-migration-history  # stamp legacy schema into migration history (once)
 ```
 
+CI also runs two disposable runtime contracts. The browser contract builds the frontend,
+serves its production preview, and checks the public shell with Playwright. The database
+contract uses a fresh MySQL service, explicitly synchronizes the current entity schema, and
+then checks critical tables, indexes, and hot-path query plans:
+
+```bash
+DB_CONTRACT_DATABASE_URL=mysql://root:root@127.0.0.1:3306/studycod_contract \
+DB_CONTRACT_BOOTSTRAP_SCHEMA=1 npm run db:contract:bootstrap
+DB_CONTRACT_DATABASE_URL=mysql://root:root@127.0.0.1:3306/studycod_contract \
+DB_CONTRACT_REQUIRED=1 npm run test:db-contract
+```
+
+The bootstrap command is intentionally limited to an isolated contract database. It is not a
+replacement for `db:migrate`: this repository still relies on the existing production schema
+or a legacy baseline for the earliest migrations, so CI does not pretend to prove a clean
+historical migration replay from an absent baseline dump.
+
 ---
 
 ## The Judge (code execution & sandboxing)
@@ -372,6 +389,11 @@ Overload returns `503` with a `Retry-After` header.
 npm run test:judge-contract   # backend ↔ judge request/response contract
 npm run test:db-contract      # DB contract
 ```
+
+`test:judge-contract` runs the real scoring path only on Linux with `nsjail`, the configured
+judge worker, and an available sandbox rootfs; on Windows it intentionally reports a skipped
+contract. The package-level CI job still verifies the judge build/configuration, while the full
+runtime contract belongs on the Linux judge host or a CI runner provisioned with that toolchain.
 
 ---
 

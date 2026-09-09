@@ -1,6 +1,7 @@
 import { JudgeLimits } from "./result";
 import type { LanguageId } from "../languages/types";
 import { LANGUAGES } from "../languages/registry";
+import { readMaxOutputLimitKb } from "../config";
 export interface ResolvedLimits {
   timeLimitMs: number;
   memoryLimitBytes: number;
@@ -26,8 +27,7 @@ export function validateAndResolveLimits(language: LanguageId, limits: JudgeLimi
   }
   // Output cap is configurable: tasks with large expected output need a higher ceiling.
   // Actual stdout is buffered in memory up to this bound, so keep a sane absolute max.
-  const maxOutKbRaw = parseInt(String(process.env.JUDGE_MAX_OUTPUT_LIMIT_KB ?? ""), 10);
-  const maxOutKb = Number.isFinite(maxOutKbRaw) && maxOutKbRaw > 0 ? Math.min(maxOutKbRaw, 256 * 1024) : 64 * 1024;
+  const maxOutKb = readMaxOutputLimitKb();
   if (!Number.isFinite(outKb) || outKb < 1 || outKb > maxOutKb) {
     throw new Error(`INVALID_LIMITS: output_limit_kb must be 1..${maxOutKb}`);
   }

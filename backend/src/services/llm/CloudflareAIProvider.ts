@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { logger } from '../../utils/logger';
+import { env } from '../../env';
 interface CloudflareWorkerRequest {
   mode: string;
   language: "uk" | "en";
@@ -18,9 +19,21 @@ interface CloudflareWorkerResponse {
 }
 interface ExpressServiceResponse {
   success?: boolean;
-  data?: any;
+  data?: unknown;
   error?: string;
 }
+
+type JsonRecord = Record<string, unknown>;
+type FallbackError = Error & { shouldFallback?: boolean };
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export class CloudflareAIProvider implements LLMProvider {
   private buildTaskConditionPrompt(params: {
     topicTitle: string;
@@ -155,7 +168,7 @@ ${JSON.stringify(schema, null, 2)}
       traceId = `trace-${randomUUID()}`,
       signal
     } = options;
-    const url = process.env.CLOUDFLARE_AI_URL;
+    const url = env.CLOUDFLARE_AI_URL;
     if (!url) {
       throw new Error('AI_GENERATION_FAILED: CLOUDFLARE_AI_URL not configured');
     }
@@ -186,7 +199,7 @@ ${JSON.stringify(schema, null, 2)}
           else signal.addEventListener('abort', onAbort, { once: true });
         }
         logger.debug('[cf-ai] request', { ...logContext, attempt: attempt + 1 });
-        const internalSecret = String(process.env.CLOUDFLARE_AI_INTERNAL_SECRET ?? '').trim();
+        const internalSecret = String(env.CLOUDFLARE_AI_INTERNAL_SECRET ?? '').trim();
         const response = await fetch(url, {
           method: 'POST',
           headers: {
@@ -209,8 +222,8 @@ ${JSON.stringify(schema, null, 2)}
             error: String(errorText).slice(0, 2000)
           });
           if (response.status === 502) {
-            const fallbackError = new Error(`AI_GENERATION_FAILED: Cloudflare Worker returned 502 (Bad Gateway). Fallback to OpenRouter.`);
-            (fallbackError as any).shouldFallback = true;
+            const fallbackError = new Error(`AI_GENERATION_FAILED: Cloudflare Worker returned 502 (Bad Gateway). Fallback to OpenRouter.`) as FallbackError;
+            fallbackError.shouldFallback = true;
             throw fallbackError;
           }
           if (response.status >= 400 && response.status < 500) {
@@ -225,13 +238,13 @@ ${JSON.stringify(schema, null, 2)}
           }
           throw error;
         }
-        const rawData = await response.json();
+        const rawData: unknown = await response.json();
         const isArray = Array.isArray(rawData);
-        const isObject = rawData && typeof rawData === 'object' && !isArray;
+        const rawRecord = isJsonRecord(rawData) ? rawData : null;
         logger.debug('[cf-ai] response', {
           ...logContext,
           attempt: attempt + 1,
-          shape: isArray ? `array:${rawData.length}` : isObject ? 'object' : typeof rawData
+          shape: isArray ? `array:${rawData.length}` : rawRecord ? 'object' : typeof rawData
         });
         if (isArray && mode === 'generate-test-data') {
           const content = JSON.stringify(rawData);
@@ -240,10 +253,10 @@ ${JSON.stringify(schema, null, 2)}
           };
           return data;
         }
-        if (isObject && !('success' in rawData) && !('content' in rawData)) {
-          if ('task_condition' in rawData || 'theory_md' in rawData || 'description' in rawData || 'questions' in rawData || 'quizJson' in rawData) {
+        if (rawRecord && !('success' in rawRecord) && !('content' in rawRecord)) {
+          if ('task_condition' in rawRecord || 'theory_md' in rawRecord || 'description' in rawRecord || 'questions' in rawRecord || 'quizJson' in rawRecord) {
             let content: string | undefined;
-            const legacy: any = rawData as any;
+            const legacy = rawRecord;
             if (mode === 'generate-task-condition' && legacy.task_condition) {
               content = typeof legacy.task_condition === 'string' ? legacy.task_condition : JSON.stringify(legacy.task_condition);
             } else if (mode === 'generate-task-condition' && legacy.description) {
@@ -258,7 +271,7 @@ ${JSON.stringify(schema, null, 2)}
               content = JSON.stringify(rawData);
             }
             if (!content) {
-              logger.error('[cf-ai] extract failed (legacy)', { ...logContext, mode, keys: Object.keys(rawData) });
+              logger.error('[cf-ai] extract failed (legacy)', { ...logContext, mode, keys: Object.keys(rawRecord) });
               throw new Error(`AI_GENERATION_FAILED: Empty response from CloudflareAI (mode: ${mode}, old format)`);
             }
             const data: CloudflareWorkerResponse = {
@@ -267,18 +280,19 @@ ${JSON.stringify(schema, null, 2)}
             return data;
           }
         }
-        if (rawData && typeof rawData === 'object' && 'success' in rawData) {
-          const expressResponse = rawData as ExpressServiceResponse;
+        if (rawRecord && 'success' in rawRecord) {
+          const expressResponse = rawRecord as ExpressServiceResponse;
           if (!expressResponse.success) {
             logger.warn('[cf-ai] api error', { ...logContext, error: expressResponse.error || 'unknown' });
             throw new Error(`AI_GENERATION_FAILED: ${expressResponse.error || 'Unknown error'}`);
           }
 
           const d = expressResponse.data;
+          const dataRecord = isJsonRecord(d) ? d : null;
           let content: string | undefined;
 
           if (d != null) {
-            const obj = d as any;
+            const obj = dataRecord;
             if (mode === 'generate-task-condition' && obj?.description != null) {
               content = typeof obj.description === 'string' ? obj.description : JSON.stringify(obj.description);
             } else if (mode === 'generate-theory' && obj?.theory != null) {
@@ -293,8 +307,8 @@ ${JSON.stringify(schema, null, 2)}
               content = typeof d === 'string' ? d : JSON.stringify(d);
             } else if (typeof d === 'string') {
               content = d;
-            } else if (d && typeof d === 'object') {
-              for (const value of Object.values(d)) {
+            } else if (obj) {
+              for (const value of Object.values(obj)) {
                 if (typeof value === 'string' && value.trim().length > 0) {
                   content = value;
                   break;
@@ -308,7 +322,7 @@ ${JSON.stringify(schema, null, 2)}
               ...logContext,
               mode,
               dataType: d == null ? null : typeof d,
-              keys: d && typeof d === 'object' ? Object.keys(d) : null
+              keys: dataRecord ? Object.keys(dataRecord) : null
             });
             throw new Error(`AI_GENERATION_FAILED: Empty response from CloudflareAI (mode: ${mode})`);
           }
@@ -316,8 +330,8 @@ ${JSON.stringify(schema, null, 2)}
           return { content };
         }
 
-        if (rawData && typeof rawData === 'object') {
-          const data = rawData as CloudflareWorkerResponse;
+        if (rawRecord) {
+          const data = rawRecord as CloudflareWorkerResponse;
           if (data.error) {
             logger.warn('[cf-ai] api error', { ...logContext, error: data.error });
             throw new Error(`AI_GENERATION_FAILED: ${data.error}`);
@@ -335,15 +349,16 @@ ${JSON.stringify(schema, null, 2)}
 
         logger.error('[cf-ai] unexpected response', { ...logContext, mode, type: typeof rawData });
         throw new Error(`AI_GENERATION_FAILED: Unexpected response from CloudflareAI (mode: ${mode})`);
-      } catch (err: any) {
-        if (signal && err?.name === 'AbortError' && signal.aborted) {
+      } catch (err: unknown) {
+        const normalizedError = err instanceof Error ? err : new Error(errorMessage(err));
+        if (signal && normalizedError.name === 'AbortError' && signal.aborted) {
           throw new Error('AI_GENERATION_FAILED: Request aborted (deadline exceeded)');
         }
-        lastError = err;
-        if (err.shouldFallback) {
-          throw err;
+        lastError = normalizedError;
+        if ((normalizedError as FallbackError).shouldFallback) {
+          throw normalizedError;
         }
-        if (err.name === 'AbortError' || err.message?.includes('timeout')) {
+        if (normalizedError.name === 'AbortError' || normalizedError.message.includes('timeout')) {
           logger.warn('[cf-ai] timeout', { ...logContext, attempt: attempt + 1 });
           if (attempt < maxRetries) {
             const delay = Math.min(1000 * Math.pow(2, attempt), 2000);
@@ -353,18 +368,19 @@ ${JSON.stringify(schema, null, 2)}
           }
           throw new Error('AI_GENERATION_FAILED: Request timeout (20s exceeded)');
         }
-        if (err.message?.includes('AI_GENERATION_FAILED') && err.message?.includes('HTTP 4')) {
-          throw err;
+        if (normalizedError.message.includes('AI_GENERATION_FAILED') && normalizedError.message.includes('HTTP 4')) {
+          throw normalizedError;
         }
-        const isNetworkError = err.message?.includes('ECONNREFUSED') || err.message?.includes('ENOTFOUND') || err.message?.includes('network') || err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND';
+        const errorCode = isJsonRecord(err) ? err.code : undefined;
+        const isNetworkError = normalizedError.message.includes('ECONNREFUSED') || normalizedError.message.includes('ENOTFOUND') || normalizedError.message.includes('network') || errorCode === 'ECONNREFUSED' || errorCode === 'ENOTFOUND';
         if (isNetworkError && attempt < maxRetries) {
           const delay = Math.min(1000 * Math.pow(2, attempt), 2000);
           logger.debug('[cf-ai] retry', { ...logContext, attempt: attempt + 1, delayMs: delay, reason: 'network' });
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
-        if (err.message?.includes('AI_GENERATION_FAILED')) {
-          throw err;
+        if (normalizedError.message.includes('AI_GENERATION_FAILED')) {
+          throw normalizedError;
         }
       }
     }
@@ -382,7 +398,7 @@ ${JSON.stringify(schema, null, 2)}
     }
     return response.content;
   }
-  async generateJSON<T = any>(prompt: string, schema: object, systemPrompt?: string, options: LLMGenerateOptions = {}): Promise<T> {
+  async generateJSON<T = unknown>(prompt: string, schema: object, systemPrompt?: string, options: LLMGenerateOptions = {}): Promise<T> {
     const response = await this.callCloudflareWorker('generate-json', {
       prompt,
       systemPrompt,
@@ -400,8 +416,8 @@ ${JSON.stringify(schema, null, 2)}
         if (jsonMatch) jsonContent = jsonMatch[1];
       }
       return JSON.parse(jsonContent) as T;
-    } catch (error: any) {
-      throw new Error(`AI_GENERATION_FAILED: Failed to parse JSON response: ${error.message}`);
+    } catch (error: unknown) {
+      throw new Error(`AI_GENERATION_FAILED: Failed to parse JSON response: ${errorMessage(error)}`);
     }
   }
   async generateTaskWithAI(params: {
@@ -418,9 +434,9 @@ ${JSON.stringify(schema, null, 2)}
     allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
     userId?: number;
     topicId?: number;
-  }, options?: LLMGenerateOptions): Promise<any> {
+  }, options?: LLMGenerateOptions): Promise<unknown> {
     const taskTimeoutMs = (() => {
-      const raw = String(process.env.LLM_TASK_TIMEOUT_MS ?? '').trim();
+      const raw = String(env.LLM_TASK_TIMEOUT_MS ?? '').trim();
       const n = raw ? Number(raw) : NaN;
       const v = Number.isFinite(n) ? Math.floor(n) : 45_000;
       return Math.max(10_000, Math.min(120_000, v));
@@ -439,8 +455,8 @@ ${JSON.stringify(schema, null, 2)}
     }
     try {
       return JSON.parse(response.content);
-    } catch (error: any) {
-      throw new Error(`AI_GENERATION_FAILED: Failed to parse response: ${error.message}`);
+    } catch (error: unknown) {
+      throw new Error(`AI_GENERATION_FAILED: Failed to parse response: ${errorMessage(error)}`);
     }
   }
   async generateTheoryWithAI(params: {
@@ -592,15 +608,16 @@ ${JSON.stringify(schema, null, 2)}
       throw new Error('AI_GENERATION_FAILED: Empty response from CloudflareAI');
     }
     try {
-      const parsed = typeof response.content === 'string' ? JSON.parse(response.content) : response.content;
-      const tests = (parsed as any)?.tests || parsed || [];
+      const parsed: unknown = typeof response.content === 'string' ? JSON.parse(response.content) : response.content;
+      const parsedRecord = isJsonRecord(parsed) ? parsed : null;
+      const tests: unknown = parsedRecord?.tests ?? parsed ?? [];
       const taskDescLower = String(params.taskDescription ?? "").toLowerCase();
       const explicitlyNoInput = /нема(є)?\s+вхідн/i.test(taskDescLower) || /без\s+вхідн/i.test(taskDescLower) || /відсутн/i.test(taskDescLower) || /no\s+input/i.test(taskDescLower) || /does\s+not\s+take\s+input/i.test(taskDescLower);
       const allowEmptyInput = params.ioType !== "STDIN_STDOUT" || explicitlyNoInput || params.count <= 1;
 
-      const validTests = (Array.isArray(tests) ? tests : []).filter((t: any) => {
-        const input = typeof t?.input === "string" ? t.input : String(t?.input ?? "");
-        const output = typeof t?.output === "string" ? t.output : String(t?.output ?? "");
+      const validTests = (Array.isArray(tests) ? tests.filter(isJsonRecord) : []).filter(t => {
+        const input = typeof t.input === "string" ? t.input : String(t.input ?? "");
+        const output = typeof t.output === "string" ? t.output : String(t.output ?? "");
         if (!output || output.trim() === "") return false;
         if (!allowEmptyInput && (!input || input.trim() === "")) return false;
         return true;
@@ -608,13 +625,13 @@ ${JSON.stringify(schema, null, 2)}
       if (validTests.length === 0) {
         throw new Error("No valid tests generated");
       }
-      return validTests.map((t: any) => ({
+      return validTests.map(t => ({
         input: String(t.input ?? "").trim(),
         output: String(t.output).trim(),
         explanation: t.explanation ? String(t.explanation).trim() : undefined
       }));
-    } catch (error: any) {
-      throw new Error(`AI_GENERATION_FAILED: Failed to parse test data: ${error.message}`);
+    } catch (error: unknown) {
+      throw new Error(`AI_GENERATION_FAILED: Failed to parse test data: ${errorMessage(error)}`);
     }
   }
 }

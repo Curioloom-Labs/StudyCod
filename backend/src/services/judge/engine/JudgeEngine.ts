@@ -239,10 +239,10 @@ function judgeRegex(userOutput: string, pattern: string, flags?: string): JudgeR
         matchedPattern: matched
       }
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       success: false,
-      message: `Invalid regex pattern: ${error.message}`,
+      message: `Invalid regex pattern: ${error instanceof Error ? error.message : String(error)}`,
       details: {
         expected: pattern,
         received: userOutput
@@ -272,10 +272,10 @@ function judgeCustom(userOutput: string, validatorName: string): JudgeResult {
         received: userOutput
       }
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     return {
       success: false,
-      message: `Error in custom validator "${validatorName}": ${error.message}`,
+      message: `Error in custom validator "${validatorName}": ${error instanceof Error ? error.message : String(error)}`,
       details: {
         expected: undefined,
         received: userOutput

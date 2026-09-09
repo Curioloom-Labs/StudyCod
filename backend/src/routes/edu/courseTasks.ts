@@ -81,7 +81,7 @@ async function saveCourseGradeWithinAttemptLimit(task: EduTask, student: Student
       throw Object.assign(new Error("MAX_ATTEMPTS_REACHED"), { statusCode: 403 });
     }
 
-    const created = gradeRepoM.create({ ...draft, task, student } as any);
+    const created = gradeRepoM.create({ ...draft, task, student });
     const saved = await gradeRepoM.save(created);
     return Array.isArray(saved) ? saved[0] : saved;
   });
@@ -100,9 +100,11 @@ async function handleIfCourseTask(req: AuthRequest, res: Response, next: NextFun
     : next();
   try {
     await fn(ctx);
-  } catch (error: any) {
-    const status = Number(error?.statusCode ?? error?.status ?? 500);
-    return res.status(status >= 400 && status < 600 ? status : 500).json({ message: error?.message || "INTERNAL_SERVER_ERROR" });
+  } catch (error: unknown) {
+    const errorRecord = error && typeof error === "object" ? error as Record<string, unknown> : {};
+    const status = Number(errorRecord.statusCode ?? errorRecord.status ?? 500);
+    const message = typeof errorRecord.message === "string" ? errorRecord.message : "INTERNAL_SERVER_ERROR";
+    return res.status(status >= 400 && status < 600 ? status : 500).json({ message });
   }
 }
 
@@ -238,7 +240,7 @@ router.post("/tasks/:taskId/web-submit", authRequired, async (req: AuthRequest, 
     const score = check.maxScore > 0 ? check.score : check.passedRules;
     const total = Math.round((score / maxScore) * 100);
     const grade = await saveCourseGradeWithinAttemptLimit(task, student, { total, score, maxScore, testsPassed: check.passedRules, testsTotal: check.totalRules, submittedCode: encodeWebTaskPayload({ mode: "WEB", version: 1, files }), testResults: JSON.stringify(check.results), isCompleted: check.passed, isManuallyGraded: false, feedback: check.passed ? null : "Some validation rules failed." });
-    return res.json({ grade: { id: grade.id, total: grade.total, testsPassed: grade.testsPassed, testsTotal: grade.testsTotal, isManuallyGraded: false }, testResults: check.results, hints: check.passed ? [] : check.results.filter((result: any) => !result.passed).map((result: any) => result.message || "Перевір цю вимогу ще раз.").slice(0, 4), scoring: { score, maxScore }, taskMode: "WEB" });
+    return res.json({ grade: { id: grade.id, total: grade.total, testsPassed: grade.testsPassed, testsTotal: grade.testsTotal, isManuallyGraded: false }, testResults: check.results, hints: check.passed ? [] : check.results.filter(result => !result.passed).map(result => result.message || "Перевір цю вимогу ще раз.").slice(0, 4), scoring: { score, maxScore }, taskMode: "WEB" });
   });
 });
 

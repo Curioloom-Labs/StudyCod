@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "cross-env NODE_PATH=../shared:../backend/src tsx watch -r tsconfig-paths/register src/index.ts",
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/config.test.ts",
     "start": "cross-env NODE_PATH=../shared:../backend/src node -r tsconfig-paths/register dist/index.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
-    "morgan": "^1.11.0",
+    "morgan": "^1.12.0",
     "reflect-metadata": "^0.2.2",
     "typeorm": "^0.3.31",
     "zod": "^4.3.6"

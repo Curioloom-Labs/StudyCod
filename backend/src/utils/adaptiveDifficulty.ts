@@ -11,6 +11,9 @@ import {
 import { AppDataSource } from "../data-source";
 import { UserCourseEnrollment } from "../entities/UserCourseEnrollment";
 import { LearningEvidence } from "../entities/LearningEvidence";
+import { Grade } from "../entities/Grade";
+import { User } from "../entities/User";
+import type { Repository } from "typeorm";
 
 /**
  * Backward-compatible helper for quick deterministic updates in tests/tools.
@@ -21,10 +24,10 @@ export function calculateAdaptiveIad(currentIad: number, grade: number, evidence
 
 export const calculateAdaptiveDifus = calculateAdaptiveIad;
 
-function evidenceFromGrade(grade: any): IadEvidence {
+function evidenceFromGrade(grade: Grade): IadEvidence {
   const task = grade?.task;
-  const topicIndex = Number(task?.topicIndex);
-  const numInTopic = Number(task?.numInTopic);
+  const topicIndex = Number(task?.topicIndex ?? NaN);
+  const numInTopic = Number(task?.numInTopic ?? NaN);
   return {
     topicIndex: Number.isFinite(topicIndex) ? topicIndex : null,
     taskType: task?.type ?? null,
@@ -33,7 +36,7 @@ function evidenceFromGrade(grade: any): IadEvidence {
   };
 }
 
-function rebuildIadFromGrades(grades: any[]): { value: number; maxTopicIndex: number | null } {
+function rebuildIadFromGrades(grades: Grade[]): { value: number; maxTopicIndex: number | null } {
   let value = 0;
   let maxTopicIndex: number | null = null;
   for (const grade of grades) {
@@ -41,7 +44,7 @@ function rebuildIadFromGrades(grades: any[]): { value: number; maxTopicIndex: nu
     if (Number.isFinite(Number(evidence.topicIndex))) {
       maxTopicIndex = Math.max(maxTopicIndex ?? 0, Number(evidence.topicIndex));
     }
-    value = calculateAdaptiveIad(value, Number(grade?.total ?? 0), evidence);
+    value = calculateAdaptiveIad(value, Number(grade.total ?? 0), evidence);
   }
 
   // Apply the curriculum ceiling after all evidence has been replayed. This
@@ -55,8 +58,8 @@ export async function getStableIad(
   userId: number,
   lang: "JAVA" | "PYTHON" | "CPP",
   _topicIndex: number,
-  userRepo: () => any,
-  gradeRepo: () => any
+  userRepo: () => Repository<User>,
+  gradeRepo: () => Repository<Grade>
 ): Promise<number> {
   const user = await userRepo().findOne({ where: { id: userId } });
   if (!user) return 0;
@@ -81,8 +84,8 @@ export async function getStableIad(
   if (Math.abs(storedIad - rebuilt.value) > 0.0005 || lastProcessedGradeId !== latestGradeId) {
     setUserIadForLang(user, lang, rebuilt.value);
     setLastProcessedGradeIdForLang(user, lang, latestGradeId);
-    (user as any).lastIadChange = new Date();
-    (user as any).lastDifusChange = new Date();
+    user.lastIadChange = new Date();
+    user.lastDifusChange = new Date();
     await userRepo().save(user);
   }
 
@@ -102,7 +105,7 @@ export async function getStableIad(
   const evidenceRepo = AppDataSource.getRepository(LearningEvidence);
   if (enrollment) {
     for (const grade of grades) {
-      const sourceId = `grade:${Number(grade?.id ?? 0)}`;
+      const sourceId = `grade:${Number(grade.id ?? 0)}`;
       if (sourceId === "grade:0") continue;
       const exists = await evidenceRepo.findOne({ where: { enrollmentId: enrollment.id, sourceId } });
       if (exists) continue;
@@ -110,8 +113,8 @@ export async function getStableIad(
         enrollmentId: enrollment.id,
         sourceType: "GRADE",
         sourceId,
-        score: clampIad(Number(grade?.total ?? 0) / 100),
-        difficulty: clampIad(Number(grade?.task?.difus ?? 0) / 100),
+        score: clampIad(Number(grade.total ?? 0) / 100),
+        difficulty: clampIad(Number(grade.task?.difus ?? 0) / 100),
         modelVersion: 2
       }));
     }

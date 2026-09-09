@@ -75,7 +75,7 @@ function defaultDedupeKey(input: LearningEventInput): string {
 
 export async function recordLearningEvent(input: LearningEventInput, repos = learningRepositories()): Promise<LearningEvent | null> {
   const dedupeKey = String(input.dedupeKey || defaultDedupeKey(input)).slice(0, 191);
-  const existing = await repos.events.findOne({ where: { dedupeKey } as any });
+  const existing = await repos.events.findOne({ where: { dedupeKey } });
   if (existing) return existing;
 
   const event = repos.events.create({
@@ -95,11 +95,11 @@ export async function recordLearningEvent(input: LearningEventInput, repos = lea
     saved = await repos.events.save(event);
   } catch {
     // The unique key makes concurrent/retried client events idempotent.
-    return repos.events.findOne({ where: { dedupeKey } as any });
+    return repos.events.findOne({ where: { dedupeKey } });
   }
 
   if (saved.eventType === "hint_viewed" && saved.learningAttemptId && saved.hintLevel) {
-    const attempt = await repos.attempts.findOne({ where: { id: saved.learningAttemptId } as any });
+    const attempt = await repos.attempts.findOne({ where: { id: saved.learningAttemptId } });
     if (attempt && saved.hintLevel > (attempt.highestHintLevelShown ?? 0)) {
       attempt.highestHintLevelShown = saved.hintLevel;
       await repos.attempts.save(attempt);
@@ -115,8 +115,8 @@ export async function recordLearningOutcome(input: LearningOutcomeInput, repos =
       principalId: input.principalId,
       taskKind: input.taskKind,
       taskId: input.taskId,
-    } as any,
-    order: { createdAt: "ASC" } as any,
+    },
+    order: { createdAt: "ASC" },
   });
   const solvedAfterFailure = input.outcome === "SOLVED" && previous.some((row) => row.outcome === "FAILED");
   const attempt = repos.attempts.create({
@@ -238,8 +238,8 @@ export function deriveSkillEvidence(attempts: LearningAttempt[]): SkillEvidence 
 
 export async function getSkillEvidence(principalType: LearningPrincipalType, principalId: number, repos = learningRepositories()): Promise<SkillEvidence> {
   const attempts = await repos.attempts.find({
-    where: { principalType, principalId } as any,
-    order: { createdAt: "ASC" } as any,
+    where: { principalType, principalId },
+    order: { createdAt: "ASC" },
   });
   // Library exercises are independent practice and must not become lesson skill evidence.
   return deriveSkillEvidence(attempts.filter((attempt) => attempt.taskKind !== "LIBRARY"));

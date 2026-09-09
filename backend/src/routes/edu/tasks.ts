@@ -68,6 +68,19 @@ const hintFeedbackLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 20,
 
 type EduTaskTelemetryAction = "submit" | "complete";
 type EduTaskTelemetryStatus = "started" | "succeeded" | "failed" | "denied" | "invalid";
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return String(readProperty(error, "message") ?? "");
+}
 
 function logEduTaskTelemetry(payload: {
   requestId?: string;
@@ -108,9 +121,9 @@ function logHintsFeedbackTelemetry(payload: {
 }
 
 function isHintFeedbackTableMissingError(error: unknown): boolean {
-  const code = String((error as any)?.code ?? "").toUpperCase();
+  const code = String(readProperty(error, "code") ?? "").toUpperCase();
   if (code === "ER_NO_SUCH_TABLE" || code === "42P01") return true;
-  const message = String((error as any)?.message ?? "").toLowerCase();
+  const message = errorMessage(error).toLowerCase();
   return message.includes("doesn't exist") || message.includes("no such table") || message.includes("relation") && message.includes("does not exist");
 }
 
@@ -129,8 +142,8 @@ function normalizeWebProfile(raw: unknown): WebTaskValidationProfile {
 }
 
 function assertWebFilesWithinLimits(files: ReturnType<typeof normalizeWebTaskFiles>) {
-  const maxFileSize = Number((env as any).__webTaskMaxFileSize ?? 200_000);
-  const maxTotalSize = Number((env as any).__webTaskMaxTotalSize ?? 500_000);
+  const maxFileSize = Number(env.__webTaskMaxFileSize ?? 200_000);
+  const maxTotalSize = Number(env.__webTaskMaxTotalSize ?? 500_000);
   let total = 0;
   for (const f of files) {
     const size = Buffer.byteLength(String(f.content ?? ""), "utf8");
@@ -162,9 +175,9 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   if (!Array.isArray(raw)) return [];
   const out: ApiCodeFile[] = [];
   for (const f of raw) {
-    if (!f || typeof f !== "object") continue;
-    const p = normalizeSafeCodeFilePath((f as any).path) ?? "";
-    const c = typeof (f as any).content === "string" ? (f as any).content : "";
+    if (!isRecord(f)) continue;
+    const p = normalizeSafeCodeFilePath(f.path) ?? "";
+    const c = typeof f.content === "string" ? f.content : "";
     if (!p) continue;
     out.push({ path: p, content: c });
   }
@@ -252,7 +265,7 @@ async function buildEduJudgeTests(tests: TestData[]): Promise<{
   hasSubtasks: boolean;
   judgeTests: WorkerJudgeRequest["tests"];
 }> {
-  const subtasks = tests.map(t => normalizeEduSubtaskGroup((t as any).subtask));
+  const subtasks = tests.map(t => normalizeEduSubtaskGroup(t.subtask));
   const hasSubtasks = subtasks.some(Boolean);
   const subtaskById = new Map(tests.map((t, idx) => [String(t.id), subtasks[idx]] as const));
 
@@ -262,7 +275,7 @@ async function buildEduJudgeTests(tests: TestData[]): Promise<{
       const group = hasSubtasks ? (subtask || `unassigned_${t.id}`) : t.isHidden === true ? "hidden" : "public";
       return { hidden: t.isHidden === true, group, weight: t.points || 1 };
     },
-    hashes: t => ({ inputHash: (t as any).inputSha256, outputHash: (t as any).outputSha256 }),
+    hashes: t => ({ inputHash: t.inputSha256, outputHash: t.outputSha256 }),
     loadContent: loadTestContentByIds
   });
 
@@ -272,27 +285,27 @@ async function buildEduJudgeTests(tests: TestData[]): Promise<{
   };
 }
 
-function sanitizeTestResultsForStudent(results: any): Array<{ testId: number; passed: boolean; verdict?: string | null; errorKind?: string | null }> {
+function sanitizeTestResultsForStudent(results: unknown): Array<{ testId: number; passed: boolean; verdict?: string | null; errorKind?: string | null }> {
   if (!Array.isArray(results)) return [];
   return results
-    .map((r: any) => ({
-      testId: Number(r?.testId ?? r?.test_id ?? 0),
-      passed: !!r?.passed,
-      verdict: r?.verdict ?? null,
-      errorKind: r?.errorKind ?? r?.error_kind ?? null
+    .map((r: unknown) => ({
+      testId: Number(readProperty(r, "testId") ?? readProperty(r, "test_id") ?? 0),
+      passed: Boolean(readProperty(r, "passed")),
+      verdict: readProperty(r, "verdict") as string | null | undefined ?? null,
+      errorKind: (readProperty(r, "errorKind") ?? readProperty(r, "error_kind")) as string | null | undefined ?? null
     }))
     .filter(r => Number.isFinite(r.testId) && r.testId > 0);
 }
 
 function isTopicTaskAssignedToStudent(topicTask: TopicTask, studentId: number): boolean {
-  if (isAssignedToStudent(topicTask.isAssigned, (topicTask as any).assignedStudentIds, studentId)) {
+  if (isAssignedToStudent(topicTask.isAssigned, topicTask.assignedStudentIds, studentId)) {
     return true;
   }
 
   if (topicTask.type === "CONTROL" && topicTask.controlWork) {
     return isAssignedToStudent(
       topicTask.controlWork.isAssigned,
-      (topicTask.controlWork as any).assignedStudentIds,
+      topicTask.controlWork.assignedStudentIds,
       studentId
     );
   }
@@ -454,7 +467,7 @@ async function assertControlTaskUnlockedForStudent(
   const latestByTaskId = new Map<number, EduGrade>();
   const attemptsByTaskId = new Map<number, number>();
   for (const grade of allTaskGrades) {
-    const topicTaskId = (grade as any).topicTask?.id;
+    const topicTaskId = grade.topicTask?.id;
     if (!topicTaskId) continue;
     if (!latestByTaskId.has(topicTaskId)) {
       latestByTaskId.set(topicTaskId, grade);
@@ -523,7 +536,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       }
     }
 
-    let grade: any = null;
+    let grade: UnknownRecord | null = null;
     let attemptsUsed: number | null = null;
 
     if (req.studentId) {
@@ -538,20 +551,20 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       if (grades.length > 0) {
         const latestGrade = grades[0];
 
-        let parsedTestResults = null;
-        let parsedGroupScores = null;
+        let parsedTestResults: unknown = null;
+        let parsedGroupScores: unknown = null;
 
         if (latestGrade.testResults) {
           try {
-            parsedTestResults = JSON.parse(latestGrade.testResults);
+            parsedTestResults = JSON.parse(latestGrade.testResults) as unknown;
           } catch (e) {
             logger.warn("Failed to parse testResults JSON", { requestId: req.requestId, err: e });
           }
         }
 
-        if ((latestGrade as any).groupScores) {
+        if (latestGrade.groupScores) {
           try {
-            parsedGroupScores = JSON.parse((latestGrade as any).groupScores);
+            parsedGroupScores = JSON.parse(latestGrade.groupScores) as unknown;
           } catch (e) {
             logger.warn("Failed to parse groupScores JSON", { requestId: req.requestId, err: e });
           }
@@ -570,8 +583,8 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
           submittedFiles: decoded?.files,
           // OJ-style: do not expose per-test I/O to students.
           testResults: sanitizeTestResultsForStudent(parsedTestResults),
-          score: (latestGrade as any).score ?? null,
-          maxScore: (latestGrade as any).maxScore ?? null,
+          score: latestGrade.score ?? null,
+          maxScore: latestGrade.maxScore ?? null,
           groupScores: parsedGroupScores,
           submissionMeta: {
             submissionId: String(latestGrade.id),
@@ -605,16 +618,16 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       .where("theory.topic_task_id = :taskId", { taskId })
       .getOne();
 
-    const debugTheoryRequested = ["1", "true", "yes"].includes(String((req.query as any)?.debugTheory ?? "").toLowerCase());
+    const debugTheoryRequested = ["1", "true", "yes"].includes(String(req.query.debugTheory ?? "").toLowerCase());
 
     // Load global (admin) materials for the same language+order.
     // Student tasks are class-scoped (topic.class != null) but the source-of-truth materials are global (topic.class == null).
     // We use global materials as a fallback and also as the default when they are newer than stale class snapshots.
     const globalRepo = AppDataSource.getRepository(TopicNew);
-    const classTopic = (topicTask as any)?.topic as any;
-    const classLang = classTopic?.language;
-    const classOrder = classTopic?.order;
-    const classTitleNorm = String(classTopic?.title ?? "").trim().toLowerCase();
+    const classTopic = topicTask.topic;
+    const classLang = classTopic.language;
+    const classOrder = classTopic.order;
+    const classTitleNorm = classTopic.title.trim().toLowerCase();
 
     let globalMatchStrategy: "language+order" | "language+title" | null = null;
 
@@ -622,9 +635,9 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       where: {
         language: classLang,
         order: classOrder,
-        class: IsNull() as any
-      } as any,
-      relations: ["theoryBlock"] as any
+        class: IsNull()
+      },
+      relations: { theoryBlock: true }
     });
 
     if (globalTopic) globalMatchStrategy = "language+order";
@@ -634,24 +647,24 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       const globals = await globalRepo.find({
         where: {
           language: classLang,
-          class: IsNull() as any
-        } as any,
-        relations: ["theoryBlock"] as any
+          class: IsNull()
+        },
+        relations: { theoryBlock: true }
       });
-      globalTopic = globals.find(t => String((t as any)?.title ?? "").trim().toLowerCase() === classTitleNorm) as any;
+      globalTopic = globals.find(t => t.title.trim().toLowerCase() === classTitleNorm) ?? null;
       if (globalTopic) globalMatchStrategy = "language+title";
     }
 
-    const classTheoryBlock = (topicTask as any)?.topic?.theoryBlock as any;
+    const classTheoryBlock = topicTask.topic.theoryBlock;
     const classTheory = typeof classTheoryBlock?.content === "string" ? String(classTheoryBlock.content) : "";
     const classTheoryUpdatedAt = classTheoryBlock?.updatedAt instanceof Date ? classTheoryBlock.updatedAt : (classTheoryBlock?.updatedAt ? new Date(classTheoryBlock.updatedAt) : null);
 
-    const globalTheoryBlock = (globalTopic as any)?.theoryBlock as any;
+    const globalTheoryBlock = globalTopic?.theoryBlock;
     const globalTheory = typeof globalTheoryBlock?.content === "string" ? String(globalTheoryBlock.content) : "";
     const globalTheoryUpdatedAt = globalTheoryBlock?.updatedAt instanceof Date ? globalTheoryBlock.updatedAt : (globalTheoryBlock?.updatedAt ? new Date(globalTheoryBlock.updatedAt) : null);
     const taskTheoryUpdatedAt = taskTheory?.updatedAt instanceof Date ? taskTheory.updatedAt : (taskTheory?.updatedAt ? new Date(taskTheory.updatedAt) : null);
 
-    const taskTheoryContent = taskTheory && typeof (taskTheory as any).content === "string" ? String((taskTheory as any).content) : "";
+    const taskTheoryContent = taskTheory?.content ?? "";
 
     type TheoryPickSource = "classTopic" | "globalTopic" | "taskSnapshot" | "none";
     const pickFromMaterials = (): { content: string; updatedAt: Date | null; source: TheoryPickSource } => {
@@ -705,10 +718,10 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
         title: topicTask.title,
         description: topicTask.description,
         template: topicTask.template,
-        taskMode: (topicTask as any).taskMode ?? "CODE",
-        projectSpec: (topicTask as any).projectSpec ?? null,
-        webTemplateFiles: (topicTask as any).webTemplateFiles ?? null,
-        webValidationRules: (topicTask as any).webValidationRules ?? null,
+        taskMode: topicTask.taskMode ?? "CODE",
+        projectSpec: topicTask.projectSpec ?? null,
+        webTemplateFiles: topicTask.webTemplateFiles ?? null,
+        webValidationRules: topicTask.webValidationRules ?? null,
         maxAttempts: resolveTaskMaxAttempts(topicTask),
         attemptsUsed: attemptsUsed ?? undefined,
         deadline: topicTask.deadline ? topicTask.deadline.toISOString() : null,
@@ -734,14 +747,14 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
                   pickedUpdatedAt: finalPick.updatedAt ? finalPick.updatedAt.toISOString() : null,
                   globalMatchStrategy,
                   classTopic: {
-                    id: typeof classTopic?.id === "number" ? classTopic.id : null,
-                    language: classLang ?? null,
-                    order: typeof classOrder === "number" ? classOrder : null,
-                    title: typeof classTopic?.title === "string" ? classTopic.title : null
+                    id: classTopic.id,
+                    language: classLang,
+                    order: classOrder,
+                    title: classTopic.title
                   },
                   globalTopic: {
-                    id: typeof (globalTopic as any)?.id === "number" ? (globalTopic as any).id : null,
-                    title: typeof (globalTopic as any)?.title === "string" ? (globalTopic as any).title : null
+                    id: globalTopic?.id ?? null,
+                    title: globalTopic?.title ?? null
                   },
                   classTheoryBlock: {
                     id: typeof classTheoryBlock?.id === "number" ? classTheoryBlock.id : null,
@@ -754,7 +767,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
                     length: globalTheory.length
                   },
                   taskTheorySnapshot: {
-                    id: typeof (taskTheory as any)?.id === "number" ? (taskTheory as any).id : null,
+                    id: taskTheory?.id ?? null,
                     updatedAt: taskTheoryUpdatedAt ? taskTheoryUpdatedAt.toISOString() : null,
                     length: taskTheoryContent.length
                   },
@@ -766,7 +779,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
         }
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
@@ -777,7 +790,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
 
 router.get("/tasks/:taskId/web-template", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
 
@@ -798,7 +811,7 @@ router.get("/tasks/:taskId/web-template", authRequired, async (req: AuthRequest,
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
 
-    if (String((topicTask as any).taskMode ?? "CODE") !== "WEB") {
+    if (topicTask.taskMode !== "WEB") {
       return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
     }
 
@@ -812,16 +825,16 @@ router.get("/tasks/:taskId/web-template", authRequired, async (req: AuthRequest,
       await assertControlTaskUnlockedForStudent(req.studentId, topicTask, { requireActiveAttempt: true });
     }
 
-    const files = normalizeWebTaskFiles((topicTask as any).webTemplateFiles ?? []);
-    const rules = normalizeWebRules((topicTask as any).webValidationRules ?? []);
+    const files = normalizeWebTaskFiles(topicTask.webTemplateFiles ?? []);
+    const rules = normalizeWebRules(topicTask.webValidationRules ?? []);
     return res.json({
       taskId: topicTask.id,
       taskMode: "WEB",
       files,
       rules,
-      profile: normalizeWebProfile((topicTask as any).webValidationProfile ?? "FREE_WEB"),
+      profile: normalizeWebProfile(topicTask.webValidationProfile ?? "FREE_WEB"),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error getting web task template", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -829,7 +842,7 @@ router.get("/tasks/:taskId/web-template", authRequired, async (req: AuthRequest,
 
 router.put("/tasks/:taskId/web-draft", authRequired, submissionRateLimitMiddleware, runLimiter, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
     if (req.userType !== "STUDENT" || !req.studentId) {
@@ -852,7 +865,7 @@ router.put("/tasks/:taskId/web-draft", authRequired, submissionRateLimitMiddlewa
     if (!topicTask || !topicTask.topic || !topicTask.topic.class) {
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
-    if (String((topicTask as any).taskMode ?? "CODE") !== "WEB") {
+    if (topicTask.taskMode !== "WEB") {
       return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
     }
 
@@ -865,7 +878,7 @@ router.put("/tasks/:taskId/web-draft", authRequired, submissionRateLimitMiddlewa
 
     await assertControlTaskUnlockedForStudent(req.studentId, topicTask, { requireActiveAttempt: true });
 
-    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    const files = normalizeWebTaskFiles(readProperty(req.body, "files") ?? []);
     assertWebFilesWithinLimits(files);
 
     webDraftStore.set(webDraftKey(req.studentId, taskId), {
@@ -874,7 +887,7 @@ router.put("/tasks/:taskId/web-draft", authRequired, submissionRateLimitMiddlewa
     });
 
     return res.json({ ok: true, updatedAt: new Date().toISOString() });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
@@ -885,7 +898,7 @@ router.put("/tasks/:taskId/web-draft", authRequired, submissionRateLimitMiddlewa
 
 router.post("/tasks/:taskId/web-check", authRequired, submissionRateLimitMiddleware, runLimiter, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
     if (req.userType !== "STUDENT" || !req.studentId) {
@@ -908,7 +921,7 @@ router.post("/tasks/:taskId/web-check", authRequired, submissionRateLimitMiddlew
     if (!topicTask || !topicTask.topic || !topicTask.topic.class) {
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
-    if (String((topicTask as any).taskMode ?? "CODE") !== "WEB") {
+    if (topicTask.taskMode !== "WEB") {
       return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
     }
 
@@ -920,17 +933,17 @@ router.post("/tasks/:taskId/web-check", authRequired, submissionRateLimitMiddlew
     await assertTopicTaskAssignedToStudent(req.studentId, topicTask);
     await assertControlTaskUnlockedForStudent(req.studentId, topicTask, { requireActiveAttempt: true });
 
-    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    const files = normalizeWebTaskFiles(readProperty(req.body, "files") ?? []);
     assertWebFilesWithinLimits(files);
 
-    const rules = normalizeWebRules((topicTask as any).webValidationRules ?? []);
-    const profile = normalizeWebProfile((topicTask as any).webValidationProfile ?? "FREE_WEB");
-    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (topicTask as any).webTemplateFiles ?? [] });
+    const rules = normalizeWebRules(topicTask.webValidationRules ?? []);
+    const profile = normalizeWebProfile(topicTask.webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: topicTask.webTemplateFiles ?? [] });
     return res.json({
       taskMode: "WEB",
       ...check,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
@@ -941,7 +954,7 @@ router.post("/tasks/:taskId/web-check", authRequired, submissionRateLimitMiddlew
 
 router.post("/tasks/:taskId/web-submit", authRequired, submissionRateLimitMiddleware, submitLimiter, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
     if (req.userType !== "STUDENT" || !req.studentId) {
@@ -964,7 +977,7 @@ router.post("/tasks/:taskId/web-submit", authRequired, submissionRateLimitMiddle
     if (!topicTask || !topicTask.topic || !topicTask.topic.class) {
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
-    if (String((topicTask as any).taskMode ?? "CODE") !== "WEB") {
+    if (topicTask.taskMode !== "WEB") {
       return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
     }
 
@@ -992,11 +1005,11 @@ router.post("/tasks/:taskId/web-submit", authRequired, submissionRateLimitMiddle
       return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
     }
 
-    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    const files = normalizeWebTaskFiles(readProperty(req.body, "files") ?? []);
     assertWebFilesWithinLimits(files);
-    const rules = normalizeWebRules((topicTask as any).webValidationRules ?? []);
-    const profile = normalizeWebProfile((topicTask as any).webValidationProfile ?? "FREE_WEB");
-    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (topicTask as any).webTemplateFiles ?? [] });
+    const rules = normalizeWebRules(topicTask.webValidationRules ?? []);
+    const profile = normalizeWebProfile(topicTask.webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: topicTask.webTemplateFiles ?? [] });
 
     const maxScore = check.maxScore > 0 ? check.maxScore : Math.max(1, check.totalRules);
     const score = check.maxScore > 0 ? check.score : check.passedRules;
@@ -1039,8 +1052,8 @@ router.post("/tasks/:taskId/web-submit", authRequired, submissionRateLimitMiddle
       }
 
       const grade = gradeRepoM.create({
-        student: { id: req.studentId } as any,
-        topicTask: { id: taskId } as any,
+        student: { id: req.studentId },
+        topicTask: { id: taskId },
         total: totalGrade,
         testsPassed: check.passedRules,
         testsTotal: check.totalRules,
@@ -1078,8 +1091,8 @@ router.post("/tasks/:taskId/web-submit", authRequired, submissionRateLimitMiddle
       },
       taskMode: "WEB",
     });
-  } catch (error: any) {
-    if (error?.message === "MAX_ATTEMPTS_REACHED") {
+  } catch (error: unknown) {
+    if (errorMessage(error) === "MAX_ATTEMPTS_REACHED") {
       return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
     }
     if (error instanceof HttpError) {
@@ -1119,8 +1132,8 @@ router.post("/tasks/:taskId/run", authRequired, submissionRateLimitMiddleware, r
     const input = validated.data.input;
 
     const judgeLang = judgeLanguageFromEduLanguage(topicTask.topic.class.language);
-    const normalizedFiles = normalizeApiFiles((validated.data as any).files);
-    const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
+    const normalizedFiles = normalizeApiFiles(validated.data.files);
+    const providedCode = validated.data.code ?? "";
     const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
     const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
     let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
@@ -1174,7 +1187,7 @@ router.post("/tasks/:taskId/run", authRequired, submissionRateLimitMiddleware, r
     }
     const r = workerRes.tests[0];
     return res.json({ output: r?.actual ?? "", stderr: r?.stderr ?? "", success: workerRes.verdict === "AC" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ error: error.message, status: error.statusCode });
     }
@@ -1280,8 +1293,8 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
 
     const eduLang = topicTask.topic.class.language;
     const judgeLang = judgeLanguageFromEduLanguage(eduLang);
-    const normalizedFiles = normalizeApiFiles((validatedBody.data as any).files);
-    const providedCode = typeof (validatedBody.data as any).code === "string" ? (validatedBody.data as any).code : "";
+    const normalizedFiles = normalizeApiFiles(validatedBody.data.files);
+    const providedCode = validatedBody.data.code ?? "";
     const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
     const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
     let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
@@ -1291,7 +1304,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
     }
     const sourceText = isMultiFile ? (effectiveFiles.find(f => f.path === entryFile)?.content ?? "") : providedCode;
     const persistedSubmitted = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : sourceText;
-    const normalizedClientSubmissionId = normalizeClientSubmissionId((validatedBody.data as any).clientSubmissionId);
+    const normalizedClientSubmissionId = normalizeClientSubmissionId(validatedBody.data.clientSubmissionId);
     const serverCodeHash = sha256Hex(persistedSubmitted);
     const codeForHints = isMultiFile ? concatForAI({ version: 1, entry: entryFile, files: effectiveFiles }) : sourceText;
     const hintStrategyVariant = resolveHintStrategyVariant({
@@ -1362,7 +1375,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
 
     try {
       workerRes = await judgeWithSemaphore(workerReq);
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (e instanceof HttpError) throw e;
       const errMsg = e instanceof Error ? e.message : String(e);
       logger.error("judge worker failed (edu submit)", {
@@ -1418,7 +1431,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
             input: t.input || "",
             expected: String(t.expectedOutput ?? ""),
             actual: r?.actual ?? "",
-            error_kind: (r as any)?.error_kind ?? null
+            error_kind: r?.error_kind ?? null
           });
           if (t.isHidden) continue;
           testResultsDetailed.push({
@@ -1428,7 +1441,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
             stderr: r?.stderr ?? null,
             passed: isPassed,
             verdict: r?.verdict ?? null,
-            errorKind: (r as any)?.error_kind ?? null
+            errorKind: r?.error_kind ?? null
           });
         }
       }
@@ -1439,11 +1452,11 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       maxScore = workerRes.max_score;
     }
 
-    if (workerRes && Array.isArray((workerRes as any).group_scores)) {
-      scoringGroupScores = (workerRes as any).group_scores.map((gs: any) => ({
-        group: String(gs?.group ?? ""),
-        score: Number(gs?.score ?? 0),
-        maxScore: Number(gs?.max_score ?? 0)
+    if (workerRes?.group_scores) {
+      scoringGroupScores = workerRes.group_scores.map(gs => ({
+        group: String(gs.group ?? ""),
+        score: Number(gs.score ?? 0),
+        maxScore: Number(gs.max_score ?? 0)
       }));
     }
 
@@ -1532,8 +1545,8 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       }
 
       const grade = gradeRepoM.create({
-        student: { id: studentId } as any,
-        topicTask: { id: taskId } as any,
+        student: { id: studentId },
+        topicTask: { id: taskId },
         total: totalGrade,
         testsPassed: passed,
         testsTotal: tests.length,
@@ -1575,8 +1588,8 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
         failureCategory: learningFirstFailure?.errorKind ?? (workerRes?.verdict === "CE" ? "compile" : null),
         firstFailedTestId: learningFirstFailure?.testId ?? null,
       });
-    } catch (error: any) {
-      logger.warn("[learning] edu outcome persistence failed", { requestId: req.requestId, error: error?.message });
+    } catch (error: unknown) {
+      logger.warn("[learning] edu outcome persistence failed", { requestId: req.requestId, error: errorMessage(error) });
     }
 
     const learningFailureAnalysis = buildLearningFailureAnalysis({
@@ -1630,9 +1643,10 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
           }
         : null,
     });
-  } catch (error: any) {
-    const telemetryErrorCode = typeof error?.message === "string" && error.message.trim()
-      ? error.message.trim()
+  } catch (error: unknown) {
+    const message = errorMessage(error);
+    const telemetryErrorCode = message.trim()
+      ? message.trim()
       : "INTERNAL_SERVER_ERROR";
     logEduTaskTelemetry({
       ...telemetryBase,
@@ -1640,13 +1654,13 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       durationMs: Date.now() - telemetryStartedAt,
       errorCode: telemetryErrorCode
     });
-    if (error?.message === "TASK_MANUALLY_GRADED_LOCKED") {
+    if (message === "TASK_MANUALLY_GRADED_LOCKED") {
       return res.status(409).json({ message: "TASK_MANUALLY_GRADED_LOCKED" });
     }
-    if (error?.message === "TASK_ALREADY_COMPLETED") {
+    if (message === "TASK_ALREADY_COMPLETED") {
       return res.status(409).json({ message: "TASK_ALREADY_COMPLETED" });
     }
-    if (error?.message === "MAX_ATTEMPTS_REACHED") {
+    if (message === "MAX_ATTEMPTS_REACHED") {
       return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
     }
     logger.error("Error submitting task", { requestId: req.requestId, err: error });
@@ -1793,28 +1807,28 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
         }
 
         return savedExisting;
-      }).catch((e: any) => {
-        if (e?.message === "ATTEMPTS_AVAILABLE") return null;
+      }).catch((e: unknown) => {
+        if (errorMessage(e) === "ATTEMPTS_AVAILABLE") return null;
         throw e;
       });
 
       if (!saved) {
         // Fall through to normal flow below (we'll judge and save a new completed attempt).
       } else {
-        let parsedTestResults: any[] = [];
+        let parsedTestResults: unknown[] = [];
         if (saved.testResults) {
           try {
-            const parsed = JSON.parse(saved.testResults);
+            const parsed = JSON.parse(saved.testResults) as unknown;
             if (Array.isArray(parsed)) parsedTestResults = parsed;
           } catch {
             // ignore
           }
         }
 
-        let parsedGroupScores: any[] | null = null;
-        if ((saved as any).groupScores) {
+        let parsedGroupScores: unknown[] | null = null;
+        if (saved.groupScores) {
           try {
-            const parsed = JSON.parse((saved as any).groupScores);
+            const parsed = JSON.parse(saved.groupScores) as unknown;
             if (Array.isArray(parsed)) parsedGroupScores = parsed;
           } catch {
             // ignore
@@ -1839,10 +1853,10 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
           testResults: sanitizeTestResultsForStudent(parsedTestResults),
           hints: [],
           scoring:
-            typeof (saved as any).score === "number" && typeof (saved as any).maxScore === "number"
+            typeof saved.score === "number" && typeof saved.maxScore === "number"
               ? {
-                  score: (saved as any).score,
-                  maxScore: (saved as any).maxScore,
+                  score: saved.score,
+                  maxScore: saved.maxScore,
                   groupScores: parsedGroupScores
                 }
               : undefined
@@ -1857,8 +1871,8 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
 
     const eduLang = topicTask.topic.class.language;
     const judgeLang = judgeLanguageFromEduLanguage(eduLang);
-    const normalizedFiles = normalizeApiFiles((validatedBody.data as any).files);
-    const providedCode = typeof (validatedBody.data as any).code === "string" ? (validatedBody.data as any).code : "";
+    const normalizedFiles = normalizeApiFiles(validatedBody.data.files);
+    const providedCode = validatedBody.data.code ?? "";
     const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
     const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
     let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
@@ -1868,7 +1882,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
     }
     const sourceText = isMultiFile ? (effectiveFiles.find(f => f.path === entryFile)?.content ?? "") : providedCode;
     const persistedSubmitted = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : sourceText;
-    const normalizedClientSubmissionId = normalizeClientSubmissionId((validatedBody.data as any).clientSubmissionId);
+    const normalizedClientSubmissionId = normalizeClientSubmissionId(validatedBody.data.clientSubmissionId);
     const serverCodeHash = sha256Hex(persistedSubmitted);
     const codeForHints = isMultiFile ? concatForAI({ version: 1, entry: entryFile, files: effectiveFiles }) : sourceText;
     const hintStrategyVariant = resolveHintStrategyVariant({
@@ -1939,7 +1953,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
 
     try {
       workerRes = await judgeWithSemaphore(workerReq);
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (e instanceof HttpError) throw e;
       const errMsg = e instanceof Error ? e.message : String(e);
       logger.error("judge worker failed (edu complete)", {
@@ -1995,7 +2009,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
             input: t.input || "",
             expected: String(t.expectedOutput ?? ""),
             actual: r?.actual ?? "",
-            error_kind: (r as any)?.error_kind ?? null
+            error_kind: r?.error_kind ?? null
           });
           if (t.isHidden) continue;
           testResultsDetailed.push({
@@ -2005,7 +2019,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
             stderr: r?.stderr ?? null,
             passed: isPassed,
             verdict: r?.verdict ?? null,
-            errorKind: (r as any)?.error_kind ?? null
+            errorKind: r?.error_kind ?? null
           });
         }
       }
@@ -2016,11 +2030,11 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       maxScore = workerRes.max_score;
     }
 
-    if (workerRes && Array.isArray((workerRes as any).group_scores)) {
-      scoringGroupScores = (workerRes as any).group_scores.map((gs: any) => ({
-        group: String(gs?.group ?? ""),
-        score: Number(gs?.score ?? 0),
-        maxScore: Number(gs?.max_score ?? 0)
+    if (workerRes?.group_scores) {
+      scoringGroupScores = workerRes.group_scores.map(gs => ({
+        group: String(gs.group ?? ""),
+        score: Number(gs.score ?? 0),
+        maxScore: Number(gs.max_score ?? 0)
       }));
     }
 
@@ -2118,8 +2132,8 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       }
 
       const grade = gradeRepoM.create({
-        student: { id: studentId } as any,
-        topicTask: { id: taskId } as any,
+        student: { id: studentId },
+        topicTask: { id: taskId },
         total: totalGrade,
         testsPassed: passed,
         testsTotal: tests.length,
@@ -2146,20 +2160,20 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
     if (savedOrExisting.kind === "existing") {
       const saved = savedOrExisting.grade;
 
-      let parsedTestResults: any[] = [];
+      let parsedTestResults: unknown[] = [];
       if (saved.testResults) {
         try {
-          const parsed = JSON.parse(saved.testResults);
+            const parsed = JSON.parse(saved.testResults) as unknown;
           if (Array.isArray(parsed)) parsedTestResults = parsed;
         } catch {
           // ignore
         }
       }
 
-      let parsedGroupScores: any[] | null = null;
-      if ((saved as any).groupScores) {
+      let parsedGroupScores: unknown[] | null = null;
+      if (saved.groupScores) {
         try {
-          const parsed = JSON.parse((saved as any).groupScores);
+          const parsed = JSON.parse(saved.groupScores) as unknown;
           if (Array.isArray(parsed)) parsedGroupScores = parsed;
         } catch {
           // ignore
@@ -2173,8 +2187,8 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
         verdict: null,
         testsPassed: Number.isFinite(saved.testsPassed) ? saved.testsPassed : null,
         testsTotal: Number.isFinite(saved.testsTotal) ? saved.testsTotal : null,
-        score: typeof (saved as any).score === "number" ? (saved as any).score : null,
-        maxScore: typeof (saved as any).maxScore === "number" ? (saved as any).maxScore : null,
+        score: typeof saved.score === "number" ? saved.score : null,
+        maxScore: typeof saved.maxScore === "number" ? saved.maxScore : null,
         hintsCount: 0,
         hintStrategyVariant: null,
         analysisConfidence: null,
@@ -2200,10 +2214,10 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
         hints: [],
         hintStrategyVariant: null,
         scoring:
-          typeof (saved as any).score === "number" && typeof (saved as any).maxScore === "number"
+          typeof saved.score === "number" && typeof saved.maxScore === "number"
             ? {
-                score: (saved as any).score,
-                maxScore: (saved as any).maxScore,
+                score: saved.score,
+                maxScore: saved.maxScore,
                 groupScores: parsedGroupScores
               }
             : undefined,
@@ -2236,8 +2250,8 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
         failureCategory: learningFirstFailure?.errorKind ?? (workerRes?.verdict === "CE" ? "compile" : null),
         firstFailedTestId: learningFirstFailure?.testId ?? null,
       });
-    } catch (error: any) {
-      logger.warn("[learning] edu completion persistence failed", { requestId: req.requestId, error: error?.message });
+    } catch (error: unknown) {
+      logger.warn("[learning] edu completion persistence failed", { requestId: req.requestId, error: errorMessage(error) });
     }
 
     const learningFailureAnalysis = buildLearningFailureAnalysis({
@@ -2300,9 +2314,10 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
           }
         : null,
     });
-  } catch (error: any) {
-    const telemetryErrorCode = typeof error?.message === "string" && error.message.trim()
-      ? error.message.trim()
+  } catch (error: unknown) {
+    const message = errorMessage(error);
+    const telemetryErrorCode = message.trim()
+      ? message.trim()
       : "INTERNAL_SERVER_ERROR";
     logEduTaskTelemetry({
       ...telemetryBase,
@@ -2310,13 +2325,13 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       durationMs: Date.now() - telemetryStartedAt,
       errorCode: telemetryErrorCode
     });
-    if (error?.message === "TASK_MANUALLY_GRADED_LOCKED") {
+    if (message === "TASK_MANUALLY_GRADED_LOCKED") {
       return res.status(409).json({ message: "TASK_MANUALLY_GRADED_LOCKED" });
     }
-    if (error?.message === "TASK_ALREADY_COMPLETED") {
+    if (message === "TASK_ALREADY_COMPLETED") {
       return res.status(409).json({ message: "TASK_ALREADY_COMPLETED" });
     }
-    if (error?.message === "MAX_ATTEMPTS_REACHED") {
+    if (message === "MAX_ATTEMPTS_REACHED") {
       return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
     }
     logger.error("Error completing task", { requestId: req.requestId, err: error });
@@ -2406,14 +2421,14 @@ router.post("/tasks/:taskId/hints-feedback", authRequired, submissionRateLimitMi
         .getOne();
 
       const feedback = existing ?? repo.create({
-        student: { id: studentId } as any,
-        topicTask: { id: taskId } as any,
-        grade: matchedGrade ? ({ id: matchedGrade.id } as any) : null,
+        student: { id: studentId },
+        topicTask: { id: taskId },
+        grade: matchedGrade,
         submissionId,
         codeHash,
       });
 
-      feedback.grade = matchedGrade ? ({ id: matchedGrade.id } as any) : null;
+      feedback.grade = matchedGrade;
       feedback.submissionId = submissionId;
       feedback.codeHash = codeHash;
       feedback.verdict = verdict;
@@ -2459,7 +2474,7 @@ router.post("/tasks/:taskId/hints-feedback", authRequired, submissionRateLimitMi
       id: feedbackId,
       strategyVariant,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
@@ -2529,7 +2544,7 @@ router.post("/topics/tasks/:taskId/unassign", authRequired, async (req: AuthRequ
     });
 
     res.json({ message: "TASK_UNASSIGNED_AND_CLEARED" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error unassigning task", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2633,7 +2648,7 @@ router.post("/topics/control-works/:controlWorkId/unassign", authRequired, async
     });
 
     res.json({ message: "CONTROL_WORK_UNASSIGNED_AND_CLEARED" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error unassigning control work", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

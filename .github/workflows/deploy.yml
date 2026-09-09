@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        package: [frontend, backend, judge, ai-service, lsp-service]
+        package: [frontend, backend, judge, ai-service, lsp-service, ai-service/cloudflare-ai-worker]
     defaults:
       run:
         working-directory: ${{ matrix.package }}
@@ -28,7 +28,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: ${{ matrix.package }}/package-lock.json
 
@@ -43,12 +43,21 @@ jobs:
         working-directory: backend
         run: npm ci
 
+      - name: Type-check package
+        run: npm run typecheck --if-present
+
       - name: Build package
         run: npm run build
 
-      - name: Run backend unit tests
+      - name: Run package tests
+        run: npm run test --if-present
+
+      - name: Verify backend env contract
         if: matrix.package == 'backend'
-        run: npm test -- --runInBand
+        run: npm run test:env-contract
+
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high
 
   deploy:
     needs: verify
@@ -72,6 +81,8 @@ jobs:
             echo "backend=1" >> "$GITHUB_OUTPUT"
             echo "judge=1" >> "$GITHUB_OUTPUT"
             echo "ai_service=1" >> "$GITHUB_OUTPUT"
+            echo "lsp_service=1" >> "$GITHUB_OUTPUT"
+            echo "ai_worker=1" >> "$GITHUB_OUTPUT"
             echo "frontend=1" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -81,6 +92,8 @@ jobs:
             echo "backend=1" >> "$GITHUB_OUTPUT"
             echo "judge=1" >> "$GITHUB_OUTPUT"
             echo "ai_service=1" >> "$GITHUB_OUTPUT"
+            echo "lsp_service=1" >> "$GITHUB_OUTPUT"
+            echo "ai_worker=1" >> "$GITHUB_OUTPUT"
             echo "frontend=1" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -92,25 +105,33 @@ jobs:
           backend=0
           judge=0
           ai_service=0
+          lsp_service=0
+          ai_worker=0
           frontend=0
 
           has_path '^(backend/|package-lock.json$)' && backend=1
           has_path '^(judge/|package-lock.json$)' && judge=1
           has_path '^(ai-service/|package-lock.json$)' && ai_service=1
+          has_path '^(lsp-service/|package-lock.json$)' && lsp_service=1
+          has_path '^ai-service/cloudflare-ai-worker/' && ai_worker=1
           has_path '^(frontend/|\.github/workflows/deploy\.yml$)' && frontend=1
 
           # A commit outside a known package is treated as a full deploy so
           # shared infrastructure changes cannot silently be skipped.
-          if [[ "$backend$judge$ai_service$frontend" == "0000" ]]; then
+          if [[ "$backend$judge$ai_service$lsp_service$ai_worker$frontend" == "000000" ]]; then
             backend=1
             judge=1
             ai_service=1
+            lsp_service=1
+            ai_worker=1
             frontend=1
           fi
 
           echo "backend=$backend" >> "$GITHUB_OUTPUT"
           echo "judge=$judge" >> "$GITHUB_OUTPUT"
           echo "ai_service=$ai_service" >> "$GITHUB_OUTPUT"
+          echo "lsp_service=$lsp_service" >> "$GITHUB_OUTPUT"
+          echo "ai_worker=$ai_worker" >> "$GITHUB_OUTPUT"
           echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
 
       - name: Configure SSH
@@ -127,6 +148,8 @@ jobs:
           BUILD_BACKEND: ${{ steps.scope.outputs.backend }}
           BUILD_JUDGE: ${{ steps.scope.outputs.judge }}
           BUILD_AI_SERVICE: ${{ steps.scope.outputs.ai_service }}
+          BUILD_LSP_SERVICE: ${{ steps.scope.outputs.lsp_service }}
+          BUILD_AI_WORKER: ${{ steps.scope.outputs.ai_worker }}
           BUILD_FRONTEND: ${{ steps.scope.outputs.frontend }}
         run: |
           set -euo pipefail
@@ -139,4 +162,19 @@ jobs:
             fi
             pm2 stop all || true
             trap 'pm2 restart all --update-env || true' EXIT
-            BUILD_BACKEND=$BUILD_BACKEND BUILD_JUDGE=$BUILD_JUDGE BUILD_AI_SERVICE=$BUILD_AI_SERVICE BUILD_FRONTEND=$BUILD_FRONTEND \"\$repo/restart-all.sh\""
+            BUILD_BACKEND=$BUILD_BACKEND BUILD_JUDGE=$BUILD_JUDGE BUILD_AI_SERVICE=$BUILD_AI_SERVICE BUILD_LSP_SERVICE=$BUILD_LSP_SERVICE BUILD_AI_WORKER=$BUILD_AI_WORKER BUILD_FRONTEND=$BUILD_FRONTEND \"\$repo/restart-all.sh\""
+
+      - name: Warn when the Cloudflare Worker deploy is not configured
+        if: steps.scope.outputs.ai_worker == '1' && (env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: echo "::warning::Cloudflare Worker changed, but CLOUDFLARE_API_TOKEN and/or CLOUDFLARE_ACCOUNT_ID is not configured; worker deployment was skipped."
+
+      - name: Deploy Cloudflare Worker
+        if: steps.scope.outputs.ai_worker == '1' && env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != ''
+        working-directory: ai-service/cloudflare-ai-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --env production

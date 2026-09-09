@@ -6,10 +6,20 @@ import { Runner } from "./engine/runner";
 import type { JudgeRequest, JudgeResponse } from "./engine/result";
 import { LANGUAGE_IDS } from "./languages/registry";
 import type { LanguageId } from "./languages/types";
+import {
+  isProductionEnvironment,
+  readEnv,
+  readJudgeRequestLimits,
+  readLanguageChroot,
+  readNsjailChroot,
+  readNsjailConfigPath,
+  readNsjailCwd,
+  readNsjailPath,
+  useNsjailConfigFromEnv
+} from "./config";
 
-function readIntEnv(name: string, fallback: number): number {
-  const raw = parseInt(String(process.env[name] ?? ""), 10);
-  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function safeExists(p: string): boolean {
@@ -33,7 +43,7 @@ function safeExecutable(p: string): boolean {
   }
 }
 
-function logStderr(line: string, meta?: Record<string, any>) {
+function logStderr(line: string, meta?: Record<string, unknown>) {
   try {
     const payload = meta ? ` ${JSON.stringify(meta)}` : "";
     // IMPORTANT: do not use stdout, it is reserved for JSON responses.
@@ -62,7 +72,7 @@ function buildHealthPayload(params: {
     maxSourceBytes: number;
   };
 }) {
-  const isProduction = String(process.env.NODE_ENV ?? "").trim() === "production";
+  const isProduction = isProductionEnvironment();
   const nsjailExists = safeExists(params.nsjailPath);
   const nsjailExecutable = safeExecutable(params.nsjailPath);
   const configExists = safeExists(params.nsjailConfigPath);
@@ -83,8 +93,8 @@ function buildHealthPayload(params: {
       fs.unlinkSync(f);
       fs.rmSync(dir, { recursive: true, force: true });
       return { ok: true as const };
-    } catch (e: any) {
-      return { ok: false as const, error: e?.message || String(e) };
+    } catch (e: unknown) {
+      return { ok: false as const, error: errorMessage(e) };
     }
   })();
   if (!tempCheck.ok) problems.push(`TMP_WRITE_FAILED: ${tempCheck.error}`);
@@ -122,8 +132,8 @@ function buildHealthPayload(params: {
         ok: false as const,
         error: out || `exit ${r.status ?? "(null)"}${r.signal ? ` (signal ${r.signal})` : ""}`
       };
-    } catch (e: any) {
-      return { ok: false as const, error: e?.message || String(e) };
+    } catch (e: unknown) {
+      return { ok: false as const, error: errorMessage(e) };
     }
   })();
 
@@ -148,12 +158,12 @@ function buildHealthPayload(params: {
       // Ensure directory is at least readable.
       try {
         fs.readdirSync(chrootPath);
-      } catch (e: any) {
-        throw new Error(e?.message || "unreadable");
+      } catch (e: unknown) {
+        throw new Error(errorMessage(e) || "unreadable");
       }
       chrootChecks[lang] = { path: chrootPath, ok: true };
-    } catch (e: any) {
-      chrootChecks[lang] = { path: chrootPath, ok: false, error: e?.message || String(e) };
+    } catch (e: unknown) {
+      chrootChecks[lang] = { path: chrootPath, ok: false, error: errorMessage(e) };
       problems.push(`CHROOT_UNAVAILABLE: ${lang} ${chrootPath}`);
     }
   }
@@ -163,7 +173,7 @@ function buildHealthPayload(params: {
   return {
     status: ok ? "ok" : "error",
     service: "studycod-judge",
-    nodeEnv: process.env.NODE_ENV ?? null,
+    nodeEnv: readEnv("NODE_ENV") || null,
     sandboxMode: mode,
     ...(ok ? {} : { reason: problems[0] }),
     nsjail: {
@@ -191,19 +201,19 @@ function buildHealthPayload(params: {
 }
 
 async function main() {
-  const nsjailPath = process.env.NSJAIL_PATH || "/usr/bin/nsjail";
-  const nsjailConfigPath = process.env.NSJAIL_CONFIG || path.join(__dirname, "..", "sandbox", "nsjail.cfg");
-  const isProduction = String(process.env.NODE_ENV ?? "").trim() === "production";
+  const nsjailPath = readNsjailPath();
+  const nsjailConfigPath = readNsjailConfigPath();
+  const isProduction = isProductionEnvironment();
   const configExists = safeExists(nsjailConfigPath);
-  const useConfigFromEnv = String(process.env.NSJAIL_USE_CONFIG ?? "").trim() === "1";
+  const useConfigFromEnv = useNsjailConfigFromEnv();
   // Production should always use config-mode. We infer it automatically when NSJAIL_CONFIG exists,
   // so production does not depend on NSJAIL_USE_CONFIG being set.
   const useConfig = useConfigFromEnv || (isProduction && configExists);
 
   if (isProduction && !useConfig) {
     logStderr("[judge] FATAL: production requires NSJAIL_CONFIG (config-mode)", {
-      nodeEnv: process.env.NODE_ENV,
-      nsjailUseConfig: String(process.env.NSJAIL_USE_CONFIG ?? ""),
+      nodeEnv: readEnv("NODE_ENV"),
+      nsjailUseConfig: readEnv("NSJAIL_USE_CONFIG"),
       nsjailConfigPath,
       nsjailConfigExists: configExists
     });
@@ -213,12 +223,15 @@ async function main() {
     process.exit(1);
   }
 
-  const maxInputBytes = readIntEnv("JUDGE_MAX_INPUT_BYTES", 32 * 1024 * 1024);
-  const maxTests = readIntEnv("JUDGE_MAX_TESTS", 5000);
-  const maxTestInputBytes = readIntEnv("JUDGE_MAX_TEST_INPUT_BYTES", 1024 * 1024);
-  const maxTestOutputBytes = readIntEnv("JUDGE_MAX_TEST_OUTPUT_BYTES", 1024 * 1024);
-  const maxFiles = readIntEnv("JUDGE_MAX_FILES", 64);
-  const maxSourceBytes = 1024 * 1024;
+  const limits = readJudgeRequestLimits();
+  const {
+    maxInputBytes,
+    maxTests,
+    maxTestInputBytes,
+    maxTestOutputBytes,
+    maxFiles,
+    maxSourceBytes
+  } = limits;
 
   const mode = useConfig ? "config" : "cli";
   const warnCli = !useConfig;
@@ -229,7 +242,7 @@ async function main() {
     nsjailExists: safeExists(nsjailPath),
     nsjailConfigPath,
     nsjailConfigExists: safeExists(nsjailConfigPath),
-    nsjailUseConfigEnv: String(process.env.NSJAIL_USE_CONFIG ?? ""),
+    nsjailUseConfigEnv: readEnv("NSJAIL_USE_CONFIG"),
     limits: {
       maxInputBytes,
       maxTests,
@@ -242,7 +255,7 @@ async function main() {
 
   const ROOTFS = "/sandbox/rootfs";
   const hasRootfs = fs.existsSync(ROOTFS);
-  const envChroot = (process.env.NSJAIL_CHROOT || "").trim();
+  const envChroot = readNsjailChroot();
   const defaultChrootFallback = hasRootfs ? ROOTFS : "";
   const chrootDefault = (envChroot || defaultChrootFallback).trim();
 
@@ -250,14 +263,14 @@ async function main() {
   // NSJAIL_CHROOT_<LANG> env → shared default (NSJAIL_CHROOT / rootfs) → per-language
   // fallback dir. Driven by the language registry so new families need no edits here.
   const resolveLangChroot = (lang: LanguageId): string => {
-    const explicit = (process.env[`NSJAIL_CHROOT_${lang.toUpperCase()}`] || "").trim();
+    const explicit = readLanguageChroot(lang);
     const fallback = hasRootfs ? ROOTFS : `/sandbox/${lang}`;
     return (explicit || chrootDefault || fallback).trim();
   };
   const chrootByLanguage = Object.fromEntries(
     LANGUAGE_IDS.map(lang => [lang, resolveLangChroot(lang)])
   ) as Record<LanguageId, string>;
-  const cwd = (process.env.NSJAIL_CWD || "/work").trim();
+  const cwd = readNsjailCwd();
 
   if (hasArg("--health")) {
     const health = buildHealthPayload({
@@ -275,7 +288,7 @@ async function main() {
         maxSourceBytes
       }
     });
-    writeJson(health as any);
+    writeJson(health);
     process.exit(health.status === "ok" ? 0 : 1);
   }
 
@@ -292,15 +305,15 @@ async function main() {
   const res = await runner.run(req);
   writeJson(res);
 }
-function writeJson(obj: JudgeResponse | { error: string } | Record<string, any>) {
+function writeJson(obj: JudgeResponse | { error: string } | Record<string, unknown>) {
   process.stdout.write(JSON.stringify(obj));
   process.stdout.write("\n");
 }
 function parseJSON(s: string): unknown {
   try {
     return JSON.parse(s);
-  } catch (e: any) {
-    throw new Error(`INVALID_JSON: ${e?.message || "parse error"}`);
+  } catch (e: unknown) {
+    throw new Error(`INVALID_JSON: ${errorMessage(e) || "parse error"}`);
   }
 }
 async function readStdinLimited(maxBytes: number): Promise<string> {

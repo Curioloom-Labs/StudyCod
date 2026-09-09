@@ -101,12 +101,12 @@ export async function sendBirthdayGreetingsForDate(date: Date, opts?: { dryRun?:
       });
 
       sent++;
-    } catch (err: any) {
+    } catch (err: unknown) {
       failed++;
       logger.error("[birthday] failed to send greeting", {
         userId: user.id,
         email: user.email,
-        message: err?.message,
+        message: err instanceof Error ? err.message : String(err),
       });
 
       // Roll back reservation so it can be retried later.

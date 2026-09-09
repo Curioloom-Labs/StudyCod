@@ -4,6 +4,7 @@ import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
 import { AppDataSource } from '../../data-source';
 import { User } from '../../entities/User';
+import { env } from '../../env';
 
 type KeyHealthState = {
   cooldownUntilMs: number;
@@ -14,12 +15,26 @@ type KeyHealthState = {
   lastModel?: string;
 };
 
+type UnknownRecord = Record<string, unknown>;
+
+function readProperty(value: unknown, key: string): unknown {
+  if (!value || typeof value !== 'object') return undefined;
+  return (value as UnknownRecord)[key];
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  const message = readProperty(error, 'message');
+  if (typeof message === 'string' && message) return message;
+  return String(error);
+}
+
 const keyHealthByKey = new Map<string, KeyHealthState>();
 let didWarnSuspiciousKeyPrefix = false;
 const loggedModelCandidateModes = new Set<'text' | 'json'>();
 
 function envFlag(name: string): boolean {
-  const raw = String(process.env[name] ?? '').trim().toLowerCase();
+  const raw = String((env as Record<string, unknown>)[name] ?? '').trim().toLowerCase();
   return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
 }
 
@@ -263,7 +278,7 @@ function extractBalancedJsonObject(text: string): string | null {
   return null;
 }
 
-function parseModelJsonOrThrow<T = any>(raw: string): T {
+function parseModelJsonOrThrow<T = unknown>(raw: string): T {
   const content = String(raw ?? '').trim();
   if (!content) {
     throw new Error('Empty JSON response content');
@@ -306,7 +321,7 @@ function resolveReasoningPreferenceForModel(model: string): OpenRouterRequest['r
   if (!isGptOss20bModel(model)) return undefined;
 
   // For gpt-oss we default to non-reasoning mode unless explicitly enabled.
-  const raw = String(process.env.OPENROUTER_REASONING_ENABLED || '').trim().toLowerCase();
+  const raw = String(env.OPENROUTER_REASONING_ENABLED || '').trim().toLowerCase();
   if (raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on') {
     return {
       enabled: true
@@ -435,7 +450,7 @@ function normalizeMessagesForOutgoingPayload(messages: Array<{
 
 function resolveTextModel(rawModel: string): string {
   const configured = String(rawModel ?? '').trim();
-  const fallback = String(process.env.OPENROUTER_TEXT_MODEL || '').trim() || 'openai/gpt-4o-mini';
+  const fallback = String(env.OPENROUTER_TEXT_MODEL || '').trim() || 'openai/gpt-4o-mini';
   if (!configured) return fallback;
 
   // Vision-first models are frequently incompatible with strict JSON/text-only generation flow.
@@ -451,12 +466,12 @@ function resolveTextModel(rawModel: string): string {
 
 function resolveJsonModel(rawModel: string): string {
   const configured = String(rawModel ?? '').trim();
-  const explicitJsonModel = String(process.env.OPENROUTER_JSON_MODEL || '').trim();
+  const explicitJsonModel = String(env.OPENROUTER_JSON_MODEL || '').trim();
   if (explicitJsonModel) {
     return resolveTextModel(explicitJsonModel);
   }
 
-  const fallback = String(process.env.OPENROUTER_TEXT_MODEL || '').trim() || 'openai/gpt-4o-mini';
+  const fallback = String(env.OPENROUTER_TEXT_MODEL || '').trim() || 'openai/gpt-4o-mini';
   if (!configured) return fallback;
 
   const looksThinkingModel = /thinking|reasoning|reasoner/i.test(configured);
@@ -470,8 +485,8 @@ function resolveJsonModel(rawModel: string): string {
 }
 
 function getConfiguredOpenRouterFallbackModels(): string[] {
-  const primaryList = String(process.env.OPENROUTER_FALLBACK_MODELS || '').trim();
-  const legacyAlias = String(process.env.OPENROUTER_MODEL_FALLBACKS || '').trim();
+  const primaryList = String(env.OPENROUTER_FALLBACK_MODELS || '').trim();
+  const legacyAlias = String(env.OPENROUTER_MODEL_FALLBACKS || '').trim();
   const merged = [primaryList, legacyAlias].filter(Boolean).join(',');
   if (!merged) return [];
   return merged
@@ -488,8 +503,8 @@ function buildModelCandidateChain(params: {
   mode: 'text' | 'json';
 }): string[] {
   const primary = String(params.primaryModel || '').trim();
-  const configuredTextModel = String(process.env.OPENROUTER_TEXT_MODEL || '').trim();
-  const configuredJsonModel = String(process.env.OPENROUTER_JSON_MODEL || '').trim();
+  const configuredTextModel = String(env.OPENROUTER_TEXT_MODEL || '').trim();
+  const configuredJsonModel = String(env.OPENROUTER_JSON_MODEL || '').trim();
   const explicitFallbacks = getConfiguredOpenRouterFallbackModels();
 
   const candidates: string[] = [primary];
@@ -514,8 +529,8 @@ function buildModelCandidateChain(params: {
   return normalizeAndDeduplicateModels(candidates);
 }
 
-function shouldFallbackToNextModel(error: any): boolean {
-  const msg = String(error?.message || error || '').toLowerCase();
+function shouldFallbackToNextModel(error: unknown): boolean {
+  const msg = errorMessage(error).toLowerCase();
   if (!msg) return false;
 
   // Some routed endpoints reject explicit reasoning.disable for specific models.
@@ -567,17 +582,17 @@ export interface OpenRouterRuntimeDiagnostics {
 }
 
 function readCsvEnvList(name: string): string[] {
-  return String(process.env[name] || '')
+  return String((env as Record<string, unknown>)[name] || '')
     .split(',')
     .map(s => s.trim())
     .filter(Boolean);
 }
 
 export function getOpenRouterRuntimeDiagnostics(): OpenRouterRuntimeDiagnostics {
-  const openRouterModel = String(process.env.OPENROUTER_MODEL || '').trim() || null;
-  const openRouterTextModel = String(process.env.OPENROUTER_TEXT_MODEL || '').trim() || null;
-  const openRouterJsonModel = String(process.env.OPENROUTER_JSON_MODEL || '').trim() || null;
-  const openRouterReasoningEnabled = String(process.env.OPENROUTER_REASONING_ENABLED || '').trim() || null;
+  const openRouterModel = String(env.OPENROUTER_MODEL || '').trim() || null;
+  const openRouterTextModel = String(env.OPENROUTER_TEXT_MODEL || '').trim() || null;
+  const openRouterJsonModel = String(env.OPENROUTER_JSON_MODEL || '').trim() || null;
+  const openRouterReasoningEnabled = String(env.OPENROUTER_REASONING_ENABLED || '').trim() || null;
   const fallbackModels = readCsvEnvList('OPENROUTER_FALLBACK_MODELS');
   const fallbackModelsAlias = readCsvEnvList('OPENROUTER_MODEL_FALLBACKS');
   const effectiveFallbackModels = getConfiguredOpenRouterFallbackModels();
@@ -588,7 +603,7 @@ export function getOpenRouterRuntimeDiagnostics(): OpenRouterRuntimeDiagnostics 
     json: buildModelCandidateChain({ primaryModel: primary, mode: 'json' })
   };
 
-  const primaryKey = String(process.env.OPENROUTER_API_KEY || '').trim();
+  const primaryKey = String(env.OPENROUTER_API_KEY || '').trim();
   const backupKeysCount = readCsvEnvList('OPENROUTER_BACKUP_API_KEYS').length;
 
   const now = nowMs();
@@ -646,7 +661,7 @@ export class OpenRouterProvider implements LLMProvider {
     // If an admin-specific model is configured and the caller is an admin user,
     // prefer the admin model as primary candidate.
     try {
-      const adminModelRaw = String(process.env.OPENROUTER_ADMIN_MODEL || '').trim();
+      const adminModelRaw = String(env.OPENROUTER_ADMIN_MODEL || '').trim();
       if (adminModelRaw && options?.userId) {
         const user = await AppDataSource.getRepository(User).findOne({ where: { id: options.userId }, select: ['id', 'role'] });
         if (user && user.role === 'SYSTEM_ADMIN') {
@@ -657,8 +672,8 @@ export class OpenRouterProvider implements LLMProvider {
           logger.info('Using admin-specific OpenRouter model for SYSTEM_ADMIN user', { userId: options.userId, adminModel });
         }
       }
-    } catch (err: any) {
-      logger.warn('Failed to resolve admin model preference; continuing with default candidates', { err: String(err?.message || err) });
+    } catch (err: unknown) {
+      logger.warn('Failed to resolve admin model preference; continuing with default candidates', { err: errorMessage(err) });
     }
     if (candidates.length === 0) {
       throw new Error('AI_GENERATION_FAILED: No OpenRouter model candidates configured');
@@ -675,13 +690,13 @@ export class OpenRouterProvider implements LLMProvider {
       });
     }
 
-    let lastError: any = null;
+    let lastError: unknown = null;
     for (let i = 0; i < candidates.length; i++) {
       const model = candidates[i];
       try {
         const response = await this.callOpenRouter(requestFactory(model), options);
         return { response, model };
-      } catch (error: any) {
+      } catch (error: unknown) {
         lastError = error;
         const hasNext = i < candidates.length - 1;
         const canFallback = hasNext && shouldFallbackToNextModel(error);
@@ -694,7 +709,7 @@ export class OpenRouterProvider implements LLMProvider {
             mode,
             failedModel: model,
             nextModel: candidates[i + 1],
-            reason: String(error?.message || error || 'unknown').slice(0, 400)
+            reason: errorMessage(error).slice(0, 400)
           });
           continue;
         }
@@ -728,15 +743,15 @@ export class OpenRouterProvider implements LLMProvider {
       // transport-stall guard, not a user-visible task-generation deadline:
       // once it fires, the model fallback chain can continue with another
       // provider. Keep it configurable for unusually slow deployments.
-      const rawTransport = Number(process.env.OPENROUTER_TRANSPORT_TIMEOUT_MS);
+      const rawTransport = Number(env.OPENROUTER_TRANSPORT_TIMEOUT_MS);
       if (Number.isFinite(rawTransport) && rawTransport > 0) {
         return Math.max(1_000, Math.floor(rawTransport));
       }
       return 90_000;
     })();
-    const requestedModel = request.model || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+    const requestedModel = request.model || env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
     const model = resolveTextModel(requestedModel);
-    const url = process.env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';
+    const url = env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';
     const adaptedRequest = {
       ...request,
       messages: adaptMessagesForModel(request.messages, model)
@@ -748,8 +763,8 @@ export class OpenRouterProvider implements LLMProvider {
     if (shouldRemoveJsonMode(model) && adaptedRequest.response_format) {
       delete adaptedRequest.response_format;
     }
-    const primary = (process.env.OPENROUTER_API_KEY || '').trim();
-    const backups = (process.env.OPENROUTER_BACKUP_API_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
+    const primary = (env.OPENROUTER_API_KEY || '').trim();
+    const backups = (env.OPENROUTER_BACKUP_API_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
     const allKeys = normalizeAndDeduplicateKeys(primary, backups);
     if (allKeys.length === 0) {
       throw new Error('AI_GENERATION_FAILED: No OpenRouter API keys configured');
@@ -775,27 +790,27 @@ export class OpenRouterProvider implements LLMProvider {
 
     const errorsSummary: Array<{ keyIndex: number; status?: number; message: string }> = [];
     const keyDisableMs = (() => {
-      const raw = String(process.env.OPENROUTER_KEY_DISABLE_MS || '').trim();
+      const raw = String(env.OPENROUTER_KEY_DISABLE_MS || '').trim();
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 24 * 60 * 60 * 1000;
     })();
     const defaultRateLimitCooldownMs = (() => {
-      const raw = String(process.env.OPENROUTER_RATE_LIMIT_COOLDOWN_MS || '').trim();
+      const raw = String(env.OPENROUTER_RATE_LIMIT_COOLDOWN_MS || '').trim();
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 20_000;
     })();
     const defaultServerErrorCooldownMs = (() => {
-      const raw = String(process.env.OPENROUTER_SERVER_ERROR_COOLDOWN_MS || '').trim();
+      const raw = String(env.OPENROUTER_SERVER_ERROR_COOLDOWN_MS || '').trim();
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 4_000;
     })();
     const defaultRetryBaseDelayMs = (() => {
-      const raw = String(process.env.OPENROUTER_RETRY_BASE_DELAY_MS || '').trim();
+      const raw = String(env.OPENROUTER_RETRY_BASE_DELAY_MS || '').trim();
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 4_000;
     })();
     const defaultRetryMaxDelayMs = (() => {
-      const raw = String(process.env.OPENROUTER_RETRY_MAX_DELAY_MS || '').trim();
+      const raw = String(env.OPENROUTER_RETRY_MAX_DELAY_MS || '').trim();
       const n = Number.parseInt(raw, 10);
       return Number.isFinite(n) && n > 0 ? n : 30_000;
     })();
@@ -895,7 +910,7 @@ export class OpenRouterProvider implements LLMProvider {
             headers: {
               'Authorization': `Bearer ${apiKey}`,
               'Content-Type': 'application/json',
-              'HTTP-Referer': process.env.OPENROUTER_REFERER || 'https://studycod.app',
+              'HTTP-Referer': env.OPENROUTER_REFERER || 'https://studycod.app',
               'X-Title': 'StudyCod Task Generator'
             },
             body: JSON.stringify({
@@ -929,15 +944,16 @@ export class OpenRouterProvider implements LLMProvider {
               message: String(errorText ?? '').slice(0, 400)
             });
 
-            let parsedError: any = null;
+            let parsedError: unknown = null;
             try {
               parsedError = JSON.parse(errorText);
             } catch {
               parsedError = null;
             }
-            const errorMessage = parsedError?.error?.message || errorText;
-            const isInvalidArgument = response.status === 400 && (errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('JSON mode is not enabled') || errorMessage.includes('not enabled'));
-            const isRateLimit = response.status === 429 || isRateLimitLike(errorMessage);
+            const nestedErrorMessage = readProperty(readProperty(parsedError, 'error'), 'message');
+            const responseErrorMessage = typeof nestedErrorMessage === 'string' ? nestedErrorMessage : errorText;
+            const isInvalidArgument = response.status === 400 && (responseErrorMessage.includes('INVALID_ARGUMENT') || responseErrorMessage.includes('JSON mode is not enabled') || responseErrorMessage.includes('not enabled'));
+            const isRateLimit = response.status === 429 || isRateLimitLike(responseErrorMessage);
             if (isInvalidArgument) {
               throw new Error(`AI_GENERATION_FAILED: Invalid request for model ${model}. ${errorText}`);
             }
@@ -1041,19 +1057,22 @@ export class OpenRouterProvider implements LLMProvider {
             responseId
           });
           return data;
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (timeoutId) {
             clearTimeout(timeoutId);
           }
           if (signal) {
             signal.removeEventListener('abort', onAbort);
           }
-          if (signal && err?.name === 'AbortError' && signal.aborted) {
+          const errName = readProperty(err, 'name');
+          const errMessage = errorMessage(err);
+          const normalizedError = err instanceof Error ? err : new Error(errMessage);
+          if (signal && errName === 'AbortError' && signal.aborted) {
             // External cancellation (request deadline) – surface as timeout to callers.
             throw new Error('AI_GENERATION_FAILED: Request aborted (deadline exceeded)');
           }
-          lastError = err;
-          if (requestTimeoutMs !== null && (err.name === 'AbortError' || err.message?.includes('timeout'))) {
+          lastError = normalizedError;
+          if (requestTimeoutMs !== null && (errName === 'AbortError' || errMessage.includes('timeout'))) {
             logger.warn("OpenRouter request timeout", {
               traceId,
               userId,
@@ -1063,15 +1082,15 @@ export class OpenRouterProvider implements LLMProvider {
             const timeoutSeconds = Math.max(1, Math.round(requestTimeoutMs / 1000));
             throw new Error(`AI_GENERATION_FAILED: Request timeout (${timeoutSeconds}s exceeded)`);
           }
-          if (err.message?.includes('Invalid request for model')) {
+          if (errMessage.includes('Invalid request for model')) {
             throw err;
           }
-          if (isRateLimitLike(err?.message || '')) {
+          if (isRateLimitLike(errMessage)) {
             // Try the next key (if any) instead of failing fast.
-            lastError = err;
+            lastError = normalizedError;
             break;
           }
-          if (err.message?.includes('AI_GENERATION_FAILED')) {
+          if (errMessage.includes('AI_GENERATION_FAILED')) {
             throw err;
           }
           if (attempt >= maxRetries) {
@@ -1089,10 +1108,10 @@ export class OpenRouterProvider implements LLMProvider {
         }
       }
     }
-    if (lastError?.message?.includes('Invalid request for model')) {
+    if (errorMessage(lastError).includes('Invalid request for model')) {
       throw lastError;
     }
-    if (lastError?.message?.includes('Rate limit exceeded')) {
+    if (errorMessage(lastError).includes('Rate limit exceeded')) {
       throw lastError;
     }
 
@@ -1110,14 +1129,14 @@ export class OpenRouterProvider implements LLMProvider {
       throw new Error(
         `AI_GENERATION_FAILED: All API keys exhausted for model ${model}. ` +
         `Errors: ${statusSummary}. ` +
-        `Last error: ${lastError?.message || 'Unknown error'}`
+        `Last error: ${lastError ? errorMessage(lastError) : 'Unknown error'}`
       );
     }
 
-    throw new Error(`AI_GENERATION_FAILED: All API keys exhausted for model ${model}. Last error: ${lastError?.message || 'Unknown error'}`);
+    throw new Error(`AI_GENERATION_FAILED: All API keys exhausted for model ${model}. Last error: ${lastError ? errorMessage(lastError) : 'Unknown error'}`);
   }
   async generateText(prompt: string, systemPrompt?: string, options: LLMGenerateOptions = {}): Promise<string> {
-    const primaryModel = resolveTextModel(process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini');
+    const primaryModel = resolveTextModel(env.OPENROUTER_MODEL || 'openai/gpt-4o-mini');
     const modelCandidates = buildModelCandidateChain({
       primaryModel,
       mode: 'text'
@@ -1156,8 +1175,8 @@ export class OpenRouterProvider implements LLMProvider {
     }
     return content;
   }
-  async generateJSON<T = any>(prompt: string, schema: object, systemPrompt?: string, options: LLMGenerateOptions = {}): Promise<T> {
-    const primaryModel = resolveJsonModel(process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini');
+  async generateJSON<T = unknown>(prompt: string, schema: object, systemPrompt?: string, options: LLMGenerateOptions = {}): Promise<T> {
+    const primaryModel = resolveJsonModel(env.OPENROUTER_MODEL || 'openai/gpt-4o-mini');
     const modelCandidates = buildModelCandidateChain({
       primaryModel,
       mode: 'json'
@@ -1244,8 +1263,8 @@ export class OpenRouterProvider implements LLMProvider {
         if (jsonMatch) jsonContent = jsonMatch[1];
       }
       return parseModelJsonOrThrow<T>(jsonContent);
-    } catch (error: any) {
-      const primaryParseError = error?.message || String(error);
+    } catch (error: unknown) {
+      const primaryParseError = errorMessage(error);
       let repairParseError: string | null = null;
 
       logger.debug('OpenRouter JSON parse failed on primary response; attempting repair', {
@@ -1288,8 +1307,8 @@ export class OpenRouterProvider implements LLMProvider {
         }
         try {
           return parseModelJsonOrThrow<T>(repairedContent);
-        } catch (repairErr: any) {
-          repairParseError = repairErr?.message || String(repairErr);
+        } catch (repairErr: unknown) {
+          repairParseError = errorMessage(repairErr);
 
           logger.debug('OpenRouter JSON parse failed on repair response; trying strict regeneration', {
             model,
@@ -1326,16 +1345,16 @@ export class OpenRouterProvider implements LLMProvider {
           }
           return parseModelJsonOrThrow<T>(strictContent);
         }
-      } catch (fixError: any) {
+      } catch (fixError: unknown) {
         logger.warn('OpenRouter JSON recovery failed after parse error', {
           model,
           responseId: response.id || 'unknown',
           primaryParseError,
           repairParseError,
-          recoveryError: fixError?.message || String(fixError),
+          recoveryError: errorMessage(fixError),
           preview: content.slice(0, 160)
         });
-        throw new Error(`AI_GENERATION_FAILED: Failed to parse JSON response: ${error.message}. ` + `Fix attempt failed: ${fixError?.message || String(fixError)}`);
+        throw new Error(`AI_GENERATION_FAILED: Failed to parse JSON response: ${errorMessage(error)}. ` + `Fix attempt failed: ${errorMessage(fixError)}`);
       }
     }
   }

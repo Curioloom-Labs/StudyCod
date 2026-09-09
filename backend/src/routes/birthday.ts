@@ -5,6 +5,10 @@ import { isCronAuthorized } from "../middleware/cronAuth";
 
 const router = Router();
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 router.post("/check", async (req: Request, res: Response) => {
   try {
     if (!isCronAuthorized(req)) {
@@ -13,9 +17,10 @@ router.post("/check", async (req: Request, res: Response) => {
       });
     }
 
-    const rawDate = String((req as any).body?.date ?? "").trim();
-    const dryRun = Boolean((req as any).body?.dryRun);
-    const rawLimit = (req as any).body?.limit;
+    const body = isRecord(req.body) ? req.body : {};
+    const rawDate = String(body.date ?? "").trim();
+    const dryRun = Boolean(body.dryRun);
+    const rawLimit = body.limit;
 
     const date = rawDate ? new Date(rawDate) : new Date();
     if (Number.isNaN(date.getTime())) {
@@ -35,10 +40,10 @@ router.post("/check", async (req: Request, res: Response) => {
       success: true,
       ...result,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[birthday] POST /birthday/check error", {
-      requestId: (req as any).requestId,
-      message: err?.message,
+      requestId: isRecord(req) ? req.requestId : undefined,
+      message: err instanceof Error ? err.message : String(err),
     });
     return res.status(500).json({
       message: "Internal server error",

@@ -15,6 +15,10 @@ const router = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const studentRepo = () => AppDataSource.getRepository(Student);
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 const sendBroadcastSchema = z
   .object({
     subject: z.string().min(1).max(160),
@@ -173,7 +177,7 @@ router.post("/broadcast", authRequired, systemAdminGuard, async (req: AuthReques
 
       if (userIds.length) {
         const users = await userRepo().find({
-          where: { id: In(userIds) } as any
+          where: { id: In(userIds) }
         });
         for (const u of users) {
           const email = String(u.email || "").trim();
@@ -185,7 +189,7 @@ router.post("/broadcast", authRequired, systemAdminGuard, async (req: AuthReques
 
       if (studentIds.length) {
         const students = await studentRepo().find({
-          where: { id: In(studentIds) } as any
+          where: { id: In(studentIds) }
         });
         for (const s of students) {
           const email = String(s.email || "").trim();
@@ -197,7 +201,7 @@ router.post("/broadcast", authRequired, systemAdminGuard, async (req: AuthReques
 
       if (classIds.length) {
         const students = await studentRepo().find({
-          where: { class: { id: In(classIds) } as any } as any
+          where: { class: { id: In(classIds) } }
         });
         for (const s of students) {
           const email = String(s.email || "").trim();
@@ -210,7 +214,7 @@ router.post("/broadcast", authRequired, systemAdminGuard, async (req: AuthReques
       if (emails.length) {
         // Resolve emails to known recipients (user preferred over student).
         for (const e of emails) {
-          const u = await userRepo().findOne({ where: { email: e } as any });
+          const u = await userRepo().findOne({ where: { email: e } });
           if (u) {
             const email = String(u.email || "").trim();
             if (email) {
@@ -220,7 +224,7 @@ router.post("/broadcast", authRequired, systemAdminGuard, async (req: AuthReques
             }
             continue;
           }
-          const s = await studentRepo().findOne({ where: { email: e } as any });
+          const s = await studentRepo().findOne({ where: { email: e } });
           if (s) {
             const email = String(s.email || "").trim();
             if (email) {
@@ -284,14 +288,14 @@ router.post("/broadcast", authRequired, systemAdminGuard, async (req: AuthReques
           });
         }
         sent++;
-      } catch (err: any) {
+      } catch (err: unknown) {
         failed++;
-        logger.error("[admin-broadcast] failed", { email: r.email, kind: r.kind, id: r.id, err: err?.message || err });
+        logger.error("[admin-broadcast] failed", { email: r.email, kind: r.kind, id: r.id, err: errorMessage(err) });
       }
     }
 
     return res.json({ ok: true, dryRun: false, recipients: recipients.length, sent, failed });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-broadcast] error", { requestId: req.requestId, userId: req.userId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

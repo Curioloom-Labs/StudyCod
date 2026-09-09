@@ -43,8 +43,8 @@ export async function checkReadiness(): Promise<ReadinessResult> {
       await AppDataSource.query("SELECT 1");
       checks.db.ok = true;
     }
-  } catch (err: any) {
-    checks.db.error = String(err?.message || "query-failed");
+  } catch (err: unknown) {
+    checks.db.error = err instanceof Error ? err.message : "query-failed";
   }
 
   if (!checks.redis.enabled) {
@@ -58,8 +58,8 @@ export async function checkReadiness(): Promise<ReadinessResult> {
       } else {
         checks.redis.error = "unavailable";
       }
-    } catch (err: any) {
-      checks.redis.error = String(err?.message || "ping-failed");
+    } catch (err: unknown) {
+      checks.redis.error = err instanceof Error ? err.message : "ping-failed";
     }
   }
 

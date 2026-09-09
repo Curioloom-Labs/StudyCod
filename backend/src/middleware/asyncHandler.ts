@@ -7,10 +7,10 @@ import type { ParamsDictionary, Query } from "express-serve-static-core";
  */
 export function asyncHandler<
   P = ParamsDictionary,
-  ResBody = any,
-  ReqBody = any,
+  ResBody = unknown,
+  ReqBody = unknown,
   ReqQuery = Query,
-  LocalsObj extends Record<string, any> = Record<string, any>,
+  LocalsObj extends Record<string, unknown> = Record<string, unknown>,
 >(
   fn: (
     req: Request<P, ResBody, ReqBody, ReqQuery, LocalsObj>,

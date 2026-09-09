@@ -1,6 +1,7 @@
 import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { logger } from '../../utils/logger';
 import { tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
+import { env } from '../../env';
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
@@ -19,19 +20,28 @@ type OpenAICompatResponse = {
 	error?: { message?: string; type?: string };
 };
 
+function readProperty(value: unknown, key: string): unknown {
+	if (!value || typeof value !== "object") return undefined;
+	return (value as Record<string, unknown>)[key];
+}
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
 function nowMs(): number {
 	return Date.now();
 }
 
 function parseEnvTimeoutMs(envVar: string, fallbackMs: number, minMs: number, maxMs: number): number {
-	const raw = String(process.env[envVar] ?? '').trim();
+	const raw = String((env as unknown as Record<string, unknown>)[envVar] ?? '').trim();
 	const n = raw ? Number(raw) : NaN;
 	const v = Number.isFinite(n) ? Math.floor(n) : fallbackMs;
 	return Math.max(minMs, Math.min(maxMs, v));
 }
 
 function resolveLocalChatCompletionsUrl(): string {
-	const base = String(process.env.LOCAL_LLM_URL || '').trim();
+	const base = String(env.LOCAL_LLM_URL || '').trim();
 	if (!base) return '';
 	// Accept either a full chat/completions URL or a server base URL.
 	if (/\/chat\/completions\b/i.test(base)) return base;
@@ -57,7 +67,7 @@ export class LocalLLMProvider implements LLMProvider {
 			else options.signal.addEventListener('abort', onAbort, { once: true });
 		}
 
-		const apiKey = String(process.env.LOCAL_LLM_API_KEY || '').trim();
+		const apiKey = String(env.LOCAL_LLM_API_KEY || '').trim();
 
 		try {
 			logger.info('[llm] local request started', {
@@ -83,16 +93,18 @@ export class LocalLLMProvider implements LLMProvider {
 			}
 
 			return (await resp.json()) as OpenAICompatResponse;
-		} catch (err: any) {
-			if (options.signal && err?.name === 'AbortError' && options.signal.aborted) {
+		} catch (err: unknown) {
+			const name = readProperty(err, "name");
+			const message = errorMessage(err);
+			if (options.signal && name === 'AbortError' && options.signal.aborted) {
 				throw new Error('AI_GENERATION_FAILED: Request aborted (deadline exceeded)');
 			}
-			if (err?.name === 'AbortError') {
+			if (name === 'AbortError') {
 				const timeoutSeconds = Math.max(1, Math.round(timeout / 1000));
 				throw new Error(`AI_GENERATION_FAILED: Request timeout (${timeoutSeconds}s exceeded)`);
 			}
-			if (err?.message?.includes('AI_GENERATION_FAILED')) throw err;
-			throw new Error(`AI_GENERATION_FAILED: ${err?.message || String(err)}`);
+			if (message.includes('AI_GENERATION_FAILED')) throw err;
+			throw new Error(`AI_GENERATION_FAILED: ${message}`);
 		} finally {
 			clearTimeout(timeoutId);
 			if (options.signal) options.signal.removeEventListener('abort', onAbort);
@@ -100,7 +112,7 @@ export class LocalLLMProvider implements LLMProvider {
 	}
 
 	async generateText(prompt: string, systemPrompt?: string, options: LLMGenerateOptions = {}): Promise<string> {
-		const model = String(process.env.LOCAL_LLM_MODEL || process.env.OPENROUTER_MODEL || 'gpt-4o-mini').trim();
+		const model = String(env.LOCAL_LLM_MODEL || env.OPENROUTER_MODEL || 'gpt-4o-mini').trim();
 		const messages: ChatMessage[] = [];
 		if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
 		messages.push({ role: 'user', content: prompt });
@@ -117,7 +129,7 @@ export class LocalLLMProvider implements LLMProvider {
 		return String(content);
 	}
 
-	async generateJSON<T = any>(prompt: string, schema: object, systemPrompt?: string, options: LLMGenerateOptions = {}): Promise<T> {
+	async generateJSON<T = unknown>(prompt: string, schema: object, systemPrompt?: string, options: LLMGenerateOptions = {}): Promise<T> {
 		const jsonPrompt = `${prompt}\n\nJSON schema:\n${JSON.stringify(schema, null, 2)}\n\nReturn ONLY valid JSON (no markdown, no explanations).`;
 		const content = await this.generateText(jsonPrompt, systemPrompt, options);
 		try {
@@ -127,13 +139,13 @@ export class LocalLLMProvider implements LLMProvider {
 				if (jsonMatch) jsonContent = jsonMatch[1];
 			}
 			return JSON.parse(jsonContent) as T;
-		} catch (error: any) {
+		} catch (error: unknown) {
 			try {
 				return tryFixJsonResponse(content) as T;
-			} catch (fixError: any) {
+			} catch (fixError: unknown) {
 				throw new Error(
-					`AI_GENERATION_FAILED: Failed to parse JSON response: ${error.message}. ` +
-					`Fix attempt failed: ${fixError?.message || String(fixError)}`
+					`AI_GENERATION_FAILED: Failed to parse JSON response: ${errorMessage(error)}. ` +
+					`Fix attempt failed: ${errorMessage(fixError)}`
 				);
 			}
 		}

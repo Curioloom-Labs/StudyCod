@@ -13,6 +13,7 @@ import { setSharedAuthCookie } from "../../utils/authCookie";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
 import type { AuthRequest } from "../../middleware/authMiddleware";
 import { enforceAuthTurnstile } from "../auth";
+import { env } from "../../env";
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.post("/student-login", studentLoginLimiter, async (req: AuthRequest, res:
 
     const { username, password, turnstileToken } = validated.data;
 
-    const qaStudentUsername = String(process.env.EDU_QA_STUDENT_USERNAME ?? "").trim();
+    const qaStudentUsername = String(env.EDU_QA_STUDENT_USERNAME ?? "").trim();
     const isConfiguredQaStudent = qaStudentUsername.length > 0 && username.trim() === qaStudentUsername;
     if (!isConfiguredQaStudent && !(await enforceAuthTurnstile(req, res, turnstileToken))) return;
 
@@ -90,7 +91,7 @@ router.post("/student-login", studentLoginLimiter, async (req: AuthRequest, res:
       }
     });
   } catch (error) {
-    logger.error("[edu/studentAuth] POST /student-login error", { requestId: (req as any).requestId, error });
+    logger.error("[edu/studentAuth] POST /student-login error", { requestId: req.requestId, error });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });

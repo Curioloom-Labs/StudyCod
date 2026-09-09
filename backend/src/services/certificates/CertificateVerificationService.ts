@@ -1,5 +1,7 @@
 import { AppDataSource } from "../../data-source";
 
+type SqlRow = Record<string, unknown>;
+
 export class CertificateVerificationService {
   async getByCertificateId(certificateId: string): Promise<null | {
     certificateId: string;
@@ -27,16 +29,22 @@ export class CertificateVerificationService {
       LIMIT 1
       `,
       [certificateId]
-    )) as Array<any>;
+    )) as SqlRow[];
 
     const row = rows[0];
     if (!row) return null;
+    const issuedAt = row.issuedAt;
+    const issuedDate = issuedAt instanceof Date
+      ? issuedAt
+      : typeof issuedAt === "string" || typeof issuedAt === "number"
+        ? new Date(issuedAt)
+        : null;
 
     return {
       certificateId: String(row.certificateId),
       name: String(row.participantName ?? ""),
       contestName: String(row.contestTitle ?? ""),
-      date: row.issuedAt ? new Date(row.issuedAt).toISOString() : null,
+      date: issuedDate && Number.isFinite(issuedDate.getTime()) ? issuedDate.toISOString() : null,
       score: Number(row.score ?? 0) || 0,
       maxScore: Number(row.maxScore ?? 0) || 0,
       organizer: String(row.organizerName ?? "StudyCod"),

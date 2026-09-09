@@ -100,5 +100,5 @@ export async function getMyPlaygroundSnippets(): Promise<PlaygroundSnippetSummar
 export async function getPlaygroundSnippet(shareId: string): Promise<PlaygroundSnippet> {
   const res = await api.get(`/playground/snippets/${encodeURIComponent(shareId)}`);
   const data = res.data as PlaygroundSnippet;
-  return { ...data, language: normalizePlaygroundLanguage((data as any).language) };
+  return { ...data, language: normalizePlaygroundLanguage(data.language) };
 }

@@ -108,7 +108,7 @@ router.get("/students/me", authRequired, async (req: AuthRequest, res: Response)
         }
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/students] Error fetching student info", { requestId: req.requestId, studentId: req.studentId, error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -181,7 +181,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       .getMany();
 
     const visibleControlWorks = controlWorks.filter(controlWork =>
-      isAssignedToStudent(controlWork.isAssigned, (controlWork as any).assignedStudentIds, req.studentId!)
+      isAssignedToStudent(controlWork.isAssigned, controlWork.assignedStudentIds, req.studentId!)
     );
 
     for (const controlWork of visibleControlWorks) {
@@ -206,9 +206,9 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       controlTasks = controlTasks.filter(t => {
         if (t.type !== "CONTROL") return false;
         if (t.isAssigned) {
-          return isAssignedToStudent(t.isAssigned, (t as any).assignedStudentIds, req.studentId!);
+          return isAssignedToStudent(t.isAssigned, t.assignedStudentIds, req.studentId!);
         }
-        return isAssignedToStudent(true, (controlWork as any).assignedStudentIds, req.studentId!);
+        return isAssignedToStudent(true, controlWork.assignedStudentIds, req.studentId!);
       });
       controlWork.topic.tasks = controlTasks;
     }
@@ -229,7 +229,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
     const latestCourseGradeByTaskId = new Map<number, EduGrade>();
     const courseAttemptsByTaskId = new Map<number, number>();
     for (const grade of courseGrades) {
-      const taskId = (grade.task as any)?.id ?? (grade as any).taskId;
+      const taskId = grade.task?.id;
       if (!Number.isFinite(Number(taskId))) continue;
       if (!latestCourseGradeByTaskId.has(Number(taskId))) latestCourseGradeByTaskId.set(Number(taskId), grade);
       courseAttemptsByTaskId.set(Number(taskId), (courseAttemptsByTaskId.get(Number(taskId)) || 0) + 1);
@@ -296,7 +296,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
 
     const topicsWithGrades = await Promise.all(topics.map(async topic => {
       const tasks = (topic.tasks || []).filter(t =>
-        t.type === "PRACTICE" && isAssignedToStudent(t.isAssigned, (t as any).assignedStudentIds, req.studentId!)
+        t.type === "PRACTICE" && isAssignedToStudent(t.isAssigned, t.assignedStudentIds, req.studentId!)
       );
 
       const tasksWithGrades = await Promise.all(tasks.map(async task => {
@@ -454,7 +454,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
     res.json({
       lessons: allLessons
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/students] Error fetching student lessons", { requestId: req.requestId, studentId: req.studentId, error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -522,8 +522,8 @@ router.get("/students/:studentId/grades", authRequired, async (req: AuthRequest,
 
     logger.debug("[GET /edu/students/:studentId/grades] grades fetched", { requestId: req.requestId, studentId, gradesCount: allGrades.length });
 
-    const gradesByTask = new Map<number, any>();
-    const gradesByTopicTask = new Map<number, any>();
+    const gradesByTask = new Map<number, EduGrade>();
+    const gradesByTopicTask = new Map<number, EduGrade>();
 
     for (const grade of allGrades) {
       if (grade.task) {
@@ -589,7 +589,7 @@ router.get("/students/:studentId/grades", authRequired, async (req: AuthRequest,
       where: {
         student: {
           id: studentId
-        } as any
+        }
       },
       relations: ["controlWork", "class", "topic"],
       order: {
@@ -617,7 +617,7 @@ router.get("/students/:studentId/grades", authRequired, async (req: AuthRequest,
         createdAt: sg.createdAt
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/students] Error fetching student grades", { requestId: req.requestId, studentId: req.studentId, error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"

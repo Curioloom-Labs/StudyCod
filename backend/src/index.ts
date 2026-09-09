@@ -69,6 +69,20 @@ import { checkReadiness, renderPrometheusMetrics } from "./observability/health"
 import { httpMetricsMiddleware } from "./observability/httpMetrics";
 const app = express();
 
+type UnknownRecord = Record<string, unknown>;
+
+function readProperty(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object") return undefined;
+  return (value as UnknownRecord)[key];
+}
+
+function errorMessage(error: unknown, fallback = ""): string {
+  const message = readProperty(error, "message");
+  if (typeof message === "string" && message.trim()) return message;
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return fallback || String(error);
+}
+
 // Graceful shutdown plumbing.
 //
 // The HTTP server handle is set in bootstrap() once app.listen() resolves.
@@ -80,7 +94,7 @@ let httpServer: import("http").Server | null = null;
 let shutdownInProgress = false;
 
 const SHUTDOWN_DRAIN_TIMEOUT_MS = (() => {
-  const raw = (process.env.SHUTDOWN_DRAIN_TIMEOUT_MS ?? "").trim();
+  const raw = (env.SHUTDOWN_DRAIN_TIMEOUT_MS ?? "").trim();
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) && n >= 1000 ? n : 15_000;
 })();
@@ -118,8 +132,8 @@ async function gracefulShutdown(reason: string, exitCode: number): Promise<void>
   // 2) Release Redis after HTTP so in-flight handlers could still use it.
   try {
     await shutdownRedis();
-  } catch (err: any) {
-    logger.warn("[shutdown] Redis shutdown error", { error: err?.message });
+  } catch (err: unknown) {
+    logger.warn("[shutdown] Redis shutdown error", { error: errorMessage(err) });
   }
 
   process.exit(exitCode);
@@ -132,7 +146,7 @@ if (isRedisEnabled()) {
 }
 
 function createSessionStore(): session.Store | undefined {
-  const mode = String((env as any).__sessionStore ?? process.env.SESSION_STORE ?? "").trim().toLowerCase();
+  const mode = String(env.__sessionStore ?? env.SESSION_STORE ?? "").trim().toLowerCase();
   if (mode !== "redis") {
     logger.info("[session] using in-memory store", { mode: mode || "memory" });
     return undefined;
@@ -162,9 +176,9 @@ function createSessionStore(): session.Store | undefined {
       client: redisClient,
       prefix: `${getRedisKeyPrefix()}sess:`
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[session] redis store initialization failed", {
-      message: err?.message
+      message: errorMessage(err)
     });
     return undefined;
   }
@@ -192,15 +206,15 @@ async function assertProductionJudgeConfig(): Promise<void> {
 
   try {
     await resolveJudgeWorkerEntry();
-  } catch (error: any) {
-    issues.push(String(error?.message || "JUDGE_WORKER_ENTRY is unavailable"));
+  } catch (error: unknown) {
+    issues.push(errorMessage(error, "JUDGE_WORKER_ENTRY is unavailable"));
   }
 
   try {
     const configPath = resolveJudgeSandboxConfig();
     fsSync.accessSync(configPath, fsSync.constants.R_OK);
-  } catch (error: any) {
-    issues.push(String(error?.message || "NSJAIL_CONFIG is unavailable"));
+  } catch (error: unknown) {
+    issues.push(errorMessage(error, "NSJAIL_CONFIG is unavailable"));
   }
 
   if (issues.length > 0) {
@@ -212,13 +226,13 @@ async function assertProductionJudgeConfig(): Promise<void> {
 // node:net or node:http. Previously any object with code:'EPIPE' triggered
 // the silent-ignore path, which would also hide bugs that happen to throw
 // such an object from business logic.
-function isDisconnectError(err: any): boolean {
+function isDisconnectError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
-  const code = (err as any).code;
+  const code = readProperty(err, "code");
   if (code !== "EPIPE" && code !== "ECONNRESET" && code !== "ERR_STREAM_DESTROYED") {
     return false;
   }
-  const syscall = (err as any).syscall;
+  const syscall = readProperty(err, "syscall");
   // EPIPE/ECONNRESET from sockets always have a syscall (write/read/shutdown).
   // ERR_STREAM_DESTROYED is a Node stream error and has no syscall but does
   // come from node-internal stack frames — accept it without a syscall.
@@ -260,11 +274,11 @@ function resolveGlobalRateLimitKey(req: express.Request): string {
 
 // In production behind a reverse proxy, clients can disconnect while we are still computing.
 // Writing a response to a closed socket may produce EPIPE/ECONNRESET; do not crash the process.
-process.on("uncaughtException", (err: any) => {
+process.on("uncaughtException", (err: unknown) => {
   if (isDisconnectError(err)) {
     logger.warn("Socket disconnected (ignored)", {
-      code: err?.code,
-      message: err?.message
+      code: readProperty(err, "code"),
+      message: errorMessage(err)
     });
     return;
   }
@@ -285,17 +299,17 @@ process.on("uncaughtException", (err: any) => {
 //
 // Set UNHANDLED_REJECTION_FATAL_THRESHOLD=0 to never auto-restart on rejections.
 const UNHANDLED_REJECTION_WINDOW_MS = (() => {
-  const n = Number.parseInt(String(process.env.UNHANDLED_REJECTION_WINDOW_MS ?? "").trim(), 10);
+  const n = Number.parseInt(String(env.UNHANDLED_REJECTION_WINDOW_MS ?? "").trim(), 10);
   return Number.isFinite(n) && n >= 1000 ? n : 60_000;
 })();
 const UNHANDLED_REJECTION_FATAL_THRESHOLD = (() => {
-  const raw = String(process.env.UNHANDLED_REJECTION_FATAL_THRESHOLD ?? "").trim();
+  const raw = String(env.UNHANDLED_REJECTION_FATAL_THRESHOLD ?? "").trim();
   if (raw === "") return 25;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) && n >= 0 ? n : 25;
 })();
 let unhandledRejectionTimestamps: number[] = [];
-process.on("unhandledRejection", (reason: any) => {
+process.on("unhandledRejection", (reason: unknown) => {
   logger.error("Unhandled rejection", { reason });
   if (UNHANDLED_REJECTION_FATAL_THRESHOLD <= 0) return;
 
@@ -350,7 +364,8 @@ if (IS_PRODUCTION) {
       // express-rate-limit sets standard rate limit headers; add a simple JSON body for clients.
       const retryAfterSeconds = (() => {
         try {
-          const resetTime = (req as any)?.rateLimit?.resetTime as Date | undefined;
+          const resetTimeValue = readProperty(readProperty(req, "rateLimit"), "resetTime");
+          const resetTime = resetTimeValue instanceof Date ? resetTimeValue : undefined;
           if (resetTime instanceof Date) {
             const deltaMs = resetTime.getTime() - Date.now();
             return Math.max(1, Math.ceil(deltaMs / 1000));
@@ -408,10 +423,10 @@ app.use((_req, res, next) => {
 
 // Attach a low-level response error handler so socket write errors don't crash the process.
 app.use((req, res, next) => {
-  res.on("error", (err: any) => {
+  res.on("error", (err: unknown) => {
     if (isDisconnectError(err)) {
       logger.warn("Response error due to disconnect (ignored)", {
-        code: err?.code,
+        code: readProperty(err, "code"),
         path: req.originalUrl,
         method: req.method
       });
@@ -445,11 +460,11 @@ const LARGE_BODY_PATH_PREFIXES = [
   "/topics", "/api/topics",
   "/contests", "/api/contests"
 ];
-const defaultBodyLimit = String(process.env.BODY_LIMIT_DEFAULT || "256kb");
+const defaultBodyLimit = String(env.BODY_LIMIT_DEFAULT || "256kb");
 const largeBodyLimit = String(
-  process.env.BODY_LIMIT_LARGE
-    || process.env.API_BODY_LIMIT
-    || process.env.BODY_LIMIT
+  env.BODY_LIMIT_LARGE
+    || env.API_BODY_LIMIT
+    || env.BODY_LIMIT
     || "50mb"
 );
 
@@ -480,7 +495,7 @@ const sessionStore = createSessionStore();
 // from studycod.space. In that setup the browser must be able to read the
 // CSRF cookie from either subdomain so it can mirror it into the request
 // header. Keep this aligned with the session/auth cookie domain setting.
-const sharedCookieDomain = (process.env.COOKIE_DOMAIN || "").trim() || undefined;
+const sharedCookieDomain = (env.COOKIE_DOMAIN || "").trim() || undefined;
 const sessionMiddleware = session({
   store: sessionStore,
   secret: SESSION_SECRET,
@@ -534,7 +549,7 @@ app.use((req, res, next) => {
 // cookie/header mode lets the browser client send the token without placing it
 // in URLs or request bodies. Tests use JWT fixtures and intentionally bypass
 // this browser-only middleware.
-if (process.env.NODE_ENV !== "test") {
+if (env.NODE_ENV !== "test") {
   const csrfMiddleware = lusca.csrf({
     angular: true,
     cookie: {
@@ -608,14 +623,14 @@ app.get(["/ready", "/api/ready"], async (_req, res) => {
       status: result.ready ? "ready" : "not-ready",
       checks: result.checks
     });
-  } catch (err: any) {
-    res.status(503).json({ status: "not-ready", error: String(err?.message || "READINESS_CHECK_FAILED") });
+  } catch (err: unknown) {
+    res.status(503).json({ status: "not-ready", error: errorMessage(err, "READINESS_CHECK_FAILED") });
   }
 });
 
 // Prometheus metrics. Gated in production (operational info) behind
 // METRICS_ENABLED=1, mirroring the other internal diagnostics endpoints.
-const METRICS_EXPOSED = !IS_PRODUCTION || String(process.env.METRICS_ENABLED || "").trim() === "1";
+const METRICS_EXPOSED = !IS_PRODUCTION || String(env.METRICS_ENABLED || "").trim() === "1";
 app.get(["/metrics", "/api/metrics"], (_req, res) => {
   if (!METRICS_EXPOSED) {
     return res.status(404).json({ error: "NOT_FOUND", status: 404 });
@@ -651,7 +666,7 @@ app.get(["/internal/load", "/api/internal/load"], (_req, res) => {
 });
 
 app.get(["/internal/ai/openrouter", "/api/internal/ai/openrouter"], (_req, res) => {
-  const exposeInProduction = String(process.env.EXPOSE_INTERNAL_AI_DIAGNOSTICS || "").trim() === "1";
+  const exposeInProduction = String(env.EXPOSE_INTERNAL_AI_DIAGNOSTICS || "").trim() === "1";
   if (IS_PRODUCTION && !exposeInProduction) {
     return res.status(404).json({ error: "NOT_FOUND", status: 404 });
   }
@@ -667,11 +682,16 @@ app.get(["/internal/ai/openrouter", "/api/internal/ai/openrouter"], (_req, res) 
 // spawn one nsjail child per request — expensive and noisy. TTL kept short
 // enough that a real outage surfaces within a few polls.
 const JUDGE_HEALTH_CACHE_TTL_MS = (() => {
-  const raw = (process.env.JUDGE_HEALTH_CACHE_TTL_MS ?? "").trim();
+  const raw = (env.JUDGE_HEALTH_CACHE_TTL_MS ?? "").trim();
   const n = raw ? Number.parseInt(raw, 10) : NaN;
   return Number.isFinite(n) && n >= 0 ? n : 5_000;
 })();
-let judgeHealthCache: { at: number; status: number; body: any } | null = null;
+type JudgeHealthProbe = {
+  status?: unknown;
+  reason?: unknown;
+};
+
+let judgeHealthCache: { at: number; status: number; body: UnknownRecord } | null = null;
 let judgeHealthInFlight: Promise<void> | null = null;
 
 app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
@@ -726,7 +746,7 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
     })();
 
     const readInt = (name: string, fallback: number): number => {
-      const v = parseInt(String(process.env[name] ?? ""), 10);
+      const v = parseInt(String((env as unknown as Record<string, unknown>)[name] ?? ""), 10);
       return Number.isFinite(v) && v > 0 ? v : fallback;
     };
 
@@ -751,7 +771,7 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
       return;
     }
 
-    const health = await new Promise<any>((resolve, reject) => {
+    const health = await new Promise<JudgeHealthProbe>((resolve, reject) => {
       const nodeBin = process.execPath;
       const childEnv = {
         ...process.env,
@@ -791,7 +811,7 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
           }, 500);
         } catch {}
       };
-      const timeoutMs = Math.max(1000, Number(process.env.JUDGE_HEALTH_TIMEOUT_MS ?? 5000));
+      const timeoutMs = Math.max(1000, Number(env.JUDGE_HEALTH_TIMEOUT_MS ?? 5000));
       const timeout = setTimeout(() => {
         kill();
         reject(new Error("JUDGE_HEALTH_TIMEOUT"));
@@ -825,14 +845,18 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
           return;
         }
         try {
-          const parsed = JSON.parse(stdout);
-          if (parsed?.status !== "ok") {
-            reject(new Error(`JUDGE_HEALTH_ERROR: ${String(parsed?.reason ?? "unknown")}`));
+          const parsed: unknown = JSON.parse(stdout);
+          const parsedRecord = parsed && typeof parsed === "object" ? parsed as UnknownRecord : null;
+          if (parsedRecord?.status !== "ok") {
+            reject(new Error(`JUDGE_HEALTH_ERROR: ${String(parsedRecord?.reason ?? "unknown")}`));
             return;
           }
-          resolve(parsed);
-        } catch (e: any) {
-          reject(new Error(`JUDGE_HEALTH_BAD_JSON: ${e?.message || "parse error"} stdout=${stdout.slice(0, 2048)} stderr=${stderr.slice(0, 2048)}`));
+          resolve({
+            status: parsedRecord.status,
+            reason: parsedRecord.reason
+          });
+        } catch (e: unknown) {
+          reject(new Error(`JUDGE_HEALTH_BAD_JSON: ${errorMessage(e, "parse error")} stdout=${stdout.slice(0, 2048)} stderr=${stderr.slice(0, 2048)}`));
         }
       });
     });
@@ -854,7 +878,7 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
     };
     judgeHealthCache = { at: Date.now(), status: 200, body };
     res.json(body);
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("Judge health probe failed", { err });
     const body = { error: "Judge unavailable", status: 503 };
     // Cache failures briefly too, so a real outage doesn't fork-bomb us.
@@ -907,9 +931,10 @@ app.use("/api/blog", blogRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/emails", emailsRouter);
 app.use("/api/learning", authMiddleware, forbidContestModeUsers, learningCatalogRouter);
-app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
-  const isCorsError = String(err?.message ?? "").trim() === "CORS_NOT_ALLOWED";
-  const isCsrfError = /csrf\s+token|invalid\s+csrf|csrf.*missing/i.test(String(err?.message ?? ""));
+app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const message = errorMessage(err);
+  const isCorsError = message.trim() === "CORS_NOT_ALLOWED";
+  const isCsrfError = /csrf\s+token|invalid\s+csrf|csrf.*missing/i.test(message);
   if (isCorsError) logger.warn("Rejected request from disallowed CORS origin");
   else if (isCsrfError) logger.warn("Rejected state-changing request without a valid CSRF token");
   else logger.error("Unhandled error", { err });
@@ -922,13 +947,17 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
     return next(err);
   }
 
-  const status = Number(err?.statusCode ?? err?.status ?? 500);
-  const isHttpError = err instanceof HttpError || err?.name === "HttpError";
+  const status = Number(readProperty(err, "statusCode") ?? readProperty(err, "status") ?? 500);
+  const isHttpError = err instanceof HttpError || readProperty(err, "name") === "HttpError";
 
   // If the judge scheduler is overloaded, tell clients when to retry.
   // This must be present on overload 503 responses.
   setRetryAfterForOverload(err, res);
-  const expose = isHttpError ? (err as HttpError).expose !== false : status < 500;
+  const expose = err instanceof HttpError
+    ? err.expose !== false
+    : isHttpError
+    ? readProperty(err, "expose") !== false
+    : status < 500;
 
   const responseStatus = isCorsError || isCsrfError
     ? 403
@@ -938,8 +967,8 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
     : isCsrfError
     ? "CSRF_TOKEN_INVALID"
     : expose
-    ? String(err?.message || "INTERNAL_SERVER_ERROR")
-    : (process.env.NODE_ENV === "production" ? "INTERNAL_SERVER_ERROR" : String(err?.message || "INTERNAL_SERVER_ERROR"));
+    ? message || "INTERNAL_SERVER_ERROR"
+    : (env.NODE_ENV === "production" ? "INTERNAL_SERVER_ERROR" : message || "INTERNAL_SERVER_ERROR");
 
   res.status(responseStatus).json({
     error,
@@ -962,48 +991,50 @@ type StartupMigrationOutcome = {
 // (ER_TABLE_EXISTS_ERROR) and `errno` (1050). The message-based check was
 // kept as a last-resort fallback for non-mysql2 drivers; on locale-translated
 // MySQL servers the previous regex on /already exists/ silently broke.
-function isLegacyTableExistsMigrationError(error: any): boolean {
-  const code = String(error?.code || error?.driverError?.code || "").trim().toUpperCase();
+function isLegacyTableExistsMigrationError(error: unknown): boolean {
+  const driverError = readProperty(error, "driverError");
+  const code = String(readProperty(error, "code") || readProperty(driverError, "code") || "").trim().toUpperCase();
   if (code === "ER_TABLE_EXISTS_ERROR") return true;
-  const errno = Number(error?.errno ?? error?.driverError?.errno);
+  const errno = Number(readProperty(error, "errno") ?? readProperty(driverError, "errno"));
   if (Number.isFinite(errno) && errno === 1050) return true;
-  const sqlState = String(error?.sqlState || error?.driverError?.sqlState || "").trim();
+  const sqlState = String(readProperty(error, "sqlState") || readProperty(driverError, "sqlState") || "").trim();
   if (sqlState === "42S01") return true;
   // Last resort for drivers that only expose a message — kept English only;
   // the structured signals above are authoritative.
-  return /\bER_TABLE_EXISTS_ERROR\b|\balready exists\b/i.test(String(error?.message || ""));
+  return /\bER_TABLE_EXISTS_ERROR\b|\balready exists\b/i.test(String(readProperty(error, "message") || ""));
 }
 
-function extractFailedMigrationName(error: any): string | undefined {
-  const directName = String(error?.migration?.name || "").trim();
+function extractFailedMigrationName(error: unknown): string | undefined {
+  const directName = String(readProperty(readProperty(error, "migration"), "name") || "").trim();
   if (directName) return directName;
 
-  const message = String(error?.message || "");
-  const stack = String(error?.stack || "");
+  const message = String(readProperty(error, "message") || "");
+  const stack = String(readProperty(error, "stack") || "");
   const source = `${message}\n${stack}`;
   const match = source.match(/Migration\s+"([^"]+)"\s+failed/i);
   const parsedName = String(match?.[1] || "").trim();
   return parsedName || undefined;
 }
 
-function extractAlreadyExistingTableName(error: any): string | undefined {
+function extractAlreadyExistingTableName(error: unknown): string | undefined {
   // Prefer the FAILED SQL string — that is locale-independent and unambiguous.
   // The localized message ("Table 'x' already exists") is only consulted as a
   // fallback because the SQL is always emitted by us.
-  const sqlRaw = String(error?.sql || error?.query || error?.driverError?.sql || "");
+  const driverError = readProperty(error, "driverError");
+  const sqlRaw = String(readProperty(error, "sql") || readProperty(error, "query") || readProperty(driverError, "sql") || "");
   const createMatch = sqlRaw.match(/create\s+table\s+(?:if\s+not\s+exists\s+)?`?([a-zA-Z0-9_]+)`?/i);
   if (createMatch?.[1]) {
     return String(createMatch[1]).trim().toLowerCase();
   }
 
   const rawMessage = String(
-    error?.message ||
-    error?.sqlMessage ||
-    error?.driverError?.message ||
-    error?.driverError?.sqlMessage ||
+    readProperty(error, "message") ||
+    readProperty(error, "sqlMessage") ||
+    readProperty(driverError, "message") ||
+    readProperty(driverError, "sqlMessage") ||
     ""
   );
-  // Generic table-name extraction: any quoted identifier in the message.
+  // Generic table-name extraction: a quoted identifier in the message.
   // Locale-independent because we only look for backtick / single-quote
   // wrappers around an identifier, not specific English phrases.
   const quotedMatch = rawMessage.match(/[`']([a-zA-Z0-9_.]+)[`']/);
@@ -1015,7 +1046,7 @@ function extractAlreadyExistingTableName(error: any): string | undefined {
   return undefined;
 }
 
-function getStartupMigrationRemediationHint(error: any): string | undefined {
+function getStartupMigrationRemediationHint(error: unknown): string | undefined {
   if (!isLegacyTableExistsMigrationError(error)) return undefined;
 
   return "Legacy schema detected (tables exist without migration history). Run `npm run db:bootstrap-migration-history` once before restarting backend workers.";
@@ -1060,7 +1091,7 @@ async function runStartupMigrations(): Promise<StartupMigrationOutcome> {
         attemptCount: attempt,
         autoStampedMigrations
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       const remediationHint = getStartupMigrationRemediationHint(error);
       const failedMigrationName = extractFailedMigrationName(error);
       const failedTableName = extractAlreadyExistingTableName(error);
@@ -1119,23 +1150,23 @@ async function runStartupMigrations(): Promise<StartupMigrationOutcome> {
           });
 
           continue;
-        } catch (stampError: any) {
+        } catch (stampError: unknown) {
           logger.error("[startup:migrations] failed to auto-stamp legacy migration history row", {
             attempt,
             failedMigrationName,
             failedTableName,
             migrationCount: migrationsToAutoStamp.length,
             migrations: migrationsToAutoStamp,
-            message: stampError?.message,
-            code: stampError?.code
+            message: errorMessage(stampError),
+            code: readProperty(stampError, "code")
           });
         }
       }
 
       logger.error("[startup:migrations] failed", {
         attempt,
-        message: error?.message,
-        code: error?.code,
+        message: errorMessage(error),
+        code: readProperty(error, "code"),
         failedMigrationName,
         failedTableName,
         autoBootstrapLegacyHistory,
@@ -1148,7 +1179,7 @@ async function runStartupMigrations(): Promise<StartupMigrationOutcome> {
         appliedNames: [],
         attemptCount: attempt,
         autoStampedMigrations,
-        errorMessage: String(error?.message || "MIGRATION_FAILED"),
+        errorMessage: errorMessage(error, "MIGRATION_FAILED"),
         remediationHint
       };
     }
@@ -1202,12 +1233,12 @@ async function bootstrap(): Promise<void> {
     // hides real curriculum-data regressions. Operators can re-enable
     // explicitly with SEED_TOPICS_ON_STARTUP=true.
     const seedDefault = IS_PRODUCTION ? "false" : "true";
-    const shouldSeed = String(process.env.SEED_TOPICS_ON_STARTUP ?? seedDefault).toLowerCase() !== "false";
+    const shouldSeed = String(env.SEED_TOPICS_ON_STARTUP ?? seedDefault).toLowerCase() !== "false";
     if (shouldSeed) {
       await seedTopicsIfNeeded();
       await seedLearningCatalogContent();
     } else {
-      logger.info("[seed-topics] skipped", { reason: process.env.SEED_TOPICS_ON_STARTUP ? "env:false" : "prod-default" });
+      logger.info("[seed-topics] skipped", { reason: env.SEED_TOPICS_ON_STARTUP ? "env:false" : "prod-default" });
     }
 
     httpServer = app.listen(PORT, () => {
@@ -1218,7 +1249,7 @@ async function bootstrap(): Promise<void> {
     httpServer.headersTimeout = 65_000;
 
     // Periodically GC the on-disk test cache (TTL-based). Best-effort; never throws.
-    const cacheSweepMs = Math.max(60 * 60 * 1000, parseInt(String(process.env.JUDGE_TEST_CACHE_SWEEP_MS ?? ""), 10) || 6 * 60 * 60 * 1000);
+    const cacheSweepMs = Math.max(60 * 60 * 1000, parseInt(String(env.JUDGE_TEST_CACHE_SWEEP_MS ?? ""), 10) || 6 * 60 * 60 * 1000);
     const cacheSweepTimer = setInterval(() => {
       void sweepTestCache().catch(() => undefined);
     }, cacheSweepMs);

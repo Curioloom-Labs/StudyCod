@@ -35,8 +35,24 @@ const studentRepo = () => AppDataSource.getRepository(Student);
 const libraryAttemptRepo = () => AppDataSource.getRepository(LibraryTaskAttempt);
 const contestParticipantRepo = () => AppDataSource.getRepository(ContestParticipant);
 const contestSubmissionRepo = () => AppDataSource.getRepository(ContestSubmission);
-function normalizeLang(input?: string | null): UserRuntime {
-  const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
+
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+function toIsoDate(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+function normalizeLang(input?: unknown): UserRuntime {
+  const raw = (typeof input === "string" ? input : "").toUpperCase().replace(/\s+/g, "").trim();
   if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
   if (raw.startsWith("PY")) return "PYTHON";
   return "JAVA";
@@ -249,16 +265,16 @@ function buildUserDto(user: User, activeRuntime: UserRuntime = "PYTHON") {
     userMode: user.userMode,
     role: user.role || null,
     googleId: user.googleId ?? null,
-    placementDone: Boolean((user as any).placementDone),
-    placementLevel: (user as any).placementLevel ?? null,
-    placementScore: (user as any).placementScore ?? null,
-    placementMasteredUntilTopicIndexJava: (user as any).placementMasteredUntilTopicIndexJava ?? null,
-    placementMasteredUntilTopicIndexPython: (user as any).placementMasteredUntilTopicIndexPython ?? null,
-    placementCodingPassed: Boolean((user as any).placementCodingPassed),
-    placementCodingLevel: (user as any).placementCodingLevel ?? null,
-    placementCodingTaskId: (user as any).placementCodingTaskId ?? null,
-    placementCodingScore: (user as any).placementCodingScore ?? null,
-    placementCodingDoneAt: (user as any).placementCodingDoneAt ?? null
+    placementDone: Boolean((user).placementDone),
+    placementLevel: (user).placementLevel ?? null,
+    placementScore: (user).placementScore ?? null,
+    placementMasteredUntilTopicIndexJava: (user).placementMasteredUntilTopicIndexJava ?? null,
+    placementMasteredUntilTopicIndexPython: (user).placementMasteredUntilTopicIndexPython ?? null,
+    placementCodingPassed: Boolean((user).placementCodingPassed),
+    placementCodingLevel: (user).placementCodingLevel ?? null,
+    placementCodingTaskId: (user).placementCodingTaskId ?? null,
+    placementCodingScore: (user).placementCodingScore ?? null,
+    placementCodingDoneAt: (user).placementCodingDoneAt ?? null
   };
 }
 
@@ -299,7 +315,7 @@ function denyContestProfileAccess(req: AuthRequest, res: Response): boolean {
 
 router.get("/public/:username", async (req: AuthRequest, res: Response) => {
   try {
-    const username = String((req.params as any)?.username ?? "").trim();
+    const username = String((req.params)?.username ?? "").trim();
     if (!username) {
       return res.status(400).json({ message: "USERNAME_REQUIRED" });
     }
@@ -425,7 +441,7 @@ router.get("/public/:username", async (req: AuthRequest, res: Response) => {
   } catch (err) {
     logger.error("[profile] GET /profile/public/:username error", {
       requestId: req.requestId,
-      username: (req.params as any)?.username,
+      username: (req.params)?.username,
       err,
     });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -777,11 +793,11 @@ router.get("/placement/coding-challenge", authMiddleware, async (req: AuthReques
       return res.status(403).json({ message: "ONLY_PERSONAL_USERS" });
     }
 
-    const qLevelRaw = String((req.query as any)?.level ?? "INTERMEDIATE").toUpperCase().trim();
+    const qLevelRaw = String((req.query)?.level ?? "INTERMEDIATE").toUpperCase().trim();
     const level = (qLevelRaw === "ADVANCED" ? "ADVANCED" : qLevelRaw === "BEGINNER" ? "BEGINNER" : "INTERMEDIATE") as "BEGINNER" | "INTERMEDIATE" | "ADVANCED";
 
-    const qCourse = (req.query as any)?.course;
-    const qLang = (req.query as any)?.lang;
+    const qCourse = (req.query)?.course;
+    const qLang = (req.query)?.lang;
     const normalizedLang = normalizeLang(qCourse || qLang || req.learningRuntime || "PYTHON");
     const { challenge } = buildChallengeFor(level, user.id);
 
@@ -925,8 +941,8 @@ router.get("/placement/assessment-pack", authMiddleware, async (req: AuthRequest
       return res.status(403).json({ message: "ONLY_PERSONAL_USERS" });
     }
 
-    const track = normalizePlacementTrack((req.query as any)?.track);
-    const normalizedLang = normalizeLang((req.query as any)?.course || (req.query as any)?.lang || req.learningRuntime || "PYTHON");
+    const track = normalizePlacementTrack((req.query)?.track);
+    const normalizedLang = normalizeLang((req.query)?.course || (req.query)?.lang || req.learningRuntime || "PYTHON");
     const pack = buildPlacementAssessmentPack(track, normalizedLang, user.id);
     return res.json(toPublicPlacementAssessmentPack(pack));
   } catch (err) {
@@ -1285,16 +1301,16 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
       const byCourse = getContestHandlesByCourse(user);
 
       if (Object.prototype.hasOwnProperty.call(contestHandles, "codeforces")) {
-        byCourse.codeforces = setCourseContestHandle(byCourse.codeforces, activeCourse, (contestHandles as any).codeforces, "codeforces");
+        byCourse.codeforces = setCourseContestHandle(byCourse.codeforces, activeCourse, (contestHandles).codeforces, "codeforces");
       }
       if (Object.prototype.hasOwnProperty.call(contestHandles, "atcoder")) {
-        byCourse.atcoder = setCourseContestHandle(byCourse.atcoder, activeCourse, (contestHandles as any).atcoder, "atcoder");
+        byCourse.atcoder = setCourseContestHandle(byCourse.atcoder, activeCourse, (contestHandles).atcoder, "atcoder");
       }
       if (Object.prototype.hasOwnProperty.call(contestHandles, "leetcode")) {
-        byCourse.leetcode = setCourseContestHandle(byCourse.leetcode, activeCourse, (contestHandles as any).leetcode, "leetcode");
+        byCourse.leetcode = setCourseContestHandle(byCourse.leetcode, activeCourse, (contestHandles).leetcode, "leetcode");
       }
       if (Object.prototype.hasOwnProperty.call(contestHandles, "codechef")) {
-        byCourse.codechef = setCourseContestHandle(byCourse.codechef, activeCourse, (contestHandles as any).codechef, "codechef");
+        byCourse.codechef = setCourseContestHandle(byCourse.codechef, activeCourse, (contestHandles).codechef, "codechef");
       }
 
       user.cfHandle = serializeCourseHandleMap(byCourse.codeforces);
@@ -1368,7 +1384,7 @@ router.get("/email-subscription", authMiddleware, async (req: AuthRequest, res: 
 router.put("/email-subscription", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (denyContestProfileAccess(req, res)) return;
-    const enabled = Boolean((req.body as any)?.enabled);
+    const enabled = Boolean((req.body)?.enabled);
 
     if (req.userType === "STUDENT" && req.studentId) {
       const student = await studentRepo().findOne({ where: { id: req.studentId } });
@@ -1420,7 +1436,7 @@ router.get("/certificates", authMiddleware, async (req: AuthRequest, res: Respon
         ...(req.userId ? [req.userId] : []),
         ...(req.studentId ? [req.studentId] : []),
       ]
-    )) as Array<any>;
+    )) as Array<Record<string, unknown>>;
 
     return res.json({
       certificates: rows.map((r) => ({
@@ -1433,9 +1449,9 @@ router.get("/certificates", authMiddleware, async (req: AuthRequest, res: Respon
         place: r.placeText == null ? null : String(r.placeText),
         organizer: String(r.organizerName ?? ""),
         status: String(r.status ?? "queued"),
-        issuedAt: r.issuedAt ? new Date(r.issuedAt).toISOString() : null,
+        issuedAt: toIsoDate(r.issuedAt),
         pdfStorageKey: r.pdfStorageKey == null ? null : String(r.pdfStorageKey),
-        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+        createdAt: toIsoDate(r.createdAt),
       })),
     });
   } catch (err) {
@@ -1554,14 +1570,14 @@ router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response)
         message: "INVALID_LEVEL"
       });
     }
-    (user as any).placementLevel = level;
+    (user).placementLevel = level;
     if (score !== undefined) {
       if (score !== null && (!Number.isFinite(Number(score)) || Number(score) < 0)) {
         return res.status(400).json({
           message: "INVALID_SCORE"
         });
       }
-      (user as any).placementScore = score === null ? null : Math.round(Number(score));
+      (user).placementScore = score === null ? null : Math.round(Number(score));
     }
 
     if (masteredUntilTopicIndex !== undefined) {
@@ -1580,15 +1596,15 @@ router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response)
         }
         const normalizedValue = rounded < 0 ? null : rounded;
         if (normalizedLang === "JAVA") {
-          (user as any).placementMasteredUntilTopicIndexJava = normalizedValue;
+          (user).placementMasteredUntilTopicIndexJava = normalizedValue;
         } else {
-          (user as any).placementMasteredUntilTopicIndexPython = normalizedValue;
+          (user).placementMasteredUntilTopicIndexPython = normalizedValue;
         }
       } else {
         if (normalizedLang === "JAVA") {
-          (user as any).placementMasteredUntilTopicIndexJava = null;
+          (user).placementMasteredUntilTopicIndexJava = null;
         } else {
-          (user as any).placementMasteredUntilTopicIndexPython = null;
+          (user).placementMasteredUntilTopicIndexPython = null;
         }
       }
     }
@@ -1608,15 +1624,15 @@ router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response)
 
       const hasValidIncomingScore = typeof score === "number" && Number.isFinite(Number(score)) && Number(score) >= 0;
       if (hasValidIncomingScore) {
-        (user as any).placementScore = Math.max(0, Math.min(100, Math.round(Number(score))));
+        (user).placementScore = Math.max(0, Math.min(100, Math.round(Number(score))));
       } else {
-        const codingScore = Number((user as any).placementCodingScore ?? NaN);
+        const codingScore = Number((user).placementCodingScore ?? NaN);
         if (!Number.isFinite(codingScore)) {
           return res.status(400).json({
             message: "PLACEMENT_SCORE_REQUIRED"
           });
         }
-        (user as any).placementScore = Math.max(0, Math.min(100, Math.round(codingScore)));
+        (user).placementScore = Math.max(0, Math.min(100, Math.round(codingScore)));
       }
 
       if (masteredUntilTopicIndex === undefined) {
@@ -1627,22 +1643,22 @@ router.put("/placement", authMiddleware, async (req: AuthRequest, res: Response)
         };
         const fallbackMastered = byLevel[level as "BEGINNER" | "INTERMEDIATE" | "ADVANCED"];
         if (normalizedLang === "JAVA") {
-          (user as any).placementMasteredUntilTopicIndexJava = fallbackMastered;
+          (user).placementMasteredUntilTopicIndexJava = fallbackMastered;
         } else {
-          (user as any).placementMasteredUntilTopicIndexPython = fallbackMastered;
+          (user).placementMasteredUntilTopicIndexPython = fallbackMastered;
         }
       }
     } else {
-      (user as any).placementScore = null;
+      (user).placementScore = null;
       if (normalizedLang === "JAVA") {
-        (user as any).placementMasteredUntilTopicIndexJava = null;
+        (user).placementMasteredUntilTopicIndexJava = null;
       } else {
-        (user as any).placementMasteredUntilTopicIndexPython = null;
+        (user).placementMasteredUntilTopicIndexPython = null;
       }
     }
 
-    (user as any).placementDone = true;
-    (user as any).placementDoneAt = new Date();
+    (user).placementDone = true;
+    (user).placementDoneAt = new Date();
 
     await userRepo().save(user);
     return res.json(buildUserDto(user, req.learningRuntime));

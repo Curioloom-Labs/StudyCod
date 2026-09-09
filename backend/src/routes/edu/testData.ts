@@ -10,6 +10,7 @@ import { logger } from "../../utils/logger";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
 import { authorizeClassAction } from "../../services/edu/classAccess";
 import type { Capability } from "../../services/edu/rbac";
+import { env } from "../../env";
 
 const router = Router();
 
@@ -35,12 +36,12 @@ async function canActOnTopicTaskClass(
 }
 
 function parseAIBudgetMs(envKey: string, fallbackMs: number, minMs = 8_000, maxMs = 55_000): number {
-  const raw = Number(process.env[envKey]);
+  const raw = Number((env as unknown as Record<string, unknown>)[envKey]);
   const value = Number.isFinite(raw) ? Math.floor(raw) : fallbackMs;
   return Math.max(minMs, Math.min(maxMs, value));
 }
 
-const EDU_TESTDATA_AI_DISABLE_DEADLINE = String(process.env.EDU_TESTDATA_AI_DISABLE_DEADLINE || "").trim() === "1";
+const EDU_TESTDATA_AI_DISABLE_DEADLINE = String(env.EDU_TESTDATA_AI_DISABLE_DEADLINE || "").trim() === "1";
 const EDU_TESTDATA_AI_BUDGET_MS = parseAIBudgetMs("EDU_TESTDATA_AI_BUDGET_MS", 25_000);
 
 // AI-heavy endpoint: protect against bursts.
@@ -343,7 +344,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
           }
         : {})
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error fetching test data", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -393,11 +394,11 @@ router.get("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
         expectedOutput: testData.expectedOutput,
         points: testData.points,
         isHidden: testData.isHidden === true,
-        source: normalizeTestDataSource((testData as any).source),
-        subtask: normalizeSubtaskValue((testData as any).subtask)
+        source: normalizeTestDataSource(testData.source),
+        subtask: normalizeSubtaskValue(testData.subtask)
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error fetching test data item", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -442,13 +443,13 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
 
     const createdTests = testData.map(td =>
       testDataRepo().create({
-        topicTask: { id: taskId } as any,
+        topicTask: { id: taskId },
         input: td.input,
         expectedOutput: td.expectedOutput,
         points: td.points || 1,
         isHidden: td.isHidden === true,
         source: "MANUAL",
-        subtask: normalizeSubtaskValue((td as any).subtask)
+        subtask: normalizeSubtaskValue(td.subtask)
       })
     );
 
@@ -462,11 +463,11 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
         expectedOutput: td.expectedOutput,
         points: td.points,
         isHidden: td.isHidden === true,
-        source: normalizeTestDataSource((td as any).source),
-        subtask: normalizeSubtaskValue((td as any).subtask)
+        source: normalizeTestDataSource(td.source),
+        subtask: normalizeSubtaskValue(td.subtask)
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error adding test data", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -556,7 +557,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         "DELETE FROM test_data WHERE topic_task_id = ? AND source = 'AI_GENERATED'",
         [taskId]
       );
-      replacedGeneratedCount = Number((deleteResult as any)?.affectedRows ?? 0);
+      replacedGeneratedCount = Number((deleteResult as { affectedRows?: number })?.affectedRows ?? 0);
     }
 
     const existingRows = (await AppDataSource.query(
@@ -589,7 +590,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
 
     const createdTests = uniqueGenerated.map((td) =>
       testDataRepo().create({
-        topicTask: { id: taskId } as any,
+        topicTask: { id: taskId },
         input: td.input,
         expectedOutput: td.expectedOutput,
         points: 1,
@@ -611,11 +612,11 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         expectedOutput: td.expectedOutput,
         points: td.points,
         isHidden: td.isHidden === true,
-        source: normalizeTestDataSource((td as any).source),
-        subtask: normalizeSubtaskValue((td as any).subtask)
+        source: normalizeTestDataSource(td.source),
+        subtask: normalizeSubtaskValue(td.subtask)
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error generating test data", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "TEST_DATA_GENERATION_FAILED" });
   }
@@ -670,7 +671,7 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
     if (expectedOutput !== undefined) testData.expectedOutput = expectedOutput;
     if (points !== undefined) testData.points = points;
     if (isHidden !== undefined) testData.isHidden = isHidden === true;
-    if (subtask !== undefined) (testData as any).subtask = normalizeSubtaskValue(subtask);
+    if (subtask !== undefined) testData.subtask = normalizeSubtaskValue(subtask);
 
     await testDataRepo().save(testData);
 
@@ -682,11 +683,11 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
         expectedOutput: testData.expectedOutput,
         points: testData.points,
         isHidden: testData.isHidden === true,
-        source: normalizeTestDataSource((testData as any).source),
-        subtask: normalizeSubtaskValue((testData as any).subtask)
+        source: normalizeTestDataSource(testData.source),
+        subtask: normalizeSubtaskValue(testData.subtask)
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error updating test data", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -728,13 +729,13 @@ router.delete("/tasks/:taskId/test-data/generated", authRequired, async (req: Au
       "DELETE FROM test_data WHERE topic_task_id = ? AND source = 'AI_GENERATED'",
       [taskId]
     );
-    const deleted = Number((deleteResult as any)?.affectedRows ?? 0);
+    const deleted = Number((deleteResult as { affectedRows?: number })?.affectedRows ?? 0);
 
     res.json({
       message: "GENERATED_TEST_DATA_DELETED",
       deleted
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error deleting generated test data", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -781,7 +782,7 @@ router.delete("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: 
     await testDataRepo().remove(testData);
 
     res.json({ message: "TEST_DATA_DELETED" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("Error deleting test data", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

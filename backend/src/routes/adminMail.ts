@@ -6,12 +6,19 @@ import { studyCodMailService } from "../services/studycodMailService";
 import { logger } from "../utils/logger";
 import fs from "fs";
 import path from "path";
+import { env } from "../env";
 
 const router = Router();
 
+function errorMessage(error: unknown): string {
+  return typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+    ? error.message
+    : "MAIL_ERROR";
+}
+
 // Persistent (cross-device) signature for the admin mailbox — a small file so it
 // survives restarts and doesn't depend on the (flaky) Redis instance.
-const SIGNATURE_FILE = process.env.MAIL_SIGNATURE_FILE || path.join(process.cwd(), "data", "mail-signature.txt");
+const SIGNATURE_FILE = env.MAIL_SIGNATURE_FILE || path.join(process.cwd(), "data", "mail-signature.txt");
 function readSignature(): string {
   try { return fs.readFileSync(SIGNATURE_FILE, "utf8"); } catch { return ""; }
 }
@@ -106,7 +113,7 @@ router.put("/signature", authRequired, systemAdminGuard, async (req: AuthRequest
   try {
     writeSignature(parsed.data.signature);
     return res.json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-mail] PUT /signature failed", { requestId: req.requestId, userId: req.userId, err });
     return res.status(500).json({ message: "WRITE_FAILED" });
   }
@@ -116,9 +123,9 @@ router.get("/folders", authRequired, systemAdminGuard, async (req: AuthRequest, 
   try {
     const folders = await studyCodMailService.getFolders();
     return res.json({ folders });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-mail] GET /folders failed", { requestId: req.requestId, userId: req.userId, err });
-    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+    return res.status(400).json({ message: errorMessage(err) });
   }
 });
 
@@ -130,9 +137,9 @@ router.get("/messages", authRequired, systemAdminGuard, async (req: AuthRequest,
     }
     const result = await studyCodMailService.listMessages(parsed.data);
     return res.json(result);
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-mail] GET /messages failed", { requestId: req.requestId, userId: req.userId, err });
-    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+    return res.status(400).json({ message: errorMessage(err) });
   }
 });
 
@@ -144,9 +151,9 @@ router.get("/search", authRequired, systemAdminGuard, async (req: AuthRequest, r
     }
     const result = await studyCodMailService.searchMessages(parsed.data.folder, parsed.data.q, parsed.data.limit);
     return res.json(result);
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-mail] GET /search failed", { requestId: req.requestId, userId: req.userId, err });
-    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+    return res.status(400).json({ message: errorMessage(err) });
   }
 });
 
@@ -162,9 +169,9 @@ router.get("/messages/:uid/attachments/:index", authRequired, systemAdminGuard, 
     res.setHeader("Content-Type", att.contentType);
     res.setHeader("Content-Disposition", `inline; filename="${att.filename.replace(/["\r\n]/g, "")}"`);
     return res.send(att.content);
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-mail] GET /attachment failed", { requestId: req.requestId, userId: req.userId, err });
-    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+    return res.status(400).json({ message: errorMessage(err) });
   }
 });
 
@@ -184,9 +191,9 @@ router.get("/messages/:uid", authRequired, systemAdminGuard, async (req: AuthReq
 
     const message = await studyCodMailService.getMessage(folderParsed.data.folder, uidParsed.data.uid);
     return res.json({ message });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-mail] GET /messages/:uid failed", { requestId: req.requestId, userId: req.userId, err });
-    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+    return res.status(400).json({ message: errorMessage(err) });
   }
 });
 
@@ -198,9 +205,9 @@ router.post("/messages/draft", authRequired, systemAdminGuard, async (req: AuthR
     }
     await studyCodMailService.saveDraft(parsed.data);
     return res.json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-mail] POST /messages/draft failed", { requestId: req.requestId, userId: req.userId, err });
-    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+    return res.status(400).json({ message: errorMessage(err) });
   }
 });
 
@@ -213,9 +220,9 @@ router.post("/messages/send", authRequired, systemAdminGuard, async (req: AuthRe
 
     const info = await studyCodMailService.sendMessage(parsed.data);
     return res.json({ ok: true, ...info });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-mail] POST /messages/send failed", { requestId: req.requestId, userId: req.userId, err });
-    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+    return res.status(400).json({ message: errorMessage(err) });
   }
 });
 
@@ -235,9 +242,9 @@ router.post("/messages/:uid/read", authRequired, systemAdminGuard, async (req: A
 
     await studyCodMailService.setRead(bodyParsed.data.folder, uidParsed.data.uid, bodyParsed.data.read);
     return res.json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-mail] POST /messages/:uid/read failed", { requestId: req.requestId, userId: req.userId, err });
-    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+    return res.status(400).json({ message: errorMessage(err) });
   }
 });
 
@@ -257,9 +264,9 @@ router.post("/messages/:uid/move", authRequired, systemAdminGuard, async (req: A
 
     await studyCodMailService.moveMessage(bodyParsed.data.folder, uidParsed.data.uid, bodyParsed.data.destination);
     return res.json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-mail] POST /messages/:uid/move failed", { requestId: req.requestId, userId: req.userId, err });
-    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+    return res.status(400).json({ message: errorMessage(err) });
   }
 });
 
@@ -279,9 +286,9 @@ router.delete("/messages/:uid", authRequired, systemAdminGuard, async (req: Auth
 
     await studyCodMailService.deleteMessage(folderParsed.data.folder, uidParsed.data.uid);
     return res.json({ ok: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[admin-mail] DELETE /messages/:uid failed", { requestId: req.requestId, userId: req.userId, err });
-    return res.status(400).json({ message: err?.message || "MAIL_ERROR" });
+    return res.status(400).json({ message: errorMessage(err) });
   }
 });
 

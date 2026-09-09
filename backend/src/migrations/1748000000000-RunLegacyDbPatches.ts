@@ -1,33 +1,25 @@
 import type { MigrationInterface, QueryRunner } from "typeorm";
-import { _legacyDbPatchesForMigration } from "../utils/dbPatches";
-
 /**
- * Consolidates the 60+ legacy `ensure*` / `migrate*` schema-repair helpers
- * from `utils/dbPatches.ts` into a single tracked migration.
+ * Historical marker for the former all-in-one legacy patch migration.
  *
- * History: these helpers were originally executed at server startup as
- * "shadow migrations" — ad-hoc `ALTER TABLE` / `CREATE TABLE IF NOT EXISTS`
- * statements outside the TypeORM migration runner. That pattern races across
- * multi-instance startup and bypasses migration history. The audit (C3)
- * identified it as a Critical issue.
+ * The actual phase migrations follow this marker. Keeping this migration as
+ * a no-op preserves the applied timestamp for existing databases while
+ * preventing new databases from running the historical monolith twice.
  *
- * The helpers themselves are internally idempotent (every step does a
- * `SHOW COLUMNS` / `SHOW TABLES` check first), so running this migration
- * against a database that already has the fixes applied is a no-op. New
- * databases inherit the fixes from the migration runner instead of from
- * boot-time shadow execution.
- *
- * `down()` is intentionally a no-op: these are forward-only schema repairs
- * with no defined inverse.
+ * `down()` explicitly fails: these are forward-only schema repairs with no
+ * defined inverse, and a silent no-op would make TypeORM report a misleading
+ * rollback state.
  */
 export class RunLegacyDbPatches1748000000000 implements MigrationInterface {
   name = "RunLegacyDbPatches1748000000000";
 
   public async up(_queryRunner: QueryRunner): Promise<void> {
-    await _legacyDbPatchesForMigration();
+    // Historical marker only. See the five phase migrations after this file.
   }
 
   public async down(_queryRunner: QueryRunner): Promise<void> {
-    // No-op: legacy repairs have no inverse.
+    throw new Error(
+      "IRREVERSIBLE_MIGRATION: RunLegacyDbPatches1748000000000 has no safe inverse; restore a database backup instead.",
+    );
   }
 }

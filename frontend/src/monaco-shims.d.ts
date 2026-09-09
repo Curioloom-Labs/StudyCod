@@ -19,3 +19,4 @@ declare module "monaco-editor/esm/vs/basic-languages/html/html.contribution" { c
 declare module "monaco-editor/esm/vs/basic-languages/css/css.contribution" { const contribution: unknown; export default contribution; }
 declare module "monaco-editor/esm/vs/basic-languages/xml/xml.contribution" { const contribution: unknown; export default contribution; }
 declare module "monaco-editor/esm/vs/basic-languages/sql/sql.contribution" { const contribution: unknown; export default contribution; }
+declare module "monaco-editor/min/vs/editor/editor.main.css?inline" { const css: string; export default css; }

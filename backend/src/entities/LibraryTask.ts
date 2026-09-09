@@ -12,6 +12,7 @@ import {
 import { User } from "./User";
 import { TaskTheory } from "./TaskTheory";
 import { TestData } from "./TestData";
+import type { CheckerSpec } from "../services/judgeWorker/types";
 
 export type LibraryTaskStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED";
 export type LibraryTaskLang = "JAVA" | "PYTHON" | "CPP";
@@ -197,7 +198,7 @@ export class LibraryTask {
 
   // Stored as JSON in TEXT column (TypeORM simple-json).
   @Column({ type: "simple-json", name: "checker_spec", nullable: true })
-  checkerSpec?: any | null;
+  checkerSpec?: CheckerSpec | null;
 
   // Planned: multi-language tasks. For now, informational.
   @Column({ type: "simple-json", name: "allowed_languages", nullable: true })

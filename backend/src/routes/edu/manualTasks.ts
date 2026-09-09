@@ -1,4 +1,4 @@
-import { Router, Response } from "express";
+import { Router, Response, type NextFunction, type Request } from "express";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -19,13 +19,13 @@ import {
   markGraded
 } from "../../services/edu/manualSubmissions";
 import { logger } from "../../utils/logger";
+import { UPLOADS_ROOT } from "../../config/storagePaths";
 
 const router = Router();
 const taskRepo = () => AppDataSource.getRepository(EduTask);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
 
-const UPLOADS_ROOT = process.env.UPLOADS_DIR ? String(process.env.UPLOADS_DIR) : path.resolve(process.cwd(), "uploads");
 const MANUAL_DIR = path.join(UPLOADS_ROOT, "manual-submissions");
 const ALLOWED_EXT = new Set([".pdf", ".txt", ".md", ".zip", ".png", ".jpg", ".jpeg", ".docx", ".py", ".java", ".cpp", ".js"]);
 
@@ -33,6 +33,10 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024, files: 1 }
 });
+
+type ManualTaskRequest = AuthRequest & {
+  file?: Express.Multer.File;
+};
 
 /** Load a MANUAL task with its class/teacher; null if not found or not MANUAL. */
 async function loadManualTask(taskId: number): Promise<EduTask | null> {
@@ -46,15 +50,17 @@ async function loadManualTask(taskId: number): Promise<EduTask | null> {
 }
 
 // Student submits (or resubmits) text and/or a file for a manual task.
-router.post("/manual-tasks/:taskId/submit", authRequired, (req: AuthRequest, res: Response, next) => {
-  upload.single("file")(req as any, res as any, (err: any) => {
+router.post("/manual-tasks/:taskId/submit", authRequired, (req: ManualTaskRequest, res: Response, next: NextFunction) => {
+  upload.single("file")(req as unknown as Request, res, (err?: unknown) => {
     if (err) {
-      if (String(err?.code || "") === "LIMIT_FILE_SIZE") return res.status(400).json({ message: "FILE_TOO_LARGE" });
+      if (typeof err === "object" && err !== null && "code" in err && String(err.code) === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ message: "FILE_TOO_LARGE" });
+      }
       return res.status(400).json({ message: "INVALID_UPLOAD" });
     }
     return next();
   });
-}, async (req: AuthRequest, res: Response) => {
+}, async (req: ManualTaskRequest, res: Response) => {
   try {
     if (req.userType !== "STUDENT" || !req.studentId) {
       return res.status(403).json({ message: "ONLY_STUDENTS" });
@@ -72,7 +78,7 @@ router.post("/manual-tasks/:taskId/submit", authRequired, (req: AuthRequest, res
     const previous = await getSubmission(task.id, student.id);
     if (previous?.status === "GRADED") return res.status(409).json({ message: "SUBMISSION_ALREADY_GRADED" });
 
-    const file = (req as any).file as Express.Multer.File | undefined;
+    const file = req.file;
     let fileStorageKey: string | null = null;
     let fileName: string | null = null;
     if (file && file.buffer && file.size) {
@@ -112,7 +118,7 @@ router.post("/manual-tasks/:taskId/submit", authRequired, (req: AuthRequest, res
         updatedAt: submission.updatedAt
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/manualTasks] submit failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -138,7 +144,7 @@ router.get("/manual-tasks/:taskId/submission", authRequired, async (req: AuthReq
         updatedAt: submission.updatedAt
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/manualTasks] get submission failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -193,7 +199,7 @@ router.get("/manual-tasks/:taskId/submissions", authRequired, async (req: AuthRe
           : null
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/manualTasks] list submissions failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -219,7 +225,7 @@ router.post("/manual-tasks/:taskId/submissions/:studentId/grade", authRequired, 
     const total = Number(req.body?.total);
     if (!Number.isFinite(total) || total < 0 || total > maxScore) return res.status(400).json({ message: "INVALID_GRADE_VALUE" });
     let grade = await gradeRepo().findOne({ where: { task: { id: taskId }, student: { id: studentId } } });
-    if (!grade) grade = gradeRepo().create({ task: { id: taskId } as EduTask, student, testsPassed: 0, testsTotal: 0 });
+    if (!grade) grade = gradeRepo().create({ task, student, testsPassed: 0, testsTotal: 0 });
     grade.total = Math.round(total);
     grade.maxScore = Math.round(maxScore);
     grade.score = Math.round(total);
@@ -229,7 +235,7 @@ router.post("/manual-tasks/:taskId/submissions/:studentId/grade", authRequired, 
     await gradeRepo().save(grade);
     await markGraded(taskId, studentId);
     return res.json({ grade: { id: grade.id, total: grade.total, maxScore: grade.maxScore, feedback: grade.feedback, isManuallyGraded: true } });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/manualTasks] grade failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -269,7 +275,7 @@ router.get("/manual-tasks/:taskId/submissions/:studentId/file", authRequired, as
     if (!filePath.startsWith(`${root}${path.sep}`)) return res.status(400).json({ message: "INVALID_FILE" });
     if (!fs.existsSync(filePath)) return res.status(404).json({ message: "FILE_NOT_FOUND" });
     return res.download(filePath, submission.fileName || path.basename(filePath));
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/manualTasks] file download failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

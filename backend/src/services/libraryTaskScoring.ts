@@ -41,14 +41,17 @@ export type LibraryGroupScore = {
 
 export function normalizeLibraryGroupScores(raw: unknown): LibraryGroupScore[] | null {
   if (!Array.isArray(raw)) return null;
-  return raw.map((group: any) => {
-    const status = ["PASSED", "PARTIAL", "FAILED", "SKIPPED"].includes(String(group?.status))
+  return raw.map((value: unknown) => {
+    const group = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+    const status = ["PASSED", "PARTIAL", "FAILED", "SKIPPED"].includes(String(group.status))
       ? String(group.status) as LibraryGroupScore["status"]
       : undefined;
     return {
-      group: String(group?.group ?? ""),
-      score: Number.isFinite(Number(group?.score)) ? Number(group.score) : 0,
-      maxScore: Number.isFinite(Number(group?.max_score)) ? Number(group.max_score) : 0,
+      group: String(group.group ?? ""),
+      score: Number.isFinite(Number(group.score)) ? Number(group.score) : 0,
+      maxScore: Number.isFinite(Number(group.max_score)) ? Number(group.max_score) : 0,
       ...(status ? { status } : {}),
     };
   });

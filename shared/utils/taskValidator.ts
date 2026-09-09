@@ -44,7 +44,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object';
 }
 
-export function validateTaskGenerationResponse(data: any): TaskGenerationSchema {
+export function validateTaskGenerationResponse(data: unknown): TaskGenerationSchema {
   if (!isObject(data)) {
     fail('Invalid response: expected object');
   }
@@ -66,14 +66,15 @@ export function validateTaskGenerationResponse(data: any): TaskGenerationSchema 
   if (!Array.isArray(data.examples)) fail('Invalid response: examples must be array');
   if (typeof data.codeTemplate !== 'string') fail('Invalid response: codeTemplate must be string');
 
-  for (let i = 0; i < data.examples.length; i++) {
-    const ex = data.examples[i];
+  const examples = data.examples;
+  for (let i = 0; i < examples.length; i++) {
+    const ex = examples[i];
     if (!isObject(ex)) {
       fail(`Invalid response: example ${i} must be object`);
     }
-    if (typeof (ex as any).input !== 'string') fail(`Invalid response: example ${i}.input must be string`);
-    if (typeof (ex as any).output !== 'string') fail(`Invalid response: example ${i}.output must be string`);
-    if ((ex as any).explanation && typeof (ex as any).explanation !== 'string') {
+    if (typeof ex.input !== 'string') fail(`Invalid response: example ${i}.input must be string`);
+    if (typeof ex.output !== 'string') fail(`Invalid response: example ${i}.output must be string`);
+    if (ex.explanation && typeof ex.explanation !== 'string') {
       fail(`Invalid response: example ${i}.explanation must be string if present`);
     }
   }
@@ -84,20 +85,25 @@ export function validateTaskGenerationResponse(data: any): TaskGenerationSchema 
     difficulty: Number(data.difficulty),
     theoryMarkdown: String(data.theoryMarkdown).trim(),
     practicalTask: String(data.practicalTask).trim(),
-    ioType: typeof (data as any).ioType === 'string' ? String((data as any).ioType).trim() as any : undefined,
+    ioType: data.ioType === "STDIN_STDOUT" || data.ioType === "NO_INPUT_FIXED_OUTPUT" || data.ioType === "NO_INPUT_FREE_OUTPUT"
+      ? data.ioType
+      : undefined,
     inputFormat: String(data.inputFormat).trim(),
     outputFormat: String(data.outputFormat).trim(),
     constraints: String(data.constraints).trim(),
-    examples: data.examples.map((ex: any) => ({
-      input: String(ex.input).trim(),
-      output: String(ex.output).trim(),
-      explanation: ex.explanation ? String(ex.explanation).trim() : '',
-    })),
+    examples: examples.map(ex => {
+      const item = ex as Record<string, unknown>;
+      return {
+        input: String(item.input).trim(),
+        output: String(item.output).trim(),
+        explanation: item.explanation ? String(item.explanation).trim() : '',
+      };
+    }),
     codeTemplate: String(data.codeTemplate).trim(),
   };
 }
 
-export function tryFixJsonResponse(text: string): any {
+export function tryFixJsonResponse(text: string): unknown {
   let cleaned = text.trim();
 
   // Cheap fence stripping (it’s not a markdown parser; it just covers the usual case)

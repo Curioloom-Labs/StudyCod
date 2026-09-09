@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import AdmZip from "adm-zip";
+import SafeZipArchive from "./safeZip";
 import {
   validateUploadedZip,
   ZipValidationError,
@@ -9,26 +9,22 @@ import {
   ZIP_MAX_PER_ENTRY_BYTES,
 } from "./zipUploadValidator";
 
-function buildZip(entries: Array<{ name: string; data: Buffer | string }>): AdmZip {
-  const zip = new AdmZip();
+function buildZip(entries: Array<{ name: string; data: Buffer | string }>): SafeZipArchive {
+  const zip = new SafeZipArchive();
   for (const e of entries) {
     zip.addFile(e.name, Buffer.isBuffer(e.data) ? e.data : Buffer.from(e.data, "utf-8"));
   }
   // Round-trip through buffer so per-entry compressedSize/size headers are populated.
-  return new AdmZip(zip.toBuffer());
+  return new SafeZipArchive(zip.toBuffer());
 }
 
-// adm-zip SANITIZES traversal sequences (`..`, leading `/`, `\`) when it WRITES
-// an entry name via addFile. So authoring a malicious name through addFile would
-// test adm-zip's normalization, not our validator. To exercise the real attack
-// path we author an equal-length, all-safe placeholder and then byte-patch the
-// raw bytes back into the buffer's local + central headers — exactly how a
-// hand-crafted malicious archive looks when adm-zip READS it (read does NOT
-// normalize, confirmed: entryName comes through verbatim).
-function buildZipWithRawName(name: string, data = "x"): AdmZip {
+// Authoring an unsafe name through addFile would test the writer rather than
+// the validator. To exercise the real attack path, author an equal-length,
+// safe placeholder and byte-patch the raw bytes in both ZIP name headers.
+function buildZipWithRawName(name: string, data = "x"): SafeZipArchive {
   const placeholder = name.replace(/[^A-Za-z0-9]/g, "A");
   assert.equal(placeholder.length, name.length, "placeholder must preserve length");
-  const zip = new AdmZip();
+  const zip = new SafeZipArchive();
   zip.addFile(placeholder, Buffer.from(data, "utf-8"));
   const buf = zip.toBuffer();
   const ph = Buffer.from(placeholder, "utf-8");
@@ -38,7 +34,7 @@ function buildZipWithRawName(name: string, data = "x"): AdmZip {
     ml.copy(buf, idx);
     idx += ml.length;
   }
-  return new AdmZip(buf);
+  return new SafeZipArchive(buf);
 }
 
 function expectCode(fn: () => void, code: string) {

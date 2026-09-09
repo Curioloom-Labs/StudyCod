@@ -126,8 +126,8 @@ ${code}
           documentation: response.documentation
         }
       };
-    } catch (error: any) {
-      logger.warn('[grading] llm code critique failed', { message: error?.message });
+    } catch (error: unknown) {
+      logger.warn('[grading] llm code critique failed', { message: error instanceof Error ? error.message : String(error) });
       return {
         styleScore: 0.5,
         feedback: {

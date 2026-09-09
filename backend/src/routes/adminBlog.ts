@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { z } from "zod";
-import { Not } from "typeorm";
+import { Not, type FindOptionsWhere } from "typeorm";
 import multer from "multer";
 import crypto from "crypto";
 import fs from "fs";
@@ -112,7 +112,7 @@ async function uniqueSlug(base: string, ignoreId?: number): Promise<string> {
   let n = 1;
   // Loop until we find a free slug. Bounded in practice by collision count.
   while (true) {
-    const where: any = { slug: candidate };
+    const where: FindOptionsWhere<BlogPost> = { slug: candidate };
     if (ignoreId) where.id = Not(ignoreId);
     const existing = await postRepo().findOne({ where });
     if (!existing) return candidate;
@@ -339,7 +339,7 @@ router.post(
   systemAdminGuard,
   imageUpload.single("file"),
   async (req: AuthRequest, res: Response) => {
-    const file = (req as any).file as Express.Multer.File | undefined;
+    const file = (req as AuthRequest & { file?: Express.Multer.File }).file;
     if (!file) return res.status(400).json({ message: "NO_FILE" });
 
     try {

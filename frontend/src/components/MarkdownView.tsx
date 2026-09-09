@@ -4,6 +4,8 @@ import { useId } from "react";
 import type { Components } from "react-markdown";
 import type { Pluggable, PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { decodeEscapedInputText, normalizeMarkdownEscapes } from "../utils/inputTextNormalization";
 import { InteractiveBlock, parseInteractiveSpec } from "./theory/InteractiveBlock";
 const MATH_MARKUP_RE = /(\$\$[^$]+?\$\$)|(\$[^$\n]+?\$)|\\\(|\\\[|\\begin\{/;
@@ -70,6 +72,26 @@ type HastNode = {
   tagName?: string;
   properties?: Record<string, unknown>;
   children?: unknown[];
+};
+
+// Course pages can contain server-generated <video>/<track> markup. Parse raw
+// HTML only with a narrow allowlist so author content cannot turn this markdown
+// surface into an XSS sink. The allowlist intentionally covers the generated
+// media attributes and the iframe attributes used by trusted embed detection.
+const markdownSanitizeSchema = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames || []), "section", "video", "track", "iframe"],
+  attributes: {
+    ...defaultSchema.attributes,
+    section: [["className", /^sc-/]],
+    video: ["controls", "preload", "src", "ariaLabel", "ariaDescribedBy", "className"],
+    track: [["kind", "captions"], "src", "srcLang", "label", "default"],
+    iframe: ["src", "title", "frameBorder", "allowFullScreen", "loading", "allow", "referrerPolicy", "className"],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    src: ["http", "https"],
+  },
 };
 
 function parseHttpUrl(raw: string): URL | null {
@@ -536,8 +558,10 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
   }, [mathPlugins.remarkMath]);
 
   const rehypePlugins = useMemo(() => {
-    if (!mathPlugins.rehypeKatex) return [] as PluggableList;
-    return [mathPlugins.rehypeKatex];
+    const plugins: PluggableList = [rehypeRaw];
+    if (mathPlugins.rehypeKatex) plugins.push(mathPlugins.rehypeKatex);
+    plugins.push([rehypeSanitize, markdownSanitizeSchema]);
+    return plugins;
   }, [mathPlugins.rehypeKatex]);
 
   const codeComponents = useMemo<Pick<Components, "code" | "a" | "img" | "p" | "pre">>(() => ({

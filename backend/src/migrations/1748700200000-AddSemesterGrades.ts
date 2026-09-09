@@ -1,5 +1,7 @@
 import type { MigrationInterface, QueryRunner } from "typeorm";
 
+type ColumnRow = Record<string, unknown>;
+
 /**
  * Semester aggregation support:
  *  - widen `summary_grades.assessment_type` enum to include SEMESTER
@@ -17,7 +19,7 @@ export class AddSemesterGrades1748700200000 implements MigrationInterface {
     if (Array.isArray(sgTables) && sgTables.length > 0) {
       // Widen the assessment_type enum (only if SEMESTER not already present).
       const typeCol = await queryRunner.query("SHOW COLUMNS FROM `summary_grades` LIKE 'assessment_type'");
-      const typeDef = Array.isArray(typeCol) && typeCol.length > 0 ? String((typeCol[0] as any).Type || "") : "";
+      const typeDef = Array.isArray(typeCol) && typeCol.length > 0 ? String((typeCol[0] as ColumnRow).Type || "") : "";
       if (typeDef && !/SEMESTER/i.test(typeDef)) {
         await queryRunner.query(
           "ALTER TABLE `summary_grades` MODIFY COLUMN `assessment_type` ENUM('PRACTICE','INTERMEDIATE','CONTROL','SEMESTER') NOT NULL DEFAULT 'INTERMEDIATE'"
@@ -26,7 +28,7 @@ export class AddSemesterGrades1748700200000 implements MigrationInterface {
 
       // Make topic_id nullable.
       const topicCol = await queryRunner.query("SHOW COLUMNS FROM `summary_grades` LIKE 'topic_id'");
-      const topicNullable = Array.isArray(topicCol) && topicCol.length > 0 ? String((topicCol[0] as any).Null || "") : "";
+      const topicNullable = Array.isArray(topicCol) && topicCol.length > 0 ? String((topicCol[0] as ColumnRow).Null || "") : "";
       if (topicNullable && topicNullable.toUpperCase() !== "YES") {
         await queryRunner.query("ALTER TABLE `summary_grades` MODIFY COLUMN `topic_id` INT NULL");
       }
@@ -69,7 +71,7 @@ export class AddSemesterGrades1748700200000 implements MigrationInterface {
 
       // Restore topic_id NOT NULL (true inverse of the up() migration).
       const topicCol = await queryRunner.query("SHOW COLUMNS FROM `summary_grades` LIKE 'topic_id'");
-      const topicNullable = Array.isArray(topicCol) && topicCol.length > 0 ? String((topicCol[0] as any).Null || "") : "";
+      const topicNullable = Array.isArray(topicCol) && topicCol.length > 0 ? String((topicCol[0] as ColumnRow).Null || "") : "";
       if (topicNullable && topicNullable.toUpperCase() === "YES") {
         await queryRunner.query("ALTER TABLE `summary_grades` MODIFY COLUMN `topic_id` INT NOT NULL");
       }

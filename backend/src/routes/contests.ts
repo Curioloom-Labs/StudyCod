@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import type { FindManyOptions } from "typeorm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
@@ -28,8 +29,26 @@ import { emailService } from "../services/emailService";
 import { certificateService } from "../services/certificates/CertificateService";
 import { computeScoreboard, type ScoreboardSubmission } from "../services/contest/scoreboard";
 import { publishContestEvent, subscribeContestEvents, type ContestEvent } from "../services/contest/contestEvents";
+import { ALL_JUDGE_LANGUAGES } from "../config/judgeLanguages";
 
 const contestsRouter = Router();
+
+type UnknownRecord = Record<string, unknown>;
+
+function readProperty(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object") return undefined;
+  return (value as UnknownRecord)[key];
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  const message = readProperty(error, "message");
+  return typeof message === "string" && message ? message : String(error);
+}
 
 const contestRepo = () => AppDataSource.getRepository(Contest);
 const problemRepo = () => AppDataSource.getRepository(ContestProblem);
@@ -41,11 +60,7 @@ const classRepo = () => AppDataSource.getRepository(Class);
 const libraryRepo = () => AppDataSource.getRepository(LibraryTask);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
 
-const ALL_JUDGE_LANGS = [
-  "java", "python", "cpp", "c", "csharp", "kotlin",
-  "js", "go", "rust", "pascal",
-  "d", "dart", "haskell", "lisp", "lua", "perl", "php", "ruby", "swift"
-] as const;
+const ALL_JUDGE_LANGS = ALL_JUDGE_LANGUAGES;
 
 const NATIVE_LIMITS = { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 };
 const SCRIPTING_LIMITS = { time_limit_ms: 2000, memory_limit_mb: 256, output_limit_kb: 64 };
@@ -103,11 +118,12 @@ async function verifyTurnstileToken(params: {
       body: body.toString(),
     });
     if (!response.ok) return { success: false, errorCodes: [`HTTP_${response.status}`] };
-    const data = (await response.json()) as any;
-    const errorCodes = Array.isArray(data?.["error-codes"])
-      ? data["error-codes"].map((x: unknown) => String(x ?? "").trim()).filter(Boolean)
+    const data = await response.json() as unknown;
+    const errorCodesRaw = readProperty(data, "error-codes");
+    const errorCodes = Array.isArray(errorCodesRaw)
+      ? errorCodesRaw.map((x: unknown) => String(x ?? "").trim()).filter(Boolean)
       : [];
-    return { success: data?.success === true, errorCodes };
+    return { success: readProperty(data, "success") === true, errorCodes };
   } catch {
     return { success: false, errorCodes: ["VERIFY_REQUEST_FAILED"] };
   }
@@ -142,8 +158,9 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   const out: ApiCodeFile[] = [];
   for (const f of raw) {
     if (!f || typeof f !== "object") continue;
-    const p = normalizeSafeCodeFilePath((f as any).path) ?? "";
-    const c = typeof (f as any).content === "string" ? (f as any).content : "";
+    const p = normalizeSafeCodeFilePath(readProperty(f, "path")) ?? "";
+    const rawContent = readProperty(f, "content");
+    const c = typeof rawContent === "string" ? rawContent : "";
     if (!p) continue;
     out.push({ path: p, content: c });
   }
@@ -177,9 +194,9 @@ async function canViewContestMeta(params: { contest: Contest; req: AuthRequest }
   // Unpublished: only creator/admin.
   if (contest.isPublished === false) {
     if (req.userRole === "SYSTEM_ADMIN" && req.userId) return true;
-    if (req.userId && (contest as any)?.createdBy?.id === req.userId) return true;
+    if (req.userId && contest.createdBy?.id === req.userId) return true;
     if (req.userId) {
-      const row = await contestRepo().findOne({ where: { id: contest.id } as any, relations: ["createdBy"] as any });
+      const row = await contestRepo().findOne({ where: { id: contest.id }, relations: ["createdBy"] });
       if (row?.createdBy?.id === req.userId) return true;
     }
     return false;
@@ -206,56 +223,56 @@ async function getOrCreateParticipant(params: { contestId: number; req: AuthRequ
 
   const existing = await participantRepo().findOne({
     where: {
-      contest: { id: params.contestId } as any,
-      ...(principalType === "USER" ? { user: { id: principalId } as any } : { student: { id: principalId } as any }),
-    } as any,
+      contest: { id: params.contestId },
+      ...(principalType === "USER" ? { user: { id: principalId } } : { student: { id: principalId } }),
+    },
   });
   if (existing) return existing;
 
   const displayName = await (async () => {
     if (principalType === "USER") {
-      const u = await userRepo().findOne({ where: { id: principalId } as any });
+      const u = await userRepo().findOne({ where: { id: principalId } });
       const name = String(u?.username ?? "").trim();
       return name || `user_${principalId}`;
     }
-    const s = await studentRepo().findOne({ where: { id: principalId } as any });
+    const s = await studentRepo().findOne({ where: { id: principalId } });
     const n = `${String(s?.lastName ?? "").trim()} ${String(s?.firstName ?? "").trim()}`.trim();
     return n || `student_${principalId}`;
   })();
 
   const notificationEmail = await (async (): Promise<string | null> => {
     if (principalType === "USER") {
-      const u = await userRepo().findOne({ where: { id: principalId } as any });
+      const u = await userRepo().findOne({ where: { id: principalId } });
       const email = String(u?.email ?? "").trim().toLowerCase();
       return email || null;
     }
-    const s = await studentRepo().findOne({ where: { id: principalId } as any });
+    const s = await studentRepo().findOne({ where: { id: principalId } });
     const email = String(s?.email ?? "").trim().toLowerCase();
     return email || null;
   })();
 
   const created: ContestParticipant = participantRepo().create();
   Object.assign(created, {
-    contest: { id: params.contestId } as any,
+    contest: { id: params.contestId } as Contest,
     principalType,
     displayName,
     notificationEmail,
     notificationFullName: displayName || null,
-    ...(principalType === "USER" ? { user: { id: principalId } as any } : { student: { id: principalId } as any }),
+    ...(principalType === "USER" ? { user: { id: principalId } as User } : { student: { id: principalId } as Student }),
   });
   try {
-    const saved: ContestParticipant = await participantRepo().save(created as any);
+    const saved: ContestParticipant = await participantRepo().save(created);
     return saved;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Two tabs may join simultaneously. The database unique constraint is the
     // arbiter; return the row created by the winner instead of surfacing 500.
-    const code = String(error?.code ?? "").toUpperCase();
-    if (code === "ER_DUP_ENTRY" || String(error?.message ?? "").toLowerCase().includes("duplicate")) {
+    const code = String(readProperty(error, "code") ?? "").toUpperCase();
+    if (code === "ER_DUP_ENTRY" || errorMessage(error).toLowerCase().includes("duplicate")) {
       const winner = await participantRepo().findOne({
         where: {
-          contest: { id: params.contestId } as any,
-          ...(principalType === "USER" ? { user: { id: principalId } as any } : { student: { id: principalId } as any }),
-        } as any,
+          contest: { id: params.contestId },
+          ...(principalType === "USER" ? { user: { id: principalId } } : { student: { id: principalId } }),
+        },
       });
       if (winner) return winner;
     }
@@ -272,9 +289,9 @@ async function ensureContestParticipantNotificationColumns(): Promise<void> {
       AND TABLE_NAME = 'contest_participants'
       AND COLUMN_NAME IN ('notification_email', 'notification_full_name')
     `
-  )) as Array<any>;
+  )) as Array<UnknownRecord>;
 
-  const existing = new Set((rows || []).map((r) => String(r?.columnName ?? "").trim().toLowerCase()));
+  const existing = new Set((rows || []).map((r) => String(readProperty(r, "columnName") ?? "").trim().toLowerCase()));
 
   if (!existing.has("notification_email")) {
     await AppDataSource.query(
@@ -294,10 +311,10 @@ async function canAccessContest(params: { contest: Contest; req: AuthRequest }):
   if (contest.isPublished === false) {
     // Only creator and SYSTEM_ADMIN can see unpublished contests.
     if (req.userRole === "SYSTEM_ADMIN" && req.userId) return true;
-    if (req.userId && (contest as any)?.createdBy?.id === req.userId) return true;
+    if (req.userId && contest.createdBy?.id === req.userId) return true;
     // If creator relation wasn't loaded, check by id.
     if (req.userId) {
-      const row = await contestRepo().findOne({ where: { id: contest.id } as any, relations: ["createdBy"] as any });
+      const row = await contestRepo().findOne({ where: { id: contest.id }, relations: ["createdBy"] });
       if (row?.createdBy?.id === req.userId) return true;
     }
     return false;
@@ -310,9 +327,9 @@ async function canAccessContest(params: { contest: Contest; req: AuthRequest }):
     if (!req.userId) return false;
     const participant = await participantRepo().findOne({
       where: {
-        contest: { id: contest.id } as any,
-        user: { id: req.userId } as any,
-      } as any,
+        contest: { id: contest.id },
+        user: { id: req.userId },
+      },
     });
     return !!participant;
   }
@@ -324,20 +341,20 @@ async function canAccessContest(params: { contest: Contest; req: AuthRequest }):
   // Creator/admin can always access.
   if (req.userRole === "SYSTEM_ADMIN" && req.userId) return true;
   if (req.userId) {
-    const row = (contest as any)?.createdBy?.id ? contest : await contestRepo().findOne({ where: { id: contest.id } as any, relations: ["createdBy"] as any });
-    if ((row as any)?.createdBy?.id === req.userId) return true;
+    const row = contest.createdBy?.id ? contest : await contestRepo().findOne({ where: { id: contest.id }, relations: ["createdBy"] });
+    if (row?.createdBy?.id === req.userId) return true;
   }
 
   if (contest.visibility === "CLASS") {
     if (req.studentId) {
-      const s = await studentRepo().findOne({ where: { id: req.studentId } as any, relations: ["class"] as any });
-      const classId = (contest as any)?.class?.id ?? (contest as any)?.class_id;
+      const s = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
+      const classId = contest.class?.id ?? Number(readProperty(contest, "class_id"));
       if (s?.class?.id && classId && s.class.id === classId) return true;
     }
     if (req.userId) {
-      const classId = (contest as any)?.class?.id ?? (contest as any)?.class_id;
+      const classId = contest.class?.id ?? Number(readProperty(contest, "class_id"));
       if (classId) {
-        const c = await classRepo().findOne({ where: { id: classId } as any, relations: ["teacher"] as any });
+        const c = await classRepo().findOne({ where: { id: classId }, relations: ["teacher"] });
         if (c?.teacher?.id === req.userId) return true;
       }
     }
@@ -346,9 +363,9 @@ async function canAccessContest(params: { contest: Contest; req: AuthRequest }):
   // Joined participants can access.
   const p = await participantRepo().findOne({
     where: {
-      contest: { id: contest.id } as any,
-      ...(req.userId ? { user: { id: req.userId } as any } : { student: { id: req.studentId } as any }),
-    } as any,
+      contest: { id: contest.id },
+      ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }),
+    },
   });
   return !!p;
 }
@@ -432,7 +449,7 @@ async function isContestOrganizer(contestId: number, userId: number): Promise<bo
     const rows = (await AppDataSource.query(
       `SELECT user_id as userId FROM contest_organizers WHERE contest_id = ? AND user_id = ? LIMIT 1`,
       [contestId, userId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     return rows.length > 0;
   } catch {
     return false;
@@ -446,8 +463,8 @@ async function getContestPausedState(contestId: number): Promise<boolean> {
     const rows = (await AppDataSource.query(
       `SELECT is_paused as isPaused FROM contest_runtime_state WHERE contest_id = ? LIMIT 1`,
       [contestId]
-    )) as Array<any>;
-    const value = rows[0]?.isPaused;
+    )) as Array<UnknownRecord>;
+    const value = readProperty(rows[0], "isPaused");
     return Number(value) === 1 || value === true;
   } catch {
     return false;
@@ -494,7 +511,7 @@ async function isProblemAnnulledForParticipant(contestId: number, problemId: num
       LIMIT 1
       `,
       [contestId, problemId, participantId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     return rows.length > 0;
   } catch {
     return false;
@@ -504,9 +521,9 @@ async function isProblemAnnulledForParticipant(contestId: number, problemId: num
 async function canManageContest(params: { contest: Contest; req: AuthRequest }): Promise<boolean> {
   const { contest, req } = params;
   if (req.userRole === "SYSTEM_ADMIN" && req.userId) return true;
-  if (req.userId && (contest as any)?.createdBy?.id === req.userId) return true;
+  if (req.userId && contest.createdBy?.id === req.userId) return true;
   if (req.userId) {
-    const row = await contestRepo().findOne({ where: { id: contest.id } as any, relations: ["createdBy"] as any });
+    const row = await contestRepo().findOne({ where: { id: contest.id }, relations: ["createdBy"] });
     if (row?.createdBy?.id === req.userId) return true;
     const organizer = await isContestOrganizer(contest.id, req.userId);
     if (organizer) return true;
@@ -585,7 +602,7 @@ async function allocateUniqueContestUsername(prefix: string, contestId: number):
   for (let i = 0; i < 30; i++) {
     const suffix = crypto.randomBytes(4).toString("hex");
     const username = `${prefix}_${contestId}_${suffix}`;
-    const existing = await userRepo().findOne({ where: { username } as any });
+    const existing = await userRepo().findOne({ where: { username } });
     if (!existing) return username;
   }
   const fallback = `${prefix}_${contestId}_${Date.now()}`.slice(0, 50);
@@ -608,11 +625,11 @@ async function getMaxScoreByLibraryTaskId(libraryTaskIds: number[]): Promise<Map
     GROUP BY library_task_id
     `,
     uniq
-  )) as Array<any>;
+  )) as Array<UnknownRecord>;
 
   for (const r of rows || []) {
-    const tid = Number(r.taskId);
-    const sc = Number(r.maxScore);
+    const tid = Number(readProperty(r, "taskId"));
+    const sc = Number(readProperty(r, "maxScore"));
     if (!Number.isFinite(tid) || tid <= 0) continue;
     map.set(tid, Number.isFinite(sc) && sc > 0 ? sc : 0);
   }
@@ -668,15 +685,15 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
     const contestId = parseInt(req.params.id, 10);
     if (isNaN(contestId)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId } });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     if (contest.visibility !== "PUBLIC" && !(await canAccessContest({ contest, req }))) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
     const subs = await submissionRepo().find({
-      where: { contest: { id: contestId } } as any,
-      relations: ["participant", "problem"] as any,
+      where: { contest: { id: contestId } },
+      relations: ["participant", "problem"],
     });
 
     const endsAtMs = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
@@ -703,8 +720,8 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
     const participants: Record<number, string> = {};
     const problems: Record<number, string> = {};
     for (const s of subs) {
-      if (s.participant) participants[s.participant.id] = String((s.participant as any).displayName ?? `#${s.participant.id}`);
-      if (s.problem) problems[s.problem.id] = String((s.problem as any).label ?? `#${s.problem.id}`);
+      if (s.participant) participants[s.participant.id] = String(s.participant.displayName ?? `#${s.participant.id}`);
+      if (s.problem) problems[s.problem.id] = String(s.problem.label ?? `#${s.problem.id}`);
     }
 
     res.set("Cache-Control", "no-store");
@@ -716,8 +733,8 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
       participants,
       problems,
     });
-  } catch (error: any) {
-    logger.warn("[contests] scoreboard failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[contests] scoreboard failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -727,7 +744,7 @@ contestsRouter.get("/:id/community", authOptional, async (req: AuthRequest, res:
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = await canAccessContest({ contest, req });
@@ -739,9 +756,9 @@ contestsRouter.get("/:id/community", authOptional, async (req: AuthRequest, res:
       if (!req.userId && !req.studentId) return null;
       const participant = await participantRepo().findOne({
         where: {
-          contest: { id: contestId } as any,
-          ...(req.userId ? { user: { id: req.userId } as any } : { student: { id: req.studentId } as any }),
-        } as any,
+          contest: { id: contestId },
+          ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }),
+        },
       });
       return participant?.id ?? null;
     })();
@@ -749,12 +766,12 @@ contestsRouter.get("/:id/community", authOptional, async (req: AuthRequest, res:
     await ensureContestCommunityTables();
 
     const qLimit = (() => {
-      const n = Number((req.query as any)?.qLimit);
+      const n = Number(readProperty(req.query, "qLimit"));
       if (!Number.isFinite(n)) return 300;
       return Math.max(1, Math.min(1000, Math.floor(n)));
     })();
     const aLimit = (() => {
-      const n = Number((req.query as any)?.aLimit);
+      const n = Number(readProperty(req.query, "aLimit"));
       if (!Number.isFinite(n)) return 200;
       return Math.max(1, Math.min(1000, Math.floor(n)));
     })();
@@ -775,7 +792,7 @@ contestsRouter.get("/:id/community", authOptional, async (req: AuthRequest, res:
       LIMIT ?
       `,
       [contestId, canManage ? 1 : 0, principalParticipantId ?? -1, qLimit]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
 
     const announcements = (await AppDataSource.query(
       `
@@ -789,7 +806,7 @@ contestsRouter.get("/:id/community", authOptional, async (req: AuthRequest, res:
       LIMIT ?
       `,
       [contestId, aLimit]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
 
     return res.json({
       contestId,
@@ -798,19 +815,19 @@ contestsRouter.get("/:id/community", authOptional, async (req: AuthRequest, res:
         participantId: Number.isFinite(Number(q.participantId)) ? Number(q.participantId) : null,
         author: String(q.author ?? "participant"),
         text: String(q.text ?? ""),
-        createdAt: q.createdAt ? new Date(q.createdAt).toISOString() : new Date().toISOString(),
+        createdAt: readProperty(q, "createdAt") ? new Date(String(readProperty(q, "createdAt"))).toISOString() : new Date().toISOString(),
         answer: q.answer != null ? String(q.answer) : null,
-        answeredAt: q.answeredAt ? new Date(q.answeredAt).toISOString() : null,
+        answeredAt: readProperty(q, "answeredAt") ? new Date(String(readProperty(q, "answeredAt"))).toISOString() : null,
         status: q.answer != null ? "ANSWERED" : "OPEN",
       })),
       announcements: announcements.map((a) => ({
         id: Number(a.id),
         author: String(a.author ?? "organizer"),
         text: String(a.text ?? ""),
-        createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString(),
+        createdAt: readProperty(a, "createdAt") ? new Date(String(readProperty(a, "createdAt"))).toISOString() : new Date().toISOString(),
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/community error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -822,7 +839,7 @@ contestsRouter.post("/:id/community/questions", authRequired, async (req: AuthRe
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = await canAccessContest({ contest, req });
@@ -835,19 +852,19 @@ contestsRouter.post("/:id/community/questions", authRequired, async (req: AuthRe
     if (!text) return res.status(400).json({ message: "EMPTY_TEXT" });
 
     const participant = await getOrCreateParticipant({ contestId, req });
-    if ((participant as any).isDisqualified) {
+    if (participant.isDisqualified) {
       return res.status(403).json({ message: "PARTICIPANT_DISQUALIFIED" });
     }
 
     await ensureContestCommunityTables();
-    const insertResult: any = await AppDataSource.query(
+    const insertResult = await AppDataSource.query(
       `
       INSERT INTO contest_questions (contest_id, participant_id, author_name, question_text, created_at)
       VALUES (?, ?, ?, ?, NOW())
       `,
       [contestId, participant.id, String(participant.displayName ?? "participant"), text]
     );
-    const newId = Number(insertResult?.insertId ?? 0);
+    const newId = Number(readProperty(insertResult, "insertId") ?? 0);
     if (!Number.isFinite(newId) || newId <= 0) {
       return res.status(500).json({ message: "CREATE_FAILED" });
     }
@@ -865,7 +882,7 @@ contestsRouter.post("/:id/community/questions", authRequired, async (req: AuthRe
       LIMIT 1
       `,
       [newId, contestId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     const q = rows[0];
     if (!q) return res.status(500).json({ message: "CREATE_FAILED" });
 
@@ -874,12 +891,12 @@ contestsRouter.post("/:id/community/questions", authRequired, async (req: AuthRe
         id: Number(q.id),
         author: String(q.author ?? "participant"),
         text: String(q.text ?? ""),
-        createdAt: q.createdAt ? new Date(q.createdAt).toISOString() : new Date().toISOString(),
+        createdAt: readProperty(q, "createdAt") ? new Date(String(readProperty(q, "createdAt"))).toISOString() : new Date().toISOString(),
         answer: q.answer != null ? String(q.answer) : null,
-        answeredAt: q.answeredAt ? new Date(q.answeredAt).toISOString() : null,
+        answeredAt: readProperty(q, "answeredAt") ? new Date(String(readProperty(q, "answeredAt"))).toISOString() : null,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] POST /:id/community/questions error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -896,7 +913,7 @@ contestsRouter.patch("/:id/community/questions/:questionId/answer", authRequired
       return res.status(400).json({ message: "INVALID_ID" });
     }
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const canManage = await canManageContest({ contest, req });
@@ -913,7 +930,7 @@ contestsRouter.patch("/:id/community/questions/:questionId/answer", authRequired
     const existsRows = (await AppDataSource.query(
       `SELECT id FROM contest_questions WHERE id = ? AND contest_id = ? LIMIT 1`,
       [questionId, contestId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     if (!existsRows.length) return res.status(404).json({ message: "QUESTION_NOT_FOUND" });
 
     await AppDataSource.query(
@@ -938,7 +955,7 @@ contestsRouter.patch("/:id/community/questions/:questionId/answer", authRequired
       LIMIT 1
       `,
       [questionId, contestId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     const q = rows[0];
     if (!q) return res.status(404).json({ message: "QUESTION_NOT_FOUND" });
 
@@ -947,12 +964,12 @@ contestsRouter.patch("/:id/community/questions/:questionId/answer", authRequired
         id: Number(q.id),
         author: String(q.author ?? "participant"),
         text: String(q.text ?? ""),
-        createdAt: q.createdAt ? new Date(q.createdAt).toISOString() : new Date().toISOString(),
+        createdAt: readProperty(q, "createdAt") ? new Date(String(readProperty(q, "createdAt"))).toISOString() : new Date().toISOString(),
         answer: q.answer != null ? String(q.answer) : null,
-        answeredAt: q.answeredAt ? new Date(q.answeredAt).toISOString() : null,
+        answeredAt: readProperty(q, "answeredAt") ? new Date(String(readProperty(q, "answeredAt"))).toISOString() : null,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] PATCH /:id/community/questions/:questionId/answer error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -966,7 +983,7 @@ contestsRouter.post("/:id/community/announcements", authRequired, async (req: Au
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const canManage = await canManageContest({ contest, req });
@@ -980,17 +997,17 @@ contestsRouter.post("/:id/community/announcements", authRequired, async (req: Au
 
     await ensureContestCommunityTables();
 
-    const u = await userRepo().findOne({ where: { id: req.userId } as any });
+    const u = await userRepo().findOne({ where: { id: req.userId } });
     const authorName = String(u?.username ?? "organizer").trim() || "organizer";
 
-    const insertResult: any = await AppDataSource.query(
+    const insertResult = await AppDataSource.query(
       `
       INSERT INTO contest_announcements (contest_id, author_user_id, author_name, announcement_text, created_at)
       VALUES (?, ?, ?, ?, NOW())
       `,
       [contestId, req.userId, authorName, text]
     );
-    const newId = Number(insertResult?.insertId ?? 0);
+    const newId = Number(readProperty(insertResult, "insertId") ?? 0);
     if (!Number.isFinite(newId) || newId <= 0) {
       return res.status(500).json({ message: "CREATE_FAILED" });
     }
@@ -1006,7 +1023,7 @@ contestsRouter.post("/:id/community/announcements", authRequired, async (req: Au
       LIMIT 1
       `,
       [newId, contestId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     const a = rows[0];
     if (!a) return res.status(500).json({ message: "CREATE_FAILED" });
 
@@ -1024,10 +1041,10 @@ contestsRouter.post("/:id/community/announcements", authRequired, async (req: Au
         id: Number(a.id),
         author: String(a.author ?? "organizer"),
         text: String(a.text ?? ""),
-        createdAt: a.createdAt ? new Date(a.createdAt).toISOString() : new Date().toISOString(),
+        createdAt: readProperty(a, "createdAt") ? new Date(String(readProperty(a, "createdAt"))).toISOString() : new Date().toISOString(),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] POST /:id/community/announcements error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1039,13 +1056,13 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
     const isAdmin = req.userRole === "SYSTEM_ADMIN";
     const shouldIncludeUnpublishedCandidates = Boolean(req.userId) || isAdmin;
 
-    const findOptions: any = {
-      order: { createdAt: "DESC" } as any,
-      relations: ["createdBy", "class"] as any,
+    const findOptions: FindManyOptions<Contest> = {
+      order: { createdAt: "DESC" },
+      relations: ["createdBy", "class"],
       take: 300,
     };
     if (!shouldIncludeUnpublishedCandidates) {
-      findOptions.where = { isPublished: true } as any;
+      findOptions.where = { isPublished: true };
     }
 
     const contests = await contestRepo().find(findOptions);
@@ -1053,12 +1070,12 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
     let contestOnlyUserParticipantContestIds: Set<number> | null = null;
     if (isContestOnlyUser(req) && req.userId) {
       const rows = await participantRepo().find({
-        where: { user: { id: req.userId } as any } as any,
-        relations: ["contest"] as any,
+        where: { user: { id: req.userId } },
+        relations: ["contest"],
       });
       contestOnlyUserParticipantContestIds = new Set(
         rows
-          .map((row) => Number((row as any)?.contest?.id))
+          .map((row) => Number(row.contest?.id))
           .filter((id) => Number.isFinite(id) && id > 0)
       );
     }
@@ -1081,13 +1098,13 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
         startsAt: c.startsAt ? new Date(c.startsAt).toISOString() : null,
         endsAt: c.endsAt ? new Date(c.endsAt).toISOString() : null,
         isPublished: c.isPublished,
-        allowUpsolve: (c as any).allowUpsolve ?? true,
+        allowUpsolve: c.allowUpsolve ?? true,
         createdAt: c.createdAt ? new Date(c.createdAt).toISOString() : null,
         createdBy: c.createdBy ? { id: c.createdBy.id, username: c.createdBy.username } : null,
-        classId: (c as any)?.class?.id ?? null,
+        classId: c.class?.id ?? null,
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET / error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1110,8 +1127,8 @@ contestsRouter.post("/join-by-code", authRequired, async (req: AuthRequest, res:
     if (!provided) return res.status(400).json({ message: "CODE_REQUIRED" });
 
     const contest = await contestRepo().findOne({
-      where: { isPublished: true, visibility: "PRIVATE_CODE", joinCode: provided } as any,
-      relations: ["createdBy", "class"] as any,
+      where: { isPublished: true, visibility: "PRIVATE_CODE", joinCode: provided },
+      relations: ["createdBy", "class"],
     });
 
     // Don't reveal anything: same response for wrong/unknown code.
@@ -1119,7 +1136,7 @@ contestsRouter.post("/join-by-code", authRequired, async (req: AuthRequest, res:
 
     const participant = await getOrCreateParticipant({ contestId: contest.id, req });
     return res.json({ joined: true, contestId: contest.id, participantId: participant.id });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] POST /join-by-code error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1158,7 +1175,7 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
     }
     if (data.visibility === "CLASS") {
       if (!data.classId) return res.status(400).json({ message: "CLASS_ID_REQUIRED" });
-      const c = await classRepo().findOne({ where: { id: data.classId } as any, relations: ["teacher"] as any });
+      const c = await classRepo().findOne({ where: { id: data.classId }, relations: ["teacher"] });
       if (!c) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
       if (c.teacher.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") {
         return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -1167,21 +1184,21 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
 
     const contest: Contest = contestRepo().create();
     Object.assign(contest, {
-      createdBy: { id: req.userId } as any,
+      createdBy: { id: req.userId } as User,
       title: data.title.trim(),
       description: data.description?.trim() ?? null,
       visibility: data.visibility as ContestVisibility,
       joinCode: data.visibility === "PRIVATE_CODE" ? String(data.joinCode).trim() : null,
-      class: data.visibility === "CLASS" ? ({ id: data.classId } as any) : null,
+      class: data.visibility === "CLASS" ? ({ id: data.classId } as Class) : null,
       startsAt: data.startsAt ? new Date(data.startsAt) : null,
       endsAt: data.endsAt ? new Date(data.endsAt) : null,
       isPublished: typeof data.isPublished === "boolean" ? data.isPublished : false,
       allowUpsolve: typeof data.allowUpsolve === "boolean" ? data.allowUpsolve : true,
       scoringMode: data.scoringMode ?? "IOI",
     });
-    const saved: Contest = await contestRepo().save(contest as any);
+    const saved: Contest = await contestRepo().save(contest);
     return res.json({ id: saved.id });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] POST / error", { requestId: req.requestId, userId: req.userId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1197,7 +1214,7 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     if (contest.createdBy?.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") {
       return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -1232,20 +1249,20 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
     if (data.startsAt !== undefined) contest.startsAt = nextStartsAt;
     if (data.endsAt !== undefined) contest.endsAt = nextEndsAt;
     if (data.isPublished !== undefined) contest.isPublished = data.isPublished;
-    if (data.allowUpsolve !== undefined) (contest as any).allowUpsolve = data.allowUpsolve;
-    if (data.scoringMode !== undefined) (contest as any).scoringMode = data.scoringMode;
+    if (data.allowUpsolve !== undefined) contest.allowUpsolve = data.allowUpsolve;
+    if (data.scoringMode !== undefined) contest.scoringMode = data.scoringMode;
 
-    const saved = await contestRepo().save(contest as any);
+    const saved = await contestRepo().save(contest);
     return res.json({
       id: saved.id,
       isPublished: saved.isPublished,
       title: saved.title,
       startsAt: saved.startsAt ? new Date(saved.startsAt).toISOString() : null,
       endsAt: saved.endsAt ? new Date(saved.endsAt).toISOString() : null,
-      allowUpsolve: (saved as any).allowUpsolve ?? true,
-      scoringMode: (saved as any).scoringMode ?? "IOI",
+      allowUpsolve: saved.allowUpsolve ?? true,
+      scoringMode: saved.scoringMode ?? "IOI",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] PATCH /:id error", { requestId: req.requestId, userId: req.userId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1257,7 +1274,7 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const canMeta = await canViewContestMeta({ contest, req });
@@ -1271,17 +1288,17 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
       if (!principalId) return null;
       return participantRepo().findOne({
         where: {
-          contest: { id } as any,
-          ...(req.userId ? { user: { id: req.userId } as any } : { student: { id: req.studentId } as any }),
-        } as any,
+          contest: { id },
+          ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }),
+        },
       });
     })();
     const isJoined = !!joined;
 
     const problems = await problemRepo().find({
-      where: { contest: { id } } as any,
-      relations: ["libraryTask"] as any,
-      order: { order: "ASC" } as any,
+      where: { contest: { id } },
+      relations: ["libraryTask"],
+      order: { order: "ASC" },
     });
 
     const now = Date.now();
@@ -1305,10 +1322,10 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
         startsAt: contest.startsAt ? new Date(contest.startsAt).toISOString() : null,
         endsAt: contest.endsAt ? new Date(contest.endsAt).toISOString() : null,
         isPublished: contest.isPublished,
-        allowUpsolve: (contest as any).allowUpsolve ?? true,
-        scoringMode: (contest as any).scoringMode ?? "IOI",
+        allowUpsolve: contest.allowUpsolve ?? true,
+        scoringMode: contest.scoringMode ?? "IOI",
         createdBy: contest.createdBy ? { id: contest.createdBy.id, username: contest.createdBy.username } : null,
-        classId: (contest as any)?.class?.id ?? null,
+        classId: contest.class?.id ?? null,
       },
       access: {
         canAccessContent: canContent,
@@ -1322,15 +1339,15 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
             id: p.id,
             order: p.order,
             label: p.label ?? labelFromOrder(p.order),
-            points: (p as any).points ?? null,
+            points: p.points ?? null,
             title: p.libraryTask?.title ?? "",
-            libraryTaskId: (p.libraryTask as any)?.id ?? null,
+            libraryTaskId: p.libraryTask?.id ?? null,
           }))
         : problems.map((p) => ({
             id: p.id,
             order: p.order,
             label: p.label ?? labelFromOrder(p.order),
-            points: (p as any).points ?? null,
+            points: p.points ?? null,
             title: "(hidden until start)",
             libraryTaskId: null,
           })),
@@ -1340,7 +1357,7 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
         finished: endsAtMs === null ? false : now > endsAtMs,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1358,7 +1375,7 @@ contestsRouter.post("/:id/join", authRequired, async (req: AuthRequest, res: Res
     const principalId = req.userId ?? req.studentId ?? null;
     if (!principalId) return res.status(401).json({ message: "UNAUTHORIZED" });
 
-    const contest = await contestRepo().findOne({ where: { id } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     if (contest.isPublished === false && req.userRole !== "SYSTEM_ADMIN" && contest.createdBy?.id !== req.userId) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -1374,20 +1391,20 @@ contestsRouter.post("/:id/join", authRequired, async (req: AuthRequest, res: Res
     }
 
     if (contest.visibility === "CLASS") {
-      const classId = (contest as any)?.class?.id ?? null;
+      const classId = contest.class?.id ?? null;
       if (!classId) return res.status(500).json({ message: "CONTEST_CLASS_MISSING" });
       if (req.studentId) {
-        const s = await studentRepo().findOne({ where: { id: req.studentId } as any, relations: ["class"] as any });
+        const s = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
         if (!s?.class?.id || s.class.id !== classId) return res.status(403).json({ message: "ACCESS_DENIED" });
       } else if (req.userId) {
-        const c = await classRepo().findOne({ where: { id: classId } as any, relations: ["teacher"] as any });
+        const c = await classRepo().findOne({ where: { id: classId }, relations: ["teacher"] });
         if (c?.teacher?.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") return res.status(403).json({ message: "ACCESS_DENIED" });
       }
     }
 
     const participant = await getOrCreateParticipant({ contestId: id, req });
     return res.json({ joined: true, participantId: participant.id });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] POST /:id/join error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1399,7 +1416,7 @@ contestsRouter.get("/:id/account", authRequired, async (req: AuthRequest, res: R
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = await canAccessContest({ contest, req });
@@ -1409,11 +1426,11 @@ contestsRouter.get("/:id/account", authRequired, async (req: AuthRequest, res: R
     return res.json({
       contestId,
       account: {
-        handle: (participant as any).contestAccountHandle ?? null,
-        note: (participant as any).contestAccountNote ?? null,
+        handle: participant.contestAccountHandle ?? null,
+        note: participant.contestAccountNote ?? null,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/account error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1425,7 +1442,7 @@ contestsRouter.put("/:id/account", authRequired, async (req: AuthRequest, res: R
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const allowed = await canAccessContest({ contest, req });
@@ -1448,21 +1465,21 @@ contestsRouter.put("/:id/account", authRequired, async (req: AuthRequest, res: R
 
     const participant = await getOrCreateParticipant({ contestId, req });
     if (Object.prototype.hasOwnProperty.call(parsed.data, "handle")) {
-      (participant as any).contestAccountHandle = norm((parsed.data as any).handle, 120);
+      participant.contestAccountHandle = norm(parsed.data.handle, 120);
     }
     if (Object.prototype.hasOwnProperty.call(parsed.data, "note")) {
-      (participant as any).contestAccountNote = norm((parsed.data as any).note, 255);
+      participant.contestAccountNote = norm(parsed.data.note, 255);
     }
-    const saved = await participantRepo().save(participant as any);
+    const saved = await participantRepo().save(participant);
 
     return res.json({
       contestId,
       account: {
-        handle: (saved as any).contestAccountHandle ?? null,
-        note: (saved as any).contestAccountNote ?? null,
+        handle: saved.contestAccountHandle ?? null,
+        note: saved.contestAccountNote ?? null,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] PUT /:id/account error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1475,7 +1492,7 @@ contestsRouter.patch("/:id/admin/pause", authRequired, async (req: AuthRequest, 
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const canManage = await canManageContest({ contest, req });
     if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -1487,7 +1504,7 @@ contestsRouter.patch("/:id/admin/pause", authRequired, async (req: AuthRequest, 
     await setContestPausedState(contestId, parsed.data.paused, req.userId);
     const isPaused = await getContestPausedState(contestId);
     return res.json({ contestId, isPaused });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] PATCH /:id/admin/pause error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1500,7 +1517,7 @@ contestsRouter.get("/:id/admin/organizers", authRequired, async (req: AuthReques
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const canManage = await canManageContest({ contest, req });
     if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -1518,7 +1535,7 @@ contestsRouter.get("/:id/admin/organizers", authRequired, async (req: AuthReques
       ORDER BY co.created_at ASC, co.user_id ASC
       `,
       [contestId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
 
     const isPaused = await getContestPausedState(contestId);
     return res.json({
@@ -1528,10 +1545,10 @@ contestsRouter.get("/:id/admin/organizers", authRequired, async (req: AuthReques
       organizers: rows.map((r) => ({
         userId: Number(r.userId),
         username: String(r.username ?? ""),
-        addedAt: r.addedAt ? new Date(r.addedAt).toISOString() : null,
+        addedAt: readProperty(r, "addedAt") ? new Date(String(readProperty(r, "addedAt"))).toISOString() : null,
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/admin/organizers error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1544,7 +1561,7 @@ contestsRouter.post("/:id/admin/organizers", authRequired, async (req: AuthReque
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const isOwner = contest.createdBy?.id === req.userId;
@@ -1556,7 +1573,7 @@ contestsRouter.post("/:id/admin/organizers", authRequired, async (req: AuthReque
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
 
     const targetUserId = parsed.data.userId;
-    const targetUser = await userRepo().findOne({ where: { id: targetUserId } as any });
+    const targetUser = await userRepo().findOne({ where: { id: targetUserId } });
     if (!targetUser) return res.status(404).json({ message: "USER_NOT_FOUND" });
     if (contest.createdBy?.id === targetUserId) return res.status(400).json({ message: "USER_IS_OWNER" });
 
@@ -1576,7 +1593,7 @@ contestsRouter.post("/:id/admin/organizers", authRequired, async (req: AuthReque
         username: targetUser.username,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] POST /:id/admin/organizers error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1592,7 +1609,7 @@ contestsRouter.delete("/:id/admin/organizers/:userId", authRequired, async (req:
       return res.status(400).json({ message: "INVALID_ID" });
     }
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const isOwner = contest.createdBy?.id === req.userId;
@@ -1606,7 +1623,7 @@ contestsRouter.delete("/:id/admin/organizers/:userId", authRequired, async (req:
     );
 
     return res.json({ removed: true, userId: targetUserId });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] DELETE /:id/admin/organizers/:userId error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1619,7 +1636,7 @@ contestsRouter.post("/:id/admin/accounts/generate", authRequired, async (req: Au
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const isOwner = contest.createdBy?.id === req.userId;
@@ -1674,7 +1691,6 @@ contestsRouter.post("/:id/admin/accounts/generate", authRequired, async (req: Au
         username,
         email: null,
         password: passwordHash,
-        lang: "JAVA",
         difusJava: 0,
         difusPython: 0,
         difusCpp: 0,
@@ -1683,19 +1699,19 @@ contestsRouter.post("/:id/admin/accounts/generate", authRequired, async (req: Au
         userMode: "CONTEST",
         firstName: split.firstName,
         lastName: split.lastName,
-      } as any);
-      const savedUser = await userRepo().save(user as any);
+      });
+      const savedUser = await userRepo().save(user);
 
       const participant: ContestParticipant = participantRepo().create();
       Object.assign(participant, {
-        contest: { id: contestId } as any,
-        user: { id: savedUser.id } as any,
+        contest: { id: contestId } as Contest,
+        user: { id: savedUser.id } as User,
         principalType: "USER",
         displayName,
         notificationEmail: row.email || null,
         notificationFullName: split.fullName || displayName,
       });
-      const savedParticipant = await participantRepo().save(participant as any);
+      const savedParticipant = await participantRepo().save(participant);
 
       created.push({
         userId: savedUser.id,
@@ -1711,7 +1727,7 @@ contestsRouter.post("/:id/admin/accounts/generate", authRequired, async (req: Au
       contestId,
       created,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] POST /:id/admin/accounts/generate error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1724,7 +1740,7 @@ contestsRouter.post("/:id/admin/accounts/send-emails", authRequired, async (req:
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const isOwner = contest.createdBy?.id === req.userId;
@@ -1800,10 +1816,10 @@ contestsRouter.post("/:id/admin/accounts/send-emails", authRequired, async (req:
           text,
         });
         sent.push({ email });
-      } catch (error: any) {
+      } catch (error: unknown) {
         failed.push({
           email,
-          reason: String(error?.message ?? "SEND_FAILED"),
+          reason: errorMessage(error) || "SEND_FAILED",
         });
       }
     }
@@ -1815,7 +1831,7 @@ contestsRouter.post("/:id/admin/accounts/send-emails", authRequired, async (req:
       failedCount: failed.length,
       failed,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] POST /:id/admin/accounts/send-emails error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1828,7 +1844,7 @@ contestsRouter.get("/:id/admin/annulments", authRequired, async (req: AuthReques
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const canManage = await canManageContest({ contest, req });
     if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -1849,7 +1865,7 @@ contestsRouter.get("/:id/admin/annulments", authRequired, async (req: AuthReques
       ORDER BY updated_at DESC, id DESC
       `,
       [contestId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
 
     return res.json({
       contestId,
@@ -1860,11 +1876,11 @@ contestsRouter.get("/:id/admin/annulments", authRequired, async (req: AuthReques
         reason: r.reason != null ? String(r.reason) : null,
         isActive: Number(r.isActive) === 1 || r.isActive === true,
         createdByUserId: Number(r.createdByUserId),
-        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
-        updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : null,
+        createdAt: readProperty(r, "createdAt") ? new Date(String(readProperty(r, "createdAt"))).toISOString() : null,
+        updatedAt: readProperty(r, "updatedAt") ? new Date(String(readProperty(r, "updatedAt"))).toISOString() : null,
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/admin/annulments error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1877,7 +1893,7 @@ contestsRouter.patch("/:id/admin/annulments", authRequired, async (req: AuthRequ
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const canManage = await canManageContest({ contest, req });
     if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -1894,11 +1910,11 @@ contestsRouter.patch("/:id/admin/annulments", authRequired, async (req: AuthRequ
     const problemId = parsed.data.problemId;
     const participantId = parsed.data.participantId != null ? parsed.data.participantId : 0;
 
-    const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } as any });
+    const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } });
     if (!problem) return res.status(404).json({ message: "PROBLEM_NOT_FOUND" });
 
     if (participantId > 0) {
-      const participant = await participantRepo().findOne({ where: { id: participantId, contest: { id: contestId } } as any });
+      const participant = await participantRepo().findOne({ where: { id: participantId, contest: { id: contestId } } });
       if (!participant) return res.status(404).json({ message: "PARTICIPANT_NOT_FOUND" });
     }
 
@@ -1934,7 +1950,7 @@ contestsRouter.patch("/:id/admin/annulments", authRequired, async (req: AuthRequ
       LIMIT 1
       `,
       [contestId, problemId, participantId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     const row = rows[0];
     if (!row) return res.status(500).json({ message: "UPDATE_FAILED" });
 
@@ -1946,11 +1962,11 @@ contestsRouter.patch("/:id/admin/annulments", authRequired, async (req: AuthRequ
         reason: row.reason != null ? String(row.reason) : null,
         isActive: Number(row.isActive) === 1 || row.isActive === true,
         createdByUserId: Number(row.createdByUserId),
-        createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : null,
-        updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
+        createdAt: readProperty(row, "createdAt") ? new Date(String(readProperty(row, "createdAt"))).toISOString() : null,
+        updatedAt: readProperty(row, "updatedAt") ? new Date(String(readProperty(row, "updatedAt"))).toISOString() : null,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] PATCH /:id/admin/annulments error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -1963,14 +1979,14 @@ contestsRouter.get("/:id/admin/participants", authRequired, async (req: AuthRequ
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const canManage = await canManageContest({ contest, req });
     if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const participants = await participantRepo().find({
-      where: { contest: { id: contestId } } as any,
-      order: { joinedAt: "ASC" } as any,
+      where: { contest: { id: contestId } },
+      order: { joinedAt: "ASC" },
     });
 
     // Aggregate integrity events per participant (focus loss / paste / fullscreen exit).
@@ -1983,7 +1999,7 @@ contestsRouter.get("/:id/admin/participants", authRequired, async (req: AuthRequ
       GROUP BY participant_id, event_type
       `,
       [contestId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     const integrityByParticipant = new Map<number, { total: number; byType: Record<string, number> }>();
     for (const r of integrityRows) {
       const pid = Number(r.participantId);
@@ -2002,15 +2018,15 @@ contestsRouter.get("/:id/admin/participants", authRequired, async (req: AuthRequ
         displayName: p.displayName,
         principalType: p.principalType,
         joinedAt: p.joinedAt ? new Date(p.joinedAt).toISOString() : null,
-        contestAccountHandle: (p as any).contestAccountHandle ?? null,
-        contestAccountNote: (p as any).contestAccountNote ?? null,
-        isDisqualified: !!(p as any).isDisqualified,
-        disqualificationReason: (p as any).disqualificationReason ?? null,
-        disqualifiedAt: (p as any).disqualifiedAt ? new Date((p as any).disqualifiedAt).toISOString() : null,
+        contestAccountHandle: p.contestAccountHandle ?? null,
+        contestAccountNote: p.contestAccountNote ?? null,
+        isDisqualified: p.isDisqualified,
+        disqualificationReason: p.disqualificationReason ?? null,
+        disqualifiedAt: p.disqualifiedAt ? new Date(p.disqualifiedAt).toISOString() : null,
         integrity: integrityByParticipant.get(p.id) ?? { total: 0, byType: {} },
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/admin/participants error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2044,18 +2060,18 @@ contestsRouter.get("/:id/admin/similarity", authRequired, async (req: AuthReques
   try {
     if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
     const contestId = Number(req.params.id);
-    const problemId = Number((req.query as any)?.problemId);
+    const problemId = Number(readProperty(req.query, "problemId"));
     if (!Number.isFinite(contestId) || contestId <= 0 || !Number.isFinite(problemId) || problemId <= 0) {
       return res.status(400).json({ message: "INVALID_ID" });
     }
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const canManage = await canManageContest({ contest, req });
     if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const threshold = (() => {
-      const n = Number((req.query as any)?.threshold);
+      const n = Number(readProperty(req.query, "threshold"));
       return Number.isFinite(n) && n > 0 && n < 1 ? n : 0.6;
     })();
 
@@ -2073,11 +2089,11 @@ contestsRouter.get("/:id/admin/similarity", authRequired, async (req: AuthReques
       LIMIT 600
       `,
       [contestId, problemId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
 
-    const participants = await participantRepo().find({ where: { contest: { id: contestId } } as any });
+    const participants = await participantRepo().find({ where: { contest: { id: contestId } } });
     const nameById = new Map<number, string>();
-    for (const p of participants) nameById.set(p.id, String((p as any).displayName ?? `#${p.id}`));
+    for (const p of participants) nameById.set(p.id, String(p.displayName ?? `#${p.id}`));
 
     type Entry = { participantId: number; displayName: string; language: string; shingles: Set<string> };
     const entries: Entry[] = [];
@@ -2120,7 +2136,7 @@ contestsRouter.get("/:id/admin/similarity", authRequired, async (req: AuthReques
       comparedSubmissions: entries.length,
       pairs: pairs.slice(0, 100),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/admin/similarity error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2136,7 +2152,7 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
       return res.status(400).json({ message: "INVALID_ID" });
     }
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const canManage = await canManageContest({ contest, req });
     if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -2146,15 +2162,15 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
 
     const participant = await participantRepo().findOne({
-      where: { id: participantId, contest: { id: contestId } } as any,
-      relations: ["user", "student"] as any,
+      where: { id: participantId, contest: { id: contestId } },
+      relations: ["user", "student"],
     });
     if (!participant) return res.status(404).json({ message: "PARTICIPANT_NOT_FOUND" });
 
-    (participant as any).isDisqualified = parsed.data.disqualified;
-    (participant as any).disqualificationReason = parsed.data.disqualified ? (parsed.data.reason?.trim() || null) : null;
-    (participant as any).disqualifiedAt = parsed.data.disqualified ? new Date() : null;
-    const saved = await participantRepo().save(participant as any);
+    participant.isDisqualified = parsed.data.disqualified;
+    participant.disqualificationReason = parsed.data.disqualified ? (parsed.data.reason?.trim() || null) : null;
+    participant.disqualifiedAt = parsed.data.disqualified ? new Date() : null;
+    const saved = await participantRepo().save(participant);
 
     let notification: {
       attempted: boolean;
@@ -2169,16 +2185,16 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
     };
 
     if (parsed.data.disqualified) {
-      const snapshotEmail = String((participant as any)?.notificationEmail ?? "").trim().toLowerCase();
-      const userEmail = String((participant as any)?.user?.email ?? "").trim().toLowerCase();
-      const studentEmail = String((participant as any)?.student?.email ?? "").trim().toLowerCase();
+      const snapshotEmail = String(participant.notificationEmail ?? "").trim().toLowerCase();
+      const userEmail = String(participant.user?.email ?? "").trim().toLowerCase();
+      const studentEmail = String(participant.student?.email ?? "").trim().toLowerCase();
       const recipientEmail = snapshotEmail || userEmail || studentEmail || "";
 
       if (!snapshotEmail && recipientEmail) {
         try {
-          (saved as any).notificationEmail = recipientEmail;
-          await participantRepo().save(saved as any);
-        } catch (persistError: any) {
+          saved.notificationEmail = recipientEmail;
+          await participantRepo().save(saved);
+        } catch (persistError: unknown) {
           logger.warn("[contests] failed to persist participant notification_email snapshot", {
             requestId: req.requestId,
             contestId,
@@ -2189,9 +2205,9 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
         }
       }
 
-      const reasonText = String((saved as any).disqualificationReason ?? "").trim() || "Не вказано";
-      const disqualifiedAtIso = (saved as any).disqualifiedAt
-        ? new Date((saved as any).disqualifiedAt).toISOString()
+      const reasonText = String(saved.disqualificationReason ?? "").trim() || "Не вказано";
+      const disqualifiedAtIso = saved.disqualifiedAt
+        ? new Date(saved.disqualifiedAt).toISOString()
         : new Date().toISOString();
       const disqualifiedAtDisplay = new Date(disqualifiedAtIso).toLocaleString("uk-UA");
       const contestUrl = `${String(FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "")}/contest/contests/${contestId}`;
@@ -2204,7 +2220,7 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
           reason: "EMAIL_NOT_AVAILABLE",
         };
       } else {
-        const participantName = String((participant as any).notificationFullName ?? participant.displayName ?? "учасник").trim() || "учасник";
+        const participantName = String(participant.notificationFullName ?? participant.displayName ?? "учасник").trim() || "учасник";
         const contentHtml = `
 <p style="margin:0 0 12px 0;">Вітаємо, <b>${escapeHtml(participantName)}</b>.</p>
 <p style="margin:0 0 12px 0;">Повідомляємо, що вас дискваліфіковано з контесту <b>${escapeHtml(contest.title)}</b>.</p>
@@ -2254,7 +2270,7 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
             recipientEmail,
             reason: null,
           };
-        } catch (mailError: any) {
+        } catch (mailError: unknown) {
           logger.error("[contests] disqualification email send failed", {
             requestId: req.requestId,
             contestId,
@@ -2275,13 +2291,13 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
     return res.json({
       participant: {
         id: saved.id,
-        isDisqualified: !!(saved as any).isDisqualified,
-        disqualificationReason: (saved as any).disqualificationReason ?? null,
-        disqualifiedAt: (saved as any).disqualifiedAt ? new Date((saved as any).disqualifiedAt).toISOString() : null,
+        isDisqualified: saved.isDisqualified,
+        disqualificationReason: saved.disqualificationReason ?? null,
+        disqualifiedAt: saved.disqualifiedAt ? new Date(saved.disqualifiedAt).toISOString() : null,
       },
       notification,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] PATCH /:id/admin/participants/:participantId/disqualify error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2297,16 +2313,16 @@ contestsRouter.get("/:id/admin/participants/:participantId/submissions", authReq
       return res.status(400).json({ message: "INVALID_ID" });
     }
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const canManage = await canManageContest({ contest, req });
     if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
 
-    const participant = await participantRepo().findOne({ where: { id: participantId, contest: { id: contestId } } as any });
+    const participant = await participantRepo().findOne({ where: { id: participantId, contest: { id: contestId } } });
     if (!participant) return res.status(404).json({ message: "PARTICIPANT_NOT_FOUND" });
 
     const limit = (() => {
-      const n = Number((req.query as any)?.limit);
+      const n = Number(readProperty(req.query, "limit"));
       if (!Number.isFinite(n)) return 100;
       return Math.max(1, Math.min(500, Math.floor(n)));
     })();
@@ -2334,7 +2350,7 @@ contestsRouter.get("/:id/admin/participants/:participantId/submissions", authReq
         LIMIT ?
       `,
       [contestId, participantId, limit]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
 
     return res.json({
       contestId,
@@ -2342,13 +2358,13 @@ contestsRouter.get("/:id/admin/participants/:participantId/submissions", authReq
         id: participant.id,
         displayName: participant.displayName,
         principalType: participant.principalType,
-        contestAccountHandle: (participant as any).contestAccountHandle ?? null,
-        contestAccountNote: (participant as any).contestAccountNote ?? null,
-        isDisqualified: !!(participant as any).isDisqualified,
+        contestAccountHandle: participant.contestAccountHandle ?? null,
+        contestAccountNote: participant.contestAccountNote ?? null,
+        isDisqualified: participant.isDisqualified,
       },
       submissions: rows.map((r) => ({
         id: Number(r.id),
-        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+        createdAt: readProperty(r, "createdAt") ? new Date(String(readProperty(r, "createdAt"))).toISOString() : null,
         phase: r.phase === "UPSOLVE" ? "UPSOLVE" : "CONTEST",
         language: String(r.language ?? ""),
         verdict: r.verdict != null ? String(r.verdict) : null,
@@ -2365,7 +2381,7 @@ contestsRouter.get("/:id/admin/participants/:participantId/submissions", authReq
         },
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/admin/participants/:participantId/submissions error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2379,7 +2395,7 @@ contestsRouter.post("/:id/problems", authRequired, async (req: AuthRequest, res:
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     if (contest.createdBy.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") return res.status(403).json({ message: "ACCESS_DENIED" });
 
@@ -2405,92 +2421,92 @@ contestsRouter.post("/:id/problems", authRequired, async (req: AuthRequest, res:
     const parsed = schema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
 
-    const nextOrder = await problemRepo().count({ where: { contest: { id: contestId } } as any });
+    const nextOrder = await problemRepo().count({ where: { contest: { id: contestId } } });
 
     const contestLocalTask: LibraryTask = await (async () => {
       if (parsed.data.mode === "CREATE") {
         const t: LibraryTask = libraryRepo().create();
         Object.assign(t, {
-          author: { id: req.userId } as any,
+          author: { id: req.userId },
           title: parsed.data.title.trim(),
           description: parsed.data.description.trim(),
           template: parsed.data.template,
           difficulty: parsed.data.difficulty ?? null,
-          lang: "JAVA" as any,
+          lang: "JAVA",
           maxAttempts: parsed.data.maxAttempts ?? 999999,
           isHiddenFromLibrary: true,
-          status: "DRAFT" as any,
+          status: "DRAFT",
         });
-        const savedTask: LibraryTask = await libraryRepo().save(t as any);
+        const savedTask = await libraryRepo().save(t);
         if (Array.isArray(parsed.data.tests) && parsed.data.tests.length > 0) {
-          const rows: TestData[] = testDataRepo().create(
+          const rows = testDataRepo().create(
             parsed.data.tests.map((tt) => ({
-              libraryTask: { id: savedTask.id } as any,
+              libraryTask: { id: savedTask.id },
               input: String(tt.input ?? ""),
               expectedOutput: String(tt.expectedOutput ?? ""),
               isHidden: !!tt.isHidden,
-              kind: (!!tt.isHidden ? "JUDGE" : "SAMPLE") as any,
+              kind: !!tt.isHidden ? "JUDGE" : "SAMPLE",
               points: tt.points ?? 1,
-                subtask: typeof (tt as any).subtask === "number" ? String((tt as any).subtask) : null,
-            })) as any
-          ) as any;
-          await testDataRepo().save(rows as any);
+              subtask: tt.subtask != null ? String(tt.subtask) : null,
+            }))
+          );
+          await testDataRepo().save(rows);
         }
         return savedTask;
       }
       // COPY: snapshot into a new DRAFT library task owned by creator.
-      const src = await libraryRepo().findOne({ where: { id: parsed.data.libraryTaskId } as any });
+      const src = await libraryRepo().findOne({ where: { id: parsed.data.libraryTaskId } });
       if (!src) throw new HttpError(404, "LIBRARY_TASK_NOT_FOUND", { expose: true });
       const clone: LibraryTask = libraryRepo().create();
       Object.assign(clone, {
-        author: { id: req.userId } as any,
+        author: { id: req.userId },
         title: src.title,
         description: src.description,
         template: src.template,
-        templatesByLanguage: (src as any).templatesByLanguage ?? null,
-        difficulty: (src as any).difficulty ?? null,
-        tags: (src as any).tags ?? null,
-        section: (src as any).section ?? null,
-        timeLimitMs: (src as any).timeLimitMs ?? null,
-        memoryLimitMb: (src as any).memoryLimitMb ?? null,
-        outputLimitKb: (src as any).outputLimitKb ?? null,
-        checkerSpec: (src as any).checkerSpec ?? null,
-        allowedLanguages: (src as any).allowedLanguages ?? null,
-        lang: (src as any).lang ?? "JAVA",
+        templatesByLanguage: src.templatesByLanguage ?? null,
+        difficulty: src.difficulty ?? null,
+        tags: src.tags ?? null,
+        section: src.section ?? null,
+        timeLimitMs: src.timeLimitMs ?? null,
+        memoryLimitMb: src.memoryLimitMb ?? null,
+        outputLimitKb: src.outputLimitKb ?? null,
+        checkerSpec: src.checkerSpec ?? null,
+        allowedLanguages: src.allowedLanguages ?? null,
+        lang: src.lang ?? "JAVA",
         maxAttempts: 999999,
         isHiddenFromLibrary: true,
-        status: "DRAFT" as any,
+        status: "DRAFT",
       });
-      const savedClone: LibraryTask = await libraryRepo().save(clone as any);
-      const tests = await testDataRepo().find({ where: { libraryTask: { id: src.id } } as any, order: { id: "ASC" } as any });
+      const savedClone = await libraryRepo().save(clone);
+      const tests = await testDataRepo().find({ where: { libraryTask: { id: src.id } }, order: { id: "ASC" } });
       if (tests.length) {
-        const copied: TestData[] = testDataRepo().create(
+        const copied = testDataRepo().create(
           tests.map((t) => ({
             input: t.input,
             expectedOutput: t.expectedOutput,
             isHidden: t.isHidden,
-            kind: (t as any).kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
+            kind: t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
             points: t.points,
-            subtask: (t as any).subtask ?? null,
-            libraryTask: { id: savedClone.id } as any,
-          })) as any
-        ) as any;
-        await testDataRepo().save(copied as any);
+            subtask: t.subtask ?? null,
+            libraryTask: { id: savedClone.id },
+          }))
+        );
+        await testDataRepo().save(copied);
       }
       return savedClone;
     })();
 
     const p: ContestProblem = problemRepo().create();
     Object.assign(p, {
-      contest: { id: contestId } as any,
-      libraryTask: { id: contestLocalTask.id } as any,
+      contest: { id: contestId },
+      libraryTask: { id: contestLocalTask.id },
       order: nextOrder,
       label: labelFromOrder(nextOrder),
       points: null,
     });
-    const saved: ContestProblem = await problemRepo().save(p as any);
-    return res.json({ problemId: saved.id, libraryTaskId: contestLocalTask.id, order: saved.order, label: saved.label, points: (saved as any).points ?? null });
-  } catch (error: any) {
+    const saved = await problemRepo().save(p);
+    return res.json({ problemId: saved.id, libraryTaskId: contestLocalTask.id, order: saved.order, label: saved.label, points: saved.points ?? null });
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
@@ -2510,7 +2526,7 @@ contestsRouter.patch("/:id/problems/:problemId", authRequired, async (req: AuthR
       return res.status(400).json({ message: "INVALID_ID" });
     }
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     if (contest.createdBy?.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") return res.status(403).json({ message: "ACCESS_DENIED" });
 
@@ -2526,11 +2542,11 @@ contestsRouter.patch("/:id/problems/:problemId", authRequired, async (req: AuthR
 
     const data = parsed.data;
 
-    const current = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } as any });
+    const current = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } });
     if (!current) return res.status(404).json({ message: "PROBLEM_NOT_FOUND" });
 
     if (data.order !== undefined && data.order !== current.order) {
-      const all = await problemRepo().find({ where: { contest: { id: contestId } } as any, order: { order: "ASC" } as any });
+      const all = await problemRepo().find({ where: { contest: { id: contestId } }, order: { order: "ASC" } });
       const without = all.filter((x) => x.id !== current.id);
       const newIndex = Math.max(0, Math.min(without.length, data.order));
       without.splice(newIndex, 0, current);
@@ -2550,7 +2566,7 @@ contestsRouter.patch("/:id/problems/:problemId", authRequired, async (req: AuthR
       });
     }
 
-    const fresh = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } as any });
+    const fresh = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } });
     if (!fresh) return res.status(404).json({ message: "PROBLEM_NOT_FOUND" });
 
     if (data.label !== undefined) {
@@ -2558,19 +2574,19 @@ contestsRouter.patch("/:id/problems/:problemId", authRequired, async (req: AuthR
       fresh.label = v && v.length > 0 ? v : null;
     }
     if (data.points !== undefined) {
-      (fresh as any).points = data.points === null ? null : data.points;
+      fresh.points = data.points === null ? null : data.points;
     }
 
-    const saved = await problemRepo().save(fresh as any);
+    const saved = await problemRepo().save(fresh);
     return res.json({
       problem: {
         id: saved.id,
         order: saved.order,
         label: saved.label ?? labelFromOrder(saved.order),
-        points: (saved as any).points ?? null,
+        points: saved.points ?? null,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] PATCH /:id/problems/:problemId error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2585,7 +2601,7 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
       return res.status(400).json({ message: "INVALID_ID" });
     }
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -2595,10 +2611,10 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
     const isBeforeStart = contest.startsAt ? Date.now() < new Date(contest.startsAt).getTime() : false;
     if (isBeforeStart && !isPrivileged) return res.status(403).json({ message: "CONTEST_NOT_STARTED" });
 
-    const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } as any, relations: ["libraryTask"] as any });
+    const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } }, relations: ["libraryTask"] });
     if (!problem) return res.status(404).json({ message: "PROBLEM_NOT_FOUND" });
 
-    const task = await libraryRepo().findOne({ where: { id: (problem.libraryTask as any).id } as any });
+    const task = await libraryRepo().findOne({ where: { id: problem.libraryTask.id } });
     if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
 
     return res.json({
@@ -2612,15 +2628,15 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
         title: task.title,
         description: task.description,
         template: task.template,
-        templatesByLanguage: (task as any).templatesByLanguage ?? null,
+        templatesByLanguage: task.templatesByLanguage ?? null,
         allowedLanguages: getAllowedJudgeLanguages(task),
-        timeLimitMs: (task as any).timeLimitMs ?? null,
-        memoryLimitMb: (task as any).memoryLimitMb ?? null,
-        outputLimitKb: (task as any).outputLimitKb ?? null,
-        checkerSpec: (task as any).checkerSpec ?? null,
+        timeLimitMs: task.timeLimitMs ?? null,
+        memoryLimitMb: task.memoryLimitMb ?? null,
+        outputLimitKb: task.outputLimitKb ?? null,
+        checkerSpec: task.checkerSpec ?? null,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/problems/:problemId error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2639,7 +2655,7 @@ contestsRouter.post(
         return res.status(400).json({ message: "INVALID_ID" });
       }
 
-      const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+      const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
       if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
       const allowed = await canAccessContest({ contest, req });
@@ -2650,7 +2666,7 @@ contestsRouter.post(
       if (!timeState.started && !isPrivileged) {
         return res.status(403).json({ message: "CONTEST_NOT_STARTED" });
       }
-      const allowUpsolve = (contest as any).allowUpsolve ?? true;
+      const allowUpsolve = contest.allowUpsolve;
       if (!timeState.active && !(timeState.finished && allowUpsolve) && !isPrivileged) {
         return res.status(403).json({ message: "CONTEST_NOT_ACTIVE" });
       }
@@ -2664,11 +2680,11 @@ contestsRouter.post(
       if (principalId) {
         const existingParticipant = await participantRepo().findOne({
           where: {
-            contest: { id: contestId } as any,
-            ...(req.userId ? { user: { id: req.userId } as any } : { student: { id: req.studentId } as any }),
-          } as any,
+            contest: { id: contestId },
+            ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }),
+          },
         });
-        if (existingParticipant && (existingParticipant as any).isDisqualified) {
+        if (existingParticipant?.isDisqualified) {
           return res.status(403).json({ message: "PARTICIPANT_DISQUALIFIED" });
         }
       }
@@ -2687,10 +2703,10 @@ contestsRouter.post(
         return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
       }
 
-      const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } as any, relations: ["libraryTask"] as any });
+      const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } }, relations: ["libraryTask"] });
       if (!problem) return res.status(404).json({ message: "PROBLEM_NOT_FOUND" });
-      const taskId = (problem.libraryTask as any)?.id;
-      const task = await libraryRepo().findOne({ where: { id: taskId } as any, relations: ["author"] as any });
+      const taskId = problem.libraryTask.id;
+      const task = await libraryRepo().findOne({ where: { id: taskId }, relations: ["author"] });
       if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
 
       const requested = normalizeJudgeLanguage(validated.data.language);
@@ -2701,9 +2717,9 @@ contestsRouter.post(
       }
 
       const taskLimits = {
-        time_limit_ms: Number.isFinite((task as any).timeLimitMs) && (task as any).timeLimitMs > 0 ? (task as any).timeLimitMs : undefined,
-        memory_limit_mb: Number.isFinite((task as any).memoryLimitMb) && (task as any).memoryLimitMb > 0 ? (task as any).memoryLimitMb : undefined,
-        output_limit_kb: Number.isFinite((task as any).outputLimitKb) && (task as any).outputLimitKb > 0 ? (task as any).outputLimitKb : undefined,
+        time_limit_ms: typeof task.timeLimitMs === "number" && Number.isFinite(task.timeLimitMs) && task.timeLimitMs > 0 ? task.timeLimitMs : undefined,
+        memory_limit_mb: typeof task.memoryLimitMb === "number" && Number.isFinite(task.memoryLimitMb) && task.memoryLimitMb > 0 ? task.memoryLimitMb : undefined,
+        output_limit_kb: typeof task.outputLimitKb === "number" && Number.isFinite(task.outputLimitKb) && task.outputLimitKb > 0 ? task.outputLimitKb : undefined,
       };
       const defaultLimitsByLang = DEFAULT_LIMITS_BY_LANG;
       const effectiveLimits = {
@@ -2716,8 +2732,8 @@ contestsRouter.post(
         output_limit_kb: taskLimits.output_limit_kb ?? defaultLimitsByLang[judgeLang].output_limit_kb,
       };
 
-      const normalizedFiles = normalizeApiFiles((validated.data as any).files);
-      const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
+      const normalizedFiles = normalizeApiFiles(validated.data.files);
+      const providedCode = typeof validated.data.code === "string" ? validated.data.code : "";
       const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
       const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
       let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
@@ -2730,13 +2746,13 @@ contestsRouter.post(
       const workerReq: WorkerJudgeRequest = {
         submission_id: `contest_run_${contestId}_${problemId}_${Date.now()}`,
         language: judgeLang,
-        ...(normCompilerId((validated.data as any).compiler) ? { compiler: normCompilerId((validated.data as any).compiler) } : {}),
+        ...(normCompilerId(validated.data.compiler) ? { compiler: normCompilerId(validated.data.compiler) } : {}),
         source: sourceText,
         ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
         tests: [
           {
             id: "custom",
-            input: String((validated.data as any).input ?? ""),
+            input: String(validated.data.input ?? ""),
             output: "",
             hidden: false,
             group: "custom",
@@ -2753,7 +2769,7 @@ contestsRouter.post(
       let workerRes: WorkerJudgeResponse;
       try {
         workerRes = await judgeWithSemaphore(workerReq);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (e instanceof HttpError) throw e;
         throw new HttpError(503, "Judge unavailable", { code: "JUDGE_UNAVAILABLE", expose: true, cause: e });
       }
@@ -2773,11 +2789,11 @@ contestsRouter.post(
       }
 
       const t0 = workerRes.tests?.[0];
-      const stdout = (t0 as any)?.actual ?? "";
-      const stderr = (t0 as any)?.stderr ?? "";
+      const stdout = t0?.actual ?? "";
+      const stderr = t0?.stderr ?? "";
       const success = workerRes.verdict === "AC" || workerRes.verdict === "WA";
-      const timeMs = Number.isFinite(Number((t0 as any)?.time_ms)) ? Number((t0 as any)?.time_ms) : null;
-      const memoryKb = Number.isFinite(Number((t0 as any)?.memory_kb)) ? Number((t0 as any)?.memory_kb) : null;
+      const timeMs = Number.isFinite(Number(t0?.time_ms)) ? Number(t0?.time_ms) : null;
+      const memoryKb = Number.isFinite(Number(t0?.memory_kb)) ? Number(t0?.memory_kb) : null;
       return res.json({
         stdout: String(stdout ?? ""),
         stderr: String(stderr ?? ""),
@@ -2787,7 +2803,7 @@ contestsRouter.post(
         timeMs,
         memoryKb,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof HttpError) {
         return res.status(error.statusCode).json({ message: error.message, ...(error.details ? { details: error.details } : {}) });
       }
@@ -2810,7 +2826,7 @@ contestsRouter.post(
         return res.status(400).json({ message: "INVALID_ID" });
       }
 
-      const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+      const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
       if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
       const allowed = await canAccessContest({ contest, req });
@@ -2820,7 +2836,7 @@ contestsRouter.post(
       if (!timeState.started) {
         return res.status(403).json({ message: "CONTEST_NOT_STARTED" });
       }
-      const allowUpsolve = (contest as any).allowUpsolve ?? true;
+      const allowUpsolve = contest.allowUpsolve;
       const submissionPhase: "CONTEST" | "UPSOLVE" = timeState.active ? "CONTEST" : (timeState.finished && allowUpsolve ? "UPSOLVE" : "CONTEST");
       if (!timeState.active && !(timeState.finished && allowUpsolve)) {
         return res.status(403).json({ message: "CONTEST_NOT_ACTIVE" });
@@ -2833,7 +2849,7 @@ contestsRouter.post(
       }
 
       const participant = await getOrCreateParticipant({ contestId, req });
-      if ((participant as any).isDisqualified) {
+      if (participant.isDisqualified) {
         return res.status(403).json({ message: "PARTICIPANT_DISQUALIFIED" });
       }
 
@@ -2858,7 +2874,7 @@ contestsRouter.post(
       // Human verification is enforced for regular participants.
       // Privileged users (SYSTEM_ADMIN / contest managers) are allowed to submit without Turnstile token.
       if (enforceTurnstileOnContestSubmit && turnstileSecretKey && !isPrivileged) {
-        const token = String((validated.data as any).turnstileToken ?? "").trim();
+        const token = String(validated.data.turnstileToken ?? "").trim();
         if (!token) {
           return res.status(400).json({ message: "TURNSTILE_REQUIRED" });
         }
@@ -2872,16 +2888,16 @@ contestsRouter.post(
         }
       }
 
-      const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } as any, relations: ["libraryTask"] as any });
+      const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } }, relations: ["libraryTask"] });
       if (!problem) return res.status(404).json({ message: "PROBLEM_NOT_FOUND" });
-      const taskId = (problem.libraryTask as any)?.id;
-      const task = await libraryRepo().findOne({ where: { id: taskId } as any, relations: ["author"] as any });
+      const taskId = problem.libraryTask.id;
+      const task = await libraryRepo().findOne({ where: { id: taskId }, relations: ["author"] });
       if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
 
       // Metadata-only: exclude the big `input` column (read lazily for cache misses only).
       const tests = await testDataRepo().find({
-        where: { libraryTask: { id: task.id } } as any,
-        order: { id: "ASC" } as any,
+        where: { libraryTask: { id: task.id } },
+        order: { id: "ASC" },
         select: {
           id: true,
           isHidden: true,
@@ -2891,7 +2907,7 @@ contestsRouter.post(
           expectedOutput: true,
           inputSha256: true,
           outputSha256: true
-        } as any
+        }
       });
       if (!tests.length) return res.status(400).json({ message: "NO_TESTS_DEFINED_FOR_THIS_TASK" });
 
@@ -2903,9 +2919,9 @@ contestsRouter.post(
       }
 
       const taskLimits = {
-        time_limit_ms: Number.isFinite((task as any).timeLimitMs) && (task as any).timeLimitMs > 0 ? (task as any).timeLimitMs : undefined,
-        memory_limit_mb: Number.isFinite((task as any).memoryLimitMb) && (task as any).memoryLimitMb > 0 ? (task as any).memoryLimitMb : undefined,
-        output_limit_kb: Number.isFinite((task as any).outputLimitKb) && (task as any).outputLimitKb > 0 ? (task as any).outputLimitKb : undefined,
+        time_limit_ms: typeof task.timeLimitMs === "number" && Number.isFinite(task.timeLimitMs) && task.timeLimitMs > 0 ? task.timeLimitMs : undefined,
+        memory_limit_mb: typeof task.memoryLimitMb === "number" && Number.isFinite(task.memoryLimitMb) && task.memoryLimitMb > 0 ? task.memoryLimitMb : undefined,
+        output_limit_kb: typeof task.outputLimitKb === "number" && Number.isFinite(task.outputLimitKb) && task.outputLimitKb > 0 ? task.outputLimitKb : undefined,
       };
       const defaultLimitsByLang = DEFAULT_LIMITS_BY_LANG;
       const effectiveLimits = {
@@ -2918,13 +2934,13 @@ contestsRouter.post(
         output_limit_kb: taskLimits.output_limit_kb ?? defaultLimitsByLang[judgeLang].output_limit_kb,
       };
 
-      const explicitChecker = (task as any).checkerSpec as CheckerSpec | null | undefined;
+      const explicitChecker = task.checkerSpec;
       const effectiveChecker = explicitChecker ?? chooseDefaultCheckerFromExpectedOutputs(tests.map((t) => t.expectedOutput || ""));
       const maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
-      const hasSubtasks = tests.some(t => String((t as any).subtask ?? "").trim().length > 0);
+      const hasSubtasks = tests.some(t => String(t.subtask ?? "").trim().length > 0);
 
-      const normalizedFiles = normalizeApiFiles((validated.data as any).files);
-      const providedCode = typeof (validated.data as any).code === "string" ? (validated.data as any).code : "";
+      const normalizedFiles = normalizeApiFiles(validated.data.files);
+      const providedCode = typeof validated.data.code === "string" ? validated.data.code : "";
       const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
       const entryFile = decodedFromCode?.entry || entryFileForJudgeLanguage(judgeLang);
       let effectiveFiles: ApiCodeFile[] = normalizedFiles.length ? normalizedFiles : decodedFromCode?.files ?? [];
@@ -2938,15 +2954,15 @@ contestsRouter.post(
       const principalTag = req.userType === "STUDENT" ? `student_${req.studentId}` : `user_${req.userId}`;
       const { tests: workerTests } = await buildJudgeTests(tests, {
         meta: (t) => {
-          const subtaskRaw = (t as any).subtask ?? "";
+          const subtaskRaw = t.subtask ?? "";
           const subtaskGroup = String(subtaskRaw ?? "").trim();
           const group = hasSubtasks ? (subtaskGroup ? subtaskGroup : `unassigned_${t.id}`) : t.isHidden === true ? "hidden" : "public";
           return { hidden: t.isHidden === true, group, weight: t.points || 1 };
         },
-        hashes: (t) => ({ inputHash: (t as any).inputSha256, outputHash: (t as any).outputSha256 }),
+        hashes: (t) => ({ inputHash: t.inputSha256, outputHash: t.outputSha256 }),
         loadContent: loadTestContentByIds
       });
-      const submitCompiler = normCompilerId((validated.data as any).compiler);
+      const submitCompiler = normCompilerId(validated.data.compiler);
       const workerReq: WorkerJudgeRequest = {
         submission_id: `contest_${contestId}_${problemId}_${principalTag}_${Date.now()}`,
         language: judgeLang,
@@ -2970,7 +2986,7 @@ contestsRouter.post(
       let workerRes: WorkerJudgeResponse;
       try {
         workerRes = await judgeWithSemaphore(workerReq);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (e instanceof HttpError) throw e;
         throw new HttpError(503, "Judge unavailable", { code: "JUDGE_UNAVAILABLE", expose: true, cause: e });
       }
@@ -2979,11 +2995,11 @@ contestsRouter.post(
       let totalScore = 0;
       let compileError: string | null = null;
       let compileErrorKind: string | null = null;
-      const groupScores = Array.isArray((workerRes as any).group_scores)
-        ? (workerRes as any).group_scores.map((gs: any) => ({
-            group: String(gs?.group ?? ""),
-            score: Number.isFinite(Number(gs?.score)) ? Number(gs.score) : 0,
-            max_score: Number.isFinite(Number(gs?.max_score)) ? Number(gs.max_score) : 0,
+      const groupScores = Array.isArray(workerRes.group_scores)
+        ? workerRes.group_scores.map((gs) => ({
+            group: String(gs.group ?? ""),
+            score: Number.isFinite(Number(gs.score)) ? Number(gs.score) : 0,
+            max_score: Number.isFinite(Number(gs.max_score)) ? Number(gs.max_score) : 0,
           }))
         : null;
 
@@ -3029,7 +3045,7 @@ contestsRouter.post(
           const verdict = r?.verdict ?? null;
           const passed = verdict === "AC";
           const hidden = t.isHidden === true;
-          const subtask = String((t as any).subtask ?? "").trim();
+          const subtask = String(t.subtask ?? "").trim();
           const group = subtask || (hidden ? "hidden" : "public");
           const timeMs = Number.isFinite(Number(r?.time_ms)) ? Number(r?.time_ms) : null;
           const memoryKb = Number.isFinite(Number(r?.memory_kb)) ? Number(r?.memory_kb) : null;
@@ -3052,10 +3068,10 @@ contestsRouter.post(
                   group,
                   // Input sample comes from the judge (debug) since the route no longer
                   // loads the full `input` column; expected output is still in metadata.
-                  input: truncateForClient((r as any)?.input ?? ""),
+                  input: truncateForClient(r?.input ?? ""),
                   expected: truncateForClient(t.expectedOutput ?? ""),
-                  actual: truncateForClient((r as any)?.actual ?? ""),
-                  stderr: truncateForClient((r as any)?.stderr ?? "", 2_000),
+                  actual: truncateForClient(r?.actual ?? ""),
+                  stderr: truncateForClient(r?.stderr ?? "", 2_000),
                 };
           }
         }
@@ -3063,15 +3079,15 @@ contestsRouter.post(
 
       const scoringScore = typeof workerRes.score === "number" ? workerRes.score : totalScore;
       const scoringMaxScore = typeof workerRes.max_score === "number" ? workerRes.max_score : maxScore;
-      const weighted = scaleScoreToProblemPoints(scoringScore, scoringMaxScore, (problem as any).points ?? null);
+      const weighted = scaleScoreToProblemPoints(scoringScore, scoringMaxScore, problem.points ?? null);
       const annulled = await isProblemAnnulledForParticipant(contestId, problemId, participant.id);
       const finalScore = annulled ? 0 : weighted.score;
 
       const newSubmission: ContestSubmission = submissionRepo().create();
       Object.assign(newSubmission, {
-        contest: { id: contestId } as any,
-        problem: { id: problemId } as any,
-        participant: { id: participant.id } as any,
+        contest: { id: contestId },
+        problem: { id: problemId },
+        participant: { id: participant.id },
         language: judgeLang,
         submittedCode: persistedSubmitted,
         verdict: workerRes.verdict ?? null,
@@ -3083,7 +3099,7 @@ contestsRouter.post(
         groupScores: groupScores ? JSON.stringify(groupScores) : null,
         phase: submissionPhase,
       });
-      const saved: ContestSubmission = await submissionRepo().save(newSubmission as any);
+      const saved = await submissionRepo().save(newSubmission);
 
       // Notify live SSE subscribers that the board may have changed. No scores
       // are included, so this is freeze-safe — clients refetch /standings.
@@ -3105,7 +3121,7 @@ contestsRouter.post(
         tests: perTest,
         firstFailure,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof HttpError) {
         return res.status(error.statusCode).json({ message: error.message, ...(error.details ? { details: error.details } : {}) });
       }
@@ -3125,18 +3141,18 @@ contestsRouter.get("/:id/problems/:problemId/submissions", authRequired, async (
       return res.status(400).json({ message: "INVALID_ID" });
     }
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     // Validate problem belongs to contest.
-    const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } as any });
+    const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } });
     if (!problem) return res.status(404).json({ message: "PROBLEM_NOT_FOUND" });
 
     const participant = await getOrCreateParticipant({ contestId, req });
     const limit = (() => {
-      const n = Number((req.query as any)?.limit);
+      const n = Number(req.query.limit);
       if (!Number.isFinite(n)) return 20;
       return Math.max(1, Math.min(50, Math.floor(n)));
     })();
@@ -3160,7 +3176,7 @@ contestsRouter.get("/:id/problems/:problemId/submissions", authRequired, async (
         LIMIT ?
       `,
       [contestId, problemId, participant.id, limit]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
 
     return res.json({
       contestId,
@@ -3168,8 +3184,8 @@ contestsRouter.get("/:id/problems/:problemId/submissions", authRequired, async (
       participantId: participant.id,
       submissions: rows.map((r) => ({
         id: Number(r.id),
-        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
-        phase: (r.phase === "UPSOLVE" ? "UPSOLVE" : "CONTEST") as any,
+        createdAt: readProperty(r, "createdAt") ? new Date(String(readProperty(r, "createdAt"))).toISOString() : null,
+        phase: readProperty(r, "phase") === "UPSOLVE" ? "UPSOLVE" : "CONTEST",
         language: String(r.language ?? ""),
         verdict: r.verdict != null ? String(r.verdict) : null,
         score: r.score != null ? Number(r.score) : null,
@@ -3182,18 +3198,24 @@ contestsRouter.get("/:id/problems/:problemId/submissions", authRequired, async (
             try {
               const parsed = typeof r.groupScores === "string" ? JSON.parse(r.groupScores) : r.groupScores;
               if (!Array.isArray(parsed)) return null;
-              return parsed.map((gs: any) => ({
-                group: String(gs?.group ?? ""),
-                score: Number.isFinite(Number(gs?.score)) ? Number(gs.score) : 0,
-                maxScore: Number.isFinite(Number(gs?.max_score)) ? Number(gs.max_score) : Number.isFinite(Number(gs?.maxScore)) ? Number(gs.maxScore) : 0,
-              }));
+              return parsed.map((gs: unknown) => {
+                const groupScore = isRecord(gs) ? gs : {};
+                const score = Number(groupScore.score);
+                const maxScore = Number(groupScore.max_score);
+                const legacyMaxScore = Number(groupScore.maxScore);
+                return {
+                  group: String(groupScore.group ?? ""),
+                  score: Number.isFinite(score) ? score : 0,
+                  maxScore: Number.isFinite(maxScore) ? maxScore : Number.isFinite(legacyMaxScore) ? legacyMaxScore : 0,
+                };
+              });
             } catch {
               return null;
             }
           })(),
       })),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/problems/:problemId/submissions error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -3209,7 +3231,7 @@ contestsRouter.post("/:id/integrity", authRequired, async (req: AuthRequest, res
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -3228,14 +3250,14 @@ contestsRouter.post("/:id/integrity", authRequired, async (req: AuthRequest, res
     if (isManager) return res.json({ recorded: false });
 
     const participant = await getOrCreateParticipant({ contestId, req });
-    if ((participant as any).isDisqualified) return res.json({ recorded: false });
+    if (participant.isDisqualified) return res.json({ recorded: false });
 
     await ensureContestAdminTables();
     // Coarse anti-spam cap.
     const countRows = (await AppDataSource.query(
       `SELECT COUNT(*) as c FROM contest_integrity_events WHERE contest_id = ? AND participant_id = ?`,
       [contestId, participant.id]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     if (Number(countRows?.[0]?.c ?? 0) >= 2000) return res.json({ recorded: false });
 
     await AppDataSource.query(
@@ -3243,7 +3265,7 @@ contestsRouter.post("/:id/integrity", authRequired, async (req: AuthRequest, res
       [contestId, participant.id, type, parsed.data.detail ?? null]
     );
     return res.json({ recorded: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] POST /:id/integrity error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -3254,7 +3276,7 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -3262,9 +3284,9 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
     const participant = await getOrCreateParticipant({ contestId, req });
 
     const problems = await problemRepo().find({
-      where: { contest: { id: contestId } } as any,
-      relations: ["libraryTask"] as any,
-      order: { order: "ASC" } as any,
+      where: { contest: { id: contestId } },
+      relations: ["libraryTask"],
+      order: { order: "ASC" },
     });
 
     await ensureContestAdminTables();
@@ -3279,7 +3301,7 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
         AND (participant_id = 0 OR participant_id = ?)
       `,
       [contestId, participant.id]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     const globallyAnnulled = new Set<number>();
     const participantAnnulled = new Set<number>();
     for (const r of annulmentRows) {
@@ -3291,7 +3313,7 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
     }
 
     // Max score per library task (sum(points) with default 1).
-    const taskIds = problems.map((p) => Number((p.libraryTask as any)?.id)).filter((x) => Number.isFinite(x) && x > 0);
+    const taskIds = problems.map((p) => Number(p.libraryTask?.id)).filter((x) => Number.isFinite(x) && x > 0);
     const maxByTask = new Map<number, number>();
     if (taskIds.length) {
       const uniq = Array.from(new Set(taskIds));
@@ -3305,7 +3327,7 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
           GROUP BY library_task_id
         `,
         uniq
-      )) as Array<any>;
+      )) as Array<UnknownRecord>;
       for (const r of rows) {
         const tid = Number(r.taskId);
         const ms = Number(r.maxScore);
@@ -3335,14 +3357,14 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
         GROUP BY x.problem_id, x.bestScore
       `,
       [contestId, participant.id, contestId, participant.id]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     const bestByProblem = new Map<number, { bestScore: number; bestAt: string | null }>();
     for (const r of bestRows) {
       const pid = Number(r.problemId);
       if (!Number.isFinite(pid) || pid <= 0) continue;
       bestByProblem.set(pid, {
         bestScore: Number(r.bestScore ?? 0) || 0,
-        bestAt: r.bestAt ? new Date(r.bestAt).toISOString() : null,
+        bestAt: readProperty(r, "bestAt") ? new Date(String(readProperty(r, "bestAt"))).toISOString() : null,
       });
     }
 
@@ -3356,7 +3378,7 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
         GROUP BY problem_id
       `,
       [contestId, participant.id]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     const lastIdByProblem = new Map<number, number>();
     for (const r of lastIdRows) {
       const pid = Number(r.problemId);
@@ -3366,7 +3388,7 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
     }
 
     const lastIds = Array.from(lastIdByProblem.values());
-    const lastById = new Map<number, any>();
+    const lastById = new Map<number, UnknownRecord>();
     if (lastIds.length) {
       const placeholders = lastIds.map(() => "?").join(",");
       const rows = (await AppDataSource.query(
@@ -3385,14 +3407,14 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
           WHERE id IN (${placeholders})
         `,
         lastIds
-      )) as Array<any>;
+      )) as Array<UnknownRecord>;
       for (const r of rows) {
         const id = Number(r.id);
         if (!Number.isFinite(id) || id <= 0) continue;
         lastById.set(id, {
           id,
           problemId: Number(r.problemId),
-          createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+          createdAt: r.createdAt ? new Date(String(r.createdAt)).toISOString() : null,
           phase: r.phase === "UPSOLVE" ? "UPSOLVE" : "CONTEST",
           language: String(r.language ?? ""),
           verdict: r.verdict != null ? String(r.verdict) : null,
@@ -3405,9 +3427,9 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
     }
 
     const out = problems.map((p) => {
-      const taskId = Number((p.libraryTask as any)?.id);
-      const maxScore = ((p as any).points ?? null) != null
-        ? Number((p as any).points)
+      const taskId = Number(p.libraryTask?.id);
+      const maxScore = (p.points ?? null) != null
+        ? Number(p.points)
         : (Number.isFinite(taskId) && taskId > 0 ? (maxByTask.get(taskId) ?? null) : null);
       const best = bestByProblem.get(p.id) ?? { bestScore: 0, bestAt: null };
       const isAnnulled = globallyAnnulled.has(p.id) || participantAnnulled.has(p.id);
@@ -3426,7 +3448,7 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
     });
 
     return res.json({ contestId, participantId: participant.id, problems: out });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/my-progress error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -3443,31 +3465,31 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
-    const scoringMode: "IOI" | "ICPC" = (contest as any).scoringMode === "ICPC" ? "ICPC" : "IOI";
+    const scoringMode: "IOI" | "ICPC" = contest.scoringMode;
 
     const problems = await problemRepo().find({
-      where: { contest: { id: contestId } } as any,
-      relations: ["libraryTask"] as any,
-      order: { order: "ASC" } as any,
+      where: { contest: { id: contestId } },
+      relations: ["libraryTask"],
+      order: { order: "ASC" },
     });
 
     // Per-problem max points (problem.points override, else sum of test points).
-    const taskIds = problems.map((p) => Number((p.libraryTask as any)?.id)).filter((x) => Number.isFinite(x) && x > 0);
+    const taskIds = problems.map((p) => Number(p.libraryTask?.id)).filter((x) => Number.isFinite(x) && x > 0);
     const maxByTask = await getMaxScoreByLibraryTaskId(taskIds);
     const problemMaxPoints = (p: ContestProblem): number => {
-      const pts = (p as any).points;
+      const pts = p.points;
       if (pts != null && Number(pts) > 0) return Math.floor(Number(pts));
-      const tid = Number((p.libraryTask as any)?.id);
+      const tid = Number(p.libraryTask?.id);
       return Number.isFinite(tid) && tid > 0 ? (maxByTask.get(tid) ?? 0) : 0;
     };
 
-    const participants = await participantRepo().find({ where: { contest: { id: contestId } } as any, order: { joinedAt: "ASC" } as any });
-    const activeParticipants = participants.filter((p) => !(p as any).isDisqualified);
+    const participants = await participantRepo().find({ where: { contest: { id: contestId } }, order: { joinedAt: "ASC" } });
+    const activeParticipants = participants.filter((p) => !p.isDisqualified);
 
     await ensureContestAdminTables();
     const annulmentRows = (await AppDataSource.query(
@@ -3480,7 +3502,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
         AND is_active = 1
       `,
       [contestId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
     const globalAnnulledProblems = new Set<number>();
     const participantProblemAnnulled = new Set<string>();
     for (const r of annulmentRows) {
@@ -3544,7 +3566,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       ORDER BY created_at ASC, id ASC
       `,
       [contestId]
-    )) as Array<any>;
+    )) as Array<UnknownRecord>;
 
     // IOI best score per (participant, problem) as of the freeze cutoff, and a
     // "pending" flag for cells whose latest activity is hidden behind the freeze.
@@ -3555,7 +3577,8 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       const pid = Number(s.participantId);
       const pr = Number(s.problemId);
       if (!Number.isFinite(pid) || !Number.isFinite(pr)) continue;
-      const tMs = new Date(s.createdAt).getTime();
+      const createdAt = String(s.createdAt ?? "");
+      const tMs = new Date(createdAt).getTime();
       if (Number.isFinite(tMs)) submissionTimes.push(tMs);
       const key = `${pid}:${pr}`;
       if (cutoffMs != null && tMs > cutoffMs) {
@@ -3565,7 +3588,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       const sc = Number(s.score ?? 0) || 0;
       const prev = byKey.get(key);
       if (!prev || sc > prev.bestScore) {
-        byKey.set(key, { bestScore: sc, bestAt: new Date(s.createdAt).toISOString() });
+        byKey.set(key, { bestScore: sc, bestAt: new Date(createdAt).toISOString() });
       }
     }
 
@@ -3573,13 +3596,13 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
 
     const scoreSubs: ScoreboardSubmission[] = allSubs
       .filter((s) => !isAnnulledFor(Number(s.participantId), Number(s.problemId)))
-      .filter((s) => endsAtMs == null || new Date(s.createdAt).getTime() <= endsAtMs)
-      .filter((s) => cutoffMs == null || new Date(s.createdAt).getTime() <= cutoffMs)
+      .filter((s) => endsAtMs == null || new Date(String(s.createdAt ?? "")).getTime() <= endsAtMs)
+      .filter((s) => cutoffMs == null || new Date(String(s.createdAt ?? "")).getTime() <= cutoffMs)
       .map((s) => ({
         participantId: Number(s.participantId),
         problemId: Number(s.problemId),
         verdict: s.verdict != null ? String(s.verdict) : null,
-        createdAtMs: new Date(s.createdAt).getTime(),
+        createdAtMs: new Date(String(s.createdAt ?? "")).getTime(),
       }));
     const icpcBoard = computeScoreboard(scoreSubs, { startMs: icpcStartMs, penaltyPerWrong: ICPC_PENALTY_PER_WRONG, nowMs });
     const icpcByParticipant = new Map<number, (typeof icpcBoard.rows)[number]>();
@@ -3662,7 +3685,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       disqualifiedCount: participants.length - activeParticipants.length,
       generatedAtMs: nowMs,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/standings error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -3671,7 +3694,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
 // Live updates over Server-Sent Events. EventSource cannot set headers, so a
 // token may be supplied via ?token= and is promoted to a Bearer header here.
 function sseAuthShim(req: AuthRequest, _res: Response, next: () => void): void {
-  const qToken = typeof (req.query as any)?.token === "string" ? String((req.query as any).token) : "";
+  const qToken = typeof req.query.token === "string" ? req.query.token : "";
   if (!req.headers.authorization && qToken) {
     req.headers.authorization = `Bearer ${qToken}`;
   }
@@ -3683,7 +3706,7 @@ contestsRouter.get("/:id/events", sseAuthShim, authOptional, async (req: AuthReq
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -3695,7 +3718,7 @@ contestsRouter.get("/:id/events", sseAuthShim, authOptional, async (req: AuthReq
       // Disable proxy buffering (nginx) so events flush immediately.
       "X-Accel-Buffering": "no",
     });
-    (res as any).flushHeaders?.();
+    (res as Response & { flushHeaders?: () => void }).flushHeaders?.();
     res.write("retry: 5000\n\n");
     res.write(`event: ready\ndata: ${JSON.stringify({ at: Date.now() })}\n\n`);
 
@@ -3724,7 +3747,7 @@ contestsRouter.get("/:id/events", sseAuthShim, authOptional, async (req: AuthReq
         // ignore
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[contests] GET /:id/events error", { requestId: req.requestId, err: error });
     if (!res.headersSent) res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -3738,7 +3761,7 @@ contestsRouter.post("/:id/generate-certificates", authRequired, async (req: Auth
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } as any, relations: ["createdBy", "class"] as any });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
     const canManage = await canManageContest({ contest, req });
@@ -3759,8 +3782,8 @@ contestsRouter.post("/:id/generate-certificates", authRequired, async (req: Auth
       contestId,
       jobId: job.jobId,
     });
-  } catch (error: any) {
-    if (String(error?.message ?? "") === "CERTIFICATES_DISABLED_FOR_CONTEST") {
+  } catch (error: unknown) {
+    if (errorMessage(error) === "CERTIFICATES_DISABLED_FOR_CONTEST") {
       return res.status(400).json({ message: "CERTIFICATES_DISABLED_FOR_CONTEST" });
     }
     logger.error("[contests] POST /:id/generate-certificates error", { requestId: req.requestId, err: error });

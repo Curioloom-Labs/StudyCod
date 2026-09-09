@@ -207,7 +207,7 @@ router.post("/classes/:classId/live-sessions", authRequired, async (req: AuthReq
 
     disableCache(res);
     return res.json({ session: sessionDto(session), ...minted });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] start session failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -234,7 +234,7 @@ router.get("/classes/:classId/live-sessions/active", authRequired, async (req: A
 
     disableCache(res);
     return res.json({ session: session ? sessionDto(session) : null, enabled: isLiveClassroomEnabled() && await isLiveStateReady() });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] active lookup failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -283,7 +283,7 @@ router.post("/live-sessions/:id/join", authRequired, async (req: AuthRequest, re
     const minted = await mintRoomToken({ room: session.roomName, identity, name, role });
     disableCache(res);
     return res.json({ session: sessionDto(session), ...minted });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] join failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -320,7 +320,7 @@ router.post("/live-sessions/:id/end", authRequired, async (req: AuthRequest, res
 
     disableCache(res);
     return res.json({ session: sessionDto(session) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] end session failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -411,7 +411,7 @@ router.get("/classes/:classId/live-overview", authRequired, async (req: AuthRequ
     const overview = await computeLiveOverview(classId);
     disableCache(res);
     return res.json(overview);
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] overview failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -444,7 +444,7 @@ router.post("/tasks/:taskId/live-code", authRequired, async (req: AuthRequest, r
 
     await setLiveCode(student.id, { classId: student.class.id, taskId, taskTitle, code });
     return res.status(204).end();
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] publish code failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -483,7 +483,7 @@ router.get("/classes/:classId/students/:studentId/live-code", authRequired, asyn
         updatedAtMs: snap.updatedAtMs
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] read code failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -518,7 +518,7 @@ router.get("/classes/:classId/practice-tasks", authRequired, async (req: AuthReq
     return res.json({
       tasks: tasks.map((t) => ({ id: t.id, title: t.title, lessonTitle: t.lesson?.title ?? null }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] list practice tasks failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -556,7 +556,7 @@ router.post("/classes/:classId/live-challenges", authRequired, async (req: AuthR
     const challenge = await startChallenge({ classId, taskId, taskTitle: task.title, durationSec });
     disableCache(res);
     return res.json({ challenge: challengeDto(challenge) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] start challenge failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -574,7 +574,7 @@ router.get("/classes/:classId/live-challenges/active", authRequired, async (req:
     const challenge = await getChallenge(classId);
     disableCache(res);
     return res.json({ challenge: challenge ? challengeDto(challenge) : null });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] active challenge failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -629,7 +629,7 @@ router.get("/classes/:classId/live-challenges/leaderboard", authRequired, async 
 
     disableCache(res);
     return res.json({ challenge: challengeDto(challenge), entries, generatedAtMs: Date.now() });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] challenge leaderboard failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -657,7 +657,7 @@ router.get("/classes/:classId/lessons-list", authRequired, async (req: AuthReque
     });
     disableCache(res);
     return res.json({ lessons: lessons.map((l) => ({ id: l.id, title: l.title, type: l.type })) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] lessons-list failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -694,7 +694,7 @@ router.put("/live-sessions/:id/lesson", authRequired, async (req: AuthRequest, r
     const fresh = (await liveRepo().findOne({ where: { id: sessionId }, relations: ["class", "lesson"] }))!;
     disableCache(res);
     return res.json({ session: sessionDto(fresh) });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] attach lesson failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -730,7 +730,7 @@ router.get("/live-sessions/:id/materials", authRequired, async (req: AuthRequest
       hasTheory: Boolean(lesson?.hasTheory && lesson?.theory),
       tasks: (lesson?.tasks ?? []).map((t) => ({ id: t.id, title: t.title }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] materials failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -768,7 +768,7 @@ router.post("/classes/:classId/live-copilot", authRequired, async (req: AuthRequ
 
     disableCache(res);
     return res.json({ signals, briefing, totals: overview.totals, generatedAtMs: Date.now() });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] copilot failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -789,7 +789,7 @@ router.post("/classes/:classId/live-challenges/end", authRequired, async (req: A
     await endChallenge(classId);
     disableCache(res);
     return res.json({ ok: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] end challenge failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -836,7 +836,7 @@ router.post("/classes/:classId/breakouts", authRequired, async (req: AuthRequest
 
     disableCache(res);
     return res.json(await buildBreakoutDto(state));
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] open breakouts failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -860,7 +860,7 @@ router.get("/classes/:classId/breakouts", authRequired, async (req: AuthRequest,
       req.userType === "STUDENT" && req.studentId ? await findStudentGroup(classId, req.studentId) : null;
     const myGroupIndex = myGroup?.index ?? null;
     return res.json({ active: true, ...dto, myGroupIndex });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] get breakouts failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -890,7 +890,7 @@ router.get("/classes/:classId/breakouts/my-token", authRequired, async (req: Aut
       role: "participant"
     });
     return res.json({ active: true, groupIndex: group.index, ...minted });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] breakout my-token failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -922,7 +922,7 @@ router.post("/classes/:classId/breakouts/token/:index", authRequired, async (req
     });
     disableCache(res);
     return res.json({ groupIndex: group.index, ...minted });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] breakout teacher token failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -943,7 +943,7 @@ router.post("/classes/:classId/breakouts/close", authRequired, async (req: AuthR
     closeBreakouts(classId);
     disableCache(res);
     return res.json({ ok: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/live] close breakouts failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

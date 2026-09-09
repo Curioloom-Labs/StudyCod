@@ -11,6 +11,10 @@ export const TRACE_BEGIN = "__SC_TRACE_BEGIN__";
 export const TRACE_END = "__SC_TRACE_END__";
 export const DEFAULT_MAX_STEPS = 1000;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 /** One call-stack frame at a trace step (bottom = module, top = current function). */
 export interface TraceFrame {
   func: string;
@@ -71,31 +75,35 @@ export function parseTraceOutput(stdout: string): TraceResult | null {
   const preSentinel = s.slice(0, begin).replace(/\n$/, "");
   const jsonPart = s.slice(begin + TRACE_BEGIN.length, end).trim();
   try {
-    const parsed = JSON.parse(jsonPart) as { steps?: unknown; truncated?: unknown; programOutput?: unknown };
+    const parsedValue: unknown = JSON.parse(jsonPart);
+    if (!isRecord(parsedValue)) return null;
+    const parsed = parsedValue;
     // Drivers that mix tooling noise into stdout (e.g. gdb) carry the program's own output
     // inside the JSON; prefer it. In-language tracers leave it as the pre-sentinel slice.
     const programOutput = typeof parsed.programOutput === "string" ? parsed.programOutput.replace(/\n$/, "") : preSentinel;
     const steps: TraceStep[] = Array.isArray(parsed.steps)
       ? parsed.steps
-          .filter((x: any) => x && typeof x === "object" && Number.isFinite(x.line))
-          .map((x: any) => {
+          .filter(isRecord)
+          .filter(x => Number.isFinite(Number(x.line)))
+          .map(x => {
             const stack: TraceFrame[] | undefined = Array.isArray(x.stack)
               ? x.stack
-                  .filter((f: any) => f && typeof f === "object")
-                  .map((f: any) => ({
+                  .filter(isRecord)
+                  .map(f => ({
                     func: typeof f.func === "string" ? f.func : "?",
-                    line: Number.isFinite(f.line) ? Number(f.line) : 0,
-                    locals: f.locals && typeof f.locals === "object" ? f.locals : {},
+                    line: Number.isFinite(Number(f.line)) ? Number(f.line) : 0,
+                    locals: isRecord(f.locals) ? f.locals : {},
                   }))
               : undefined;
-            const topLocals = stack && stack.length ? stack[stack.length - 1].locals : (x.locals && typeof x.locals === "object" ? x.locals : {});
+            const topLocals = stack && stack.length ? stack[stack.length - 1].locals : (isRecord(x.locals) ? x.locals : {});
+            const stdoutLen = Number(x.stdoutLen);
             return {
               line: Number(x.line),
               event: x.event === "call" || x.event === "return" || x.event === "line" ? x.event : undefined,
               stack,
-              stdoutLen: Number.isFinite(x.stdoutLen) ? Number(x.stdoutLen) : undefined,
+              stdoutLen: Number.isFinite(stdoutLen) ? stdoutLen : undefined,
               locals: topLocals,
-              heap: x.heap && typeof x.heap === "object" ? (x.heap as Record<string, HeapObject>) : undefined,
+              heap: isRecord(x.heap) ? x.heap as Record<string, HeapObject> : undefined,
             };
           })
       : [];

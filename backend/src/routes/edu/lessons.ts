@@ -38,21 +38,21 @@ const lessonIdParamSchema = z.coerce.number().int().positive();
 
 const quizSubmitBodySchema = z.object({
   answers: z.union([
-    z.array(z.any()).max(250),
-    z.record(z.string(), z.any()).refine(v => Object.keys(v).length <= 500)
+    z.array(z.unknown()).max(250),
+    z.record(z.string(), z.unknown()).refine(v => Object.keys(v).length <= 500)
   ])
 });
 
 function isControlWorkVisibleToStudent(controlWork: ControlWork, studentId: number): boolean {
-  return isAssignedToStudent(controlWork.isAssigned, (controlWork as any).assignedStudentIds, studentId);
+  return isAssignedToStudent(controlWork.isAssigned, (controlWork).assignedStudentIds, studentId);
 }
 
 function isControlTaskVisibleToStudent(task: TopicTask, controlWork: ControlWork, studentId: number): boolean {
   if (task.type !== "CONTROL") return false;
   if (task.isAssigned) {
-    return isAssignedToStudent(task.isAssigned, (task as any).assignedStudentIds, studentId);
+    return isAssignedToStudent(task.isAssigned, (task).assignedStudentIds, studentId);
   }
-  return isAssignedToStudent(true, (controlWork as any).assignedStudentIds, studentId);
+  return isAssignedToStudent(true, (controlWork).assignedStudentIds, studentId);
 }
 
 const CONTROL_TASK_MAX_ATTEMPTS = 3;
@@ -116,11 +116,11 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
       });
     }
 
-    logger.debug("[GET /edu/lessons/:id] Looking for lesson", { requestId: req.requestId, principalId: req.principalId, id, type: (req.query as any)?.type });
+    logger.debug("[GET /edu/lessons/:id] Looking for lesson", { requestId: req.requestId, principalId: req.principalId, id, type: (req.query)?.type });
 
-    const requestedTypeRaw = Array.isArray((req.query as any)?.type)
-      ? String((req.query as any).type[0] || "")
-      : String((req.query as any)?.type || "");
+    const requestedTypeRaw = Array.isArray((req.query)?.type)
+      ? String((req.query).type[0] || "")
+      : String((req.query)?.type || "");
     const requestedType = requestedTypeRaw.toUpperCase().trim();
 
     let classIdScope: number | null = null;
@@ -290,7 +290,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
 
       let quizSubmitted: boolean | undefined = undefined;
       let quizGrade: number | null | undefined = undefined;
-      let quizReview: any | null | undefined = undefined;
+      let quizReview: unknown = undefined;
       let reportOnly: boolean | undefined = undefined;
       let reportReason: "COMPLETED" | "DEADLINE_EXPIRED" | null | undefined = undefined;
       let controlReport:
@@ -352,7 +352,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
             .getMany();
 
           for (const g of allGrades) {
-            const tid = (g as any).topicTask?.id;
+            const tid = (g).topicTask?.id;
             if (!tid) continue;
             if (!latestGradeByTaskId.has(tid)) {
               latestGradeByTaskId.set(tid, g);
@@ -571,7 +571,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
       const practiceTasks = (topic.tasks || []).filter(t =>
         t.type === "PRACTICE" &&
         t.isAssigned &&
-        (!req.studentId || isAssignedToStudent(t.isAssigned, (t as any).assignedStudentIds, req.studentId))
+        (!req.studentId || isAssignedToStudent(t.isAssigned, (t).assignedStudentIds, req.studentId))
       );
 
       const topicDeadlineTimezone = extractTimezoneFromProfileMeta(topic.class?.teacher?.timezone ?? null);
@@ -591,9 +591,9 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
       const controlWorks = await Promise.all(visibleTopicControlWorks.map(async cw => {
         const controlTasks = await topicTaskRepo().find({
           where: {
-            controlWork: { id: cw.id } as any,
-            type: "CONTROL" as any
-          } as any,
+            controlWork: { id: cw.id },
+            type: "CONTROL"
+          },
           order: {
             order: "ASC"
           }
@@ -651,7 +651,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
               const attemptsByTaskId = new Map<number, number>();
 
               for (const grade of allTaskGrades) {
-                const topicTaskId = (grade as any).topicTask?.id;
+                const topicTaskId = (grade).topicTask?.id;
                 if (!topicTaskId) continue;
                 if (!latestByTaskId.has(topicTaskId)) {
                   latestByTaskId.set(topicTaskId, grade);
@@ -751,7 +751,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
     return res.status(404).json({
       message: "LESSON_NOT_FOUND"
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/lessons] Error getting lesson", { requestId: req.requestId, principalId: req.principalId, error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -867,7 +867,7 @@ router.get("/lessons/:id/control-work-status", authRequired, async (req: AuthReq
         const attemptsByTaskId = new Map<number, number>();
 
         for (const grade of allTaskGrades) {
-          const topicTaskId = (grade as any).topicTask?.id;
+          const topicTaskId = (grade).topicTask?.id;
           if (!topicTaskId) continue;
           if (!latestByTaskId.has(topicTaskId)) {
             latestByTaskId.set(topicTaskId, grade);
@@ -917,7 +917,7 @@ router.get("/lessons/:id/control-work-status", authRequired, async (req: AuthReq
       timeLimitMinutes: attempt.timeLimitMinutes,
       finishedAt: attempt.finishedAt ? attempt.finishedAt.toISOString() : null
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/lessons] Error getting control work status", { requestId: req.requestId, studentId: req.studentId, error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -1020,7 +1020,7 @@ router.get("/lessons/:id/attempt-status", authRequired, async (req: AuthRequest,
       status: attempt.status,
       finishedAt: attempt.finishedAt ? attempt.finishedAt.toISOString() : null
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/lessons] Error getting attempt status", { requestId: req.requestId, studentId: req.studentId, error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -1160,7 +1160,7 @@ router.post("/lessons/:id/start-attempt", authRequired, async (req: AuthRequest,
           const attemptsByTaskId = new Map<number, number>();
 
           for (const grade of allTaskGrades) {
-            const topicTaskId = (grade as any).topicTask?.id;
+            const topicTaskId = (grade).topicTask?.id;
             if (!topicTaskId) continue;
             if (!latestByTaskId.has(topicTaskId)) {
               latestByTaskId.set(topicTaskId, grade);
@@ -1214,7 +1214,7 @@ router.post("/lessons/:id/start-attempt", authRequired, async (req: AuthRequest,
       timeLimitMinutes: attempt.timeLimitMinutes,
       remainingSeconds: attempt.timeLimitMinutes * 60
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/lessons] Error starting attempt", { requestId: req.requestId, studentId: req.studentId, error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -1241,9 +1241,9 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
     }
 
     const { answers } = bodyParsed.data;
-    const answerAt = (idx: number): any => {
+    const answerAt = (idx: number): unknown => {
       if (Array.isArray(answers)) return answers[idx];
-      return (answers as Record<string, any>)[String(idx)];
+      return (answers as Record<string, unknown>)[String(idx)];
     };
 
     if (!req.studentId) {
@@ -1336,7 +1336,7 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
       });
     }
 
-    let quiz: any[];
+    let quiz: Record<string, unknown>[];
     try {
       quiz = JSON.parse(controlWork.quizJson);
     } catch (e) {
@@ -1353,7 +1353,7 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
 
     let correctAnswers = 0;
     const totalQuestions = quiz.length;
-    const reviewQuestions: any[] = [];
+    const reviewQuestions: Record<string, unknown>[] = [];
 
     for (let i = 0; i < quiz.length; i++) {
       const question = quiz[i];
@@ -1477,7 +1477,7 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
         const latestByTaskId = new Map<number, EduGrade>();
         const attemptsByTaskId = new Map<number, number>();
         for (const grade of allTaskGrades) {
-          const topicTaskId = (grade as any).topicTask?.id;
+          const topicTaskId = (grade).topicTask?.id;
           if (!topicTaskId) continue;
           if (!latestByTaskId.has(topicTaskId)) {
             latestByTaskId.set(topicTaskId, grade);
@@ -1526,7 +1526,7 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
         questions: reviewQuestions
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/lessons] Error submitting quiz", { requestId: req.requestId, studentId: req.studentId, error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"

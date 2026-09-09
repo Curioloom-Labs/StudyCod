@@ -1,6 +1,6 @@
 export interface Env {
   AI: {
-    run: (model: string, options: any) => Promise<any>;
+    run: (model: string, options: Record<string, unknown>) => Promise<unknown>;
   };
   ENVIRONMENT?: string;
   /**
@@ -18,7 +18,7 @@ export interface Env {
  * Constant-time-ish string compare to avoid trivial timing oracles on the
  * shared secret. Lengths differing short-circuits, which is acceptable here.
  */
-function secretsMatch(a: string, b: string): boolean {
+export function secretsMatch(a: string, b: string): boolean {
   if (a.length !== b.length || a.length === 0) return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
@@ -28,7 +28,7 @@ function secretsMatch(a: string, b: string): boolean {
 /**
  * Returns a Response when the request must be rejected, or null when authorized.
  */
-function checkAuth(req: Request, env: Env, cors: Record<string, string>): Response | null {
+export function checkAuth(req: Request, env: Env, cors: Record<string, string>): Response | null {
   const expected = String(env.WORKER_SHARED_SECRET ?? "").trim();
   const isProduction = String(env.ENVIRONMENT ?? "").toLowerCase() === "production";
 
@@ -72,7 +72,7 @@ interface WorkerRequest {
     maxTokens?: number;
   };
 }
-function normalizeMode(mode?: string): string {
+export function normalizeMode(mode?: string): string {
   if (!mode) return "generate-text";
   const m = mode.toLowerCase().trim().replace(/[_\s]+/g, "-");
   const map: Record<string, string> = {
@@ -90,10 +90,10 @@ function normalizeMode(mode?: string): string {
   };
   return map[m] ?? "generate-text";
 }
-function isJSONMode(mode: string, schema?: object): boolean {
+export function isJSONMode(mode: string, schema?: object): boolean {
   return mode === "generate-json" || mode === "generate-test-data" || !!schema;
 }
-function resolveMaxTokens(mode: string, requested?: number): number {
+export function resolveMaxTokens(mode: string, requested?: number): number {
   if (requested && requested > 0) return Math.min(requested, 4096);
   const map: Record<string, number> = {
     "generate-task": 3500,
@@ -183,51 +183,64 @@ function buildIoTypeDirective(promptRaw: string, lang: Language): string {
     ? `\n\nIO POLICY (MANDATORY): "ioType" MUST be one of: ${allowed.join(", ")}. Do not use any other IO type.`
     : `\n\nIO-ПОЛІТИКА (ОБОВ'ЯЗКОВО): "ioType" МАЄ бути одним із: ${allowed.join(", ")}. Не використовуй інший IO-тип.`;
 }
-function extractText(result: any): string {
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function extractText(result: unknown): string {
   if (!result) return "";
   if (typeof result === "string") return result;
-  if (typeof result.response === "string") return result.response;
-  if (typeof result.text === "string") return result.text;
-  if (typeof result.output_text === "string") return result.output_text;
+  const object = asObject(result);
+  if (!object) return "";
+  if (typeof object.response === "string") return object.response;
+  if (typeof object.text === "string") return object.text;
+  if (typeof object.output_text === "string") return object.output_text;
   // OpenAI/most providers shape: { choices: [{ message: { content: "..." } }] }
   // and the streaming-style { choices: [{ delta: { content: "..." } }] }.
   // Workers AI sometimes mimics OpenAI when wrapped. Missing this used to
   // return "" and force a fallback to OpenRouter, leaking cost on every miss.
-  if (Array.isArray(result.choices)) {
-    for (const choice of result.choices) {
-      const messageContent = choice?.message?.content;
+  if (Array.isArray(object.choices)) {
+    for (const rawChoice of object.choices) {
+      const choice = asObject(rawChoice);
+      if (!choice) continue;
+      const message = asObject(choice.message);
+      const delta = asObject(choice.delta);
+      const messageContent = message?.content;
       if (typeof messageContent === "string" && messageContent.length > 0) {
         return messageContent;
       }
-      const deltaContent = choice?.delta?.content;
+      const deltaContent = delta?.content;
       if (typeof deltaContent === "string" && deltaContent.length > 0) {
         return deltaContent;
       }
-      if (typeof choice?.text === "string" && choice.text.length > 0) {
+      if (typeof choice.text === "string" && choice.text.length > 0) {
         return choice.text;
       }
     }
   }
-  if (Array.isArray(result.outputs)) {
-    for (const out of result.outputs) {
+  if (Array.isArray(object.outputs)) {
+    for (const rawOut of object.outputs) {
+      const out = asObject(rawOut);
       if (Array.isArray(out?.content)) {
-        for (const c of out.content) {
-          if (typeof c?.text === "string") return c.text;
+        for (const rawContent of out.content) {
+          const content = asObject(rawContent);
+          if (typeof content?.text === "string") return content.text;
         }
       }
     }
   }
   return "";
 }
-function extractJSON(result: any): any {
-  if (!result || typeof result !== "object") return null;
-  if (Array.isArray(result.outputs)) {
-    for (const out of result.outputs) {
-      if (Array.isArray(out?.content)) {
-        for (const c of out.content) {
-          if (c?.type === "json" && c?.data) {
-            return c.data;
-          }
+function extractJSON(result: unknown): Record<string, unknown> | null {
+  const object = asObject(result);
+  if (!object || !Array.isArray(object.outputs)) return null;
+  for (const rawOut of object.outputs) {
+    const out = asObject(rawOut);
+    if (Array.isArray(out?.content)) {
+      for (const rawContent of out.content) {
+        const content = asObject(rawContent);
+        if (content?.type === "json" && asObject(content.data)) {
+          return asObject(content.data);
         }
       }
     }
@@ -323,7 +336,7 @@ export default {
           source_lang: source,
           target_lang: target,
         });
-        const translatedText = String((result as any)?.translated_text ?? "");
+        const translatedText = String(asObject(result)?.translated_text ?? "");
         if (!translatedText) {
           return new Response(JSON.stringify({ error: "Empty translation" }), {
             status: 502,
@@ -334,8 +347,8 @@ export default {
           status: 200,
           headers: { ...cors, "Content-Type": "application/json" }
         });
-      } catch (err: any) {
-        return new Response(JSON.stringify({ error: err?.message ?? "Internal error" }), {
+      } catch (err: unknown) {
+        return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Internal error" }), {
           status: 500,
           headers: { ...cors, "Content-Type": "application/json" }
         });
@@ -377,9 +390,9 @@ export default {
           "Content-Type": "application/json"
         }
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       return new Response(JSON.stringify({
-        error: err.message ?? "Internal error"
+        error: err instanceof Error ? err.message : "Internal error"
       }), {
         status: 500,
         headers: {

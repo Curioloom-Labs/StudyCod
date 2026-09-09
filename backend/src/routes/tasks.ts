@@ -23,7 +23,7 @@ import { TheoryBlock } from "../entities/TheoryBlock";
 import { authMiddleware, AuthRequest } from "../middleware/authMiddleware";
 import { submissionRateLimitMiddleware } from "../middleware/submissionRateLimit";
 import { In } from "typeorm";
-import { safeAICall, sendAIError, neutralizePromptInjection } from "../services/ai/safeAICall";
+import { safeAICall, sendAIError, neutralizePromptInjection, type AIError } from "../services/ai/safeAICall";
 import { generateAlgorithmicHints, explainSubmissionError, type HintLanguage } from "../services/ai/failureHints";
 import { debugMentorReply, type DebugChatMessage, DEBUG_CHAT_MAX_HISTORY, DEBUG_CHAT_MAX_MESSAGE_CHARS } from "../services/ai/debugMentor";
 import { computeIntegrityScore } from "../services/integrity/proctoringScore";
@@ -60,6 +60,16 @@ import {
 } from "../services/webTaskValidationService";
 import { encodeWebTaskPayload, normalizeWebTaskTemplate } from "../utils/webTaskPayload";
 import { getSharedRedisClient, redisKey } from "../services/redis/sharedRedis";
+import {
+  GENERATE_COOLDOWN_MAX_MS,
+  GENERATE_COOLDOWN_MIN_MS,
+  isTaskGenerationDeadlineDisabled,
+  readTaskGenerationBoolean,
+  readTaskGenerationInteger,
+  resolveQuizBudgetCapMs,
+  resolveRequestBudgetMs,
+  resolveTaskBudgetCapMs,
+} from "../config/taskGenerationConfig";
 import { cleanupCompletedPersonalTaskTests } from "../services/personalTaskCleanup";
 import {
   getTaskGenerationProgress,
@@ -74,6 +84,60 @@ const tasksRouter = Router();
 
 type ApiCodeFile = { path: string; content: string };
 type UiLanguage = "uk" | "en";
+type UnknownRecord = Record<string, unknown>;
+type GeneratedTestExample = { input?: unknown; output?: unknown };
+type GeneratedTaskPayload = {
+  title?: unknown;
+  practicalTask?: unknown;
+  ioType?: unknown;
+  inputFormat?: unknown;
+  outputFormat?: unknown;
+  constraints?: unknown;
+  examples?: unknown;
+};
+type QuizQuestion = UnknownRecord;
+
+function quizOptions(raw: unknown, labels: string[]): Record<string, string> {
+  if (Array.isArray(raw)) {
+    return Object.fromEntries(labels.map((label, index) => [label, String(raw[index] ?? "")]));
+  }
+  if (isRecord(raw)) {
+    return Object.fromEntries(labels.map(label => [label, String(raw[label] ?? "")]));
+  }
+  return Object.fromEntries(labels.map(label => [label, ""]));
+}
+
+function quizQuestionText(question: QuizQuestion): string {
+  return String(question.question ?? question.q ?? "");
+}
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readProperty(value: unknown, key: string): unknown {
+  return isRecord(value) ? value[key] : undefined;
+}
+
+function errorMessage(error: unknown): string {
+  const message = readProperty(error, "message");
+  return String(message ?? "");
+}
+
+function isTaskIoType(value: string): value is TaskIoType {
+  return value === "STDIN_STDOUT" || value === "NO_INPUT_FIXED_OUTPUT" || value === "NO_INPUT_FREE_OUTPUT";
+}
+
+function asAIError(error: unknown): AIError {
+  const statusCode = Number(readProperty(error, "statusCode"));
+  const details = readProperty(error, "details");
+  return {
+    statusCode: Number.isInteger(statusCode) ? statusCode : 502,
+    message: errorMessage(error) || "AI_GENERATION_FAILED",
+    error: String(readProperty(error, "error") ?? ""),
+    details: isRecord(details) ? details : undefined
+  };
+}
 
 function sha256Hex(input: string): string {
   return createHash("sha256").update(input, "utf8").digest("hex");
@@ -117,9 +181,9 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   if (!Array.isArray(raw)) return [];
   const out: ApiCodeFile[] = [];
   for (const f of raw) {
-    if (!f || typeof f !== "object") continue;
-    const p = normalizeSafeCodeFilePath((f as any).path) ?? "";
-    const c = typeof (f as any).content === "string" ? (f as any).content : "";
+    if (!isRecord(f)) continue;
+    const p = normalizeSafeCodeFilePath(f.path) ?? "";
+    const c = typeof f.content === "string" ? f.content : "";
     if (!p) continue;
     // Keep paths constrained to the same safe relative subset as the judge.
     out.push({ path: p, content: c });
@@ -147,8 +211,8 @@ function normalizeWebProfile(raw: unknown): WebTaskValidationProfile {
 }
 
 function assertPersonalWebFilesWithinLimits(files: ReturnType<typeof normalizeWebTaskFiles>) {
-  const maxFileSize = Number((env as any).__webTaskMaxFileSize ?? 200_000);
-  const maxTotalSize = Number((env as any).__webTaskMaxTotalSize ?? 500_000);
+  const maxFileSize = Number(env.__webTaskMaxFileSize ?? 200_000);
+  const maxTotalSize = Number(env.__webTaskMaxTotalSize ?? 500_000);
   let total = 0;
   for (const f of files) {
     const size = Buffer.byteLength(String(f.content ?? ""), "utf8");
@@ -163,11 +227,11 @@ function assertPersonalWebFilesWithinLimits(files: ReturnType<typeof normalizeWe
 }
 
 function resolveUiLanguage(req: AuthRequest): UiLanguage {
-  const q = String((req.query as any)?.uiLang ?? "").toLowerCase().trim();
+  const q = String(req.query?.uiLang ?? "").toLowerCase().trim();
   if (q.startsWith("en")) return "en";
   if (q.startsWith("uk")) return "uk";
 
-  const bodyLang = String((req.body as any)?.language ?? "").toLowerCase().trim();
+  const bodyLang = String(readProperty(req.body, "language") ?? "").toLowerCase().trim();
   if (bodyLang === "en") return "en";
   if (bodyLang === "uk") return "uk";
 
@@ -250,15 +314,15 @@ function inferEffectiveIoTypeForPersonalTask(task: Task, tests: Array<{ input?: 
   return "NO_INPUT_FREE_OUTPUT";
 }
 
-function sanitizeTestResultsForStudent(results: any): Array<{ testId: number; passed: boolean; verdict?: string | null; errorKind?: string | null; error?: string | null }> {
+function sanitizeTestResultsForStudent(results: unknown): Array<{ testId: number; passed: boolean; verdict?: string | null; errorKind?: string | null; error?: string | null }> {
   if (!Array.isArray(results)) return [];
   return results
-    .map((r: any) => ({
-      testId: Number(r?.testId ?? r?.test_id ?? 0),
-      passed: !!r?.passed,
-      verdict: r?.verdict ?? null,
-      errorKind: r?.errorKind ?? r?.error_kind ?? null,
-      error: r?.error ?? null
+    .map((r: unknown) => ({
+      testId: Number(readProperty(r, "testId") ?? readProperty(r, "test_id") ?? 0),
+      passed: Boolean(readProperty(r, "passed")),
+      verdict: (readProperty(r, "verdict") as string | null | undefined) ?? null,
+      errorKind: (readProperty(r, "errorKind") ?? readProperty(r, "error_kind")) as string | null | undefined ?? null,
+      error: readProperty(r, "error") as string | null | undefined ?? null
     }))
     .filter(r => Number.isFinite(r.testId) && r.testId > 0);
 }
@@ -266,9 +330,15 @@ const taskRepo = () => AppDataSource.getRepository(Task);
 const topicRepo = () => AppDataSource.getRepository(Topic);
 const gradeRepo = () => AppDataSource.getRepository(Grade);
 function isDuplicateSubmissionError(error: unknown): boolean {
-  const value = error as any;
-  return String(value?.code ?? value?.driverError?.code ?? "") === "ER_DUP_ENTRY"
-    || Number(value?.errno ?? value?.driverError?.errno ?? 0) === 1062;
+  const driverError = readProperty(error, "driverError");
+  return String(readProperty(error, "code") ?? readProperty(driverError, "code") ?? "") === "ER_DUP_ENTRY"
+    || Number(readProperty(error, "errno") ?? readProperty(driverError, "errno") ?? 0) === 1062;
+}
+
+function hasSubmissionPayload(value: unknown): boolean {
+  const code = readProperty(value, "code");
+  const files = readProperty(value, "files");
+  return (typeof code === "string" && code.length > 0) || (Array.isArray(files) && files.length > 0);
 }
 const userRepo = () => AppDataSource.getRepository(User);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
@@ -374,20 +444,6 @@ const PERSONAL_CONTROL_PRACTICE_COUNT = 3;
 const PERSONAL_CONTROL_PRACTICE_COEFF = 1.3;
 const PERSONAL_CONTROL_PASS_GRADE = 60;
 const PERSONAL_TOPIC_PASS_GRADE = 60;
-
-const GENERATE_COOLDOWN_MIN_MS = (() => {
-  const raw = Number(process.env.TASKS_GENERATE_COOLDOWN_MIN_MS);
-  const v = Number.isFinite(raw) ? Math.floor(raw) : 5_000;
-  return Math.max(1_000, Math.min(60_000, v));
-})();
-
-const GENERATE_COOLDOWN_MAX_MS = (() => {
-  const raw = Number(process.env.TASKS_GENERATE_COOLDOWN_MAX_MS);
-  const fallback = 10_000;
-  const v = Number.isFinite(raw) ? Math.floor(raw) : fallback;
-  const bounded = Math.max(1_000, Math.min(60_000, v));
-  return Math.max(GENERATE_COOLDOWN_MIN_MS, bounded);
-})();
 
 const generateCooldownByRuntime = new Map<string, number>();
 const generateInFlightByRuntime = new Set<string>();
@@ -506,7 +562,7 @@ function parsePersonalControlBatchPrefix(subtitle: unknown): string | null {
 
 function isPersonalControlQuizTask(task: Pick<Task, "type" | "subtitle">): boolean {
   if (task.type !== "CONTROL") return false;
-  return typeof (task as any).subtitle === "string" && String((task as any).subtitle).includes("|QUIZ|");
+  return typeof task.subtitle === "string" && task.subtitle.includes("|QUIZ|");
 }
 
 function clampGrade0to100Int(v: number): number {
@@ -544,7 +600,7 @@ function buildPrevTopicsTextFromRange(params: { topics: Topic[]; startTopicIndex
   const selected = params.topics.filter(t => t.topicIndex >= params.startTopicIndex && t.topicIndex <= params.endTopicIndex);
   const titles = selected
     .map(t => {
-      const topicId = Number((t as any)?.id);
+      const topicId = Number(t.id);
       const localized = Number.isFinite(topicId) ? params.titleByTopicId?.get(topicId) : undefined;
       return String(localized ?? t.title ?? "").trim();
     })
@@ -560,8 +616,8 @@ async function refreshPersonalMiniProjectIfNeeded(params: {
   if (task.completed !== 0) return task;
 
   const existingTests = await testDataRepo().find({
-    where: { personalTask: { id: task.id } } as any,
-    order: { id: "ASC" } as any,
+    where: { personalTask: { id: task.id } },
+    order: { id: "ASC" },
   });
   const needsRefresh = !task.description.includes("### Формат вводу") || existingTests.length < definition.tests.length;
   if (!needsRefresh) return task;
@@ -579,7 +635,7 @@ async function refreshPersonalMiniProjectIfNeeded(params: {
     input: test.input,
     expectedOutput: test.expectedOutput,
     points: test.points,
-    personalTask: { id: task.id } as any,
+    personalTask: { id: task.id },
   }));
   await testDataRepo().save([...existingTests, ...newTests]);
   return task;
@@ -603,7 +659,7 @@ async function findOrCreatePersonalMiniProject(params: {
   if (existing) return refreshPersonalMiniProjectIfNeeded({ task: existing, definition });
 
   const task = await taskRepo().save(taskRepo().create({
-    user: { id: params.userId } as any,
+    user: { id: params.userId },
     topic: null,
     title: `${definition.title} · ${params.sequence + 1}`,
     subtitle: `${prefix}|MINI_PROJECT|${definition.key}`,
@@ -627,7 +683,7 @@ async function findOrCreatePersonalMiniProject(params: {
     input: test.input,
     expectedOutput: test.expectedOutput,
     points: test.points,
-    personalTask: { id: task.id } as any,
+    personalTask: { id: task.id },
   }));
   await testDataRepo().save(tests);
   return task;
@@ -644,7 +700,7 @@ async function getLatestGradesByTaskId(params: { userId: number; taskIds: number
     .orderBy("grade.created_at", "DESC")
     .getMany();
   for (const g of grades) {
-    const taskId = typeof (g as any)?.task?.id === "number" ? (g as any).task.id : (g as any)?.task_id;
+    const taskId = typeof g.task?.id === "number" ? g.task.id : undefined;
     const id = Number(taskId);
     if (!Number.isFinite(id) || id <= 0) continue;
     if (!out.has(id)) out.set(id, g);
@@ -673,11 +729,11 @@ async function buildLocalizedTheoryEnByBlockId(params: {
   const needsTranslation: typeof blocks = [];
   
   for (const b of blocks) {
-    const contentEn = String((b as any).contentEn ?? "");
+    const contentEn = String(b.contentEn ?? "");
     const isFresh =
       contentEn.trim().length > 0 &&
       !looksLikeTranslationProviderErrorText(contentEn) &&
-      Number((b as any).translationVersionEn ?? 0) === Number((b as any).version ?? 0);
+      Number(b.translationVersionEn ?? 0) === Number(b.version ?? 0);
 
     if (isFresh) {
       out.set(b.id, contentEn);
@@ -705,12 +761,12 @@ async function buildLocalizedTheoryEnByBlockId(params: {
             if (translated.trim().length > 0 && !looksLikeTranslationProviderErrorText(translated)) {
               temp.set(item.id, translated);
             }
-          } catch (error: any) {
+          } catch (error: unknown) {
             logger.warn("[tasks] translate theory block uk->en failed", {
               requestId: params.req.requestId,
               userId: params.req.userId,
               theoryBlockId: item.id,
-              error: error?.message ?? String(error)
+              error: errorMessage(error) || String(error)
             });
           }
         });
@@ -726,21 +782,21 @@ async function buildLocalizedTheoryEnByBlockId(params: {
       .filter(b => translatedMap.has(b.id))
       .map(b => {
         const translated = translatedMap.get(b.id)!;
-        (b as any).contentEn = translated;
-        (b as any).translationVersionEn = Number((b as any).version ?? 1);
-        (b as any).translatedAtEn = new Date();
+        b.contentEn = translated;
+        b.translationVersionEn = Number(b.version ?? 1);
+        b.translatedAtEn = new Date();
         return b;
       });
 
     if (blocksToSave.length > 0) {
       try {
         await theoryBlockRepo().save(blocksToSave);
-      } catch (error: any) {
+      } catch (error: unknown) {
         logger.warn("[tasks] batch save translated theory blocks failed", {
           requestId: params.req.requestId,
           userId: params.req.userId,
           count: blocksToSave.length,
-          error: error?.message ?? String(error)
+          error: errorMessage(error) || String(error)
         });
       }
     }
@@ -762,11 +818,11 @@ async function buildLocalizedLegacyTheoryEnByTopicId(params: {
   const unique = new Map<number, string>();
 
   for (const topic of params.topics) {
-    const topicId = Number((topic as any)?.id);
+    const topicId = Number(topic?.id);
     if (!Number.isFinite(topicId) || topicId <= 0) continue;
-    const hasTheoryBlock = !!(topic as any)?.theoryBlock;
+    const hasTheoryBlock = !!topic?.theoryBlock;
     if (hasTheoryBlock) continue;
-    const legacy = String((topic as any)?.theoryMarkdown ?? "").trim();
+    const legacy = String(topic?.theoryMarkdown ?? "").trim();
     if (!legacy) continue;
     if (!unique.has(topicId)) unique.set(topicId, legacy);
   }
@@ -777,12 +833,12 @@ async function buildLocalizedLegacyTheoryEnByTopicId(params: {
       if (translated.trim().length > 0 && !looksLikeTranslationProviderErrorText(translated)) {
         out.set(topicId, translated);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.warn("[tasks] translate legacy topic theory uk->en failed", {
         requestId: params.req.requestId,
         userId: params.req.userId,
         topicId,
-        error: error?.message ?? String(error)
+        error: errorMessage(error) || String(error)
       });
     }
   }
@@ -847,7 +903,7 @@ function catalogPracticeSequenceFromItem(item: {
   contentKey?: string | null;
   title?: string | null;
 }): number | null {
-  const fromExercise = Number((item.content as any)?.exercise?.sequence);
+  const fromExercise = Number(item.content?.exercise && isRecord(item.content.exercise) ? item.content.exercise.sequence : undefined);
   if (Number.isInteger(fromExercise) && fromExercise > 0) return fromExercise;
 
   const fromKey = /\.practice-(\d+)$/i.exec(String(item.contentKey ?? ""));
@@ -1128,9 +1184,9 @@ function renderPublicExamples(params: {
 function composeTaskStatementMarkdown(params: {
   practicalTask: string;
   ioType?: TaskIoType | null;
-  inputFormat?: string | null;
-  outputFormat?: string | null;
-  constraints?: string | null;
+  inputFormat?: unknown;
+  outputFormat?: unknown;
+  constraints?: unknown;
   examples?: Array<{ input?: unknown; output?: unknown }>;
   uiLanguage?: UiLanguage;
 }): string {
@@ -1233,7 +1289,7 @@ function shouldRequireVariableDeclarations(task: Task): boolean {
     task.title,
     task.subtitle,
     task.description,
-    (task as any)?.topic?.title,
+    task.topic?.title,
   ].map(v => String(v || "")).join(" ").toLowerCase();
 
   return (
@@ -1338,7 +1394,7 @@ function pickNoInputFixedExpectedOutput(params: {
 }): string | null {
   const examples = Array.isArray(params.examples) ? params.examples : [];
   const first = examples.length ? examples[0] : null;
-  const fromExample = first && typeof (first as any).output === "string" ? String((first as any).output).trim() : "";
+  const fromExample = first && typeof first.output === "string" ? first.output.trim() : "";
   if (fromExample) return fromExample;
   const fromOutputFormat = typeof params.outputFormat === "string" ? String(params.outputFormat).trim() : "";
   if (fromOutputFormat) return fromOutputFormat;
@@ -1346,10 +1402,10 @@ function pickNoInputFixedExpectedOutput(params: {
 }
 /* Legacy theory fallback superseded by getTopicTheoryInfo.
 function getTopicTheoryMarkdown(task: Task, uiLanguage: UiLanguage = "uk"): string {
-  const fromBlock = (task.topic as any)?.theoryBlock?.content;
+  const fromBlock = task.topic?.theoryBlock?.content;
   const theory = stripPracticeLikeSectionsFromTheory(String(fromBlock ?? ""));
   if (theory) return theory;
-  const legacy = stripPracticeLikeSectionsFromTheory(String((task.topic as any)?.theoryMarkdown ?? ""));
+  const legacy = stripPracticeLikeSectionsFromTheory(String(task.topic?.theoryMarkdown ?? ""));
   if (legacy) return legacy;
   return i18nText(
     uiLanguage,
@@ -1373,7 +1429,7 @@ function getTopicTheoryInfo(task: Task, opts?: {
   legacyLength: number;
 } {
   const uiLanguage = opts?.uiLanguage ?? "uk";
-  const block = (task.topic as any)?.theoryBlock;
+  const block = task.topic?.theoryBlock;
   const blockId = typeof block?.id === "number" ? block.id : null;
   const blockRaw = uiLanguage === "en" && blockId && opts?.localizedTheoryEnByBlockId?.has(blockId)
     ? String(opts.localizedTheoryEnByBlockId.get(blockId) ?? "")
@@ -1386,14 +1442,14 @@ function getTopicTheoryInfo(task: Task, opts?: {
       theoryBlockId: blockId,
       theoryBlockUpdatedAt: block?.updatedAt ? new Date(block.updatedAt).toISOString() : null,
       blockLength: blockContent.length,
-      legacyLength: stripPracticeLikeSectionsFromTheory(String((task.topic as any)?.theoryMarkdown ?? "")).length
+      legacyLength: stripPracticeLikeSectionsFromTheory(String(task.topic?.theoryMarkdown ?? "")).length
     };
   }
 
-  const topicId = Number((task.topic as any)?.id);
+  const topicId = Number(task.topic?.id);
   const legacyRaw = uiLanguage === "en" && Number.isFinite(topicId) && opts?.localizedLegacyTheoryEnByTopicId?.has(topicId)
     ? String(opts.localizedLegacyTheoryEnByTopicId.get(topicId) ?? "")
-    : String((task.topic as any)?.theoryMarkdown ?? "");
+    : String(task.topic?.theoryMarkdown ?? "");
   const legacyContent = stripPracticeLikeSectionsFromTheory(legacyRaw);
   if (legacyContent) {
     return {
@@ -1417,7 +1473,7 @@ function getTopicTheoryInfo(task: Task, opts?: {
     theoryBlockId: blockId,
     theoryBlockUpdatedAt: block?.updatedAt ? new Date(block.updatedAt).toISOString() : null,
     blockLength: stripPracticeLikeSectionsFromTheory(String(block?.content ?? "")).length,
-    legacyLength: stripPracticeLikeSectionsFromTheory(String((task.topic as any)?.theoryMarkdown ?? "")).length
+    legacyLength: stripPracticeLikeSectionsFromTheory(String(task.topic?.theoryMarkdown ?? "")).length
   };
 }
 function computeTaskStatus(task: Task, latestGrade: Grade | null, hasGrade: boolean): TaskStatus {
@@ -1464,32 +1520,21 @@ function titleLooksLikeInputIsTaught(title: string, lang: "JAVA" | "PYTHON" | "C
 function isStdinAllowedForTopic(params: { allTopics: Topic[]; lang: "JAVA" | "PYTHON" | "CPP"; topicIndex: number }): boolean {
   for (const t of params.allTopics) {
     if (t.topicIndex > params.topicIndex) break;
-    const theory = String((t as any)?.theoryBlock?.content ?? (t as any)?.theoryMarkdown ?? "");
+    const theory = String(t.theoryBlock?.content ?? t.theoryMarkdown ?? "");
     if (theoryLooksLikeInputIsTaught(theory, params.lang)) return true;
     // When we only fetched topic metadata (no theory) we still want stdin policy to work.
-    if (titleLooksLikeInputIsTaught(String((t as any)?.title ?? ""), params.lang)) return true;
+    if (titleLooksLikeInputIsTaught(String(t.title ?? ""), params.lang)) return true;
   }
   return false;
 }
 
-function envFlag(name: string, fallback = false): boolean {
-  const raw = String(process.env[name] ?? '').trim().toLowerCase();
-  if (!raw) return fallback;
-  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
-}
-
-function envInt(name: string, fallback: number): number {
-  const raw = Number(process.env[name]);
-  return Number.isFinite(raw) ? Math.floor(raw) : fallback;
-}
-
-const FORCE_STDIN_AFTER_INPUT = envFlag('TASKS_FORCE_STDIN_AFTER_INPUT', false);
-const FORCE_STDIN_FROM_TOPIC_INDEX = envInt('TASKS_FORCE_STDIN_FROM_TOPIC_INDEX', 0);
-const STRICT_TEST_CONSISTENCY = envFlag('TASKS_STRICT_TEST_CONSISTENCY', true);
-const TEST_CONSISTENCY_RETRY_ATTEMPTS = Math.max(0, envInt('TASKS_TEST_CONSISTENCY_RETRY_ATTEMPTS', 1));
+const FORCE_STDIN_AFTER_INPUT = readTaskGenerationBoolean('TASKS_FORCE_STDIN_AFTER_INPUT', false);
+const FORCE_STDIN_FROM_TOPIC_INDEX = readTaskGenerationInteger('TASKS_FORCE_STDIN_FROM_TOPIC_INDEX', 0);
+const STRICT_TEST_CONSISTENCY = readTaskGenerationBoolean('TASKS_STRICT_TEST_CONSISTENCY', true);
+const TEST_CONSISTENCY_RETRY_ATTEMPTS = Math.max(0, readTaskGenerationInteger('TASKS_TEST_CONSISTENCY_RETRY_ATTEMPTS', 1));
 // A model can return duplicate test cases even when the provider request succeeds.
 // Keep one bounded retry inside safeAICall so validation failures get a fresh response.
-const TEST_DATA_GENERATION_MAX_ATTEMPTS = Math.max(1, Math.min(3, envInt('TASKS_TEST_DATA_MAX_ATTEMPTS', 2)));
+const TEST_DATA_GENERATION_MAX_ATTEMPTS = Math.max(1, Math.min(3, readTaskGenerationInteger('TASKS_TEST_DATA_MAX_ATTEMPTS', 2)));
 
 function chooseGenerationAllowedIoTypes(params: {
   stdinAllowed: boolean;
@@ -1570,7 +1615,7 @@ async function loadCatalogTheoryByTaskId(tasks: Task[], uiLanguage: UiLanguage):
     if (!String(task.subtitle ?? "").startsWith("CATALOG_ITEM:")) continue;
     const sequence = catalogPracticeSequenceFromTask(task) ?? Number(task.numInTopic ?? 1);
     if (sequence !== 1) continue;
-    const theoryItemId = Number(((task as any).courseItem?.content as any)?.theoryItemId ?? 0);
+    const theoryItemId = Number(task.courseItem?.content?.theoryItemId ?? 0);
     if (Number.isInteger(theoryItemId) && theoryItemId > 0) theoryItemIdByTaskId.set(task.id, theoryItemId);
   }
   const theoryItemIds = Array.from(new Set(theoryItemIdByTaskId.values()));
@@ -1582,7 +1627,7 @@ async function loadCatalogTheoryByTaskId(tasks: Task[], uiLanguage: UiLanguage):
   for (const [taskId, theoryItemId] of theoryItemIdByTaskId) {
     const theoryItem = theoryById.get(theoryItemId);
     const localized = theoryItem ? localizeCourseItem(theoryItem, uiLanguage) : null;
-    const markdown = String((localized?.content as any)?.markdown ?? "").trim();
+    const markdown = String(localized?.content?.markdown ?? "").trim();
     if (markdown) result.set(taskId, markdown);
   }
   return result;
@@ -1596,13 +1641,13 @@ async function syncCatalogPracticeProgress(params: { userId: number; task: Task;
     // to complete code/quiz catalog items. The default "direct" source is
     // intentionally rejected for those item kinds.
     await completeCourseItem(params.userId, itemId, params.score, "practice");
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.warn("[learning] catalog practice progress sync failed", {
       requestId: params.requestId,
       userId: params.userId,
       taskId: params.task.id,
       itemId,
-      error: error?.message,
+      error: errorMessage(error),
     });
   }
 }
@@ -1747,7 +1792,7 @@ function buildIdempotentSubmissionResponse(grade: Grade, submitMode: "TESTS" | "
 }
 
 function latestTaskGrade(task: Task): Grade | null {
-  const grades = Array.isArray((task as any).grades) ? (task as any).grades as Grade[] : [];
+  const grades = Array.isArray(task.grades) ? task.grades : [];
   return [...grades]
     .filter(Boolean)
     .sort((a, b) => Number(new Date(b.createdAt)) - Number(new Date(a.createdAt)))[0] ?? null;
@@ -1768,7 +1813,7 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
   const status: TaskStatus = computeTaskStatus(task, lastGrade, hasGrade);
   const rawPractice = sanitizeMetaOutputFormatInStatement(
     (task.descriptionMarkdown || task.description || "").toString(),
-    (task as any).ioType,
+    task.ioType,
     uiLanguage
   );
   const isControlStandalone = task.type === "CONTROL" && !task.topic;
@@ -1777,10 +1822,12 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
   const lessonInTopic = catalogSequence ?? (task.numInTopic ?? 1);
   const catalogTheory = isCatalogTask && lessonInTopic === 1 ? String(opts?.catalogTheoryMarkdown ?? "").trim() : "";
   const catalogTheoryItemId = isCatalogTask && lessonInTopic === 1
-    ? Number(((task as any).courseItem?.content as any)?.theoryItemId ?? 0)
+    ? Number(task.courseItem?.content?.theoryItemId ?? 0)
     : 0;
   const learningStage = isCatalogTask
-    ? String(((task as any).courseItem?.content as any)?.exercise?.learningContract?.stage || "") || null
+    ? String(isRecord(task.courseItem?.content?.exercise) && isRecord(task.courseItem.content.exercise.learningContract)
+      ? task.courseItem.content.exercise.learningContract.stage || ""
+      : "") || null
     : null;
 
   const includeTheory = isControlStandalone
@@ -1809,22 +1856,22 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
         ? `${theoryMarkdown}\n\n${practiceHeader}\n\n${practiceText || practicePlaceholder}`.trim()
         : `${practiceHeader}\n\n${practiceText || practicePlaceholder}`.trim());
 
-  const topicId = typeof (task.topic as any)?.id === "number" ? (task.topic as any).id : null;
-  const rawTopicTitle = typeof (task.topic as any)?.title === "string" ? (task.topic as any).title : null;
+  const topicId = typeof task.topic?.id === "number" ? task.topic.id : null;
+  const rawTopicTitle = typeof task.topic?.title === "string" ? task.topic.title : null;
   const topicTitle = uiLanguage === "en" && typeof topicId === "number" && Number.isFinite(topicId)
     ? (opts?.localizedTopicTitleEnByTopicId?.get(topicId) ?? rawTopicTitle)
     : rawTopicTitle;
-  const topicIndex = typeof (task as any)?.topicIndex === "number" && Number.isFinite((task as any).topicIndex)
-    ? Number((task as any).topicIndex)
+  const topicIndex = typeof task.topicIndex === "number" && Number.isFinite(task.topicIndex)
+    ? Number(task.topicIndex)
     : null;
 
   const starterDecoded = decodeMultiFileSubmissionV1(task.template);
   const starterFiles = starterDecoded?.files ?? null;
   const starterEntry = starterDecoded?.entry ?? null;
   const starterCode = starterDecoded ? pickEntryContent(starterDecoded) : task.template;
-  const taskMode = String((task as any).taskMode ?? "CODE") === "WEB" ? "WEB" : "CODE";
+  const taskMode = task.taskMode === "WEB" ? "WEB" : "CODE";
   const normalizedWebTemplate = taskMode === "WEB"
-    ? normalizeWebTaskTemplate((task as any).template)
+    ? normalizeWebTaskTemplate(task.template)
     : null;
 
   const codeRaw = status === "OPEN" ? task.draftCode || "" : task.finalCode || task.draftCode || "";
@@ -1860,9 +1907,9 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
       : {}),
     practiceText,
     taskMode,
-    projectSpec: (task as any).projectSpec ?? null,
-    webTemplateFiles: taskMode === "WEB" ? normalizedWebTemplate?.files ?? normalizeWebTaskFiles((task as any).webTemplateFiles ?? []) : undefined,
-    webValidationRules: taskMode === "WEB" ? normalizeWebRules((task as any).webValidationRules ?? normalizedWebTemplate?.rules ?? []) : undefined,
+    projectSpec: task.projectSpec ?? null,
+    webTemplateFiles: taskMode === "WEB" ? normalizedWebTemplate?.files ?? normalizeWebTaskFiles(task.webTemplateFiles ?? []) : undefined,
+    webValidationRules: taskMode === "WEB" ? normalizeWebRules(task.webValidationRules ?? normalizedWebTemplate?.rules ?? []) : undefined,
     starterCode,
     starterFiles: starterFiles ?? undefined,
     starterEntryFile: starterEntry ?? undefined,
@@ -1923,34 +1970,27 @@ async function generateAndPersistPersonalProgrammingTask(params: {
 
   const previousTasksBrief = params.existingTasksForContext
     .map(t => {
-      const practice = stripPracticeHeader(String((t as any).description || "")).replace(/\s+/g, " ").trim();
+      const practice = stripPracticeHeader(String(t.description || "")).replace(/\s+/g, " ").trim();
       const short = practice.length > 240 ? practice.slice(0, 240) + "…" : practice;
-      return `- ${String((t as any).title || "(без назви)").trim()}: ${short}`;
+      return `- ${String(t.title || "(без назви)").trim()}: ${short}`;
     })
     .filter(Boolean)
     .join("\n");
 
   const previousTaskPracticesForUniq = params.existingTasksForContext
-    .map(t => stripPracticeHeader(String((t as any).description || "")).trim())
+    .map(t => stripPracticeHeader(String(t.description || "")).trim())
     .filter(s => s.length > 0)
     .slice(0, 8);
   const previousTaskTitlesForUniq = params.existingTasksForContext
-    .map(t => String((t as any).title || "").trim())
+    .map(t => String(t.title || "").trim())
     .filter(Boolean)
     .slice(0, 12);
 
   const remainingBeforeTask = params.requestBudgetMs - (Date.now() - params.requestStartedAt);
-  const disableDeadlines = String(process.env.TASKS_GENERATE_DISABLE_DEADLINE || '').trim() === '1';
+  const disableDeadlines = isTaskGenerationDeadlineDisabled();
   // Allow increasing task-generation budget when proxy timeout is higher.
   // Default: ~75% of the total request budget, capped to a reasonable ceiling.
-  const TASK_BUDGET_CAP_MS = (() => {
-    const raw = Number(process.env.TASKS_GENERATE_TASK_BUDGET_MS);
-    const fallback = Math.floor(params.requestBudgetMs * 0.75);
-    const v = Number.isFinite(raw) ? raw : fallback;
-    // Guard against accidental under-budgeting (e.g., 10-15s) which causes frequent deadline aborts.
-    // We still respect the remaining request budget below.
-    return Math.max(25_000, Math.min(90_000, Math.floor(v)));
-  })();
+  const TASK_BUDGET_CAP_MS = resolveTaskBudgetCapMs(params.requestBudgetMs);
   const taskBudgetMs = Math.max(10_000, Math.min(TASK_BUDGET_CAP_MS, remainingBeforeTask - 6_000));
 
   const createProviderFallback = async (): Promise<Task> => {
@@ -2130,8 +2170,8 @@ async function generateAndPersistPersonalProgrammingTask(params: {
             ].join("\n")
           : "public class Main { public static void main(String[] args) { System.out.println(8); } }";
     const fallback = taskRepo().create({
-      user: { id: params.userId } as any,
-      topic: params.topic ? ({ id: params.topic.id } as any) : null,
+      user: { id: params.userId },
+      topic: params.topic ? { id: params.topic.id } : null,
       title: `${params.requiredTasksInThisGroup > 1 ? `(${params.numInTopic}/${params.requiredTasksInThisGroup}) ` : ""}${fallbackTitle}`.trim(),
       subtitle: typeof params.subtitle === "string" ? params.subtitle : "AI_FALLBACK:PROVIDER_UNAVAILABLE",
       description: fallbackStatement,
@@ -2164,7 +2204,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
       input,
       expectedOutput: output,
       points: points[index] ?? 1,
-      personalTask: { id: saved.id } as any,
+      personalTask: { id: saved.id },
     })));
     logger.warn("[tasks] generated deterministic fallback task after AI provider failure", {
       requestId: params.requestId,
@@ -2175,7 +2215,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     return saved;
   };
 
-  const aiTaskResult = await safeAICall('generateTask', {
+  const aiTaskResult = await safeAICall<GeneratedTaskPayload>('generateTask', {
     topicTitle: params.topicTitleForAi,
     theory: String(params.theoryForAi || i18nText(params.userLanguage, "Контрольна робота. Теорії не потрібно.", "Control work. No theory is required.")).trim()
       || i18nText(params.userLanguage, "Контрольна робота.", "Control work."),
@@ -2192,7 +2232,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     previousTaskPractices: previousTaskPracticesForUniq,
     previousTaskTitles: previousTaskTitlesForUniq,
     ...(params.prevTopicsText ? { prevTopics: params.prevTopicsText, isControl: params.type === "CONTROL" } : {})
-  } as any, {
+  }, {
     language: params.userLanguage,
     requestId: params.requestId,
     // A single malformed model response must not become a learner-visible
@@ -2222,7 +2262,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     66,
     i18nText(params.userLanguage, "Перевіряємо приклади та готуємо автотести", "Checking examples and preparing autotests"),
   );
-  const practicalOnly = String((aiTask as any).practicalTask ?? "").trim();
+  const practicalOnly = String(aiTask.practicalTask ?? "").trim();
   // Use a single, stable template per language (AI templates often drift and can break expectations).
   const template = (() => {
     if (params.lang === "PYTHON") {
@@ -2259,15 +2299,14 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     ].join("\n");
   })();
 
-  const knownIoTypes = new Set(["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"] as const);
-  const aiIoRaw = typeof (aiTask as any)?.ioType === "string" ? String((aiTask as any).ioType).trim() : "";
+  const aiIoRaw = typeof aiTask.ioType === "string" ? aiTask.ioType.trim() : "";
   const inferredNeedsInput = inferNeedsInput({
     taskDescription: practicalOnly,
-    aiInputFormat: (aiTask as any)?.inputFormat
+    aiInputFormat: typeof aiTask.inputFormat === "string" ? aiTask.inputFormat : null
   });
   const deterministicNoInput = (params.lang === "PYTHON" && params.topic && isIntroPythonFixedSumTask(practicalOnly, params.topic.title)) || computeDeterministicNoInputExpectedOutput(practicalOnly) !== null;
-  const inferred = (knownIoTypes.has(aiIoRaw as any)
-    ? (aiIoRaw as any)
+  const inferred = (isTaskIoType(aiIoRaw)
+    ? aiIoRaw
     : (inferredNeedsInput
         ? "STDIN_STDOUT"
         : (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT"))) as TaskIoType;
@@ -2277,23 +2316,23 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     : inferred;
 
   const fixedNoInputExpected = ioType === "NO_INPUT_FIXED_OUTPUT" ? pickNoInputFixedExpectedOutput({
-    examples: Array.isArray((aiTask as any)?.examples) ? (aiTask as any).examples : [],
-    outputFormat: (aiTask as any)?.outputFormat
+    examples: Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [],
+    outputFormat: aiTask.outputFormat
   }) : null;
 
   const statementMarkdown = composeTaskStatementMarkdown({
     practicalTask: practicalOnly,
     ioType,
     inputFormat: ioType === "STDIN_STDOUT"
-      ? (aiTask as any)?.inputFormat
+      ? aiTask.inputFormat
       : i18nText(params.userLanguage, "Вхідних даних немає.", "No input data."),
-    outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || (aiTask as any)?.outputFormat) : (aiTask as any)?.outputFormat,
-    constraints: (aiTask as any)?.constraints,
-    examples: Array.isArray((aiTask as any)?.examples) ? (aiTask as any).examples : [],
+    outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || aiTask.outputFormat) : aiTask.outputFormat,
+    constraints: aiTask.constraints,
+    examples: Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [],
     uiLanguage: params.userLanguage
   });
 
-  const aiTitleRaw = typeof (aiTask as any)?.title === "string" ? String((aiTask as any).title).trim() : "";
+  const aiTitleRaw = typeof aiTask.title === "string" ? aiTask.title.trim() : "";
   const baseTitle = aiTitleRaw || (params.type === "CONTROL"
     ? i18nText(params.userLanguage, "Контрольна практика", "Control practice")
     : i18nText(params.userLanguage, `Практика: ${params.topicTitleForAi}`, `Practice: ${params.topicTitleForAi}`));
@@ -2301,8 +2340,8 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   const uniqueTitle = `${titlePrefix}${baseTitle}`.trim();
 
   const task = taskRepo().create({
-    user: { id: params.userId } as any,
-    topic: params.topic ? ({ id: params.topic.id } as any) : null,
+    user: { id: params.userId },
+    topic: params.topic ? { id: params.topic.id } : null,
     title: uniqueTitle,
     subtitle: typeof params.subtitle === "string" ? params.subtitle : "",
     description: statementMarkdown,
@@ -2346,11 +2385,11 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     if (testExamples.length === 0 && expected !== null) testExamples = [{ input: "", output: expected }];
   }
 
-    const aiExamples = Array.isArray((aiTask as any)?.examples)
-      ? (aiTask as any).examples
-          .map((ex: any) => sanitizeGeneratedTestExample({
-            input: ex?.input,
-            output: ex?.output,
+    const aiExamples = Array.isArray(aiTask.examples)
+      ? aiTask.examples
+          .map((ex: unknown) => sanitizeGeneratedTestExample({
+            input: readProperty(ex, "input"),
+            output: readProperty(ex, "output"),
             ioType
           }))
           .filter((ex: { input: string; output: string } | null): ex is { input: string; output: string } => !!ex)
@@ -2452,9 +2491,9 @@ async function generateAndPersistPersonalProgrammingTask(params: {
       }
 
       const additional = (testDataResult.data || [])
-        .map((ex: any) => sanitizeGeneratedTestExample({
-          input: ex?.input,
-          output: ex?.output,
+        .map((ex: GeneratedTestExample) => sanitizeGeneratedTestExample({
+          input: ex.input,
+          output: ex.output,
           ioType
         }))
         .filter((ex: { input: string; output: string } | null): ex is { input: string; output: string } => !!ex);
@@ -2520,7 +2559,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     input: ex.input || "",
     expectedOutput: ex.output || "",
     points: pointsByIndex[idx] ?? 1,
-    personalTask: { id: saved.id } as any
+    personalTask: { id: saved.id }
   }));
   await testDataRepo().save(newTestData);
   await params.reportProgress?.(
@@ -2537,7 +2576,7 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
         message: "UNAUTHORIZED"
       });
     }
-    const debugTheoryRequested = ["1", "true", "yes"].includes(String((req.query as any)?.debugTheory ?? "").toLowerCase());
+    const debugTheoryRequested = ["1", "true", "yes"].includes(String(req.query?.debugTheory ?? "").toLowerCase());
     const includeTheoryDebug = await (async () => {
       if (!debugTheoryRequested) return false;
       const u = await userRepo().findOne({ where: { id: req.userId } });
@@ -2545,10 +2584,10 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
     })();
     const uiLanguage = resolveUiLanguage(req);
 
-    const rawScope = Array.isArray((req.query as any)?.scope) ? (req.query as any).scope[0] : (req.query as any)?.scope;
+    const rawScope = Array.isArray(req.query?.scope) ? req.query.scope[0] : req.query?.scope;
     const scope = rawScope == null || rawScope === "" ? null : String(rawScope).toUpperCase();
     if (scope != null && scope !== "COURSE" && scope !== "LAB") return res.status(400).json({ message: "INVALID_TASK_SCOPE" });
-    const rawEnrollmentId = Array.isArray((req.query as any)?.courseEnrollmentId) ? (req.query as any).courseEnrollmentId[0] : (req.query as any)?.courseEnrollmentId;
+    const rawEnrollmentId = Array.isArray(req.query?.courseEnrollmentId) ? req.query.courseEnrollmentId[0] : req.query?.courseEnrollmentId;
     const requestedEnrollmentId = rawEnrollmentId == null || rawEnrollmentId === "" ? null : Number(rawEnrollmentId);
     if (scope === "COURSE" && (!Number.isInteger(requestedEnrollmentId) || Number(requestedEnrollmentId) <= 0)) return res.status(400).json({ message: "COURSE_ENROLLMENT_REQUIRED" });
     if (requestedEnrollmentId != null && (!Number.isInteger(requestedEnrollmentId) || requestedEnrollmentId <= 0)) return res.status(400).json({ message: "INVALID_COURSE_ENROLLMENT_ID" });
@@ -2582,7 +2621,7 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
         relations: ["task"]
       });
       for (const g of grades) {
-        const tid = (g as any)?.task?.id;
+        const tid = g.task?.id;
         if (typeof tid === "number") {
           gradeTaskIds.add(tid);
           const current = latestGradesByTaskId.get(tid);
@@ -2593,16 +2632,16 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
       }
     }
     const theoryBlockIds = uiLanguage === "en"
-      ? Array.from(new Set(tasks.map(t => Number((t.topic as any)?.theoryBlock?.id)).filter((id): id is number => Number.isFinite(id) && id > 0)))
+      ? Array.from(new Set(tasks.map(t => Number(t.topic?.theoryBlock?.id)).filter((id): id is number => Number.isFinite(id) && id > 0)))
       : [];
     const localizedTheoryEnByBlockId = uiLanguage === "en"
       ? await buildLocalizedTheoryEnByBlockId({ req, theoryBlockIds })
       : new Map<number, string>();
     const localizedLegacyTheoryEnByTopicId = uiLanguage === "en"
-      ? await buildLocalizedLegacyTheoryEnByTopicId({ req, topics: tasks.map(t => (t as any)?.topic) })
+      ? await buildLocalizedLegacyTheoryEnByTopicId({ req, topics: tasks.map(t => t.topic) })
       : new Map<number, string>();
     const localizedTopicTitleEnByTopicId = uiLanguage === "en"
-      ? await buildLocalizedTopicTitleEnById({ req, topics: tasks.map(t => (t as any)?.topic) })
+      ? await buildLocalizedTopicTitleEnById({ req, topics: tasks.map(t => t.topic) })
       : new Map<number, string>();
     const catalogTheoryByTaskId = await loadCatalogTheoryByTaskId(tasks, uiLanguage);
 
@@ -2645,7 +2684,7 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
       });
     }
 
-    const debugTheoryRequested = ["1", "true", "yes"].includes(String((req.query as any)?.debugTheory ?? "").toLowerCase());
+    const debugTheoryRequested = ["1", "true", "yes"].includes(String(req.query?.debugTheory ?? "").toLowerCase());
     const includeTheoryDebug = await (async () => {
       if (!debugTheoryRequested) return false;
       const u = await userRepo().findOne({ where: { id: req.userId } });
@@ -2682,16 +2721,16 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
     const grade = grades[0] ?? null;
     const gradeTaskIds = new Set<number>();
     if (grade) gradeTaskIds.add(task.id);
-    const theoryBlockId = Number((task as any)?.topic?.theoryBlock?.id);
+    const theoryBlockId = Number(task.topic?.theoryBlock?.id);
     const theoryBlockIds = uiLanguage === "en" && Number.isFinite(theoryBlockId) && theoryBlockId > 0 ? [theoryBlockId] : [];
     const localizedTheoryEnByBlockId = uiLanguage === "en"
       ? await buildLocalizedTheoryEnByBlockId({ req, theoryBlockIds })
       : new Map<number, string>();
     const localizedLegacyTheoryEnByTopicId = uiLanguage === "en"
-      ? await buildLocalizedLegacyTheoryEnByTopicId({ req, topics: [(task as any)?.topic] })
+      ? await buildLocalizedLegacyTheoryEnByTopicId({ req, topics: [task.topic] })
       : new Map<number, string>();
     const localizedTopicTitleEnByTopicId = uiLanguage === "en"
-      ? await buildLocalizedTopicTitleEnById({ req, topics: [(task as any)?.topic] })
+      ? await buildLocalizedTopicTitleEnById({ req, topics: [task.topic] })
       : new Map<number, string>();
     const catalogTheoryByTaskId = await loadCatalogTheoryByTaskId([task], uiLanguage);
 
@@ -2723,38 +2762,26 @@ tasksRouter.get("/:id/quiz", authMiddleware, async (req: AuthRequest, res: Respo
 
     const task = await taskRepo().findOne({
       where: { id, user: { id: req.userId } },
-      select: ["id", "title", "type", "subtitle", "template", "completed"] as any
+      select: { id: true, title: true, type: true, subtitle: true, template: true, completed: true }
     });
     if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
     if (!isPersonalControlQuizTask(task)) return res.status(400).json({ message: "TASK_IS_NOT_QUIZ" });
 
-    let quiz: any[];
+    let quiz: QuizQuestion[];
     try {
-      quiz = JSON.parse(String(task.template || ""));
+      const parsed: unknown = JSON.parse(String(task.template || ""));
+      if (!Array.isArray(parsed) || !parsed.every(isRecord)) return res.status(400).json({ message: "INVALID_QUIZ_FORMAT" });
+      quiz = parsed;
     } catch {
       return res.status(400).json({ message: "INVALID_QUIZ_FORMAT" });
     }
     if (!Array.isArray(quiz) || quiz.length === 0) return res.status(400).json({ message: "INVALID_QUIZ_FORMAT" });
 
     const questions = quiz.map((q, i) => {
-      const rawOptions = Array.isArray((q as any).options)
-        ? {
-            [optionLabels[0]]: (q as any).options[0] || "",
-            [optionLabels[1]]: (q as any).options[1] || "",
-            [optionLabels[2]]: (q as any).options[2] || "",
-            [optionLabels[3]]: (q as any).options[3] || "",
-            [optionLabels[4]]: (q as any).options[4] || ""
-          }
-        : ((q as any).options || {
-            [optionLabels[0]]: "",
-            [optionLabels[1]]: "",
-            [optionLabels[2]]: "",
-            [optionLabels[3]]: "",
-            [optionLabels[4]]: ""
-          });
+      const rawOptions = quizOptions(q.options, optionLabels);
       return {
         index: i,
-        question: (q as any).question || (q as any).q || "",
+        question: quizQuestionText(q),
         options: rawOptions
       };
     });
@@ -2763,11 +2790,11 @@ tasksRouter.get("/:id/quiz", authMiddleware, async (req: AuthRequest, res: Respo
       where: { user: { id: req.userId }, task: { id: task.id } },
       order: { createdAt: "DESC" }
     });
-    let submittedReview: any = null;
+    let submittedReview: UnknownRecord | null = null;
     if (submittedGrade?.comparisonFeedback) {
       try {
-        const parsed = JSON.parse(String(submittedGrade.comparisonFeedback));
-        if (parsed && Array.isArray(parsed.questions)) submittedReview = parsed;
+        const parsed: unknown = JSON.parse(String(submittedGrade.comparisonFeedback));
+        if (isRecord(parsed) && Array.isArray(parsed.questions)) submittedReview = parsed;
       } catch {
         submittedReview = null;
       }
@@ -2786,7 +2813,7 @@ tasksRouter.get("/:id/quiz", authMiddleware, async (req: AuthRequest, res: Respo
       } : null,
       submittedReview
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[tasks] GET /:id/quiz error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -2817,14 +2844,15 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
       return Number.isFinite(idx) ? optionLabels[idx] : key;
     };
 
-    const answers = Array.isArray((req.body as any)?.answers) ? (req.body as any).answers : null;
+    const rawAnswers = readProperty(req.body, "answers");
+    const answers = Array.isArray(rawAnswers) ? rawAnswers : null;
     if (!answers || !Array.isArray(answers)) {
       return res.status(400).json({ message: "ANSWERS_REQUIRED" });
     }
 
     const task = await taskRepo().findOne({
       where: { id, user: { id: req.userId } },
-      select: ["id", "title", "type", "subtitle", "template", "completed", "lang"] as any
+      select: { id: true, title: true, type: true, subtitle: true, template: true, completed: true, lang: true }
     });
     if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
     if (!isPersonalControlQuizTask(task)) return res.status(400).json({ message: "TASK_IS_NOT_QUIZ" });
@@ -2835,9 +2863,11 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
     });
     if (existingGrade) return res.status(409).json({ message: "QUIZ_ALREADY_SUBMITTED" });
 
-    let quiz: any[];
+    let quiz: QuizQuestion[];
     try {
-      quiz = JSON.parse(String(task.template || ""));
+      const parsed: unknown = JSON.parse(String(task.template || ""));
+      if (!Array.isArray(parsed) || !parsed.every(isRecord)) return res.status(400).json({ message: "INVALID_QUIZ_FORMAT" });
+      quiz = parsed;
     } catch {
       return res.status(400).json({ message: "INVALID_QUIZ_FORMAT" });
     }
@@ -2845,14 +2875,14 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
 
     let correctAnswers = 0;
     const totalQuestions = quiz.length;
-    const reviewQuestions: any[] = [];
+    const reviewQuestions: UnknownRecord[] = [];
 
-    const answerAt = (i: number) => (answers as any[])[i];
+    const answerAt = (i: number): unknown => answers[i];
 
     for (let i = 0; i < quiz.length; i++) {
       const question = quiz[i];
       const studentAnswer = answerAt(i);
-      const correctAnswer = (question as any).correct;
+      const correctAnswer = question.correct;
 
       let normalizedCorrect: string;
       if (typeof correctAnswer === "number") {
@@ -2865,25 +2895,11 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
       const isCorrect = normalizedStudent === normalizedCorrect;
       if (isCorrect) correctAnswers++;
 
-      const rawOptions = Array.isArray((question as any).options)
-        ? {
-            [optionLabels[0]]: (question as any).options[0] || "",
-            [optionLabels[1]]: (question as any).options[1] || "",
-            [optionLabels[2]]: (question as any).options[2] || "",
-            [optionLabels[3]]: (question as any).options[3] || "",
-            [optionLabels[4]]: (question as any).options[4] || ""
-          }
-        : ((question as any).options || {
-            [optionLabels[0]]: "",
-            [optionLabels[1]]: "",
-            [optionLabels[2]]: "",
-            [optionLabels[3]]: "",
-            [optionLabels[4]]: ""
-          });
+      const rawOptions = quizOptions(question.options, optionLabels);
 
       reviewQuestions.push({
         index: i,
-        question: (question as any).question || (question as any).q || "",
+        question: quizQuestionText(question),
         options: rawOptions,
         correct: normalizedCorrect,
         student: normalizedStudent || null,
@@ -2926,14 +2942,14 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
         throw new Error("QUIZ_ALREADY_SUBMITTED");
       }
 
-      await manager.getRepository(Task).update({ id: task.id } as any, {
+      await manager.getRepository(Task).update({ id: task.id }, {
         completed: 1,
         finalCode: JSON.stringify(answers)
-      } as any);
+      });
 
       const grade = gradeRepoM.create({
-        user: { id: req.userId } as any,
-        task: { id: task.id } as any,
+        user: { id: req.userId },
+        task: { id: task.id },
         total: quizGrade,
         workScore: 0,
         optimizationScore: 0,
@@ -2958,8 +2974,12 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
     });
 
     // If this quiz belongs to a control batch, compute current summary.
-    const batchPrefix = parsePersonalControlBatchPrefix((task as any).subtitle);
-    let summary: any = null;
+    const batchPrefix = parsePersonalControlBatchPrefix(task.subtitle);
+    let summary: ReturnType<typeof computePersonalControlFinalGrade> & {
+      quizGrade: number;
+      passGrade: number;
+      maxGrade: number;
+    } | null = null;
     if (batchPrefix) {
       const batchTasks = await taskRepo()
         .createQueryBuilder("t")
@@ -2968,7 +2988,7 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
         .andWhere("t.type = :type", { type: "CONTROL" })
         .andWhere("t.subtitle LIKE :pref", { pref: `${batchPrefix}%` })
         .getMany();
-      const practice = batchTasks.filter(t => typeof (t as any).subtitle === "string" && String((t as any).subtitle).includes("|PRACTICE|"));
+      const practice = batchTasks.filter(t => typeof t.subtitle === "string" && t.subtitle.includes("|PRACTICE|"));
 
       const practiceGrades: Array<number | null> = [];
       for (const pt of practice) {
@@ -2996,7 +3016,7 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
     return res.json({
       message: "QUIZ_SUBMITTED",
       grade: {
-        id: (savedGrade as any).id,
+        id: savedGrade.id,
         total: quizGrade,
         correctAnswers,
         totalQuestions
@@ -3009,8 +3029,8 @@ tasksRouter.post("/:id/submit-quiz", authMiddleware, async (req: AuthRequest, re
       },
       summary
     });
-  } catch (error: any) {
-    if (error?.message === "QUIZ_ALREADY_SUBMITTED") {
+  } catch (error: unknown) {
+    if (errorMessage(error) === "QUIZ_ALREADY_SUBMITTED") {
       return res.status(409).json({ message: "QUIZ_ALREADY_SUBMITTED" });
     }
     logger.error("[tasks] POST /:id/submit-quiz error", { requestId: req.requestId, userId: req.userId, error });
@@ -3026,11 +3046,11 @@ tasksRouter.get("/:id/control-summary", authMiddleware, async (req: AuthRequest,
 
     const task = await taskRepo().findOne({
       where: { id, user: { id: req.userId } },
-      select: ["id", "type", "subtitle", "lang"] as any
+      select: { id: true, type: true, subtitle: true, lang: true }
     });
     if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
 
-    const batchPrefix = parsePersonalControlBatchPrefix((task as any).subtitle);
+    const batchPrefix = parsePersonalControlBatchPrefix(task.subtitle);
     if (!batchPrefix) return res.status(400).json({ message: "TASK_IS_NOT_CONTROL_BATCH" });
 
     const batchTasks = await taskRepo()
@@ -3043,7 +3063,7 @@ tasksRouter.get("/:id/control-summary", authMiddleware, async (req: AuthRequest,
       .getMany();
 
     const quizTask = batchTasks.find(t => isPersonalControlQuizTask(t));
-    const practice = batchTasks.filter(t => typeof (t as any).subtitle === "string" && String((t as any).subtitle).includes("|PRACTICE|"));
+    const practice = batchTasks.filter(t => typeof t.subtitle === "string" && t.subtitle.includes("|PRACTICE|"));
 
     const quizGradeRow = quizTask
       ? await gradeRepo().findOne({ where: { user: { id: req.userId }, task: { id: quizTask.id } }, order: { createdAt: "DESC" } })
@@ -3074,7 +3094,7 @@ tasksRouter.get("/:id/control-summary", authMiddleware, async (req: AuthRequest,
       maxGrade: 100,
       completed: isCompleted
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[tasks] GET /:id/control-summary error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -3129,8 +3149,8 @@ tasksRouter.post("/explain-error", authMiddleware, submissionRateLimitMiddleware
     });
 
     return res.json({ explanation: result.explanation, source: result.source });
-  } catch (error: any) {
-    logger.warn("[tasks] explain-error failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[tasks] explain-error failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(503).json({ message: "EXPLAIN_UNAVAILABLE" });
   }
 });
@@ -3169,8 +3189,8 @@ tasksRouter.post("/solve-replay", authMiddleware, async (req: AuthRequest, res: 
     });
     await solveSessionRepo().save(row);
     return res.status(201).json({ id: row.id, snapshotCount: bounded.length });
-  } catch (error: any) {
-    logger.warn("[tasks] solve-replay save failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[tasks] solve-replay save failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "SAVE_FAILED" });
   }
 });
@@ -3183,7 +3203,7 @@ tasksRouter.get("/solve-replay/:id", authMiddleware, async (req: AuthRequest, re
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const row = await solveSessionRepo().findOne({ where: { id } as any });
+    const row = await solveSessionRepo().findOne({ where: { id } });
     if (!row) return res.status(404).json({ message: "NOT_FOUND" });
     if (row.principalType !== principal.type || row.principalId !== principal.id) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -3202,8 +3222,8 @@ tasksRouter.get("/solve-replay/:id", authMiddleware, async (req: AuthRequest, re
       createdAt: row.createdAt,
       snapshots,
     });
-  } catch (error: any) {
-    logger.warn("[tasks] solve-replay fetch failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[tasks] solve-replay fetch failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "FETCH_FAILED" });
   }
 });
@@ -3245,12 +3265,12 @@ tasksRouter.post("/proctoring-score", authMiddleware, async (req: AuthRequest, r
             flags: JSON.stringify(result.flags),
           })
         )
-        .catch((err) => logger.warn("[tasks] proctoring persist failed", { requestId: req.requestId, error: err?.message }));
+        .catch((err: unknown) => logger.warn("[tasks] proctoring persist failed", { requestId: req.requestId, error: errorMessage(err) }));
     }
 
     return res.json(result);
-  } catch (error: any) {
-    logger.warn("[tasks] proctoring-score failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[tasks] proctoring-score failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(400).json({ message: "INVALID_SIGNALS" });
   }
 });
@@ -3269,7 +3289,7 @@ tasksRouter.post("/concept-review", authMiddleware, async (req: AuthRequest, res
 
     const now = Date.now();
     const existing = await conceptReviewRepo().findOne({
-      where: { principalType: principal.type, principalId: principal.id, conceptKey } as any,
+      where: { principalType: principal.type, principalId: principal.id, conceptKey },
     });
 
     const state: ConceptReviewStateShape = existing
@@ -3307,8 +3327,8 @@ tasksRouter.post("/concept-review", authMiddleware, async (req: AuthRequest, res
     await conceptReviewRepo().save(row);
 
     return res.json({ conceptKey, state: next, grade });
-  } catch (error: any) {
-    logger.warn("[tasks] concept-review failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[tasks] concept-review failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(400).json({ message: "INVALID_REVIEW" });
   }
 });
@@ -3320,7 +3340,7 @@ tasksRouter.get("/concepts/due", authMiddleware, async (req: AuthRequest, res: R
     if (!principal) return res.status(401).json({ message: "UNAUTHORIZED" });
 
     const rows = await conceptReviewRepo().find({
-      where: { principalType: principal.type, principalId: principal.id } as any,
+      where: { principalType: principal.type, principalId: principal.id },
     });
     const now = Date.now();
     const items = rows.map((r) => ({
@@ -3335,8 +3355,8 @@ tasksRouter.get("/concepts/due", authMiddleware, async (req: AuthRequest, res: R
     }));
     const due = dueConcepts(items, now);
     return res.json({ now, total: items.length, due });
-  } catch (error: any) {
-    logger.warn("[tasks] concepts/due failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[tasks] concepts/due failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -3399,8 +3419,8 @@ tasksRouter.post("/debug-chat", authMiddleware, submissionRateLimitMiddleware, a
     });
 
     return res.json({ reply: result.reply, source: result.source });
-  } catch (error: any) {
-    logger.warn("[tasks] debug-chat failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[tasks] debug-chat failed", { requestId: req.requestId, error: errorMessage(error) });
     return res.status(503).json({ message: "DEBUG_CHAT_UNAVAILABLE" });
   }
 });
@@ -3415,23 +3435,13 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
   ) => Promise<void> = async () => undefined;
   try {
     const requestStartedAt = Date.now();
-    const requestedGenerationId = String((req.body as any)?.generationId ?? "").trim();
+    const requestedGenerationId = String(readProperty(req.body, "generationId") ?? "").trim();
     const generationId = /^[A-Za-z0-9_-]{8,100}$/.test(requestedGenerationId) ? requestedGenerationId : null;
-    const DISABLE_AI_DEADLINES = String(process.env.TASKS_GENERATE_DISABLE_DEADLINE || '').trim() === '1';
+    const DISABLE_AI_DEADLINES = isTaskGenerationDeadlineDisabled();
     // Total budget for the whole generation flow (quiz/task/tests).
     // Override with TASKS_GENERATE_BUDGET_MS to match your upstream proxy timeout.
     // If your proxy timeout is 60s, set this to something like 45-55s.
-    const REQUEST_BUDGET_MS = (() => {
-      if (DISABLE_AI_DEADLINES) {
-        // Explicit "no deadline" mode for internal guards.
-        // This keeps fallback/test-generation branches from short-circuiting due to synthetic request budgets.
-        return Number.MAX_SAFE_INTEGER;
-      }
-      const raw = Number(process.env.TASKS_GENERATE_BUDGET_MS);
-      const v = Number.isFinite(raw) ? raw : 45_000;
-      // Keep sane bounds; lower bound prevents too aggressive aborts, upper bound avoids runaway waits.
-      return Math.max(15_000, Math.min(120_000, Math.floor(v)));
-    })();
+    const REQUEST_BUDGET_MS = resolveRequestBudgetMs();
     const userId = req.userId!;
     reportGenerationProgress = async (
       phase: TaskGenerationProgressPhase,
@@ -3444,7 +3454,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     await reportGenerationProgress("requesting", 5, "Надсилаємо запит на створення практики");
     const rawLang = String(req.learningRuntime ?? "PYTHON").toUpperCase().trim();
     let lang: "JAVA" | "PYTHON" | "CPP" = rawLang === "PYTHON" ? "PYTHON" : rawLang === "CPP" ? "CPP" : "JAVA";
-    const forcePersonalControl = req.body && typeof req.body === "object" && (req.body as any).forceControl === true;
+    const forcePersonalControl = readProperty(req.body, "forceControl") === true;
     throttleKey = makeGenerateThrottleKey(userId, lang);
 
     const now = Date.now();
@@ -3503,7 +3513,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     // have arrived from another language, so do not reject a valid course
     // practice request merely because authMiddleware selected a different
     // active runtime for the legacy workspace.
-    const requestedCourseItemId = Number((req.body as any)?.courseItemId ?? 0);
+    const requestedCourseItemId = Number(readProperty(req.body, "courseItemId") ?? 0);
     let courseContext: Awaited<ReturnType<typeof getCoursePracticeContext>> | null = null;
     if (Number.isInteger(requestedCourseItemId) && requestedCourseItemId > 0) {
       courseContext = await getCoursePracticeContext(userId, requestedCourseItemId, userLanguage);
@@ -3520,9 +3530,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
 
     const masteredUntilTopicIndex = (() => {
       const raw = lang === "JAVA"
-        ? (user as any).placementMasteredUntilTopicIndexJava
+        ? user.placementMasteredUntilTopicIndexJava
         : lang === "PYTHON"
-          ? (user as any).placementMasteredUntilTopicIndexPython
+          ? user.placementMasteredUntilTopicIndexPython
           : null;
       const v = raw === null || raw === undefined ? -1 : Number(raw);
       if (!Number.isFinite(v)) return -1;
@@ -3545,7 +3555,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         .select(["task.id", "task.type", "task.subtitle"])
         .getOne();
     if (blocking) {
-      const isControlBatch = blocking.type === "CONTROL" && !!parsePersonalControlBatchPrefix((blocking as any).subtitle);
+      const isControlBatch = blocking.type === "CONTROL" && !!parsePersonalControlBatchPrefix(blocking.subtitle);
       return res.status(400).json({
         status: "blocked",
         message: isControlBatch ? "COMPLETE_CONTROL_WORK" : "COMPLETE_PREVIOUS_TASK",
@@ -3558,7 +3568,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     const topics = await topicRepo().find({
       where: { lang },
       order: { topicIndex: "ASC" },
-      select: ["id", "title", "topicIndex", "lang"] as any
+      select: { id: true, title: true, topicIndex: true, lang: true }
     });
 
     // Roadmap practice is explicitly scoped to a catalog item. This branch
@@ -3575,14 +3585,14 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         });
       }
 
-      const content = (context.item.content || {}) as any;
-      const exercise = content.exercise && typeof content.exercise === "object" ? content.exercise : {};
+      const content = context.item.content ?? {};
+      const exercise = isRecord(content.exercise) ? content.exercise : {};
       // `course_items.order` is only the position inside its module. The AI
       // policy is based on the global learning topic, which is the module's
       // order. Using the item order made every practice in a module look like
       // an early topic and could incorrectly select NO_INPUT_FIXED_OUTPUT.
-      const moduleOrder = Number((context.item as any)?.module?.order);
-      const itemOrder = Number((context.item as any)?.order);
+      const moduleOrder = Number(context.item.module?.order);
+      const itemOrder = Number(context.item.order);
       const topicIndex = Math.max(0, Number.isFinite(moduleOrder) ? moduleOrder : (itemOrder || 0));
       const existingCourseTasks = await taskRepo()
         .createQueryBuilder("task")
@@ -3667,9 +3677,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       if (typeof exercise.starterCode === "string" && exercise.starterCode.trim()) {
         saved.template = exercise.starterCode;
       }
-      saved.courseItem = { id: context.item.id } as any;
+      saved.courseItem = context.item;
       saved.courseItemId = context.item.id;
-      saved.courseEnrollment = { id: context.enrollment.id } as any;
+      saved.courseEnrollment = context.enrollment;
       saved.courseEnrollmentId = context.enrollment.id;
       await taskRepo().save(saved);
       await startCourseItem(userId, requestedCourseItemId);
@@ -3705,11 +3715,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       .andWhere("task.type = :type", { type: "TOPIC" })
       .andWhere("(task.subtitle IS NULL OR task.subtitle NOT LIKE :miniProjectPrefix)", { miniProjectPrefix: "MPJ:%" })
       .groupBy("task.topic_index")
-      .getRawMany();
+      .getRawMany<{ topicIndex: unknown; cnt: unknown }>();
     const countByTopicIndex = new Map<number, number>();
     for (const row of rawCounts) {
-      const idx = Number((row as any)?.topicIndex);
-      const cnt = Number((row as any)?.cnt);
+      const idx = Number(row.topicIndex);
+      const cnt = Number(row.cnt);
       if (Number.isFinite(idx) && Number.isFinite(cnt)) countByTopicIndex.set(idx, cnt);
     }
 
@@ -3728,11 +3738,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       .andWhere("task.completed = 1")
       .andWhere("grade.total >= :passGrade", { passGrade: PERSONAL_TOPIC_PASS_GRADE })
       .groupBy("task.topic_index")
-      .getRawMany();
+      .getRawMany<{ topicIndex: unknown; cnt: unknown }>();
     const passedCountByTopicIndex = new Map<number, number>();
     for (const row of passedRawCounts) {
-      const idx = Number((row as any)?.topicIndex);
-      const cnt = Number((row as any)?.cnt);
+      const idx = Number(row.topicIndex);
+      const cnt = Number(row.cnt);
       if (Number.isFinite(idx) && Number.isFinite(cnt)) passedCountByTopicIndex.set(idx, cnt);
     }
 
@@ -3802,8 +3812,8 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         .select(["task.id", "task.title", "task.subtitle", "task.description", "task.numInTopic", "task.topicIndex", "task.type", "task.lang", "task.difus", "task.ioType", "task.template", "task.completed"])
         .getMany();
 
-      const quizTask = (batchTasks as Task[]).find(t => isPersonalControlQuizTask(t));
-      const practiceTasks = (batchTasks as Task[]).filter(t => typeof (t as any).subtitle === "string" && String((t as any).subtitle).includes("|PRACTICE|"));
+      const quizTask = batchTasks.find(t => isPersonalControlQuizTask(t));
+      const practiceTasks = batchTasks.filter(t => typeof t.subtitle === "string" && t.subtitle.includes("|PRACTICE|"));
 
       const rangeLabel = buildTopicsRangeLabel({ startTopicIndex, endTopicIndex });
       const topicsInRange = topics.filter(t => t.topicIndex >= startTopicIndex && t.topicIndex <= endTopicIndex);
@@ -3821,12 +3831,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         const remainingBeforeQuiz = REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
         // Quiz generation can be slower on free/provider-constrained models.
         // Keep this budget configurable and a bit more generous than before to reduce 504/deadline aborts.
-        const QUIZ_BUDGET_CAP_MS = (() => {
-          const raw = Number(process.env.TASKS_GENERATE_QUIZ_BUDGET_MS);
-          const fallback = 20_000;
-          const v = Number.isFinite(raw) ? raw : fallback;
-          return Math.max(10_000, Math.min(35_000, Math.floor(v)));
-        })();
+        const QUIZ_BUDGET_CAP_MS = resolveQuizBudgetCapMs();
         const quizBudgetMs = Math.max(8_000, Math.min(QUIZ_BUDGET_CAP_MS, remainingBeforeQuiz - 5_000));
         const quizResult = await safeAICall('generateQuiz', {
           lang,
@@ -3859,7 +3864,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         ].join("\n");
 
         const quizSaved = await taskRepo().save(taskRepo().create({
-          user: { id: userId } as any,
+          user: { id: userId },
           topic: null,
           title: quizTitle,
           subtitle: `${batchPrefix}|QUIZ|v1`,
@@ -3875,7 +3880,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
           topicIndex: endTopicIndex,
           type: "CONTROL" as TaskType,
           ioType: "NO_INPUT_FREE_OUTPUT" as TaskIoType
-        })) as any;
+        }));
 
         return res.json({
           status: "ok",
@@ -3928,8 +3933,8 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
             status: "ok",
             task: mapTaskToDto(saved, undefined, { uiLanguage: userLanguage })
           });
-        } catch (err: any) {
-          if (err && err.statusCode) return sendAIError(res, err);
+        } catch (err: unknown) {
+          if (Number(readProperty(err, "statusCode")) > 0) return sendAIError(res, asAIError(err));
           throw err;
         }
       }
@@ -3974,7 +3979,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       order: {
         numInTopic: "ASC"
       },
-      select: ["id", "title", "description", "numInTopic"] as any
+      select: { id: true, title: true, description: true, numInTopic: true }
     });
     const numInTopic = existingTasksInTopic.length + 1;
     let description = "";
@@ -3999,10 +4004,10 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     })();
     // Load theory lazily for just this topic.
     const topicWithTheory = await topicRepo().findOne({
-      where: { id: topic.id } as any,
+      where: { id: topic.id },
       relations: ["theoryBlock"]
     });
-    const topicTheory = stripPracticeLikeSectionsFromTheory(String((topicWithTheory as any)?.theoryBlock?.content ?? (topicWithTheory as any)?.theoryMarkdown ?? ""));
+    const topicTheory = stripPracticeLikeSectionsFromTheory(String(topicWithTheory?.theoryBlock?.content ?? topicWithTheory?.theoryMarkdown ?? ""));
     const topicTheoryForAi = wantsEn
       ? await translateTheoryUkToEn({ req, topicId: topic.id, text: topicTheory })
       : topicTheory;
@@ -4030,7 +4035,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       : topic.title;
     const prevTopicsForReinforcement = prevTopicsForReinforcementCandidates
       .map(t => {
-        const topicId = Number((t as any)?.id);
+        const topicId = Number(t.id);
         const localized = Number.isFinite(topicId) ? localizedTopicTitleEnByTopicId.get(topicId) : undefined;
         return String(localized ?? t.title ?? "").trim();
       })
@@ -4039,7 +4044,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
 
     const previousTasksBrief = existingTasksInTopic
       .map(t => {
-        const practice = stripPracticeHeader(String((t as any).description || "")).replace(/\s+/g, " ").trim();
+        const practice = stripPracticeHeader(String(t.description || "")).replace(/\s+/g, " ").trim();
         const short = practice.length > 240 ? practice.slice(0, 240) + "…" : practice;
         return `- ${String(t.title || "(без назви)").trim()}: ${short}`;
       })
@@ -4048,25 +4053,18 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
 
     // Structured previous-task context (used for deterministic uniqueness checks in the AI wrapper).
     const previousTaskPracticesForUniq = existingTasksInTopic
-      .map(t => stripPracticeHeader(String((t as any).description || "")).trim())
+      .map(t => stripPracticeHeader(String(t.description || "")).trim())
       .filter(s => s.length > 0)
       .slice(0, 8);
     const previousTaskTitlesForUniq = existingTasksInTopic
-      .map(t => String((t as any).title || "").trim())
+      .map(t => String(t.title || "").trim())
       .filter(Boolean)
       .slice(0, 12);
 
     const remainingBeforeTask = REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
     // Allow increasing task-generation budget when proxy timeout is higher.
     // Default: ~75% of the total request budget, capped to a reasonable ceiling.
-    const TASK_BUDGET_CAP_MS = (() => {
-      const raw = Number(process.env.TASKS_GENERATE_TASK_BUDGET_MS);
-      const fallback = Math.floor(REQUEST_BUDGET_MS * 0.75);
-      const v = Number.isFinite(raw) ? raw : fallback;
-      // Guard against accidental under-budgeting (e.g., 10-15s) which causes frequent deadline aborts.
-      // We still respect the remaining request budget below.
-      return Math.max(25_000, Math.min(90_000, Math.floor(v)));
-    })();
+    const TASK_BUDGET_CAP_MS = resolveTaskBudgetCapMs(REQUEST_BUDGET_MS);
     // Keep some budget for test-data generation + DB writes.
     // Cap low to avoid nginx 504; generation retries still happen inside this budget.
     const taskBudgetMs = Math.max(10_000, Math.min(TASK_BUDGET_CAP_MS, remainingBeforeTask - 6_000));
@@ -4076,7 +4074,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       36,
       userLanguage === "en" ? "Building a standalone task condition" : "Формуємо окрему умову практичної задачі",
     );
-    const aiTaskResult = await safeAICall('generateTask', {
+    const aiTaskResult = await safeAICall<GeneratedTaskPayload>('generateTask', {
       topicTitle: topicTitleForAi,
       theory: topicTheoryForAi,
       lang,
@@ -4115,15 +4113,14 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     // (AI templates often include implementation or drift in structure.)
     // We still keep codeTemplate restrictions in prompts, but runtime uses our template.
     // template remains as computed above.
-    const knownIoTypes = new Set(["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"] as const);
-    const aiIoRaw = typeof (aiTask as any)?.ioType === "string" ? String((aiTask as any).ioType).trim() : "";
+    const aiIoRaw = typeof aiTask.ioType === "string" ? aiTask.ioType.trim() : "";
     const inferredNeedsInput = inferNeedsInput({
       taskDescription: practicalOnly,
-      aiInputFormat: (aiTask as any)?.inputFormat
+      aiInputFormat: typeof aiTask.inputFormat === "string" ? aiTask.inputFormat : null
     });
     const deterministicNoInput = (lang === "PYTHON" && isIntroPythonFixedSumTask(practicalOnly, topic.title)) || computeDeterministicNoInputExpectedOutput(practicalOnly) !== null;
-    const inferred = (knownIoTypes.has(aiIoRaw as any)
-      ? (aiIoRaw as any)
+    const inferred = (isTaskIoType(aiIoRaw)
+      ? aiIoRaw
       : (inferredNeedsInput
           ? "STDIN_STDOUT"
           : (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT"))) as "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
@@ -4134,24 +4131,24 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       : inferred;
 
     const fixedNoInputExpected = ioType === "NO_INPUT_FIXED_OUTPUT" ? pickNoInputFixedExpectedOutput({
-      examples: Array.isArray((aiTask as any)?.examples) ? (aiTask as any).examples : [],
-      outputFormat: (aiTask as any)?.outputFormat
+      examples: Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [],
+      outputFormat: aiTask.outputFormat
     }) : null;
     const statementMarkdown = composeTaskStatementMarkdown({
       practicalTask: practicalOnly,
       ioType,
       inputFormat: ioType === "STDIN_STDOUT"
-        ? (aiTask as any)?.inputFormat
+        ? aiTask.inputFormat
         : i18nText(userLanguage, "Вхідних даних немає.", "No input data."),
       // For NO_INPUT_FIXED_OUTPUT we want the visible output section to match the exact expected output.
-      outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || (aiTask as any)?.outputFormat) : (aiTask as any)?.outputFormat,
-      constraints: (aiTask as any)?.constraints,
-      examples: Array.isArray((aiTask as any)?.examples) ? (aiTask as any).examples : [],
+      outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || aiTask.outputFormat) : aiTask.outputFormat,
+      constraints: aiTask.constraints,
+      examples: Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [],
       uiLanguage: userLanguage
     });
     description = statementMarkdown;
 
-    const aiTitleRaw = typeof (aiTask as any)?.title === "string" ? String((aiTask as any).title).trim() : "";
+    const aiTitleRaw = typeof aiTask.title === "string" ? aiTask.title.trim() : "";
     const baseTitle = aiTitleRaw || i18nText(userLanguage, `Практика: ${topic.title}`, `Practice: ${topicTitleForAi}`);
     const titlePrefix = requiredTasksInThisTopic > 1 ? `(${numInTopic}/${requiredTasksInThisTopic}) ` : "";
     const uniqueTitle = `${titlePrefix}${baseTitle}`.trim();
@@ -4208,11 +4205,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       }];
     }
     // Reuse AI-provided examples when possible (can reduce or avoid a separate test-generation call).
-    const aiExamples = Array.isArray((aiTask as any)?.examples)
-      ? (aiTask as any).examples
-          .map((ex: any) => sanitizeGeneratedTestExample({
-            input: ex?.input,
-            output: ex?.output,
+    const aiExamples = Array.isArray(aiTask.examples)
+      ? aiTask.examples
+          .map((ex: unknown) => sanitizeGeneratedTestExample({
+            input: readProperty(ex, "input"),
+            output: readProperty(ex, "output"),
             ioType
           }))
           .filter((ex: { input: string; output: string } | null): ex is { input: string; output: string } => !!ex)
@@ -4266,7 +4263,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         userLanguage === "en" ? "Generating public and hidden test cases" : "Генеруємо відкриті та приховані тести",
       );
       for (let consistencyAttempt = 0; consistencyAttempt <= TEST_CONSISTENCY_RETRY_ATTEMPTS; consistencyAttempt++) {
-        const testDataResult = await safeAICall('generateTestData', {
+        const testDataResult = await safeAICall<GeneratedTestExample[]>('generateTestData', {
           taskDescription: buildTestDataPrompt({
             statement: taskDescriptionForTests || description,
             existingExamples: [...testExamples, ...aiExamples],
@@ -4326,9 +4323,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         }
 
         const additional = (testDataResult.data || [])
-          .map((ex: any) => sanitizeGeneratedTestExample({
-            input: ex?.input,
-            output: ex?.output,
+          .map((ex: GeneratedTestExample) => sanitizeGeneratedTestExample({
+            input: ex.input,
+            output: ex.output,
             ioType
           }))
           .filter((ex: { input: string; output: string } | null): ex is { input: string; output: string } => !!ex);
@@ -4424,8 +4421,8 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         localizedTopicTitleEnByTopicId: localizedTopicTitleEnByTopicId
       })
     });
-  } catch (error: any) {
-    const statusCode = Number(error?.statusCode);
+  } catch (error: unknown) {
+    const statusCode = Number(readProperty(error, "statusCode"));
     const isExpectedClientError = Number.isInteger(statusCode) && statusCode >= 400 && statusCode < 500;
     const logMeta = { requestId: req.requestId, userId: req.userId, error };
     if (isExpectedClientError) {
@@ -4441,8 +4438,8 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     );
     if (Number.isInteger(statusCode) && statusCode > 0) {
       return res.status(statusCode).json({
-        message: error.message,
-        error: error.error
+        message: errorMessage(error) || "Internal server error",
+        error: readProperty(error, "error")
       });
     }
     return res.status(500).json({
@@ -4495,7 +4492,7 @@ tasksRouter.post("/reset-topic", authMiddleware, async (req: AuthRequest, res: R
     return res.json({
       message: i18nText(uiLanguage, "Тему успішно скинуто", "Topic reset successfully")
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[tasks] POST /reset-topic error", { requestId: req.requestId, userId: req.userId, error });
     const uiLanguage = resolveUiLanguage(req);
     return res.status(500).json({
@@ -4506,7 +4503,7 @@ tasksRouter.post("/reset-topic", authMiddleware, async (req: AuthRequest, res: R
 
 tasksRouter.get("/:id/web-template", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
     const id = Number(req.params.id);
@@ -4522,19 +4519,19 @@ tasksRouter.get("/:id/web-template", authMiddleware, async (req: AuthRequest, re
     if (!task) {
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
-    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+    if (task.taskMode !== "WEB") {
       return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
     }
 
-    const normalized = normalizeWebTaskTemplate((task as any).template);
+    const normalized = normalizeWebTaskTemplate(task.template);
     return res.json({
       taskId: task.id,
       taskMode: "WEB",
-      files: normalizeWebTaskFiles((task as any).webTemplateFiles ?? normalized.files),
-      rules: normalizeWebRules((task as any).webValidationRules ?? normalized.rules),
-      profile: normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB"),
+      files: normalizeWebTaskFiles(task.webTemplateFiles ?? normalized.files),
+      rules: normalizeWebRules(task.webValidationRules ?? normalized.rules),
+      profile: normalizeWebProfile(task.webValidationProfile ?? "FREE_WEB"),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[tasks] GET /:id/web-template error", { requestId: req.requestId, userId: req.userId, error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -4542,7 +4539,7 @@ tasksRouter.get("/:id/web-template", authMiddleware, async (req: AuthRequest, re
 
 tasksRouter.put("/:id/web-draft", authMiddleware, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
     const id = Number(req.params.id);
@@ -4554,14 +4551,14 @@ tasksRouter.put("/:id/web-draft", authMiddleware, submissionRateLimitMiddleware,
     if (!task) {
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
-    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+    if (task.taskMode !== "WEB") {
       return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
     }
 
-    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    const files = normalizeWebTaskFiles(readProperty(req.body, "files") ?? []);
     assertPersonalWebFilesWithinLimits(files);
 
-    const rules = normalizeWebRules((task as any).webValidationRules ?? []);
+    const rules = normalizeWebRules(task.webValidationRules ?? []);
     const encoded = encodeWebTaskPayload({ mode: "WEB", version: 1, files, rules });
     task.draftCode = encoded;
     await taskRepo().save(task);
@@ -4572,7 +4569,7 @@ tasksRouter.put("/:id/web-draft", authMiddleware, submissionRateLimitMiddleware,
     });
 
     return res.json({ ok: true, updatedAt: new Date().toISOString() });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
@@ -4583,7 +4580,7 @@ tasksRouter.put("/:id/web-draft", authMiddleware, submissionRateLimitMiddleware,
 
 tasksRouter.post("/:id/web-check", authMiddleware, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
     const id = Number(req.params.id);
@@ -4595,18 +4592,18 @@ tasksRouter.post("/:id/web-check", authMiddleware, submissionRateLimitMiddleware
     if (!task) {
       return res.status(404).json({ message: "TASK_NOT_FOUND" });
     }
-    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+    if (task.taskMode !== "WEB") {
       return res.status(400).json({ message: "TASK_IS_NOT_WEB" });
     }
 
-    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    const files = normalizeWebTaskFiles(readProperty(req.body, "files") ?? []);
     assertPersonalWebFilesWithinLimits(files);
-    const rules = normalizeWebRules((task as any).webValidationRules ?? []);
-    const profile = normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB");
-    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (task as any).webTemplateFiles ?? [] });
+    const rules = normalizeWebRules(task.webValidationRules ?? []);
+    const profile = normalizeWebProfile(task.webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: task.webTemplateFiles ?? [] });
 
     return res.json({ taskMode: "WEB", ...check });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
@@ -4617,7 +4614,7 @@ tasksRouter.post("/:id/web-check", authMiddleware, submissionRateLimitMiddleware
 
 tasksRouter.post("/:id/web-submit", authMiddleware, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    if (!(env as any).__webTasksEnabled) {
+    if (!env.__webTasksEnabled) {
       return res.status(404).json({ message: "WEB_TASKS_DISABLED" });
     }
     const id = Number(req.params.id);
@@ -4629,15 +4626,15 @@ tasksRouter.post("/:id/web-submit", authMiddleware, submissionRateLimitMiddlewar
     if (!task) {
       throw new HttpError(404, "TASK_NOT_FOUND", { code: "TASK_NOT_FOUND", expose: true });
     }
-    if (String((task as any).taskMode ?? "CODE") !== "WEB") {
+    if (task.taskMode !== "WEB") {
       throw new HttpError(400, "TASK_IS_NOT_WEB", { code: "TASK_IS_NOT_WEB", expose: true });
     }
 
-    const files = normalizeWebTaskFiles((req.body as any)?.files ?? []);
+    const files = normalizeWebTaskFiles(readProperty(req.body, "files") ?? []);
     assertPersonalWebFilesWithinLimits(files);
-    const rules = normalizeWebRules((task as any).webValidationRules ?? []);
-    const profile = normalizeWebProfile((task as any).webValidationProfile ?? "FREE_WEB");
-    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: (task as any).webTemplateFiles ?? [] });
+    const rules = normalizeWebRules(task.webValidationRules ?? []);
+    const profile = normalizeWebProfile(task.webValidationProfile ?? "FREE_WEB");
+    const check = validateWebTaskSubmission({ files, rules, profile, referenceFiles: task.webTemplateFiles ?? [] });
 
     const maxScore = check.maxScore > 0 ? check.maxScore : Math.max(1, check.totalRules);
     const score = check.maxScore > 0 ? check.score : check.passedRules;
@@ -4645,7 +4642,7 @@ tasksRouter.post("/:id/web-submit", authMiddleware, submissionRateLimitMiddlewar
     const total = Math.max(1, Math.min(100, Math.round(ratio * 100)));
 
     const codeSnapshot = encodeWebTaskPayload({ mode: "WEB", version: 1, files, rules });
-    const normalizedClientSubmissionId = normalizeClientSubmissionId((req.body as any)?.clientSubmissionId);
+    const normalizedClientSubmissionId = normalizeClientSubmissionId(readProperty(req.body, "clientSubmissionId"));
     const serverCodeHash = sha256Hex(codeSnapshot);
     if (normalizedClientSubmissionId) {
       const existingSubmission = await gradeRepo().findOne({
@@ -4682,7 +4679,7 @@ tasksRouter.post("/:id/web-submit", authMiddleware, submissionRateLimitMiddlewar
       hintsStatus: "NOT_REQUESTED",
       previousGradeId: null,
       comparisonFeedback: null,
-    } as any);
+    });
     let savedGradeResult: Grade | Grade[];
     try {
       savedGradeResult = await gradeRepo().save(grade);
@@ -4740,7 +4737,7 @@ tasksRouter.post("/:id/web-submit", authMiddleware, submissionRateLimitMiddlewar
         maxScore,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof HttpError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
@@ -4756,9 +4753,7 @@ tasksRouter.post(
     body("code").optional().isString(),
     body("files").optional().isArray(),
     body().custom(v => {
-      const hasCode = typeof (v as any)?.code === "string" && (v as any).code.length > 0;
-      const hasFiles = Array.isArray((v as any)?.files) && (v as any).files.length > 0;
-      if (!hasCode && !hasFiles) throw new Error("code or files required");
+      if (!hasSubmissionPayload(v)) throw new Error("code or files required");
       return true;
     })
   ],
@@ -4811,9 +4806,7 @@ tasksRouter.post(
     body("clientSubmissionId").optional().isString().isLength({ min: 1, max: 128 }),
     body("codeHash").optional().isString().isLength({ min: 8, max: 128 }),
     body().custom(v => {
-      const hasCode = typeof (v as any)?.code === "string" && (v as any).code.length > 0;
-      const hasFiles = Array.isArray((v as any)?.files) && (v as any).files.length > 0;
-      if (!hasCode && !hasFiles) throw new Error("code or files required");
+      if (!hasSubmissionPayload(v)) throw new Error("code or files required");
       return true;
     })
   ],
@@ -5110,7 +5103,7 @@ tasksRouter.post(
       group: "public",
       weight: effectiveIoType === "NO_INPUT_FREE_OUTPUT" ? Math.max(1, maxScore) : (t.points || 1)
     }),
-    hashes: t => ({ inputHash: (t as any).inputSha256, outputHash: (t as any).outputSha256 }),
+    hashes: t => ({ inputHash: t.inputSha256, outputHash: t.outputSha256 }),
     loadContent: loadTestContentByIds
   });
   const judgeLang = task.lang === "JAVA" ? "java" : task.lang === "PYTHON" ? "python" : "cpp";
@@ -5198,7 +5191,7 @@ tasksRouter.post(
           input: t.input || "",
           expected: (r?.expected ?? t.expectedOutput ?? "").toString(),
           actual: r?.actual ?? "",
-          error_kind: (r as any)?.error_kind ?? null
+          error_kind: r?.error_kind ?? null
         });
         testResultsDetailed.push({
           testId: t.id,
@@ -5208,7 +5201,7 @@ tasksRouter.post(
           passed,
           verdict: r?.verdict ?? null,
           error: r?.stderr ?? null,
-          errorKind: (r as any)?.error_kind ?? null
+          errorKind: r?.error_kind ?? null
         });
       }
       // For NO_INPUT_FREE_OUTPUT we deliberately ignore judge score/max_score because older judge builds
@@ -5289,9 +5282,9 @@ tasksRouter.post(
     score: scoringScore,
     maxScore: scoringMaxScore
   }] : (Array.isArray(workerRes?.group_scores) ? workerRes.group_scores.map(gs => ({
-    group: String((gs as any).group ?? ""),
-    score: Number((gs as any).score ?? 0),
-    maxScore: Number((gs as any).max_score ?? 0)
+    group: String(gs.group ?? ""),
+    score: Number(gs.score ?? 0),
+    maxScore: Number(gs.max_score ?? 0)
   })) : [{
     group: "public",
     score: scoringScore,
@@ -5371,8 +5364,8 @@ tasksRouter.post(
       failureCategory: learningFirstFailure?.errorKind ?? (workerRes?.verdict === "CE" ? "compile" : null),
       firstFailedTestId: learningFirstFailure?.testId ?? null,
     });
-  } catch (error: any) {
-    logger.warn("[learning] personal outcome persistence failed", { requestId: req.requestId, error: error?.message });
+  } catch (error: unknown) {
+    logger.warn("[learning] personal outcome persistence failed", { requestId: req.requestId, error: errorMessage(error) });
   }
   return res.json({
     grade: {
@@ -5421,9 +5414,7 @@ tasksRouter.post(
     body("files").optional().isArray(),
     body("input").optional().isString(),
     body().custom(v => {
-      const hasCode = typeof (v as any)?.code === "string" && (v as any).code.length > 0;
-      const hasFiles = Array.isArray((v as any)?.files) && (v as any).files.length > 0;
-      if (!hasCode && !hasFiles) throw new Error("code or files required");
+      if (!hasSubmissionPayload(v)) throw new Error("code or files required");
       return true;
     })
   ],
@@ -5507,7 +5498,7 @@ tasksRouter.post(
       const combined = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
       return res.json({ output: "", stderr: combined || "Compilation error", success: false });
     }
-    const t0 = workerRes.tests?.[0] as any;
+    const t0 = workerRes.tests?.[0];
     const stdout = String(t0?.actual ?? "");
     const stderr = String(t0?.stderr ?? "");
     return res.json({ output: stdout, stderr, success: true });

@@ -1,54 +1,27 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { dirname, join, normalize, resolve } from "node:path";
+import { dirname, join, normalize } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { pathToFileURL } from "node:url";
-
-// PM2 must not carry credentials in its serialized process environment. Load
-// the LSP secret from the service's private env file at process startup instead.
-function loadPrivateEnv(): void {
-  const candidates = [
-    process.env.LSP_ENV_FILE,
-    join(process.cwd(), ".env"),
-    join(process.cwd(), "..", "backend", ".env"),
-    join(process.cwd(), "..", ".env"),
-  ].filter((value): value is string => Boolean(value));
-  for (const file of candidates) {
-    try {
-      const raw = readFileSync(file, "utf8");
-      for (const line of raw.split(/\r?\n/)) {
-        const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-        if (!match || process.env[match[1]] !== undefined) continue;
-        let value = match[2].trim();
-        if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
-          value = value.slice(1, -1);
-        }
-        process.env[match[1]] = value.replace(/\\n/g, "\n");
-      }
-      if (process.env.LSP_SECRET) return;
-    } catch {
-      // Try the next private env location.
-    }
-  }
-}
+import { childProcessEnvironment, loadPrivateEnv, readLspConfig } from "./config";
 
 loadPrivateEnv();
+const CONFIG = readLspConfig();
 
 type Language = "java" | "cpp" | "c" | "python";
 type JsonObject = Record<string, unknown>;
 
-const PORT = Number(process.env.LSP_PORT || 4010);
-const SECRET = String(process.env.LSP_SECRET || "").trim();
-const ROOT = resolve(process.env.LSP_DATA_DIR || "/var/lib/studycod-lsp");
+const PORT = CONFIG.port;
+const SECRET = CONFIG.secret;
+const ROOT = CONFIG.root;
 const SESSION_TTL_MS = 30 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 8_000;
 const INITIALIZE_TIMEOUT_MS = 20_000;
 const DIAGNOSTICS_WAIT_MS = 800;
-const MAX_SESSIONS = Math.max(1, Number(process.env.LSP_MAX_SESSIONS || 16));
-const MAX_PENDING_REQUESTS = Math.max(1, Number(process.env.LSP_MAX_PENDING_REQUESTS || 64));
-const MAX_BODY_BYTES = Math.max(64 * 1024, Number(process.env.LSP_MAX_BODY_BYTES || 2 * 1024 * 1024));
+const MAX_SESSIONS = CONFIG.maxSessions;
+const MAX_PENDING_REQUESTS = CONFIG.maxPendingRequests;
+const MAX_BODY_BYTES = CONFIG.maxBodyBytes;
 
 if (!SECRET) {
   throw new Error("LSP_SECRET must be configured");
@@ -126,20 +99,17 @@ function safeRelativePath(value: unknown, language: Language): string {
 
 function commandFor(language: Language, session: string): { command: string; args: string[] } {
   if (language === "cpp" || language === "c") {
-    const clangd = process.env.CLANGD_PATH || "/opt/swift/usr/bin/clangd";
-    return { command: clangd, args: ["--background-index=false", "--clang-tidy=false", "--header-insertion=never", "--limit-results=200"] };
+    return { command: CONFIG.clangdPath, args: ["--background-index=false", "--clang-tidy=false", "--header-insertion=never", "--limit-results=200"] };
   }
   if (language === "python") {
-    const pyright = process.env.PYRIGHT_LANGSERVER || "/opt/studycod-lsp/node_modules/.bin/pyright-langserver";
-    return { command: pyright, args: ["--stdio"] };
+    return { command: CONFIG.pyrightLangserver, args: ["--stdio"] };
   }
 
-  const jdtls = process.env.JDTLS_HOME || "/opt/jdtls";
-  const launcher = process.env.JDTLS_LAUNCHER || join(jdtls, "plugins", "org.eclipse.equinox.launcher.jar");
-  const configuration = process.env.JDTLS_CONFIGURATION || join(jdtls, "config_linux");
+  const launcher = CONFIG.jdtlsLauncher;
+  const configuration = CONFIG.jdtlsConfiguration;
   const data = join(ROOT, "jdtls", session);
   return {
-    command: process.env.JAVA_PATH || "java",
+    command: CONFIG.javaPath,
     args: [
       "-Declipse.application=org.eclipse.jdt.ls.core.id1",
       "-Dosgi.bundles.defaultStartLevel=4",
@@ -246,10 +216,10 @@ async function startSession(language: Language): Promise<LspSession> {
   const workspace = join(root, "workspace");
   await mkdir(workspace, { recursive: true });
   const spec = commandFor(language, id);
-  const child = spawn(spec.command, spec.args, { cwd: workspace, stdio: "pipe", env: { ...process.env, HOME: process.env.LSP_HOME || "/tmp" } });
+  const child = spawn(spec.command, spec.args, { cwd: workspace, stdio: "pipe", env: childProcessEnvironment(CONFIG) });
   const session: LspSession = { id, language, root, workspace, process: child, buffer: Buffer.alloc(0), nextRequestId: 1, pending: new Map(), diagnostics: new Map(), diagnosticRevisions: new Map(), diagnosticWaiters: new Set(), lastUsedAt: Date.now(), closed: false };
   child.stdout.on("data", (chunk: Buffer) => { session.buffer = Buffer.concat([session.buffer, chunk]); consumeMessages(session); });
-  child.stderr.on("data", (chunk: Buffer) => { if (process.env.LSP_DEBUG === "1") process.stderr.write(`[lsp:${id}] ${chunk}`); });
+  child.stderr.on("data", (chunk: Buffer) => { if (CONFIG.debug) process.stderr.write(`[lsp:${id}] ${chunk}`); });
   child.stdin.on("error", error => {
     session.closed = true;
     rejectPending(session, error);

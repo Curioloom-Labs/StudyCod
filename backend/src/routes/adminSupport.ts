@@ -8,6 +8,7 @@ import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { supportAgentGuard } from "../middleware/rolesGuard";
 import { emailService } from "../services/emailService";
 import { logger } from "../utils/logger";
+import { env } from "../env";
 const router = Router();
 const supportRepo = () => AppDataSource.getRepository(SupportTicket);
 const convRepo = () => AppDataSource.getRepository(SupportConversation);
@@ -23,6 +24,10 @@ const adminChatReplySchema = z.object({
 const conversationStatusSchema = z.object({
   status: z.enum(["OPEN", "CLOSED"])
 });
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 router.get("/conversations", authRequired, supportAgentGuard, async (req: AuthRequest, res: Response) => {
   try {
@@ -41,7 +46,7 @@ router.get("/conversations", authRequired, supportAgentGuard, async (req: AuthRe
         lastMessageAt: c.lastMessageAt
       }))
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[support desk] failed to list conversations", { requestId: req.requestId, userId: req.userId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -54,11 +59,11 @@ router.get("/conversations/:id", authRequired, supportAgentGuard, async (req: Au
       return res.status(400).json({ message: "INVALID_CONVERSATION_ID" });
     }
 
-    const conversation = await convRepo().findOne({ where: { id: conversationId } as any });
+    const conversation = await convRepo().findOne({ where: { id: conversationId } });
     if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
 
     const messages = await msgRepo().find({
-      where: { conversation: { id: conversation.id } } as any,
+      where: { conversation: { id: conversation.id } },
       order: { createdAt: "ASC" },
       relations: ["attachments"]
     });
@@ -85,7 +90,7 @@ router.get("/conversations/:id", authRequired, supportAgentGuard, async (req: Au
         }))
       }))
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[support desk] failed to get conversation", { requestId: req.requestId, userId: req.userId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -97,19 +102,19 @@ router.patch("/conversations/:id/status", authRequired, supportAgentGuard, async
   const validated = conversationStatusSchema.safeParse(req.body);
   if (!validated.success) return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
   try {
-    const conversation = await convRepo().findOne({ where: { id: conversationId } as any });
+    const conversation = await convRepo().findOne({ where: { id: conversationId } });
     if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
     if (conversation.status !== validated.data.status) {
-      await convRepo().update({ id: conversation.id }, { status: validated.data.status } as any);
+      await convRepo().update({ id: conversation.id }, { status: validated.data.status });
       const systemMessage = msgRepo().create({
         conversation,
         senderType: "SYSTEM",
         text: validated.data.status === "CLOSED" ? "Conversation closed by support." : "Conversation reopened by support."
       } as Partial<SupportMessage>);
       await msgRepo().save(systemMessage);
-      await convRepo().update({ id: conversation.id }, { lastMessageAt: systemMessage.createdAt } as any);
+      await convRepo().update({ id: conversation.id }, { lastMessageAt: systemMessage.createdAt });
     }
-    const updated = await convRepo().findOne({ where: { id: conversation.id } as any });
+    const updated = await convRepo().findOne({ where: { id: conversation.id } });
     return res.json({ ok: true, conversation: {
       id: updated?.id ?? conversation.id,
       userEmail: updated?.userEmail ?? conversation.userEmail,
@@ -118,7 +123,7 @@ router.patch("/conversations/:id/status", authRequired, supportAgentGuard, async
       createdAt: updated?.createdAt ?? conversation.createdAt,
       lastMessageAt: updated?.lastMessageAt ?? conversation.lastMessageAt
     } });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[support desk] failed to change conversation status", { requestId: req.requestId, userId: req.userId, conversationId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -134,7 +139,7 @@ router.post("/conversations/:id/messages", authRequired, supportAgentGuard, asyn
     return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
   }
   try {
-    const conversation = await convRepo().findOne({ where: { id: conversationId } as any });
+    const conversation = await convRepo().findOne({ where: { id: conversationId } });
     if (!conversation) return res.status(404).json({ message: "CONVERSATION_NOT_FOUND" });
     if (conversation.status === "CLOSED") return res.status(409).json({ message: "CONVERSATION_CLOSED" });
 
@@ -142,10 +147,10 @@ router.post("/conversations/:id/messages", authRequired, supportAgentGuard, asyn
       conversation,
       senderType: "ADMIN",
       text: validated.data.text,
-      senderUser: req.userId ? ({ id: req.userId } as any) : null
+      senderUser: req.userId ? { id: req.userId } : null
     } as Partial<SupportMessage>);
     await msgRepo().save(msg);
-    await convRepo().update({ id: conversation.id }, { lastMessageAt: msg.createdAt } as any);
+    await convRepo().update({ id: conversation.id }, { lastMessageAt: msg.createdAt });
 
     let emailSent = false;
     if (validated.data.sendEmail !== false) {
@@ -156,12 +161,12 @@ router.post("/conversations/:id/messages", authRequired, supportAgentGuard, asyn
           message: validated.data.text
         });
         emailSent = true;
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.warn("[support desk] chat reply saved but email delivery failed", {
           requestId: req.requestId,
           userId: req.userId,
           conversationId,
-          error: err?.message || String(err)
+          error: errorMessage(err)
         });
       }
     }
@@ -176,7 +181,7 @@ router.post("/conversations/:id/messages", authRequired, supportAgentGuard, asyn
         createdAt: msg.createdAt
       }
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.error("[support desk] failed to post message", { requestId: req.requestId, userId: req.userId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -229,11 +234,11 @@ router.post("/:id/reply", authRequired, supportAgentGuard, async (req: AuthReque
         subject: ticket.subject,
         message: validated.data.replyText
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
     return res.status(502).json({
       message: "EMAIL_SEND_FAILED",
-      ...(process.env.NODE_ENV !== "production" && {
-        details: err?.message || String(err)
+      ...(env.NODE_ENV !== "production" && {
+        details: errorMessage(err)
       })
     });
   }

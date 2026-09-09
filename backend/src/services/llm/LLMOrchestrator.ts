@@ -44,6 +44,20 @@ export interface TestDataExample {
   explanation?: string;
 }
 
+type UnknownRecord = Record<string, unknown>;
+
+function readProperty(value: unknown, key: string): unknown {
+  if (!value || typeof value !== 'object') return undefined;
+  return (value as UnknownRecord)[key];
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  const message = readProperty(error, 'message');
+  if (typeof message === 'string' && message) return message;
+  return String(error);
+}
+
 type TaskAnchor = {
   topic: string;
   coreOperation: string;
@@ -149,45 +163,45 @@ function buildResponseLanguageInstruction(responseLanguage: string | null, isEng
     : `\n\nВАЖЛИВО: Пиши весь пояснювальний текст мовою "${responseLanguage}". Синтаксис коду залишай мовою програмування.`;
 }
 
-function shouldFallbackToOpenRouter(error: any): boolean {
+function shouldFallbackToOpenRouter(error: unknown): boolean {
   if (!error) return false;
-  if (error.shouldFallback) return true;
-  const message = error.message || String(error);
+  if (readProperty(error, 'shouldFallback') === true) return true;
+  const message = errorMessage(error);
   // Fall back when Cloudflare worker is down, overloaded or temporarily refusing.
   return message.includes('502') || message.includes('Bad Gateway') || message.includes('HTTP 429') || message.includes('429 Too') || message.toLowerCase().includes('too many requests');
 }
 
-function shouldFallbackToCloudflare(error: any): boolean {
+function shouldFallbackToCloudflare(error: unknown): boolean {
   if (!error) return false;
-  const message = (error.message || String(error)).toLowerCase();
+  const message = errorMessage(error).toLowerCase();
   // Fall back when OpenRouter is rate-limited or temporarily unavailable.
   return message.includes('rate limit') || message.includes('temporarily rate-limited') || message.includes('too many requests') || /\b429\b/.test(message) || message.includes('timeout') || message.includes('timed out');
 }
 
 function isCloudflareConfigured(): boolean {
-  return !!String(process.env.CLOUDFLARE_AI_URL || '').trim();
+  return !!String(env.CLOUDFLARE_AI_URL || '').trim();
 }
 
 function isOpenRouterConfigured(): boolean {
-  const primary = String(process.env.OPENROUTER_API_KEY || '').trim();
-  const backups = String(process.env.OPENROUTER_BACKUP_API_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const primary = String(env.OPENROUTER_API_KEY || '').trim();
+  const backups = String(env.OPENROUTER_BACKUP_API_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
   return !!primary || backups.length > 0;
 }
 
 function isLocalConfigured(): boolean {
-  return !!String(process.env.LOCAL_LLM_URL || '').trim();
+  return !!String(env.LOCAL_LLM_URL || '').trim();
 }
 
 function preferredProvider(): 'cloudflare' | 'openrouter' | 'local' | 'auto' {
-  const raw = String(process.env.LLM_PROVIDER || 'auto').toLowerCase().trim();
+  const raw = String(env.LLM_PROVIDER || 'auto').toLowerCase().trim();
   if (raw === 'cloudflare') return 'cloudflare';
   if (raw === 'openrouter') return 'openrouter';
   if (raw === 'local' || raw === 'local-llm' || raw === 'selfhosted') return 'local';
   return 'auto';
 }
-function isRetryableError(error: any): boolean {
+function isRetryableError(error: unknown): boolean {
   if (!error) return false;
-  const message = error.message || String(error);
+  const message = errorMessage(error);
   return message.includes('timeout') || message.includes('network') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND') || message.includes('Failed to parse') || message.includes('Empty response') || message.includes('Invalid JSON');
 }
 export class LLMOrchestrator {
@@ -353,7 +367,7 @@ export class LLMOrchestrator {
       }
       try {
         return await tryLocal();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryCloudflare();
         }
@@ -368,7 +382,7 @@ export class LLMOrchestrator {
       if (!canCf && canOr) return await tryOpenRouter();
       try {
         return await tryCloudflare();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryOpenRouter();
         }
@@ -380,7 +394,7 @@ export class LLMOrchestrator {
     if (!canOr && canCf) return await tryCloudflare();
     try {
       return await tryOpenRouter();
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (canCf && shouldFallbackToCloudflare(e)) {
         return await tryCloudflare();
       }
@@ -569,7 +583,7 @@ Return ONLY JSON without explanations.`
         };
         this.setCachedTaskAnchor(cacheKey, resolvedAnchor);
         return resolvedAnchor;
-      } catch (err) {
+      } catch (err: unknown) {
         lastErr = err;
         logger.warn('[llm] anchor generation attempt failed', {
           requestId: params.requestId,
@@ -577,7 +591,7 @@ Return ONLY JSON without explanations.`
           maxAnchorAttempts,
           userId: params.userId,
           topicId: params.topicId,
-          error: String((err as any)?.message || err)
+          error: errorMessage(err)
         });
       }
     }
@@ -587,7 +601,7 @@ Return ONLY JSON without explanations.`
       userId: params.userId,
       topicId: params.topicId,
       expectedTopic,
-      error: String((lastErr as any)?.message || lastErr || 'unknown')
+      error: lastErr ? errorMessage(lastErr) : 'unknown'
     });
     this.setCachedTaskAnchor(cacheKey, fallbackAnchor);
     return fallbackAnchor;
@@ -1145,7 +1159,7 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
     let lastError: Error | null = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const parsed = await provider.generateJSON<any>(userPrompt, jsonSchema, systemPrompt, {
+        const parsed = await provider.generateJSON<unknown>(userPrompt, jsonSchema, systemPrompt, {
           timeout: LLM_TASK_TIMEOUT_MS,
           maxRetries: 0,
           userId: params.userId,
@@ -1182,11 +1196,12 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
           }
         }
         return validated;
-      } catch (err: any) {
-        lastError = err;
-        if (err.message && (err.message.includes('TOPIC_MISMATCH_HARD_FAIL') || err.message.includes('CORE_OPERATION_MISSING') || err.message.includes('FORBIDDEN_SCOPE_VIOLATION') || err.message.includes('MULTI_TASK_NOT_ALLOWED'))) {
+      } catch (err: unknown) {
+        const message = errorMessage(err);
+        lastError = err instanceof Error ? err : new Error(message);
+        if (message && (message.includes('TOPIC_MISMATCH_HARD_FAIL') || message.includes('CORE_OPERATION_MISSING') || message.includes('FORBIDDEN_SCOPE_VIOLATION') || message.includes('MULTI_TASK_NOT_ALLOWED'))) {
           if (attempt < maxRetries) {
-            logger.debug('[llm] semantic retry', { attempt: attempt + 1, maxRetries, error: err.message });
+            logger.debug('[llm] semantic retry', { attempt: attempt + 1, maxRetries, error: message });
             await new Promise(r => setTimeout(r, 1000));
             continue;
           }
@@ -1196,7 +1211,7 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
           await new Promise(r => setTimeout(r, 1000));
           continue;
         }
-        const msg = String(err?.message || 'Unknown error');
+        const msg = message || 'Unknown error';
         if (msg.includes('AI_GENERATION_FAILED')) {
           throw err;
         }
@@ -1294,7 +1309,7 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
       }, {
         language: params.language,
         signal: params.signal
-      } as any);
+      });
       return AIResponseValidator.validateGenerateTheory(raw);
     };
 
@@ -1314,7 +1329,7 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
       }
       try {
         return await tryLocal();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryCloudflare();
         }
@@ -1329,7 +1344,7 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
       if (!canCf && canOr) return await tryOpenRouter();
       try {
         return await tryCloudflare();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryOpenRouter();
         }
@@ -1340,7 +1355,7 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
     if (!canOr && canCf) return await tryCloudflare();
     try {
       return await tryOpenRouter();
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (canCf && shouldFallbackToCloudflare(e)) {
         return await tryCloudflare();
       }
@@ -1411,8 +1426,8 @@ REQUIREMENTS (mandatory):
         theory: content.trim()
       });
       return validated;
-    } catch (error: any) {
-      throw new Error(`AI_GENERATION_FAILED: ${error.message || 'Unknown error'}`);
+    } catch (error: unknown) {
+      throw new Error(`AI_GENERATION_FAILED: ${errorMessage(error) || 'Unknown error'}`);
     }
   }
   async generateQuizWithAI(params: {
@@ -1441,7 +1456,7 @@ REQUIREMENTS (mandatory):
       }, {
         language: params.language,
         signal: params.signal
-      } as any);
+      });
       return AIResponseValidator.validateGenerateQuiz(raw, params.count || 12);
     };
 
@@ -1461,7 +1476,7 @@ REQUIREMENTS (mandatory):
       }
       try {
         return await tryLocal();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryCloudflare();
         }
@@ -1476,7 +1491,7 @@ REQUIREMENTS (mandatory):
       if (!canCf && canOr) return await tryOpenRouter();
       try {
         return await tryCloudflare();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryOpenRouter();
         }
@@ -1487,7 +1502,7 @@ REQUIREMENTS (mandatory):
     if (!canOr && canCf) return await tryCloudflare();
     try {
       return await tryOpenRouter();
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (canCf && shouldFallbackToCloudflare(e)) {
         return await tryCloudflare();
       }
@@ -1540,7 +1555,7 @@ REQUIREMENTS:
           maxTokens: 3000
         });
         if (!content) throw new Error('Empty AI response');
-        let parsed: any;
+        let parsed: unknown;
         try {
           parsed = JSON.parse(content.trim());
         } catch (firstError) {
@@ -1621,16 +1636,19 @@ REQUIREMENTS:
             parsed = tryFixJsonResponse(content);
           }
         }
-        if (typeof parsed === 'object' && !Array.isArray(parsed)) {
-          const keys = Object.keys(parsed);
-          if (keys.length > 0 && Array.isArray(parsed[keys[0]])) {
-            parsed = parsed[keys[0]];
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const parsedRecord = parsed as UnknownRecord;
+          const keys = Object.keys(parsedRecord);
+          const firstValue = keys.length > 0 ? parsedRecord[keys[0]] : undefined;
+          if (Array.isArray(firstValue)) {
+            parsed = firstValue;
           }
         }
         const validated = AIResponseValidator.validateGenerateQuiz(parsed, questionCount);
         return validated;
-      } catch (err: any) {
-        lastError = err;
+      } catch (err: unknown) {
+        const message = errorMessage(err);
+        lastError = err instanceof Error ? err : new Error(message);
         if (attempt < maxRetries) {
           userPrompt += `\n\nВиправ формат. Поверни ТІЛЬКИ JSON масив з ${questionCount} питаннями, кожне з 5 варіантами відповіді. БЕЗ жодного тексту до або після JSON. БЕЗ markdown. БЕЗ пояснень. ТІЛЬКИ чистий JSON масив.`;
           await new Promise(r => setTimeout(r, 1000));
@@ -1671,7 +1689,7 @@ REQUIREMENTS:
       }, {
         language: params.userLanguage,
         signal: params.signal
-      } as any);
+      });
       return AIResponseValidator.validateGenerateTaskCondition(raw);
     };
 
@@ -1691,7 +1709,7 @@ REQUIREMENTS:
       }
       try {
         return await tryLocal();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryCloudflare();
         }
@@ -1706,7 +1724,7 @@ REQUIREMENTS:
       if (!canCf && canOr) return await tryOpenRouter();
       try {
         return await tryCloudflare();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryOpenRouter();
         }
@@ -1717,7 +1735,7 @@ REQUIREMENTS:
     if (!canOr && canCf) return await tryCloudflare();
     try {
       return await tryOpenRouter();
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (canCf && shouldFallbackToCloudflare(e)) {
         return await tryCloudflare();
       }
@@ -1834,8 +1852,8 @@ ${difficultyPrompt}
         description: content.trim()
       });
       return validated;
-    } catch (error: any) {
-      throw new Error(`AI_GENERATION_FAILED: ${error.message || 'Unknown error'}`);
+    } catch (error: unknown) {
+      throw new Error(`AI_GENERATION_FAILED: ${errorMessage(error) || 'Unknown error'}`);
     }
   }
   async generateTaskTemplate(params: {
@@ -1867,7 +1885,7 @@ ${difficultyPrompt}
       }, {
         language: params.userLanguage,
         signal: params.signal
-      } as any);
+      });
 
       // Cloudflare returns the template as-is; normalize TODO line for consistency.
       const isEnglish = params.userLanguage === 'en';
@@ -1897,7 +1915,7 @@ ${difficultyPrompt}
       }
       try {
         return await tryLocal();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryCloudflare();
         }
@@ -1912,7 +1930,7 @@ ${difficultyPrompt}
       if (!canCf && canOr) return await tryOpenRouter();
       try {
         return await tryCloudflare();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryOpenRouter();
         }
@@ -1923,7 +1941,7 @@ ${difficultyPrompt}
     if (!canOr && canCf) return await tryCloudflare();
     try {
       return await tryOpenRouter();
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (canCf && shouldFallbackToCloudflare(e)) {
         return await tryCloudflare();
       }
@@ -2113,8 +2131,8 @@ public class Main {
         template
       });
       return validated;
-    } catch (error: any) {
-      throw new Error(`AI_GENERATION_FAILED: ${error.message || 'Unknown error'}`);
+    } catch (error: unknown) {
+      throw new Error(`AI_GENERATION_FAILED: ${errorMessage(error) || 'Unknown error'}`);
     }
   }
   async generateTestDataWithAI(params: {
@@ -2165,7 +2183,7 @@ public class Main {
       }
       try {
         return await tryLocal();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canCf && (isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryCloudflare();
         }
@@ -2180,7 +2198,7 @@ public class Main {
       if (!canCf && canOr) return await tryOpenRouter();
       try {
         return await tryCloudflare();
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (canOr && (shouldFallbackToOpenRouter(e) || isRetryableError(e) || shouldFallbackToCloudflare(e))) {
           return await tryOpenRouter();
         }
@@ -2191,7 +2209,7 @@ public class Main {
     if (!canOr && canCf) return await tryCloudflare();
     try {
       return await tryOpenRouter();
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (canCf && shouldFallbackToCloudflare(e)) {
         return await tryCloudflare();
       }
@@ -2328,11 +2346,11 @@ ${JSON.stringify(jsonSchema, null, 2)}
           maxTokens: 3000
         });
         return AIResponseValidator.validateGenerateTestData(parsed, desiredCount);
-      } catch (error: any) {
+      } catch (error: unknown) {
         lastError = error;
-        const isValidationFailure = String(error?.name ?? '') === 'AIValidationError';
+        const isValidationFailure = readProperty(error, 'name') === 'AIValidationError';
         logger.warn('[llm] test data generation failed', {
-          message: error?.message,
+          message: errorMessage(error),
           attempt,
           validationAttempts,
           isValidationFailure,

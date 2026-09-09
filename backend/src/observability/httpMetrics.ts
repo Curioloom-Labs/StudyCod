@@ -21,6 +21,11 @@ interface Series {
   buckets: number[]; // per-bucket (non-cumulative) counts; last slot = +Inf overflow
 }
 
+type RequestWithRoute = Request & {
+  route?: { path?: string | string[] };
+  baseUrl?: string;
+};
+
 // Hard cap on distinct series so pathological cardinality can't exhaust memory on
 // a small box. Once reached, new label combos fold into a single "__other__" route.
 const MAX_SERIES = 2000;
@@ -37,13 +42,14 @@ function statusClass(status: number): string {
 function resolveRoute(req: Request): string {
   // req.route is only populated when a handler matched. Combine the router mount
   // path (baseUrl) with the matched route pattern to get the full template.
-  const r: any = (req as any).route;
+  const routedReq = req as RequestWithRoute;
+  const r = routedReq.route;
   let pattern = "";
   if (r && typeof r.path === "string") pattern = r.path;
   else if (r && Array.isArray(r.path)) pattern = r.path.join("|");
   else if (r) pattern = "(complex)";
   if (!pattern) return "unmatched";
-  const base = (req as any).baseUrl || "";
+  const base = routedReq.baseUrl || "";
   const full = `${base}${pattern}` || "/";
   return full.length > 120 ? full.slice(0, 120) : full;
 }

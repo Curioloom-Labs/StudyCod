@@ -42,7 +42,7 @@ export async function createCourse(input: {
   if (!title) throw new Error("TITLE_REQUIRED");
   const runtime = normalizeCourseRuntime(input.runtime);
   const course = courseRepo().create({
-    organization: { id: input.orgId } as any,
+    organization: { id: input.orgId },
     title,
     description: input.description ?? null,
     catalogKey: null,
@@ -53,7 +53,7 @@ export async function createCourse(input: {
   });
   const saved = await courseRepo().save(course);
   await variantRepo().save(variantRepo().create({
-    course: { id: saved.id } as any,
+    course: { id: saved.id },
     runtime,
     title: runtime === "CPP" ? "C++" : runtime === "JAVA" ? "Java" : "Python",
     status: "DRAFT"
@@ -89,7 +89,7 @@ export async function getCourseTree(courseId: number, orgId: number): Promise<Co
 export async function addModule(courseId: number, title: string, order: number): Promise<CourseModule> {
   const t = String(title ?? "").trim();
   if (!t) throw new Error("TITLE_REQUIRED");
-  const mod = moduleRepo().create({ course: { id: courseId } as any, title: t, order: Math.max(0, Math.floor(order) || 0) });
+  const mod = moduleRepo().create({ course: { id: courseId }, title: t, order: Math.max(0, Math.floor(order) || 0) });
   return await moduleRepo().save(mod);
 }
 
@@ -104,7 +104,7 @@ export async function addItem(input: {
   const t = String(input.title ?? "").trim();
   if (!t) throw new Error("TITLE_REQUIRED");
   const item = itemRepo().create({
-    module: { id: input.moduleId } as any,
+    module: { id: input.moduleId },
     kind: input.kind,
     title: t,
     order: Math.max(0, Math.floor(input.order) || 0),

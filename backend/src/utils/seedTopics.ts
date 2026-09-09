@@ -7,8 +7,13 @@ import * as fs from "fs";
 import * as path from "path";
 import YAML from "yaml";
 import { IsNull } from "typeorm";
+import { env } from "../env";
 
 let cachedRepoRoot: string | null | undefined;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 function walkUpDirs(startDir: string, maxDepth: number): string[] {
   const out: string[] = [];
@@ -26,10 +31,10 @@ function findRepoRoot(): string | null {
   if (cachedRepoRoot !== undefined) return cachedRepoRoot;
 
   const envRoots = [
-    process.env.REPO_ROOT,
-    process.env.STUDYCOD_REPO_ROOT,
-    process.env.APP_ROOT
-  ].filter(Boolean) as string[];
+    env.REPO_ROOT,
+    env.STUDYCOD_REPO_ROOT,
+    env.APP_ROOT
+  ].filter((root): root is string => typeof root === "string" && root.length > 0);
 
   const candidates = [
     ...envRoots.map(r => path.resolve(r)),
@@ -63,19 +68,7 @@ function resolveRepoFile(filePath: string): string {
   if (repoRoot) return path.resolve(repoRoot, filePath);
   return path.resolve(process.cwd(), filePath);
 }
-async function readJsonFile(filePath: string): Promise<any> {
-  try {
-    const fullPath = resolveRepoFile(filePath);
-    const content = await fs.promises.readFile(fullPath, "utf-8");
-    return JSON.parse(content);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.debug('[seed-topics] read failed', { filePath, resolved: resolveRepoFile(filePath), message });
-    return null;
-  }
-}
-
-async function readYamlFile(filePath: string): Promise<any> {
+async function readYamlFile(filePath: string): Promise<unknown> {
   try {
     const fullPath = resolveRepoFile(filePath);
     const content = await fs.promises.readFile(fullPath, "utf-8");
@@ -90,17 +83,18 @@ async function readYamlFile(filePath: string): Promise<any> {
 async function loadTopicsFromYaml(lang: "JAVA" | "PYTHON" | "CPP"): Promise<Array<{ title: string; theory: string; index: number }> | null> {
   const name = lang === "JAVA" ? "java_core" : lang === "PYTHON" ? "python_core" : "cpp_core";
   const parsed = await readYamlFile(`theories/${name}_theory.yml`);
-  const topics = parsed && typeof parsed === "object" ? (parsed.topics as any) : null;
+  const topics = isRecord(parsed) && Array.isArray(parsed.topics) ? parsed.topics : null;
   if (!Array.isArray(topics)) return null;
 
   const result: Array<{ title: string; theory: string; index: number }> = [];
-  topics.forEach((t: any, i: number) => {
-    const title = String(t?.title || "").trim();
+  topics.forEach((rawTopic, i) => {
+    const topic = isRecord(rawTopic) ? rawTopic : {};
+    const title = String(topic.title || "").trim();
     if (!title) return;
-    const content = (typeof t?.theory === "string")
-      ? String(t.theory)
-      : String(t?.theory?.content || "");
-    const order = Number(t?.order);
+    const content = typeof topic.theory === "string"
+      ? topic.theory
+      : isRecord(topic.theory) ? String(topic.theory.content || "") : "";
+    const order = Number(topic.order);
     const index = Number.isFinite(order) && order > 0 ? (order - 1) : i;
     result.push({
       title,
@@ -120,14 +114,14 @@ export async function seedTopicsIfNeeded(): Promise<void> {
     // not overwrite already customized curriculum on every restart.
     // Use SEED_TOPICS_FORCE_SYNC=true only when you intentionally want
     // to re-sync DB from repo files.
-    const forceSync = String(process.env.SEED_TOPICS_FORCE_SYNC ?? "false").toLowerCase() === "true";
+    const forceSync = String(env.SEED_TOPICS_FORCE_SYNC ?? "false").toLowerCase() === "true";
     if (!forceSync) {
       const [legacyCount, globalCount] = await Promise.all([
         topicRepo.count(),
         topicNewRepo.count({
           where: {
-            class: IsNull() as any
-          } as any
+            class: IsNull()
+          }
         })
       ]);
 
@@ -190,15 +184,13 @@ export async function seedTopicsIfNeeded(): Promise<void> {
         where: {
           title: item.title,
           lang: item.lang
-        } as any
+        }
       });
       if (existing) {
         const content = String(item.theory || "").trim();
         if (content) {
           const block = await getOrCreateBlock(item.title, content);
-          (existing as any).theoryBlock = {
-            id: block.id
-          };
+          existing.theoryBlock = block;
         }
         if (existing.topicIndex !== item.index) {
           existing.topicIndex = item.index;
@@ -217,13 +209,9 @@ export async function seedTopicsIfNeeded(): Promise<void> {
           lang: item.lang,
           topicIndex: item.index,
           theoryMarkdown: null,
-          ...(blockId ? {
-            theoryBlock: {
-              id: blockId
-            }
-          } : {}),
+          theoryBlock: blockId ? { id: blockId } : null,
           isControl: false
-        } as any);
+        });
         await topicRepo.save(newTopic);
         added++;
       }
@@ -238,8 +226,8 @@ export async function seedTopicsIfNeeded(): Promise<void> {
         where: {
           title: item.title,
           language: item.lang as TopicLanguage,
-          class: IsNull() as any
-        } as any,
+          class: IsNull()
+        },
         relations: ["theoryBlock"]
       });
       if (existingNew) {
@@ -249,7 +237,7 @@ export async function seedTopicsIfNeeded(): Promise<void> {
           changed = true;
         }
         if (desiredBlock && (existingNew.theoryBlockId ?? null) !== desiredBlock.id) {
-          (existingNew as any).theoryBlock = { id: desiredBlock.id };
+          existingNew.theoryBlock = desiredBlock;
           changed = true;
         }
         if (changed) {
@@ -263,8 +251,8 @@ export async function seedTopicsIfNeeded(): Promise<void> {
           order: desiredOrder,
           language: item.lang as TopicLanguage,
           class: null,
-          ...(desiredBlock ? { theoryBlock: { id: desiredBlock.id } } : {})
-        } as any);
+          theoryBlock: desiredBlock
+        });
         await topicNewRepo.save(created);
         addedNew++;
       }
@@ -272,7 +260,7 @@ export async function seedTopicsIfNeeded(): Promise<void> {
     if (added > 0 || updated > 0 || addedNew > 0 || updatedNew > 0) {
       logger.info('[seed-topics] updated', { added, updated, addedNew, updatedNew });
     }
-  } catch (err: any) {
-    logger.error('[seed-topics] failed', { message: err?.message });
+  } catch (err: unknown) {
+    logger.error('[seed-topics] failed', { message: err instanceof Error ? err.message : String(err) });
   }
 }

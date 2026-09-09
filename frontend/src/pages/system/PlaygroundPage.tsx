@@ -6,10 +6,12 @@ import { Button } from "../../components/ui/Button";
 import { CodeEditor } from "../../components/CodeEditor";
 import ErrorExplainButton from "../../components/ErrorExplainButton";
 import { showToast } from "../../lib/toast";
+import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import {
   getMyPlaygroundSnippets,
   getPlaygroundSnippet,
   getVisualizerLanguages,
+  type HeapObject,
   normalizePlaygroundLanguage,
   runPlayground,
   savePlaygroundSnippet,
@@ -144,8 +146,8 @@ export const PlaygroundPage: React.FC = () => {
     }
     try {
       setRun(await runPlayground({ language, compiler, code, stdin }));
-    } catch (cause: any) {
-      showToast({ type: "error", message: cause?.response?.data?.message || tr("Помилка запуску.", "Run failed.") });
+    } catch (cause: unknown) {
+      showToast({ type: "error", message: getErrorMessageFromUnknown(cause, tr("Помилка запуску.", "Run failed.")) });
     } finally {
       setRunning(false);
     }
@@ -174,8 +176,8 @@ export const PlaygroundPage: React.FC = () => {
       setTrace(result);
       setStepIdx(0);
       setRun({ stdout: result.programOutput, stderr: result.stderr, exitCode: result.ok ? 0 : 1, success: result.ok });
-    } catch (cause: any) {
-      showToast({ type: "error", message: cause?.response?.data?.message || tr("Не вдалося трасувати.", "Trace failed.") });
+    } catch (cause: unknown) {
+      showToast({ type: "error", message: getErrorMessageFromUnknown(cause, tr("Не вдалося трасувати.", "Trace failed.")) });
     } finally {
       setTracing(false);
     }
@@ -199,10 +201,10 @@ export const PlaygroundPage: React.FC = () => {
     }
   };
 
-  const renderValue = (value: unknown, heap: Record<string, any> | undefined, depth = 0): string => {
+  const renderValue = (value: unknown, heap: Record<string, HeapObject> | undefined, depth = 0): string => {
     if (value === null || value === undefined) return "None";
-    if (typeof value === "object" && "ref" in (value as any)) {
-      const id = String((value as any).ref);
+    if (typeof value === "object" && value !== null && "ref" in value) {
+      const id = String(Reflect.get(value, "ref"));
       const obj = heap?.[id];
       if (!obj || depth > 2) return `#${id}`;
       const tag = `#${id}`;

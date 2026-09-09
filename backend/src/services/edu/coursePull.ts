@@ -224,14 +224,14 @@ export async function applyPullUpdates(
         }
         const planned = planTaskFromItem(up);
         const task = manager.getRepository(EduTask).create({
-          lesson: { id: lessonId } as any,
+          lesson: { id: lessonId },
           title: planned.title,
           description: planned.description,
           template: planned.template,
-          taskMode: planned.taskMode as any,
-          webTemplateFiles: planned.webTemplateFiles as any,
-          webValidationRules: planned.webValidationRules as any,
-          webValidationProfile: planned.webValidationProfile as any,
+          taskMode: planned.taskMode,
+          webTemplateFiles: planned.webTemplateFiles,
+          webValidationRules: planned.webValidationRules,
+          webValidationProfile: planned.webValidationProfile,
           maxAttempts: 1,
           isClosed: false
         });
@@ -279,8 +279,8 @@ function applyPlannedToTask(task: EduTask, planned: ReturnType<typeof planTaskFr
   task.title = planned.title;
   task.description = planned.description;
   task.template = planned.template;
-  task.taskMode = planned.taskMode as any;
-  task.webTemplateFiles = planned.webTemplateFiles as any;
-  task.webValidationRules = planned.webValidationRules as any;
-  task.webValidationProfile = planned.webValidationProfile as any;
+  task.taskMode = planned.taskMode;
+  task.webTemplateFiles = planned.webTemplateFiles;
+  task.webValidationRules = planned.webValidationRules;
+  task.webValidationProfile = planned.webValidationProfile;
 }

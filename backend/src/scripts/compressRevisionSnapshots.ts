@@ -35,13 +35,13 @@ async function main(): Promise<void> {
     for (const { id } of ids) {
       // Load one row at a time — snapshots are large (tens of MB) and must not all
       // be held in memory at once on a small box.
-      const row = await repo.findOne({ where: { id } as any });
+      const row = await repo.findOne({ where: { id } });
       if (!row) continue;
       scanned += 1;
       const original = String(row.snapshot ?? "");
       if (isCompressedSnapshot(original)) { alreadyCompressed += 1; continue; }
 
-      let obj: any;
+      let obj: unknown;
       try {
         obj = parseSnapshot(original);
       } catch {
@@ -66,7 +66,7 @@ async function main(): Promise<void> {
       converted += 1;
 
       if (apply) {
-        await repo.update({ id } as any, { snapshot: encoded } as any);
+        await repo.update({ id }, { snapshot: encoded });
       }
     }
 
@@ -86,7 +86,10 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: any) => {
-  logger.error("[compress-snapshots] failed", { message: error?.message, code: error?.code });
+main().catch((error: unknown) => {
+  logger.error("[compress-snapshots] failed", {
+    message: error instanceof Error ? error.message : String(error),
+    code: typeof error === "object" && error !== null ? (error as Record<string, unknown>).code : undefined
+  });
   process.exit(1);
 });

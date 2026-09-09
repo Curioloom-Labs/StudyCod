@@ -25,6 +25,10 @@ import { logger } from "../../utils/logger";
 
 const router = Router();
 
+function errorMessage(error: unknown): string {
+  return typeof error === "object" && error !== null && "message" in error && typeof error.message === "string" ? error.message : "";
+}
+
 function requireUser(req: AuthRequest, res: Response): boolean {
   if (!req.userId || req.userType === "STUDENT" || req.studentId) {
     res.status(403).json({ message: "ONLY_USERS" });
@@ -98,7 +102,7 @@ router.post("/orgs/:orgId/courses", authRequired, async (req: AuthRequest, res: 
       ip: req.ip
     });
     return res.status(201).json({ course: { id: course.id, title: course.title, status: course.status, variants: (course.variants || []).map((v) => ({ id: v.id, runtime: v.runtime, status: v.status })) } });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/courses] create failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -122,7 +126,7 @@ router.get("/orgs/:orgId/courses", authRequired, async (req: AuthRequest, res: R
         updatedAt: c.updatedAt
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/courses] list failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -155,7 +159,7 @@ router.get("/courses/:courseId", authRequired, async (req: AuthRequest, res: Res
         }))
       }
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/courses] get tree failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -175,7 +179,7 @@ router.post("/courses/:courseId/modules", authRequired, async (req: AuthRequest,
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
     const mod = await addModule(courseId, parsed.data.title, parsed.data.order ?? 0);
     return res.status(201).json({ module: { id: mod.id, title: mod.title, order: mod.order } });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/courses] add module failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -210,11 +214,11 @@ router.post("/modules/:moduleId/items", authRequired, async (req: AuthRequest, r
         content: parsed.data.content ?? null
       });
       return res.status(201).json({ item: { id: item.id, kind: item.kind, title: item.title, order: item.order } });
-    } catch (e: any) {
-      if (e?.message === "INVALID_ITEM_KIND") return res.status(400).json({ message: "INVALID_ITEM_KIND" });
+    } catch (e: unknown) {
+      if (errorMessage(e) === "INVALID_ITEM_KIND") return res.status(400).json({ message: "INVALID_ITEM_KIND" });
       throw e;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/courses] add item failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -249,14 +253,14 @@ router.post("/classes/:classId/assign-course", authRequired, async (req: AuthReq
         ip: req.ip
       });
       return res.status(201).json({ assignment: result });
-    } catch (e: any) {
-      const msg = String(e?.message || "");
+    } catch (e: unknown) {
+      const msg = errorMessage(e);
       if (msg === "COURSE_NOT_FOUND") return res.status(404).json({ message: "COURSE_NOT_FOUND" });
       if (msg === "COURSE_NOT_PUBLISHED") return res.status(409).json({ message: "COURSE_NOT_PUBLISHED" });
       if (msg === "CLASS_NOT_IN_ORG") return res.status(403).json({ message: "CLASS_NOT_IN_ORG" });
       throw e;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/courses] assign failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -317,7 +321,7 @@ router.get("/classes/:classId/course-updates", authRequired, async (req: AuthReq
       summary: summarizePullDiff(entries),
       entries
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/courses] course-updates failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -356,11 +360,11 @@ router.post("/classes/:classId/course-updates/apply", authRequired, async (req: 
         ip: req.ip
       });
       return res.json({ result });
-    } catch (e: any) {
-      if (String(e?.message) === "ASSIGNMENT_NOT_FOUND") return res.status(404).json({ message: "ASSIGNMENT_NOT_FOUND" });
+    } catch (e: unknown) {
+      if (errorMessage(e) === "ASSIGNMENT_NOT_FOUND") return res.status(404).json({ message: "ASSIGNMENT_NOT_FOUND" });
       throw e;
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/courses] pull apply failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -381,7 +385,7 @@ router.put("/courses/:courseId/status", authRequired, async (req: AuthRequest, r
     const course = await setCourseStatus(courseId, orgId, parsed.data.status);
     if (!course) return res.status(404).json({ message: "COURSE_NOT_FOUND" });
     return res.json({ course: { id: course.id, status: course.status } });
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error("[edu/courses] set status failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

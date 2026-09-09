@@ -10,7 +10,7 @@ import { logger } from "./utils/logger";
 // (and exposes a counter for /metrics) so "which code path is slow" is answerable
 // without grepping. Threshold is configurable; default 500ms matches DB-1.
 const DB_SLOW_QUERY_MS = (() => {
-  const n = Number.parseInt(String(process.env.DB_SLOW_QUERY_MS ?? ""), 10);
+  const n = Number.parseInt(String(env.DB_SLOW_QUERY_MS ?? ""), 10);
   return Number.isFinite(n) && n > 0 ? n : 500;
 })();
 let dbSlowQueryCount = 0;
@@ -21,13 +21,16 @@ export function getDbQueryErrorCount(): number { return dbQueryErrorCount; }
 /** Minimal logger: only surfaces slow queries + errors, stays silent otherwise. */
 class SlowQueryLogger implements TypeOrmLogger {
   logQuery(): void {}
-  logQuerySlow(time: number, query: string, _params?: any[], _qr?: QueryRunner): void {
+  logQuerySlow(time: number, query: string, _params?: unknown[], _qr?: QueryRunner): void {
     dbSlowQueryCount += 1;
     logger.warn("[db] slow query", { timeMs: time, query: query.slice(0, 500) });
   }
-  logQueryError(error: string | Error, query: string, _params?: any[], _qr?: QueryRunner): void {
+  logQueryError(error: string | Error, query: string, _params?: unknown[], _qr?: QueryRunner): void {
     dbQueryErrorCount += 1;
-    logger.error("[db] query error", { error: String((error as any)?.message ?? error), query: query.slice(0, 500) });
+    logger.error("[db] query error", {
+      error: error instanceof Error ? error.message : String(error),
+      query: query.slice(0, 500)
+    });
   }
   logSchemaBuild(): void {}
   logMigration(): void {}

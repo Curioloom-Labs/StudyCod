@@ -799,30 +799,41 @@ const registerKotlinHighlighting = (monaco: MonacoApi) => {
   }
 };
 let monacoLoadPromise: Promise<MonacoApi> | null = null;
+const monacoLanguageLoadPromises = new Map<string, Promise<unknown>>();
+const monacoLanguageLoaders: Record<string, () => Promise<unknown>> = {
+  java: () => import("monaco-editor/esm/vs/basic-languages/java/java.contribution"),
+  python: () => import("monaco-editor/esm/vs/basic-languages/python/python.contribution"),
+  cpp: () => import("monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution"),
+  csharp: () => import("monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution"),
+  kotlin: () => import("monaco-editor/esm/vs/basic-languages/kotlin/kotlin.contribution"),
+  javascript: () => import("monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution"),
+  typescript: () => import("monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution"),
+  html: () => import("monaco-editor/esm/vs/basic-languages/html/html.contribution"),
+  css: () => import("monaco-editor/esm/vs/basic-languages/css/css.contribution"),
+  xml: () => import("monaco-editor/esm/vs/basic-languages/xml/xml.contribution"),
+  sql: () => import("monaco-editor/esm/vs/basic-languages/sql/sql.contribution"),
+};
 
 /**
- * Keep Monaco out of the application entry chunk. The editor API, the small
- * set of languages used by StudyCod, and the worker are fetched together only
- * when an editor is actually rendered.
+ * Keep Monaco out of the application entry chunk. The editor API and worker
+ * are fetched only when an editor is rendered; the selected language grammar
+ * is loaded independently on demand.
  */
-export const loadStudyCodMonaco = (): Promise<MonacoApi> => {
+export const loadStudyCodMonaco = (language?: string): Promise<MonacoApi> => {
   if (!monacoLoadPromise) {
     monacoLoadPromise = Promise.all([
       import("monaco-editor/esm/vs/editor/editor.api"),
       import("monaco-editor/esm/vs/editor/editor.worker?worker"),
-      import("monaco-editor/esm/vs/basic-languages/java/java.contribution"),
-      import("monaco-editor/esm/vs/basic-languages/python/python.contribution"),
-      import("monaco-editor/esm/vs/basic-languages/cpp/cpp.contribution"),
-      import("monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution"),
-      import("monaco-editor/esm/vs/basic-languages/kotlin/kotlin.contribution"),
-      import("monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution"),
-      import("monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution"),
-      import("monaco-editor/esm/vs/basic-languages/html/html.contribution"),
-      import("monaco-editor/esm/vs/basic-languages/css/css.contribution"),
-      import("monaco-editor/esm/vs/basic-languages/xml/xml.contribution"),
-      import("monaco-editor/esm/vs/basic-languages/sql/sql.contribution"),
-      import("monaco-editor/min/vs/editor/editor.main.css"),
-    ]).then(([monaco, editorWorker]) => {
+      import("monaco-editor/min/vs/editor/editor.main.css?inline"),
+    ]).then(([monaco, editorWorker, cssModule]) => {
+      const cssModuleValue = cssModule as { default?: unknown };
+      const cssText = typeof cssModuleValue?.default === "string" ? cssModuleValue.default : "";
+      if (cssText && typeof document !== "undefined" && !document.head.querySelector("style[data-studycod-monaco]")) {
+        const style = document.createElement("style");
+        style.dataset.studycodMonaco = "true";
+        style.textContent = cssText;
+        document.head.appendChild(style);
+      }
       const worker = editorWorker.default;
       (globalThis as typeof globalThis & {
         MonacoEnvironment?: { getWorker: () => Worker };
@@ -833,7 +844,16 @@ export const loadStudyCodMonaco = (): Promise<MonacoApi> => {
       return monaco as MonacoApi;
     });
   }
-  return monacoLoadPromise;
+  if (!language) return monacoLoadPromise;
+
+  const loadLanguage = monacoLanguageLoaders[language];
+  if (!loadLanguage) return monacoLoadPromise;
+  const languagePromise = monacoLanguageLoadPromises.get(language) ?? loadLanguage();
+  monacoLanguageLoadPromises.set(language, languagePromise);
+  return monacoLoadPromise.then(async monaco => {
+    await languagePromise;
+    return monaco;
+  });
 };
 
 const Editor = React.lazy(async () => {
@@ -1059,7 +1079,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
     if (typeof window === "undefined") return;
     let cancelled = false;
 
-    loadStudyCodMonaco()
+    loadStudyCodMonaco(monacoLang)
       .then(() => loader.init())
       .then(monaco => {
         if (cancelled) return;
@@ -1226,7 +1246,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
             <div>container: {debugSize ? `${debugSize.w}×${debugSize.h}` : "?"}</div>
           </div>
         </div>}
-      <Suspense fallback={<div className="h-full w-full flex items-center justify-center bg-bg-code border border-border">
+      {loaderReady ? <Suspense fallback={<div className="h-full w-full flex items-center justify-center bg-bg-code border border-border">
             <div className="text-text-secondary font-mono text-sm">{tr("Завантаження редактора…", "Loading editor…")}</div>
           </div>}>
         <Editor height="100%" width="100%" language={monacoLang} theme={monacoTheme} value={value} options={editorOptions} onChange={handleChange} beforeMount={(monaco: MonacoApi) => {
@@ -1329,7 +1349,11 @@ export const CodeEditor: React.FC<Props> = React.memo(({
       }} loading={<div className="h-full w-full flex items-center justify-center bg-bg-code border border-border">
               <div className="text-text-secondary font-mono text-sm">{tr("Завантаження редактора…", "Loading editor…")}</div>
             </div>} />
-      </Suspense>
+      </Suspense> : <div className="flex h-full w-full items-center justify-center border border-border bg-bg-code">
+        <div className="text-text-secondary font-mono text-sm">
+          {loaderError ? tr("Редактор тимчасово недоступний.", "The editor is temporarily unavailable.") : tr("Завантаження редактора…", "Loading editor…")}
+        </div>
+      </div>}
       </div>
     </div>;
 });

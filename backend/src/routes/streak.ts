@@ -7,7 +7,8 @@ import { logger } from "../utils/logger";
 import { isCronAuthorized } from "../middleware/cronAuth";
 const router = Router();
 const userRepo = () => AppDataSource.getRepository(User);
-router.post("/check", async (req: Request, res: Response) => {
+type RequestWithId = Request & { requestId?: string };
+router.post("/check", async (req: RequestWithId, res: Response) => {
   try {
     if (!isCronAuthorized(req)) {
       return res.status(401).json({
@@ -39,7 +40,7 @@ router.post("/check", async (req: Request, res: Response) => {
           notified++;
         } catch (err) {
           logger.error("[streak] failed to send streak break email", {
-            requestId: (req as any).requestId,
+            requestId: req.requestId,
             email: user.email,
             userId: user.id,
             err,
@@ -52,7 +53,7 @@ router.post("/check", async (req: Request, res: Response) => {
       notified
     });
   } catch (err) {
-    logger.error("[streak] POST /streak/check error", { requestId: (req as any).requestId, err });
+    logger.error("[streak] POST /streak/check error", { requestId: req.requestId, err });
     return res.status(500).json({
       message: "Internal server error"
     });

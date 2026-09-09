@@ -43,7 +43,10 @@ export const CourseDetailPage: React.FC = () => {
       try {
         await reload();
         const { data } = await api.get(`/edu/classes`);
-        setClasses((data?.classes ?? []).map((c: any) => ({ id: c.id, name: c.name })));
+        setClasses((data?.classes ?? []).map((raw: unknown) => {
+          const row = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+          return { id: Number(row.id), name: String(row.name ?? "") };
+        }));
       } catch (error) {
         showToast({ message: getErrorMessageFromUnknown(error, tr("Помилка", "Error")), type: "error" });
       } finally {
