@@ -188,9 +188,11 @@ jobs:
         run: |
           set -euo pipefail
           ssh "$DEPLOY_USER@$DEPLOY_HOST" 'set -euo pipefail
+            ready_file=$(mktemp)
+            trap "rm -f \"$ready_file\"" EXIT
             for attempt in $(seq 1 30); do
-              if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:4000/ready >/tmp/studycod-ready.json; then
-                cat /tmp/studycod-ready.json
+              if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:4000/ready >"$ready_file"; then
+                cat "$ready_file"
                 exit 0
               fi
               if [[ "$attempt" == "30" ]]; then
