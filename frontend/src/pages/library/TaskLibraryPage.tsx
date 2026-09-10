@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Clock3, Download, Edit2, GripVertical, Library, Play, Plus, Rocket, Search, Send, Share2, Star, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Clock3, Download, Edit2, ExternalLink, GripVertical, Library, Play, Plus, Rocket, Search, Send, Share2, Star, Trash2, Upload, X } from "lucide-react";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
@@ -219,6 +219,18 @@ function safeParseTestsJson(text: string): Array<{ input: string; expectedOutput
       subtask: Number.isInteger(parsedSubtask) && parsedSubtask >= 1 ? parsedSubtask : undefined,
     };
   });
+}
+
+function formatShortDateTime(iso: string | null | undefined, locale: string) {
+  const raw = String(iso ?? "").trim();
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(d);
+  } catch {
+    return d.toLocaleString();
+  }
 }
 
 function extractWebFileContent(files: WebTaskFile[] | null | undefined, path: WebTaskFile["path"]): string {
@@ -1488,6 +1500,16 @@ export const TaskLibraryPage: React.FC = () => {
       search: `?${params.toString()}`,
     };
   };
+  const resetFilters = () => {
+    setOnlySolved(false);
+    setOnlyFavorites(false);
+    setMineStatus("ALL");
+    setSort("UPDATED_DESC");
+    setJudgeLang("ALL");
+    setQDraft("");
+    setQ("");
+    if (view === "approved") setPage(1);
+  };
   const rememberAndOpenTask = (task: LibraryTaskListItem) => {
     const storageKey = scopedStorageKey(RECENT_TASKS_STORAGE_KEY, "all");
     try {
@@ -1617,6 +1639,7 @@ export const TaskLibraryPage: React.FC = () => {
         query={qDraft}
         onQuery={setQDraft}
         onOpen={rememberAndOpenTask}
+        getTaskHref={buildSolvePath}
       />
     </>;
   }
@@ -1807,16 +1830,7 @@ export const TaskLibraryPage: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setOnlySolved(false);
-                  setOnlyFavorites(false);
-                  setMineStatus("ALL");
-                  setSort("UPDATED_DESC");
-                  setJudgeLang("ALL");
-                  setQDraft("");
-                  setQ("");
-                  if (view === "approved") setPage(1);
-                }}
+                onClick={resetFilters}
                 className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-[#637267] transition hover:bg-[#f0f4ef] hover:text-[#142018] dark:text-[#a8b5aa] dark:hover:bg-white/[.06] dark:hover:text-white"
               >
                 <RotateCcwIcon />
@@ -1901,7 +1915,7 @@ export const TaskLibraryPage: React.FC = () => {
                   {view === "mine" ? tr("Мої задачі", "My tasks") : tr("Каталог задач", "Task catalog")}
                 </h2>
                 <p className="mt-1 text-sm text-[#6a786d] dark:text-[#9fac9f]">
-                  {tr("Натисніть на картку, щоб відкрити preview праворуч.", "Select a card to open preview on the right.")}
+                  {tr("Відкрийте preview кнопкою на картці або назвою задачі.", "Open the preview with the card button or task title.")}
                 </p>
               </div>
 
@@ -1935,6 +1949,10 @@ export const TaskLibraryPage: React.FC = () => {
                 <div className="mt-2 text-sm text-[#6a786d] dark:text-[#9fac9f]">
                   {tr("Змініть пошук, фільтри або відкрийте інший розділ.", "Adjust search, filters, or open another section.")}
                 </div>
+                <button type="button" onClick={resetFilters} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-[#00c96d]/30 bg-[#e8f8ed] px-3.5 py-2 text-sm font-semibold text-[#147b47] transition hover:border-[#00c96d]/55 hover:bg-[#dff5e7] dark:bg-[#00ff88]/10 dark:text-[#72edb0] dark:hover:bg-[#00ff88]/15">
+                  <RotateCcwIcon />
+                  {tr("Скинути фільтри", "Reset filters")}
+                </button>
               </div>
             ) : (
               <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid gap-4 md:grid-cols-2">
@@ -1945,6 +1963,7 @@ export const TaskLibraryPage: React.FC = () => {
                   const diffMeta = diff ? FRIENDLY_DIFFICULTY[diff] : null;
                   const testsPassed = task.attempt?.lastTestsPassed;
                   const testsTotal = task.attempt?.lastTestsTotal;
+                  const lastCheckedAt = task.attempt?.lastCheckedAt;
                   const progress = typeof testsPassed === "number" && typeof testsTotal === "number" && testsTotal > 0
                     ? clamp(testsPassed / testsTotal, 0, 1)
                     : null;
@@ -1953,17 +1972,7 @@ export const TaskLibraryPage: React.FC = () => {
                     <motion.article
                       key={task.id}
                       variants={fadeUpItem}
-                      role="button"
-                      tabIndex={0}
-                      aria-current={isSelected ? "true" : undefined}
-                      onClick={() => selectTask(task)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          selectTask(task);
-                        }
-                      }}
-                      className={`group flex min-h-[230px] flex-col rounded-[28px] border bg-white p-5 text-left shadow-[0_20px_55px_-44px_rgba(18,42,26,.55)] transition focus:outline-none focus-visible:ring-4 focus-visible:ring-[#00ff88]/15 dark:bg-[#121b15] ${isSelected ? "border-[#00c96d]/55 ring-4 ring-[#00ff88]/10 dark:border-[#00ff88]/35" : "border-[#142018]/10 hover:-translate-y-1 hover:border-[#00c96d]/30 dark:border-[#294333] dark:hover:border-[#00ff88]/25"}`}
+                      className={`group flex min-h-[230px] flex-col rounded-[28px] border bg-white p-5 text-left shadow-[0_20px_55px_-44px_rgba(18,42,26,.55)] transition dark:bg-[#121b15] ${isSelected ? "border-[#00c96d]/55 ring-4 ring-[#00ff88]/10 dark:border-[#00ff88]/35" : "border-[#142018]/10 hover:-translate-y-1 hover:border-[#00c96d]/30 dark:border-[#294333] dark:hover:border-[#00ff88]/25"}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -1988,10 +1997,22 @@ export const TaskLibraryPage: React.FC = () => {
                             ) : null}
                           </div>
                           <h3 className="mt-4 line-clamp-2 text-lg font-semibold tracking-[-0.03em] text-[#142018] dark:text-white">
-                            {task.title}
+                            <button type="button" onClick={() => selectTask(task)} className="text-left hover:text-[#147b47] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c96d]/50 dark:hover:text-[#72edb0]">
+                              {task.title}
+                            </button>
                           </h3>
                         </div>
                         <div className="flex shrink-0 items-center gap-1">
+                          <a
+                            href={buildSolvePath(task)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-xl p-2 text-[#7c8a80] transition hover:bg-[#f1f5f1] hover:text-[#147b47] dark:hover:bg-white/[.07] dark:hover:text-[#72edb0]"
+                            aria-label={tr("Відкрити задачу в новій вкладці", "Open task in a new tab")}
+                            title={tr("Відкрити в новій вкладці", "Open in a new tab")}
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
                           <button
                             type="button"
                             onClick={(e) => {
@@ -2022,6 +2043,7 @@ export const TaskLibraryPage: React.FC = () => {
                         {(task.problemCode || task.slug) ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.problemCode || task.slug}</span> : null}
                         {task.section ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.section}</span> : null}
                         <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{formatShortDate(task.updatedAt, i18n.language || "uk")}</span>
+                        {lastCheckedAt ? <span className="rounded-full bg-[#e8f8ed] px-2.5 py-1 text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{tr("Перевірено", "Checked")}: {formatShortDateTime(lastCheckedAt, i18n.language || "uk")}</span> : null}
                         {task.projectSpec ? <span className="rounded-full bg-[#fff4df] px-2.5 py-1 text-[#a65600] dark:bg-[#ffb454]/10 dark:text-[#ffca7e]">{task.projectSpec.estimatedMinutes} {tr("хв проєкту", "min project")}</span> : null}
                       </div>
 
@@ -2080,7 +2102,12 @@ export const TaskLibraryPage: React.FC = () => {
                               </Button>
                             ) : null}
                           </div>
-                        ) : null}
+                        ) : (
+                          <button type="button" onClick={() => selectTask(task)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#00c96d]/30 px-3 py-2 text-xs font-semibold text-[#147b47] transition hover:border-[#00c96d]/55 hover:bg-[#e8f8ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c96d]/50 dark:text-[#72edb0] dark:hover:bg-[#00ff88]/10">
+                            <Play className="h-3 w-3" />
+                            {tr("Переглянути", "Preview")}
+                          </button>
+                        )}
                       </div>
                     </motion.article>
                   );

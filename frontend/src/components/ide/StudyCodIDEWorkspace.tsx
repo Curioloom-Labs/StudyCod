@@ -130,6 +130,8 @@ type Props = {
   onStdinChange: (next: string) => void;
   firstExampleInput?: string;
   onUseExampleInput: () => void;
+  publicExamples?: Array<{ testId: number; input: string; expectedOutput: string }>;
+  hasUnsavedChanges?: boolean;
   running: boolean;
   checking: boolean;
   onRun: () => void;
@@ -247,13 +249,14 @@ type PracticeCodeEditorProps = {
   fontSize: number;
   wordWrap: boolean;
   isWebTask: boolean;
+  focusLine?: number | null;
   onChange: (nextCode: string) => void;
 };
 
 // Keep Monaco's draft isolated from the large IDE workspace. The workspace
 // contains task markdown, test panels and mentor UI; re-rendering all of that
 // for every keystroke makes the editor feel frozen on slower devices.
-const PracticeCodeEditor = React.memo<PracticeCodeEditorProps>(({ taskId, value, language, readOnly, fontSize, wordWrap, isWebTask, onChange }) => {
+const PracticeCodeEditor = React.memo<PracticeCodeEditorProps>(({ taskId, value, language, readOnly, fontSize, wordWrap, isWebTask, focusLine = null, onChange }) => {
   const [draft, setDraft] = React.useState(value);
 
   React.useEffect(() => {
@@ -273,6 +276,7 @@ const PracticeCodeEditor = React.memo<PracticeCodeEditorProps>(({ taskId, value,
     readOnly={readOnly}
     fontSize={fontSize}
     wordWrap={wordWrap}
+    focusLine={focusLine}
   />;
 });
 
@@ -611,6 +615,13 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       setNotice(tr("Не вдалося скопіювати текст", "Could not copy text"));
     }
   };
+  const compilerErrorLine = React.useMemo(() => {
+    const source = String(props.checkResult?.compileError ?? "");
+    if (!source) return null;
+    const match = source.match(/(?:\bline\s+|:\s*)(\d+)(?::|\b)/i);
+    const line = match ? Number(match[1]) : NaN;
+    return Number.isFinite(line) && line > 0 ? line : null;
+  }, [props.checkResult?.compileError]);
   const comparisonCode = history[0]?.code ?? "";
   const comparisonLines = React.useMemo(() => {
     const before = comparisonCode.split("\n");
@@ -626,6 +637,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     }
     return rows;
   }, [comparisonCode, props.code]);
+  const firstFailedPublicTestId = props.checkResult?.publicTestResults?.find((test) => !test.passed)?.testId ?? null;
   const renderBottom = () => {
     if (bottomTab === "debugger") {
       const step =
@@ -837,11 +849,23 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <div className="mb-2 text-[10px] uppercase tracking-[.14em] text-[#82968a]">stdout</div>
+              <div className="mb-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[.14em] text-[#82968a]">
+                <span>stdout</span>
+                <button type="button" onClick={() => void copyText(props.runResult?.stdout || "", "stdout")} disabled={!props.runResult?.stdout} className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] normal-case tracking-normal text-[#c8d6cc] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40" aria-label={tr("Скопіювати stdout", "Copy stdout")} title={tr("Скопіювати stdout", "Copy stdout")}>
+                  {copiedLabel === "stdout" ? <Check className="size-3" /> : <Copy className="size-3" />}
+                  {copiedLabel === "stdout" ? tr("Скопійовано", "Copied") : tr("Копіювати", "Copy")}
+                </button>
+              </div>
               <pre className="min-h-24 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs leading-5 text-[#dce7df]">{props.runResult?.stdout || "—"}</pre>
             </div>
             <div>
-              <div className="mb-2 text-[10px] uppercase tracking-[.14em] text-[#82968a]">stderr</div>
+              <div className="mb-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[.14em] text-[#82968a]">
+                <span>stderr</span>
+                <button type="button" onClick={() => void copyText(props.runResult?.stderr || "", "stderr")} disabled={!props.runResult?.stderr} className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] normal-case tracking-normal text-[#c8d6cc] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40" aria-label={tr("Скопіювати stderr", "Copy stderr")} title={tr("Скопіювати stderr", "Copy stderr")}>
+                  {copiedLabel === "stderr" ? <Check className="size-3" /> : <Copy className="size-3" />}
+                  {copiedLabel === "stderr" ? tr("Скопійовано", "Copied") : tr("Копіювати", "Copy")}
+                </button>
+              </div>
               <pre className="min-h-24 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs leading-5 text-[#ff9aba]">{props.runResult?.stderr || "—"}</pre>
             </div>
           </div>
@@ -944,21 +968,39 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         {props.checkResult?.publicTestResults?.length ? (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
             {props.checkResult.publicTestResults.map((test, index) => (
-              <button
-                key={test.testId}
-                type="button"
-                onClick={() =>
-                  setNotice(`${tr("Тест", "Test")} #${test.testId}`)
-                }
-                className={`rounded-lg border p-2 text-center transition hover:brightness-125 ${test.skipped ? "border-[#f0c674]/30 bg-[#f0c674]/10 text-[#f0c674]" : test.passed ? "border-[#00d978]/30 bg-[#00d978]/10 text-[#72edb0]" : "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]"}`}
-              >
-                <span className="block font-bold">
-                  {test.passed ? "✓" : "×"} {index + 1}
-                </span>
-                <span className="mt-1 block text-[10px] opacity-70">
-                  {test.verdict || (test.passed ? "AC" : "WA")}
-                </span>
-              </button>
+              <div key={test.testId} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setNotice(`${tr("Тест", "Test")} #${test.testId}`)
+                  }
+                  className={`w-full rounded-lg border p-2 text-center transition hover:brightness-125 ${test.testId === firstFailedPublicTestId ? "ring-2 ring-[#ff9aba]/70 ring-offset-1 ring-offset-[#0b120e]" : ""} ${test.skipped ? "border-[#f0c674]/30 bg-[#f0c674]/10 text-[#f0c674]" : test.passed ? "border-[#00d978]/30 bg-[#00d978]/10 text-[#72edb0]" : "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]"}`}
+                  aria-label={`${tr("Тест", "Test")} #${test.testId}${test.testId === firstFailedPublicTestId ? ` · ${tr("перший невдалий", "first failed")}` : ""}`}
+                >
+                  <span className="block font-bold">
+                    {test.passed ? "✓" : "×"} {index + 1}
+                  </span>
+                  <span className="mt-1 block text-[10px] opacity-70">
+                    {test.verdict || (test.passed ? "AC" : "WA")}
+                  </span>
+                </button>
+                {(() => {
+                  const example = props.publicExamples?.find((item) => item.testId === test.testId);
+                  if (!example) return null;
+                  const inputLabel = `public-input:${test.testId}`;
+                  const outputLabel = `public-output:${test.testId}`;
+                  return (
+                    <div className="flex justify-center gap-1">
+                      <button type="button" onClick={() => void copyText(example.input, inputLabel)} disabled={!example.input} className="rounded border border-white/10 p-1 text-[#82968a] hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40" aria-label={tr(`Скопіювати input тесту ${index + 1}`, `Copy test ${index + 1} input`)} title={tr("Скопіювати input", "Copy input")}>
+                        {copiedLabel === inputLabel ? <Check className="size-3" /> : <Copy className="size-3" />}
+                      </button>
+                      <button type="button" onClick={() => void copyText(example.expectedOutput, outputLabel)} disabled={!example.expectedOutput} className="rounded border border-white/10 p-1 text-[#82968a] hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40" aria-label={tr(`Скопіювати очікуваний output тесту ${index + 1}`, `Copy test ${index + 1} expected output`)} title={tr("Скопіювати expected output", "Copy expected output")}>
+                        {copiedLabel === outputLabel ? <Check className="size-3" /> : <Copy className="size-3" />}
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
             ))}
           </div>
         ) : (
@@ -1321,19 +1363,38 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <span className="rounded-md border border-[#294333] bg-[#111f15] px-1.5 py-0.5 font-mono text-[9px] text-[#6f8877]">stdin</span>
             </div>
             <textarea
+              id="ide-run-input"
+              name="runInput"
               value={props.stdin}
               onChange={(event) => props.onStdinChange(event.target.value)}
               disabled={props.isWebTask || isEmptyTask}
-              rows={2}
+              rows={4}
+              aria-label={tr("Ввід для запуску", "Run input")}
               spellCheck={false}
               placeholder={
                 props.isWebTask
                   ? tr("WEB без stdin", "WEB has no stdin")
                   : tr("Власний input для Run", "Custom input for Run")
               }
-              className="col-span-2 row-start-2 min-h-16 max-h-36 min-w-0 w-full resize-y overflow-auto rounded-xl border border-[#294333] bg-[#101b13] px-3 py-2.5 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] transition focus:border-[#00d978]/60 focus:bg-[#122117] disabled:opacity-50"
+              className="col-span-2 row-start-2 min-h-28 max-h-48 min-w-0 w-full resize-y overflow-auto rounded-xl border border-[#294333] bg-[#101b13] px-3 py-2.5 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] transition focus:border-[#00d978]/60 focus:bg-[#122117] disabled:opacity-50 sm:min-h-16"
             />
-            {props.firstExampleInput ? (
+            {props.publicExamples?.length ? (
+              <div className="col-span-2 row-start-3 flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-[10px] font-semibold text-[#82968a]">{tr("Швидкий приклад", "Quick example")}</span>
+                {props.publicExamples.map((example, index) => (
+                  <button
+                    key={example.testId}
+                    type="button"
+                    onClick={() => props.onStdinChange(example.input)}
+                    disabled={props.isWebTask || isEmptyTask}
+                    className="rounded-md border border-[#294333] px-2 py-1 text-[10px] font-semibold text-[#72edb0] hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40"
+                    aria-label={tr(`Вставити відкритий приклад ${index + 1}`, `Use public example ${index + 1}`)}
+                  >
+                    #{index + 1}
+                  </button>
+                ))}
+              </div>
+            ) : props.firstExampleInput ? (
               <button
                 type="button"
                 onClick={props.onUseExampleInput}
@@ -1439,6 +1500,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   activePath={activeFile}
                   onActivePathChange={setActiveFile}
                   hideTabsOnDesktop
+                  hasUnsavedChanges={props.hasUnsavedChanges}
+                  focusLine={compilerErrorLine}
                   requestAddToken={fileAddRequestToken}
                 />
               ) : (
@@ -1450,6 +1513,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   fontSize={fontSize}
                   wordWrap={wordWrap}
                   isWebTask={Boolean(props.isWebTask)}
+                  focusLine={compilerErrorLine}
                   onChange={handleCodeChange}
                 />
               )}

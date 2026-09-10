@@ -875,6 +875,8 @@ interface Props {
   filePath?: string;
   /** Shows a touch-friendly symbol row on phones. */
   showMobileToolbar?: boolean;
+  /** Focus and reveal a source line after the editor has mounted. */
+  focusLine?: number | null;
   /**
    * Exposes the underlying Monaco editor + api once mounted, so callers can
    * attach cursor listeners or decorations (e.g. the live code board's shared
@@ -1035,7 +1037,8 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   enableSemanticLsp = true,
   filePath,
   onEditorMount,
-  showMobileToolbar = true
+  showMobileToolbar = true,
+  focusLine = null,
 }) => {
   const {
     i18n
@@ -1136,6 +1139,20 @@ export const CodeEditor: React.FC<Props> = React.memo(({
       // ignore
     }
   }, [value]);
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !Number.isFinite(focusLine) || Number(focusLine) < 1) return;
+    try {
+      const model = editor.getModel();
+      if (!model) return;
+      const lineNumber = Math.min(Math.floor(Number(focusLine)), model.getLineCount());
+      editor.revealLineInCenter(lineNumber);
+      editor.setPosition({ lineNumber, column: 1 });
+      editor.focus();
+    } catch {
+      // A line jump is a convenience; never let it break the editor.
+    }
+  }, [focusLine]);
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor) return;

@@ -47,6 +47,8 @@ export interface MultiFileEditorProps {
   activePath?: string;
   onActivePathChange?: (path: string) => void;
   hideTabsOnDesktop?: boolean;
+  hasUnsavedChanges?: boolean;
+  focusLine?: number | null;
   /**
    * Increment this number to request opening the “Add file” modal.
    * Useful when the parent triggers file creation from outside the editor.
@@ -67,6 +69,8 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   activePath: controlledActivePath,
   onActivePathChange,
   hideTabsOnDesktop = false,
+  hasUnsavedChanges = false,
+  focusLine = null,
   requestAddToken,
 }) => {
   const normalized = useMemo(() => {
@@ -185,6 +189,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
                 >
                   <FileCode2 className={`size-3.5 ${isActive ? "text-[#72edb0]" : "text-[#718078]"}`} />
                   {f.path}
+                  {hasUnsavedChanges && isActive ? <span className="size-1.5 rounded-full bg-[#f0c674]" title={tr("Є незбережені зміни", "Unsaved changes")} aria-label={tr("Є незбережені зміни", "Unsaved changes")} /> : null}
                 </button>
                 {!readOnly && !isEntry ? (
                   <button
@@ -208,7 +213,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
 
       <div className="flex h-full min-h-0 flex-1" id={`${panelAriaId}-panel`} role="tabpanel" aria-labelledby={active ? tabIdForPath(active.path) : undefined}>
         <div className="h-full min-h-0 w-full" style={height ? { height } : undefined}>
-          <CodeEditor key={active?.path || entryFile} language={language} value={active?.content ?? ""} onChange={readOnly ? undefined : setActiveContent} readOnly={readOnly} fontSize={fontSize} wordWrap={wordWrap} enableSemanticLsp={enableSemanticLsp} filePath={active?.path || entryFile} />
+          <CodeEditor key={active?.path || entryFile} language={language} value={active?.content ?? ""} onChange={readOnly ? undefined : setActiveContent} readOnly={readOnly} fontSize={fontSize} wordWrap={wordWrap} enableSemanticLsp={enableSemanticLsp} filePath={active?.path || entryFile} focusLine={focusLine} />
         </div>
       </div>
 

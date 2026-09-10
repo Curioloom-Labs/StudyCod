@@ -58,13 +58,13 @@ function tabTemplate(kind: WorkspaceTabKind): WorkspaceTab {
   return { id: "discussion", kind, title: "Discussion", closable: true };
 }
 
-function buildExamplesFromMarkdown(markdown: string): Array<{ id: string; title: string; input: string }> {
+function buildExamplesFromMarkdown(markdown: string): Array<{ id: string; title: string; input: string; expectedOutput?: string }> {
   const fences = Array.from(String(markdown).matchAll(/```(?:[\w+-]*)\n([\s\S]*?)```/g)).map((m) => String(m[1] ?? "").trim());
-  const out: Array<{ id: string; title: string; input: string }> = [];
+  const out: Array<{ id: string; title: string; input: string; expectedOutput?: string }> = [];
   for (let i = 0; i < fences.length; i += 2) {
     const input = fences[i];
     if (!input) continue;
-    out.push({ id: `ex-${i / 2 + 1}`, title: `Example #${i / 2 + 1}`, input });
+    out.push({ id: `ex-${i / 2 + 1}`, title: `Example #${i / 2 + 1}`, input, expectedOutput: fences[i + 1] || "" });
   }
   return out;
 }

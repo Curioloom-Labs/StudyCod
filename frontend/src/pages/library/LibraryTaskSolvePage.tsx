@@ -24,6 +24,7 @@ import {
   type CodeFile,
   type LibraryCheckResult,
   type LibraryTaskListItem,
+  type LibraryTaskTest,
   type LibraryRunResult,
   type JudgeLanguage,
   type WebTaskFile,
@@ -243,6 +244,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [task, setTask] = useState<Awaited<ReturnType<typeof getLibraryTask>>["task"] | null>(null);
   const [theory, setTheory] = useState<string | null>(null);
+  const [visibleTests, setVisibleTests] = useState<LibraryTaskTest[]>([]);
 
   // Always use a numeric id for run/check/drafts. When the route uses slug/problemCode,
   // taskId will be null, but loaded task will still have an id.
@@ -374,6 +376,9 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const outputSectionRef = useRef<HTMLDivElement | null>(null);
 
   const firstExampleInput = useMemo(() => extractFirstExampleInput(String(task?.description ?? "")), [task?.description]);
+  const isDraftDirty = useMemo(() => useFiles
+    ? !(lastSavedUseFiles === true && filesEqual(files, lastSavedFiles))
+    : !(lastSavedUseFiles === false && code === lastSavedCode), [code, files, lastSavedCode, lastSavedFiles, lastSavedUseFiles, useFiles]);
 
   const scrollToSection = (id: "mission" | "task" | "console") => {
     setActiveRailItem(id);
@@ -397,6 +402,9 @@ export const LibraryTaskSolvePage: React.FC = () => {
     const load = async () => {
       const d = taskId != null ? await getLibraryTask(taskId) : await getLibraryTaskByKey(taskKey);
       let taskData = d.task;
+      // Only public tests may be surfaced to the learner. Hidden test data
+      // must never reach copy/example controls in the client.
+      setVisibleTests((d.tests || []).filter((test) => !test.isHidden).slice(0, 12));
 
       if (taskData.taskMode === "WEB") {
         let initialFiles = normalizeWebFiles(taskData.webTemplateFiles ?? null);
@@ -467,6 +475,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
         if (isPreview()) {
           setTask(previewLibraryTask);
           setTheory(null);
+          setVisibleTests([]);
           setJudgeLanguage("python");
           setCode(previewLibraryTask.template);
           setLastSavedCode(previewLibraryTask.template);
@@ -1035,6 +1044,8 @@ export const LibraryTaskSolvePage: React.FC = () => {
           onStdinChange={setStdin}
           firstExampleInput={firstExampleInput}
           onUseExampleInput={() => setStdin(firstExampleInput)}
+          publicExamples={visibleTests.map((test) => ({ testId: test.id, input: test.input, expectedOutput: test.expectedOutput }))}
+          hasUnsavedChanges={isDraftDirty}
           running={running}
           checking={checking}
           onRun={doRun}

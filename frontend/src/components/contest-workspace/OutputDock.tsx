@@ -6,6 +6,7 @@ type ExampleCase = {
   id: string;
   title: string;
   input: string;
+  expectedOutput?: string;
 };
 
 type OutputDockProps = {
@@ -39,9 +40,9 @@ function verdictTone(verdict: string | null | undefined) {
 
 export const OutputDock: React.FC<OutputDockProps> = ({ examples, onPickExample, runResult, checkResult, submissions, wsStatus, latestVerdict, attention, onRefresh, refreshing = false }) => {
   const [view, setView] = React.useState<DockView>("tests");
-  const [copiedOutput, setCopiedOutput] = React.useState<"stdout" | "stderr" | null>(null);
+  const [copiedOutput, setCopiedOutput] = React.useState<string | null>(null);
 
-  const copyOutput = async (kind: "stdout" | "stderr", value: string) => {
+  const copyOutput = async (kind: string, value: string) => {
     try {
       await navigator.clipboard.writeText(value);
       setCopiedOutput(kind);
@@ -168,15 +169,34 @@ export const OutputDock: React.FC<OutputDockProps> = ({ examples, onPickExample,
           <>
             {examples.length === 0 ? <div className="rounded-lg border border-border bg-bg-base/70 p-2.5 text-xs text-text-secondary">No parsed examples found in this statement section yet.</div> : null}
             {examples.map((ex) => (
-              <button type="button"
-                key={ex.id}
-                onClick={() => onPickExample(ex.input)}
-                className="w-full text-left rounded-xl border border-border bg-bg-base/80 hover:bg-bg-hover transition-fast p-2.5"
-                aria-label={`Use ${ex.title} input`}
-              >
-                <div className="text-xs text-primary mb-1">{ex.title}</div>
-                <pre className="text-[11px] text-text-primary overflow-auto max-h-24">{ex.input || "—"}</pre>
-              </button>
+              <div key={ex.id} className="w-full rounded-xl border border-border bg-bg-base/80 p-2.5">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-xs text-primary">{ex.title}</div>
+                  <button type="button" onClick={() => onPickExample(ex.input)} className="rounded-md border border-secondary/40 px-2 py-1 text-[10px] font-semibold text-secondary hover:bg-secondary/10" aria-label={`Use ${ex.title} input`}>
+                    Use input
+                  </button>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="min-w-0 rounded-lg border border-border/70 bg-bg-base/60 p-2">
+                    <div className="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.07em] text-text-secondary">
+                      <span>Input</span>
+                      <button type="button" onClick={() => void copyOutput(`example-input:${ex.id}`, ex.input)} disabled={!ex.input} className="rounded p-1 hover:bg-bg-hover disabled:pointer-events-none disabled:opacity-40" aria-label={`Copy ${ex.title} input`} title={`Copy ${ex.title} input`}>
+                        {copiedOutput === `example-input:${ex.id}` ? <Check className="size-3" /> : <Copy className="size-3" />}
+                      </button>
+                    </div>
+                    <pre className="max-h-24 overflow-auto whitespace-pre-wrap text-[11px] text-text-primary">{ex.input || "—"}</pre>
+                  </div>
+                  <div className="min-w-0 rounded-lg border border-border/70 bg-bg-base/60 p-2">
+                    <div className="mb-1 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.07em] text-text-secondary">
+                      <span>Expected output</span>
+                      <button type="button" onClick={() => void copyOutput(`example-output:${ex.id}`, ex.expectedOutput || "")} disabled={!ex.expectedOutput} className="rounded p-1 hover:bg-bg-hover disabled:pointer-events-none disabled:opacity-40" aria-label={`Copy ${ex.title} expected output`} title={`Copy ${ex.title} expected output`}>
+                        {copiedOutput === `example-output:${ex.id}` ? <Check className="size-3" /> : <Copy className="size-3" />}
+                      </button>
+                    </div>
+                    <pre className="max-h-24 overflow-auto whitespace-pre-wrap text-[11px] text-text-primary">{ex.expectedOutput || "—"}</pre>
+                  </div>
+                </div>
+              </div>
             ))}
           </>
         ) : null}
