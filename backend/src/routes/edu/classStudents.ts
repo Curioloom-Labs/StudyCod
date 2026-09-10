@@ -267,7 +267,9 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
       .trim()
       .toLowerCase()
       .replace(/\s+/g, "")
-      .replace(/["'’ʼ`]/g, "")
+      // Spreadsheet headers may contain typographic apostrophes from Word,
+      // Google Sheets, or Ukrainian text input (for example, `Імʼя`).
+      .replace(/["'´ʻʼʽʾ‘’‛′`]/g, "")
       .replace(/-/g, "");
 
     const splitFullName = (value: string) => {
