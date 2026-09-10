@@ -75,6 +75,87 @@ const emptyStudent = (): DraftStudent => ({
   email: "",
 });
 
+const parsePastedStudentList = (raw: string): { students: DraftStudent[]; invalidLines: number[] } => {
+  const lines = raw
+    .replace(/^\uFEFF/, "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return { students: [], invalidLines: [] };
+
+  const splitLine = (line: string) => {
+    const delimiter = line.includes("\t") ? "\t" : line.includes(";") ? ";" : ",";
+    const cells: string[] = [];
+    let current = "";
+    let quoted = false;
+    for (let index = 0; index < line.length; index += 1) {
+      const character = line[index];
+      if (character === '"') {
+        if (quoted && line[index + 1] === '"') {
+          current += '"';
+          index += 1;
+        } else {
+          quoted = !quoted;
+        }
+      } else if (character === delimiter && !quoted) {
+        cells.push(current.trim());
+        current = "";
+      } else {
+        current += character;
+      }
+    }
+    cells.push(current.trim());
+    return cells;
+  };
+
+  const normalizeHeader = (value: string) => value
+    .toLowerCase()
+    .replace(/["'’ʼ]/g, "")
+    .replace(/[\s_-]+/g, "");
+  const firstCells = splitLine(lines[0]).map(normalizeHeader);
+  const headerAliases = {
+    lastName: ["прізвище", "призвище", "lastname", "last"],
+    firstName: ["імя", "имя", "firstname", "first"],
+    middleName: ["побатькові", "middlename", "middle"],
+    email: ["email", "emailaddress", "емейл"],
+  } as const;
+  const headerIndex = (aliases: readonly string[]) => firstCells.findIndex((cell) => aliases.includes(cell));
+  const hasHeader = Object.values(headerAliases).some((aliases) => headerIndex(aliases) >= 0);
+  const indexes = {
+    lastName: headerIndex(headerAliases.lastName),
+    firstName: headerIndex(headerAliases.firstName),
+    middleName: headerIndex(headerAliases.middleName),
+    email: headerIndex(headerAliases.email),
+  };
+  const students: DraftStudent[] = [];
+  const invalidLines: number[] = [];
+
+  lines.slice(hasHeader ? 1 : 0).forEach((line, offset) => {
+    const lineNumber = offset + (hasHeader ? 2 : 1);
+    const cells = splitLine(line);
+    const item = hasHeader
+      ? {
+          lastName: indexes.lastName >= 0 ? cells[indexes.lastName] || "" : "",
+          firstName: indexes.firstName >= 0 ? cells[indexes.firstName] || "" : "",
+          middleName: indexes.middleName >= 0 ? cells[indexes.middleName] || "" : "",
+          email: indexes.email >= 0 ? cells[indexes.email] || "" : "",
+        }
+      : cells.length >= 4
+        ? { lastName: cells[0] || "", firstName: cells[1] || "", middleName: cells[2] || "", email: cells[3] || "" }
+        : { lastName: cells[0] || "", firstName: cells[1] || "", middleName: "", email: cells[2] || "" };
+    const student = {
+      firstName: item.firstName.trim(),
+      lastName: item.lastName.trim(),
+      middleName: item.middleName.trim(),
+      email: item.email.trim().toLowerCase(),
+    };
+    if (!student.firstName || !student.lastName || !student.email) invalidLines.push(lineNumber);
+    else students.push(student);
+  });
+
+  return { students, invalidLines };
+};
+
 export const ClassManagementPage: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
@@ -99,6 +180,9 @@ export const ClassManagementPage: React.FC = () => {
   const [showCredentials, setShowCredentials] = React.useState(false);
   const [importFile, setImportFile] = React.useState<File | null>(null);
   const [showImport, setShowImport] = React.useState(false);
+  const [importError, setImportError] = React.useState<string | null>(null);
+  const [addMode, setAddMode] = React.useState<"paste" | "manual">("paste");
+  const [bulkStudentText, setBulkStudentText] = React.useState("");
   const [parentStudent, setParentStudent] = React.useState<Student | null>(
     null,
   );
@@ -122,6 +206,10 @@ export const ClassManagementPage: React.FC = () => {
   );
   const [announcementsUnavailable, setAnnouncementsUnavailable] =
     React.useState(false);
+  const parsedBulkStudents = React.useMemo(
+    () => parsePastedStudentList(bulkStudentText),
+    [bulkStudentText],
+  );
 
   const load = React.useCallback(async () => {
     if (!Number.isFinite(id) || id <= 0) return;
@@ -182,9 +270,24 @@ export const ClassManagementPage: React.FC = () => {
     void load();
   }, [load]);
 
+  const openAddStudents = (mode: "paste" | "manual") => {
+    setAddMode(mode);
+    setAddStudentsError(null);
+    setShowAdd(true);
+  };
+
+  const closeAddStudents = () => {
+    setShowAdd(false);
+    setAddStudentsError(null);
+  };
+
   const submitStudents = async () => {
     setAddStudentsError(null);
-    const valid = draftStudents
+    if (addMode === "paste" && parsedBulkStudents.invalidLines.length) {
+      setAddStudentsError(`Перевірте рядки ${parsedBulkStudents.invalidLines.join(", ")}: потрібні прізвище, імʼя та email.`);
+      return;
+    }
+    const valid = (addMode === "paste" ? parsedBulkStudents.students : draftStudents)
       .map((item) => ({
         firstName: item.firstName.trim(),
         lastName: item.lastName.trim(),
@@ -193,7 +296,7 @@ export const ClassManagementPage: React.FC = () => {
       }))
       .filter((item) => item.firstName && item.lastName && item.email);
     if (!valid.length) {
-      setAddStudentsError("Заповніть імʼя, прізвище та email хоча б одного учня.");
+      setAddStudentsError(addMode === "paste" ? "Вставте список учнів у поле вище." : "Заповніть імʼя, прізвище та email хоча б одного учня.");
       return;
     }
     const emails = new Set<string>();
@@ -206,6 +309,12 @@ export const ClassManagementPage: React.FC = () => {
       setAddStudentsError(`Email ${duplicateEmail} повторюється у формі. Перевірте рядки.`);
       return;
     }
+    const existingEmails = new Set(students.map((student) => student.email.trim().toLowerCase()).filter(Boolean));
+    const alreadyInClass = valid.find((item) => existingEmails.has(item.email))?.email;
+    if (alreadyInClass) {
+      setAddStudentsError(`Email ${alreadyInClass} уже є в цьому класі.`);
+      return;
+    }
     setSaving(true);
     try {
       const result = await addStudents(id, valid);
@@ -213,6 +322,7 @@ export const ClassManagementPage: React.FC = () => {
       setShowCredentials(true);
       setShowAdd(false);
       setDraftStudents([emptyStudent()]);
+      setBulkStudentText("");
       await load();
     } catch (caught) {
       const message = getErrorMessageFromUnknown(caught, "Не вдалося додати учнів.");
@@ -250,22 +360,24 @@ export const ClassManagementPage: React.FC = () => {
 
   const importRoster = async () => {
     if (!importFile) return;
+    setImportError(null);
     setSaving(true);
     try {
       const result = await importStudents(id, await importFile.text());
+      if (!result.count) {
+        setImportError("У файлі не знайдено учнів. Перевірте колонки: Прізвище, Імʼя, По батькові, Email.");
+        return;
+      }
       setCredentials(result.credentials);
       setShowCredentials(true);
       setShowImport(false);
       setImportFile(null);
       await load();
     } catch (caught) {
-      showToast({
-        type: "error",
-        message: getErrorMessageFromUnknown(
-          caught,
-          "Не вдалося імпортувати список.",
-        ),
-      });
+      const message = getErrorMessageFromUnknown(caught, "Не вдалося імпортувати список.");
+      setImportError(message === "INVALID_STUDENT_IMPORT"
+        ? "Не вдалося розпізнати файл. Перевірте рядки та колонки: Прізвище, Імʼя, По батькові, Email."
+        : message);
     } finally {
       setSaving(false);
     }
@@ -511,7 +623,7 @@ export const ClassManagementPage: React.FC = () => {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="ghost" onClick={() => setShowImport(true)}>
+                <Button variant="ghost" onClick={() => { setImportError(null); setShowImport(true); }}>
                   <FileUp className="mr-2 size-4" />
                   Імпорт CSV
                 </Button>
@@ -519,9 +631,9 @@ export const ClassManagementPage: React.FC = () => {
                   <Download className="mr-2 size-4" />
                   Експорт
                 </Button>
-                <Button onClick={() => { setAddStudentsError(null); setShowAdd(true); }}>
+                <Button onClick={() => openAddStudents("paste")}>
                   <UserPlus className="mr-2 size-4" />
-                  Створити облікові записи учнів
+                  Додати учнів
                 </Button>
               </div>
             </div>
@@ -564,12 +676,20 @@ export const ClassManagementPage: React.FC = () => {
               {!students.length && (
                 <div className="col-span-full rounded-[24px] border border-dashed border-[#142018]/15 p-12 text-center dark:border-white/10">
                   <UsersRound className="mx-auto size-9 text-[#16834d] dark:text-[#7bedb4]" />
-                  <h3 className="mt-4 text-xl font-black">
-                    Клас поки порожній
-                  </h3>
+                  <h3 className="mt-4 text-xl font-black">У класі ще немає учнів</h3>
                   <p className="mt-2 text-sm text-[#6b7a70] dark:text-[#aebbb2]">
-                    Додайте першого учня, щоб почати навчання.
+                    Вставте список із Excel або Google Таблиць — облікові записи створяться одним кроком.
                   </p>
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    <Button onClick={() => openAddStudents("paste")}>
+                      <UserPlus className="mr-2 size-4" />
+                      Вставити список учнів
+                    </Button>
+                    <Button variant="ghost" onClick={() => { setImportError(null); setShowImport(true); }}>
+                      <FileUp className="mr-2 size-4" />
+                      Завантажити CSV
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -825,110 +945,59 @@ export const ClassManagementPage: React.FC = () => {
 
       <Modal
         open={showAdd}
-        onClose={() => { setShowAdd(false); setAddStudentsError(null); }}
-        title="Створити облікові записи учнів"
+        onClose={closeAddStudents}
+        title="Додати учнів"
         showCloseButton={false}
       >
         <div className="max-h-[70vh] space-y-3 overflow-y-auto">
-          <p className="text-sm text-text-secondary">
-            Можна додати одного або кількох учнів. Дані та згенеровані паролі
-            покажемо після успішного створення.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-text-secondary">Створимо облікові записи та покажемо логіни й паролі один раз після додавання.</p>
+            <button type="button" onClick={() => { setAddMode(addMode === "paste" ? "manual" : "paste"); setAddStudentsError(null); }} className="text-xs font-bold text-accent-success hover:underline">
+              {addMode === "paste" ? "Ввести по одному" : "Вставити список"}
+            </button>
+          </div>
           {addStudentsError && (
-            <div role="alert" className="rounded-xl border border-accent-error/30 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
+            <div role="alert" aria-live="polite" className="rounded-xl border border-accent-error/30 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
               {addStudentsError}
             </div>
           )}
-          {draftStudents.map((student, index) => (
-            <fieldset key={index} className="grid gap-2 rounded-2xl border border-border/70 p-3 sm:grid-cols-2">
-              <legend className="px-1 text-xs font-bold text-text-secondary">Учень {index + 1}</legend>
-              <input
-                aria-label={`Прізвище учня ${index + 1}`}
-                name={`student-${index}-lastName`}
-                autoComplete="family-name"
-                value={student.lastName}
-                onChange={(event) =>
-                  setDraftStudents((list) =>
-                    list.map((item, itemIndex) =>
-                      itemIndex === index
-                        ? { ...item, lastName: event.target.value }
-                        : item,
-                    ),
-                  )
-                }
-                placeholder="Прізвище"
-                className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
-              />
-              <input
-                aria-label={`Імʼя учня ${index + 1}`}
-                name={`student-${index}-firstName`}
-                autoComplete="given-name"
-                value={student.firstName}
-                onChange={(event) =>
-                  setDraftStudents((list) =>
-                    list.map((item, itemIndex) =>
-                      itemIndex === index
-                        ? { ...item, firstName: event.target.value }
-                        : item,
-                    ),
-                  )
-                }
-                placeholder="Імʼя"
-                className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
-              />
-              <input
-                aria-label={`По батькові учня ${index + 1}`}
-                name={`student-${index}-middleName`}
-                autoComplete="additional-name"
-                value={student.middleName}
-                onChange={(event) =>
-                  setDraftStudents((list) =>
-                    list.map((item, itemIndex) =>
-                      itemIndex === index
-                        ? { ...item, middleName: event.target.value }
-                        : item,
-                    ),
-                  )
-                }
-                placeholder="По батькові"
-                className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
-              />
-              <input
-                type="email"
-                aria-label={`Email учня ${index + 1}`}
-                name={`student-${index}-email`}
-                autoComplete="email"
+          {addMode === "paste" ? (
+            <div className="space-y-2">
+              <label htmlFor="bulk-student-list" className="text-sm font-bold">Список учнів</label>
+              <p className="text-xs leading-5 text-text-secondary">Скопіюйте рядки з таблиці в порядку: Прізвище → Імʼя → По батькові → Email. По батькові можна залишити порожнім.</p>
+              <textarea
+                id="bulk-student-list"
+                name="bulkStudentList"
+                autoComplete="off"
                 spellCheck={false}
-                value={student.email}
-                onChange={(event) =>
-                  setDraftStudents((list) =>
-                    list.map((item, itemIndex) =>
-                      itemIndex === index
-                        ? { ...item, email: event.target.value }
-                        : item,
-                    ),
-                  )
-                }
-                placeholder="Email"
-                className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
+                rows={8}
+                value={bulkStudentText}
+                onChange={(event) => { setBulkStudentText(event.target.value); setAddStudentsError(null); }}
+                placeholder={"Шевченко\tТарас\t\tstudent@example.com\nМельник\tСофія\tОлена\tsofia@example.com\n…"}
+                className="w-full resize-y rounded-2xl border border-border bg-bg-surface px-3 py-3 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-accent-success/50"
               />
-            </fieldset>
-          ))}
-          <Button
-            variant="ghost"
-            onClick={() =>
-              setDraftStudents((list) => [...list, emptyStudent()])
-            }
-          >
-            <Plus className="mr-2 size-4" />
-            Ще один рядок
-          </Button>
+              {bulkStudentText.trim() && <p aria-live="polite" className="text-xs font-bold text-text-secondary">Розпізнано учнів: {parsedBulkStudents.students.length}{parsedBulkStudents.invalidLines.length ? ` · помилки у рядках: ${parsedBulkStudents.invalidLines.join(", ")}` : ""}</p>}
+            </div>
+          ) : (
+            <>
+              {draftStudents.map((student, index) => (
+                <fieldset key={index} className="grid gap-2 rounded-2xl border border-border/70 p-3 sm:grid-cols-2">
+                  <legend className="px-1 text-xs font-bold text-text-secondary">Учень {index + 1}</legend>
+                  <input aria-label={`Прізвище учня ${index + 1}`} name={`student-${index}-lastName`} autoComplete="family-name" value={student.lastName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, lastName: event.target.value } : item))} placeholder="Прізвище…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
+                  <input aria-label={`Імʼя учня ${index + 1}`} name={`student-${index}-firstName`} autoComplete="given-name" value={student.firstName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, firstName: event.target.value } : item))} placeholder="Імʼя…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
+                  <input aria-label={`По батькові учня ${index + 1}`} name={`student-${index}-middleName`} autoComplete="additional-name" value={student.middleName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, middleName: event.target.value } : item))} placeholder="По батькові…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
+                  <input type="email" aria-label={`Email учня ${index + 1}`} name={`student-${index}-email`} autoComplete="email" spellCheck={false} value={student.email} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} placeholder="student@example.com…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
+                </fieldset>
+              ))}
+              <Button variant="ghost" onClick={() => setDraftStudents((list) => [...list, emptyStudent()])}><Plus className="mr-2 size-4" />Ще один рядок</Button>
+            </>
+          )}
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setShowAdd(false)}>
+            <Button variant="ghost" onClick={closeAddStudents}>
               Скасувати
             </Button>
             <Button onClick={() => void submitStudents()} disabled={saving}>
-              Додати
+              {saving ? "Додаємо…" : addMode === "paste" && parsedBulkStudents.students.length ? `Додати ${parsedBulkStudents.students.length} учнів` : "Додати учнів"}
             </Button>
           </div>
         </div>
@@ -943,14 +1012,15 @@ export const ClassManagementPage: React.FC = () => {
           <p className="text-sm text-text-secondary">
             Формат: Імʼя, Прізвище, По батькові, Email.
           </p>
+          {importError && <div role="alert" aria-live="polite" className="rounded-xl border border-accent-error/30 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">{importError}</div>}
           <input
             type="file"
             accept=".csv"
-            onChange={(event) => setImportFile(event.target.files?.[0] || null)}
+            onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportError(null); }}
             className="w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
           />
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setShowImport(false)}>
+            <Button variant="ghost" onClick={() => { setShowImport(false); setImportError(null); }}>
               Скасувати
             </Button>
             <Button

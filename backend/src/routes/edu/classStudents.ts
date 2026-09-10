@@ -294,31 +294,22 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
 
     const startIndex = hasHeader ? 1 : 0;
 
-    const ensureUniqueUsername = async (desired: string) => {
-      let candidate = desired;
-      if (!candidate.trim()) {
-        candidate = desired;
-      }
-      for (let attempt = 0; attempt < 10; attempt++) {
-        const exists = await studentRepo().count({
-          where: {
-            generatedUsername: candidate
-          }
-        });
-        if (!exists) return candidate;
-        const suffix = crypto.randomBytes(2).toString("hex");
-        candidate = `${candidate}_${suffix}`;
-      }
-      return `${candidate}_${crypto.randomBytes(2).toString("hex")}`;
-    };
+    const parsedRows: Array<{
+      firstName: string;
+      lastName: string;
+      middleName: string;
+      email: string;
+      username: string;
+      password: string;
+    }> = [];
+    const invalidLines: number[] = [];
 
-    // Persist the whole batch atomically: a failure partway through must not
-    // leave some students created and others not.
-    await AppDataSource.transaction(async (manager) => {
-    const studentRepoTx = manager.getRepository(Student);
     for (let i = startIndex; i < lines.length; i++) {
       const parts = parseCsvLine(lines[i]);
-      if (parts.length < 3) continue;
+      if (parts.length < 3) {
+        invalidLines.push(i + 1);
+        continue;
+      }
 
       let firstName = "";
       let lastName = "";
@@ -352,12 +343,57 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
         if (emailCandidate) email = emailCandidate;
       }
 
-      if (!firstName || !lastName || !email) continue;
+      const normalized = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        middleName: middleName.trim(),
+        email: email.trim().toLowerCase(),
+        username: username.trim(),
+        password: password.trim()
+      };
+      if (!normalized.firstName || !normalized.lastName || !normalized.email || !normalized.email.includes("@")) {
+        invalidLines.push(i + 1);
+        continue;
+      }
+      parsedRows.push(normalized);
+    }
 
-      const plainPassword = password?.trim() ? password.trim() : generatePassword();
+    if (!parsedRows.length || invalidLines.length) {
+      return res.status(400).json({
+        message: "INVALID_STUDENT_IMPORT",
+        invalidLines: invalidLines.slice(0, 50),
+        validRows: parsedRows.length
+      });
+    }
+
+    const ensureUniqueUsername = async (desired: string) => {
+      let candidate = desired;
+      if (!candidate.trim()) {
+        candidate = desired;
+      }
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const exists = await studentRepo().count({
+          where: {
+            generatedUsername: candidate
+          }
+        });
+        if (!exists) return candidate;
+        const suffix = crypto.randomBytes(2).toString("hex");
+        candidate = `${candidate}_${suffix}`;
+      }
+      return `${candidate}_${crypto.randomBytes(2).toString("hex")}`;
+    };
+
+    // Persist the whole batch atomically: a failure partway through must not
+    // leave some students created and others not.
+    await AppDataSource.transaction(async (manager) => {
+    const studentRepoTx = manager.getRepository(Student);
+    for (const row of parsedRows) {
+      const { firstName, lastName, middleName, email, username, password } = row;
+      const plainPassword = password || generatePassword();
       const hashedPassword = await hashPassword(plainPassword);
       const generatedBase = generateUsername(firstName, lastName, middleName);
-      const finalUsername = await ensureUniqueUsername(username?.trim() ? username.trim() : generatedBase);
+      const finalUsername = await ensureUniqueUsername(username || generatedBase);
 
       const student = studentRepoTx.create({
         firstName,

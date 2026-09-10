@@ -34,6 +34,8 @@ assert(learningCatalog.includes("existing.status = \"IN_PROGRESS\";") && learnin
 assert(fs.existsSync(path.join(root, "src/migrations/1752500000000-EnforceClassOrgNotNull.ts")), "org_id hardening migration must remain present");
 assert(fs.existsSync(path.join(root, "src/migrations/1752600000000-AddStudentDeletedAt.ts")), "student soft-delete migration must be present");
 assert(read("src/routes/edu/classStudents.ts").includes("writeSensitiveStudentRead"), "sensitive student reads must be audited");
+assert(eraseRoute.includes('z.string().trim().email()'), "manual student provisioning must accept trimmed email input");
+assert(eraseRoute.includes('message: "INVALID_STUDENT_IMPORT"') && eraseRoute.includes("invalidLines"), "CSV student imports must reject malformed or empty batches");
 assert((learningCatalog.match(/where: \{ id: itemId, isActive: true \}/g) || []).length === 3, "all direct course-item lookups must exclude inactive items");
 assert(learningCatalog.includes('.createQueryBuilder("task")') && learningCatalog.includes('task.user_id = :userId') && learningCatalog.includes('task.type IN (:...legacyTypes)'), "legacy progress sync must filter tasks in SQL");
 assert(tasks.includes("COURSE_PRACTICE_GENERATION_UNAVAILABLE") && tasks.includes("shouldUseGenericPersonalFallback(params.subtitle)"), "catalog practice must not use the generic AI fallback");
@@ -44,4 +46,4 @@ assert(tasks.includes('completeCourseItem(params.userId, itemId, params.score, "
 assert(safeAICall.includes("Provider messages/details can contain URLs") && !safeAICall.includes("error: error.error"), "AI provider internals must not be returned to clients");
 assert(lessonQuiz.includes("isQuizAttemptDuplicateError") && lessonQuiz.includes('QUIZ_ALREADY_SUBMITTED'), "quiz duplicate submissions must return the stable conflict contract");
 
-console.log("STATIC CONTRACT PASS: auth, student erase/restore, org hardening, sensitive-read guards, course progress, and safe AI error contracts");
+console.log("STATIC CONTRACT PASS: auth, student provisioning/import, erase/restore, org hardening, sensitive-read guards, course progress, and safe AI error contracts");
