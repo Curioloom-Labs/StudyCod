@@ -108,6 +108,19 @@ const parsePastedStudentList = (raw: string): { students: DraftStudent[]; invali
     return cells;
   };
 
+  const splitFullName = (value: string) => {
+    const words = value
+      .replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    return {
+      lastName: words[0] || "",
+      firstName: words[1] || "",
+      middleName: words.slice(2).join(" "),
+    };
+  };
+
   const normalizeHeader = (value: string) => value
     .toLowerCase()
     .replace(/["'’ʼ]/g, "")
@@ -118,6 +131,7 @@ const parsePastedStudentList = (raw: string): { students: DraftStudent[]; invali
     firstName: ["імя", "имя", "firstname", "first"],
     middleName: ["побатькові", "middlename", "middle"],
     email: ["email", "emailaddress", "емейл"],
+    fullName: ["піб", "fullname", "імяпрізвище", "name"],
   } as const;
   const headerIndex = (aliases: readonly string[]) => firstCells.findIndex((cell) => aliases.includes(cell));
   const hasHeader = Object.values(headerAliases).some((aliases) => headerIndex(aliases) >= 0);
@@ -126,6 +140,7 @@ const parsePastedStudentList = (raw: string): { students: DraftStudent[]; invali
     firstName: headerIndex(headerAliases.firstName),
     middleName: headerIndex(headerAliases.middleName),
     email: headerIndex(headerAliases.email),
+    fullName: headerIndex(headerAliases.fullName),
   };
   const students: DraftStudent[] = [];
   const invalidLines: number[] = [];
@@ -134,22 +149,30 @@ const parsePastedStudentList = (raw: string): { students: DraftStudent[]; invali
     const lineNumber = offset + (hasHeader ? 2 : 1);
     const cells = splitLine(line);
     const item = hasHeader
-      ? {
-          lastName: indexes.lastName >= 0 ? cells[indexes.lastName] || "" : "",
-          firstName: indexes.firstName >= 0 ? cells[indexes.firstName] || "" : "",
-          middleName: indexes.middleName >= 0 ? cells[indexes.middleName] || "" : "",
-          email: indexes.email >= 0 ? cells[indexes.email] || "" : "",
-        }
-      : cells.length >= 4
-        ? { lastName: cells[0] || "", firstName: cells[1] || "", middleName: cells[2] || "", email: cells[3] || "" }
-        : { lastName: cells[0] || "", firstName: cells[1] || "", middleName: "", email: cells[2] || "" };
+      ? indexes.fullName >= 0
+        ? { ...splitFullName(cells[indexes.fullName] || ""), email: indexes.email >= 0 ? cells[indexes.email] || "" : "" }
+        : {
+            lastName: indexes.lastName >= 0 ? cells[indexes.lastName] || "" : "",
+            firstName: indexes.firstName >= 0 ? cells[indexes.firstName] || "" : "",
+            middleName: indexes.middleName >= 0 ? cells[indexes.middleName] || "" : "",
+            email: indexes.email >= 0 ? cells[indexes.email] || "" : "",
+          }
+      : cells.length === 1
+        ? { ...splitFullName(cells[0] || ""), email: "" }
+        : cells.length === 2
+          ? { lastName: cells[0] || "", firstName: cells[1] || "", middleName: "", email: "" }
+          : cells.length === 3 && !cells[2]?.includes("@")
+            ? { lastName: cells[0] || "", firstName: cells[1] || "", middleName: cells[2] || "", email: "" }
+            : cells.length >= 4
+              ? { lastName: cells[0] || "", firstName: cells[1] || "", middleName: cells[2] || "", email: cells[3] || "" }
+              : { lastName: cells[0] || "", firstName: cells[1] || "", middleName: "", email: cells[2] || "" };
     const student = {
       firstName: item.firstName.trim(),
       lastName: item.lastName.trim(),
       middleName: item.middleName.trim(),
       email: item.email.trim().toLowerCase(),
     };
-    if (!student.firstName || !student.lastName || !student.email) invalidLines.push(lineNumber);
+    if (!student.firstName || !student.lastName || (student.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(student.email))) invalidLines.push(lineNumber);
     else students.push(student);
   });
 
@@ -272,6 +295,8 @@ export const ClassManagementPage: React.FC = () => {
 
   const openAddStudents = (mode: "paste" | "manual") => {
     setAddMode(mode);
+    setBulkStudentText("");
+    setDraftStudents([emptyStudent()]);
     setAddStudentsError(null);
     setShowAdd(true);
   };
@@ -284,7 +309,7 @@ export const ClassManagementPage: React.FC = () => {
   const submitStudents = async () => {
     setAddStudentsError(null);
     if (addMode === "paste" && parsedBulkStudents.invalidLines.length) {
-      setAddStudentsError(`Перевірте рядки ${parsedBulkStudents.invalidLines.join(", ")}: потрібні прізвище, імʼя та email.`);
+      setAddStudentsError(`Перевірте рядки ${parsedBulkStudents.invalidLines.join(", ")}: потрібні прізвище та імʼя, а email має бути коректним, якщо його вказано.`);
       return;
     }
     const valid = (addMode === "paste" ? parsedBulkStudents.students : draftStudents)
@@ -292,15 +317,16 @@ export const ClassManagementPage: React.FC = () => {
         firstName: item.firstName.trim(),
         lastName: item.lastName.trim(),
         middleName: item.middleName.trim(),
-        email: item.email.trim().toLowerCase(),
+        email: item.email.trim().toLowerCase() || undefined,
       }))
-      .filter((item) => item.firstName && item.lastName && item.email);
+      .filter((item) => item.firstName && item.lastName);
     if (!valid.length) {
-      setAddStudentsError(addMode === "paste" ? "Вставте список учнів у поле вище." : "Заповніть імʼя, прізвище та email хоча б одного учня.");
+      setAddStudentsError(addMode === "paste" ? "Вставте список учнів у поле вище." : "Заповніть імʼя та прізвище хоча б одного учня.");
       return;
     }
     const emails = new Set<string>();
     const duplicateEmail = valid.find((item) => {
+      if (!item.email) return false;
       if (emails.has(item.email)) return true;
       emails.add(item.email);
       return false;
@@ -309,8 +335,8 @@ export const ClassManagementPage: React.FC = () => {
       setAddStudentsError(`Email ${duplicateEmail} повторюється у формі. Перевірте рядки.`);
       return;
     }
-    const existingEmails = new Set(students.map((student) => student.email.trim().toLowerCase()).filter(Boolean));
-    const alreadyInClass = valid.find((item) => existingEmails.has(item.email))?.email;
+    const existingEmails = new Set(students.map((student) => student.email?.trim().toLowerCase()).filter(Boolean));
+    const alreadyInClass = valid.find((item) => item.email && existingEmails.has(item.email))?.email;
     if (alreadyInClass) {
       setAddStudentsError(`Email ${alreadyInClass} уже є в цьому класі.`);
       return;
@@ -328,7 +354,7 @@ export const ClassManagementPage: React.FC = () => {
       const message = getErrorMessageFromUnknown(caught, "Не вдалося додати учнів.");
       setAddStudentsError(
         message === "INVALID_INPUT"
-          ? "Перевірте імʼя, прізвище та коректність email у кожному заповненому рядку."
+          ? "Перевірте імʼя та прізвище. Email необовʼязковий, але якщо його вказано — він має бути коректним."
           : message === "INTERNAL_SERVER_ERROR"
             ? "Сервер не зміг створити облікові записи. Спробуйте ще раз або додайте учнів по одному."
             : message,
@@ -652,7 +678,7 @@ export const ClassManagementPage: React.FC = () => {
                         {student.lastName} {student.firstName}
                       </strong>
                       <span className="mt-1 block truncate text-xs text-[#718075] dark:text-[#aab9ae]">
-                        {student.email}
+                        {student.email || "Email ще не додано"}
                       </span>
                     </div>
                   </div>
@@ -964,7 +990,7 @@ export const ClassManagementPage: React.FC = () => {
           {addMode === "paste" ? (
             <div className="space-y-2">
               <label htmlFor="bulk-student-list" className="text-sm font-bold">Список учнів</label>
-              <p className="text-xs leading-5 text-text-secondary">Скопіюйте рядки з таблиці в порядку: Прізвище → Імʼя → По батькові → Email. По батькові можна залишити порожнім.</p>
+              <p className="text-xs leading-5 text-text-secondary">Вставте ПІБ — одного учня на рядок. Можна також вставити колонки: Прізвище → Імʼя → По батькові → Email. Email необовʼязковий: логін і пароль згенеруємо автоматично.</p>
               <textarea
                 id="bulk-student-list"
                 name="bulkStudentList"
@@ -973,7 +999,7 @@ export const ClassManagementPage: React.FC = () => {
                 rows={8}
                 value={bulkStudentText}
                 onChange={(event) => { setBulkStudentText(event.target.value); setAddStudentsError(null); }}
-                placeholder={"Шевченко\tТарас\t\tstudent@example.com\nМельник\tСофія\tОлена\tsofia@example.com\n…"}
+                placeholder={"Шевченко Тарас Григорович\nМельник Софія\nабо: Шевченко\tТарас\tГригорович\tstudent@example.com\n…"}
                 className="w-full resize-y rounded-2xl border border-border bg-bg-surface px-3 py-3 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-accent-success/50"
               />
               {bulkStudentText.trim() && <p aria-live="polite" className="text-xs font-bold text-text-secondary">Розпізнано учнів: {parsedBulkStudents.students.length}{parsedBulkStudents.invalidLines.length ? ` · помилки у рядках: ${parsedBulkStudents.invalidLines.join(", ")}` : ""}</p>}
@@ -986,7 +1012,7 @@ export const ClassManagementPage: React.FC = () => {
                   <input aria-label={`Прізвище учня ${index + 1}`} name={`student-${index}-lastName`} autoComplete="family-name" value={student.lastName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, lastName: event.target.value } : item))} placeholder="Прізвище…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
                   <input aria-label={`Імʼя учня ${index + 1}`} name={`student-${index}-firstName`} autoComplete="given-name" value={student.firstName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, firstName: event.target.value } : item))} placeholder="Імʼя…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
                   <input aria-label={`По батькові учня ${index + 1}`} name={`student-${index}-middleName`} autoComplete="additional-name" value={student.middleName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, middleName: event.target.value } : item))} placeholder="По батькові…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
-                  <input type="email" aria-label={`Email учня ${index + 1}`} name={`student-${index}-email`} autoComplete="email" spellCheck={false} value={student.email} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} placeholder="student@example.com…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
+                  <input type="email" aria-label={`Email учня ${index + 1} (необовʼязково)`} name={`student-${index}-email`} autoComplete="email" spellCheck={false} value={student.email} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} placeholder="student@example.com…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
                 </fieldset>
               ))}
               <Button variant="ghost" onClick={() => setDraftStudents((list) => [...list, emptyStudent()])}><Plus className="mr-2 size-4" />Ще один рядок</Button>
@@ -1047,7 +1073,7 @@ export const ClassManagementPage: React.FC = () => {
               <strong>
                 {item.lastName} {item.firstName}
               </strong>
-              <div className="mt-1 text-text-secondary">{item.email}</div>
+              <div className="mt-1 text-text-secondary">{item.email || "Email не вказано"}</div>
               <div className="font-mono">
                 {item.username} / {item.password}
               </div>

@@ -22,7 +22,7 @@ export interface StudentInput {
   firstName: string;
   lastName: string;
   middleName?: string;
-  email: string;
+  email?: string | null;
 }
 
 export interface ProvisionedStudent {
@@ -50,12 +50,14 @@ async function uniqueUsername(manager: EntityManager, input: StudentInput): Prom
  */
 export async function provisionStudent(cls: Class, input: StudentInput): Promise<ProvisionedStudent> {
   return await AppDataSource.transaction(async (manager) => {
-    const email = input.email.trim();
+    const email = input.email?.trim() || null;
 
     // An email already owned by a User can't back a fresh generated-credential
     // account cleanly — fall back to a shell student (claimable later).
-    const emailTaken = await manager.getRepository(User).findOne({ where: { email } });
-    if (emailTaken) throw new Error("EMAIL_TAKEN");
+    if (email) {
+      const emailTaken = await manager.getRepository(User).findOne({ where: { email } });
+      if (emailTaken) throw new Error("EMAIL_TAKEN");
+    }
 
     const username = await uniqueUsername(manager, input);
     if (!username) throw new Error("USERNAME_GENERATION_FAILED");
@@ -72,7 +74,7 @@ export async function provisionStudent(cls: Class, input: StudentInput): Promise
       firstName: input.firstName,
       lastName: input.lastName,
       middleName: input.middleName,
-      email,
+      email: email || "",
       // Keep the generated columns identical to legacy so /student-login still
       // works with the same credentials handed to the teacher.
       generatedUsername: username,

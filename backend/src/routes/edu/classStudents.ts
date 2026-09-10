@@ -70,7 +70,7 @@ router.post("/classes/:classId/students", authRequired, requireClassCapability("
         firstName: z.string().trim().min(1),
         lastName: z.string().trim().min(1),
         middleName: z.string().trim().optional(),
-        email: z.string().trim().email()
+        email: z.string().trim().email().optional().or(z.literal(""))
       })).min(1)
     });
     const validated = schema.safeParse(req.body);
@@ -104,7 +104,7 @@ router.post("/classes/:classId/students", authRequired, requireClassCapability("
           firstName: s.firstName,
           lastName: s.lastName,
           middleName: s.middleName,
-          email: s.email,
+          email: s.email || "",
           class: cls,
           generatedUsername: username,
           generatedPassword: hashedPassword
@@ -118,7 +118,7 @@ router.post("/classes/:classId/students", authRequired, requireClassCapability("
         firstName: s.firstName,
         lastName: s.lastName,
         middleName: s.middleName || "",
-        email: s.email,
+        email: s.email || "",
         username,
         password: plainPassword
       });
@@ -270,13 +270,27 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
       .replace(/["']/g, "")
       .replace(/-/g, "");
 
+    const splitFullName = (value: string) => {
+      const words = value
+        .replace(/^\s*(?:\d+[.)]|[-*•])\s*/, "")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+      return {
+        lastName: words[0] || "",
+        firstName: words[1] || "",
+        middleName: words.slice(2).join(" ")
+      };
+    };
+
     const headerCells = parseCsvLine(lines[0]);
     const headerKeys = headerCells.map(normalizeHeaderKey);
 
     const hasHeader = headerKeys.some(k => k.includes("email") || k.includes("e-mail"))
       || headerKeys.some(k => k.includes("прізвище") || k.includes("призвище"))
       || headerKeys.some(k => k.includes("імя") || k.includes("имя"))
-      || headerKeys.some(k => k.includes("firstname") || k.includes("lastname"));
+      || headerKeys.some(k => k.includes("firstname") || k.includes("lastname"))
+      || headerKeys.some(k => ["піб", "fullname", "name"].includes(k));
 
     const colIndex = (variants: string[]) => {
       for (let i = 0; i < headerKeys.length; i++) {
@@ -289,6 +303,7 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
     const lastNameIdx = colIndex(["прізвище", "призвище", "lastname", "last", "last_name", "lastname"]);
     const middleNameIdx = colIndex(["побатькові", "по-батькові", "middlename", "middle", "middle_name", "middlename"]);
     const emailIdx = colIndex(["email", "e-mail"]);
+    const fullNameIdx = colIndex(["піб", "fullname", "name"]);
     const usernameIdx = colIndex(["username", "login", "логін", "логин"]);
     const passwordIdx = colIndex(["password", "пароль"]);
 
@@ -306,7 +321,7 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
 
     for (let i = startIndex; i < lines.length; i++) {
       const parts = parseCsvLine(lines[i]);
-      if (parts.length < 3) {
+      if (parts.length < 2) {
         invalidLines.push(i + 1);
         continue;
       }
@@ -319,22 +334,29 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
       let password = "";
 
       if (hasHeader) {
-        firstName = firstNameIdx >= 0 ? parts[firstNameIdx] || "" : "";
-        lastName = lastNameIdx >= 0 ? parts[lastNameIdx] || "" : "";
-        middleName = middleNameIdx >= 0 ? parts[middleNameIdx] || "" : "";
+        if (fullNameIdx >= 0) {
+          const parsedName = splitFullName(parts[fullNameIdx] || "");
+          firstName = parsedName.firstName;
+          lastName = parsedName.lastName;
+          middleName = parsedName.middleName;
+        } else {
+          firstName = firstNameIdx >= 0 ? parts[firstNameIdx] || "" : "";
+          lastName = lastNameIdx >= 0 ? parts[lastNameIdx] || "" : "";
+          middleName = middleNameIdx >= 0 ? parts[middleNameIdx] || "" : "";
+        }
         email = emailIdx >= 0 ? parts[emailIdx] || "" : "";
         username = usernameIdx >= 0 ? parts[usernameIdx] || "" : "";
         password = passwordIdx >= 0 ? parts[passwordIdx] || "" : "";
       } else {
-        firstName = parts[0] || "";
-        lastName = parts[1] || "";
-        if (parts.length === 3) {
-          email = parts[2] || "";
-        } else {
-          middleName = parts[2] || "";
-          email = parts[3] || "";
-          username = parts[4] || "";
-          password = parts[5] || "";
+        const emailIndex = parts.findIndex(part => part.includes("@"));
+        const nameParts = emailIndex >= 0 ? parts.filter((_, partIndex) => partIndex !== emailIndex) : parts;
+        firstName = nameParts[0] || "";
+        lastName = nameParts[1] || "";
+        middleName = nameParts.slice(2, emailIndex >= 0 ? undefined : 3).join(" ");
+        email = emailIndex >= 0 ? parts[emailIndex] || "" : "";
+        if (emailIndex >= 0 && parts.length >= 5) {
+          username = parts[emailIndex + 1] || "";
+          password = parts[emailIndex + 2] || "";
         }
       }
 
@@ -351,7 +373,7 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
         username: username.trim(),
         password: password.trim()
       };
-      if (!normalized.firstName || !normalized.lastName || !normalized.email || !normalized.email.includes("@")) {
+      if (!normalized.firstName || !normalized.lastName || (normalized.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized.email))) {
         invalidLines.push(i + 1);
         continue;
       }
@@ -399,7 +421,7 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
         firstName,
         lastName,
         middleName,
-        email,
+        email: email || "",
         class: cls,
         generatedUsername: finalUsername,
         generatedPassword: hashedPassword
@@ -411,7 +433,7 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
         firstName,
         lastName,
         middleName: middleName || "",
-        email,
+        email: email || "",
         username: finalUsername,
         password: plainPassword
       });

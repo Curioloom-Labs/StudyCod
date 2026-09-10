@@ -491,7 +491,7 @@ export interface AddStudentsRequest {
     firstName: string;
     lastName: string;
     middleName?: string;
-    email: string;
+    email?: string;
   }>;
 }
 export async function addStudents(classId: number, students: AddStudentsRequest["students"]): Promise<{
