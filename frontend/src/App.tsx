@@ -32,6 +32,8 @@ import { setActiveEduStudentId } from "./lib/eduContext";
 import { applySeo } from "./lib/seo";
 import { MascotCompanion } from "./components/MascotCompanion";
 import { Button } from "./components/ui/Button";
+import { GlobalQuickSearch } from "./components/ui/GlobalQuickSearch";
+import { NetworkStatus } from "./components/ui/NetworkStatus";
 const AuthPage = React.lazy(() => import("./pages/auth/AuthPage").then(mod => ({ default: mod.AuthPage })));
 const VerifyEmailPage = React.lazy(() => import("./pages/auth/VerifyEmailPage").then(mod => ({ default: mod.VerifyEmailPage })));
 const ResetPasswordPage = React.lazy(() => import("./pages/auth/ResetPasswordPage").then(mod => ({ default: mod.ResetPasswordPage })));
@@ -927,6 +929,8 @@ export const App: React.FC = () => {
   }, [location.pathname, subdomainNavigate]);
   return <TheoryModalProvider>
         <ToastViewport />
+        <GlobalQuickSearch />
+        <NetworkStatus />
         <MascotCompanion />
         <AnimatePresence mode="sync">
           <Routes location={location} key={topLevelRouteKey}>

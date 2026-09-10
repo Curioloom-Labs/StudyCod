@@ -2,7 +2,7 @@ import React from "react";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { CodeEditor } from "../CodeEditor";
-import { Play, Rocket, ScanSearch, Minus, Plus, WrapText, RotateCcw, Copy, Check } from "lucide-react";
+import { Play, Rocket, ScanSearch, Minus, Plus, WrapText, RotateCcw, Copy, Check, Download, X } from "lucide-react";
 import type { ContestProblemStatement, JudgeLanguage } from "../../lib/api/contests";
 import { JUDGE_LANGUAGE_LABELS as FRIENDLY_LANG, enabledJudgeLanguages, compilersForFamily } from "../../lib/judgeLanguages";
 
@@ -114,6 +114,19 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     }
   };
 
+  const downloadCode = () => {
+    const blob = new Blob([code ?? ""], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${String(statement.task.title || "solution").replace(/[^a-z0-9а-яёіїєґ_-]+/gi, "-").replace(/^-+|-+$/g, "") || "solution"}.${language === "cpp" ? "cpp" : language === "python" ? "py" : language === "java" ? "java" : "txt"}`;
+    anchor.rel = "noopener";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const runSolution = React.useCallback(() => {
     if (running || checking) return;
     onRun();
@@ -129,12 +142,13 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.key === "Enter" && !event.shiftKey) {
+      const primaryModifier = event.ctrlKey || event.metaKey;
+      if (primaryModifier && event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
         runSolution();
         return;
       }
-      if (event.ctrlKey && event.shiftKey && event.key === "Enter") {
+      if (primaryModifier && event.shiftKey && event.key === "Enter") {
         event.preventDefault();
         submitSolution();
       }
@@ -218,6 +232,16 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
           <button
             type="button"
+            onClick={downloadCode}
+            className="h-11 w-11 rounded-xl border border-border bg-bg-base text-text-secondary hover:text-text-primary hover:bg-bg-hover flex items-center justify-center transition-fast"
+            title="Download code"
+            aria-label="Download code"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+
+          <button
+            type="button"
             onClick={resetToTemplate}
             className="h-11 w-11 rounded-xl border border-border bg-bg-base text-text-secondary hover:text-accent-error hover:bg-bg-hover flex items-center justify-center transition-fast"
             title="Reset to starter template"
@@ -239,19 +263,19 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
           <Button variant="secondary" onClick={runSolution} disabled={running || checking} className="h-11 px-4" aria-label="Run code">
             <Play className="w-4 h-4 mr-2" />
-            {running ? "Running…" : "Run (Ctrl+Enter)"}
+            {running ? "Running…" : "Run (Ctrl/Cmd+Enter)"}
           </Button>
 
           <Button onClick={submitSolution} disabled={checking || running} className="h-11 px-4" aria-label="Submit solution">
             <Rocket className="w-4 h-4 mr-2" />
-            {checking ? "Submitting…" : "Submit (Ctrl+Shift+Enter)"}
+            {checking ? "Submitting…" : "Submit (Ctrl/Cmd+Shift+Enter)"}
           </Button>
         </div>
       </div>
 
       <div className="px-4 py-2 text-[11px] text-text-secondary border-b border-border/60 bg-bg-base/60 flex items-center justify-between gap-3">
         <span>
-          Hotkeys: <span className="text-text-primary">Ctrl+Enter</span> run · <span className="text-text-primary">Ctrl+Shift+Enter</span> submit · Drafts auto-save by problem and language
+          Hotkeys: <span className="text-text-primary">Ctrl/Cmd+Enter</span> run · <span className="text-text-primary">Ctrl/Cmd+Shift+Enter</span> submit · Drafts auto-save by problem and language
         </span>
         <span className="hidden shrink-0 tabular-nums text-text-muted sm:inline" aria-live="polite">
           {lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Saving…"}
@@ -266,7 +290,20 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       <div className="border-t border-border/60 bg-bg-base/55 px-4 py-3">
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="text-[11px] uppercase tracking-wider text-text-secondary">Run input (stdin)</div>
-          <div className="hidden sm:block text-[11px] text-text-muted">Use examples from the problem panel for quick checks</div>
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:block text-[11px] text-text-muted">Use examples from the problem panel for quick checks</div>
+            <button
+              type="button"
+              onClick={() => onRunInputChange("")}
+              disabled={!runInput}
+              className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2 text-[11px] text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:pointer-events-none disabled:opacity-40"
+              aria-label="Clear run input"
+              title="Clear run input"
+            >
+              <X className="size-3.5" />
+              Clear
+            </button>
+          </div>
         </div>
         <textarea
           name="runInput"

@@ -1,6 +1,6 @@
 import React from "react";
 import type { ContestCheckResult, ContestRunResult, ContestSubmissionListItem } from "../../lib/api/contests";
-import { Activity, Clock3, FlaskConical, Radio, RefreshCw, TerminalSquare, type LucideIcon } from "lucide-react";
+import { Activity, Check, Clock3, Copy, FlaskConical, Radio, RefreshCw, TerminalSquare, type LucideIcon } from "lucide-react";
 
 type ExampleCase = {
   id: string;
@@ -39,6 +39,17 @@ function verdictTone(verdict: string | null | undefined) {
 
 export const OutputDock: React.FC<OutputDockProps> = ({ examples, onPickExample, runResult, checkResult, submissions, wsStatus, latestVerdict, attention, onRefresh, refreshing = false }) => {
   const [view, setView] = React.useState<DockView>("tests");
+  const [copiedOutput, setCopiedOutput] = React.useState<"stdout" | "stderr" | null>(null);
+
+  const copyOutput = async (kind: "stdout" | "stderr", value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedOutput(kind);
+      window.setTimeout(() => setCopiedOutput((current) => current === kind ? null : current), 1200);
+    } catch {
+      // Clipboard access is optional; output remains selectable for manual copying.
+    }
+  };
 
   const chartData = React.useMemo(() => {
     return [...submissions]
@@ -188,11 +199,21 @@ export const OutputDock: React.FC<OutputDockProps> = ({ examples, onPickExample,
               </div>
             ) : null}
             <div className="rounded-xl border border-border bg-bg-base/70 p-2.5">
-              <div className="text-[11px] text-text-secondary mb-1">stdout</div>
+              <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-text-secondary">
+                <span>stdout</span>
+                <button type="button" onClick={() => void copyOutput("stdout", runResult?.stdout || "")} disabled={!runResult?.stdout} className="inline-flex items-center rounded-md p-1 text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:pointer-events-none disabled:opacity-40" aria-label="Copy stdout" title="Copy stdout">
+                  {copiedOutput === "stdout" ? <Check className="size-3" /> : <Copy className="size-3" />}
+                </button>
+              </div>
               <pre className="text-xs text-text-primary overflow-auto max-h-36 whitespace-pre-wrap break-words">{runResult?.stdout || ""}</pre>
             </div>
             <div className="rounded-xl border border-border bg-bg-base/70 p-2.5">
-              <div className="text-[11px] text-text-secondary mb-1">stderr</div>
+              <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-text-secondary">
+                <span>stderr</span>
+                <button type="button" onClick={() => void copyOutput("stderr", runResult?.stderr || "")} disabled={!runResult?.stderr} className="inline-flex items-center rounded-md p-1 text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:pointer-events-none disabled:opacity-40" aria-label="Copy stderr" title="Copy stderr">
+                  {copiedOutput === "stderr" ? <Check className="size-3" /> : <Copy className="size-3" />}
+                </button>
+              </div>
               <pre className="text-xs text-accent-error/90 overflow-auto max-h-36 whitespace-pre-wrap break-words">{runResult?.stderr || ""}</pre>
             </div>
           </div>

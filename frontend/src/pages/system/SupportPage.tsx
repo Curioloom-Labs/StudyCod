@@ -82,6 +82,19 @@ export const SupportPage: React.FC = () => {
     return Number.isFinite(v) && v > 0 ? v : null;
   }, [searchParams]);
 
+  const requestedSubject = searchParams.get("subject") || "";
+  const requestedMessage = searchParams.get("message") || "";
+
+  useEffect(() => {
+    if (!requestedSubject && !requestedMessage) return;
+    if (requestedSubject) setNewSubject((current) => current || requestedSubject);
+    if (requestedMessage) setNewMessage((current) => current || requestedMessage);
+    const next = new URLSearchParams(searchParams);
+    next.delete("subject");
+    next.delete("message");
+    setSearchParams(next, { replace: true });
+  }, [requestedMessage, requestedSubject, searchParams, setSearchParams]);
+
   const loadConversations = async (silent = false) => {
     if (!silent) setLoading(true);
     setError(null);

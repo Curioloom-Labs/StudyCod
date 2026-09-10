@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock3,
+  Download,
   Code2,
   FileCode2,
   FileText,
@@ -156,6 +157,7 @@ type Props = {
 const LAYOUT_KEY = "studycod:ide:layout:v4";
 const HISTORY_KEY = "studycod:ide:history:v1";
 const MINI_PROJECT_TIMER_KEY = "studycod:ide:mini-project-start:v1";
+const ACTIVE_FILE_KEY = "studycod:ide:active-file:v1";
 
 const rubberband = (overshoot: number, dimension: number, constant = 0.55) =>
   (overshoot * dimension * constant) / (dimension + constant * Math.abs(overshoot));
@@ -308,7 +310,13 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const [assistantTab, setAssistantTab] = React.useState<AssistantTab>("task");
   const [openHintIndex, setOpenHintIndex] = React.useState<number | null>(null);
   const [bottomTab, setBottomTab] = React.useState<BottomTab>("tests");
-  const [activeFile, setActiveFile] = React.useState(props.entryFile);
+  const [activeFile, setActiveFile] = React.useState(() => {
+    try {
+      return localStorage.getItem(scopedStorageKey(ACTIVE_FILE_KEY, props.task.id)) || props.entryFile;
+    } catch {
+      return props.entryFile;
+    }
+  });
   const [fileAddRequestToken, setFileAddRequestToken] = React.useState(0);
   const [fontSize, setFontSize] = React.useState(14);
   const [wordWrap, setWordWrap] = React.useState(false);
@@ -364,7 +372,19 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     setBottomTab("tests");
     setFocusMode(false);
     setTraceStep(0);
-  }, [props.task.id, props.theory, taskTheoryKey]);
+    try {
+      setActiveFile(localStorage.getItem(scopedStorageKey(ACTIVE_FILE_KEY, props.task.id)) || props.entryFile);
+    } catch {
+      setActiveFile(props.entryFile);
+    }
+  }, [props.entryFile, props.task.id, props.theory, taskTheoryKey]);
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(scopedStorageKey(ACTIVE_FILE_KEY, props.task.id), activeFile);
+    } catch {
+      // ignore
+    }
+  }, [activeFile, props.task.id]);
   React.useEffect(() => {
     try {
       const raw = JSON.parse(
@@ -549,14 +569,26 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     : [{ path: props.entryFile, content: draftCodeRef.current }];
 
   const runWithTab = () => {
-    if (props.readOnly) return;
+    if (props.readOnly || props.running || props.checking) return;
     setBottomTab("terminal");
     props.onRun();
   };
   const checkWithTab = () => {
-    if (props.readOnly) return;
+    if (props.readOnly || props.running || props.checking) return;
     setBottomTab("tests");
     props.onCheck();
+  };
+  const downloadCurrentCode = () => {
+    const blob = new Blob([draftCodeRef.current || ""], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${String(props.task.title || "solution").replace(/[^a-z0-9а-яёіїєґ_-]+/gi, "-").replace(/^-+|-+$/g, "") || "solution"}.${props.isWebTask ? "html" : props.language === "cpp" ? "cpp" : props.language === "python" ? "py" : props.language === "java" ? "java" : "txt"}`;
+    anchor.rel = "noopener";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   const renderBottom = () => {
     if (bottomTab === "debugger") {
@@ -1070,6 +1102,15 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         </button>
         <button
           type="button"
+          onClick={downloadCurrentCode}
+          className="grid size-9 place-items-center rounded-lg border border-white/10 text-[#c8d6cc] hover:bg-white/[.06]"
+          aria-label={tr("Завантажити код", "Download code")}
+          title={tr("Завантажити код", "Download code")}
+        >
+          <Download className="size-3.5" />
+        </button>
+        <button
+          type="button"
           onClick={runWithTab}
           disabled={props.readOnly || props.running || props.checking}
           className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-white/[.08] px-3 text-xs font-semibold text-white hover:bg-white/[.14] disabled:opacity-50"
@@ -1250,6 +1291,16 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 {tr("Приклад", "Example")}
               </button>
             ) : null}
+            <button
+              type="button"
+              onClick={() => props.onStdinChange("")}
+              disabled={!props.stdin || props.isWebTask || isEmptyTask}
+              className="col-start-1 row-start-1 justify-self-end rounded-md px-2 py-1 text-[10px] font-semibold text-[#82968a] hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40"
+              aria-label={tr("Очистити ввід", "Clear run input")}
+              title={tr("Очистити ввід", "Clear run input")}
+            >
+              {tr("Очистити", "Clear")}
+            </button>
           </div>
           <div className="flex min-h-11 items-center gap-2 overflow-x-auto border-b border-[#203428] bg-[#111a14] px-3">
             <div className="flex items-center gap-2 rounded-lg border border-[#294333] bg-[#0d1610] px-2.5 py-1.5 text-[10px] text-[#c8d6cc]">

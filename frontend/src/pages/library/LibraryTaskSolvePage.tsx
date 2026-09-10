@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CircleHelp } from "lucide-react";
 import { Card } from "../../components/ui/Card";
 import { useProctoring } from "../../hooks/useProctoring";
 import { scoreProctoring, recordConceptReview } from "../../lib/api/tasks";
@@ -223,6 +223,10 @@ export const LibraryTaskSolvePage: React.FC = () => {
   }, [location.search, libraryListPath]);
 
   const goBackToLibrary = () => {
+    const dirty = useFiles
+      ? !(lastSavedUseFiles === true && filesEqual(files, lastSavedFiles))
+      : !(lastSavedUseFiles === false && code === lastSavedCode);
+    if (dirty && typeof window !== "undefined" && !window.confirm(tr("Є незбережені зміни. Вийти без очікування автозбереження?", "There are unsaved changes. Leave without waiting for autosave?"))) return;
     const isSolvePath = (p: string) => /^\/(?:edu\/)?(?:lab\/)?library\/solve\//.test(String(p || ""));
 
     const primaryTarget = !isSolvePath(safeBackPath) ? safeBackPath : libraryListPath;
@@ -277,6 +281,19 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const [files, setFiles] = useState<CodeFile[]>([]);
   const [lastSavedUseFiles, setLastSavedUseFiles] = useState<boolean>(false);
   const [lastSavedFiles, setLastSavedFiles] = useState<CodeFile[]>([]);
+
+  useEffect(() => {
+    const dirty = useFiles
+      ? !(lastSavedUseFiles === true && filesEqual(files, lastSavedFiles))
+      : !(lastSavedUseFiles === false && code === lastSavedCode);
+    if (!dirty) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [code, files, lastSavedCode, lastSavedFiles, lastSavedUseFiles, useFiles]);
   const saveTimer = useRef<number | null>(null);
 
   const [stdin, setStdin] = useState<string>("");
@@ -976,12 +993,18 @@ export const LibraryTaskSolvePage: React.FC = () => {
     />
   ) : null;
 
+  const reportTaskIssue = () => {
+    const subject = tr("Проблема із задачею", "Task issue") + ": " + task.title;
+    const message = tr("Задача", "Task") + ": " + task.title + "\n" + tr("Опиши проблему, яка виникла під час розв’язання.", "Describe the issue you encountered while solving this task.");
+    navigate("/support?subject=" + encodeURIComponent(subject) + "&message=" + encodeURIComponent(message));
+  };
+
   return (
     <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-6 lg:px-10 lg:py-9">
       <div className="mx-auto max-w-[1680px]">
         <div className="mb-4 flex items-center justify-between gap-3">
           <button type="button" onClick={goBackToLibrary} className="inline-flex items-center gap-2 text-sm font-semibold text-[#617066] transition hover:text-[#147b47] dark:text-[#a7b5aa] dark:hover:text-[#72edb0]"><ArrowLeft className="size-4" />{tr("До бібліотеки", "Back to library")}</button>
-          <div className="hidden items-center gap-2 text-xs text-[#718075] sm:flex"><span>{task.difficulty === "HARD" ? tr("Складна", "Hard") : task.difficulty === "MEDIUM" ? tr("Середня", "Medium") : tr("Легка", "Easy")}</span><span>·</span><span>{task.tags?.slice(0, 3).join(" · ")}</span></div>
+          <div className="flex items-center gap-2"><div className="hidden items-center gap-2 text-xs text-[#718075] sm:flex"><span>{task.difficulty === "HARD" ? tr("Складна", "Hard") : task.difficulty === "MEDIUM" ? tr("Середня", "Medium") : tr("Легка", "Easy")}</span><span>·</span><span>{task.tags?.slice(0, 3).join(" · ")}</span></div><button type="button" onClick={reportTaskIssue} className="inline-flex items-center gap-1.5 rounded-lg border border-[#152219]/10 bg-white px-2.5 py-2 text-xs font-semibold text-[#617066] transition hover:border-[#00c96d]/40 hover:text-[#147b47] dark:border-white/10 dark:bg-white/[.04] dark:text-[#a7b5aa] dark:hover:text-[#72edb0]" aria-label={tr("Повідомити про проблему із задачею", "Report a task issue")} title={tr("Повідомити про проблему", "Report an issue")}><CircleHelp className="size-3.5" />{tr("Проблема", "Report issue")}</button></div>
         </div>
         <StudyCodIDEWorkspace
           task={task}

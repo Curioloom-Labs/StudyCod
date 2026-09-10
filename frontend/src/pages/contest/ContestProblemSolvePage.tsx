@@ -500,6 +500,7 @@ export const ContestProblemSolvePage: React.FC = () => {
       return;
     }
 
+    setRunResult(null);
     setRunning(true);
     try {
       const res = await runContestProblem({
@@ -543,6 +544,7 @@ export const ContestProblemSolvePage: React.FC = () => {
     }
     const tokenForSubmit = turnstileToken ?? undefined;
 
+    setCheckResult(null);
     setChecking(true);
     try {
       const res = await checkContestProblem({

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Download, Edit2, GripVertical, Library, Play, Plus, Rocket, Search, Send, Star, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Clock3, Download, Edit2, GripVertical, Library, Play, Plus, Rocket, Search, Send, Star, Trash2, Upload, X } from "lucide-react";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
@@ -37,6 +37,26 @@ import {
 } from "../../lib/api/library";
 import { JUDGE_LANGUAGE_LABELS, enabledJudgeLanguages } from "../../lib/judgeLanguages";
 import { PremiumLibrary } from "../core/PremiumPersonalExperience";
+
+const RECENT_TASKS_STORAGE_KEY = "studycod:library:recent:v1";
+
+const RecentTasksBanner: React.FC<{ onOpen: (task: LibraryTaskListItem) => void }> = ({ onOpen }) => {
+  const { i18n } = useTranslation();
+  const en = i18n.language?.toLowerCase().startsWith("en");
+  const storageKey = scopedStorageKey(RECENT_TASKS_STORAGE_KEY, "all");
+  const [tasks] = useState<LibraryTaskListItem[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      return Array.isArray(raw)
+        ? raw.filter((task) => task && Number.isFinite(Number(task.id)) && typeof task.title === "string").slice(0, 4)
+        : [];
+    } catch {
+      return [];
+    }
+  });
+  if (!tasks.length) return null;
+  return <section className="mx-auto max-w-7xl px-4 pt-5 text-[#142017] dark:text-[#edf3ef] sm:px-6 lg:px-10"><div className="rounded-[24px] border border-[#152219]/10 bg-white p-4 dark:border-white/10 dark:bg-[#121b15] sm:p-5"><div className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-[#147b47] dark:text-[#62ecaa]" aria-hidden="true" /><div><div className="text-xs font-semibold uppercase tracking-[.15em] text-[#147b47] dark:text-[#62ecaa]">{en ? "Pick up where you left off" : "Продовжити з останнього"}</div><p className="mt-1 text-xs text-[#718075] dark:text-[#9dac9f]">{en ? "Your latest practice tasks are kept on this device." : "Останні практичні задачі зберігаються на цьому пристрої."}</p></div></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{tasks.map((task) => <button key={task.id} type="button" onClick={() => onOpen(task)} className="rounded-xl border border-[#152219]/10 bg-[#f8faf7] p-3 text-left transition hover:-translate-y-0.5 hover:border-[#00c96d]/45 dark:border-white/10 dark:bg-white/[.035]"><span className="block truncate text-sm font-semibold">{task.title}</span><span className="mt-1 block truncate text-xs text-[#718075] dark:text-[#9dac9f]">{task.section || (task.taskMode === "WEB" ? (en ? "Web task" : "Веб-задача") : (en ? "Code task" : "Кодова задача"))}</span></button>)}</div></div></section>;
+};
 
 type TaskDetails = {
   task: LibraryTaskListItem;
@@ -1442,6 +1462,17 @@ export const TaskLibraryPage: React.FC = () => {
       search: `?${params.toString()}`,
     };
   };
+  const rememberAndOpenTask = (task: LibraryTaskListItem) => {
+    const storageKey = scopedStorageKey(RECENT_TASKS_STORAGE_KEY, "all");
+    try {
+      const raw = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      const recent = Array.isArray(raw) ? raw.filter((item) => item && Number(item.id) !== task.id) : [];
+      localStorage.setItem(storageKey, JSON.stringify([task, ...recent].slice(0, 4)));
+    } catch {
+      // ignore
+    }
+    navigate(buildSolveTarget(task));
+  };
 
   const visibleTasks = useMemo(() => {
     let list: LibraryTaskListItem[] = tasks.slice();
@@ -1539,15 +1570,18 @@ export const TaskLibraryPage: React.FC = () => {
   // Learners see a new discovery-first library. Authoring/moderation remains on
   // the specialised workspace below, where its dense controls are necessary.
   if (!canManage && view === "approved") {
-    return <PremiumLibrary
-      tasks={learnerTasks}
-      total={total ?? (isDesignPreview ? PREVIEW_LIBRARY_TASKS.length : null)}
-      solved={solvedCount}
-      loading={loading}
-      query={qDraft}
-      onQuery={setQDraft}
-      onOpen={(task) => navigate(buildSolveTarget(task))}
-    />;
+    return <>
+      <RecentTasksBanner onOpen={rememberAndOpenTask} />
+      <PremiumLibrary
+        tasks={learnerTasks}
+        total={total ?? (isDesignPreview ? PREVIEW_LIBRARY_TASKS.length : null)}
+        solved={solvedCount}
+        loading={loading}
+        query={qDraft}
+        onQuery={setQDraft}
+        onOpen={rememberAndOpenTask}
+      />
+    </>;
   }
 
   return (
