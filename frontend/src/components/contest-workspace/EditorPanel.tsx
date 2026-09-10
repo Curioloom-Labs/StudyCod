@@ -81,6 +81,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     }
   });
   const [copied, setCopied] = React.useState(false);
+  const [lastSavedAt, setLastSavedAt] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     try {
@@ -90,6 +91,11 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       // ignore
     }
   }, [fontSize, wordWrap]);
+
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setLastSavedAt(Date.now()), 450);
+    return () => window.clearTimeout(timer);
+  }, [code, runInput, language]);
 
   const adjustFont = (delta: number) => setFontSize((prev) => Math.min(FONT_MAX, Math.max(FONT_MIN, prev + delta)));
 
@@ -108,23 +114,34 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     }
   };
 
+  const runSolution = React.useCallback(() => {
+    if (running || checking) return;
+    onRun();
+  }, [checking, onRun, running]);
+
+  const submitSolution = React.useCallback(() => {
+    if (running || checking) return;
+    if (typeof window !== "undefined" && !window.confirm("Submit this solution for judging?")) return;
+    onSubmit();
+  }, [checking, onSubmit, running]);
+
   const lineCount = React.useMemo(() => (code ? code.split("\n").length : 0), [code]);
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
-        onRun();
+        runSolution();
         return;
       }
       if (event.ctrlKey && event.shiftKey && event.key === "Enter") {
         event.preventDefault();
-        onSubmit();
+        submitSolution();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onRun, onSubmit]);
+  }, [runSolution, submitSolution]);
 
   return (
     <div className="h-full min-h-0 rounded-2xl border border-border/70 bg-bg-surface shadow-[0_6px_18px_rgba(0,0,0,0.2)] flex flex-col overflow-hidden">
@@ -220,12 +237,12 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
             {focusMode ? "Exit Focus" : "Focus"}
           </Button>
 
-          <Button variant="secondary" onClick={onRun} disabled={running || checking} className="h-11 px-4" aria-label="Run code">
+          <Button variant="secondary" onClick={runSolution} disabled={running || checking} className="h-11 px-4" aria-label="Run code">
             <Play className="w-4 h-4 mr-2" />
             {running ? "Running…" : "Run (Ctrl+Enter)"}
           </Button>
 
-          <Button onClick={onSubmit} disabled={checking || running} className="h-11 px-4" aria-label="Submit solution">
+          <Button onClick={submitSolution} disabled={checking || running} className="h-11 px-4" aria-label="Submit solution">
             <Rocket className="w-4 h-4 mr-2" />
             {checking ? "Submitting…" : "Submit (Ctrl+Shift+Enter)"}
           </Button>
@@ -235,6 +252,9 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       <div className="px-4 py-2 text-[11px] text-text-secondary border-b border-border/60 bg-bg-base/60 flex items-center justify-between gap-3">
         <span>
           Hotkeys: <span className="text-text-primary">Ctrl+Enter</span> run · <span className="text-text-primary">Ctrl+Shift+Enter</span> submit · Drafts auto-save by problem and language
+        </span>
+        <span className="hidden shrink-0 tabular-nums text-text-muted sm:inline" aria-live="polite">
+          {lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Saving…"}
         </span>
         <span className="hidden sm:inline tabular-nums text-text-muted">{lineCount} lines · {(code ?? "").length} chars</span>
       </div>
@@ -249,10 +269,13 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
           <div className="hidden sm:block text-[11px] text-text-muted">Use examples from the problem panel for quick checks</div>
         </div>
         <textarea
+          name="runInput"
           value={runInput}
           onChange={(e) => onRunInputChange(e.target.value)}
           aria-label="Custom run input"
-            className="w-full min-h-[120px] sm:min-h-[108px] max-h-[220px] resize-y rounded-xl bg-bg-base border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-secondary/50"
+          autoComplete="off"
+          spellCheck={false}
+          className="w-full min-h-[120px] sm:min-h-[108px] max-h-[220px] resize-y rounded-xl bg-bg-base border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-secondary/50"
           placeholder="Paste input to validate edge cases before submit…"
         />
       </div>

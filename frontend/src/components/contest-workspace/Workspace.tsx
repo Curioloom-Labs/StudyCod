@@ -236,6 +236,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
       wsStatus={wsStatus}
       latestVerdict={latestVerdict}
       attention={dockAttention}
+      onRefresh={onRefreshSubmissions}
     />
   );
 
@@ -649,6 +650,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
                       wsStatus={wsStatus}
                       latestVerdict={latestVerdict}
                       attention={dockAttention}
+                      onRefresh={onRefreshSubmissions}
                     />
                   </div>
                 ) : null}
@@ -714,6 +716,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
               wsStatus={wsStatus}
               latestVerdict={latestVerdict}
               attention={dockAttention}
+              onRefresh={onRefreshSubmissions}
             />
           </div>
         </div>

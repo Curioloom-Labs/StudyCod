@@ -1263,6 +1263,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 type="button"
                 onClick={() => setFontSize((size) => Math.max(11, size - 1))}
                 className="grid size-7 place-items-center rounded-lg text-xs text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
+                aria-label={tr("Зменшити розмір шрифту", "Decrease font size")}
+                title={tr("Зменшити розмір шрифту", "Decrease font size")}
               >
                 A−
               </button>
@@ -1270,6 +1272,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 type="button"
                 onClick={() => setFontSize((size) => Math.min(22, size + 1))}
                 className="grid size-7 place-items-center rounded-lg text-xs text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
+                aria-label={tr("Збільшити розмір шрифту", "Increase font size")}
+                title={tr("Збільшити розмір шрифту", "Increase font size")}
               >
                 A+
               </button>
@@ -1277,14 +1281,20 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 type="button"
                 onClick={() => setWordWrap((value) => !value)}
                 className={`grid size-7 place-items-center rounded-lg text-xs transition ${wordWrap ? "bg-[#00d978]/10 text-[#72edb0]" : "text-[#82968a] hover:bg-white/[.07] hover:text-white"}`}
+                aria-pressed={wordWrap}
+                aria-label={tr("Перенесення рядків", "Word wrap")}
                 title="Word wrap"
               >
                 ↪
               </button>
               <button
                 type="button"
-                onClick={props.onReset}
+                onClick={() => {
+                  if (typeof window !== "undefined" && !window.confirm(tr("Скинути код до шаблону? Незбережені зміни буде втрачено.", "Reset code to the starter template? Unsaved changes will be lost."))) return;
+                  props.onReset();
+                }}
                 className="grid size-7 place-items-center rounded-lg text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
+                aria-label={tr("Скинути шаблон", "Reset template")}
                 title={tr("Скинути шаблон", "Reset template")}
               >
                 <RotateCcw className="size-3.5" />

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion } from "framer-motion";
-import { BookOpen, ChevronRight } from "lucide-react";
+import { BookOpen, ChevronRight, Search } from "lucide-react";
 import type { User } from "../../types";
 import { tr } from "../../i18n";
 import { getTheoryTopic, getTheoryTopics, type TheoryTopic } from "../../lib/api/theory";
@@ -21,8 +21,18 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [topicSearch, setTopicSearch] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
+  const [detailRetryToken, setDetailRetryToken] = useState(0);
   const runtime = user.activeRuntime || "PYTHON";
   const courseLabel = runtime === "JAVA" ? "Java" : runtime === "CPP" ? "C++" : "Python";
+  const filteredTopics = topics.filter((topic) => {
+    const query = topicSearch.trim().toLocaleLowerCase();
+    if (!query) return true;
+    return `${topic.title} ${topic.id}`.toLocaleLowerCase().includes(query);
+  });
+  const selectedIndex = selected ? topics.findIndex((topic) => topic.id === selected.id) : -1;
 
   useEffect(() => {
     let cancelled = false;
@@ -46,26 +56,31 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
     };
     void load();
     return () => { cancelled = true; };
-  }, [runtime, i18n.language]);
+  }, [runtime, i18n.language, reloadToken]);
 
   useEffect(() => {
     if (!selected?.theory || selected.theory.content !== null) return;
     let cancelled = false;
     setDetailLoading(true);
+    setDetailError(null);
     void getTheoryTopic(runtime, selected.id)
       .then(detail => {
         if (cancelled || !detail) return;
         setTopics(current => current.map(topic => topic.id === detail.id ? detail : topic));
         setSelected(current => current?.id === detail.id ? detail : current);
       })
-      .catch(error => {
-        console.error("Failed to load theory topic", error);
+      .catch(() => {
+        if (!cancelled) setDetailError(tr("Не вдалося завантажити тему. Спробуйте ще раз.", "Failed to load this topic. Please try again."));
       })
       .finally(() => {
         if (!cancelled) setDetailLoading(false);
       });
     return () => { cancelled = true; };
-  }, [runtime, i18n.language, selected?.id, selected?.theory?.content]);
+  }, [runtime, i18n.language, selected?.id, selected?.theory?.content, detailRetryToken]);
+
+  const retryTopic = () => {
+    setDetailRetryToken((value) => value + 1);
+  };
 
   return (
     <div className="flex flex-col md:flex-row gap-4 md:gap-6 p-3 sm:p-4 md:p-6">
@@ -85,6 +100,11 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
           <div className="mt-1 text-sm font-semibold tracking-tight text-text-primary">
             {tr("Курс:", "Course:")} {courseLabel}
           </div>
+          <label htmlFor="theory-topic-search" className="sr-only">{tr("Пошук теми", "Search topics")}</label>
+          <div className="relative mt-3">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-muted" aria-hidden="true" />
+            <input id="theory-topic-search" name="topicSearch" type="search" autoComplete="off" value={topicSearch} onChange={(event) => setTopicSearch(event.target.value)} placeholder={tr("Знайти тему…", "Search topics…")} className="h-10 w-full rounded-lg border border-border bg-bg-base pl-9 pr-3 text-sm text-text-primary outline-none transition focus:border-primary/60 focus:ring-2 focus:ring-primary/15" />
+          </div>
         </div>
 
         {/* Topic list */}
@@ -95,8 +115,9 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
             </div>
           )}
           {!loading && loadError && (
-            <div className="m-2 rounded-lg border border-accent-error/50 bg-accent-error/10 px-3 py-2 text-xs font-mono text-accent-error">
-              {loadError}
+            <div role="alert" aria-live="assertive" className="m-2 rounded-lg border border-accent-error/50 bg-accent-error/10 px-3 py-3 text-xs font-mono text-accent-error">
+              <div>{loadError}</div>
+              <button type="button" onClick={() => setReloadToken((value) => value + 1)} className="mt-2 rounded-md border border-accent-error/40 px-2.5 py-1.5 font-semibold hover:bg-accent-error/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-error/50">{tr("Спробувати ще", "Try again")}</button>
             </div>
           )}
           {!loading && !loadError && topics.length === 0 && (
@@ -109,12 +130,15 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
               </div>
             </div>
           )}
+          {!loading && !loadError && topics.length > 0 && filteredTopics.length === 0 && (
+            <div className="px-4 py-8 text-center text-xs font-mono text-text-secondary">{tr("Тем не знайдено", "No matching topics")}</div>
+          )}
           <motion.div
             variants={prefersReducedMotion ? undefined : staggerContainer}
             initial={prefersReducedMotion ? undefined : "initial"}
             animate={prefersReducedMotion ? undefined : "animate"}
           >
-            {topics.map(topic => (
+            {filteredTopics.map(topic => (
               <motion.button
                 key={topic.id}
                 variants={prefersReducedMotion ? undefined : fadeUpItem}
@@ -147,6 +171,9 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
           <div>
             {/* Content header */}
             <div className="px-5 py-4 border-b border-border bg-bg-code/30">
+              <nav aria-label={tr("Навігація по теорії", "Theory breadcrumb")} className="mb-2 text-[11px] font-mono text-text-muted">
+                <span>{tr("Теорія", "Theory")}</span><span className="px-1.5">/</span><span>{courseLabel}</span><span className="px-1.5">/</span><span className="text-text-secondary">{selected.theory?.title || selected.title}</span>
+              </nav>
               <PageEyebrow label={courseLabel} />
               <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-text-primary">
                 {selected.theory?.title || selected.title}
@@ -162,6 +189,12 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
                 <div className="py-12 text-center text-sm font-mono text-text-secondary">
                   {tr("Завантаження теорії…", "Loading theory…")}
                 </div>
+              ) : detailError ? (
+                <div role="alert" aria-live="assertive" className="flex flex-col items-center gap-3 py-12 text-center">
+                  <BookOpen className="size-5 text-accent-error" aria-hidden="true" />
+                  <div className="text-sm font-mono text-accent-error">{detailError}</div>
+                  <button type="button" onClick={retryTopic} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-primary hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">{tr("Спробувати ще", "Try again")}</button>
+                </div>
               ) : (
                 <div className="flex flex-col items-center gap-2 py-12 text-center">
                   <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
@@ -172,6 +205,13 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
                   </div>
                 </div>
               )}
+              {topics.length > 1 && selectedIndex >= 0 ? (
+                <div className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
+                  <button type="button" disabled={selectedIndex === 0} onClick={() => setSelected(topics[selectedIndex - 1])} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:pointer-events-none disabled:opacity-40">← {tr("Попередня", "Previous")}</button>
+                  <span className="text-[11px] font-mono text-text-muted">{selectedIndex + 1} / {topics.length}</span>
+                  <button type="button" disabled={selectedIndex === topics.length - 1} onClick={() => setSelected(topics[selectedIndex + 1])} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:pointer-events-none disabled:opacity-40">{tr("Наступна", "Next")} →</button>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : (

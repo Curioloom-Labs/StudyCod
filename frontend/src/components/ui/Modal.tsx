@@ -118,7 +118,7 @@ export const Modal: React.FC<Props> = ({
                 <h2 id={titleId} className="text-lg font-mono text-text-primary">{title}</h2>
                 {description && <p id={descriptionId} className="text-sm text-text-secondary mt-2 whitespace-pre-line">{description}</p>}
               </div>}
-            <div className={"modal-scroll-container flex-1 overflow-y-auto px-4 sm:px-6 py-3 sm:py-4" + (bodyClassName ? ` ${bodyClassName}` : "")}>
+            <div className={"modal-scroll-container flex-1 overscroll-contain overflow-y-auto px-4 sm:px-6 py-3 sm:py-4" + (bodyClassName ? ` ${bodyClassName}` : "")}>
               {children}
             </div>
             {shouldShowCloseButton && <div className="px-4 sm:px-6 py-3 sm:py-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-border flex justify-end flex-shrink-0">

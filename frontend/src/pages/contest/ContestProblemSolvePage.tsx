@@ -494,6 +494,7 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   const doRun = async () => {
     if (!contestId || !problemId || !statement) return;
+    if (running || checking) return;
     if (!hasToken) {
       setError("Please log in to run code.");
       return;
@@ -535,6 +536,7 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   const doSubmit = async () => {
     if (!contestId || !problemId || !statement) return;
+    if (running || checking) return;
     if (!hasToken) {
       setError("Please log in to submit.");
       return;
@@ -614,7 +616,12 @@ export const ContestProblemSolvePage: React.FC = () => {
   if (error && !statement) {
     return (
       <div className="p-3 sm:p-4 md:p-6">
-        <Card className="p-4 text-sm text-accent-error">{error}</Card>
+        <Card className="p-4">
+          <div role="alert" aria-live="assertive" className="text-sm text-accent-error">{error}</div>
+          <Button variant="secondary" onClick={() => void load()} className="mt-4 h-10 px-4">
+            Try again
+          </Button>
+        </Card>
       </div>
     );
   }
@@ -630,7 +637,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         </Button>
 
         <div className="text-xs font-mono text-text-secondary w-full sm:w-auto flex items-center gap-3">
-          {error ? <span className="text-accent-error">{error}</span> : null}
+          {error ? <span role="alert" aria-live="assertive" className="text-accent-error">{error}</span> : null}
           {subsLoading ? <span className="text-text-muted">Syncing submissions…</span> : null}
         </div>
       </div>

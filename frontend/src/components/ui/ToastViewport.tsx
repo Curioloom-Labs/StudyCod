@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { X } from "lucide-react";
 import { getToastEventName, type ToastPayload, type ToastType } from "../../lib/toast";
 
 type ToastItem = {
@@ -67,13 +68,19 @@ export const ToastViewport: React.FC = () => {
             key={item.id}
             role="status"
             aria-live={item.type === "error" ? "assertive" : "polite"}
+            aria-atomic="true"
             layout
             initial={shouldReduceMotion ? false : { opacity: 0, y: -10, scale: 0.985 }}
             animate={{ opacity: 1, y: 0, scale: 1, transition: shouldReduceMotion ? { duration: 0.16, ease: "linear" } : { duration: 0.22, ease: TOAST_EASE } }}
             exit={shouldReduceMotion ? { opacity: 0, transition: { duration: 0.14, ease: "linear" } } : { opacity: 0, y: -8, scale: 0.985, transition: { duration: 0.16, ease: TOAST_EASE } }}
             className={`pointer-events-auto relative overflow-hidden rounded-md border px-3 py-2 text-xs font-mono shadow-lg backdrop-blur-sm ${tone(item.type)}`}
           >
-            {item.message}
+            <div className="flex items-start gap-2 pr-1">
+              <span className="min-w-0 flex-1">{item.message}</span>
+              <button type="button" onClick={() => setItems(prev => prev.filter(t => t.id !== item.id))} className="-mr-1 -mt-1 grid size-6 shrink-0 place-items-center rounded text-current/70 transition hover:bg-black/10 hover:text-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current/60" aria-label="Dismiss notification" title="Dismiss notification">
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            </div>
             {!shouldReduceMotion ? (
               <motion.span
                 aria-hidden="true"
