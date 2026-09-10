@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Clock3, Download, Edit2, GripVertical, Library, Play, Plus, Rocket, Search, Send, Star, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Clock3, Download, Edit2, GripVertical, Library, Play, Plus, Rocket, Search, Send, Share2, Star, Trash2, Upload, X } from "lucide-react";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
@@ -39,6 +39,7 @@ import { JUDGE_LANGUAGE_LABELS, enabledJudgeLanguages } from "../../lib/judgeLan
 import { PremiumLibrary } from "../core/PremiumPersonalExperience";
 
 const RECENT_TASKS_STORAGE_KEY = "studycod:library:recent:v1";
+const LIBRARY_SCROLL_STORAGE_KEY = "studycod:library:scroll-y:v1";
 
 const RecentTasksBanner: React.FC<{ onOpen: (task: LibraryTaskListItem) => void }> = ({ onOpen }) => {
   const { i18n } = useTranslation();
@@ -373,6 +374,7 @@ export const TaskLibraryPage: React.FC = () => {
   const [judgeLang, setJudgeLang] = useState<JudgeLanguage | "ALL">("ALL");
   const [qDraft, setQDraft] = useState("");
   const [q, setQ] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const [mineStatus, setMineStatus] = useState<LibraryTaskStatus | "ALL">("ALL");
   const [onlySolved, setOnlySolved] = useState(false);
@@ -396,6 +398,30 @@ export const TaskLibraryPage: React.FC = () => {
   const hydratedFromUrlRef = useRef(false);
   const listSectionRef = useRef<HTMLDivElement | null>(null);
   const previewSectionRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const restoreFrame = window.requestAnimationFrame(() => {
+      try {
+        const saved = Number(sessionStorage.getItem(LIBRARY_SCROLL_STORAGE_KEY));
+        if (Number.isFinite(saved) && saved > 0) window.scrollTo({ top: saved, behavior: "auto" });
+      } catch {
+        // ignore unavailable session storage
+      }
+    });
+    const saveScroll = () => {
+      try {
+        sessionStorage.setItem(LIBRARY_SCROLL_STORAGE_KEY, String(window.scrollY));
+      } catch {
+        // ignore unavailable session storage
+      }
+    };
+    window.addEventListener("scroll", saveScroll, { passive: true });
+    return () => {
+      window.cancelAnimationFrame(restoreFrame);
+      saveScroll();
+      window.removeEventListener("scroll", saveScroll);
+    };
+  }, []);
 
   const [showEditor, setShowEditor] = useState(false);
   const autoEditHandledRef = useRef(false);
@@ -1473,6 +1499,16 @@ export const TaskLibraryPage: React.FC = () => {
     }
     navigate(buildSolveTarget(task));
   };
+  const copyCurrentLibraryLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setLinkCopied(true);
+      showToast({ type: "success", message: tr("Посилання зі станом фільтрів скопійовано.", "Link with current filters copied.") });
+      window.setTimeout(() => setLinkCopied(false), 1400);
+    } catch {
+      showToast({ type: "error", message: tr("Не вдалося скопіювати посилання.", "Could not copy the link.") });
+    }
+  };
 
   const visibleTasks = useMemo(() => {
     let list: LibraryTaskListItem[] = tasks.slice();
@@ -1571,6 +1607,7 @@ export const TaskLibraryPage: React.FC = () => {
   // the specialised workspace below, where its dense controls are necessary.
   if (!canManage && view === "approved") {
     return <>
+      <div className="mx-auto flex max-w-7xl justify-end px-4 pt-4 text-[#142017] dark:text-[#edf3ef] sm:px-6 lg:px-10"><button type="button" onClick={() => void copyCurrentLibraryLink()} className="inline-flex items-center gap-1.5 rounded-lg border border-[#152219]/10 bg-white px-3 py-2 text-xs font-semibold text-[#617066] transition hover:border-[#00c96d]/40 hover:text-[#147b47] dark:border-white/10 dark:bg-[#121b15] dark:text-[#a7b5aa] dark:hover:text-[#72edb0]" aria-label={tr("Скопіювати посилання на бібліотеку", "Copy library link")} title={tr("Скопіювати посилання з фільтрами", "Copy link with filters")}><Share2 className="size-3.5" />{linkCopied ? tr("Скопійовано", "Copied") : tr("Поділитися", "Share")}</button></div>
       <RecentTasksBanner onOpen={rememberAndOpenTask} />
       <PremiumLibrary
         tasks={learnerTasks}

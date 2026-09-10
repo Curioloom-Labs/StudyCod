@@ -710,6 +710,13 @@ export const LibraryTaskSolvePage: React.FC = () => {
       redirectToLoginWithNext();
       return;
     }
+    const maxAttempts = Number(task.maxAttempts ?? 0);
+    const attemptsUsed = Number(task.attempt?.submissionsCount ?? 0);
+    if (maxAttempts > 0 && attemptsUsed >= maxAttempts) {
+      showToast({ type: "error", message: tr("Ліміт спроб уже вичерпано.", "The attempt limit has already been reached.") });
+      return;
+    }
+    if (maxAttempts > 0 && attemptsUsed === maxAttempts - 1 && typeof window !== "undefined" && !window.confirm(tr("Це остання доступна спроба. Перевір код перед відправленням.", "This is your last available attempt. Review your code before submitting."))) return;
     setChecking(true);
     setCheckResult(null);
     setNextTask(null);

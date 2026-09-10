@@ -9,12 +9,14 @@ import {
   ChevronDown,
   ChevronRight,
   Clock3,
+  Copy,
   Download,
   Code2,
   FileCode2,
   FileText,
   FolderCode,
   Gauge,
+  GitCompareArrows,
   History,
   Lightbulb,
   LockKeyhole,
@@ -323,6 +325,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const [focusMode, setFocusMode] = React.useState(false);
   const [mobileContextOpen, setMobileContextOpen] = React.useState(true);
   const [notice, setNotice] = React.useState<string | null>(null);
+  const [diffOpen, setDiffOpen] = React.useState(false);
+  const [copiedLabel, setCopiedLabel] = React.useState<string | null>(null);
   const [traceStep, setTraceStep] = React.useState(0);
   const [miniProjectTimer, setMiniProjectTimer] = React.useState<{
     taskId: string;
@@ -563,6 +567,14 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       );
     }
   }, [allTestsPassed, props.checkResult?.verdict, props.checkResult?.testsPassed, props.hints?.length]);
+  React.useEffect(() => {
+    if (!diffOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDiffOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [diffOpen]);
   const lineCount = (draftCodeRef.current || "").split("\n").length;
   const fileList = props.useFiles
     ? props.files
@@ -590,6 +602,30 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     anchor.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+  const copyText = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedLabel(label);
+      window.setTimeout(() => setCopiedLabel((current) => current === label ? null : current), 1200);
+    } catch {
+      setNotice(tr("Не вдалося скопіювати текст", "Could not copy text"));
+    }
+  };
+  const comparisonCode = history[0]?.code ?? "";
+  const comparisonLines = React.useMemo(() => {
+    const before = comparisonCode.split("\n");
+    const after = (draftCodeRef.current || "").split("\n");
+    const rows: Array<{ kind: "same" | "removed" | "added"; line: string; number: number }> = [];
+    const count = Math.max(before.length, after.length);
+    for (let index = 0; index < count; index += 1) {
+      if (before[index] === after[index]) rows.push({ kind: "same", line: after[index] ?? "", number: index + 1 });
+      else {
+        if (before[index] !== undefined) rows.push({ kind: "removed", line: before[index], number: index + 1 });
+        if (after[index] !== undefined) rows.push({ kind: "added", line: after[index], number: index + 1 });
+      }
+    }
+    return rows;
+  }, [comparisonCode, props.code]);
   const renderBottom = () => {
     if (bottomTab === "debugger") {
       const step =
@@ -725,9 +761,14 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <div className="font-semibold text-white">
                 {tr("Локальна історія", "Local history")}
               </div>
-              <div className="flex items-center gap-1 text-[#72edb0]">
-                <Check className="size-4" />
-                Autosave
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 text-[#72edb0]">
+                  <Check className="size-4" />
+                  Autosave
+                </div>
+                <button type="button" onClick={() => setDiffOpen(true)} disabled={!history.length} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40" aria-label={tr("Порівняти з останнім знімком", "Compare with latest snapshot")} title={tr("Порівняти з останнім знімком", "Compare with latest snapshot")}>
+                  <GitCompareArrows className="size-3.5" />{tr("Порівняти", "Compare")}
+                </button>
               </div>
             </div>
             <p className="mt-2">
@@ -745,7 +786,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   >
                     <div className="min-w-0">
                       <div className="text-[10px] text-[#82968a]">
-                        {new Date(entry.at).toLocaleString()}
+                        {new Intl.DateTimeFormat(i18n.language || "uk", { dateStyle: "short", timeStyle: "short" }).format(new Date(entry.at))}
                       </div>
                       <pre className="mt-1 max-h-8 overflow-hidden whitespace-pre-wrap font-mono text-[10px] text-[#c8d6cc]">
                         {entry.code}
@@ -787,22 +828,22 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     }
     if (bottomTab === "terminal") {
       return (
-        <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-auto p-4 md:grid-cols-2">
-          <div>
-            <div className="mb-2 text-[10px] uppercase tracking-[.14em] text-[#82968a]">
-              stdout
-            </div>
-            <pre className="min-h-24 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs leading-5 text-[#dce7df]">
-              {props.runResult?.stdout || "—"}
-            </pre>
+        <div className="h-full min-h-0 overflow-auto p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#82968a]">{tr("Останній запуск", "Last run")}</span>
+            <button type="button" onClick={runWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:opacity-40" aria-label={tr("Запустити код знову", "Run code again")} title={tr("Запустити код знову", "Run code again")}>
+              <Play className="size-3" />{tr("Запустити знову", "Run again")}
+            </button>
           </div>
-          <div>
-            <div className="mb-2 text-[10px] uppercase tracking-[.14em] text-[#82968a]">
-              stderr
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <div className="mb-2 text-[10px] uppercase tracking-[.14em] text-[#82968a]">stdout</div>
+              <pre className="min-h-24 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs leading-5 text-[#dce7df]">{props.runResult?.stdout || "—"}</pre>
             </div>
-            <pre className="min-h-24 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs leading-5 text-[#ff9aba]">
-              {props.runResult?.stderr || "—"}
-            </pre>
+            <div>
+              <div className="mb-2 text-[10px] uppercase tracking-[.14em] text-[#82968a]">stderr</div>
+              <pre className="min-h-24 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs leading-5 text-[#ff9aba]">{props.runResult?.stderr || "—"}</pre>
+            </div>
           </div>
         </div>
       );
@@ -889,9 +930,16 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           </div>
         ) : null}
         {props.checkResult?.compileError ? (
-          <pre className="mb-3 whitespace-pre-wrap rounded-xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/5 p-3 font-mono text-[#ff9aba]">
-            {props.checkResult.compileError}
-          </pre>
+          <div className="mb-3 rounded-xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/5 p-3">
+            <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[.12em] text-[#ff9aba]">
+              <span>{tr("Помилка компіляції", "Compiler error")}</span>
+              <button type="button" onClick={() => void copyText(props.checkResult?.compileError || "", "compile-error")} className="inline-flex items-center gap-1 rounded-md border border-[#ff6b9d]/25 px-2 py-1 text-[10px] normal-case tracking-normal text-[#ffb2c9] hover:bg-[#ff6b9d]/10" aria-label={tr("Скопіювати помилку компіляції", "Copy compiler error")} title={tr("Скопіювати помилку компіляції", "Copy compiler error")}>
+                {copiedLabel === "compile-error" ? <Check className="size-3" /> : <Copy className="size-3" />}
+                {copiedLabel === "compile-error" ? tr("Скопійовано", "Copied") : tr("Копіювати", "Copy")}
+              </button>
+            </div>
+            <pre className="whitespace-pre-wrap font-mono text-[#ff9aba]">{props.checkResult.compileError}</pre>
+          </div>
         ) : null}
         {props.checkResult?.publicTestResults?.length ? (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
@@ -952,6 +1000,9 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   (test) => !test.passed,
                 )?.input || "—"}
               </pre>
+              <button type="button" onClick={() => props.onStdinChange(props.checkResult?.publicTestResults?.find((test) => !test.passed)?.input || "")} disabled={!props.checkResult.publicTestResults.find((test) => !test.passed)?.input || props.isWebTask} className="mt-2 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-[#72edb0] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40">
+                {tr("Використати як stdin", "Use as stdin")}
+              </button>
             </div>
           </div>
         ) : null}
@@ -1030,7 +1081,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const miniProjectTimerExpired = activeMiniProjectRemainingSeconds === 0;
 
   return (
-    <div className="flex h-[calc(100dvh-1rem)] min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-[#203428] bg-[#0b110d] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_24px_70px_-56px_rgba(0,217,120,.35)] sm:h-[min(1100px,calc(100dvh-2rem))] sm:min-h-[640px] sm:rounded-[30px] lg:min-h-[780px]">
+    <div className="relative flex h-[calc(100dvh-1rem)] min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-[#203428] bg-[#0b110d] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_24px_70px_-56px_rgba(0,217,120,.35)] sm:h-[min(1100px,calc(100dvh-2rem))] sm:min-h-[640px] sm:rounded-[30px] lg:min-h-[780px]">
       <header className="flex min-h-[72px] flex-wrap items-center gap-2 border-b border-[#203428] bg-[#111b14] px-4 py-3 sm:px-5">
         {props.onBack ? (
           <button
@@ -1113,7 +1164,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           type="button"
           onClick={runWithTab}
           disabled={props.readOnly || props.running || props.checking}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-white/[.08] px-3 text-xs font-semibold text-white hover:bg-white/[.14] disabled:opacity-50"
+          className="hidden h-9 items-center gap-1.5 rounded-lg bg-white/[.08] px-3 text-xs font-semibold text-white hover:bg-white/[.14] disabled:opacity-50 sm:inline-flex"
         >
           <Play className="size-3.5" />
           {props.running ? "…" : tr("Run", "Run")}
@@ -1122,7 +1173,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           type="button"
           onClick={checkWithTab}
           disabled={props.readOnly || props.running || props.checking}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:opacity-50"
+          className="hidden h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:opacity-50 sm:inline-flex"
         >
           {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : <TestTube2 className="size-3.5" />}
           {props.checking ? tr("Тестуємо…", "Testing…") : tr("Test", "Test")}
@@ -1864,6 +1915,28 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           <ChevronDown className="size-4 rotate-180" />
         </button>
       )}
+      <div className="absolute inset-x-0 bottom-0 z-40 flex gap-2 border-t border-[#203428] bg-[#111b14]/95 p-2 shadow-[0_-16px_30px_-24px_rgba(0,0,0,.9)] backdrop-blur sm:hidden">
+        <button type="button" onClick={runWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[.08] px-3 text-xs font-semibold text-white disabled:opacity-50">
+          <Play className="size-3.5" />{props.running ? "…" : tr("Запустити", "Run")}
+        </button>
+        <button type="button" onClick={checkWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#00d978] px-3 text-xs font-bold text-[#062211] disabled:opacity-50">
+          {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : <TestTube2 className="size-3.5" />}{props.checking ? tr("Тестуємо…", "Testing…") : tr("Перевірити", "Test")}
+        </button>
+      </div>
+      {diffOpen ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-3" role="dialog" aria-modal="true" aria-label={tr("Порівняння коду", "Code comparison")}>
+          <div className="flex max-h-[min(760px,calc(100dvh-1.5rem))] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#294333] bg-[#101a13] shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-[#294333] px-4 py-3">
+              <div><h2 className="text-sm font-bold text-white">{tr("Поточний код і останній знімок", "Current code vs latest snapshot")}</h2><p className="mt-1 text-[10px] text-[#82968a]">{tr("Рядки зі знаком − видалені, зі знаком + додані.", "Lines marked − were removed; lines marked + were added.")}</p></div>
+              <button type="button" onClick={() => setDiffOpen(false)} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]" aria-label={tr("Закрити порівняння", "Close comparison")}>{tr("Закрити", "Close")}</button>
+            </div>
+            <div className="min-h-0 overflow-auto p-3 font-mono text-[11px] leading-5">
+              {comparisonLines.slice(0, 500).map((row, index) => <div key={index} className={row.kind === "removed" ? "bg-[#ff6b9d]/10 text-[#ff9aba]" : row.kind === "added" ? "bg-[#00d978]/10 text-[#72edb0]" : "text-[#82968a]"}><span className="mr-2 inline-block w-4 select-none text-right opacity-70">{row.kind === "removed" ? "−" : row.kind === "added" ? "+" : " "}</span><span className="mr-3 inline-block w-8 select-none text-right opacity-50">{row.number}</span>{row.line || " "}</div>)}
+              {!comparisonLines.length ? <div className="px-3 py-8 text-center text-[#82968a]">{tr("Немає знімка для порівняння.", "No snapshot is available for comparison.")}</div> : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
       {notice ? (
         <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-[#00d978]/30 bg-[#132018] px-4 py-2 text-xs font-semibold text-[#72edb0] shadow-2xl">
           {notice}
