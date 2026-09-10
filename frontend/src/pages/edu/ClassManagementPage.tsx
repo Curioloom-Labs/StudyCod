@@ -700,21 +700,23 @@ export const ClassManagementPage: React.FC = () => {
                 </article>
               ))}
               {!students.length && (
-                <div className="col-span-full rounded-[24px] border border-dashed border-[#142018]/15 p-12 text-center dark:border-white/10">
-                  <UsersRound className="mx-auto size-9 text-[#16834d] dark:text-[#7bedb4]" />
-                  <h3 className="mt-4 text-xl font-black">У класі ще немає учнів</h3>
-                  <p className="mt-2 text-sm text-[#6b7a70] dark:text-[#aebbb2]">
+                <div className="col-span-full rounded-[24px] border border-dashed border-[#142018]/15 p-8 text-center dark:border-white/10 sm:p-12">
+                  <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
+                    <UsersRound className="size-9 shrink-0 text-[#16834d] dark:text-[#7bedb4]" />
+                    <h3 className="mt-4 text-balance text-xl font-black">У класі ще немає учнів</h3>
+                    <p className="mx-auto mt-2 max-w-2xl text-center text-sm text-[#6b7a70] dark:text-[#aebbb2]">
                     Вставте список із Excel або Google Таблиць — облікові записи створяться одним кроком.
-                  </p>
-                  <div className="mt-5 flex flex-wrap justify-center gap-2">
-                    <Button onClick={() => openAddStudents("paste")}>
-                      <UserPlus className="mr-2 size-4" />
-                      Вставити список учнів
-                    </Button>
-                    <Button variant="ghost" onClick={() => { setImportError(null); setShowImport(true); }}>
-                      <FileUp className="mr-2 size-4" />
-                      Завантажити CSV
-                    </Button>
+                    </p>
+                    <div className="mt-5 flex flex-wrap justify-center gap-2">
+                      <Button onClick={() => openAddStudents("paste")}>
+                        <UserPlus className="mr-2 size-4" />
+                        Вставити список учнів
+                      </Button>
+                      <Button variant="ghost" onClick={() => { setImportError(null); setShowImport(true); }}>
+                        <FileUp className="mr-2 size-4" />
+                        Завантажити CSV
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1000,7 +1002,7 @@ export const ClassManagementPage: React.FC = () => {
                 value={bulkStudentText}
                 onChange={(event) => { setBulkStudentText(event.target.value); setAddStudentsError(null); }}
                 placeholder={"Шевченко Тарас Григорович\nМельник Софія\nабо: Шевченко\tТарас\tГригорович\tstudent@example.com\n…"}
-                className="w-full resize-y rounded-2xl border border-border bg-bg-surface px-3 py-3 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-accent-success/50"
+                className="w-full resize-y rounded-2xl border border-border bg-bg-surface px-3 py-3 text-sm leading-6 text-text-primary placeholder:text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-accent-success/50"
               />
               {bulkStudentText.trim() && <p aria-live="polite" className="text-xs font-bold text-text-secondary">Розпізнано учнів: {parsedBulkStudents.students.length}{parsedBulkStudents.invalidLines.length ? ` · помилки у рядках: ${parsedBulkStudents.invalidLines.join(", ")}` : ""}</p>}
             </div>
@@ -1009,17 +1011,17 @@ export const ClassManagementPage: React.FC = () => {
               {draftStudents.map((student, index) => (
                 <fieldset key={index} className="grid gap-2 rounded-2xl border border-border/70 p-3 sm:grid-cols-2">
                   <legend className="px-1 text-xs font-bold text-text-secondary">Учень {index + 1}</legend>
-                  <input aria-label={`Прізвище учня ${index + 1}`} name={`student-${index}-lastName`} autoComplete="family-name" value={student.lastName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, lastName: event.target.value } : item))} placeholder="Прізвище…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
-                  <input aria-label={`Імʼя учня ${index + 1}`} name={`student-${index}-firstName`} autoComplete="given-name" value={student.firstName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, firstName: event.target.value } : item))} placeholder="Імʼя…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
-                  <input aria-label={`По батькові учня ${index + 1}`} name={`student-${index}-middleName`} autoComplete="additional-name" value={student.middleName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, middleName: event.target.value } : item))} placeholder="По батькові…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
-                  <input type="email" aria-label={`Email учня ${index + 1} (необовʼязково)`} name={`student-${index}-email`} autoComplete="email" spellCheck={false} value={student.email} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} placeholder="student@example.com…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm" />
+                  <input aria-label={`Прізвище учня ${index + 1}`} name={`student-${index}-lastName`} autoComplete="family-name" value={student.lastName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, lastName: event.target.value } : item))} placeholder="Прізвище…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary" />
+                  <input aria-label={`Імʼя учня ${index + 1}`} name={`student-${index}-firstName`} autoComplete="given-name" value={student.firstName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, firstName: event.target.value } : item))} placeholder="Імʼя…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary" />
+                  <input aria-label={`По батькові учня ${index + 1}`} name={`student-${index}-middleName`} autoComplete="additional-name" value={student.middleName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, middleName: event.target.value } : item))} placeholder="По батькові…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary" />
+                  <input type="email" aria-label={`Email учня ${index + 1} (необовʼязково)`} name={`student-${index}-email`} autoComplete="email" spellCheck={false} value={student.email} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} placeholder="student@example.com…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary" />
                 </fieldset>
               ))}
               <Button variant="ghost" onClick={() => setDraftStudents((list) => [...list, emptyStudent()])}><Plus className="mr-2 size-4" />Ще один рядок</Button>
             </>
           )}
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={closeAddStudents}>
+            <Button variant="ghost" className="text-text-secondary hover:text-text-primary" onClick={closeAddStudents}>
               Скасувати
             </Button>
             <Button onClick={() => void submitStudents()} disabled={saving}>
