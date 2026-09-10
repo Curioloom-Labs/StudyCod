@@ -67,15 +67,16 @@ router.post("/classes/:classId/students", authRequired, requireClassCapability("
 
     const schema = z.object({
       students: z.array(z.object({
-        firstName: z.string().min(1),
-        lastName: z.string().min(1),
-        middleName: z.string().optional(),
-        email: z.string().email()
-      }))
+        firstName: z.string().trim().min(1),
+        lastName: z.string().trim().min(1),
+        middleName: z.string().trim().optional(),
+        email: z.string().trim().email()
+      })).min(1)
     });
     const validated = schema.safeParse(req.body);
     if (!validated.success) return res.status(400).json({
-      message: "INVALID_INPUT"
+      message: "INVALID_INPUT",
+      issues: validated.error.issues.map((issue) => ({ path: issue.path, code: issue.code }))
     });
 
     const results = [];

@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, BarChart3, CalendarDays, Calculator, ChevronRight, GraduationCap, Plus, Save, Settings2, Trash2, UsersRound, X } from "lucide-react";
 import {
   createManualGrade,
@@ -163,6 +163,7 @@ const Header: React.FC<{ title: string; text: string; classId?: string; actions?
 export const GradebookWorkspace: React.FC = () => {
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [data, setData] = React.useState<GradebookResponse | null>(null);
   const [topics, setTopics] = React.useState<Topic[]>([]);
   const [error, setError] = React.useState<string | null>(null);
@@ -174,7 +175,9 @@ export const GradebookWorkspace: React.FC = () => {
   const [busyAction, setBusyAction] = React.useState(false);
   const [attendanceDate, setAttendanceDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [attendanceMap, setAttendanceMap] = React.useState<Record<number, AttendanceStatus>>({});
+  const [attendanceBaseline, setAttendanceBaseline] = React.useState<Record<number, AttendanceStatus>>({});
   const [attendanceSaving, setAttendanceSaving] = React.useState(false);
+  const [studentFilter, setStudentFilter] = React.useState<"all" | "missing" | "low">("all");
   const autoThematicGuardRef = React.useRef(false);
 
   const gradingSystem = normalizeGradingSystem(data?.gradingSystem || DEFAULT_GRADING_SYSTEM);
@@ -184,6 +187,12 @@ export const GradebookWorkspace: React.FC = () => {
   const missingThematics = React.useMemo(() => missingThematicTopics(data, topics), [data, topics]);
   const canUseSemesterGrades = missingThematics.length === 0;
   const students = data?.students ?? [];
+  const visibleStudents = React.useMemo(() => students.filter((student) => {
+    if (studentFilter === "all") return true;
+    if (studentFilter === "missing") return student.grades.length === 0 || student.grades.some((grade) => grade.grade == null);
+    return student.grades.some((grade) => grade.grade != null && grade.grade < 60);
+  }), [students, studentFilter]);
+  const attendanceDirty = students.some((student) => (attendanceMap[student.studentId] || "PRESENT") !== (attendanceBaseline[student.studentId] || "PRESENT"));
 
   const load = React.useCallback(async () => {
     setError(null);
@@ -191,7 +200,9 @@ export const GradebookWorkspace: React.FC = () => {
       if (preview()) {
         setData(demoGradebook);
         setTopics(demoTopics);
-        setAttendanceMap({ 1: "PRESENT", 2: "LATE", 3: "PRESENT" });
+        const demoAttendance = { 1: "PRESENT", 2: "LATE", 3: "PRESENT" } as Record<number, AttendanceStatus>;
+        setAttendanceMap(demoAttendance);
+        setAttendanceBaseline(demoAttendance);
         return;
       }
       const [book, topicList, attendance] = await Promise.all([
@@ -220,6 +231,7 @@ export const GradebookWorkspace: React.FC = () => {
       }
       setData(nextBook);
       setAttendanceMap(nextAttendance);
+      setAttendanceBaseline(nextAttendance);
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, "Не вдалося завантажити журнал."));
     }
@@ -232,6 +244,20 @@ export const GradebookWorkspace: React.FC = () => {
     setEditing({ student, column, grade });
     setGradeValue(grade?.grade == null ? "" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode));
   };
+
+  React.useEffect(() => {
+    const reviewGradeId = Number(searchParams.get("review"));
+    if (!data || !Number.isFinite(reviewGradeId) || reviewGradeId === 0) return;
+    for (const student of students) {
+      const grade = student.grades.find((item) => item.gradeId === reviewGradeId);
+      if (!grade) continue;
+      const column = columns.find((item) => item.taskId === grade.taskId || item.lessonId === grade.lessonId);
+      if (!column) continue;
+      setEditing({ student, column, grade });
+      setGradeValue(grade.grade == null ? "" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode));
+      return;
+    }
+  }, [columns, data, gradingSystem, scaleMode, searchParams, students]);
 
   const saveGrade = async () => {
     if (!editing) return;
@@ -343,12 +369,17 @@ export const GradebookWorkspace: React.FC = () => {
     setAttendanceMap(Object.fromEntries(students.map((student) => [student.studentId, "PRESENT"] as const)));
   };
 
+  const markAllAbsent = () => {
+    setAttendanceMap(Object.fromEntries(students.map((student) => [student.studentId, "ABSENT"] as const)));
+  };
+
   const saveAttendance = async () => {
     if (!classId) return;
     setAttendanceSaving(true);
     try {
       const entries = students.map((student) => ({ studentId: student.studentId, status: attendanceMap[student.studentId] || ("PRESENT" as AttendanceStatus) }));
       if (!preview()) await setAttendance(Number(classId), attendanceDate, entries);
+      setAttendanceBaseline({ ...attendanceMap });
       showToast({ type: "success", message: "Відвідуваність збережено в журналі." });
     } catch (caught) {
       showToast({ type: "error", message: getErrorMessageFromUnknown(caught, "Не вдалося зберегти відвідуваність.") });
@@ -396,6 +427,13 @@ export const GradebookWorkspace: React.FC = () => {
             <Metric icon={GraduationCap} value={columns.filter((item) => item.isSummary || item.isSemester).length} label="підсумкових колонок" tone="yellow" />
           </div>
 
+          <section className="mb-4 rounded-[24px] border border-[#19291d]/10 bg-white p-4 dark:border-white/[.09] dark:bg-[#111b14]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-[#718075] dark:text-[#a6b4a9]">Фільтр класу</p><p className="mt-1 text-sm text-[#516157] dark:text-[#c2cec5]">Швидко знайдіть роботи, які потребують уваги.</p></div>
+              <div className="flex flex-wrap gap-2">{(["all", "missing", "low"] as const).map((filter) => <button type="button" key={filter} onClick={() => setStudentFilter(filter)} className={`rounded-full px-3 py-2 text-xs font-bold ${studentFilter === filter ? "bg-[#153321] text-white dark:bg-[#00d978] dark:text-[#062211]" : "bg-[#edf2ed] text-[#617268] dark:bg-white/[.06] dark:text-[#c2cec5]"}`}>{filter === "all" ? `Усі · ${students.length}` : filter === "missing" ? `Без оцінки · ${students.filter((student) => student.grades.length === 0 || student.grades.some((grade) => grade.grade == null)).length}` : `Низькі · ${students.filter((student) => student.grades.some((grade) => grade.grade != null && grade.grade < 60)).length}`}</button>)}</div>
+            </div>
+          </section>
+
           <section className="mb-4 rounded-[28px] border border-[#19291d]/10 bg-white p-5 shadow-[0_18px_50px_rgba(12,36,20,.04)] dark:border-white/[.09] dark:bg-[#111b14]">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex items-start gap-3">
@@ -403,12 +441,13 @@ export const GradebookWorkspace: React.FC = () => {
                 <div><p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]">Присутність у журналі</p><h2 className="mt-1 text-lg font-bold">Відмітки за обрану дату</h2><p className="mt-1 text-sm text-[#718075] dark:text-[#a6b4a9]">П, З, В або У зберігаються разом з оцінками класу.</p></div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <input type="date" value={attendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} className="rounded-xl border border-[#19291d]/12 bg-[#f8fbf8] px-3 py-2.5 text-sm font-bold outline-none dark:border-white/10 dark:bg-[#0d1510]" aria-label="Дата відвідуваності" />
+                <input type="date" value={attendanceDate} onChange={(event) => { if (attendanceDirty && !window.confirm("Є незбережені відмітки. Змінити дату без збереження?")) return; setAttendanceDate(event.target.value); }} className="rounded-xl border border-[#19291d]/12 bg-[#f8fbf8] px-3 py-2.5 text-sm font-bold outline-none dark:border-white/10 dark:bg-[#0d1510]" aria-label="Дата відвідуваності" />
                 <button type="button" onClick={markAllPresent} className="rounded-xl border border-[#19291d]/12 px-3 py-2.5 text-sm font-bold text-[#38493e] dark:border-white/10 dark:text-[#dce7df]">Усі присутні</button>
+                <button type="button" onClick={markAllAbsent} className="rounded-xl border border-[#19291d]/12 px-3 py-2.5 text-sm font-bold text-[#38493e] dark:border-white/10 dark:text-[#dce7df]">Усі відсутні</button>
                 <button type="button" onClick={() => void saveAttendance()} disabled={attendanceSaving} className="inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-3 py-2.5 text-sm font-bold text-[#062211] disabled:opacity-55"><Save className="size-4" />{attendanceSaving ? "Зберігаємо…" : "Зберегти"}</button>
               </div>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2">{attendanceStatuses.map((status) => <span key={status} className={`rounded-full px-3 py-1.5 text-xs font-bold ${attendanceTone[status]}`}>{attendanceLabel[status]} · {attendanceSummary[status]}</span>)}</div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">{attendanceStatuses.map((status) => <span key={status} className={`rounded-full px-3 py-1.5 text-xs font-bold ${attendanceTone[status]}`}>{attendanceLabel[status]} · {attendanceSummary[status]}</span>)}{attendanceDirty && <span role="status" className="rounded-full border border-[#e17800]/35 bg-[#fff8e5] px-3 py-1.5 text-xs font-bold text-[#a55e00] dark:bg-[#ff8c00]/[.08] dark:text-[#ffca7e]">Є незбережені зміни</span>}</div>
           </section>
 
           <div className="overflow-x-auto rounded-[28px] border border-[#19291d]/10 bg-white shadow-[0_18px_50px_rgba(12,36,20,.05)] dark:border-white/[.09] dark:bg-[#111b14]">
@@ -421,7 +460,7 @@ export const GradebookWorkspace: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {students.map((student) => (
+                {visibleStudents.map((student) => (
                   <tr key={student.studentId} className="border-b border-[#19291d]/8 last:border-0 dark:border-white/[.06]">
                   <td className="sticky left-0 z-10 bg-white px-5 py-4 text-sm font-bold dark:bg-[#111b14]">{student.studentName}</td>
                     <td className="px-3 py-3 align-middle"><div className="flex min-w-[210px] flex-wrap gap-1">{attendanceStatuses.map((status) => { const active = (attendanceMap[student.studentId] || "PRESENT") === status; return <button type="button" key={status} title={attendanceLabel[status]} aria-pressed={active} onClick={() => setAttendanceMap((old) => ({ ...old, [student.studentId]: status }))} className={`rounded-lg px-2.5 py-2 text-xs font-extrabold transition ${active ? attendanceTone[status] : "text-[#75847a] hover:bg-[#edf2ed] dark:text-[#a6b4a9] dark:hover:bg-white/[.06]"}`}>{attendanceShort[status]}</button>; })}</div></td>
@@ -433,6 +472,7 @@ export const GradebookWorkspace: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            {!visibleStudents.length && <div className="px-5 py-10 text-center text-sm text-[#718075] dark:text-[#a6b4a9]">За цим фільтром учнів не знайдено.</div>}
           </div>
         </>
       )}

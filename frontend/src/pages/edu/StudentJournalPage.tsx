@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, BookOpen, CheckCircle2, Clock3, GraduationCap, NotebookTabs, Target } from "lucide-react";
+import { ArrowRight, BookOpen, CheckCircle2, Clock3, GraduationCap, NotebookTabs, RefreshCw, Target } from "lucide-react";
 import { getStudentGrades, getStudentLessons, type Grade, type Lesson } from "../../lib/api/edu";
 import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, gradingSystemLabel, normalizeGradingSystem, normalizeScaleMode, type ClassGradingSystem, type GradeScaleMode } from "../../lib/gradingSystems";
 import type { User } from "../../types";
@@ -17,20 +17,27 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    Promise.all([
-      getStudentLessons(),
-      user.studentId ? getStudentGrades(user.studentId) : Promise.resolve({ grades: [], summaryGrades: [], gradingSystem: DEFAULT_GRADING_SYSTEM, gradeScaleMode: undefined }),
-    ]).then(([nextLessons, nextGrades]) => {
-      if (!active) return;
-      setLessons(nextLessons);
-      setGrades(nextGrades.grades || []);
-      setSummaryGrades((nextGrades.summaryGrades || []) as typeof summaryGrades);
-      setGradingSystem(normalizeGradingSystem(nextGrades.gradingSystem || DEFAULT_GRADING_SYSTEM));
-      setScaleMode(normalizeScaleMode(nextGrades.gradeScaleMode));
-    }).catch((cause: unknown) => {
-      if (!active) return;
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [lessonsResult, gradesResult] = await Promise.allSettled([
+        getStudentLessons(),
+        user.studentId ? getStudentGrades(user.studentId) : Promise.resolve({ grades: [], summaryGrades: [], gradingSystem: DEFAULT_GRADING_SYSTEM, gradeScaleMode: undefined }),
+      ]);
+      if (lessonsResult.status === "rejected" && gradesResult.status === "rejected") throw lessonsResult.reason;
+      if (lessonsResult.status === "fulfilled") setLessons(lessonsResult.value);
+      if (gradesResult.status === "fulfilled") {
+        const nextGrades = gradesResult.value;
+        setGrades(nextGrades.grades || []);
+        setSummaryGrades((nextGrades.summaryGrades || []) as typeof summaryGrades);
+        setGradingSystem(normalizeGradingSystem(nextGrades.gradingSystem || DEFAULT_GRADING_SYSTEM));
+        setScaleMode(normalizeScaleMode(nextGrades.gradeScaleMode));
+      }
+      if (lessonsResult.status === "rejected" || gradesResult.status === "rejected") {
+        setError("Частину журналу тимчасово не вдалося завантажити. Натисніть «Повторити»." );
+      }
+    } catch (cause: unknown) {
       if (isPreview) {
         setLessons([
           { id: -51, type: "LESSON", title: "Алгоритми: два вказівники", tasksCount: 3, hasTheory: true, createdAt: "2026-07-10" },
@@ -46,15 +53,23 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
       } else {
         setError(getErrorMessageFromUnknown(cause, "Не вдалося завантажити журнал."));
       }
-    }).finally(() => active && setLoading(false));
-
-    return () => { active = false; };
+    } finally {
+      setLoading(false);
+    }
   }, [user.studentId, isPreview]);
+
+  useEffect(() => { void load(); }, [load]);
 
   const normalizedSystem = normalizeGradingSystem(gradingSystem);
   const normalizedScale = normalizeScaleMode(scaleMode);
-  const average = useMemo(() => grades.length ? grades.reduce((sum, grade) => sum + Number(grade.total || 0), 0) / grades.length : 0, [grades]);
-  const next = lessons.find((lesson) => !lesson.reportOnly) || lessons[0];
+  const graded = useMemo(() => grades.filter((grade) => grade.total != null && Number.isFinite(Number(grade.total))), [grades]);
+  const average = useMemo(() => graded.length ? graded.reduce((sum, grade) => sum + Number(grade.total), 0) / graded.length : 0, [graded]);
+  const next = lessons.find((lesson) => {
+    if (lesson.reportOnly) return false;
+    const tasks = lesson.tasks || [];
+    if (tasks.length) return tasks.some((task) => !task.progressCompleted && !task.hasGrade && !task.grade?.isCompleted);
+    return lesson.controlWorks?.some((work) => work.studentStatus !== "COMPLETED") ?? true;
+  }) || lessons.find((lesson) => !lesson.reportOnly) || lessons[0];
   const displayAverage = average ? formatGradeForSystem(average, normalizedSystem, normalizedScale) : "—";
   const recentGrades = [...grades].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 8);
 
@@ -78,7 +93,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
           </div>
         </section>
 
-        {error && <div role="alert" className="rounded-2xl bg-[#fff0f4] p-4 text-sm text-[#bd3c62] dark:bg-[#ff6b9d]/10 dark:text-[#ffa5bf]">{error}</div>}
+        {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#fff0f4] p-4 text-sm text-[#bd3c62] dark:bg-[#ff6b9d]/10 dark:text-[#ffa5bf]"><span>{error}</span><button type="button" onClick={() => void load()} className="inline-flex items-center gap-1 rounded-xl border border-current px-3 py-2 text-xs font-bold"><RefreshCw className="size-3" />Повторити</button></div>}
 
         <div className="grid gap-5 xl:grid-cols-[.95fr_1.05fr]">
           <section className="rounded-[26px] border border-[#152219]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121b15]">
@@ -116,7 +131,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
                       <div className="truncate font-semibold">{title}</div>
                       <div className="mt-1 truncate text-xs text-[#79877d] dark:text-[#9dac9f]">{context} · {new Date(grade.createdAt).toLocaleDateString("uk-UA")}</div>
                     </div>
-                    <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-lg font-bold text-[#147b47] shadow-sm dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{formatGradeForSystem(grade.total, normalizedSystem, normalizedScale)}</div>
+                    <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-lg font-bold text-[#147b47] shadow-sm dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{grade.total != null && Number.isFinite(Number(grade.total)) ? formatGradeForSystem(Number(grade.total), normalizedSystem, normalizedScale) : "На перевірці"}</div>
                   </div>
                 );
               }) : <div className="rounded-2xl bg-[#f5f8f5] p-5 text-sm text-[#718075] dark:bg-white/[.04] dark:text-[#a4b2a7]">Оцінок ще немає. Вони зʼявляться після виконання практик або перевірки вчителем.</div>}

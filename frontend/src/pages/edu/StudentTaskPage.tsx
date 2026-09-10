@@ -21,9 +21,11 @@ import {
   submitCodeFiles,
   completeTaskFiles,
   getWebTaskTemplate,
+  getLessonAttemptStatus,
   saveWebTaskDraft,
   checkWebTask,
   submitWebTask,
+  startLessonAttempt,
   submitHintFeedback,
   type CodeFile,
   type HintFeedbackReasonCode,
@@ -730,25 +732,18 @@ export const StudentTaskPage: React.FC = () => {
     const interval = setInterval(() => {
       const currentTask = taskRef.current;
       const currentCode = codeRef.current;
-      if (!currentTask || !timeStarted) {
-        clearInterval(interval);
-        return;
-      }
-      const elapsed = Math.floor((Date.now() - timeStarted.getTime()) / 1000 / 60);
-      const remaining = (currentTask.lesson.timeLimitMinutes || 0) - elapsed;
-      if (remaining > 0) {
-        setTimeRemaining(remaining);
-      } else {
-        setTimeRemaining(0);
+      if (!currentTask || !timeStarted) return;
+      const elapsedSeconds = Math.floor((Date.now() - timeStarted.getTime()) / 1000);
+      const remaining = Math.max(0, (currentTask.lesson.timeLimitMinutes || 0) * 60 - elapsedSeconds);
+      setTimeRemaining(remaining);
+      if (remaining <= 0) {
         clearInterval(interval);
         toastInfo(t("timeUpAutoSubmit"));
-        if (currentTask && currentCode && handleSubmitRef.current) {
-          handleSubmitRef.current();
-        }
+        if (currentCode && handleSubmitRef.current) void handleSubmitRef.current();
       }
-    }, 60000);
+    }, 1000);
     return () => clearInterval(interval);
-  }, [timeStarted]);
+  }, [timeStarted, t, toastInfo]);
   useEffect(() => {
     if (task) {
       const hasTheory = task.lesson.hasTheory && task.lesson.theory && task.lesson.theory.trim().length > 0;
@@ -902,22 +897,35 @@ export const StudentTaskPage: React.FC = () => {
         setQuizGrade(null);
       }
       if (data.lesson.type === "CONTROL" && data.lesson.timeLimitMinutes) {
-        const startTime = localStorage.getItem(scopedStorageKey("task_start_time", taskId));
-        if (startTime) {
-          const elapsed = Math.floor((Date.now() - parseInt(startTime)) / 1000 / 60);
-          const remaining = data.lesson.timeLimitMinutes - elapsed;
-          if (remaining > 0) {
+        const timerKey = scopedStorageKey("task_start_time", taskId);
+        try {
+          let status = await getLessonAttemptStatus(data.lesson.id);
+          if (!status.hasActiveAttempt && status.status === "NOT_STARTED") {
+            const started = await startLessonAttempt(data.lesson.id);
+            status = { ...status, hasActiveAttempt: true, startedAt: started.startedAt, remainingSeconds: started.remainingSeconds, timeLimitMinutes: started.timeLimitMinutes, status: "IN_PROGRESS" };
+          }
+          if (status.hasActiveAttempt && status.startedAt) {
+            const startedAt = new Date(status.startedAt);
+            const remaining = Math.max(0, Number(status.remainingSeconds) || 0);
             setTimeRemaining(remaining);
-            setTimeStarted(new Date(parseInt(startTime)));
+            setTimeStarted(startedAt);
+            localStorage.setItem(timerKey, startedAt.getTime().toString());
+            localStorage.setItem(scopedStorageKey("task_start_time_timestamp", taskId), startedAt.getTime().toString());
           } else {
             setTimeRemaining(0);
+            setTimeStarted(null);
+            localStorage.removeItem(timerKey);
+            localStorage.removeItem(scopedStorageKey("task_start_time_timestamp", taskId));
           }
-        } else {
-          const now = Date.now();
-          localStorage.setItem(scopedStorageKey("task_start_time", taskId), now.toString());
-          localStorage.setItem(scopedStorageKey("task_start_time_timestamp", taskId), now.toString());
-          setTimeRemaining(data.lesson.timeLimitMinutes);
-          setTimeStarted(new Date(now));
+        } catch {
+          // Keep legacy tasks usable if the attempt-status endpoint is absent.
+          const startTime = localStorage.getItem(timerKey);
+          const startedAt = startTime ? parseInt(startTime, 10) : Date.now();
+          const remaining = Math.max(0, data.lesson.timeLimitMinutes * 60 - Math.floor((Date.now() - startedAt) / 1000));
+          localStorage.setItem(timerKey, startedAt.toString());
+          localStorage.setItem(scopedStorageKey("task_start_time_timestamp", taskId), startedAt.toString());
+          setTimeRemaining(remaining);
+          setTimeStarted(new Date(startedAt));
         }
       }
       return data;
@@ -1049,6 +1057,9 @@ export const StudentTaskPage: React.FC = () => {
       }));
       return;
     }
+    if (task?.maxAttempts && task.attemptsUsed !== undefined && task.maxAttempts - task.attemptsUsed === 1 && !window.confirm(tr("Це остання спроба. Відправити рішення?", "This is your last attempt. Submit the solution?"))) {
+      return;
+    }
     const submitSeq = ++latestSubmitRequestSeq.current;
     const hideControlResults = task?.lesson?.type === "CONTROL";
     setSubmitting(true);
@@ -1120,6 +1131,8 @@ export const StudentTaskPage: React.FC = () => {
         toastInfo(t('taskSubmittedForReview'));
         const refreshedTask = await loadTask();
         if (hideControlResults && (attemptsWillExhaust || shouldLeaveControlTaskView(refreshedTask))) {
+          localStorage.removeItem(scopedStorageKey("task_start_time", taskId));
+          localStorage.removeItem(scopedStorageKey("task_start_time_timestamp", taskId));
           toastInfo(tr("Етап завершено. Повертаємось до контрольної.", "Stage completed. Returning to control work."));
           navigateToLessonPage(true);
           return;
@@ -1142,6 +1155,8 @@ export const StudentTaskPage: React.FC = () => {
       if (hideControlResults) {
         const shouldExitControlTask = attemptsWillExhaust || result.grade?.isManuallyGraded === true || shouldLeaveControlTaskView(refreshedTask);
         if (shouldExitControlTask) {
+          localStorage.removeItem(scopedStorageKey("task_start_time", taskId));
+          localStorage.removeItem(scopedStorageKey("task_start_time_timestamp", taskId));
           toastInfo(tr("Етап завершено. Повертаємось до контрольної.", "Stage completed. Returning to control work."));
           navigateToLessonPage(true);
           return;
@@ -1258,6 +1273,8 @@ export const StudentTaskPage: React.FC = () => {
       }
       await loadTask();
       if (hideControlResults) {
+        localStorage.removeItem(scopedStorageKey("task_start_time", taskId));
+        localStorage.removeItem(scopedStorageKey("task_start_time_timestamp", taskId));
         toastInfo(tr("Етап завершено. Повертаємось до контрольної.", "Stage completed. Returning to control work."));
         navigateToLessonPage(true);
         return;
@@ -1630,9 +1647,9 @@ export const StudentTaskPage: React.FC = () => {
             {(timeRemaining !== null && task.lesson.type === "CONTROL") || (deadlineRemaining !== null && !task.isClosed) ? (
               <div className={`flex-shrink-0 items-center ${timeRemaining !== null && task.lesson.type === "CONTROL" ? "flex" : "hidden sm:flex"}`}>
                 {timeRemaining !== null && task.lesson.type === "CONTROL" ? (
-                  <span role="status" aria-live="polite" className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-sm font-semibold border ${timeRemaining <= 5 ? "text-accent-error border-accent-error/40 bg-accent-error/10" : timeRemaining <= 10 ? "text-accent-warning border-accent-warning/40 bg-accent-warning/10" : "text-accent-warn border-accent-warn/40 bg-accent-warn/10"}`}>
+                  <span role="status" aria-live="polite" className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-sm font-semibold border ${timeRemaining <= 300 ? "text-accent-error border-accent-error/40 bg-accent-error/10" : timeRemaining <= 600 ? "text-accent-warning border-accent-warning/40 bg-accent-warning/10" : "text-accent-warn border-accent-warn/40 bg-accent-warn/10"}`}>
                     <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-                    {Math.floor(timeRemaining)} {tr("хв", "min")}
+                    {Math.floor(timeRemaining / 60)}:{String(timeRemaining % 60).padStart(2, "0")}
                   </span>
                 ) : deadlineRemaining !== null && !task.isClosed ? (
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono text-sm border ${deadlineRemaining <= 300 ? "text-accent-error border-accent-error/40 bg-accent-error/10" : deadlineRemaining <= 600 ? "text-accent-warning border-accent-warning/40 bg-accent-warning/10" : "text-text-secondary border-border"}`}>

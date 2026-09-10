@@ -397,6 +397,7 @@ export interface AgendaItemDto {
   id: number;
   title: string;
   deadline: string;
+  deadlineTimezone?: string | null;
   deadlineMs: number;
   bucket: AgendaBucket;
   classId: number;
@@ -500,6 +501,13 @@ export async function addStudents(classId: number, students: AddStudentsRequest[
   const res = await api.post(`/edu/classes/${classId}/students`, {
     students
   });
+  return res.data;
+}
+export async function createParentInvite(organizationId: number, payload: {
+  email: string;
+  studentId: number;
+}): Promise<{ invite?: { token?: string | null } }> {
+  const res = await api.post(`/edu/orgs/${organizationId}/parent-invites`, payload);
   return res.data;
 }
 export async function getStudents(classId: number): Promise<Student[]> {

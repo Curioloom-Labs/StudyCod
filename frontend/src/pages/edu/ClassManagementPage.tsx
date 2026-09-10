@@ -26,6 +26,7 @@ import { api } from "../../lib/api/client";
 import {
   addStudents,
   createClassAnnouncement,
+  createParentInvite,
   deleteClassAnnouncement,
   exportStudents,
   getClass,
@@ -113,6 +114,8 @@ export const ClassManagementPage: React.FC = () => {
     DEFAULT_GRADING_SYSTEM,
   );
   const [saving, setSaving] = React.useState(false);
+  const [addStudentsError, setAddStudentsError] = React.useState<string | null>(null);
+  const [parentLinkCopied, setParentLinkCopied] = React.useState(false);
   const [orgStaff, setOrgStaff] = React.useState<OrgStaff[]>([]);
   const [assignedTeacherIds, setAssignedTeacherIds] = React.useState<number[]>(
     [],
@@ -180,15 +183,27 @@ export const ClassManagementPage: React.FC = () => {
   }, [load]);
 
   const submitStudents = async () => {
-    const valid = draftStudents.filter(
-      (item) =>
-        item.firstName.trim() && item.lastName.trim() && item.email.trim(),
-    );
+    setAddStudentsError(null);
+    const valid = draftStudents
+      .map((item) => ({
+        firstName: item.firstName.trim(),
+        lastName: item.lastName.trim(),
+        middleName: item.middleName.trim(),
+        email: item.email.trim().toLowerCase(),
+      }))
+      .filter((item) => item.firstName && item.lastName && item.email);
     if (!valid.length) {
-      showToast({
-        type: "error",
-        message: "Заповніть імʼя, прізвище та email хоча б одного учня.",
-      });
+      setAddStudentsError("Заповніть імʼя, прізвище та email хоча б одного учня.");
+      return;
+    }
+    const emails = new Set<string>();
+    const duplicateEmail = valid.find((item) => {
+      if (emails.has(item.email)) return true;
+      emails.add(item.email);
+      return false;
+    })?.email;
+    if (duplicateEmail) {
+      setAddStudentsError(`Email ${duplicateEmail} повторюється у формі. Перевірте рядки.`);
       return;
     }
     setSaving(true);
@@ -200,10 +215,14 @@ export const ClassManagementPage: React.FC = () => {
       setDraftStudents([emptyStudent()]);
       await load();
     } catch (caught) {
-      showToast({
-        type: "error",
-        message: getErrorMessageFromUnknown(caught, "Не вдалося додати учнів."),
-      });
+      const message = getErrorMessageFromUnknown(caught, "Не вдалося додати учнів.");
+      setAddStudentsError(
+        message === "INVALID_INPUT"
+          ? "Перевірте імʼя, прізвище та коректність email у кожному заповненому рядку."
+          : message === "INTERNAL_SERVER_ERROR"
+            ? "Сервер не зміг створити облікові записи. Спробуйте ще раз або додайте учнів по одному."
+            : message,
+      );
     } finally {
       setSaving(false);
     }
@@ -257,26 +276,16 @@ export const ClassManagementPage: React.FC = () => {
       return;
     setSaving(true);
     try {
-      const response = await fetch(
-        `/api/edu/orgs/${classInfo.organizationId}/parent-invites`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            email: parentEmail.trim(),
-            studentId: parentStudent.id,
-          }),
-        },
-      );
-      const payload = await response.json();
-      if (!response.ok)
-        throw new Error(payload?.message || "Не вдалося створити запрошення");
+      const payload = await createParentInvite(classInfo.organizationId, {
+        email: parentEmail.trim().toLowerCase(),
+        studentId: parentStudent.id,
+      });
       setParentLink(
         payload?.invite?.token
           ? `${window.location.origin}/invite/${payload.invite.token}`
           : "",
       );
+      setParentLinkCopied(false);
       showToast({ type: "success", message: "Запрошення батькам створено" });
     } catch (caught) {
       showToast({
@@ -510,7 +519,7 @@ export const ClassManagementPage: React.FC = () => {
                   <Download className="mr-2 size-4" />
                   Експорт
                 </Button>
-                <Button onClick={() => setShowAdd(true)}>
+                <Button onClick={() => { setAddStudentsError(null); setShowAdd(true); }}>
                   <UserPlus className="mr-2 size-4" />
                   Створити облікові записи учнів
                 </Button>
@@ -543,6 +552,7 @@ export const ClassManagementPage: React.FC = () => {
                         setParentStudent(student);
                         setParentEmail("");
                         setParentLink("");
+                        setParentLinkCopied(false);
                       }}
                       className="font-bold text-[#16834d] dark:text-[#7bedb4]"
                     >
@@ -815,14 +825,27 @@ export const ClassManagementPage: React.FC = () => {
 
       <Modal
         open={showAdd}
-        onClose={() => setShowAdd(false)}
+        onClose={() => { setShowAdd(false); setAddStudentsError(null); }}
         title="Створити облікові записи учнів"
         showCloseButton={false}
       >
         <div className="max-h-[70vh] space-y-3 overflow-y-auto">
+          <p className="text-sm text-text-secondary">
+            Можна додати одного або кількох учнів. Дані та згенеровані паролі
+            покажемо після успішного створення.
+          </p>
+          {addStudentsError && (
+            <div role="alert" className="rounded-xl border border-accent-error/30 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
+              {addStudentsError}
+            </div>
+          )}
           {draftStudents.map((student, index) => (
-            <div key={index} className="grid gap-2 sm:grid-cols-2">
+            <fieldset key={index} className="grid gap-2 rounded-2xl border border-border/70 p-3 sm:grid-cols-2">
+              <legend className="px-1 text-xs font-bold text-text-secondary">Учень {index + 1}</legend>
               <input
+                aria-label={`Прізвище учня ${index + 1}`}
+                name={`student-${index}-lastName`}
+                autoComplete="family-name"
                 value={student.lastName}
                 onChange={(event) =>
                   setDraftStudents((list) =>
@@ -837,6 +860,9 @@ export const ClassManagementPage: React.FC = () => {
                 className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
               />
               <input
+                aria-label={`Імʼя учня ${index + 1}`}
+                name={`student-${index}-firstName`}
+                autoComplete="given-name"
                 value={student.firstName}
                 onChange={(event) =>
                   setDraftStudents((list) =>
@@ -851,6 +877,9 @@ export const ClassManagementPage: React.FC = () => {
                 className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
               />
               <input
+                aria-label={`По батькові учня ${index + 1}`}
+                name={`student-${index}-middleName`}
+                autoComplete="additional-name"
                 value={student.middleName}
                 onChange={(event) =>
                   setDraftStudents((list) =>
@@ -866,6 +895,10 @@ export const ClassManagementPage: React.FC = () => {
               />
               <input
                 type="email"
+                aria-label={`Email учня ${index + 1}`}
+                name={`student-${index}-email`}
+                autoComplete="email"
+                spellCheck={false}
                 value={student.email}
                 onChange={(event) =>
                   setDraftStudents((list) =>
@@ -879,7 +912,7 @@ export const ClassManagementPage: React.FC = () => {
                 placeholder="Email"
                 className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
               />
-            </div>
+            </fieldset>
           ))}
           <Button
             variant="ghost"
@@ -981,11 +1014,13 @@ export const ClassManagementPage: React.FC = () => {
                 />
                 <Button
                   variant="ghost"
-                  onClick={() =>
-                    void navigator.clipboard?.writeText(parentLink)
-                  }
+                  onClick={() => {
+                    if (!navigator.clipboard) return;
+                    void navigator.clipboard.writeText(parentLink).then(() => setParentLinkCopied(true)).catch(() => setParentLinkCopied(false));
+                  }}
                 >
-                  <Copy className="size-4" />
+                  <Copy className="mr-2 size-4" />
+                  {parentLinkCopied ? "Скопійовано" : "Копіювати"}
                 </Button>
               </div>
               <Button className="w-full" onClick={() => setParentStudent(null)}>

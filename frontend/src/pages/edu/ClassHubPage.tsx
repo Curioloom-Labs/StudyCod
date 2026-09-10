@@ -62,17 +62,19 @@ export const ClassHubPage: React.FC = () => {
     if (!Number.isFinite(id) || id <= 0) return;
     setLoading(true);
     try {
-      const [group, people, topicList, lessonList] = await Promise.all([
+      const [groupResult, peopleResult, topicsResult, lessonsResult] = await Promise.allSettled([
         getClass(id),
         getStudents(id),
         getTopics(id),
         getLessons(id),
       ]);
-      setClassInfo(group);
-      setStudents(people);
-      setTopics(topicList);
-      setLessons(lessonList);
-      setError(null);
+      if (groupResult.status !== "fulfilled") throw groupResult.reason;
+      setClassInfo(groupResult.value);
+      setStudents(peopleResult.status === "fulfilled" ? peopleResult.value : []);
+      setTopics(topicsResult.status === "fulfilled" ? topicsResult.value : []);
+      setLessons(lessonsResult.status === "fulfilled" ? lessonsResult.value : []);
+      const failedPanels = [peopleResult, topicsResult, lessonsResult].filter((result) => result.status === "rejected").length;
+      setError(failedPanels ? "Частину даних класу тимчасово не вдалося завантажити. Натисніть «Повторити»." : null);
     } catch (caught) {
       if (isPreview()) {
         setClassInfo({ id: -31, name: "10-Б · Python", language: "PYTHON", gradingSystem: "POINTS_12", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });

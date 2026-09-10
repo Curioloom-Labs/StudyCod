@@ -34,6 +34,45 @@ type Quiz = {
   options: Record<string, string>;
   correct: string;
 };
+type MiniProjectSpec = {
+  version: 1;
+  kind: "MINI_PROJECT";
+  estimatedMinutes: number;
+  skills: string[];
+  milestones: Array<{ id: string; title: string; description: string; required?: boolean }>;
+  extensions?: string[];
+};
+const parseProjectSpec = (raw: string): MiniProjectSpec | null => {
+  if (!raw.trim()) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("JSON мініпроєкту має помилку синтаксису.");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("JSON мініпроєкту має бути обʼєктом.");
+  const value = parsed as Record<string, unknown>;
+  const milestones = Array.isArray(value.milestones) ? value.milestones : [];
+  const validMilestones = milestones.every((item) => {
+    if (!item || typeof item !== "object") return false;
+    const milestone = item as Record<string, unknown>;
+    return typeof milestone.id === "string" && milestone.id.trim() && typeof milestone.title === "string" && milestone.title.trim() && typeof milestone.description === "string" && milestone.description.trim();
+  });
+  if (value.version !== 1 || value.kind !== "MINI_PROJECT" || !Number.isFinite(Number(value.estimatedMinutes)) || Number(value.estimatedMinutes) <= 0 || !Array.isArray(value.skills) || value.skills.some((item) => typeof item !== "string" || !item.trim()) || !milestones.length || !validMilestones) {
+    throw new Error("Перевірте version, kind, estimatedMinutes, skills і milestones мініпроєкту.");
+  }
+  return {
+    version: 1,
+    kind: "MINI_PROJECT",
+    estimatedMinutes: Number(value.estimatedMinutes),
+    skills: value.skills.map((item) => String(item).trim()),
+    milestones: milestones.map((item) => {
+      const milestone = item as Record<string, unknown>;
+      return { id: String(milestone.id).trim(), title: String(milestone.title).trim(), description: String(milestone.description).trim(), ...(milestone.required === undefined ? {} : { required: Boolean(milestone.required) }) };
+    }),
+    ...(Array.isArray(value.extensions) ? { extensions: value.extensions.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean) } : {}),
+  };
+};
 const preview = () =>
   import.meta.env.DEV &&
   new URLSearchParams(window.location.search).get("preview") === "true";
@@ -161,9 +200,7 @@ const LessonTeacherStudio: React.FC = () => {
     lessonId: number,
     payload: Parameters<typeof apiCreateTask>[1],
   ) => {
-    const projectSpec = task.projectSpecJson?.trim()
-      ? JSON.parse(task.projectSpecJson)
-      : null;
+    const projectSpec = parseProjectSpec(task.projectSpecJson || "");
     return apiCreateTask(lessonId, {
       ...payload,
       ...(projectSpec ? { projectSpec } : {}),
@@ -233,10 +270,9 @@ const LessonTeacherStudio: React.FC = () => {
     }
   };
   const begin = async () => {
-    // This component is the teacher/editor surface. Attempt endpoints are
-    // student-only, so starting a teacher preview must never issue a request
-    // that deterministically returns 403.
-    setError(null);
+    // Teachers do not create student attempts. Keep this action useful by
+    // taking the editor straight to the first practice block.
+    document.getElementById("lesson-practice")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   const submit = async () => {
     if (!quiz.length) return;
@@ -429,7 +465,7 @@ const LessonTeacherStudio: React.FC = () => {
           </section>
         </aside>
       </main>
-      <section className="mt-8">
+      <section id="lesson-practice" className="mt-8">
         <div className="flex items-end justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">
@@ -635,10 +671,20 @@ const StudentLessonWorkspace: React.FC = () => {
   >(null);
   const [loading, setLoading] = React.useState(true);
   const [started, setStarted] = React.useState(false);
+  const [startBusy, setStartBusy] = React.useState(false);
   const [quizAnswers, setQuizAnswers] = React.useState<Record<number, string>>({});
   const [quizSubmitted, setQuizSubmitted] = React.useState(false);
   const [quizBusy, setQuizBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!isControl || !Number.isFinite(id)) return;
+    try {
+      const saved = localStorage.getItem(`studycod.edu.lesson.${id}.quiz`);
+      if (saved) setQuizAnswers(JSON.parse(saved) as Record<number, string>);
+    } catch {
+      // Ignore an invalid or unavailable local draft.
+    }
+  }, [id, isControl]);
   React.useEffect(() => {
     let active = true;
     getLesson(id, isControl ? "CONTROL" : undefined)
@@ -698,6 +744,7 @@ const StudentLessonWorkspace: React.FC = () => {
     try {
       await submitQuizAnswers(id, quizAnswers, true);
       setQuizSubmitted(true);
+      localStorage.removeItem(`studycod.edu.lesson.${id}.quiz`);
       const refreshed = await getLesson(id, "CONTROL");
       setLesson(refreshed as Lesson & { tasks: Task[] });
     } catch (caught) {
@@ -732,16 +779,30 @@ const StudentLessonWorkspace: React.FC = () => {
           </p>
           <button
             type="button"
-            onClick={async () => {
-              if (!preview()) await startLessonAttempt(id);
-              setStarted(true);
-            }}
+            disabled={startBusy || started}
+            onClick={() => void (async () => {
+              setStartBusy(true);
+              setError(null);
+              try {
+                if (!preview()) await startLessonAttempt(id);
+                setStarted(true);
+              } catch (caught) {
+                setError(getErrorMessageFromUnknown(caught, "Не вдалося розпочати урок. Спробуйте ще раз."));
+              } finally {
+                setStartBusy(false);
+              }
+            })()}
             className="mt-7 rounded-xl bg-[#00ff88] px-5 py-3 text-sm font-bold text-[#062211]"
           >
-            {started ? "Урок розпочато" : "Почати урок"}
+            {startBusy ? "Запускаємо…" : started ? "Урок розпочато" : "Почати урок"}
           </button>
         </div>
       </header>
+      {error && (
+        <div role="alert" className="mt-5 rounded-2xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/[.08] px-4 py-3 text-sm text-[#c4436b] dark:text-[#ff9abd]">
+          {error}
+        </div>
+      )}
       <main className="mt-7 grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px]">
         <article className="rounded-[30px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14] sm:p-9">
           <div className="flex items-center gap-3">
@@ -803,7 +864,7 @@ const StudentLessonWorkspace: React.FC = () => {
                     <div className="mt-4 grid gap-2">
                       {Object.entries(question.options || {}).map(([key, value]) => (
                         <label key={key} className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${quizAnswers[index] === key ? "bg-[#dff6e7] text-[#134c2d] dark:bg-[#00ff88]/12 dark:text-[#a4f4c8]" : "bg-white text-[#415147] dark:bg-[#111b14] dark:text-[#dbe6de]"}`}>
-                          <input type="radio" name={`student-quiz-${index}`} checked={quizAnswers[index] === key} onChange={() => setQuizAnswers((current) => ({ ...current, [index]: key }))} />
+                          <input type="radio" name={`student-quiz-${index}`} checked={quizAnswers[index] === key} onChange={() => setQuizAnswers((current) => { const next = { ...current, [index]: key }; localStorage.setItem(`studycod.edu.lesson.${id}.quiz`, JSON.stringify(next)); return next; })} />
                           <span className="font-bold">{key}</span><span>{value}</span>
                         </label>
                       ))}

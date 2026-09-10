@@ -6,7 +6,6 @@ import { PageHero } from "../../components/ui/PageHero";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { SectionHeading } from "../../components/ui/SectionHeading";
 import { getAgenda, type AgendaItemDto, type AgendaBucket } from "../../lib/api/edu";
-import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -19,6 +18,13 @@ const addDays = (d: Date, n: number) => {
 const isToday = (d: Date) => {
   const n = new Date();
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+};
+const formatDeadlineTime = (deadline: string, timezone: string | null | undefined, locale: string) => {
+  try {
+    return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone: timezone || undefined }).format(new Date(deadline));
+  } catch {
+    return new Date(deadline).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  }
 };
 // A known Monday — used to render locale-correct, Monday-first weekday labels.
 const KNOWN_MONDAY = new Date(2024, 0, 1);
@@ -38,6 +44,7 @@ export const CalendarPage: React.FC = () => {
   const navigate = useNavigate();
   const [items, setItems] = useState<AgendaItemDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -50,7 +57,7 @@ export const CalendarPage: React.FC = () => {
         const data = await getAgenda();
         setItems(Array.isArray(data?.items) ? data.items : []);
       } catch (error) {
-        showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Не вдалося завантажити календар", "Failed to load calendar")) });
+        setError(getErrorMessageFromUnknown(error, tr("Не вдалося завантажити календар", "Failed to load calendar")));
       } finally {
         setLoading(false);
       }
@@ -131,6 +138,7 @@ export const CalendarPage: React.FC = () => {
       />
 
       <div className="mx-auto max-w-[1480px] space-y-6 px-4 py-8 md:px-8">
+        {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--ui-card-radius)] border border-accent-error/40 bg-accent-error/10 px-4 py-3 text-sm text-accent-error"><span>{error}</span><button type="button" onClick={() => { setError(null); setLoading(true); void getAgenda().then((data) => setItems(Array.isArray(data?.items) ? data.items : [])).catch((cause) => setError(getErrorMessageFromUnknown(cause, tr("Не вдалося завантажити календар", "Failed to load calendar")))).finally(() => setLoading(false)); }} className="rounded-xl border border-current px-3 py-2 text-xs font-bold">{tr("Повторити", "Retry")}</button></div>}
         {overdue.length > 0 && (
           <button
             type="button"
@@ -245,7 +253,7 @@ export const CalendarPage: React.FC = () => {
             <div className="space-y-2">
               {selectedItems.map(it => {
                 const KindIcon = it.kind === "CONTROL" ? FileText : FileCode;
-                const when = new Date(it.deadline).toLocaleString(locale, { hour: "2-digit", minute: "2-digit" });
+                const when = formatDeadlineTime(it.deadline, it.deadlineTimezone, locale);
                 const isOverdue = it.bucket === "overdue";
                 return (
                   <button
