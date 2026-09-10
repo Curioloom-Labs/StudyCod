@@ -267,7 +267,7 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
       .trim()
       .toLowerCase()
       .replace(/\s+/g, "")
-      .replace(/["']/g, "")
+      .replace(/["'’ʼ`]/g, "")
       .replace(/-/g, "");
 
     const splitFullName = (value: string) => {
@@ -305,7 +305,7 @@ router.post("/classes/:classId/students/import", authRequired, requireClassCapab
     const emailIdx = colIndex(["email", "e-mail"]);
     const fullNameIdx = colIndex(["піб", "fullname", "name"]);
     const usernameIdx = colIndex(["username", "login", "логін", "логин"]);
-    const passwordIdx = colIndex(["password", "пароль"]);
+    const passwordIdx = colIndex(["password", "пароль", "studentpassword", "парольучня", "loginpassword", "парольдлявходу"]);
 
     const startIndex = hasHeader ? 1 : 0;
 

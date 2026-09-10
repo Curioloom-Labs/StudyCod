@@ -75,6 +75,26 @@ const emptyStudent = (): DraftStudent => ({
   email: "",
 });
 
+const isSpreadsheetFile = (file: File) => /\.(?:xlsx|xls)$/i.test(file.name);
+
+const readStudentTable = async (file: File): Promise<string> => {
+  if (!isSpreadsheetFile(file)) return await file.text();
+
+  const xlsx = await import("xlsx");
+  const workbook = xlsx.read(await file.arrayBuffer(), {
+    type: "array",
+    cellDates: false,
+    raw: false,
+  });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = sheetName ? workbook.Sheets[sheetName] : undefined;
+  if (!sheet) throw new Error("EMPTY_STUDENT_TABLE");
+
+  const csv = xlsx.utils.sheet_to_csv(sheet, { blankrows: false });
+  if (!csv.trim()) throw new Error("EMPTY_STUDENT_TABLE");
+  return csv;
+};
+
 const parsePastedStudentList = (raw: string): { students: DraftStudent[]; invalidLines: number[] } => {
   const lines = raw
     .replace(/^\uFEFF/, "")
@@ -401,9 +421,9 @@ export const ClassManagementPage: React.FC = () => {
     setImportError(null);
     setSaving(true);
     try {
-      const result = await importStudents(id, await importFile.text());
+      const result = await importStudents(id, await readStudentTable(importFile));
       if (!result.count) {
-        setImportError("У файлі не знайдено учнів. Перевірте колонки: Прізвище, Імʼя, По батькові, Email.");
+        setImportError("У файлі не знайдено учнів. Перевірте колонки: Прізвище, Імʼя, По батькові, Email, Пароль.");
         return;
       }
       setCredentials(result.credentials);
@@ -413,9 +433,11 @@ export const ClassManagementPage: React.FC = () => {
       await load();
     } catch (caught) {
       const message = getErrorMessageFromUnknown(caught, "Не вдалося імпортувати список.");
-      setImportError(message === "INVALID_STUDENT_IMPORT"
-        ? "Не вдалося розпізнати файл. Перевірте рядки та колонки: Прізвище, Імʼя, По батькові, Email."
-        : message);
+      setImportError(message === "EMPTY_STUDENT_TABLE"
+        ? "Файл порожній або в ньому немає даних на першому аркуші."
+        : message === "INVALID_STUDENT_IMPORT"
+          ? "Не вдалося розпізнати файл. Перевірте рядки та колонки: Прізвище, Імʼя, По батькові, Email, Пароль."
+          : message);
     } finally {
       setSaving(false);
     }
@@ -662,7 +684,7 @@ export const ClassManagementPage: React.FC = () => {
               <div className="flex flex-wrap gap-2">
                 <Button variant="ghost" onClick={openImport}>
                   <FileUp className="mr-2 size-4" />
-                  Імпорт CSV
+                  Імпорт таблиці
                 </Button>
                 <Button variant="ghost" onClick={() => void exportRoster()}>
                   <Download className="mr-2 size-4" />
@@ -727,7 +749,7 @@ export const ClassManagementPage: React.FC = () => {
                       </Button>
                       <Button variant="ghost" onClick={openImport}>
                         <FileUp className="mr-2 size-4" />
-                        Завантажити CSV
+                        Завантажити таблицю
                       </Button>
                     </div>
                   </div>
@@ -1071,7 +1093,7 @@ export const ClassManagementPage: React.FC = () => {
       <Modal
         open={showImport}
         onClose={closeImport}
-        title="Імпорт учнів з CSV"
+        title="Імпорт учнів з таблиці"
         showCloseButton={false}
         panelClassName="max-w-xl"
         bodyClassName="bg-bg-base/[.02]"
@@ -1083,31 +1105,31 @@ export const ClassManagementPage: React.FC = () => {
             </span>
             <div>
               <p className="font-bold text-text-primary">Завантажте готову таблицю</p>
-              <p className="mt-1 text-xs leading-5 text-text-secondary">Підтримуються CSV-файли з ПІБ та необовʼязковими email.</p>
+              <p className="mt-1 text-xs leading-5 text-text-secondary">Підтримуються CSV та Excel-файли з ПІБ, email і необовʼязковими паролями.</p>
             </div>
           </div>
           {importError && <div role="alert" aria-live="polite" className="rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm leading-5 text-accent-error">{importError}</div>}
           <div>
             <input
-              id="student-csv-file"
-              name="studentCsvFile"
+              id="student-table-file"
+              name="studentTableFile"
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
               onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportError(null); }}
               className="sr-only"
             />
-            <label htmlFor="student-csv-file" className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-border bg-bg-surface/40 px-4 py-4 transition-colors hover:border-accent-success/70 hover:bg-accent-success/5 focus-within:ring-2 focus-within:ring-accent-success/40">
+            <label htmlFor="student-table-file" className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-border bg-bg-surface/40 px-4 py-4 transition-colors hover:border-accent-success/70 hover:bg-accent-success/5 focus-within:ring-2 focus-within:ring-accent-success/40">
               <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-bg-base text-text-secondary">
                 <FileUp aria-hidden="true" className="size-4" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-bold text-text-primary">{importFile?.name || "Обрати CSV-файл"}</span>
-                <span className="mt-0.5 block text-xs text-text-secondary">{importFile ? `${Math.max(1, Math.round(importFile.size / 1024))} КБ` : "Натисніть, щоб вибрати файл"}</span>
+                <span className="block truncate text-sm font-bold text-text-primary">{importFile?.name || "Обрати CSV або Excel-файл"}</span>
+                <span className="mt-0.5 block text-xs text-text-secondary">{importFile ? `${Math.max(1, Math.round(importFile.size / 1024))} КБ` : "Натисніть, щоб вибрати файл (.csv, .xlsx, .xls)"}</span>
               </span>
             </label>
           </div>
           <div className="rounded-xl bg-bg-base/60 px-3 py-2.5 text-xs leading-5 text-text-secondary">
-            Колонки: <span className="font-semibold text-text-primary">Прізвище, Імʼя, По батькові, Email</span>. Email можна залишити порожнім.
+            Колонки: <span className="font-semibold text-text-primary">Прізвище, Імʼя, По батькові, Email, Пароль</span>. Email і пароль можна залишити порожніми — пароль згенерується автоматично.
           </div>
           <div className="flex flex-col-reverse gap-3 border-t border-border/70 pt-4 sm:flex-row sm:justify-end">
             <Button variant="ghost" onClick={closeImport}>

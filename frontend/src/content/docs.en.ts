@@ -434,21 +434,21 @@ Review the work context, give a reasoned response, and close the appeal after re
   },
   {
     id: "edu-import-export",
-    title: "Importing and exporting students with CSV",
+    title: "Importing and exporting students with CSV and Excel",
     audience: "EDU",
-    tags: ["CSV", "import", "export", "students"],
+    tags: ["CSV", "Excel", "import", "export", "students"],
     content: `
 ## Working with a large roster
 
-Export a backup before bulk changes. For import, prepare a UTF-8 CSV and keep required template column names unchanged.
+Export a backup before bulk changes. For import, prepare a UTF-8 CSV or an Excel file (.xlsx, .xls) and keep the template column names unchanged.
 
 1. Download the current template or export.
 2. Fill it without merged cells or hidden rows.
-3. Save as UTF-8 CSV.
+3. Save as UTF-8 CSV or Excel (.xlsx, .xls).
 4. Import and review warnings.
 5. Verify the class roster after completion.
 
-Do not include passwords unless StudyCod explicitly provides a protected template for that workflow.
+The Email and Password columns are optional. If a password is empty, StudyCod generates one and shows it with the username after import. Do not share files containing passwords through public links.
 `
   },
   {
@@ -715,7 +715,7 @@ Teacher responses should explain the decision. Move technical failures to Suppor
   "edu-import-export": `
 ### File check
 
-Inspect the CSV with separators and encoding visible. Keep one student per row and verify required values have not shifted into adjacent columns.
+Inspect the CSV or the first Excel sheet. Keep one student per row and use the columns Last name, First name, Middle name, Email, Password. Email and password may be empty.
 
 Test with a small roster when possible and preserve the original file as a separate backup.
 `,
