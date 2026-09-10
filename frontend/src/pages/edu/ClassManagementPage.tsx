@@ -80,7 +80,7 @@ const isSpreadsheetFile = (file: File) => /\.(?:xlsx|xls)$/i.test(file.name);
 const readStudentTable = async (file: File): Promise<string> => {
   if (!isSpreadsheetFile(file)) return await file.text();
 
-  const xlsx = await import("xlsx");
+  const xlsx = await import("@e965/xlsx");
   const workbook = xlsx.read(await file.arrayBuffer(), {
     type: "array",
     cellDates: false,
