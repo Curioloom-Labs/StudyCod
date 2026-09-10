@@ -1,6 +1,6 @@
 import React from "react";
 import { useParams } from "react-router-dom";
-import { BarChart3, BookOpenCheck, Clock3, HeartHandshake, RefreshCw, UsersRound } from "lucide-react";
+import { BarChart3, BookOpenCheck, Clock3, HeartHandshake, Plus, RefreshCw, UsersRound } from "lucide-react";
 import { api } from "../../lib/api/client";
 import { cancelMyGradeAppeal, createGradeAppeal, getClassGradeAppeal, getClassGradeAppeals, getMyGradeAppeal, getMyGradeAppeals, postClassGradeAppealMessage, postMyGradeAppealMessage, resolveClassGradeAppeal, updateClassGradeAppealStatus, type GradeAppealItem, type GradeAppealMessageItem, type GradeAppealReasonCode, type GradeAppealStatus } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
