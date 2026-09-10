@@ -147,6 +147,25 @@ type Props = {
   runResult: StudyCodIdeRunResult | null;
   checkResult: StudyCodIdeCheckResult | null;
   resultCards?: React.ReactNode;
+  actionRecovery?: {
+    tone: "error" | "warning";
+    message: string;
+    retryLabel: string;
+    onRetry: () => void;
+  } | null;
+  saveStatus?: "saved" | "dirty" | "saving" | "error";
+  lastSavedAt?: string | null;
+  lastRunDurationMs?: number | null;
+  attemptsUsed?: number | null;
+  maxAttempts?: number | null;
+  localRecovery?: {
+    updatedAt: string;
+    code: string;
+    files: CodeFile[];
+    useFiles: boolean;
+    onRecover: () => void;
+    onDismiss: () => void;
+  } | null;
   hints?: string[];
   hintsStatus?: "AI" | "FALLBACK" | "UNAVAILABLE" | "NOT_REQUESTED" | null;
   trace?: StudyCodIdeTrace | null;
@@ -162,6 +181,7 @@ const LAYOUT_KEY = "studycod:ide:layout:v4";
 const HISTORY_KEY = "studycod:ide:history:v1";
 const MINI_PROJECT_TIMER_KEY = "studycod:ide:mini-project-start:v1";
 const ACTIVE_FILE_KEY = "studycod:ide:active-file:v1";
+const STDIN_HISTORY_KEY = "studycod:ide:stdin-history:v1";
 
 const rubberband = (overshoot: number, dimension: number, constant = 0.55) =>
   (overshoot * dimension * constant) / (dimension + constant * Math.abs(overshoot));
@@ -221,6 +241,26 @@ function formatMiniProjectCountdown(totalSeconds: number): string {
     return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
   }
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function formatIdeTimestamp(iso: string | null | undefined, locale: string): string {
+  const value = String(iso ?? "").trim();
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(date);
+  } catch {
+    return date.toLocaleString();
+  }
+}
+
+function visualizeWhitespace(value: string): string {
+  return String(value ?? "")
+    .replace(/\r/g, "␍")
+    .replace(/\t/g, "→\t")
+    .replace(/ /g, "·")
+    .replace(/\n/g, "↵\n");
 }
 
 function removeRepeatedTaskTitle(description: string, title: string): string {
@@ -331,6 +371,17 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const [notice, setNotice] = React.useState<string | null>(null);
   const [diffOpen, setDiffOpen] = React.useState(false);
   const [copiedLabel, setCopiedLabel] = React.useState<string | null>(null);
+  const [stdinHistory, setStdinHistory] = React.useState<string[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(scopedStorageKey(STDIN_HISTORY_KEY, props.task.id)) || "[]");
+      return Array.isArray(raw) ? raw.filter((value) => typeof value === "string" && value.trim()).slice(0, 6) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showFailedOnly, setShowFailedOnly] = React.useState(false);
+  const [showWhitespace, setShowWhitespace] = React.useState(false);
+  const [expandedTestId, setExpandedTestId] = React.useState<number | null>(null);
   const [traceStep, setTraceStep] = React.useState(0);
   const [miniProjectTimer, setMiniProjectTimer] = React.useState<{
     taskId: string;
@@ -380,6 +431,15 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     setBottomTab("tests");
     setFocusMode(false);
     setTraceStep(0);
+    setShowFailedOnly(false);
+    setShowWhitespace(false);
+    setExpandedTestId(null);
+    try {
+      const raw = JSON.parse(localStorage.getItem(scopedStorageKey(STDIN_HISTORY_KEY, props.task.id)) || "[]");
+      setStdinHistory(Array.isArray(raw) ? raw.filter((value) => typeof value === "string" && value.trim()).slice(0, 6) : []);
+    } catch {
+      setStdinHistory([]);
+    }
     try {
       setActiveFile(localStorage.getItem(scopedStorageKey(ACTIVE_FILE_KEY, props.task.id)) || props.entryFile);
     } catch {
@@ -586,6 +646,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
 
   const runWithTab = () => {
     if (props.readOnly || props.running || props.checking) return;
+    rememberStdinHistory();
     setBottomTab("terminal");
     props.onRun();
   };
@@ -615,6 +676,17 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       setNotice(tr("Не вдалося скопіювати текст", "Could not copy text"));
     }
   };
+  const rememberStdinHistory = () => {
+    const value = String(props.stdin ?? "").trim();
+    if (!value || props.isWebTask || isEmptyTask) return;
+    const next = [value, ...stdinHistory.filter((item) => item !== value)].slice(0, 6);
+    setStdinHistory(next);
+    try {
+      localStorage.setItem(scopedStorageKey(STDIN_HISTORY_KEY, props.task.id), JSON.stringify(next));
+    } catch {
+      // Local history is optional and must not block running code.
+    }
+  };
   const compilerErrorLine = React.useMemo(() => {
     const source = String(props.checkResult?.compileError ?? "");
     if (!source) return null;
@@ -638,6 +710,12 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     return rows;
   }, [comparisonCode, props.code]);
   const firstFailedPublicTestId = props.checkResult?.publicTestResults?.find((test) => !test.passed)?.testId ?? null;
+  const publicTestResults = props.checkResult?.publicTestResults ?? [];
+  const visiblePublicTestResults = showFailedOnly
+    ? publicTestResults.filter((test) => !test.passed)
+    : publicTestResults;
+  const firstFailedPublicTest = publicTestResults.find((test) => !test.passed) ?? null;
+  const expandedPublicTest = publicTestResults.find((test) => test.testId === expandedTestId) ?? null;
   const renderBottom = () => {
     if (bottomTab === "debugger") {
       const step =
@@ -842,7 +920,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       return (
         <div className="h-full min-h-0 overflow-auto p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <span className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#82968a]">{tr("Останній запуск", "Last run")}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#82968a]">{tr("Останній запуск", "Last run")}</span>
+              {props.lastRunDurationMs != null ? <span className="inline-flex items-center gap-1 text-[10px] tabular-nums text-[#a7b5aa]"><Clock3 className="size-3" />{props.lastRunDurationMs} ms</span> : null}
+            </div>
             <button type="button" onClick={runWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:opacity-40" aria-label={tr("Запустити код знову", "Run code again")} title={tr("Запустити код знову", "Run code again")}>
               <Play className="size-3" />{tr("Запустити знову", "Run again")}
             </button>
@@ -966,14 +1047,19 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           </div>
         ) : null}
         {props.checkResult?.publicTestResults?.length ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-            {props.checkResult.publicTestResults.map((test, index) => (
+          <div>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#82968a]">{tr("Публічні тести", "Public tests")} · {publicTestResults.length}</span>
+              <button type="button" onClick={() => setShowFailedOnly((value) => !value)} className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${showFailedOnly ? "border-[#ff6b9d]/35 bg-[#ff6b9d]/10 text-[#ffb2c9]" : "border-white/10 text-[#82968a] hover:bg-white/[.06] hover:text-white"}`} aria-pressed={showFailedOnly}>
+                {showFailedOnly ? tr("Усі тести", "All tests") : tr("Лише невдалі", "Failed only")}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+            {visiblePublicTestResults.map((test, index) => (
               <div key={test.testId} className="space-y-1">
                 <button
                   type="button"
-                  onClick={() =>
-                    setNotice(`${tr("Тест", "Test")} #${test.testId}`)
-                  }
+                  onClick={() => setExpandedTestId((current) => current === test.testId ? null : test.testId)}
                   className={`w-full rounded-lg border p-2 text-center transition hover:brightness-125 ${test.testId === firstFailedPublicTestId ? "ring-2 ring-[#ff9aba]/70 ring-offset-1 ring-offset-[#0b120e]" : ""} ${test.skipped ? "border-[#f0c674]/30 bg-[#f0c674]/10 text-[#f0c674]" : test.passed ? "border-[#00d978]/30 bg-[#00d978]/10 text-[#72edb0]" : "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]"}`}
                   aria-label={`${tr("Тест", "Test")} #${test.testId}${test.testId === firstFailedPublicTestId ? ` · ${tr("перший невдалий", "first failed")}` : ""}`}
                 >
@@ -1002,6 +1088,21 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 })()}
               </div>
             ))}
+            </div>
+            {!visiblePublicTestResults.length ? <div className="rounded-lg border border-white/10 bg-white/[.03] px-3 py-2 text-xs text-[#82968a]">{tr("Невдалих тестів немає.", "There are no failed tests.")}</div> : null}
+            {expandedPublicTest ? (
+              <div className="mt-3 rounded-xl border border-white/10 bg-black/15 p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[.12em] text-[#82968a]">
+                  <span>{tr("Деталі тесту", "Test details")} #{expandedPublicTest.testId}</span>
+                  <button type="button" onClick={() => setExpandedTestId(null)} className="rounded-md px-2 py-1 normal-case tracking-normal hover:bg-white/[.06] hover:text-white">{tr("Закрити", "Close")}</button>
+                </div>
+                <div className="grid gap-2 md:grid-cols-3">
+                  <div><div className="mb-1 text-[10px] text-[#82968a]">Input</div><pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[11px] text-[#c8d6cc]">{expandedPublicTest.input || "—"}</pre></div>
+                  <div><div className="mb-1 text-[10px] text-[#82968a]">Expected output</div><pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[11px] text-[#72edb0]">{expandedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === expandedPublicTest.testId)?.expectedOutput || "—"}</pre></div>
+                  <div><div className="mb-1 text-[10px] text-[#82968a]">Actual output</div><pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[11px] text-[#ffb2c9]">{expandedPublicTest.actualOutput || "—"}</pre></div>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[#294333] bg-[#0c1510] px-5 py-8 text-center">
@@ -1021,30 +1122,30 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             </div>
           </div>
         )}
-        {props.checkResult?.publicTestResults?.some((test) => !test.passed) ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <div>
-              <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-[#82968a]">
-                Actual output
-              </div>
-              <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono">
-                {props.checkResult.publicTestResults.find(
-                  (test) => !test.passed,
-                )?.actualOutput || "—"}
-              </pre>
-            </div>
-            <div>
-              <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-[#82968a]">
-                Input
-              </div>
-              <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono">
-                {props.checkResult.publicTestResults.find(
-                  (test) => !test.passed,
-                )?.input || "—"}
-              </pre>
-              <button type="button" onClick={() => props.onStdinChange(props.checkResult?.publicTestResults?.find((test) => !test.passed)?.input || "")} disabled={!props.checkResult.publicTestResults.find((test) => !test.passed)?.input || props.isWebTask} className="mt-2 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-[#72edb0] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40">
-                {tr("Використати як stdin", "Use as stdin")}
+        {firstFailedPublicTest ? (
+          <div className="mt-4 rounded-xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/[.04] p-3">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#ff9aba]">{tr("Перший невдалий тест", "First failed test")} #{firstFailedPublicTest.testId}</span>
+              <button type="button" onClick={() => setShowWhitespace((value) => !value)} aria-pressed={showWhitespace} className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${showWhitespace ? "border-[#ffb454]/35 bg-[#ffb454]/10 text-[#ffca7e]" : "border-white/10 text-[#82968a] hover:bg-white/[.06] hover:text-white"}`}>
+                {showWhitespace ? tr("Звичайний вигляд", "Normal output") : tr("Показати пробіли", "Show whitespace")}
               </button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <div>
+                <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-[#72edb0]">Expected output</div>
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-[#72edb0]">{showWhitespace ? visualizeWhitespace(firstFailedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === firstFailedPublicTest.testId)?.expectedOutput || "") || "—" : firstFailedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === firstFailedPublicTest.testId)?.expectedOutput || "—"}</pre>
+              </div>
+              <div>
+                <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-[#ff9aba]">Actual output</div>
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-[#ffb2c9]">{showWhitespace ? visualizeWhitespace(firstFailedPublicTest.actualOutput || "") || "—" : firstFailedPublicTest.actualOutput || "—"}</pre>
+              </div>
+              <div>
+                <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-[#82968a]">Input</div>
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-[#c8d6cc]">{firstFailedPublicTest.input || "—"}</pre>
+                <button type="button" onClick={() => props.onStdinChange(firstFailedPublicTest.input || "")} disabled={!firstFailedPublicTest.input || props.isWebTask} className="mt-2 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-[#72edb0] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40">
+                  {tr("Використати як stdin", "Use as stdin")}
+                </button>
+              </div>
             </div>
           </div>
         ) : null}
@@ -1151,6 +1252,16 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           </div>
         </div>
         {props.toolbar ? <div className="flex items-center gap-1.5 rounded-xl border border-white/[.07] bg-black/10 p-1">{props.toolbar}</div> : null}
+        {props.saveStatus ? (
+          <span className={`hidden items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold sm:inline-flex ${props.saveStatus === "error" ? "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]" : props.saveStatus === "saving" ? "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca7e]" : props.saveStatus === "dirty" ? "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca7e]" : "border-[#00d978]/25 bg-[#00d978]/10 text-[#72edb0]"}`} role="status" aria-live="polite">
+            {props.saveStatus === "saving" ? tr("Збереження…", "Saving…") : props.saveStatus === "dirty" ? tr("Є зміни", "Unsaved") : props.saveStatus === "error" ? tr("Помилка збереження", "Save failed") : props.lastSavedAt ? `${tr("Збережено", "Saved")} ${formatIdeTimestamp(props.lastSavedAt, i18n.language || "uk")}` : tr("Збережено", "Saved")}
+          </span>
+        ) : null}
+        {props.attemptsUsed != null ? (
+          <span className="hidden rounded-lg border border-white/10 bg-white/[.04] px-2.5 py-1.5 text-[10px] font-semibold text-[#a7b5aa] md:inline-flex" title={tr("Використані спроби", "Attempts used")}>
+            {tr("Спроби", "Attempts")}: {props.attemptsUsed}{props.maxAttempts && props.maxAttempts > 0 ? `/${props.maxAttempts}` : ""}
+          </span>
+        ) : null}
         {activeMiniProjectRemainingSeconds !== null ? (
           <div
             className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold tabular-nums ${miniProjectTimerExpired ? "border-[#ff6b9d]/45 bg-[#ff6b9d]/10 text-[#ff9aba]" : activeMiniProjectRemainingSeconds <= 300 ? "border-[#ffb454]/45 bg-[#ffb454]/10 text-[#ffca7e]" : "border-white/10 bg-white/[.04] text-[#c8d6cc]"}`}
@@ -1206,6 +1317,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           type="button"
           onClick={runWithTab}
           disabled={props.readOnly || props.running || props.checking}
+          title={tr("Запустити (Ctrl+Enter)", "Run (Ctrl+Enter)")}
           className="hidden h-9 items-center gap-1.5 rounded-lg bg-white/[.08] px-3 text-xs font-semibold text-white hover:bg-white/[.14] disabled:opacity-50 sm:inline-flex"
         >
           <Play className="size-3.5" />
@@ -1215,6 +1327,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           type="button"
           onClick={checkWithTab}
           disabled={props.readOnly || props.running || props.checking}
+          title={tr("Перевірити (Ctrl+Shift+Enter)", "Test (Ctrl+Shift+Enter)")}
           className="hidden h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:opacity-50 sm:inline-flex"
         >
           {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : <TestTube2 className="size-3.5" />}
@@ -1378,6 +1491,19 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               }
               className="col-span-2 row-start-2 min-h-28 max-h-48 min-w-0 w-full resize-y overflow-auto rounded-xl border border-[#294333] bg-[#101b13] px-3 py-2.5 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] transition focus:border-[#00d978]/60 focus:bg-[#122117] disabled:opacity-50 sm:min-h-16"
             />
+            {stdinHistory.length ? (
+              <div className="col-span-2 row-start-4 flex min-w-0 items-center gap-2">
+                <label htmlFor="ide-stdin-history" className="shrink-0 text-[10px] font-semibold text-[#82968a]">{tr("Останні вводи", "Recent input")}</label>
+                <select id="ide-stdin-history" name="stdinHistory" value="" onChange={(event) => { if (event.target.value) props.onStdinChange(event.target.value); }} className="min-w-0 flex-1 rounded-lg border border-[#294333] bg-[#101b13] px-2 py-1.5 text-[10px] text-[#c8d6cc] outline-none focus:border-[#00d978]/60">
+                  <option value="">{tr("Обрати з історії…", "Choose from history…")}</option>
+                  {stdinHistory.map((value, index) => <option key={`${index}-${value}`} value={value}>{`${index + 1}. ${value.replace(/\s+/g, " ").slice(0, 64)}`}</option>)}
+                </select>
+                <button type="button" onClick={() => { setStdinHistory([]); try { localStorage.removeItem(scopedStorageKey(STDIN_HISTORY_KEY, props.task.id)); } catch { /* optional */ } }} className="shrink-0 rounded-md px-2 py-1.5 text-[10px] font-semibold text-[#82968a] hover:bg-white/[.06] hover:text-white" aria-label={tr("Очистити історію вводу", "Clear input history")}>
+                  {tr("Очистити", "Clear")}
+                </button>
+              </div>
+            ) : null}
+            {props.task.projectSpec?.inputFormat ? <div className="col-span-2 row-start-5 text-[10px] leading-4 text-[#82968a]">{tr("Формат вводу", "Input format")}: <span className="text-[#b9c9bd]">{props.task.projectSpec.inputFormat}</span></div> : null}
             {props.publicExamples?.length ? (
               <div className="col-span-2 row-start-3 flex flex-wrap items-center gap-1.5">
                 <span className="mr-1 text-[10px] font-semibold text-[#82968a]">{tr("Швидкий приклад", "Quick example")}</span>
@@ -1592,11 +1718,19 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                         <span className="grid size-7 place-items-center rounded-lg bg-[#00d978]/10"><FileText className="size-3.5" /></span>
                         {tr("Умова", "Brief")}
                       </div>
-                      {props.task.difficulty ? (
-                        <span className="rounded-md border border-[#294333] bg-[#0d1710] px-2 py-1 text-[10px] font-semibold text-[#a7b5aa]">
-                          {props.task.difficulty}
-                        </span>
-                      ) : null}
+                      <div className="flex items-center gap-1.5">
+                        {props.task.difficulty ? (
+                          <span className="rounded-md border border-[#294333] bg-[#0d1710] px-2 py-1 text-[10px] font-semibold text-[#a7b5aa]">
+                            {props.task.difficulty}
+                          </span>
+                        ) : null}
+                        <button type="button" onClick={() => void copyText(taskBody, "task-statement")} className="rounded-md border border-[#294333] p-1.5 text-[#82968a] hover:bg-white/[.06] hover:text-white" aria-label={tr("Скопіювати умову задачі", "Copy task statement")} title={tr("Скопіювати умову", "Copy statement")}>
+                          {copiedLabel === "task-statement" ? <Check className="size-3" /> : <Copy className="size-3" />}
+                        </button>
+                        <button type="button" onClick={() => void copyText(draftCodeRef.current || "", "starter-code")} disabled={!draftCodeRef.current} className="rounded-md border border-[#294333] p-1.5 text-[#82968a] hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40" aria-label={tr("Скопіювати стартовий код", "Copy starter code")} title={tr("Скопіювати стартовий код", "Copy starter code")}>
+                          {copiedLabel === "starter-code" ? <Check className="size-3" /> : <Copy className="size-3" />}
+                        </button>
+                      </div>
                     </div>
                     <h2 className="mt-3 text-[17px] font-bold leading-6 tracking-[-.025em] text-[#f0f7f1]">
                       {props.task.title}
@@ -1966,8 +2100,27 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <ChevronDown className="size-3.5" />
             </button>
           </div>
-          <div className="min-h-0" style={{ height: "calc(100% - 2.5rem)" }}>
-            {renderBottom()}
+          <div className="flex min-h-0 flex-col" style={{ height: "calc(100% - 2.5rem)" }}>
+            {props.localRecovery ? (
+              <div className="shrink-0 border-b border-[#ffb454]/25 bg-[#19190f] px-3 py-2.5 text-[10px] text-[#ffca7e]" role="status" aria-live="polite">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>{tr("Знайдено локальну версію коду", "A local code version was found")} · {formatIdeTimestamp(props.localRecovery.updatedAt, i18n.language || "uk")}</span>
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" onClick={props.localRecovery.onRecover} className="rounded-md border border-[#ffb454]/35 px-2 py-1 font-semibold hover:bg-[#ffb454]/10">{tr("Відновити", "Recover")}</button>
+                    <button type="button" onClick={props.localRecovery.onDismiss} className="rounded-md px-2 py-1 font-semibold text-[#b9c9bd] hover:bg-white/[.06]">{tr("Ігнорувати", "Dismiss")}</button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {props.actionRecovery ? (
+              <div className={`shrink-0 border-b px-3 py-2.5 text-[10px] ${props.actionRecovery.tone === "error" ? "border-[#ff6b9d]/25 bg-[#ff6b9d]/[.06] text-[#ffb2c9]" : "border-[#ffb454]/25 bg-[#19190f] text-[#ffca7e]"}`} role="alert" aria-live="polite">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 flex-1">{props.actionRecovery.message}</span>
+                  <button type="button" onClick={props.actionRecovery.onRetry} disabled={props.running || props.checking} className="shrink-0 rounded-md border border-current/40 px-2 py-1 font-semibold hover:bg-white/[.06] disabled:opacity-40">{props.actionRecovery.retryLabel}</button>
+                </div>
+              </div>
+            ) : null}
+            <div className="min-h-0 flex-1">{renderBottom()}</div>
           </div>
         </section>
       ) : (

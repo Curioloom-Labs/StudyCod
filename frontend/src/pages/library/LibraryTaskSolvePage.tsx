@@ -9,6 +9,7 @@ import { saveSolveReplay, type ReplaySnapshot } from "../../lib/api/learning";
 import { FailureRecoveryCard } from "../../components/FailureRecoveryCard";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { scopedStorageKey } from "../../lib/storageScope";
 import { extractFirstExampleInput, normalizeStdinBeforeRun } from "../../utils/inputTextNormalization";
 import {
   checkLibraryWebTask,
@@ -115,6 +116,22 @@ type CodeTemplateState = {
   files: CodeFile[];
   useFiles: boolean;
 };
+
+type LocalDraftRecovery = CodeTemplateState & { updatedAt: string };
+
+function localDraftRecoveryKey(taskId: number | string, language: JudgeLanguage): string {
+  return scopedStorageKey("library:localDraftRecovery:v1", `${taskId}:${language}`);
+}
+
+function readLocalDraftRecovery(taskId: number | string, language: JudgeLanguage): LocalDraftRecovery | null {
+  try {
+    const raw = JSON.parse(localStorage.getItem(localDraftRecoveryKey(taskId, language)) || "null") as Partial<LocalDraftRecovery> | null;
+    if (!raw || typeof raw.updatedAt !== "string" || typeof raw.code !== "string" || !Array.isArray(raw.files) || typeof raw.useFiles !== "boolean") return null;
+    return { updatedAt: raw.updatedAt, code: raw.code, files: normalizeFiles(raw.files), useFiles: raw.useFiles };
+  } catch {
+    return null;
+  }
+}
 
 /** Decode the same starter format that the backend judge accepts for submissions. */
 function decodeCodeTemplate(rawTemplate: string, entryFile: string): CodeTemplateState {
@@ -242,9 +259,15 @@ export const LibraryTaskSolvePage: React.FC = () => {
   };
 
   const [loading, setLoading] = useState(true);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [task, setTask] = useState<Awaited<ReturnType<typeof getLibraryTask>>["task"] | null>(null);
   const [theory, setTheory] = useState<string | null>(null);
   const [visibleTests, setVisibleTests] = useState<LibraryTaskTest[]>([]);
+  const [draftLoadReady, setDraftLoadReady] = useState(false);
+  const [localRecovery, setLocalRecovery] = useState<LocalDraftRecovery | null>(null);
+  const [draftSaveState, setDraftSaveState] = useState<"saved" | "dirty" | "saving" | "error">("saved");
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   // Always use a numeric id for run/check/drafts. When the route uses slug/problemCode,
   // taskId will be null, but loaded task will still have an id.
@@ -301,6 +324,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const [stdin, setStdin] = useState<string>("");
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<LibraryRunResult | null>(null);
+  const [lastRunDurationMs, setLastRunDurationMs] = useState<number | null>(null);
 
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<LibraryCheckResult | null>(null);
@@ -308,7 +332,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const [tracing, setTracing] = useState(false);
   const [nextTask, setNextTask] = useState<LibraryTaskListItem | null>(null);
   const [, setLastReplayId] = useState<number | null>(null);
-  const [, setActionRecovery] = useState<{
+  const [actionRecovery, setActionRecovery] = useState<{
     tone: "error" | "warning";
     message: string;
     retry: "run" | "check" | "save";
@@ -399,6 +423,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
       return;
     }
     setLoading(true);
+    setLoadError(null);
+    setTask(null);
+    setTheory(null);
+    setDraftLoadReady(false);
+    setLocalRecovery(null);
     const load = async () => {
       const d = taskId != null ? await getLibraryTask(taskId) : await getLibraryTaskByKey(taskKey);
       let taskData = d.task;
@@ -476,6 +505,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
           setTask(previewLibraryTask);
           setTheory(null);
           setVisibleTests([]);
+          setLoadError(null);
           setJudgeLanguage("python");
           setCode(previewLibraryTask.template);
           setLastSavedCode(previewLibraryTask.template);
@@ -485,13 +515,18 @@ export const LibraryTaskSolvePage: React.FC = () => {
         }
         setTask(null);
         setTheory(null);
+        setLoadError(getErrorMessageFromUnknown(e, tr("Не вдалося завантажити задачу.", "Failed to load task.")));
       })
       .finally(() => setLoading(false));
-  }, [taskKey, taskId, hasToken]);
+  }, [taskKey, taskId, hasToken, loadAttempt]);
 
   // Load draft for selected language (and keep per-language in-memory cache to avoid losing edits)
   useEffect(() => {
-    if (!task) return;
+    if (!task) {
+      setDraftLoadReady(false);
+      return;
+    }
+    setDraftLoadReady(false);
     if (task.taskMode === "WEB") {
       const webFiles = normalizeWebFiles(task.webTemplateFiles ?? null);
       setUseFiles(true);
@@ -500,6 +535,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setLastSavedUseFiles(true);
       setLastSavedFiles(webFiles);
       setLastSavedCode(entryContentFromFiles(webFiles, "index.html"));
+      setDraftLoadReady(true);
       return;
     }
     const numericId = task.id;
@@ -522,6 +558,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setLastSavedUseFiles(cached.lastSavedUseFiles);
       setLastSavedFiles(cached.lastSavedFiles);
       setLastSavedCode(cached.lastSavedCode);
+      setDraftLoadReady(true);
       return;
     }
 
@@ -541,6 +578,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setLastSavedUseFiles(templateState.useFiles);
       setLastSavedFiles(templateState.files);
       setLastSavedCode(templateState.code);
+      setDraftLoadReady(true);
       return;
     }
 
@@ -574,6 +612,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
         setLastSavedUseFiles(useTemplateFiles);
         setLastSavedFiles(draftFiles);
         setLastSavedCode(resolvedCode);
+        setDraftLoadReady(true);
       })
       .catch(() => {
         // fallback to template
@@ -591,8 +630,69 @@ export const LibraryTaskSolvePage: React.FC = () => {
         setLastSavedUseFiles(templateState.useFiles);
         setLastSavedFiles(templateState.files);
         setLastSavedCode(templateState.code);
+        setDraftLoadReady(true);
       });
   }, [task, judgeLanguage, hasToken, taskId]);
+
+  // Keep a short-lived local safety net for the case where the browser closes
+  // before the debounced server draft save completes. It is offered as an
+  // explicit recovery banner and never silently overwrites the server draft.
+  useEffect(() => {
+    if (!task || !draftLoadReady) return;
+    const snapshot = readLocalDraftRecovery(task.id, judgeLanguage);
+    if (!snapshot) {
+      setLocalRecovery(null);
+      return;
+    }
+    const matchesCurrent = snapshot.useFiles === useFiles && (snapshot.useFiles ? filesEqual(snapshot.files, files) : snapshot.code === code);
+    setLocalRecovery(matchesCurrent ? null : snapshot);
+  // This effect intentionally runs after draft hydration; the recovery
+  // decision should not flicker on every keystroke.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task?.id, judgeLanguage, draftLoadReady]);
+
+  useEffect(() => {
+    if (!task || !draftLoadReady || localRecovery) return;
+    if (!code.trim() && !files.some((file) => file.content.trim())) return;
+    const timer = window.setTimeout(() => {
+      const snapshot: LocalDraftRecovery = {
+        updatedAt: new Date().toISOString(),
+        code,
+        files: normalizeFiles(files),
+        useFiles,
+      };
+      try {
+        localStorage.setItem(localDraftRecoveryKey(task.id, judgeLanguage), JSON.stringify(snapshot));
+      } catch {
+        // Local recovery is best-effort.
+      }
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [code, draftLoadReady, files, judgeLanguage, localRecovery, task, useFiles]);
+
+  const dismissLocalRecovery = () => {
+    if (!task) return;
+    setLocalRecovery(null);
+    try {
+      localStorage.removeItem(localDraftRecoveryKey(task.id, judgeLanguage));
+    } catch {
+      // ignore
+    }
+  };
+
+  const recoverLocalDraft = () => {
+    if (!task || !localRecovery) return;
+    setUseFiles(localRecovery.useFiles);
+    setFiles(normalizeFiles(localRecovery.files));
+    setCode(localRecovery.code);
+    setDraftSaveState("dirty");
+    setLocalRecovery(null);
+    try {
+      localStorage.removeItem(localDraftRecoveryKey(task.id, judgeLanguage));
+    } catch {
+      // ignore
+    }
+  };
 
   // Autosave draft (debounced)
   useEffect(() => {
@@ -609,9 +709,14 @@ export const LibraryTaskSolvePage: React.FC = () => {
     const isDirty = useFiles
       ? !(lastSavedUseFiles === true && filesEqual(files, lastSavedFiles))
       : !(lastSavedUseFiles === false && code === lastSavedCode);
-    if (!isDirty) return;
+    if (!isDirty) {
+      setDraftSaveState("saved");
+      return;
+    }
+    setDraftSaveState("dirty");
 
     saveTimer.current = window.setTimeout(() => {
+      setDraftSaveState("saving");
       const savePromise = isWebTask
         ? saveLibraryWebTaskDraft(effectiveTaskId, toWebPreviewFiles())
         : saveLibraryTaskDraft(effectiveTaskId, useFiles ? { files } : code, judgeLanguage);
@@ -635,8 +740,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
           setLastSavedUseFiles(isWebTask ? true : useFiles);
           setLastSavedFiles(nextFiles);
           setLastSavedCode(nextCode);
+          setDraftSaveState("saved");
+          setLastSavedAt(new Date().toISOString());
         })
         .catch(() => {
+          setDraftSaveState("error");
           showToast({ type: "error", message: tr("Чернетку не вдалося зберегти.", "Draft could not be saved.") });
         });
     }, 900);
@@ -669,6 +777,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
       return;
     }
     setRunning(true);
+    const startedAt = Date.now();
     setRunResult(null);
     setActionRecovery(null);
     try {
@@ -709,6 +818,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setResultsTab("run");
       setResultsOpen(true);
     } finally {
+      setLastRunDurationMs(Math.max(0, Date.now() - startedAt));
       setRunning(false);
     }
   };
@@ -846,6 +956,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
     }
     try {
       setActionRecovery(null);
+      setDraftSaveState("saving");
       if (isPreview()) {
         // Preview keeps the draft in local component state only.
       } else if (isWebTask) {
@@ -863,8 +974,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setLastSavedUseFiles(isWebTask ? true : useFiles);
       setLastSavedFiles(nextFiles);
       setLastSavedCode(nextCode);
+      setDraftSaveState("saved");
+      setLastSavedAt(new Date().toISOString());
       showToast({ type: "success", message: tr("Збережено", "Saved") });
     } catch (e: unknown) {
+      setDraftSaveState("error");
       const message = getErrorMessageFromUnknown(e, tr("Не вдалося зберегти", "Failed to save"));
       showToast({ type: "error", message });
       setActionRecovery({
@@ -972,6 +1086,22 @@ export const LibraryTaskSolvePage: React.FC = () => {
     );
   }
 
+  if (!loading && !task && loadError) {
+    return (
+      <div className="min-h-full bg-[#f7f8f5] p-6 dark:bg-[#0b120e]">
+        <div className="mx-auto flex min-h-[520px] max-w-xl items-center justify-center">
+          <Card className="w-full border-[#ff6b9d]/25 bg-white p-6 text-center dark:border-[#ff6b9d]/20 dark:bg-[#121b15]">
+            <div className="text-base font-bold text-[#142017] dark:text-white">{tr("Не вдалося завантажити задачу", "Could not load the task")}</div>
+            <p className="mt-2 break-words text-sm leading-6 text-[#6a786d] dark:text-[#a7b5aa]">{loadError}</p>
+            <button type="button" onClick={() => setLoadAttempt((value) => value + 1)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-4 py-2.5 text-sm font-bold text-[#062211] transition hover:bg-[#25e88d]">
+              {tr("Повторити", "Retry")}
+            </button>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
   if (loading || !task) {
     return <div className="min-h-full bg-[#f7f8f5] p-6 dark:bg-[#0b120e]"><div className="mx-auto h-[720px] max-w-[1500px] animate-pulse rounded-[28px] bg-[#e8ede8] dark:bg-white/[.04]" /></div>;
   }
@@ -1008,6 +1138,17 @@ export const LibraryTaskSolvePage: React.FC = () => {
       }}
     />
   ) : null;
+
+  const ideActionRecovery = actionRecovery ? {
+    tone: actionRecovery.tone,
+    message: actionRecovery.message,
+    retryLabel: actionRecovery.retry === "run" ? tr("Повторити запуск", "Retry run") : actionRecovery.retry === "check" ? tr("Повторити перевірку", "Retry check") : tr("Повторити збереження", "Retry save"),
+    onRetry: () => {
+      if (actionRecovery.retry === "run") void doRun();
+      else if (actionRecovery.retry === "check") void doCheck();
+      else void manualSave();
+    },
+  } as const : null;
 
   const reportTaskIssue = () => {
     const subject = tr("Проблема із задачею", "Task issue") + ": " + task.title;
@@ -1046,6 +1187,13 @@ export const LibraryTaskSolvePage: React.FC = () => {
           onUseExampleInput={() => setStdin(firstExampleInput)}
           publicExamples={visibleTests.map((test) => ({ testId: test.id, input: test.input, expectedOutput: test.expectedOutput }))}
           hasUnsavedChanges={isDraftDirty}
+          saveStatus={draftSaveState}
+          lastSavedAt={lastSavedAt}
+          lastRunDurationMs={lastRunDurationMs}
+          attemptsUsed={task.attempt?.submissionsCount ?? 0}
+          maxAttempts={task.maxAttempts}
+          actionRecovery={ideActionRecovery}
+          localRecovery={localRecovery ? { ...localRecovery, onRecover: recoverLocalDraft, onDismiss: dismissLocalRecovery } : null}
           running={running}
           checking={checking}
           onRun={doRun}
