@@ -8,18 +8,22 @@ import {
   ClipboardCheck,
   FlaskConical,
   ListChecks,
+  Pencil,
   Plus,
   Settings,
   ShieldCheck,
   Sparkles,
   TerminalSquare,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import { api } from "../../lib/api/client";
 import {
   addTestData,
+  deleteGeneratedTestData,
   deleteTestData,
+  generateTestData,
   getTestData,
   unassignControlWork,
   unassignTask,
@@ -29,12 +33,18 @@ import {
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { MarkdownView } from "../../components/MarkdownView";
 import { useDialogA11y } from "../../components/ui/useDialogA11y";
+import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
 
 type TopicTask = {
   id: number;
   title: string;
   description?: string;
   template?: string;
+  taskMode?: "CODE" | "WEB";
+  projectSpec?: unknown;
+  webTemplateFiles?: unknown;
+  webValidationRules?: unknown;
+  webValidationProfile?: unknown;
   type: "PRACTICE" | "CONTROL" | string;
   maxAttempts?: number;
   isAssigned?: boolean;
@@ -109,8 +119,8 @@ const Modal: React.FC<{ title: string; caption?: string; children: React.ReactNo
           <h2 id={titleId} className="mt-2 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.06em]">{title}</h2>
           {caption && <p className="mt-2 max-w-2xl text-sm leading-6 text-[#718075] dark:text-[#a6b4a9]">{caption}</p>}
         </div>
-        <button type="button" onClick={onClose} className="grid size-10 shrink-0 place-items-center rounded-full bg-[#eef3ef] text-[#536258] transition hover:-translate-y-0.5 dark:bg-white/[.07] dark:text-[#dbe6de]">
-          <X className="size-4" />
+        <button type="button" onClick={onClose} aria-label="Закрити вікно" className="grid size-10 shrink-0 place-items-center rounded-full bg-[#eef3ef] text-[#536258] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/30 dark:bg-white/[.07] dark:text-[#dbe6de]">
+          <X className="size-4" aria-hidden="true" />
         </button>
       </div>
       <div className="mt-7">{children}</div>
@@ -127,7 +137,15 @@ export const TopicStudioPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [mode, setMode] = React.useState<"task" | "control" | "tests" | null>(null);
   const [selectedTask, setSelectedTask] = React.useState<TopicTask | null>(null);
+  const [editingTaskId, setEditingTaskId] = React.useState<number | null>(null);
   const [tests, setTests] = React.useState<TestData[]>([]);
+  const [testNotice, setTestNotice] = React.useState<string | null>(null);
+  const [testGenerationCount, setTestGenerationCount] = React.useState("5");
+  const [replaceGeneratedTests, setReplaceGeneratedTests] = React.useState(true);
+  const [importFiles, setImportFiles] = React.useState<File[]>([]);
+  const [importPoints, setImportPoints] = React.useState("1");
+  const [importIsHidden, setImportIsHidden] = React.useState(false);
+  const [importInputKey, setImportInputKey] = React.useState(0);
   const [busy, setBusy] = React.useState(false);
   const [aiBusy, setAiBusy] = React.useState<"condition" | "template" | "theory" | null>(null);
   const [taskForm, setTaskForm] = React.useState({
@@ -172,7 +190,22 @@ export const TopicStudioPage: React.FC = () => {
   const backPath = topic?.class?.id ? `/edu/classes/${topic.class.id}${preview() ? "?preview=true" : ""}` : `/edu${preview() ? "?preview=true" : ""}`;
 
   const openTaskBuilder = () => {
+    setEditingTaskId(null);
     setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "" });
+    setMode("task");
+  };
+
+  const openTaskEditor = (task: TopicTask) => {
+    setSelectedTask(task);
+    setEditingTaskId(task.id);
+    setTaskForm({
+      title: task.title || "",
+      description: task.description || "",
+      template: task.template || "",
+      maxAttempts: String(task.maxAttempts || 3),
+      theory: task.theory?.content || "",
+      projectSpecJson: task.projectSpec ? JSON.stringify(task.projectSpec, null, 2) : "",
+    });
     setMode("task");
   };
 
@@ -263,6 +296,8 @@ export const TopicStudioPage: React.FC = () => {
 
   const openTests = async (task: TopicTask) => {
     setSelectedTask(task);
+    setTestNotice(null);
+    setImportFiles([]);
     setMode("tests");
     try {
       if (preview()) {
@@ -273,6 +308,88 @@ export const TopicStudioPage: React.FC = () => {
       setTests(data.testData || []);
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, "Не вдалося завантажити тестові дані."));
+    }
+  };
+
+  const reloadTests = async (taskId: number) => {
+    const data = await getTestData(taskId, { limit: 100, offset: 0 });
+    setTests(data.testData || []);
+  };
+
+  const generateTests = async () => {
+    if (!selectedTask) return;
+    const count = Math.max(1, Math.min(50, Number(testGenerationCount) || 5));
+    setBusy(true);
+    setTestNotice(null);
+    try {
+      if (preview()) {
+        setTests((old) => [...old, ...Array.from({ length: count }, (_, index) => ({
+          id: Date.now() + index,
+          input: `${index + 1} ${index + 2} ${index + 3}`,
+          expectedOutput: String((index + 1) + (index + 2) + (index + 3)),
+          points: 1,
+          isHidden: false,
+          source: "AI_GENERATED",
+        } as TestData))]);
+        setTestNotice(`Додано ${count} демонстраційних тестів.`);
+        return;
+      }
+      const result = await generateTestData(selectedTask.id, count, { replaceGenerated: replaceGeneratedTests });
+      await reloadTests(selectedTask.id);
+      setTestNotice(`Згенеровано ${result.count} тестів${result.skippedDuplicates ? `; дублі пропущено: ${result.skippedDuplicates}` : ""}.`);
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, "Не вдалося згенерувати тести."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clearGeneratedTests = async () => {
+    if (!selectedTask || !window.confirm("Видалити всі згенеровані AI-тести?")) return;
+    setBusy(true);
+    try {
+      if (preview()) {
+        setTests((old) => old.filter((test) => test.source !== "AI_GENERATED"));
+      } else {
+        const result = await deleteGeneratedTestData(selectedTask.id);
+        await reloadTests(selectedTask.id);
+        setTestNotice(`AI-тести очищено: ${result.deleted}.`);
+      }
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, "Не вдалося очистити AI-тести."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importTestFiles = async () => {
+    if (!selectedTask || importFiles.length === 0) return;
+    setBusy(true);
+    setTestNotice(null);
+    try {
+      const result = await importTestsFromInOutFiles(importFiles);
+      if (result.tests.length > 0) {
+        const imported = result.tests.map((test) => ({
+          input: test.input,
+          expectedOutput: test.expectedOutput,
+          points: Math.max(1, Number(importPoints) || 1),
+          isHidden: importIsHidden,
+        }));
+        if (preview()) {
+          setTests((old) => [...old, ...imported.map((test, index) => ({ ...test, id: Date.now() + index, source: "MANUAL" } as TestData))]);
+        } else {
+          await addTestData(selectedTask.id, imported);
+          await reloadTests(selectedTask.id);
+        }
+      }
+      const problems = result.errors.length ? ` ${result.errors.slice(0, 5).join("; ")}${result.errors.length > 5 ? `; ще ${result.errors.length - 5}` : ""}` : "";
+      setTestNotice(result.tests.length ? `Імпортовано ${result.tests.length} тестів.${problems}` : `Не імпортовано жодного тесту.${problems}`);
+      setImportFiles([]);
+      setImportInputKey((value) => value + 1);
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, "Не вдалося імпортувати тести."));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -292,36 +409,62 @@ export const TopicStudioPage: React.FC = () => {
       }
       let created: TopicTask | null = null;
       if (!preview()) {
-        const response = await api.post(`/topics/${id}/tasks`, {
+        const payload = {
           title: taskForm.title.trim(),
           description: taskForm.description.trim(),
           template: taskForm.template,
-          type: "PRACTICE",
+          taskMode: editingTaskId ? (selectedTask?.taskMode || "CODE") : "CODE",
+          ...(editingTaskId ? {
+            webTemplateFiles: selectedTask?.webTemplateFiles,
+            webValidationRules: selectedTask?.webValidationRules,
+            webValidationProfile: selectedTask?.webValidationProfile,
+          } : {}),
           maxAttempts: Number(taskForm.maxAttempts) || 3,
           projectSpec,
-        });
+        };
+        const response = editingTaskId
+          ? await api.put(`/topics/${id}/tasks/${editingTaskId}`, payload)
+          : await api.post(`/topics/${id}/tasks`, { ...payload, type: "PRACTICE" });
         created = response.data.task ?? response.data.topicTask ?? response.data;
         if ((!created?.id || !created?.title) && response.data.id) created = response.data as TopicTask;
         if (created?.id && taskForm.theory.trim()) {
           await api.post(`/topics/${id}/tasks/${created.id}/theory`, { content: taskForm.theory.trim() });
+        } else if (editingTaskId && selectedTask?.theory && !taskForm.theory.trim()) {
+          await api.delete(`/topics/${id}/tasks/${editingTaskId}/theory`);
         }
       } else {
-        created = {
-          id: Date.now(),
-          title: taskForm.title.trim(),
-          description: taskForm.description.trim(),
-          template: taskForm.template,
-          type: "PRACTICE",
-          maxAttempts: Number(taskForm.maxAttempts) || 3,
-          isAssigned: false,
-          theory: taskForm.theory.trim() ? { content: taskForm.theory.trim() } : null,
-        };
-        setTopic((old) => old ? { ...old, tasks: [...(old.tasks || []), created as TopicTask] } : old);
+        if (editingTaskId) {
+          created = {
+            ...(topic?.tasks || []).find((task) => task.id === editingTaskId),
+            id: editingTaskId,
+            title: taskForm.title.trim(),
+            description: taskForm.description.trim(),
+            template: taskForm.template,
+            maxAttempts: Number(taskForm.maxAttempts) || 3,
+            theory: taskForm.theory.trim() ? { content: taskForm.theory.trim() } : null,
+          } as TopicTask;
+          setTopic((old) => old ? { ...old, tasks: (old.tasks || []).map((task) => task.id === editingTaskId ? created as TopicTask : task) } : old);
+        } else {
+          created = {
+            id: Date.now(),
+            title: taskForm.title.trim(),
+            description: taskForm.description.trim(),
+            template: taskForm.template,
+            type: "PRACTICE",
+            maxAttempts: Number(taskForm.maxAttempts) || 3,
+            isAssigned: false,
+            theory: taskForm.theory.trim() ? { content: taskForm.theory.trim() } : null,
+          };
+          setTopic((old) => old ? { ...old, tasks: [...(old.tasks || []), created as TopicTask] } : old);
+        }
       }
+      const savedTaskId = created?.id;
+      setEditingTaskId(null);
       setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "" });
       if (!preview()) await load();
-      if (created?.id) {
+      if (savedTaskId) {
         setSelectedTask(created);
+        setTestNotice(null);
         setTests([]);
         setMode("tests");
       } else {
@@ -550,15 +693,19 @@ export const TopicStudioPage: React.FC = () => {
                         </span>
                       </div>
                       <div className="mt-5 flex flex-wrap gap-2">
-                        <button type="button" onClick={() => void toggleTask(task)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-[#32443a] shadow-sm dark:bg-[#0b130e] dark:text-[#d8e3db]">
+                        <button type="button" onClick={() => openTaskEditor(task)} aria-label={`Редагувати задачу ${task.title}`} className="inline-flex items-center gap-1.5 rounded-xl border border-[#142018]/12 bg-white px-3 py-2 text-xs font-black text-[#32443a] shadow-sm transition hover:border-[#00d978]/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0b130e] dark:text-[#d8e3db]">
+                          <Pencil className="size-3.5" aria-hidden="true" />
+                          Редагувати
+                        </button>
+                        <button type="button" onClick={() => void toggleTask(task)} aria-pressed={!!task.isAssigned} className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black shadow-sm transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 ${task.isAssigned ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-white text-[#32443a] dark:bg-[#0b130e] dark:text-[#d8e3db]"}`}>
                           {task.isAssigned ? "Закрити доступ" : "Відкрити учням"}
                         </button>
-                        <button type="button" onClick={() => void openTests(task)} className="inline-flex items-center gap-1 rounded-xl bg-[#fff1dc] px-3 py-2 text-xs font-black text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]">
+                        <button type="button" onClick={() => void openTests(task)} className="inline-flex items-center gap-1 rounded-xl bg-[#fff1dc] px-3 py-2 text-xs font-black text-[#a55e00] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ffb454]/25 dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]">
                           <FlaskConical className="size-3.5" />
                           Тести
                         </button>
-                        <button type="button" onClick={() => void deleteTask(task)} className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-black text-[#bd4067] opacity-100 transition dark:text-[#ff9abd] sm:opacity-0 sm:group-hover:opacity-100">
-                          <Trash2 className="size-3.5" />
+                        <button type="button" onClick={() => void deleteTask(task)} aria-label={`Видалити задачу ${task.title}`} className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-black text-[#bd4067] opacity-100 transition hover:bg-[#bd4067]/8 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ff6b9d]/20 dark:text-[#ff9abd] sm:opacity-0 sm:group-hover:opacity-100">
+                          <Trash2 className="size-3.5" aria-hidden="true" />
                           Видалити
                         </button>
                       </div>
@@ -622,7 +769,7 @@ export const TopicStudioPage: React.FC = () => {
         </main>
 
         {mode === "task" && (
-          <Modal title="Нова практика" caption="Одне вікно для умови, стартового коду й короткої теорії. Після створення відкриється налаштування тестів." onClose={() => setMode(null)} wide>
+          <Modal title={editingTaskId ? "Редагувати практику" : "Нова практика"} caption={editingTaskId ? "Змініть умову, код, теорію або кількість спроб. Чернетку можна редагувати до відкриття учням." : "Одне вікно для умови, стартового коду й короткої теорії. Після створення відкриється налаштування тестів."} onClose={() => { setMode(null); setEditingTaskId(null); }} wide>
             <div className="grid gap-5 lg:grid-cols-[1fr_.85fr]">
               <section className="space-y-4 rounded-[26px] border border-[#142018]/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
                 <div className="flex items-center gap-3">
@@ -673,7 +820,7 @@ export const TopicStudioPage: React.FC = () => {
                 </div>
                 <button type="button" disabled={busy || !taskForm.title.trim()} onClick={() => void createTask()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
                   <ArrowRight className="size-4" />
-                  Створити й додати тести
+                  {editingTaskId ? "Зберегти зміни" : "Створити й додати тести"}
                 </button>
               </section>
             </div>
@@ -733,13 +880,14 @@ export const TopicStudioPage: React.FC = () => {
         )}
 
         {mode === "tests" && selectedTask && (
-          <Modal title={`Тести · ${selectedTask.title}`} caption="Ці дані використовуються автоперевіркою практичного завдання. Після створення практики це вікно відкривається одразу." onClose={() => { setMode(null); setSelectedTask(null); }} wide>
+          <Modal title={`Тести · ${selectedTask.title}`} caption="Згенеруйте тести, імпортуйте пари sample.in + sample.out або додайте один тест вручну. Вони використовуються автоперевіркою." onClose={() => { setMode(null); setSelectedTask(null); setTestNotice(null); setImportFiles([]); }} wide>
             <div className="grid gap-5 lg:grid-cols-[1fr_.85fr]">
               <section className="space-y-3 rounded-[26px] border border-[#142018]/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-black">Набір тестів</h3>
                   <span className="rounded-full bg-[#e8f6ed] px-3 py-1 text-xs font-black text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{tests.length}</span>
                 </div>
+                {testNotice && <p role="status" aria-live="polite" className="rounded-2xl bg-[#e9f8ef] px-4 py-3 text-xs leading-5 text-[#287048] dark:bg-[#12301e] dark:text-[#b9e7c8]">{testNotice}</p>}
                 {tests.map((test, index) => (
                   <div key={test.id} className="flex items-start gap-3 rounded-2xl bg-[#f2f6f2] p-4 dark:bg-white/[.045]">
                     <span className="mt-1 text-xs font-black text-[#e17800]">{String(index + 1).padStart(2, "0")}</span>
@@ -753,19 +901,73 @@ export const TopicStudioPage: React.FC = () => {
                 {!tests.length && <p className="rounded-2xl border border-dashed border-[#142018]/15 px-4 py-10 text-center text-sm text-[#718075] dark:border-white/10 dark:text-[#a6b4a9]">Тестів ще немає.</p>}
               </section>
               <section className="space-y-3 rounded-[26px] border border-[#142018]/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
-                <h3 className="font-black">Додати тест</h3>
-                <textarea id="topic-test-input" name="testInput" aria-label="Вхідні дані тесту" value={testForm.input} onChange={(event) => setTestForm({ ...testForm, input: event.target.value })} placeholder="Вхідні дані" rows={5} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#0d1710]" />
-                <textarea id="topic-test-output" name="expectedOutput" aria-label="Очікуваний результат тесту" value={testForm.expectedOutput} onChange={(event) => setTestForm({ ...testForm, expectedOutput: event.target.value })} placeholder="Очікуваний результат" rows={5} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#0d1710]" />
-                <div className="flex gap-3">
-                  <input id="topic-test-points" name="testPoints" aria-label="Бали за тест" value={testForm.points} onChange={(event) => setTestForm({ ...testForm, points: event.target.value })} type="number" min="1" className="w-24 rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 text-sm dark:border-white/10 dark:bg-[#0d1710]" />
-                  <label className="flex items-center gap-2 text-sm font-bold text-[#627269] dark:text-[#aab7ad]">
-                    <input type="checkbox" checked={testForm.isHidden} onChange={(event) => setTestForm({ ...testForm, isHidden: event.target.checked })} />
-                    Прихований
+                <div className="rounded-2xl border border-[#142018]/10 bg-[#f7faf6] p-4 dark:border-white/10 dark:bg-white/[.04]">
+                  <div className="flex items-start gap-3">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#fff1dc] text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]"><Sparkles className="size-4" aria-hidden="true" /></span>
+                    <div>
+                      <h3 className="font-black">Згенерувати тести</h3>
+                      <p className="mt-1 text-xs leading-5 text-[#718075] dark:text-[#a6b4a9]">AI створить приклади за назвою та умовою задачі.</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-end gap-2">
+                    <label htmlFor="topic-test-generation-count" className="block">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[.1em] text-[#718075] dark:text-[#a6b4a9]">Кількість</span>
+                      <input id="topic-test-generation-count" name="testGenerationCount" value={testGenerationCount} onChange={(event) => setTestGenerationCount(event.target.value)} type="number" min="1" max="50" className="w-24 rounded-xl border border-[#142018]/10 bg-white px-3 py-2 text-sm outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0d1710]" />
+                    </label>
+                    <button type="button" disabled={busy} onClick={() => void generateTests()} className="inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-3 py-2.5 text-xs font-black text-[#061e10] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/25 disabled:opacity-45">
+                      <Sparkles className="size-3.5" aria-hidden="true" />
+                      {busy ? "Генерую…" : "Згенерувати"}
+                    </button>
+                    <button type="button" disabled={busy || !tests.some((test) => test.source === "AI_GENERATED")} onClick={() => void clearGeneratedTests()} className="rounded-xl px-3 py-2.5 text-xs font-black text-[#bd4067] transition hover:bg-[#bd4067]/8 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ff6b9d]/20 disabled:opacity-40 dark:text-[#ff9abd]">
+                      Очистити AI
+                    </button>
+                  </div>
+                  <label className="mt-3 flex items-center gap-2 text-xs font-bold text-[#627269] dark:text-[#aab7ad]">
+                    <input name="replaceGeneratedTests" type="checkbox" checked={replaceGeneratedTests} onChange={(event) => setReplaceGeneratedTests(event.target.checked)} />
+                    Замінювати попередні AI-тести
                   </label>
                 </div>
-                <button type="button" disabled={busy || !testForm.expectedOutput.trim()} onClick={() => void addTest()} className="rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
-                  Додати до набору
-                </button>
+                <div className="rounded-2xl border border-[#142018]/10 bg-[#f7faf6] p-4 dark:border-white/10 dark:bg-white/[.04]">
+                  <div className="flex items-start gap-3">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#e9f8ef] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]"><Upload className="size-4" aria-hidden="true" /></span>
+                    <div>
+                      <h3 className="font-black">Імпорт .in / .out</h3>
+                      <p className="mt-1 text-xs leading-5 text-[#718075] dark:text-[#a6b4a9]">Файли з однаковою назвою обʼєднаються в один тест.</p>
+                    </div>
+                  </div>
+                  <label htmlFor="topic-test-files" className="mt-3 block text-xs font-black text-[#32443a] dark:text-[#d8e3db]">Файли тестів</label>
+                  <input key={importInputKey} id="topic-test-files" name="testFiles" type="file" multiple accept=".in,.out,text/plain" onChange={(event) => setImportFiles(Array.from(event.target.files || []))} className="mt-1 block w-full rounded-xl border border-dashed border-[#142018]/20 bg-white px-3 py-2 text-xs text-[#536258] outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-[#e9f8ef] file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-[#16834d] focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/15 dark:bg-[#0d1710] dark:text-[#c7d5ca]" />
+                  <div className="mt-3 flex flex-wrap items-end gap-3">
+                    <label htmlFor="topic-import-points" className="block">
+                      <span className="mb-1 block text-[11px] font-black uppercase tracking-[.1em] text-[#718075] dark:text-[#a6b4a9]">Бали</span>
+                      <input id="topic-import-points" name="importPoints" value={importPoints} onChange={(event) => setImportPoints(event.target.value)} type="number" min="1" max="100" className="w-20 rounded-xl border border-[#142018]/10 bg-white px-3 py-2 text-sm outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0d1710]" />
+                    </label>
+                    <label className="flex items-center gap-2 pb-2 text-xs font-bold text-[#627269] dark:text-[#aab7ad]">
+                      <input name="importIsHidden" type="checkbox" checked={importIsHidden} onChange={(event) => setImportIsHidden(event.target.checked)} />
+                      Приховані
+                    </label>
+                    <button type="button" disabled={busy || importFiles.length === 0} onClick={() => void importTestFiles()} className="inline-flex items-center gap-2 rounded-xl border border-[#16834d]/25 bg-white px-3 py-2.5 text-xs font-black text-[#16834d] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 disabled:opacity-45 dark:bg-[#0b130e] dark:text-[#72edb0]">
+                      <Upload className="size-3.5" aria-hidden="true" />
+                      Імпортувати{importFiles.length ? ` (${importFiles.length})` : ""}
+                    </button>
+                  </div>
+                </div>
+                <div className="border-t border-[#142018]/10 pt-3 dark:border-white/10">
+                  <h3 className="font-black">Додати тест вручну</h3>
+                  <textarea id="topic-test-input" name="testInput" aria-label="Вхідні дані тесту" value={testForm.input} onChange={(event) => setTestForm({ ...testForm, input: event.target.value })} placeholder="Вхідні дані" rows={4} spellCheck={false} className="mt-3 w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0d1710]" />
+                  <textarea id="topic-test-output" name="expectedOutput" aria-label="Очікуваний результат тесту" value={testForm.expectedOutput} onChange={(event) => setTestForm({ ...testForm, expectedOutput: event.target.value })} placeholder="Очікуваний результат" rows={4} spellCheck={false} className="mt-3 w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0d1710]" />
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <label htmlFor="topic-test-points" className="sr-only">Бали за тест</label>
+                    <input id="topic-test-points" name="testPoints" aria-label="Бали за тест" value={testForm.points} onChange={(event) => setTestForm({ ...testForm, points: event.target.value })} type="number" min="1" className="w-24 rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 text-sm outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0d1710]" />
+                    <label className="flex items-center gap-2 text-sm font-bold text-[#627269] dark:text-[#aab7ad]">
+                      <input name="testIsHidden" type="checkbox" checked={testForm.isHidden} onChange={(event) => setTestForm({ ...testForm, isHidden: event.target.checked })} />
+                      Прихований
+                    </label>
+                    <button type="button" disabled={busy || !testForm.expectedOutput.trim()} onClick={() => void addTest()} className="rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/25 disabled:opacity-45">
+                      Додати до набору
+                    </button>
+                  </div>
+                </div>
               </section>
             </div>
           </Modal>

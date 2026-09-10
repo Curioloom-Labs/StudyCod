@@ -1609,6 +1609,52 @@ topicsRouter.post("/:topicId/tasks/:taskId/theory", authRequired, async (req: Au
     });
   }
 });
+topicsRouter.delete("/:topicId/tasks/:taskId/theory", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const topicId = parseInt(req.params.topicId, 10);
+    const taskId = parseInt(req.params.taskId, 10);
+    if (isNaN(topicId) || isNaN(taskId)) {
+      return res.status(400).json({
+        message: "INVALID_ID"
+      });
+    }
+    const user = await userRepo().findOne({
+      where: {
+        id: req.userId
+      }
+    });
+    if (!user || user.userMode !== "EDUCATIONAL" || req.studentId) {
+      return res.status(403).json({
+        message: "ONLY_TEACHERS_CAN_DELETE_THEORY"
+      });
+    }
+    const task = await taskRepo().findOne({
+      where: {
+        id: taskId,
+        topic: {
+          id: topicId
+        }
+      },
+      relations: ["theory"]
+    });
+    if (!task) {
+      return res.status(404).json({
+        message: "TASK_NOT_FOUND"
+      });
+    }
+    if (task.theory) {
+      await theoryRepo().remove(task.theory);
+    }
+    return res.json({
+      message: "THEORY_DELETED"
+    });
+  } catch (error: unknown) {
+    logger.error("[topics] Error deleting task theory", { requestId: req.requestId, err: error });
+    return res.status(500).json({
+      message: "INTERNAL_SERVER_ERROR"
+    });
+  }
+});
 topicsRouter.post("/:topicId/tasks/:taskId/assign", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const validated = assignmentSchema.safeParse(req.body);
