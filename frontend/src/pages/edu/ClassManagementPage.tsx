@@ -306,6 +306,18 @@ export const ClassManagementPage: React.FC = () => {
     setAddStudentsError(null);
   };
 
+  const openImport = () => {
+    setImportFile(null);
+    setImportError(null);
+    setShowImport(true);
+  };
+
+  const closeImport = () => {
+    setShowImport(false);
+    setImportFile(null);
+    setImportError(null);
+  };
+
   const submitStudents = async () => {
     setAddStudentsError(null);
     if (addMode === "paste" && parsedBulkStudents.invalidLines.length) {
@@ -648,7 +660,7 @@ export const ClassManagementPage: React.FC = () => {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="ghost" onClick={() => { setImportError(null); setShowImport(true); }}>
+                <Button variant="ghost" onClick={openImport}>
                   <FileUp className="mr-2 size-4" />
                   Імпорт CSV
                 </Button>
@@ -713,7 +725,7 @@ export const ClassManagementPage: React.FC = () => {
                         <UserPlus className="mr-2 size-4" />
                         Вставити список учнів
                       </Button>
-                      <Button variant="ghost" onClick={() => { setImportError(null); setShowImport(true); }}>
+                      <Button variant="ghost" onClick={openImport}>
                         <FileUp className="mr-2 size-4" />
                         Завантажити CSV
                       </Button>
@@ -977,23 +989,45 @@ export const ClassManagementPage: React.FC = () => {
         onClose={closeAddStudents}
         title="Додати учнів"
         showCloseButton={false}
+        panelClassName="max-w-2xl"
+        bodyClassName="bg-bg-base/[.02]"
       >
-        <div className="max-h-[70vh] space-y-3 overflow-y-auto">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-text-secondary">Створимо облікові записи та покажемо логіни й паролі один раз після додавання.</p>
-            <button type="button" onClick={() => { setAddMode(addMode === "paste" ? "manual" : "paste"); setAddStudentsError(null); }} className="text-xs font-bold text-accent-success hover:underline">
-              {addMode === "paste" ? "Ввести по одному" : "Вставити список"}
-            </button>
+        <div className="max-h-[70vh] space-y-5 overflow-y-auto">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[.14em] text-accent-success">Швидкий старт</p>
+              <p className="mt-1 text-sm text-text-secondary">Створимо доступи та покажемо їх один раз після додавання.</p>
+            </div>
+            <div role="tablist" aria-label="Спосіб додавання учнів" className="grid grid-cols-2 rounded-xl border border-border bg-bg-base/60 p-1">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={addMode === "paste"}
+                onClick={() => { setAddMode("paste"); setAddStudentsError(null); }}
+                className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-success/60 ${addMode === "paste" ? "bg-bg-surface text-text-primary shadow-sm" : "text-text-secondary hover:text-text-primary"}`}
+              >
+                Вставити список
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={addMode === "manual"}
+                onClick={() => { setAddMode("manual"); setAddStudentsError(null); }}
+                className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-success/60 ${addMode === "manual" ? "bg-bg-surface text-text-primary shadow-sm" : "text-text-secondary hover:text-text-primary"}`}
+              >
+                По одному
+              </button>
+            </div>
           </div>
           {addStudentsError && (
-            <div role="alert" aria-live="polite" className="rounded-xl border border-accent-error/30 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">
+            <div role="alert" aria-live="polite" className="rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm leading-5 text-accent-error">
               {addStudentsError}
             </div>
           )}
           {addMode === "paste" ? (
-            <div className="space-y-2">
-              <label htmlFor="bulk-student-list" className="text-sm font-bold">Список учнів</label>
-              <p className="text-xs leading-5 text-text-secondary">Вставте ПІБ — одного учня на рядок. Можна також вставити колонки: Прізвище → Імʼя → По батькові → Email. Email необовʼязковий: логін і пароль згенеруємо автоматично.</p>
+            <div className="rounded-2xl border border-border/80 bg-bg-surface/55 p-4 sm:p-5">
+              <label htmlFor="bulk-student-list" className="block text-sm font-bold">Список учнів</label>
+              <p className="mt-1 text-xs leading-5 text-text-secondary">Один ПІБ на рядок. Email не обовʼязковий — логін і пароль згенеруємо автоматично.</p>
               <textarea
                 id="bulk-student-list"
                 name="bulkStudentList"
@@ -1003,25 +1037,28 @@ export const ClassManagementPage: React.FC = () => {
                 value={bulkStudentText}
                 onChange={(event) => { setBulkStudentText(event.target.value); setAddStudentsError(null); }}
                 placeholder={"Шевченко Тарас Григорович\nМельник Софія\nабо: Шевченко\tТарас\tГригорович\tstudent@example.com\n…"}
-                className="w-full resize-y rounded-2xl border border-border bg-bg-surface px-3 py-3 text-sm leading-6 text-text-primary placeholder:text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-accent-success/50"
+                className="mt-3 min-h-44 w-full resize-y rounded-xl border border-border bg-bg-base px-3 py-3 text-sm leading-6 text-text-primary placeholder:text-text-secondary outline-none transition-colors focus:border-accent-success focus-visible:ring-2 focus-visible:ring-accent-success/40"
               />
-              {bulkStudentText.trim() && <p aria-live="polite" className="text-xs font-bold text-text-secondary">Розпізнано учнів: {parsedBulkStudents.students.length}{parsedBulkStudents.invalidLines.length ? ` · помилки у рядках: ${parsedBulkStudents.invalidLines.join(", ")}` : ""}</p>}
+              <div aria-live="polite" className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-bold text-text-secondary">{bulkStudentText.trim() ? `Розпізнано учнів: ${parsedBulkStudents.students.length}` : "Формат: ПІБ по одному на рядок"}</span>
+                {parsedBulkStudents.invalidLines.length > 0 && <span className="font-bold text-accent-error">Помилки у рядках: {parsedBulkStudents.invalidLines.join(", ")}</span>}
+              </div>
             </div>
           ) : (
-            <>
+            <div className="space-y-3">
               {draftStudents.map((student, index) => (
-                <fieldset key={index} className="grid gap-2 rounded-2xl border border-border/70 p-3 sm:grid-cols-2">
+                <fieldset key={index} className="grid gap-3 rounded-2xl border border-border/80 bg-bg-surface/55 p-4 sm:grid-cols-2">
                   <legend className="px-1 text-xs font-bold text-text-secondary">Учень {index + 1}</legend>
-                  <input aria-label={`Прізвище учня ${index + 1}`} name={`student-${index}-lastName`} autoComplete="family-name" value={student.lastName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, lastName: event.target.value } : item))} placeholder="Прізвище…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary" />
-                  <input aria-label={`Імʼя учня ${index + 1}`} name={`student-${index}-firstName`} autoComplete="given-name" value={student.firstName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, firstName: event.target.value } : item))} placeholder="Імʼя…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary" />
-                  <input aria-label={`По батькові учня ${index + 1}`} name={`student-${index}-middleName`} autoComplete="additional-name" value={student.middleName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, middleName: event.target.value } : item))} placeholder="По батькові…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary" />
-                  <input type="email" aria-label={`Email учня ${index + 1} (необовʼязково)`} name={`student-${index}-email`} autoComplete="email" spellCheck={false} value={student.email} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} placeholder="student@example.com…" className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary" />
+                  <label className="grid gap-1.5 text-xs font-bold text-text-secondary"><span>Прізвище</span><input aria-label={`Прізвище учня ${index + 1}`} name={`student-${index}-lastName`} autoComplete="family-name" value={student.lastName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, lastName: event.target.value } : item))} placeholder="Прізвище…" className="rounded-xl border border-border bg-bg-base px-3 py-2 text-sm font-normal text-text-primary placeholder:text-text-secondary outline-none focus:border-accent-success focus-visible:ring-2 focus-visible:ring-accent-success/40" /></label>
+                  <label className="grid gap-1.5 text-xs font-bold text-text-secondary"><span>Імʼя</span><input aria-label={`Імʼя учня ${index + 1}`} name={`student-${index}-firstName`} autoComplete="given-name" value={student.firstName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, firstName: event.target.value } : item))} placeholder="Імʼя…" className="rounded-xl border border-border bg-bg-base px-3 py-2 text-sm font-normal text-text-primary placeholder:text-text-secondary outline-none focus:border-accent-success focus-visible:ring-2 focus-visible:ring-accent-success/40" /></label>
+                  <label className="grid gap-1.5 text-xs font-bold text-text-secondary"><span>По батькові</span><input aria-label={`По батькові учня ${index + 1}`} name={`student-${index}-middleName`} autoComplete="additional-name" value={student.middleName} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, middleName: event.target.value } : item))} placeholder="По батькові…" className="rounded-xl border border-border bg-bg-base px-3 py-2 text-sm font-normal text-text-primary placeholder:text-text-secondary outline-none focus:border-accent-success focus-visible:ring-2 focus-visible:ring-accent-success/40" /></label>
+                  <label className="grid gap-1.5 text-xs font-bold text-text-secondary"><span>Email <span className="font-normal text-text-muted">(необовʼязково)</span></span><input type="email" aria-label={`Email учня ${index + 1} (необовʼязково)`} name={`student-${index}-email`} autoComplete="email" spellCheck={false} value={student.email} onChange={(event) => setDraftStudents((list) => list.map((item, itemIndex) => itemIndex === index ? { ...item, email: event.target.value } : item))} placeholder="student@example.com…" className="rounded-xl border border-border bg-bg-base px-3 py-2 text-sm font-normal text-text-primary placeholder:text-text-secondary outline-none focus:border-accent-success focus-visible:ring-2 focus-visible:ring-accent-success/40" /></label>
                 </fieldset>
               ))}
-              <Button variant="ghost" onClick={() => setDraftStudents((list) => [...list, emptyStudent()])}><Plus className="mr-2 size-4" />Ще один рядок</Button>
-            </>
+              <Button type="button" variant="ghost" onClick={() => setDraftStudents((list) => [...list, emptyStudent()])}><Plus className="mr-2 size-4" />Ще один рядок</Button>
+            </div>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-3 border-t border-border/70 pt-4 sm:flex-row sm:items-center sm:justify-end">
             <Button variant="ghost" className="text-text-secondary hover:text-text-primary" onClick={closeAddStudents}>
               Скасувати
             </Button>
@@ -1033,23 +1070,47 @@ export const ClassManagementPage: React.FC = () => {
       </Modal>
       <Modal
         open={showImport}
-        onClose={() => setShowImport(false)}
+        onClose={closeImport}
         title="Імпорт учнів з CSV"
         showCloseButton={false}
+        panelClassName="max-w-xl"
+        bodyClassName="bg-bg-base/[.02]"
       >
-        <div className="space-y-4">
-          <p className="text-sm text-text-secondary">
-            Формат: Імʼя, Прізвище, По батькові, Email.
-          </p>
-          {importError && <div role="alert" aria-live="polite" className="rounded-xl border border-accent-error/30 bg-accent-error/10 px-3 py-2 text-sm text-accent-error">{importError}</div>}
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportError(null); }}
-            className="w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
-          />
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => { setShowImport(false); setImportError(null); }}>
+        <div className="space-y-5">
+          <div className="flex items-start gap-3 rounded-2xl border border-border/80 bg-bg-surface/55 p-4">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-success/10 text-accent-success">
+              <FileUp aria-hidden="true" className="size-5" />
+            </span>
+            <div>
+              <p className="font-bold text-text-primary">Завантажте готову таблицю</p>
+              <p className="mt-1 text-xs leading-5 text-text-secondary">Підтримуються CSV-файли з ПІБ та необовʼязковими email.</p>
+            </div>
+          </div>
+          {importError && <div role="alert" aria-live="polite" className="rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm leading-5 text-accent-error">{importError}</div>}
+          <div>
+            <input
+              id="student-csv-file"
+              name="studentCsvFile"
+              type="file"
+              accept=".csv"
+              onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportError(null); }}
+              className="sr-only"
+            />
+            <label htmlFor="student-csv-file" className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-border bg-bg-surface/40 px-4 py-4 transition-colors hover:border-accent-success/70 hover:bg-accent-success/5 focus-within:ring-2 focus-within:ring-accent-success/40">
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-bg-base text-text-secondary">
+                <FileUp aria-hidden="true" className="size-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold text-text-primary">{importFile?.name || "Обрати CSV-файл"}</span>
+                <span className="mt-0.5 block text-xs text-text-secondary">{importFile ? `${Math.max(1, Math.round(importFile.size / 1024))} КБ` : "Натисніть, щоб вибрати файл"}</span>
+              </span>
+            </label>
+          </div>
+          <div className="rounded-xl bg-bg-base/60 px-3 py-2.5 text-xs leading-5 text-text-secondary">
+            Колонки: <span className="font-semibold text-text-primary">Прізвище, Імʼя, По батькові, Email</span>. Email можна залишити порожнім.
+          </div>
+          <div className="flex flex-col-reverse gap-3 border-t border-border/70 pt-4 sm:flex-row sm:justify-end">
+            <Button variant="ghost" onClick={closeImport}>
               Скасувати
             </Button>
             <Button
@@ -1066,23 +1127,39 @@ export const ClassManagementPage: React.FC = () => {
         onClose={() => setShowCredentials(false)}
         title="Облікові дані учнів"
         showCloseButton={false}
+        panelClassName="max-w-2xl"
+        bodyClassName="bg-bg-base/[.02]"
       >
-        <div className="space-y-3">
-          {credentials.map((item) => (
-            <div
-              key={`${item.email}-${item.username}`}
-              className="rounded-xl border border-border bg-bg-surface p-3 text-sm"
-            >
-              <strong>
-                {item.lastName} {item.firstName}
-              </strong>
-              <div className="mt-1 text-text-secondary">{item.email || "Email не вказано"}</div>
-              <div className="font-mono">
-                {item.username} / {item.password}
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-accent-success/25 bg-accent-success/10 p-4">
+            <p className="text-sm font-bold text-text-primary">Учнів додано успішно</p>
+            <p className="mt-1 text-xs leading-5 text-text-secondary">Збережіть ці дані зараз — після закриття вікна паролі більше не покажемо.</p>
+          </div>
+          <div className="space-y-3">
+            {credentials.map((item) => (
+              <div key={`${item.email}-${item.username}`} className="rounded-2xl border border-border/80 bg-bg-surface/55 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold uppercase tracking-[.12em] text-text-secondary">Учень</p>
+                    <strong className="mt-1 block truncate text-sm text-text-primary">{item.lastName} {item.firstName}</strong>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-accent-success/10 px-2.5 py-1 text-[11px] font-bold text-accent-success">Доступ створено</span>
+                </div>
+                <dl className="mt-4 grid gap-2 sm:grid-cols-2">
+                  <div className="rounded-xl bg-bg-base/70 px-3 py-2">
+                    <dt className="text-[11px] font-bold uppercase tracking-[.1em] text-text-secondary">Логін</dt>
+                    <dd className="mt-1 break-all font-mono text-sm text-text-primary">{item.username}</dd>
+                  </div>
+                  <div className="rounded-xl bg-bg-base/70 px-3 py-2">
+                    <dt className="text-[11px] font-bold uppercase tracking-[.1em] text-text-secondary">Пароль</dt>
+                    <dd className="mt-1 break-all font-mono text-sm text-text-primary">{item.password}</dd>
+                  </div>
+                </dl>
+                {item.email && <p className="mt-3 truncate text-xs text-text-secondary">{item.email}</p>}
               </div>
-            </div>
-          ))}
-          <div className="flex justify-end">
+            ))}
+          </div>
+          <div className="flex justify-end border-t border-border/70 pt-4">
             <Button onClick={() => setShowCredentials(false)}>Готово</Button>
           </div>
         </div>
@@ -1092,27 +1169,36 @@ export const ClassManagementPage: React.FC = () => {
         onClose={() => setParentStudent(null)}
         title="Запросити батьків"
         showCloseButton={false}
+        panelClassName="max-w-lg"
+        bodyClassName="bg-bg-base/[.02]"
       >
-        <div className="space-y-4">
-          <p className="text-sm text-text-secondary">
-            Учень:{" "}
-            <strong>
-              {parentStudent?.lastName} {parentStudent?.firstName}
-            </strong>
-          </p>
+        <div className="space-y-5">
+          <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-bg-surface/55 p-4">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-success/10 text-sm font-black text-accent-success">
+              {parentStudent ? initials(parentStudent) : "У"}
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-[.12em] text-text-secondary">Учень</p>
+              <p className="mt-1 truncate text-sm font-bold text-text-primary">{parentStudent?.lastName} {parentStudent?.firstName}</p>
+            </div>
+          </div>
           {parentLink ? (
-            <div className="space-y-3">
-              <p className="text-sm text-text-secondary">
-                Надішліть це посилання батькам:
-              </p>
-              <div className="flex gap-2">
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-bold text-text-primary">Посилання готове</p>
+                <p className="mt-1 text-xs leading-5 text-text-secondary">Надішліть його одному з батьків або опікунів.</p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <input
+                  aria-label="Посилання для батьків"
+                  name="parentInviteLink"
                   readOnly
                   value={parentLink}
-                  className="min-w-0 flex-1 rounded-xl border border-border bg-bg-surface px-3 py-2 text-xs"
+                  className="min-w-0 flex-1 rounded-xl border border-border bg-bg-base px-3 py-2 text-xs text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-accent-success/40"
                 />
                 <Button
                   variant="ghost"
+                  className="shrink-0"
                   onClick={() => {
                     if (!navigator.clipboard) return;
                     void navigator.clipboard.writeText(parentLink).then(() => setParentLinkCopied(true)).catch(() => setParentLinkCopied(false));
@@ -1122,21 +1208,30 @@ export const ClassManagementPage: React.FC = () => {
                   {parentLinkCopied ? "Скопійовано" : "Копіювати"}
                 </Button>
               </div>
-              <Button className="w-full" onClick={() => setParentStudent(null)}>
+              <div className="flex justify-end border-t border-border/70 pt-4">
+                <Button onClick={() => setParentStudent(null)}>
                 <Check className="mr-2 size-4" />
                 Готово
-              </Button>
+                </Button>
+              </div>
             </div>
           ) : (
             <>
-              <input
-                type="email"
-                value={parentEmail}
-                onChange={(event) => setParentEmail(event.target.value)}
-                placeholder="Email батьків"
-                className="w-full rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm"
-              />
-              <div className="flex justify-end gap-2">
+              <label className="grid gap-1.5 text-xs font-bold text-text-secondary" htmlFor="parent-invite-email">
+                <span>Email батьків або опікунів</span>
+                <input
+                  id="parent-invite-email"
+                  name="parentInviteEmail"
+                  type="email"
+                  autoComplete="email"
+                  value={parentEmail}
+                  onChange={(event) => setParentEmail(event.target.value)}
+                  placeholder="parent@example.com…"
+                  className="w-full rounded-xl border border-border bg-bg-base px-3 py-2.5 text-sm font-normal text-text-primary placeholder:text-text-secondary outline-none focus:border-accent-success focus-visible:ring-2 focus-visible:ring-accent-success/40"
+                />
+                <span className="font-normal leading-5 text-text-muted">Батьки отримають окреме посилання для підтвердження контакту.</span>
+              </label>
+              <div className="flex flex-col-reverse gap-3 border-t border-border/70 pt-4 sm:flex-row sm:justify-end">
                 <Button variant="ghost" onClick={() => setParentStudent(null)}>
                   Скасувати
                 </Button>
