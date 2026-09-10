@@ -563,16 +563,16 @@ export const ClassManagementPage: React.FC = () => {
           <ArrowLeft className="size-4" />
           До класу
         </button>
-        <header className="rounded-[34px] bg-[#13241a] p-6 text-white shadow-[0_30px_90px_rgba(7,24,13,.18)] sm:p-9">
-          <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+        <header className="rounded-[28px] border border-[#1d3b29] bg-[linear-gradient(135deg,#13241a_0%,#0f1d15_100%)] p-5 text-white shadow-[0_24px_70px_rgba(7,24,13,.16)] sm:p-7">
+          <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
             <div>
               <p className="text-xs font-black uppercase tracking-[.18em] text-[#7bedb4]">
                 Керування класом
               </p>
-              <h1 className="mt-4 font-[family-name:var(--font-display)] text-4xl font-black tracking-[-.07em] sm:text-6xl">
+              <h1 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.06em] sm:text-5xl">
                 {classInfo?.name || "Клас"}
               </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-[#c6d4c9]">
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-[#c6d4c9] sm:text-base">
                 Учні, комунікація та правила класу — в одному робочому просторі
                 без зайвих службових екранів.
               </p>
@@ -594,54 +594,53 @@ export const ClassManagementPage: React.FC = () => {
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div role="tablist" aria-label="Розділи класу" className="flex flex-wrap gap-1.5 rounded-2xl border border-[#142018]/10 bg-white/70 p-1.5 shadow-sm dark:border-white/10 dark:bg-[#111a14]">
           <button
+            id="class-tab-students"
+            role="tab"
+            aria-selected={activeTab === "students"}
+            aria-controls="class-panel-students"
             type="button"
             onClick={() => setActiveTab("students")}
-            className={`rounded-[26px] border p-5 text-left transition hover:-translate-y-0.5 ${activeTab === "students" ? "border-[#00d978]/35 bg-[#e8f8ee] dark:bg-[#10271a]" : "border-[#142018]/10 bg-white dark:border-white/10 dark:bg-[#111a14]"}`}
+            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d978]/60 ${activeTab === "students" ? "bg-[#e8f8ee] text-[#16834d] shadow-sm dark:bg-[#10271a] dark:text-[#7bedb4]" : "text-[#6b7a70] hover:bg-[#f3f8f3] hover:text-[#142018] dark:text-[#aebbb2] dark:hover:bg-white/[.06] dark:hover:text-white"}`}
           >
-            <UsersRound className="size-5 text-[#16834d] dark:text-[#7bedb4]" />
-            <strong className="mt-5 block text-xl font-black">Учні</strong>
-            <span className="mt-2 block text-sm text-[#6b7a70] dark:text-[#aebbb2]">
-              Список, доступи й батьківські контакти
-            </span>
+            <UsersRound aria-hidden="true" className="size-4" />
+            <span>Учні</span>
           </button>
           <button
+            id="class-tab-announcements"
+            role="tab"
+            aria-selected={activeTab === "announcements"}
+            aria-controls="class-panel-announcements"
             type="button"
             onClick={() => setActiveTab("announcements")}
-            className={`rounded-[26px] border p-5 text-left transition hover:-translate-y-0.5 ${activeTab === "announcements" ? "border-[#ffb454]/35 bg-[#fff8ec] dark:bg-[#2a2011]" : "border-[#142018]/10 bg-white dark:border-white/10 dark:bg-[#111a14]"}`}
+            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffb454]/60 ${activeTab === "announcements" ? "bg-[#fff8ec] text-[#a86200] shadow-sm dark:bg-[#2a2011] dark:text-[#ffd58b]" : "text-[#6b7a70] hover:bg-[#f3f8f3] hover:text-[#142018] dark:text-[#aebbb2] dark:hover:bg-white/[.06] dark:hover:text-white"}`}
           >
-            <Bell className="size-5 text-[#d97706]" />
-            <strong className="mt-5 block text-xl font-black">
-              Оголошення
-            </strong>
-            <span className="mt-2 block text-sm text-[#6b7a70] dark:text-[#aebbb2]">
-              Повідомлення, дедлайни та важливі зміни
-            </span>
+            <Bell aria-hidden="true" className="size-4" />
+            <span>Оголошення</span>
           </button>
           <button
+            id="class-tab-settings"
+            role="tab"
+            aria-selected={activeTab === "settings"}
+            aria-controls="class-panel-settings"
             type="button"
             onClick={() => setActiveTab("settings")}
-            className={`rounded-[26px] border p-5 text-left transition hover:-translate-y-0.5 ${activeTab === "settings" ? "border-[#8b7cf6]/35 bg-[#f0edff] dark:bg-[#211d3b]" : "border-[#142018]/10 bg-white dark:border-white/10 dark:bg-[#111a14]"}`}
+            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b7cf6]/60 ${activeTab === "settings" ? "bg-[#f0edff] text-[#5b4bb7] shadow-sm dark:bg-[#211d3b] dark:text-[#b9afff]" : "text-[#6b7a70] hover:bg-[#f3f8f3] hover:text-[#142018] dark:text-[#aebbb2] dark:hover:bg-white/[.06] dark:hover:text-white"}`}
           >
-            <Settings2 className="size-5 text-[#6b5bd4] dark:text-[#b9afff]" />
-            <strong className="mt-5 block text-xl font-black">
-              Налаштування
-            </strong>
-            <span className="mt-2 block text-sm text-[#6b7a70] dark:text-[#aebbb2]">
-              Оцінювання та приєднання до класу
-            </span>
+            <Settings2 aria-hidden="true" className="size-4" />
+            <span>Налаштування</span>
           </button>
         </div>
 
         {activeTab === "students" && (
-          <section className="rounded-[32px] border border-[#142018]/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111a14] sm:p-7">
+          <section id="class-panel-students" role="tabpanel" aria-labelledby="class-tab-students" className="rounded-[28px] border border-[#142018]/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111a14] sm:p-7">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-[.15em] text-[#16834d] dark:text-[#7bedb4]">
                   Склад класу
                 </p>
-                <h2 className="mt-2 text-3xl font-black tracking-[-.055em]">
+                <h2 className="mt-2 text-2xl font-black tracking-[-.05em] sm:text-3xl">
                   Учні та доступи
                 </h2>
                 <p className="mt-2 text-sm text-[#718075] dark:text-[#aab9ae]">
@@ -700,12 +699,14 @@ export const ClassManagementPage: React.FC = () => {
                 </article>
               ))}
               {!students.length && (
-                <div className="col-span-full rounded-[24px] border border-dashed border-[#142018]/15 p-8 text-center dark:border-white/10 sm:p-12">
+                <div className="col-span-full rounded-[24px] border border-dashed border-[#142018]/15 bg-[#fbfdfb] p-7 text-center dark:border-white/10 dark:bg-white/[.02] sm:p-10">
                   <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-                    <UsersRound className="size-9 shrink-0 text-[#16834d] dark:text-[#7bedb4]" />
+                    <span className="grid size-12 place-items-center rounded-2xl bg-[#e8f8ee] text-[#16834d] dark:bg-[#10271a] dark:text-[#7bedb4]">
+                      <UsersRound aria-hidden="true" className="size-6" />
+                    </span>
                     <h3 className="mt-4 text-balance text-xl font-black">У класі ще немає учнів</h3>
-                    <p className="mx-auto mt-2 max-w-2xl text-center text-sm text-[#6b7a70] dark:text-[#aebbb2]">
-                    Вставте список із Excel або Google Таблиць — облікові записи створяться одним кроком.
+                    <p className="mx-auto mt-2 max-w-lg text-center text-sm leading-6 text-[#6b7a70] dark:text-[#aebbb2]">
+                      Вставте ПІБ по одному на рядок — логіни та паролі створяться автоматично.
                     </p>
                     <div className="mt-5 flex flex-wrap justify-center gap-2">
                       <Button onClick={() => openAddStudents("paste")}>
@@ -725,7 +726,7 @@ export const ClassManagementPage: React.FC = () => {
         )}
 
         {activeTab === "announcements" && (
-          <section className="grid gap-6 xl:grid-cols-[1fr_420px]">
+          <section id="class-panel-announcements" role="tabpanel" aria-labelledby="class-tab-announcements" className="grid gap-6 xl:grid-cols-[1fr_420px]">
             {announcementsUnavailable && (
               <div className="xl:col-span-2 rounded-2xl border border-[#ffb454]/35 bg-[#fff8ec] px-4 py-3 text-sm text-[#8a5a11] dark:border-[#ffb454]/25 dark:bg-[#2a2011] dark:text-[#ffd58b]">
                 Оголошення тимчасово недоступні. Список учнів та інші розділи класу працюють.
@@ -868,7 +869,7 @@ export const ClassManagementPage: React.FC = () => {
         )}
 
         {activeTab === "settings" && (
-          <section className="grid gap-6 lg:grid-cols-2">
+          <section id="class-panel-settings" role="tabpanel" aria-labelledby="class-tab-settings" className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-[32px] border border-[#142018]/10 bg-white p-6 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111a14]">
               <p className="text-xs font-black uppercase tracking-[.15em] text-[#16834d] dark:text-[#7bedb4]">
                 Викладачі класу
