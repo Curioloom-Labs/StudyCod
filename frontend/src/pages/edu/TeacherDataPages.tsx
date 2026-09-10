@@ -1,11 +1,10 @@
 import React from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, BarChart3, CalendarDays, Calculator, ChevronRight, GraduationCap, Plus, Save, Settings2, Trash2, UsersRound, X } from "lucide-react";
+import { ArrowLeft, BarChart3, Calculator, ChevronRight, GraduationCap, Plus, Save, Settings2, Trash2, UsersRound, X } from "lucide-react";
 import {
   createManualGrade,
   createSummaryGrade,
   deleteSummaryGrade,
-  getAttendance,
   getClassGradebook,
   getSummaryGrades,
   getTopics,
@@ -13,8 +12,6 @@ import {
   updateGrade,
   updateSemesterGrade,
   updateSummaryGrade,
-  setAttendance,
-  type AttendanceStatus,
   type GradebookResponse,
   type GradebookStudent,
   type SummaryGradeGroup,
@@ -130,16 +127,6 @@ const gradeTone = (value: number | null | undefined) => {
   return "bg-[#fff0f4] text-[#c4436b] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]";
 };
 
-const attendanceStatuses: AttendanceStatus[] = ["PRESENT", "LATE", "ABSENT", "EXCUSED"];
-const attendanceLabel: Record<AttendanceStatus, string> = { PRESENT: "Присутній", LATE: "Запізнення", ABSENT: "Відсутній", EXCUSED: "Поважна" };
-const attendanceShort: Record<AttendanceStatus, string> = { PRESENT: "П", LATE: "З", ABSENT: "В", EXCUSED: "У" };
-const attendanceTone: Record<AttendanceStatus, string> = {
-  PRESENT: "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]",
-  LATE: "bg-[#fff0d7] text-[#a55e00] dark:bg-[#ff8c00]/14 dark:text-[#ffbb6a]",
-  ABSENT: "bg-[#fff0f5] text-[#bd4067] dark:bg-[#ff6b9d]/12 dark:text-[#ff9abd]",
-  EXCUSED: "bg-[#edf0ff] text-[#545db9] dark:bg-[#8791ff]/12 dark:text-[#b8beff]",
-};
-
 const Header: React.FC<{ title: string; text: string; classId?: string; actions?: React.ReactNode }> = ({ title, text, classId, actions }) => {
   const navigate = useNavigate();
   return (
@@ -173,10 +160,6 @@ export const GradebookWorkspace: React.FC = () => {
   const [thematicOpen, setThematicOpen] = React.useState(false);
   const [thematicTopicId, setThematicTopicId] = React.useState("");
   const [busyAction, setBusyAction] = React.useState(false);
-  const [attendanceDate, setAttendanceDate] = React.useState(() => new Date().toISOString().slice(0, 10));
-  const [attendanceMap, setAttendanceMap] = React.useState<Record<number, AttendanceStatus>>({});
-  const [attendanceBaseline, setAttendanceBaseline] = React.useState<Record<number, AttendanceStatus>>({});
-  const [attendanceSaving, setAttendanceSaving] = React.useState(false);
   const [studentFilter, setStudentFilter] = React.useState<"all" | "missing" | "low">("all");
   const autoThematicGuardRef = React.useRef(false);
 
@@ -192,27 +175,18 @@ export const GradebookWorkspace: React.FC = () => {
     if (studentFilter === "missing") return student.grades.length === 0 || student.grades.some((grade) => grade.grade == null);
     return student.grades.some((grade) => grade.grade != null && grade.grade < 60);
   }), [students, studentFilter]);
-  const attendanceDirty = students.some((student) => (attendanceMap[student.studentId] || "PRESENT") !== (attendanceBaseline[student.studentId] || "PRESENT"));
-
   const load = React.useCallback(async () => {
     setError(null);
     try {
       if (preview()) {
         setData(demoGradebook);
         setTopics(demoTopics);
-        const demoAttendance = { 1: "PRESENT", 2: "LATE", 3: "PRESENT" } as Record<number, AttendanceStatus>;
-        setAttendanceMap(demoAttendance);
-        setAttendanceBaseline(demoAttendance);
         return;
       }
-      const [book, topicList, attendance] = await Promise.all([
+      const [book, topicList] = await Promise.all([
         getClassGradebook(Number(classId)),
         getTopics(Number(classId)),
-        getAttendance(Number(classId), attendanceDate),
       ]);
-      const nextAttendance: Record<number, AttendanceStatus> = {};
-      book.students.forEach((student) => { nextAttendance[student.studentId] = "PRESENT"; });
-      (attendance.records || []).forEach((record) => { nextAttendance[record.studentId] = record.status; });
       setTopics(topicList);
       let nextBook = book;
       const missing = missingThematicTopics(book, topicList);
@@ -230,12 +204,10 @@ export const GradebookWorkspace: React.FC = () => {
         }
       }
       setData(nextBook);
-      setAttendanceMap(nextAttendance);
-      setAttendanceBaseline(nextAttendance);
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, "Не вдалося завантажити журнал."));
     }
-  }, [attendanceDate, classId]);
+  }, [classId]);
 
   React.useEffect(() => { void load(); }, [load]);
 
@@ -360,40 +332,12 @@ export const GradebookWorkspace: React.FC = () => {
     }
   };
 
-  const attendanceSummary = attendanceStatuses.reduce((summary, status) => ({
-    ...summary,
-    [status]: students.filter((student) => (attendanceMap[student.studentId] || "PRESENT") === status).length,
-  }), {} as Record<AttendanceStatus, number>);
-
-  const markAllPresent = () => {
-    setAttendanceMap(Object.fromEntries(students.map((student) => [student.studentId, "PRESENT"] as const)));
-  };
-
-  const markAllAbsent = () => {
-    setAttendanceMap(Object.fromEntries(students.map((student) => [student.studentId, "ABSENT"] as const)));
-  };
-
-  const saveAttendance = async () => {
-    if (!classId) return;
-    setAttendanceSaving(true);
-    try {
-      const entries = students.map((student) => ({ studentId: student.studentId, status: attendanceMap[student.studentId] || ("PRESENT" as AttendanceStatus) }));
-      if (!preview()) await setAttendance(Number(classId), attendanceDate, entries);
-      setAttendanceBaseline({ ...attendanceMap });
-      showToast({ type: "success", message: "Відвідуваність збережено в журналі." });
-    } catch (caught) {
-      showToast({ type: "error", message: getErrorMessageFromUnknown(caught, "Не вдалося зберегти відвідуваність.") });
-    } finally {
-      setAttendanceSaving(false);
-    }
-  };
-
   return (
     <div className={root}>
       <Header
         classId={classId}
         title="Журнал класу"
-        text="Оцінки, тематичні, семестрові та присутність — в одному журналі класу, без дублювання окремими розділами."
+        text="Оцінки, тематичні та семестрові підсумки — в одному журналі класу, без дублювання окремими розділами."
         actions={
           <>
             <button type="button" onClick={() => navigate(`/edu/classes/${classId}`)} className="inline-flex items-center gap-2 rounded-xl border border-[#19291d]/12 px-4 py-3 text-sm font-bold dark:border-white/10"><Settings2 className="size-4" />Налаштування класу</button>
@@ -434,28 +378,11 @@ export const GradebookWorkspace: React.FC = () => {
             </div>
           </section>
 
-          <section className="mb-4 rounded-[28px] border border-[#19291d]/10 bg-white p-5 shadow-[0_18px_50px_rgba(12,36,20,.04)] dark:border-white/[.09] dark:bg-[#111b14]">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex items-start gap-3">
-                <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#edf6ee] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]"><CalendarDays className="size-5" /></span>
-                <div><p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]">Присутність у журналі</p><h2 className="mt-1 text-lg font-bold">Відмітки за обрану дату</h2><p className="mt-1 text-sm text-[#718075] dark:text-[#a6b4a9]">П, З, В або У зберігаються разом з оцінками класу.</p></div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <input type="date" value={attendanceDate} onChange={(event) => { if (attendanceDirty && !window.confirm("Є незбережені відмітки. Змінити дату без збереження?")) return; setAttendanceDate(event.target.value); }} className="rounded-xl border border-[#19291d]/12 bg-[#f8fbf8] px-3 py-2.5 text-sm font-bold outline-none dark:border-white/10 dark:bg-[#0d1510]" aria-label="Дата відвідуваності" />
-                <button type="button" onClick={markAllPresent} className="rounded-xl border border-[#19291d]/12 px-3 py-2.5 text-sm font-bold text-[#38493e] dark:border-white/10 dark:text-[#dce7df]">Усі присутні</button>
-                <button type="button" onClick={markAllAbsent} className="rounded-xl border border-[#19291d]/12 px-3 py-2.5 text-sm font-bold text-[#38493e] dark:border-white/10 dark:text-[#dce7df]">Усі відсутні</button>
-                <button type="button" onClick={() => void saveAttendance()} disabled={attendanceSaving} className="inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-3 py-2.5 text-sm font-bold text-[#062211] disabled:opacity-55"><Save className="size-4" />{attendanceSaving ? "Зберігаємо…" : "Зберегти"}</button>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-2">{attendanceStatuses.map((status) => <span key={status} className={`rounded-full px-3 py-1.5 text-xs font-bold ${attendanceTone[status]}`}>{attendanceLabel[status]} · {attendanceSummary[status]}</span>)}{attendanceDirty && <span role="status" className="rounded-full border border-[#e17800]/35 bg-[#fff8e5] px-3 py-1.5 text-xs font-bold text-[#a55e00] dark:bg-[#ff8c00]/[.08] dark:text-[#ffca7e]">Є незбережені зміни</span>}</div>
-          </section>
-
           <div className="overflow-x-auto rounded-[28px] border border-[#19291d]/10 bg-white shadow-[0_18px_50px_rgba(12,36,20,.05)] dark:border-white/[.09] dark:bg-[#111b14]">
             <table className="min-w-full border-collapse">
               <thead>
                 <tr className="border-b border-[#19291d]/10 dark:border-white/[.08]">
                   <th className="sticky left-0 z-20 min-w-56 bg-white px-5 py-4 text-left text-xs font-bold uppercase tracking-[.13em] text-[#718075] dark:bg-[#111b14]">Учень</th>
-                  <th className="min-w-52 px-3 py-4 text-left align-bottom"><div className="text-xs font-bold text-[#26362c] dark:text-[#e4ede7]">Присутність</div><div className="mt-1 text-[11px] font-medium text-[#718075] dark:text-[#a6b4a9]">{attendanceDate}</div></th>
                   {columns.map((column) => <th key={column.id} className="min-w-40 px-3 py-4 text-left align-bottom"><div className="text-xs font-bold text-[#26362c] dark:text-[#e4ede7]">{column.title}</div><div className="mt-1 text-[11px] font-medium text-[#718075] dark:text-[#a6b4a9]">{column.subtitle}</div></th>)}
                 </tr>
               </thead>
@@ -463,7 +390,6 @@ export const GradebookWorkspace: React.FC = () => {
                 {visibleStudents.map((student) => (
                   <tr key={student.studentId} className="border-b border-[#19291d]/8 last:border-0 dark:border-white/[.06]">
                   <td className="sticky left-0 z-10 bg-white px-5 py-4 text-sm font-bold dark:bg-[#111b14]">{student.studentName}</td>
-                    <td className="px-3 py-3 align-middle"><div className="flex min-w-[210px] flex-wrap gap-1">{attendanceStatuses.map((status) => { const active = (attendanceMap[student.studentId] || "PRESENT") === status; return <button type="button" key={status} title={attendanceLabel[status]} aria-pressed={active} onClick={() => setAttendanceMap((old) => ({ ...old, [student.studentId]: status }))} className={`rounded-lg px-2.5 py-2 text-xs font-extrabold transition ${active ? attendanceTone[status] : "text-[#75847a] hover:bg-[#edf2ed] dark:text-[#a6b4a9] dark:hover:bg-white/[.06]"}`}>{attendanceShort[status]}</button>; })}</div></td>
                     {columns.map((column) => {
                       const grade = findGrade(student, column);
                       return <td key={column.id} className="px-3 py-3"><button type="button" onClick={() => openEditor(student, column)} className={`inline-flex min-h-11 min-w-12 items-center justify-center rounded-xl px-3 text-sm font-extrabold transition hover:-translate-y-0.5 hover:ring-4 hover:ring-[#00ff88]/15 ${gradeTone(grade?.grade)}`}>{grade?.grade == null ? "—" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</button></td>;
