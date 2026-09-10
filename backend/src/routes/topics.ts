@@ -889,6 +889,15 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
     } else if (task.type === "CONTROL" && task.maxAttempts !== CONTROL_TASK_MAX_ATTEMPTS) {
       task.maxAttempts = CONTROL_TASK_MAX_ATTEMPTS;
     }
+    if (deadline !== undefined) {
+      const normalizedDeadline = deadline === null ? null : new Date(deadline);
+      if (normalizedDeadline && isNaN(normalizedDeadline.getTime())) {
+        return res.status(400).json({
+          message: "INVALID_DEADLINE"
+        });
+      }
+      task.deadline = normalizedDeadline;
+    }
     await taskRepo().save(task);
     res.json({
       task

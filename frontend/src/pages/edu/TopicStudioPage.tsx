@@ -77,6 +77,16 @@ const preview = () => import.meta.env.DEV && new URLSearchParams(window.location
 const root = "min-h-[100dvh] bg-[#f3f5f0] px-4 py-6 text-[#101812] dark:bg-[#08100b] dark:text-[#ecf5ee] sm:px-6 lg:px-10 lg:py-10";
 const defaultControlFormula = "0.35 * test + 0.65 * avg(practice)";
 const defaultAssignmentDeadline = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+const toDateTimeLocalValue = (value?: string | null) => {
+  const date = new Date(value || defaultAssignmentDeadline());
+  if (Number.isNaN(date.getTime())) return "";
+  const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return offsetDate.toISOString().slice(0, 16);
+};
+const fromDateTimeLocalValue = (value: string) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
 
 const demo: Topic = {
   id: 31,
@@ -146,6 +156,8 @@ export const TopicStudioPage: React.FC = () => {
   const [importPoints, setImportPoints] = React.useState("1");
   const [importIsHidden, setImportIsHidden] = React.useState(false);
   const [importInputKey, setImportInputKey] = React.useState(0);
+  const [deadlineDrafts, setDeadlineDrafts] = React.useState<Record<number, string>>({});
+  const [assignmentBusyId, setAssignmentBusyId] = React.useState<number | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [aiBusy, setAiBusy] = React.useState<"condition" | "template" | "theory" | null>(null);
   const [taskForm, setTaskForm] = React.useState({
@@ -532,16 +544,70 @@ export const TopicStudioPage: React.FC = () => {
   };
 
   const toggleTask = async (task: TopicTask) => {
+    setError(null);
+    setAssignmentBusyId(task.id);
     try {
       if (preview()) {
-        setTopic((old) => old ? { ...old, tasks: (old.tasks || []).map((item) => item.id === task.id ? { ...item, isAssigned: !item.isAssigned } : item) } : old);
+        if (task.isAssigned) {
+          setTopic((old) => old ? { ...old, tasks: (old.tasks || []).map((item) => item.id === task.id ? { ...item, isAssigned: false, deadline: null } : item) } : old);
+        } else {
+          const deadline = fromDateTimeLocalValue(deadlineDrafts[task.id] ?? toDateTimeLocalValue(task.deadline));
+          if (!deadline || new Date(deadline).getTime() <= Date.now()) {
+            setError("Оберіть майбутній дедлайн доступу до задачі.");
+            return;
+          }
+          setTopic((old) => old ? { ...old, tasks: (old.tasks || []).map((item) => item.id === task.id ? { ...item, isAssigned: true, deadline } : item) } : old);
+        }
       } else {
         if (task.isAssigned) await unassignTask(task.id);
-        else await api.post(`/topics/${id}/tasks/${task.id}/assign`, { deadline: defaultAssignmentDeadline() });
+        else {
+          const deadline = fromDateTimeLocalValue(deadlineDrafts[task.id] ?? toDateTimeLocalValue(task.deadline));
+          if (!deadline || new Date(deadline).getTime() <= Date.now()) {
+            setError("Оберіть майбутній дедлайн доступу до задачі.");
+            return;
+          }
+          await api.post(`/topics/${id}/tasks/${task.id}/assign`, { deadline });
+        }
         await load();
       }
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, "Не вдалося змінити доступність практики."));
+    } finally {
+      setAssignmentBusyId(null);
+    }
+  };
+
+  const saveTaskDeadline = async (task: TopicTask) => {
+    if (!task.isAssigned) return;
+    const deadline = fromDateTimeLocalValue(deadlineDrafts[task.id] ?? toDateTimeLocalValue(task.deadline));
+    if (!deadline || new Date(deadline).getTime() <= Date.now()) {
+      setError("Оберіть майбутній дедлайн доступу до задачі.");
+      return;
+    }
+    setError(null);
+    setAssignmentBusyId(task.id);
+    try {
+      if (preview()) {
+        setTopic((old) => old ? { ...old, tasks: (old.tasks || []).map((item) => item.id === task.id ? { ...item, deadline } : item) } : old);
+      } else {
+        await api.put(`/topics/${id}/tasks/${task.id}`, {
+          title: task.title,
+          description: task.description || "Опис задачі",
+          template: task.template || "",
+          taskMode: task.taskMode || "CODE",
+          webTemplateFiles: task.webTemplateFiles,
+          webValidationRules: task.webValidationRules,
+          webValidationProfile: task.webValidationProfile,
+          projectSpec: task.projectSpec ?? null,
+          maxAttempts: task.maxAttempts,
+          deadline,
+        });
+        await load();
+      }
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, "Не вдалося зберегти дедлайн."));
+    } finally {
+      setAssignmentBusyId(null);
     }
   };
 
@@ -689,17 +755,26 @@ export const TopicStudioPage: React.FC = () => {
                           </div>
                         </div>
                         <span className={`rounded-full px-3 py-1.5 text-xs font-black ${task.isAssigned ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-[#edf2ed] text-[#718075] dark:bg-white/[.06] dark:text-[#a6b4a9]"}`}>
-                          {task.isAssigned ? "відкрито" : "чернетка"}
+                          {task.isAssigned ? "доступ відкритий" : "чернетка · доступ закритий"}
                         </span>
                       </div>
-                      <div className="mt-5 flex flex-wrap gap-2">
-                        <button type="button" onClick={() => openTaskEditor(task)} aria-label={`Редагувати задачу ${task.title}`} className="inline-flex items-center gap-1.5 rounded-xl border border-[#142018]/12 bg-white px-3 py-2 text-xs font-black text-[#32443a] shadow-sm transition hover:border-[#00d978]/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0b130e] dark:text-[#d8e3db]">
+                      <div className="mt-5 flex flex-wrap items-end gap-2">
+                        <label htmlFor={`topic-task-deadline-${task.id}`} className="block min-w-[220px] flex-1">
+                          <span className="mb-1 block text-[11px] font-black uppercase tracking-[.1em] text-[#718075] dark:text-[#a6b4a9]">Дедлайн доступу</span>
+                          <input id={`topic-task-deadline-${task.id}`} name={`taskDeadline-${task.id}`} type="datetime-local" value={deadlineDrafts[task.id] ?? toDateTimeLocalValue(task.deadline)} onChange={(event) => setDeadlineDrafts((old) => ({ ...old, [task.id]: event.target.value }))} disabled={assignmentBusyId === task.id} className="w-full rounded-xl border border-[#142018]/10 bg-white px-3 py-2 text-xs font-bold text-[#32443a] outline-none transition focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0b130e] dark:text-[#d8e3db]" />
+                        </label>
+                        <button type="button" disabled={assignmentBusyId === task.id} onClick={() => openTaskEditor(task)} aria-label={`Редагувати задачу ${task.title}`} className="inline-flex items-center gap-1.5 rounded-xl border border-[#142018]/12 bg-white px-3 py-2 text-xs font-black text-[#32443a] shadow-sm transition hover:border-[#00d978]/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 disabled:opacity-45 dark:border-white/10 dark:bg-[#0b130e] dark:text-[#d8e3db]">
                           <Pencil className="size-3.5" aria-hidden="true" />
                           Редагувати
                         </button>
-                        <button type="button" onClick={() => void toggleTask(task)} aria-pressed={!!task.isAssigned} className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black shadow-sm transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 ${task.isAssigned ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-white text-[#32443a] dark:bg-[#0b130e] dark:text-[#d8e3db]"}`}>
-                          {task.isAssigned ? "Закрити доступ" : "Відкрити учням"}
+                        <button type="button" disabled={assignmentBusyId === task.id} onClick={() => void toggleTask(task)} aria-pressed={!!task.isAssigned} className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black shadow-sm transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 disabled:opacity-45 ${task.isAssigned ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-white text-[#32443a] dark:bg-[#0b130e] dark:text-[#d8e3db]"}`}>
+                           {task.isAssigned ? "Закрити доступ" : "Відкрити учням"}
                         </button>
+                        {task.isAssigned && <button type="button" disabled={assignmentBusyId === task.id} onClick={() => void saveTaskDeadline(task)} className="rounded-xl border border-[#16834d]/25 bg-white px-3 py-2 text-xs font-black text-[#16834d] transition hover:border-[#00d978]/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 disabled:opacity-45 dark:bg-[#0b130e] dark:text-[#72edb0]">
+                          Зберегти дедлайн
+                        </button>}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-2">
                         <button type="button" onClick={() => void openTests(task)} className="inline-flex items-center gap-1 rounded-xl bg-[#fff1dc] px-3 py-2 text-xs font-black text-[#a55e00] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#ffb454]/25 dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]">
                           <FlaskConical className="size-3.5" />
                           Тести
