@@ -108,10 +108,14 @@ function findGrade(student: GradebookStudent, column: Column) {
 
 function missingThematicTopics(data: GradebookResponse | null, topics: Topic[]) {
   if (!data) return [];
-  const topicLessons = data.lessons.filter((lesson) => lesson.type === "TOPIC");
-  const sourceTopics = topicLessons.length
-    ? topicLessons.map((lesson) => ({ id: lesson.id, title: lesson.title }))
-    : topics.map((topic) => ({ id: topic.id, title: topic.title }));
+  // The topics endpoint is authoritative. The gradebook omits topics that do
+  // not yet have an assigned practice task, so deriving this list from its
+  // visible columns misses topics that still need a thematic column.
+  const sourceTopics = topics.length
+    ? topics.map((topic) => ({ id: topic.id, title: topic.title }))
+    : data.lessons
+      .filter((lesson) => lesson.type === "TOPIC")
+      .map((lesson) => ({ id: lesson.id, title: lesson.title }));
   const summaries = data.lessons.filter((lesson) => lesson.type === "SUMMARY");
   return sourceTopics.filter((topic) => !summaries.some((summary) => {
     if (summary.parentId === topic.id) return true;
@@ -161,7 +165,6 @@ export const GradebookWorkspace: React.FC = () => {
   const [thematicTopicId, setThematicTopicId] = React.useState("");
   const [busyAction, setBusyAction] = React.useState(false);
   const [studentFilter, setStudentFilter] = React.useState<"all" | "missing" | "low">("all");
-  const autoThematicGuardRef = React.useRef(false);
 
   const gradingSystem = normalizeGradingSystem(data?.gradingSystem || DEFAULT_GRADING_SYSTEM);
   const scaleMode = normalizeScaleMode(data?.gradeScaleMode);
@@ -188,22 +191,7 @@ export const GradebookWorkspace: React.FC = () => {
         getTopics(Number(classId)),
       ]);
       setTopics(topicList);
-      let nextBook = book;
-      const missing = missingThematicTopics(book, topicList);
-      if (missing.length && !autoThematicGuardRef.current) {
-        autoThematicGuardRef.current = true;
-        try {
-          for (const topic of missing) await createSummaryGrade(Number(classId), { name: "THEMATIC", topicId: topic.id });
-          nextBook = await getClassGradebook(Number(classId));
-          showToast({ type: "success", message: `Тематичні колонки синхронізовано: ${missing.length}.` });
-        } catch (syncError) {
-          console.warn("[GradebookWorkspace] thematic auto-sync failed:", syncError);
-          showToast({ type: "error", message: "Не вдалося автоматично створити всі тематичні колонки." });
-        } finally {
-          autoThematicGuardRef.current = false;
-        }
-      }
-      setData(nextBook);
+      setData(book);
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, "Не вдалося завантажити журнал."));
     }
@@ -293,7 +281,7 @@ export const GradebookWorkspace: React.FC = () => {
 
   const addThematic = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!thematicTopicId) return;
+    if (!thematicTopicId || !missingThematics.some((topic) => topic.id === Number(thematicTopicId))) return;
     setBusyAction(true);
     try {
       if (preview()) {
@@ -341,7 +329,7 @@ export const GradebookWorkspace: React.FC = () => {
         actions={
           <>
             <button type="button" onClick={() => navigate(`/edu/classes/${classId}`)} className="inline-flex items-center gap-2 rounded-xl border border-[#19291d]/12 px-4 py-3 text-sm font-bold dark:border-white/10"><Settings2 className="size-4" />Налаштування класу</button>
-            <button type="button" onClick={() => setThematicOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]"><Plus className="size-4" />Тематична</button>
+            <button type="button" disabled={!missingThematics.length} onClick={() => setThematicOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-45 dark:bg-[#00d978] dark:text-[#062211]"><Plus className="size-4" />{missingThematics.length ? "Тематична" : "Усі тематичні створено"}</button>
             <button type="button" disabled={busyAction || !canUseSemesterGrades} onClick={() => void recomputeSemester()} className="inline-flex items-center gap-2 rounded-xl border border-[#19291d]/12 px-4 py-3 text-sm font-bold text-[#304138] disabled:opacity-55 dark:border-white/10 dark:text-[#dce7df]"><Calculator className="size-4" />Семестрові</button>
           </>
         }
@@ -422,7 +410,7 @@ export const GradebookWorkspace: React.FC = () => {
           <form role="dialog" aria-modal="true" aria-label="Додати тематичну оцінку" tabIndex={-1} onSubmit={addThematic} className="w-full max-w-md rounded-[26px] bg-white p-6 shadow-2xl dark:bg-[#142018]">
             <h2 className="text-2xl font-bold tracking-[-.04em]">Додати тематичну в журнал</h2>
             <p className="mt-2 text-sm leading-6 text-[#6d7c71] dark:text-[#a2b1a6]">Оберіть тему, і колонка зʼявиться в цьому журналі поруч з іншими оцінками.</p>
-            <select required value={thematicTopicId} onChange={(event) => setThematicTopicId(event.target.value)} className="mt-5 w-full rounded-xl border border-[#19291d]/12 px-4 py-3 dark:border-white/10 dark:bg-[#0d1510]"><option value="">Оберіть тему</option>{topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select>
+            <select required value={thematicTopicId} onChange={(event) => setThematicTopicId(event.target.value)} className="mt-5 w-full rounded-xl border border-[#19291d]/12 px-4 py-3 dark:border-white/10 dark:bg-[#0d1510]"><option value="">Оберіть тему</option>{missingThematics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select>
             <div className="mt-5 flex gap-2"><button type="button" onClick={() => setThematicOpen(false)} className="flex-1 rounded-xl px-4 py-3 font-bold">Скасувати</button><button type="submit" disabled={busyAction || !thematicTopicId} className="flex-1 rounded-xl bg-[#00d978] px-4 py-3 font-bold text-[#062211] disabled:opacity-55">Додати</button></div>
           </form>
         </div>

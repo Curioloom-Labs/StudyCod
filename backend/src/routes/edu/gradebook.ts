@@ -126,6 +126,24 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
       }>;
     }> = [];
 
+    // A thematic column is a real gradebook artifact, not an implicit column
+    // for every topic. It exists only after the teacher creates at least one
+    // thematic summary row for that topic.
+    const thematicTopicRows = await summaryGradeRepo()
+      .createQueryBuilder("sg")
+      .select("DISTINCT sg.topic_id", "topicId")
+      .where("sg.class_id = :classId", { classId })
+      .andWhere("sg.assessment_type = :type", { type: AssessmentType.INTERMEDIATE })
+      .andWhere("sg.control_work_id IS NULL")
+      .andWhere("sg.topic_id IS NOT NULL")
+      .andWhere("LOWER(TRIM(sg.name)) IN (:...names)", { names: ["thematic", "тематична"] })
+      .getRawMany();
+    const thematicTopicIds = new Set(
+      thematicTopicRows
+        .map(row => Number(row.topicId))
+        .filter(topicId => Number.isFinite(topicId))
+    );
+
     for (const topic of topics) {
       const practiceTasks = (topic.tasks || []).filter(t => t.type === "PRACTICE" && t.isAssigned);
       if (practiceTasks.length > 0) {
@@ -141,18 +159,20 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
         });
       }
 
-      lessons.push({
-        id: topic.id,
-        title: thematicLabel,
-        type: "SUMMARY",
-        parentId: topic.id,
-        parentTitle: topic.title,
-        tasks: [{
+      if (thematicTopicIds.has(topic.id)) {
+        lessons.push({
           id: topic.id,
           title: thematicLabel,
-          type: "SUMMARY"
-        }]
-      });
+          type: "SUMMARY",
+          parentId: topic.id,
+          parentTitle: topic.title,
+          tasks: [{
+            id: topic.id,
+            title: thematicLabel,
+            type: "SUMMARY"
+          }]
+        });
+      }
 
       for (const controlWork of topic.controlWorks || []) {
         if (controlWork.isAssigned) {
@@ -537,22 +557,18 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
           })
           .getMany();
 
-        const practiceGrades = classGrades.filter(g => !(g.topicTask && g.topicTask.type === "CONTROL"));
-        const practiceBestGrades: Record<string, number> = {};
-        practiceGrades.forEach(g => {
-          // Namespaced string keys so task and topicTask ids can never collide
-          // (the previous "+1000000" offset breaks once a task id reaches 1e6).
-          let taskKey: string | null = null;
-          if (g.task) {
-            taskKey = `task:${g.task.id}`;
-          } else if (g.topicTask) {
-            taskKey = `topicTask:${g.topicTask.id}`;
-          }
-          if (taskKey !== null && (!practiceBestGrades[taskKey] || (g.total || 0) > practiceBestGrades[taskKey])) {
-            practiceBestGrades[taskKey] = g.total || 0;
-          }
-        });
-        const practiceScores = Object.values(practiceBestGrades);
+        // Use the latest attempt per practice task, exactly like the visible
+        // gradebook and student views. A newer unfinished attempt must not
+        // resurrect an older score, so only its latest row can contribute.
+        const latestPracticeGrades = new Map<string, EduGrade>();
+        for (const gradeRow of [...classGrades].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())) {
+          if (!gradeRow.topicTask || gradeRow.topicTask.type !== "PRACTICE") continue;
+          const taskKey = `topicTask:${gradeRow.topicTask.id}`;
+          if (!latestPracticeGrades.has(taskKey)) latestPracticeGrades.set(taskKey, gradeRow);
+        }
+        const practiceScores = Array.from(latestPracticeGrades.values())
+          .map(gradeRow => gradeRow.total === null ? null : Number(gradeRow.total))
+          .filter((value): value is number => value !== null && Number.isFinite(value));
 
         // Control-work grades live in SummaryGrade, independent of practice
         // grades — gather them unconditionally so a topic with only a control
@@ -570,9 +586,17 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
             topicId: topic.id
           })
           .getMany();
-        const controlScores = controlSummaryGrades
-          .map(sg => Number(sg.grade))
-          .filter(v => Number.isFinite(v));
+        // There should be one control summary per student/work. Deduplicate
+        // defensively so legacy duplicate rows cannot distort the average.
+        const latestControlGrades = new Map<number, SummaryGrade>();
+        for (const summaryGrade of [...controlSummaryGrades].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())) {
+          const controlWorkId = summaryGrade.controlWork?.id;
+          if (controlWorkId == null || latestControlGrades.has(controlWorkId)) continue;
+          latestControlGrades.set(controlWorkId, summaryGrade);
+        }
+        const controlScores = Array.from(latestControlGrades.values())
+          .map(summaryGrade => Number(summaryGrade.grade))
+          .filter(value => Number.isFinite(value));
 
         const hasPractice = practiceScores.length > 0;
         const hasControl = controlScores.length > 0;
