@@ -58,7 +58,7 @@ function isCachedValue(value: unknown): value is Omit<AICodeDetectionResult, "ca
 
 export async function detectAICode(params: {
   gradeId: number;
-  language: "JAVA" | "PYTHON" | "CPP";
+  language: string;
   taskTitle: string;
   taskDescription: string;
   template: string;

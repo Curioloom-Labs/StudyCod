@@ -673,7 +673,7 @@ router.get("/topic-tasks/:taskId/students/:studentId/ai-detect", authRequired, a
 
     const detection = await detectAICode({
       gradeId: latest.id,
-      language: topicTask.topic.class.language,
+      language: topicTask.topic.language,
       taskTitle: topicTask.title,
       taskDescription: topicTask.description,
       template: topicTask.template,
@@ -1082,7 +1082,7 @@ router.post("/grades/:gradeId/ai-review", authRequired, aiDetectLimiter, async (
     try {
       const review = await reviewCode({
         code,
-        language: (grade.student.class.language as string) || "JAVA",
+        language: grade.topicTask?.topic?.language || "PYTHON",
         taskDescription: grade.task?.description || undefined
       });
       return res.json({ review });

@@ -29,7 +29,6 @@ type Overview = {
   classes: Array<{
     id: number;
     name: string;
-    language: string;
     studentsCount: number;
     teacherName?: string | null;
     teacherNames?: string[];
@@ -89,11 +88,9 @@ export const OrgWorkspacePage: React.FC = () => {
   });
   const [classDraft, setClassDraft] = React.useState<{
     name: string;
-    language: "PYTHON" | "JAVA" | "CPP";
     gradingSystem: ClassGradingSystem;
   }>({
     name: "",
-    language: "PYTHON",
     gradingSystem: "POINTS_12",
   });
   const [nameDraft, setNameDraft] = React.useState("");
@@ -218,12 +215,10 @@ export const OrgWorkspacePage: React.FC = () => {
     try {
       await createClass(
         classDraft.name.trim(),
-        classDraft.language,
         classDraft.gradingSystem,
       );
       setClassDraft({
         name: "",
-        language: "PYTHON",
         gradingSystem: "POINTS_12",
       });
       setShowCreateClass(false);
@@ -547,7 +542,7 @@ export const OrgWorkspacePage: React.FC = () => {
                         className="flex w-full items-center gap-3 rounded-xl bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 dark:bg-white/[.05] dark:shadow-none"
                       >
                         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#edf4ee] text-[10px] font-extrabold text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
-                          {group.language}
+                          К
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-bold">
@@ -734,24 +729,7 @@ export const OrgWorkspacePage: React.FC = () => {
                 placeholder="11-А"
               />
             </label>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="text-sm font-bold">
-                Мова
-                <select
-                  value={classDraft.language}
-                  onChange={(event) =>
-                    setClassDraft((old) => ({
-                      ...old,
-                      language: event.target.value as typeof old.language,
-                    }))
-                  }
-                  className={fieldClass}
-                >
-                  <option value="PYTHON">Python</option>
-                  <option value="JAVA">Java</option>
-                  <option value="CPP">C++</option>
-                </select>
-              </label>
+            <div className="mt-4">
               <label className="text-sm font-bold">
                 Система оцінювання
                 <select
@@ -823,24 +801,7 @@ export const OrgWorkspacePage: React.FC = () => {
                 placeholder="11-А"
               />
             </label>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="text-sm font-bold">
-                Мова
-                <select
-                  value={classDraft.language}
-                  onChange={(event) =>
-                    setClassDraft((old) => ({
-                      ...old,
-                      language: event.target.value as typeof old.language,
-                    }))
-                  }
-                  className={fieldClass}
-                >
-                  <option value="PYTHON">Python</option>
-                  <option value="JAVA">Java</option>
-                  <option value="CPP">C++</option>
-                </select>
-              </label>
+            <div className="mt-4">
               <label className="text-sm font-bold">
                 Система оцінювання
                 <select

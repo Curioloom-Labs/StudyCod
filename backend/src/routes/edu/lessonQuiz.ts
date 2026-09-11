@@ -73,7 +73,9 @@ router.post("/lessons/:lessonId/generate-quiz", authRequired, async (req: AuthRe
     if (!lesson) return res.status(403).json({ message: "ONLY_LESSON_TEACHER" });
     const count = Math.min(30, Math.max(1, Math.floor(Number(req.body?.count) || 8)));
     const result = await safeAICall("generateQuiz", {
-      lang: lesson.class.language,
+      // Legacy lesson quizzes do not belong to a TopicNew yet. Do not infer
+      // their language from the class; retain the historical fallback.
+      lang: "PYTHON",
       prevTopics: String(req.body?.topicTitle || lesson.title).trim(),
       count,
       userId: req.userId

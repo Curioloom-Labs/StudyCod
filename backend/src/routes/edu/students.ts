@@ -103,7 +103,6 @@ router.get("/students/me", authRequired, async (req: AuthRequest, res: Response)
         class: {
           id: student.class.id,
           name: student.class.name,
-          language: student.class.language,
           gradingSystem: student.class.gradingSystem || DEFAULT_GRADING_SYSTEM
         }
       }
@@ -239,7 +238,10 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       title: lesson.title,
       description: lesson.theory || null,
       order: lessonIndex,
-      language: student.class!.language,
+      // Legacy course lessons predate topic-level languages. Keep their
+      // response shape/execution compatible without deriving a language from
+      // the class, which is intentionally language-agnostic now.
+      language: "PYTHON",
       // StudentPathPages groups regular course lessons with topics; preserve
       // CONTROL for assessments while exposing LESSON as a normal topic card.
       type: lesson.type === "CONTROL" ? "CONTROL" : "TOPIC",

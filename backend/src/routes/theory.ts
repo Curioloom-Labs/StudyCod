@@ -8,6 +8,7 @@ import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, transla
 import { TheoryBlock } from "../entities/TheoryBlock";
 import { hasTheoryBlockEnTranslationColumns } from "../services/translation/translationSchema";
 import { buildLocalizedTopicTitleEnById } from "../services/translation/topicTitleTranslator";
+import { normalizeTopicLanguage } from "../utils/topicLanguage";
 
 export const theoryRouter = Router();
 
@@ -19,7 +20,8 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
     const language = String(req.query.language || "").toUpperCase().trim();
     const uiLang = String(req.query.uiLang ?? "").toLowerCase().trim();
     const wantsEn = uiLang.startsWith("en");
-    if (language !== "JAVA" && language !== "PYTHON" && language !== "CPP") {
+    const normalizedLanguage = normalizeTopicLanguage(language);
+    if (!normalizedLanguage) {
       return res.status(400).json({ message: "INVALID_LANGUAGE" });
     }
 
@@ -42,13 +44,13 @@ theoryRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
           "theoryBlock.version",
           "theoryBlock.updatedAt"
         ])
-        .where("topic.language = :language", { language })
+        .where("topic.language = :language", { language: normalizedLanguage })
         .andWhere("topic.class_id IS NULL")
         .orderBy("topic.order", "ASC")
         .getMany()
       : await topicRepo().find({
         where: {
-          language: language as TopicLanguage,
+          language: normalizedLanguage,
           class: IsNull(),
           ...(topicId ? { id: topicId } : {})
         },

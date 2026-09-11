@@ -2,7 +2,8 @@ import { getLLMProvider } from "../llm/provider";
 import { logger } from "../../utils/logger";
 import { neutralizePromptInjection } from "./safeAICall";
 import { env } from "../../env";
-export type HintLanguage = "JAVA" | "PYTHON" | "CPP";
+import type { TopicLanguage } from "../../utils/topicLanguage";
+export type HintLanguage = TopicLanguage;
 export type HintGenerationStatus = "AI" | "FALLBACK" | "UNAVAILABLE";
 export interface FailureCase {
   testId?: number | string;

@@ -50,7 +50,10 @@ router.get("/classes/:classId/similarity", authRequired, async (req: AuthRequest
       .addSelect("s.lastName", "lastName")
       .getRawMany();
 
-    const lang = (cls.language as string) || "JAVA";
+    // Legacy course tasks have no topic relation. Similarity remains
+    // available for them with the historical fallback, never a class-level
+    // language setting.
+    const lang = "PYTHON";
     // Dedupe to the latest submission per (task, student); collect names.
     const byTask = new Map<number, { title: string; subs: Map<number, string> }>();
     const nameById = new Map<number, string>();

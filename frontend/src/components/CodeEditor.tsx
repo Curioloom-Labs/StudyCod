@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import type * as Monaco from "monaco-editor";
 import { getCurrentTheme, type AppTheme } from "../theme";
 import { connectStudyCodLsp } from "../lib/lspClient";
+import type { JudgeLanguage } from "../lib/judgeLanguages";
 
 let javaStdlibCompletionRegistered = false;
 let studycodMonacoThemesRegistered = false;
@@ -862,7 +863,7 @@ const Editor = React.lazy(async () => {
   return { default: mod.default };
 });
 interface Props {
-  language: "JAVA" | "PYTHON" | "CPP" | "java" | "python" | "cpp" | "c" | "csharp" | "kotlin" | "js" | "go" | "rust" | "pascal" | "d" | "dart" | "haskell" | "lisp" | "lua" | "perl" | "php" | "ruby" | "swift" | "html" | "css" | "javascript";
+  language: JudgeLanguage | Uppercase<JudgeLanguage> | "html" | "css" | "javascript";
   value: string;
   onChange?: (code: string) => void;
   readOnly?: boolean;
@@ -886,7 +887,7 @@ interface Props {
 }
 
 const toMonacoLanguage = (language: Props["language"]) => {
-  switch (language) {
+  switch (String(language).toLowerCase()) {
     case "JAVA":
     case "java":
       return "java";

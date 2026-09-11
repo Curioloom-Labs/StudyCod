@@ -261,7 +261,7 @@ export default {
   basic: 'Базовий',
   taskHistorySaved: 'Історія завдань та оцінок зберігається окремо для кожної мови.',
   studentInfo: 'Інформація про учня',
-  languageDeterminedByTeacher: 'Мову програмування та клас визначає вчитель.',
+  languageDeterminedByTeacher: 'Мову програмування вчитель визначає окремо для кожної теми.',
   profileAvatar: 'Аватар профілю',
   dragOrChooseFile: 'Перетягни PNG/JPG або обери файл',
   chooseFile: 'Вибір файлу',

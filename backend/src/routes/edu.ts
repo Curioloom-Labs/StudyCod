@@ -8,7 +8,6 @@ import { z } from "zod";
 import { UPLOADS_ROOT } from "../config/storagePaths";
 import { AppDataSource } from "../data-source";
 import { User } from "../entities/User";
-import type { CourseRuntime } from "../entities/CourseVariant";
 import { Class } from "../entities/Class";
 import { Student } from "../entities/Student";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
@@ -20,6 +19,7 @@ import { EduGrade } from "../entities/EduGrade";
 import { SummaryGrade } from "../entities/SummaryGrade";
 import { ControlWork } from "../entities/ControlWork";
 import { TopicNew } from "../entities/TopicNew";
+import { TOPIC_LANGUAGES } from "../utils/topicLanguage";
 import { validateFormula } from "../utils/safeFormulaEvaluator";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, GradingSystem } from "../types/GradingSystem";
 import { saveControlSummaryGradeForNewSystemWithManager } from "../services/edu/controlWorkGrading";
@@ -124,12 +124,6 @@ function errorMessage(error: unknown): string {
 function errorCode(error: unknown): string {
   return typeof error === "object" && error !== null && "code" in error ? String(error.code ?? "") : "";
 }
-function normalizeLang(input?: string | null): CourseRuntime {
-  const raw = (input || "").toUpperCase().replace(/\s+/g, "").trim();
-  if (raw === "CPP" || raw === "C++" || raw.startsWith("C++")) return "CPP";
-  if (raw.startsWith("PY")) return "PYTHON";
-  return "JAVA";
-}
 // Split-out auth endpoints.
 eduRouter.use(studentAuthRouter);
 eduRouter.use(announcementsRouter);
@@ -164,7 +158,7 @@ eduRouter.post("/generate-interactive-lesson", authRequired, async (req: AuthReq
   try {
     const parsed = z.object({
       topicTitle: z.string().min(1).max(300),
-      language: z.enum(["JAVA", "PYTHON", "CPP"])
+      language: z.enum(TOPIC_LANGUAGES)
     }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
     const result = await generateInteractiveLessonWithAI({
@@ -409,7 +403,6 @@ eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response)
     }
     const schema = z.object({
       name: z.string().min(1).max(100),
-      language: z.string().optional(),
       gradingSystem: z.enum(GRADING_SYSTEMS).optional(),
       gradeScaleMode: z.enum(GRADE_SCALE_MODES).optional()
     });
@@ -419,7 +412,6 @@ eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response)
     });
     const {
       name,
-      language,
       gradingSystem,
       gradeScaleMode
     } = validated.data;
@@ -432,7 +424,6 @@ eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response)
       teacher: user,
       organization: { id: teachingMembership.organizationId } as Organization,
       name,
-      language: normalizeLang(language || "PYTHON"),
       gradingSystem: gradingSystem || DEFAULT_GRADING_SYSTEM,
       gradeScaleMode: gradeScaleMode || DEFAULT_GRADE_SCALE_MODE
     });
@@ -482,7 +473,6 @@ eduRouter.get("/classes", authRequired, async (req: AuthRequest, res: Response) 
       classes: classes.map(c => ({
         id: c.id,
         name: c.name,
-        language: c.language,
         gradingSystem: c.gradingSystem || DEFAULT_GRADING_SYSTEM,
         gradeScaleMode: normalizeScaleMode(c.gradeScaleMode),
         studentsCount: (c as unknown as { studentsCount?: number }).studentsCount ?? 0,
@@ -504,7 +494,6 @@ eduRouter.get("/classes/:classId", authRequired, requireClassCapability("CLASS_V
       class: {
         id: cls.id,
         name: cls.name,
-        language: cls.language,
         organizationId: cls.organizationId ?? null,
         teacherId: cls.teacher?.id ?? null,
         teacherName: cls.teacher ? `${cls.teacher.firstName ?? ""} ${cls.teacher.lastName ?? ""}`.trim() || cls.teacher.username : null,
@@ -656,7 +645,6 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, requireClassCapa
       class: {
         id: updatedClass.id,
         name: updatedClass.name,
-        language: updatedClass.language,
         gradingSystem: updatedClass.gradingSystem,
         gradeScaleMode: normalizeScaleMode(updatedClass.gradeScaleMode),
         createdAt: updatedClass.createdAt,

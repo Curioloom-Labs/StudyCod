@@ -4,6 +4,7 @@ import { Button } from "../ui/Button";
 import { tr } from "../../i18n";
 import { LessonBlocksView } from "./LessonBlocksView";
 import type { InteractiveLesson, LessonBlock, LessonSection, RunnableLanguage } from "../../lib/lessonBlocks";
+import { enabledJudgeLanguages, JUDGE_LANGUAGE_LABELS } from "../../lib/judgeLanguages";
 
 const ctrl =
   "w-full bg-bg-code border border-border text-text-primary rounded-[var(--ui-control-radius)] px-3 py-2 text-sm outline-none focus-visible:border-primary placeholder:text-text-muted";
@@ -75,9 +76,9 @@ const BlockEditor: React.FC<{ block: LessonBlock; onChange: (b: LessonBlock) => 
       return (
         <div className="space-y-2">
           <select value={block.language} onChange={(e) => onChange({ ...block, language: e.target.value as RunnableLanguage })} className={ctrl}>
-            <option value="PYTHON">PYTHON</option>
-            <option value="JAVA">JAVA</option>
-            <option value="CPP">CPP</option>
+            {enabledJudgeLanguages().map(language => (
+              <option key={language} value={language.toUpperCase()}>{JUDGE_LANGUAGE_LABELS[language]}</option>
+            ))}
           </select>
           <input value={block.prompt ?? ""} onChange={(e) => onChange({ ...block, prompt: e.target.value })} placeholder={tr("Завдання для пісочниці (необов.)", "Sandbox prompt (optional)")} className={ctrl} />
           <textarea value={block.code} onChange={(e) => onChange({ ...block, code: e.target.value })} rows={5} placeholder={tr("Стартовий код…", "Starter code…")} className={ctrl + " font-mono"} />

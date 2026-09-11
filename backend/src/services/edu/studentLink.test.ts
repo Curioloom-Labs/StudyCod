@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { applyStudentViewToUserDto, validateClaimInput } from "./studentLink";
 
-const student = { id: 42, class: { id: 7, name: "10-A", language: "JAVA" } };
+const student = { id: 42, class: { id: 7, name: "10-A" } };
 
 test("applyStudentViewToUserDto overlays the student-in-class view", () => {
   const dto = applyStudentViewToUserDto({ id: 1, username: "ann", email: "a@e.com", userMode: "PERSONAL", role: null }, student);
@@ -10,8 +10,8 @@ test("applyStudentViewToUserDto overlays the student-in-class view", () => {
   assert.equal(dto.studentId, 42);
   assert.equal(dto.classId, 7);
   assert.equal(dto.className, "10-A");
-  assert.equal(dto.course, "JAVA");
-  assert.equal(dto.lang, "JAVA");
+  assert.equal("course" in dto, false);
+  assert.equal("lang" in dto, false);
 });
 
 test("applyStudentViewToUserDto keeps base identity fields", () => {

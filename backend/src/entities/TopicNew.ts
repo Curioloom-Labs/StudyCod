@@ -4,7 +4,9 @@ import { ControlWork } from "./ControlWork";
 import { TopicProgress } from "./TopicProgress";
 import { Class } from "./Class";
 import { TheoryBlock } from "./TheoryBlock";
-export type TopicLanguage = "JAVA" | "PYTHON" | "CPP";
+import { TOPIC_LANGUAGES, type TopicLanguage } from "../utils/topicLanguage";
+export { TOPIC_LANGUAGES } from "../utils/topicLanguage";
+export type { TopicLanguage } from "../utils/topicLanguage";
 @Entity("topics_new")
 export class TopicNew {
   @PrimaryGeneratedColumn()
@@ -33,7 +35,7 @@ export class TopicNew {
   order!: number;
   @Column({
     type: "enum",
-    enum: ["JAVA", "PYTHON", "CPP"]
+    enum: TOPIC_LANGUAGES
   })
   language!: TopicLanguage;
   // Per-topic thematic-grade formula override (vars: practice, control).

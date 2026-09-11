@@ -8,8 +8,9 @@ import { logger } from '../../utils/logger';
 import { redisKey, runWithRedis } from '../redis/sharedRedis';
 import { BoundedCache } from '../../utils/boundedCache';
 import { env } from '../../env';
+import { topicLanguageLabel, type TopicLanguage } from '../../utils/topicLanguage';
 
-export type LLMTaskLanguage = "JAVA" | "PYTHON" | "CPP";
+export type LLMTaskLanguage = TopicLanguage;
 
 export interface AiTaskGenerationResult {
   title: string;
@@ -416,7 +417,7 @@ export class LLMOrchestrator {
     forbiddenScope: string[];
   }> {
     const provider = providerOverride ?? this.openRouterProvider;
-    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
+    const langName = topicLanguageLabel(params.lang);
     const isEnglish = params.language === "en";
     const anchorSchema = {
       type: "object",
@@ -629,7 +630,7 @@ Return ONLY JSON without explanations.`
     requestId?: string;
   }, providerOverride?: LLMProvider): Promise<AiTaskGenerationResult> {
     const provider = providerOverride ?? this.openRouterProvider;
-    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
+    const langName = topicLanguageLabel(params.lang);
     const isEnglish = params.language === "en";
     const difficultyPrompt = getDifficultyPrompt(params.difus ?? 0, isEnglish);
     const allowedIoTypes = Array.isArray(params.allowedIoTypes) && params.allowedIoTypes.length
@@ -1375,7 +1376,7 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
     signal?: AbortSignal;
   }, providerOverride?: LLMProvider): Promise<AiTheoryResult> {
     const provider = providerOverride ?? this.openRouterProvider;
-    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
+    const langName = topicLanguageLabel(params.lang);
     const isEnglish = params.language === "en";
     const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
     const systemPrompt = isEnglish
@@ -1520,7 +1521,7 @@ REQUIREMENTS (mandatory):
     signal?: AbortSignal;
   }, providerOverride?: LLMProvider): Promise<AiQuizResult> {
     const provider = providerOverride ?? this.openRouterProvider;
-    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
+    const langName = topicLanguageLabel(params.lang);
     const questionCount = params.count || 12;
     const isEnglish = params.language === "en";
     const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
@@ -1757,7 +1758,7 @@ REQUIREMENTS:
     description: string;
   }> {
     const provider = providerOverride ?? this.openRouterProvider;
-    const langName = params.language === "JAVA" ? "Java" : params.language === "PYTHON" ? "Python" : "C++";
+    const langName = topicLanguageLabel(params.language);
     const isEnglish = params.userLanguage === "en";
     const difficulty = params.difficulty ?? 3;
     const difficultyPrompt = getDifficultyPrompt(difficulty / 5, isEnglish);
@@ -1962,7 +1963,7 @@ ${difficultyPrompt}
     template: string;
   }> {
     const provider = providerOverride ?? this.openRouterProvider;
-    const langName = params.language === "JAVA" ? "Java" : params.language === "PYTHON" ? "Python" : "C++";
+    const langName = topicLanguageLabel(params.language);
     const isEnglish = params.userLanguage === 'en';
     const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
     const todoText = isEnglish ? 'implement the solution according to the statement' : 'реалізуйте рішення задачі згідно з умовою';
@@ -2227,7 +2228,7 @@ public class Main {
     signal?: AbortSignal;
   }, providerOverride?: LLMProvider): Promise<TestDataExample[]> {
     const provider = providerOverride ?? this.openRouterProvider;
-    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
+    const langName = topicLanguageLabel(params.lang);
     const taskDesc = params.taskDescription.slice(0, 5000);
     const taskDescLower = taskDesc.toLowerCase();
     const explicitlyNoInput = /вхідн(?:і|их)\s+дан(?:і|их)\s+(?:нема|немає|відсутн)/i.test(taskDesc) || /без\s+вхідн/i.test(taskDesc) || /no\s+input/i.test(taskDesc) || /does\s+not\s+take\s+input/i.test(taskDesc);

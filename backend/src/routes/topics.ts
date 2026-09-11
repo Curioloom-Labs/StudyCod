@@ -27,6 +27,7 @@ import { syncControlWorkAssignmentsWithManager, syncTopicTaskAssignmentsWithMana
 import { authorizeClassForReq } from "../middleware/orgContext";
 import type { LibraryTaskProjectSpec } from "../entities/LibraryTask";
 import { env } from "../env";
+import { normalizeTopicLanguage } from "../utils/topicLanguage";
 import {
   assignmentSchema,
   createControlWorkSchema,
@@ -296,14 +297,15 @@ topicsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
         topics
       });
     }
-    if (!language || (language !== "JAVA" && language !== "PYTHON" && language !== "CPP")) {
+    const normalizedLanguage = normalizeTopicLanguage(language);
+    if (!normalizedLanguage) {
       return res.status(400).json({
         message: "INVALID_LANGUAGE"
       });
     }
     const topics = await topicRepo().find({
       where: {
-        language: language as "JAVA" | "PYTHON" | "CPP",
+        language: normalizedLanguage,
         class: IsNull()
       },
       order: {
@@ -406,12 +408,6 @@ topicsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => 
       const access = await authorizeClassForReq(req, classId, "CONTENT_AUTHOR");
       if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
       if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
-      const cls = access.cls;
-      if (cls.language !== language) {
-        return res.status(400).json({
-          message: "LANGUAGE_MISMATCH"
-        });
-      }
     }
     let topicOrder = order;
     if (topicOrder === undefined || topicOrder === null) {
@@ -1227,12 +1223,7 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
         message: "TOPIC_TITLE_REQUIRED"
       });
     }
-    const language =
-      controlWork.topic.language === "JAVA" ||
-      controlWork.topic.language === "PYTHON" ||
-      controlWork.topic.language === "CPP"
-        ? controlWork.topic.language
-        : "JAVA";
+    const language = controlWork.topic.language;
     const userLanguage: "uk" | "en" = requestedLanguage === "en" || req.headers['accept-language']?.includes('en') ? "en" : "uk";
     const aiStartedAt = Date.now();
     const result = await safeAICall('generateQuiz', {
@@ -1714,10 +1705,7 @@ topicsRouter.post("/:topicId/tasks/:taskId/assign", authRequired, async (req: Au
     } else {
       const cls = await classRepo().findOne({
         where: {
-          teacher: {
-            id: req.userId
-          },
-          language: task.topic.language
+          teacher: { id: req.userId }
         },
         order: {
           createdAt: "DESC"
@@ -1725,7 +1713,7 @@ topicsRouter.post("/:topicId/tasks/:taskId/assign", authRequired, async (req: Au
       });
       if (!cls) {
         return res.status(400).json({
-          message: "NO_CLASS_FOUND_FOR_TOPIC_LANGUAGE"
+          message: "NO_CLASS_FOUND_FOR_TOPIC"
         });
       }
       classId = cls.id;
@@ -1920,8 +1908,7 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
         where: {
           teacher: {
             id: req.userId
-          },
-          language: controlWork.topic.language
+          }
         },
         order: {
           createdAt: "DESC"
@@ -1929,7 +1916,7 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
       });
       if (!cls) {
         return res.status(400).json({
-          message: "NO_CLASS_FOUND_FOR_TOPIC_LANGUAGE"
+          message: "NO_CLASS_FOUND_FOR_TOPIC"
         });
       }
       classId = cls.id;
@@ -2208,10 +2195,7 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
     } else {
       const cls = await classRepo().findOne({
         where: {
-          teacher: {
-            id: req.userId
-          },
-          language: task.topic.language
+          teacher: { id: req.userId }
         }
       });
       if (!cls) {
@@ -2304,10 +2288,7 @@ topicsRouter.delete("/control-works/:controlWorkId", authRequired, async (req: A
     } else {
       const cls = await classRepo().findOne({
         where: {
-          teacher: {
-            id: req.userId
-          },
-          language: controlWork.topic.language
+          teacher: { id: req.userId }
         }
       });
       if (!cls) {

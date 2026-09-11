@@ -288,7 +288,6 @@ export const AuthPage: React.FC<Props> = ({
               const studentUser: User = {
                 id: studentResult.student.id,
                 username: studentResult.student.username,
-                activeRuntime: studentResult.student.language,
                 difus: 0,
                 avatarUrl: null,
                 userMode: "EDUCATIONAL" as const,
@@ -313,7 +312,6 @@ export const AuthPage: React.FC<Props> = ({
                 const studentUser: User = {
                   id: studentResult.student.id,
                   username: studentResult.student.username,
-                  activeRuntime: studentResult.student.language,
                   difus: 0,
                   avatarUrl: null,
                   userMode: "EDUCATIONAL" as const,

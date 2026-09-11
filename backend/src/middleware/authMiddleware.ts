@@ -117,7 +117,9 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
     req.studentId = payload.studentId;
     req.userType = "STUDENT";
     req.principalId = payload.studentId;
-    req.learningRuntime = activeStudent.class.language;
+    // A class is language-agnostic. Keep the legacy runtime field populated
+    // for personal/profile consumers; EDU tasks resolve language from topic.
+    req.learningRuntime = "PYTHON";
     req.uiLanguage = uiLanguage;
     req.userRole = null;
     req.userMode = "EDUCATIONAL";
@@ -197,7 +199,7 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
       req.studentId = linkedStudent.id;
       req.userType = "STUDENT";
       req.userMode = "EDUCATIONAL";
-      req.learningRuntime = linkedStudent.class.language;
+      req.learningRuntime = "PYTHON";
     }
   }
   return "ok";

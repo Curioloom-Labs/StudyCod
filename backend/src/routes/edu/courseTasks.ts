@@ -44,8 +44,11 @@ async function visibleTask(req: AuthRequest, taskId: number): Promise<{ task: Ed
   return { task, student };
 }
 
-function languageFor(task: EduTask): "JAVA" | "PYTHON" | "CPP" {
-  return task.lesson.class.language;
+function languageFor(_task: EduTask): "JAVA" | "PYTHON" | "CPP" {
+  // Materialised legacy course tasks do not carry a topic language. Classes
+  // are language-agnostic, so keep the old execution contract with a safe
+  // compatibility default instead of reading a class field.
+  return "PYTHON";
 }
 
 function uiLanguageFor(req: AuthRequest): "uk" | "en" {

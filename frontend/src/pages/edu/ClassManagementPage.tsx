@@ -50,8 +50,6 @@ import {
 
 const root =
   "min-h-[100dvh] bg-[#f4f7f3] px-4 py-6 text-[#142017] dark:bg-[#08100b] dark:text-[#edf5ef] sm:px-6 lg:px-10 lg:py-10";
-const languageName = (language?: string) =>
-  language === "CPP" ? "C++" : language === "JAVA" ? "Java" : "Python";
 const initials = (student: Student) =>
   `${student.firstName?.[0] || ""}${student.lastName?.[0] || ""}`.toUpperCase() ||
   "У";
@@ -612,9 +610,6 @@ export const ClassManagementPage: React.FC = () => {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <span className="rounded-xl border border-white/15 px-3 py-2 text-sm font-bold text-[#c6d4c9]">
-                {languageName(classInfo?.language)}
-              </span>
               <span className="rounded-xl bg-white/[.08] px-3 py-2 text-sm font-bold text-[#c6d4c9]">
                 {students.length} учнів
               </span>

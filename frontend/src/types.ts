@@ -55,7 +55,6 @@ export interface User {
       studentId: number;
       classId: number;
       className: string;
-      language: CourseLanguage;
       firstName: string;
       lastName: string;
     }>;

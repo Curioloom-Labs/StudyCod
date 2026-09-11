@@ -290,7 +290,6 @@ async function buildEduContexts(userId: number) {
         studentId: student.id,
         classId: student.class.id,
         className: student.class.name,
-        language: student.class.language,
         firstName: student.firstName,
         lastName: student.lastName
       })),
@@ -1145,8 +1144,6 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
         return res.json({
           id: student.id,
           username: student.generatedUsername,
-          course: student.class.language,
-          lang: student.class.language,
           iad: 0,
           difus: 0,
           avatarUrl: student.avatarUrl ?? null,
@@ -1189,7 +1186,7 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
       if (selected) {
         return res.json(applyStudentViewToUserDto(dto, {
           id: selected.studentId,
-          class: { id: selected.classId, name: selected.className, language: selected.language }
+          class: { id: selected.classId, name: selected.className }
         }));
       }
     }
@@ -1232,8 +1229,6 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
       return res.json({
         id: student.id,
         username: student.generatedUsername,
-        course: student.class.language,
-        lang: student.class.language,
         iad: 0,
         difus: 0,
         avatarUrl: student.avatarUrl ?? null,
@@ -1347,7 +1342,7 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
       if (selected) {
         return res.json(applyStudentViewToUserDto(dto, {
           id: selected.studentId,
-          class: { id: selected.classId, name: selected.className, language: selected.language }
+          class: { id: selected.classId, name: selected.className }
         }));
       }
     }

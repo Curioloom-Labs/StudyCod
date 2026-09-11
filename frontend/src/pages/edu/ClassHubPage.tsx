@@ -29,17 +29,13 @@ import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 const isPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const root = "min-h-[100dvh] bg-[#f4f7f3] px-4 py-6 text-[#142017] dark:bg-[#08100b] dark:text-[#edf5ef] sm:px-6 lg:px-10 lg:py-10";
+const languageName = (language?: string) => language || "—";
 
 const sampleLessons: Lesson[] = [
   { id: 101, title: "Lists and iteration", type: "LESSON", tasksCount: 4, createdAt: new Date().toISOString() },
   { id: 102, title: "Checkpoint: loops", type: "CONTROL", tasksCount: 3, createdAt: new Date().toISOString() },
 ];
 
-const languageName = (language?: string) => {
-  if (language === "CPP") return "C++";
-  if (language === "JAVA") return "Java";
-  return "Python";
-};
 
 const initials = (student: Student) => `${student.firstName?.[0] || ""}${student.lastName?.[0] || ""}`.toUpperCase() || "У";
 
@@ -77,7 +73,7 @@ export const ClassHubPage: React.FC = () => {
       setError(failedPanels ? "Частину даних класу тимчасово не вдалося завантажити. Натисніть «Повторити»." : null);
     } catch (caught) {
       if (isPreview()) {
-        setClassInfo({ id: -31, name: "10-Б · Python", language: "PYTHON", gradingSystem: "POINTS_12", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+        setClassInfo({ id: -31, name: "10-Б · StudyCod", gradingSystem: "POINTS_12", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
         setStudents(Array.from({ length: 24 }, (_, index) => ({ id: index + 1, firstName: index % 2 ? "Марко" : "Софія", lastName: index % 2 ? "Литвин" : "Мельник", email: "", generatedUsername: `student_${index + 1}`, createdAt: new Date().toISOString() })));
         setTopics([
           { id: 1, title: "Основи Python", description: "Синтаксис, змінні, введення та виведення", order: 1, language: "PYTHON", tasks: [{}, {}] },
@@ -100,7 +96,7 @@ export const ClassHubPage: React.FC = () => {
   }
 
   const className = classInfo?.name || "Клас";
-  const language = languageName(classInfo?.language);
+  const language = "Мовонезалежний клас";
   const topicUnits = topics.reduce((total, topic) => total + (topic.tasks?.length || 0) + (topic.controlWorks?.length || 0), 0);
   const activeTopics = topics.filter(topic => (topic.tasks?.length || 0) + (topic.controlWorks?.length || 0) > 0).length;
 

@@ -1,4 +1,6 @@
-export type SupportedLanguage = "JAVA" | "PYTHON" | "CPP";
+import type { TopicLanguage } from "../../utils/topicLanguage";
+
+export type SupportedLanguage = TopicLanguage;
 
 function hasCreateVerbForScaffolding(text: string): boolean {
   return /(створ(и|іть|ити)|додай(те)?|зроб(и|іть|ити)|налашт(уй|уйте|увати)|setup|configure|create|add)/i.test(text);

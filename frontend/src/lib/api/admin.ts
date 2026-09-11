@@ -31,7 +31,6 @@ export interface AdminUserResponse {
 export interface AdminClass {
   id: number;
   name: string;
-  language: "JAVA" | "PYTHON" | "CPP";
   teacherId: number;
   teacherName: string;
   createdAt: string;
@@ -131,12 +130,10 @@ export interface UpdateUserRoleData {
 }
 export interface CreateClassData {
   name: string;
-  language: "JAVA" | "PYTHON" | "CPP";
   teacherId: number;
 }
 export interface UpdateClassData {
   name?: string;
-  language?: "JAVA" | "PYTHON" | "CPP";
   teacherId?: number;
 }
 export async function getAdminUsers(params?: {

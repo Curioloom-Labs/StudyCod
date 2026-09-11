@@ -1,5 +1,9 @@
 import { api } from "./client";
 import type { ClassGradingSystem, GradeScaleMode } from "../gradingSystems";
+import type { JudgeLanguage } from "../judgeLanguages";
+
+/** Language is selected by a topic/task, never by a class. */
+export type EduLanguage = Uppercase<JudgeLanguage>;
 
 type QuizItem = {
   question: string;
@@ -35,7 +39,6 @@ export interface StudentLoginResponse {
     username: string;
     classId: number;
     className: string;
-    language: "JAVA" | "PYTHON" | "CPP";
   };
 }
 export async function studentLogin(username: string, password: string, turnstileToken?: string): Promise<StudentLoginResponse> {
@@ -55,7 +58,6 @@ export async function restoreEduStudent(studentId: number): Promise<{ ok: boolea
 export interface Class {
   id: number;
   name: string;
-  language: "JAVA" | "PYTHON" | "CPP";
   gradingSystem: ClassGradingSystem;
   gradeScaleMode?: GradeScaleMode;
   studentsCount: number;
@@ -210,7 +212,7 @@ export interface TaskWithGrade {
   } | null;
   webTemplateFiles?: WebTaskFile[] | null;
   webValidationRules?: WebTaskRule[] | null;
-  language: "JAVA" | "PYTHON" | "CPP";
+  language: EduLanguage;
   testDataCount: number;
   savedCode?: string;
   maxAttempts?: number;
@@ -377,10 +379,9 @@ export async function registerEducationalOrganization(input: {
   });
   return res.data;
 }
-export async function createClass(name: string, language: "JAVA" | "PYTHON" | "CPP", gradingSystem?: ClassGradingSystem, gradeScaleMode?: GradeScaleMode): Promise<Class> {
+export async function createClass(name: string, gradingSystem?: ClassGradingSystem, gradeScaleMode?: GradeScaleMode): Promise<Class> {
   const res = await api.post("/edu/classes", {
     name,
-    language,
     gradingSystem,
     gradeScaleMode
   });
@@ -464,7 +465,6 @@ export async function compareSimilarity(classId: number, taskId: number, a: numb
 export interface ClassDetails {
   id: number;
   name: string;
-  language: "JAVA" | "PYTHON" | "CPP";
   organizationId?: number | null;
   teacherId?: number | null;
   teacherName?: string | null;
@@ -579,11 +579,11 @@ export interface Topic {
   title: string;
   description?: string | null;
   order: number;
-  language: "JAVA" | "PYTHON" | "CPP";
+  language: EduLanguage;
   tasks?: unknown[];
   controlWorks?: unknown[];
 }
-export async function getTopics(classId?: number, language?: "JAVA" | "PYTHON" | "CPP"): Promise<Topic[]> {
+export async function getTopics(classId?: number, language?: EduLanguage): Promise<Topic[]> {
   const params = new URLSearchParams();
   if (classId) params.append("classId", classId.toString());
   if (language) params.append("language", language);
@@ -605,7 +605,7 @@ export async function generateTheory(lessonId: number, topicTitle: string): Prom
   });
   return res.data;
 }
-export async function generateTheoryPreview(topicTitle: string, language: "JAVA" | "PYTHON" | "CPP"): Promise<{
+export async function generateTheoryPreview(topicTitle: string, language: EduLanguage): Promise<{
   theory: string;
 }> {
   const res = await api.post(`/edu/generate-theory`, {
@@ -614,7 +614,7 @@ export async function generateTheoryPreview(topicTitle: string, language: "JAVA"
   });
   return res.data;
 }
-export async function generateInteractiveLesson(topicTitle: string, language: "JAVA" | "PYTHON" | "CPP"): Promise<{
+export async function generateInteractiveLesson(topicTitle: string, language: EduLanguage): Promise<{
   lesson: unknown;
 }> {
   const res = await api.post(`/edu/generate-interactive-lesson`, { topicTitle, language });
@@ -991,7 +991,6 @@ export async function getMyStudentInfo(): Promise<{
     class: {
       id: number;
       name: string;
-      language: "JAVA" | "PYTHON" | "CPP";
       gradingSystem?: ClassGradingSystem;
       gradeScaleMode?: GradeScaleMode;
     };
@@ -1802,7 +1801,6 @@ export interface StudentMasteryPathResponse {
     id: number;
     classId: number;
     className: string;
-    language: "JAVA" | "PYTHON" | "CPP";
   };
   summary: {
     topicsTotal: number;

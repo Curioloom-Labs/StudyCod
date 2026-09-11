@@ -22,9 +22,10 @@ const SEVERITIES: ReviewSeverity[] = ["info", "suggestion", "warning", "error"];
 const MAX_COMMENTS = 40;
 
 function langName(language: string): string {
-  if (language === "PYTHON") return "Python";
-  if (language === "CPP") return "C++";
-  return "Java";
+  const normalized = String(language || "").trim();
+  if (normalized === "PYTHON" || normalized.toLowerCase() === "python") return "Python";
+  if (normalized === "CPP" || normalized.toLowerCase() === "cpp") return "C++";
+  return normalized || "обраною мовою";
 }
 
 /** Pure: assemble the user prompt (code + language + optional task context). */

@@ -87,6 +87,49 @@ const fromDateTimeLocalValue = (value: string) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
+const previewTemplateForLanguage = (language: string) => {
+  switch (language.toUpperCase()) {
+    case "JAVA":
+      return "import java.util.*;\n\npublic class Main {\n  public static void main(String[] args) {\n    Scanner sc = new Scanner(System.in);\n    // TODO: прочитайте дані й реалізуйте рішення\n  }\n}\n";
+    case "CPP":
+      return "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n  // TODO: прочитайте дані й реалізуйте рішення\n  return 0;\n}\n";
+    case "C":
+      return "#include <stdio.h>\n\nint main(void) {\n  // TODO: прочитайте дані й реалізуйте рішення\n  return 0;\n}\n";
+    case "CSHARP":
+      return "using System;\n\nclass Program {\n  static void Main() {\n    // TODO: прочитайте дані й реалізуйте рішення\n  }\n}\n";
+    case "KOTLIN":
+      return "fun main() {\n    // TODO: прочитайте дані й реалізуйте рішення\n}\n";
+    case "JS":
+      return "const fs = require('fs');\nconst input = fs.readFileSync(0, 'utf8').trim();\n// TODO: прочитайте дані й реалізуйте рішення\nconsole.log(input);\n";
+    case "GO":
+      return "package main\n\nimport \"fmt\"\n\nfunc main() {\n    // TODO: прочитайте дані й реалізуйте рішення\n    fmt.Println()\n}\n";
+    case "RUST":
+      return "use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    // TODO: прочитайте дані й реалізуйте рішення\n    print!(\"{}\", input);\n}\n";
+    case "PASCAL":
+      return "program Main;\nbegin\n  { TODO: прочитайте дані й реалізуйте рішення }\nend.\n";
+    case "D":
+      return "import std.stdio;\n\nvoid main() {\n    // TODO: прочитайте дані й реалізуйте рішення\n}\n";
+    case "DART":
+      return "import 'dart:io';\n\nvoid main() {\n  final input = stdin.readAsStringSync();\n  // TODO: прочитайте дані й реалізуйте рішення\n  stdout.write(input);\n}\n";
+    case "HASKELL":
+      return "import qualified Data.ByteString.Char8 as BS\n\nmain :: IO ()\nmain = do\n  input <- BS.getContents\n  -- TODO: прочитайте дані й реалізуйте рішення\n  BS.putStr input\n";
+    case "LISP":
+      return "(defun main ()\n  ;; TODO: прочитайте дані й реалізуйте рішення\n  (format t \"~%\"))\n\n(main)\n";
+    case "LUA":
+      return "local input = io.read(\"*a\")\n-- TODO: прочитайте дані й реалізуйте рішення\nio.write(input)\n";
+    case "PERL":
+      return "use strict;\nuse warnings;\n\nmy $input = do { local $/; <STDIN> };\n# TODO: прочитайте дані й реалізуйте рішення\nprint $input;\n";
+    case "PHP":
+      return "<?php\n$input = stream_get_contents(STDIN);\n// TODO: прочитайте дані й реалізуйте рішення\necho $input;\n";
+    case "RUBY":
+      return "input = STDIN.read\n# TODO: прочитайте дані й реалізуйте рішення\nputs input\n";
+    case "SWIFT":
+      return "import Foundation\n\nlet input = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? \"\"\n// TODO: прочитайте дані й реалізуйте рішення\nprint(input, terminator: \"\")\n";
+    case "PYTHON":
+    default:
+      return "def solve():\n    # TODO: прочитайте дані й реалізуйте рішення\n    pass\n\nif __name__ == \"__main__\":\n    solve()\n";
+  }
+};
 
 const demo: Topic = {
   id: 31,
@@ -261,9 +304,7 @@ export const TopicStudioPage: React.FC = () => {
       if (preview()) {
         setTaskForm((old) => ({
           ...old,
-          template: topic.language === "JAVA"
-            ? "import java.util.*;\n\npublic class Main {\n  public static void main(String[] args) {\n    Scanner sc = new Scanner(System.in);\n    // TODO: прочитайте дані й реалізуйте рішення\n  }\n}\n"
-            : "def solve():\n    # TODO: прочитайте дані й реалізуйте рішення\n    pass\n\nif __name__ == \"__main__\":\n    solve()\n"
+          template: previewTemplateForLanguage(topic.language)
         }));
         return;
       }

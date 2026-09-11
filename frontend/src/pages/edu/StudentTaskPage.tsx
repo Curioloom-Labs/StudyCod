@@ -53,7 +53,17 @@ import { scopedStorageKey } from "../../lib/storageScope";
 import { useMediaQuery } from "../../utils/useMediaQuery";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeTrace } from "../../components/ide/StudyCodIDEWorkspace";
 import { tracePlayground } from "../../lib/api/playground";
+import { JUDGE_ENTRY_FILES } from "../../lib/judgeLanguages";
 import type { JudgeLanguage } from "../../lib/judgeLanguages";
+
+const entryFileForTaskLanguage = (language: string | null | undefined): string =>
+  JUDGE_ENTRY_FILES[String(language ?? "python").toLowerCase() as JudgeLanguage] || "main.py";
+
+const extensionForTaskLanguage = (language: string | null | undefined): string => {
+  const file = entryFileForTaskLanguage(language);
+  const extension = file.slice(file.lastIndexOf("."));
+  return extension || ".txt";
+};
 
 const textEncoder = new TextEncoder();
 type QuizOption = "А" | "Б" | "В" | "Г" | "Д";
@@ -325,12 +335,12 @@ export const StudentTaskPage: React.FC = () => {
     taskRef.current = task;
     filesRef.current = files;
     useFilesRef.current = useFiles;
-    const entryFile = task?.language === "JAVA" ? "Main.java" : task?.language === "CPP" ? "main.cpp" : "main.py";
+    const entryFile = entryFileForTaskLanguage(task?.language);
     const entryContent = useFiles ? (files.find(f => f.path === entryFile)?.content ?? "") : code;
     codeRef.current = entryContent;
   }, [task, code, files, useFiles]);
 
-  const entryFile = useMemo(() => (task?.language === "JAVA" ? "Main.java" : task?.language === "CPP" ? "main.cpp" : "main.py"), [task?.language]);
+  const entryFile = useMemo(() => entryFileForTaskLanguage(task?.language), [task?.language]);
   const isWebTask = task?.taskMode === "WEB";
   const normalizeFiles = useCallback((raw: CodeFile[]): CodeFile[] => {
     const normalizePath = (rawPath: string): string | null => {
@@ -678,7 +688,7 @@ export const StudentTaskPage: React.FC = () => {
     }
 
     const nameLower = file.name.toLowerCase();
-    const expectedExt = task?.language === "JAVA" ? ".java" : task?.language === "CPP" ? ".cpp" : ".py";
+    const expectedExt = extensionForTaskLanguage(task?.language);
     const looksOk = nameLower.endsWith(expectedExt) || nameLower.endsWith(".txt");
     if (!looksOk) {
       const ok = confirm(tr(`Файл має інше розширення. Все одно імпортувати? (${file.name})`, `File extension looks different. Import anyway? (${file.name})`));
@@ -802,7 +812,7 @@ export const StudentTaskPage: React.FC = () => {
       const draftCode = localStorage.getItem(scopedStorageKey("task_draft", taskId));
       const savedCode = data.savedCode;
 
-      const entryFromData = data.language === "JAVA" ? "Main.java" : data.language === "CPP" ? "main.cpp" : "main.py";
+      const entryFromData = entryFileForTaskLanguage(data.language);
 
       if (data.taskMode === "WEB") {
         if (draftFiles && draftFiles.length > 0) {
@@ -1727,7 +1737,7 @@ export const StudentTaskPage: React.FC = () => {
               </div>}
           </div>
 
-          <input key={importSolutionKey} ref={importInputRef} type="file" accept={task.language === "JAVA" ? ".java,.txt,text/plain" : task.language === "CPP" ? ".cpp,.txt,text/plain" : ".py,.txt,text/plain"} onChange={e => handleImportSolutionFile(e.target.files?.[0] || null)} className="hidden" />
+          <input key={importSolutionKey} ref={importInputRef} type="file" accept={`${extensionForTaskLanguage(task.language)},.txt,text/plain`} onChange={e => handleImportSolutionFile(e.target.files?.[0] || null)} className="hidden" />
         </div>}
 
       {}

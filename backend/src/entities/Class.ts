@@ -5,7 +5,6 @@ import { EduLesson } from "./EduLesson";
 import { Organization } from "./Organization";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, GradingSystem } from "../types/GradingSystem";
 import { DEFAULT_GRADE_SCALE_MODE, GRADE_SCALE_MODES, GradeScaleMode } from "../utils/gradingScale";
-export type ClassLanguage = "JAVA" | "PYTHON" | "CPP";
 @Entity("classes")
 export class Class {
   @PrimaryGeneratedColumn()
@@ -44,11 +43,6 @@ export class Class {
   organizationId!: number;
   @Column({ type: "varchar" })
   name!: string;
-  @Column({
-    type: "enum",
-    enum: ["JAVA", "PYTHON", "CPP"]
-  })
-  language!: ClassLanguage;
   @Column({
     type: "enum",
     enum: GRADING_SYSTEMS,

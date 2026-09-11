@@ -12,7 +12,7 @@ import { getMe } from "../../lib/api/profile";
 interface Org { orgId: number; role: string; name: string | null; }
 interface Member { userId: number; role: string; username: string | null; name: string | null; email: string | null; }
 interface Invite { id: number; email: string; role: string; status: string; token?: string; }
-interface ClassSummary { id: number; name: string; language: string; studentsCount: number; teacherName: string | null; }
+interface ClassSummary { id: number; name: string; studentsCount: number; teacherName: string | null; }
 interface Overview { totals: { classes: number; students: number; teachers: number }; classes: ClassSummary[]; }
 
 const ROLES = ["TEACHER", "ASSISTANT", "ORG_ADMIN"] as const;
@@ -237,7 +237,7 @@ export const OrgMembersPage: React.FC = () => {
                   className="flex items-center gap-2.5 px-3 py-2 text-left rounded-[var(--ui-card-radius)] border border-border bg-bg-surface transition-fast hover:border-primary/40 hover:bg-bg-hover focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   <strong className="font-mono text-text-primary truncate">{c.name}</strong>
-                  <span className="text-xs text-text-muted">{c.language}{c.teacherName ? ` · ${c.teacherName}` : ""}</span>
+                  <span className="text-xs text-text-muted">{c.studentsCount} учнів{c.teacherName ? ` · ${c.teacherName}` : ""}</span>
                   <span className="ml-auto text-xs text-text-secondary tabular-nums">{c.studentsCount} {tr("учнів", "students")}</span>
                 </button>
               ))}

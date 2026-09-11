@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { logger } from '../../utils/logger';
 import { env } from '../../env';
+import { topicLanguageLabel, type TopicLanguage } from '../../utils/topicLanguage';
 interface CloudflareWorkerRequest {
   mode: string;
   language: "uk" | "en";
@@ -39,10 +40,10 @@ export class CloudflareAIProvider implements LLMProvider {
     topicTitle: string;
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
-    language: "JAVA" | "PYTHON" | "CPP";
+    language: TopicLanguage;
     responseLanguage?: string;
   }, lang: "uk" | "en"): { prompt: string; systemPrompt: string } {
-    const langName = params.language === "JAVA" ? "Java" : params.language === "PYTHON" ? "Python" : "C++";
+    const langName = topicLanguageLabel(params.language);
     const isEnglish = lang === "en";
     const taskTypeText = params.taskType === "CONTROL" ? (isEnglish ? "control" : "контрольне") : (isEnglish ? "practice" : "практичне");
     const systemPrompt = isEnglish
@@ -93,11 +94,11 @@ Return ONLY the Markdown statement.${responseLanguageInstruction}`
   private buildTestDataPrompt(params: {
     taskDescription: string;
     taskTitle: string;
-    lang: "JAVA" | "PYTHON" | "CPP";
+    lang: TopicLanguage;
     count: number;
     ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
   }): { prompt: string; systemPrompt: string; schema: object } {
-    const langName = params.lang === "JAVA" ? "Java" : params.lang === "PYTHON" ? "Python" : "C++";
+    const langName = topicLanguageLabel(params.lang);
     const taskDesc = String(params.taskDescription || "").slice(0, 5000);
     const needsInput = params.ioType ? params.ioType === "STDIN_STDOUT" : params.count > 1;
     const count = needsInput ? Math.max(1, Math.floor(params.count)) : 1;
@@ -423,7 +424,7 @@ ${JSON.stringify(schema, null, 2)}
   async generateTaskWithAI(params: {
     topicTitle: string;
     theory: string;
-    lang: "JAVA" | "PYTHON" | "CPP";
+    lang: TopicLanguage;
     topicIndex?: number;
     numInTopic: number;
     isFirstTask: boolean;
@@ -461,7 +462,7 @@ ${JSON.stringify(schema, null, 2)}
   }
   async generateTheoryWithAI(params: {
     topicTitle: string;
-    lang: "JAVA" | "PYTHON" | "CPP";
+    lang: TopicLanguage;
     taskDescription?: string;
     taskType?: "PRACTICE" | "CONTROL";
     difficulty?: number;
@@ -487,7 +488,7 @@ ${JSON.stringify(schema, null, 2)}
     };
   }
   async generateQuizWithAI(params: {
-    lang: "JAVA" | "PYTHON" | "CPP";
+    lang: TopicLanguage;
     prevTopics: string;
     count?: number;
     responseLanguage?: string;
@@ -515,7 +516,7 @@ ${JSON.stringify(schema, null, 2)}
     topicTitle: string;
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
-    language: "JAVA" | "PYTHON" | "CPP";
+    language: TopicLanguage;
     responseLanguage?: string;
     userId?: number;
     topicId?: number;
@@ -548,7 +549,7 @@ ${JSON.stringify(schema, null, 2)}
   }
   async generateTaskTemplate(params: {
     topicTitle: string;
-    language: "JAVA" | "PYTHON" | "CPP";
+    language: TopicLanguage;
     description?: string;
     responseLanguage?: string;
     userId?: number;
@@ -578,7 +579,7 @@ ${JSON.stringify(schema, null, 2)}
   async generateTestDataWithAI(params: {
     taskDescription: string;
     taskTitle: string;
-    lang: "JAVA" | "PYTHON" | "CPP";
+    lang: TopicLanguage;
     count: number;
     ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
     userId?: number;

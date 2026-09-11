@@ -22,7 +22,6 @@ const studentRepo = () => AppDataSource.getRepository(Student);
 interface ClassLike {
   id: number;
   name: string;
-  language: string;
 }
 interface StudentLike {
   id: number;
@@ -40,9 +39,7 @@ export function applyStudentViewToUserDto<T extends object>(dto: T, student: Stu
     userMode: "EDUCATIONAL" as const,
     studentId: student.id,
     classId: student.class.id,
-    className: student.class.name,
-    course: student.class.language,
-    lang: student.class.language
+    className: student.class.name
   };
 }
 

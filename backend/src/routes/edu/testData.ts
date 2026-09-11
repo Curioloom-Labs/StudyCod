@@ -522,7 +522,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
       {
         taskDescription: safeTaskDescription,
         taskTitle: topicTask.title,
-        lang: topicTask.topic.class.language,
+        lang: topicTask.topic.language,
         count: testCount,
         userId: req.userId
       },

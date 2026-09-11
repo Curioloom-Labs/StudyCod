@@ -595,7 +595,6 @@ router.get("/orgs/:orgId/overview", authRequired, async (req: AuthRequest, res: 
     const classSummaries = classes.map((c) => ({
       id: c.id,
       name: c.name,
-      language: c.language,
       studentsCount: countByClass.get(c.id) ?? 0,
       teacherName: c.teacher ? `${c.teacher.firstName ?? ""} ${c.teacher.lastName ?? ""}`.trim() || c.teacher.username : null,
       teacherNames: Array.from(new Map(

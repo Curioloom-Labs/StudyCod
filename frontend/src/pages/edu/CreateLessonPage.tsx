@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { PageHero } from "../../components/ui/PageHero";
-import { createLesson, generateTheoryPreview, generateInteractiveLesson, getClasses, type CreateLessonRequest } from "../../lib/api/edu";
+import { createLesson, generateTheoryPreview, generateInteractiveLesson, type CreateLessonRequest } from "../../lib/api/edu";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { LessonBlocksEditor } from "../../components/lesson/LessonBlocksEditor";
 import { normalizeInteractiveLesson, type InteractiveLesson } from "../../lib/lessonBlocks";
+import type { EduLanguage } from "../../lib/api/edu";
 
 const EMPTY_LESSON: InteractiveLesson = { objectives: [], sections: [{ heading: "", blocks: [] }], summary: [] };
 export const CreateLessonPage: React.FC = () => {
@@ -34,27 +35,12 @@ export const CreateLessonPage: React.FC = () => {
   const [lessonBlocks, setLessonBlocks] = useState<InteractiveLesson>(EMPTY_LESSON);
   const [generatingInteractive, setGeneratingInteractive] = useState(false);
   const [topicTitle, setTopicTitle] = useState("");
-  const [language, setLanguage] = useState<"JAVA" | "PYTHON" | "CPP">("JAVA");
+  const [language, setLanguage] = useState<EduLanguage>("JAVA");
   const safeServerMessage = (value: unknown) => {
     const msg = typeof value === "string" ? value : String(value ?? "");
     if (typeof i18n.language === "string" && i18n.language.startsWith("en") && /[А-Яа-яІіЇїЄєҐґ]/.test(msg)) return "";
     return msg;
   };
-  useEffect(() => {
-    const loadClassInfo = async () => {
-      if (!classId) return;
-      try {
-        const classes = await getClasses();
-        const classData = classes.find(c => c.id === parseInt(classId, 10));
-        if (classData && (classData.language === "JAVA" || classData.language === "PYTHON" || classData.language === "CPP")) {
-          setLanguage(classData.language);
-        }
-      } catch (error) {
-        console.error("Failed to load class info:", error);
-      }
-    };
-    loadClassInfo();
-  }, [classId]);
   const handleSubmit = async () => {
     if (!classId || !title.trim()) {
       showToast({ type: "error", message: tr("Заповніть назву уроку", "Enter a lesson title") });

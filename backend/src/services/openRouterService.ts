@@ -1,5 +1,7 @@
 import { getLLMOrchestrator } from './llm/LLMOrchestrator';
+import type { LLMTaskLanguage } from './llm/LLMOrchestrator';
 import { getLLMProvider } from './llm/provider';
+import { topicLanguageLabel } from '../utils/topicLanguage';
 export interface AiTaskGenerationResult {
   title: string;
   topic: string;
@@ -26,7 +28,7 @@ export interface AiQuizResult {
 export async function generateTaskWithAI(params: {
   topicTitle: string;
   theory: string;
-  lang: "JAVA" | "PYTHON";
+  lang: LLMTaskLanguage;
   numInTopic: number;
   isFirstTask: boolean;
   difus?: number;
@@ -43,7 +45,7 @@ export async function generateTaskCondition(params: {
   taskTitle?: string;
   taskType: "PRACTICE" | "CONTROL";
   difficulty?: number;
-  language: "JAVA" | "PYTHON";
+  language: LLMTaskLanguage;
   userId?: number;
   topicId?: number;
 }): Promise<{
@@ -56,7 +58,7 @@ export async function generateTaskCondition(params: {
 export async function generateTaskTemplate(params: {
   topicTitle: string;
   taskTitle?: string;
-  language: "JAVA" | "PYTHON";
+  language: LLMTaskLanguage;
   description?: string;
   userId?: number;
   topicId?: number;
@@ -69,7 +71,7 @@ export async function generateTaskTemplate(params: {
 
 export async function generateTheoryWithAI(params: {
   topicTitle: string;
-  lang: "JAVA" | "PYTHON";
+  lang: LLMTaskLanguage;
   taskDescription?: string;
   taskType?: "PRACTICE" | "CONTROL";
   difficulty?: number;
@@ -105,13 +107,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export async function generateInteractiveLessonWithAI(params: {
   topicTitle: string;
-  lang: "JAVA" | "PYTHON" | "CPP";
+  lang: LLMTaskLanguage;
   userId?: number;
   topicId?: number;
 }): Promise<{ lesson: unknown }> {
   const provider = getLLMProvider();
-  const langName = params.lang === "JAVA" ? "Java" : params.lang === "CPP" ? "C++" : "Python";
-  const runnableLang = params.lang === "JAVA" ? "JAVA" : params.lang === "CPP" ? "CPP" : "PYTHON";
+  const langName = topicLanguageLabel(params.lang);
+  const runnableLang = params.lang;
   const codeLang = params.lang.toLowerCase();
 
   const systemPrompt = `Ти — досвідчений викладач програмування. Створюєш ІНТЕРАКТИВНИЙ урок як СТРОГИЙ JSON за схемою. Відповідай ВИКЛЮЧНО валідним JSON-об'єктом — без markdown-огортки, без тексту до/після.
@@ -162,7 +164,7 @@ export async function generateInteractiveLessonWithAI(params: {
 }
 
 export async function generateQuizWithAI(params: {
-  lang: "JAVA" | "PYTHON";
+  lang: LLMTaskLanguage;
   prevTopics: string;
   count?: number;
   userId?: number;

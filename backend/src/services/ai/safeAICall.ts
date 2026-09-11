@@ -4,6 +4,7 @@ import { AIResponseValidator, AIValidationError, makeAIValidationError } from '.
 import { logger } from '../../utils/logger';
 import { getCurriculumPolicyViolationForGeneratedTask, rewriteNonJudgeablePracticalTaskToJudgeable } from './curriculumPolicy';
 import { isAiCircuitOpen, recordAiCircuitSuccess, recordAiCircuitFailure } from './aiCircuitBreaker';
+import { normalizeTopicLanguage, TOPIC_LANGUAGES } from '../../utils/topicLanguage';
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 export interface AIError {
   statusCode: number;
@@ -35,8 +36,9 @@ function requiredString(value: unknown, field: string): string {
 }
 
 function requiredTaskLanguage(value: unknown): LLMTaskLanguage {
-  if (value === "JAVA" || value === "PYTHON" || value === "CPP") return value;
-  throw new Error('language must be "JAVA", "PYTHON" or "CPP"');
+  const normalized = normalizeTopicLanguage(value);
+  if (normalized) return normalized;
+  throw new Error(`language must be one of: ${TOPIC_LANGUAGES.join(', ')}`);
 }
 
 function requiredTaskType(value: unknown): TaskType {
@@ -280,8 +282,8 @@ function validateInputParams(mode: AIMode, params: JsonObject): void {
       if (!params.theory || typeof params.theory !== 'string' || !params.theory.trim()) {
         throw new Error('theory is required and must be a non-empty string');
       }
-      if (typeof params.lang !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
-        throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
+      if (!normalizeTopicLanguage(params.lang)) {
+        throw new Error(`lang is required and must be one of: ${TOPIC_LANGUAGES.join(', ')}`);
       }
       if (typeof params.numInTopic !== 'number' || params.numInTopic < 1) {
         throw new Error('numInTopic is required and must be a positive number');
@@ -300,13 +302,13 @@ function validateInputParams(mode: AIMode, params: JsonObject): void {
       if (!params.topicTitle || typeof params.topicTitle !== 'string' || !params.topicTitle.trim()) {
         throw new Error('topicTitle is required and must be a non-empty string');
       }
-      if (typeof params.lang !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
-        throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
+      if (!normalizeTopicLanguage(params.lang)) {
+        throw new Error(`lang is required and must be one of: ${TOPIC_LANGUAGES.join(', ')}`);
       }
       break;
     case 'generateQuiz':
-      if (typeof params.lang !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
-        throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
+      if (!normalizeTopicLanguage(params.lang)) {
+        throw new Error(`lang is required and must be one of: ${TOPIC_LANGUAGES.join(', ')}`);
       }
       if (!params.prevTopics || typeof params.prevTopics !== 'string' || !params.prevTopics.trim()) {
         throw new Error('prevTopics is required and must be a non-empty string');
@@ -322,8 +324,8 @@ function validateInputParams(mode: AIMode, params: JsonObject): void {
       if (typeof params.taskType !== 'string' || !['PRACTICE', 'CONTROL'].includes(params.taskType)) {
         throw new Error('taskType is required and must be "PRACTICE" or "CONTROL"');
       }
-      if (typeof params.language !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.language)) {
-        throw new Error('language is required and must be "JAVA" or "PYTHON" or "CPP"');
+      if (!normalizeTopicLanguage(params.language)) {
+        throw new Error(`language is required and must be one of: ${TOPIC_LANGUAGES.join(', ')}`);
       }
       if (params.difficulty !== undefined && (typeof params.difficulty !== 'number' || params.difficulty < 1 || params.difficulty > 5)) {
         throw new Error('difficulty must be a number between 1 and 5 if provided');
@@ -333,8 +335,8 @@ function validateInputParams(mode: AIMode, params: JsonObject): void {
       if (!params.topicTitle || typeof params.topicTitle !== 'string' || !params.topicTitle.trim()) {
         throw new Error('topicTitle is required and must be a non-empty string');
       }
-      if (typeof params.language !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.language)) {
-        throw new Error('language is required and must be "JAVA" or "PYTHON" or "CPP"');
+      if (!normalizeTopicLanguage(params.language)) {
+        throw new Error(`language is required and must be one of: ${TOPIC_LANGUAGES.join(', ')}`);
       }
       break;
     case 'generateTestData':
@@ -344,8 +346,8 @@ function validateInputParams(mode: AIMode, params: JsonObject): void {
       if (!params.taskTitle || typeof params.taskTitle !== 'string' || !params.taskTitle.trim()) {
         throw new Error('taskTitle is required and must be a non-empty string');
       }
-      if (typeof params.lang !== 'string' || !['JAVA', 'PYTHON', 'CPP'].includes(params.lang)) {
-        throw new Error('lang is required and must be "JAVA" or "PYTHON" or "CPP"');
+      if (!normalizeTopicLanguage(params.lang)) {
+        throw new Error(`lang is required and must be one of: ${TOPIC_LANGUAGES.join(', ')}`);
       }
       if (typeof params.count !== 'number' || params.count < 1) {
         throw new Error('count is required and must be a positive number');

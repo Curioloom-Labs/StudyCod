@@ -3,7 +3,7 @@
 // interactive ones (runnable code, comprehension check) reuse the judge + a
 // client-side MCQ. Kept defensive: malformed blocks are dropped, never thrown on.
 
-export type RunnableLanguage = "JAVA" | "PYTHON" | "CPP";
+export type RunnableLanguage = Uppercase<JudgeLanguage>;
 
 export type LessonBlock =
   | { type: "prose"; markdown: string }
@@ -24,7 +24,7 @@ export interface InteractiveLesson {
   summary: string[];
 }
 
-const RUNNABLE_LANGS: RunnableLanguage[] = ["JAVA", "PYTHON", "CPP"];
+const RUNNABLE_LANGS: RunnableLanguage[] = JUDGE_LANGUAGES.map(language => language.toUpperCase() as RunnableLanguage);
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const cleanList = (v: unknown): string[] =>
   Array.isArray(v) ? v.map(x => (typeof x === "string" ? x.trim() : "")).filter(Boolean) : [];
@@ -113,3 +113,5 @@ export function normalizeInteractiveLesson(raw: unknown): InteractiveLesson | nu
 
   return { objectives: cleanList(root.objectives), sections, summary: cleanList(root.summary) };
 }
+import type { JudgeLanguage } from "./judgeLanguages";
+import { JUDGE_LANGUAGES } from "./judgeLanguages";

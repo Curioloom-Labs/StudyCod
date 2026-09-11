@@ -46,6 +46,8 @@ import { isAssignedToStudent } from "../../utils/assignmentVisibility";
 import { extractTimezoneFromProfileMeta } from "../../utils/profileTimezone";
 import { applyHintStrategyVariant, resolveHintStrategyVariant, type HintStrategyVariant } from "../../services/edu/hintStrategy";
 import { syncControlWorkAssignmentsWithManager, syncTopicTaskAssignmentsWithManager } from "../../services/edu/assignmentTargetsService";
+import { TOPIC_ENTRY_FILES, topicLanguageToJudgeLanguage, type TopicLanguage } from "../../utils/topicLanguage";
+import type { JudgeLanguage } from "../../services/judgeWorker/types";
 
 const router = Router();
 
@@ -186,20 +188,23 @@ function normalizeApiFiles(raw: unknown): ApiCodeFile[] {
   return [...byPath.values()];
 }
 
-function judgeLanguageFromEduLanguage(lang: string): "java" | "python" | "cpp" {
-  return lang === "JAVA" ? "java" : lang === "PYTHON" ? "python" : "cpp";
+function judgeLanguageFromEduLanguage(lang: string): JudgeLanguage {
+  return topicLanguageToJudgeLanguage(lang);
 }
 
-function entryFileForJudgeLanguage(lang: "java" | "python" | "cpp"): string {
-  switch (lang) {
-    case "java":
-      return "Main.java";
-    case "python":
-      return "main.py";
-    case "cpp":
-      return "main.cpp";
-  }
+function entryFileForJudgeLanguage(lang: JudgeLanguage): string {
+  return TOPIC_ENTRY_FILES[lang.toUpperCase() as TopicLanguage] || "main.py";
 }
+
+const defaultLimitsByLang: Record<JudgeLanguage, { time_limit_ms: number; memory_limit_mb: number; output_limit_kb: number }> =
+  Object.fromEntries(([
+    "java", "python", "cpp", "c", "csharp", "kotlin", "js", "go", "rust", "pascal",
+    "d", "dart", "haskell", "lisp", "lua", "perl", "php", "ruby", "swift",
+  ] as JudgeLanguage[]).map(language => [language, {
+    time_limit_ms: language === "python" ? 900 : 1200,
+    memory_limit_mb: language === "python" ? 128 : 256,
+    output_limit_kb: 64,
+  }])) as Record<JudgeLanguage, { time_limit_ms: number; memory_limit_mb: number; output_limit_kb: number }>;
 
 const runBodySchema = z
   .object({
@@ -625,7 +630,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
     // We use global materials as a fallback and also as the default when they are newer than stale class snapshots.
     const globalRepo = AppDataSource.getRepository(TopicNew);
     const classTopic = topicTask.topic;
-    const classLang = classTopic.language;
+    const topicLanguage = classTopic.language;
     const classOrder = classTopic.order;
     const classTitleNorm = classTopic.title.trim().toLowerCase();
 
@@ -633,7 +638,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
 
     let globalTopic = await globalRepo.findOne({
       where: {
-        language: classLang,
+        language: topicLanguage,
         order: classOrder,
         class: IsNull()
       },
@@ -646,7 +651,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       // Fallback: match by title (in case class topics were reordered).
       const globals = await globalRepo.find({
         where: {
-          language: classLang,
+          language: topicLanguage,
           class: IsNull()
         },
         relations: { theoryBlock: true }
@@ -732,7 +737,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
         order: topicTask.order,
         testDataCount,
         grade,
-        language: topicTask.topic.class?.language || "JAVA",
+        language: topicTask.topic.language,
         lesson: {
           id: lessonId,
           title: lessonTitle,
@@ -748,7 +753,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
                   globalMatchStrategy,
                   classTopic: {
                     id: classTopic.id,
-                    language: classLang,
+                    language: topicLanguage,
                     order: classOrder,
                     title: classTopic.title
                   },
@@ -1131,7 +1136,7 @@ router.post("/tasks/:taskId/run", authRequired, submissionRateLimitMiddleware, r
     }
     const input = validated.data.input;
 
-    const judgeLang = judgeLanguageFromEduLanguage(topicTask.topic.class.language);
+    const judgeLang = judgeLanguageFromEduLanguage(topicTask.topic.language);
     const normalizedFiles = normalizeApiFiles(validated.data.files);
     const providedCode = validated.data.code ?? "";
     const decodedFromCode = normalizedFiles.length === 0 ? decodeMultiFileSubmissionV1(providedCode) : null;
@@ -1154,7 +1159,7 @@ router.post("/tasks/:taskId/run", authRequired, submissionRateLimitMiddleware, r
 
     // For single-file we can run locally; for multi-file route through judge worker.
     if (!isMultiFile) {
-      const result = await executeCodeWithInput(sourceText, topicTask.topic.class.language, input || "", 5000);
+      const result = await executeCodeWithInput(sourceText, judgeLang, input || "", 5000);
       return res.json({ output: result.stdout, stderr: result.stderr, success: result.success });
     }
 
@@ -1291,7 +1296,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       return res.status(400).json({ message: validationMessageFromZod(validatedBody.error) });
     }
 
-    const eduLang = topicTask.topic.class.language;
+    const eduLang = topicTask.topic.language;
     const judgeLang = judgeLanguageFromEduLanguage(eduLang);
     const normalizedFiles = normalizeApiFiles(validatedBody.data.files);
     const providedCode = validatedBody.data.code ?? "";
@@ -1343,12 +1348,6 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
     }> = [];
 
     // `judgeLang` computed above.
-    const defaultLimitsByLang = {
-      java: { time_limit_ms: 1200, memory_limit_mb: 256, output_limit_kb: 64 },
-      python: { time_limit_ms: 900, memory_limit_mb: 128, output_limit_kb: 64 },
-      cpp: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 }
-    } as const;
-
     maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
 
     const {
@@ -1480,11 +1479,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
           }));
 
         const langForHints =
-          topicTask.topic.class.language === "JAVA"
-            ? "JAVA"
-            : topicTask.topic.class.language === "CPP"
-              ? "CPP"
-              : "PYTHON";
+          topicTask.topic.language;
 
         const hints = await generateAlgorithmicHints({
           taskTitle: topicTask.title,
@@ -1869,7 +1864,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       return res.status(400).json({ message: validationMessageFromZod(validatedBody.error) });
     }
 
-    const eduLang = topicTask.topic.class.language;
+    const eduLang = topicTask.topic.language;
     const judgeLang = judgeLanguageFromEduLanguage(eduLang);
     const normalizedFiles = normalizeApiFiles(validatedBody.data.files);
     const providedCode = validatedBody.data.code ?? "";
@@ -1921,12 +1916,6 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
     }> = [];
 
     // `judgeLang` computed above.
-    const defaultLimitsByLang = {
-      java: { time_limit_ms: 1200, memory_limit_mb: 256, output_limit_kb: 64 },
-      python: { time_limit_ms: 900, memory_limit_mb: 128, output_limit_kb: 64 },
-      cpp: { time_limit_ms: 800, memory_limit_mb: 256, output_limit_kb: 64 }
-    } as const;
-
     maxScore = tests.reduce((sum, t) => sum + (t.points || 1), 0);
 
     const {
@@ -2058,11 +2047,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
           }));
 
         const langForHints =
-          topicTask.topic.class.language === "JAVA"
-            ? "JAVA"
-            : topicTask.topic.class.language === "CPP"
-              ? "CPP"
-              : "PYTHON";
+          topicTask.topic.language;
 
         const hints = await generateAlgorithmicHints({
           taskTitle: topicTask.title,

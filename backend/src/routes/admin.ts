@@ -81,13 +81,11 @@ const updateUserRoleSchema = z.object({
 });
 const createClassSchema = z.object({
   name: z.string().min(1).max(255),
-  language: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
   gradingSystem: z.enum(GRADING_SYSTEMS).optional(),
   teacherId: z.number().int().positive()
 });
 const updateClassSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  language: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
   gradingSystem: z.enum(GRADING_SYSTEMS).optional(),
   teacherId: z.number().int().positive().optional()
 });
@@ -396,7 +394,6 @@ adminRouter.post("/classes", authRequired, systemAdminGuard, async (req: AuthReq
     const cls = classRepo().create({
       teacher: teacher,
       name: data.name,
-      language: normalizeLang(data.language || "PYTHON"),
       gradingSystem: data.gradingSystem || DEFAULT_GRADING_SYSTEM
     });
     await classRepo().save(cls);
@@ -405,7 +402,6 @@ adminRouter.post("/classes", authRequired, systemAdminGuard, async (req: AuthReq
       class: {
         id: cls.id,
         name: cls.name,
-        language: cls.language,
         gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM,
         teacherId: teacher.id,
         teacherName: teacher.username,
@@ -431,7 +427,6 @@ adminRouter.get("/classes", authRequired, systemAdminGuard, async (req: AuthRequ
       classes: classes.map(cls => ({
         id: cls.id,
         name: cls.name,
-        language: cls.language,
         gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM,
         teacherId: cls.teacher.id,
         teacherName: cls.teacher.username,
@@ -474,7 +469,6 @@ adminRouter.patch("/classes/:id", authRequired, systemAdminGuard, async (req: Au
       });
     }
     if (data.name) cls.name = data.name;
-    if (data.language) cls.language = normalizeLang(data.language);
     if (data.gradingSystem) cls.gradingSystem = data.gradingSystem;
     if (data.teacherId && data.teacherId !== cls.teacher.id) {
       const teacher = await userRepo().findOne({
@@ -495,7 +489,6 @@ adminRouter.patch("/classes/:id", authRequired, systemAdminGuard, async (req: Au
       class: {
         id: cls.id,
         name: cls.name,
-        language: cls.language,
         gradingSystem: cls.gradingSystem || DEFAULT_GRADING_SYSTEM,
         teacherId: cls.teacher.id,
         teacherName: cls.teacher.username,

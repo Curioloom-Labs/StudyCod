@@ -262,7 +262,7 @@ export default {
   basic: 'Basic',
   taskHistorySaved: 'Task and grade history is saved separately for each language.',
   studentInfo: 'Student Information',
-  languageDeterminedByTeacher: 'Programming language and class are determined by the teacher.',
+  languageDeterminedByTeacher: 'The teacher chooses the programming language separately for each topic.',
   profileAvatar: 'Profile Avatar',
   dragOrChooseFile: 'Drag PNG/JPG or choose file',
   chooseFile: 'Choose File',

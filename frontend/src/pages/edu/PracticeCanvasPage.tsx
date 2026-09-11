@@ -12,7 +12,7 @@ import {
   type StudyCodIdeCheckResult,
   type StudyCodIdeRunResult,
 } from "../../components/ide/StudyCodIDEWorkspace";
-import { defaultCompilerForFamily } from "../../lib/judgeLanguages";
+import { defaultCompilerForFamily, JUDGE_ENTRY_FILES } from "../../lib/judgeLanguages";
 import type { JudgeLanguage } from "../../lib/judgeLanguages";
 
 const preview = () =>
@@ -44,6 +44,7 @@ const demoTask: TaskWithGrade = {
   hasGrade: false,
 };
 const workspace = "mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-10";
+const entryFileForLanguage = (language: string) => JUDGE_ENTRY_FILES[String(language).toLowerCase() as JudgeLanguage] || "main.py";
 
 export const PracticeCanvasPage: React.FC = () => {
   const { taskId } = useParams<{ taskId: string }>();
@@ -215,25 +216,14 @@ export const PracticeCanvasPage: React.FC = () => {
       onCodeChange={setCode}
       files={[
         {
-          path:
-            task.language === "JAVA"
-              ? "Main.java"
-              : task.language === "PYTHON"
-                ? "main.py"
-                : "main.cpp",
+          path: entryFileForLanguage(task.language),
           content: code,
         },
       ]}
       onFilesChange={(next) => setCode(next[0]?.content || "")}
       useFiles={false}
       onEnableFiles={() => undefined}
-      entryFile={
-        task.language === "JAVA"
-          ? "Main.java"
-          : task.language === "PYTHON"
-            ? "main.py"
-            : "main.cpp"
-      }
+      entryFile={entryFileForLanguage(task.language)}
       stdin={input}
       onStdinChange={setInput}
       firstExampleInput={undefined}

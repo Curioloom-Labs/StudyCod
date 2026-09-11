@@ -70,7 +70,6 @@ interface StudentMasteryPayload {
     id: number;
     classId: number;
     className: string;
-    language: "JAVA" | "PYTHON" | "CPP";
   };
   summary: {
     topicsTotal: number;
@@ -542,8 +541,7 @@ async function buildStudentMasteryPayload(student: Student, locale: UiLocale): P
     student: {
       id: student.id,
       classId: student.class.id,
-      className: student.class.name,
-      language: student.class.language
+      className: student.class.name
     },
     summary: {
       topicsTotal: topics.length,

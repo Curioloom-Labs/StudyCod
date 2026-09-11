@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TOPIC_LANGUAGES } from "../utils/topicLanguage";
 
 const optionalNonNegativeInt = z.preprocess(
   value => value === "" || value === null || value === undefined ? undefined : value,
@@ -9,7 +10,7 @@ const optionalPositiveInt = z.preprocess(
   z.coerce.number().int().positive().optional(),
 );
 const dateInput = z.union([z.string(), z.number(), z.date()]);
-const topicLanguage = z.enum(["JAVA", "PYTHON", "CPP"]);
+const topicLanguage = z.enum(TOPIC_LANGUAGES);
 
 export const createTopicSchema = z.object({
   title: z.string().trim().min(1).max(512),

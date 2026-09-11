@@ -842,13 +842,17 @@ async function ensureEnumColumnHasValues(params: {
 }
 
 async function ensureCppLanguageEnums(): Promise<void> {
-  // C++ support: widen legacy language enums to include 'CPP'.
+  // Keep legacy tables on the original three-language contract, while the
+  // EDU topic table follows the complete judge language catalogue.
   const values = ["JAVA", "PYTHON", "CPP"];
   await ensureEnumColumnHasValues({ table: "users", column: "lang", values });
   await ensureEnumColumnHasValues({ table: "tasks", column: "lang", values });
   await ensureEnumColumnHasValues({ table: "topics", column: "lang", values });
-  await ensureEnumColumnHasValues({ table: "classes", column: "language", values });
-  await ensureEnumColumnHasValues({ table: "topics_new", column: "language", values });
+  await ensureEnumColumnHasValues({
+    table: "topics_new",
+    column: "language",
+    values: ["JAVA", "PYTHON", "CPP", "C", "CSHARP", "KOTLIN", "JS", "GO", "RUST", "PASCAL", "D", "DART", "HASKELL", "LISP", "LUA", "PERL", "PHP", "RUBY", "SWIFT"]
+  });
   await ensureEnumColumnHasValues({ table: "library_tasks", column: "lang", values });
 }
 
@@ -861,7 +865,7 @@ async function ensureClassesGradingSystemColumn(): Promise<void> {
     if (!Array.isArray(col) || col.length === 0) {
       logger.warn("[DB Patch] Column classes.grading_system is missing. Applying ALTER TABLE...");
       await query(
-        "ALTER TABLE `classes` ADD COLUMN `grading_system` ENUM('PERCENT_100','POINTS_12','POINTS_10','LETTER_AF','ECTS_AF','GPA_4') NOT NULL DEFAULT 'PERCENT_100' AFTER `language`"
+        "ALTER TABLE `classes` ADD COLUMN `grading_system` ENUM('PERCENT_100','POINTS_12','POINTS_10','LETTER_AF','ECTS_AF','GPA_4') NOT NULL DEFAULT 'PERCENT_100'"
       );
       logger.info("[DB Patch] Added column classes.grading_system");
     }

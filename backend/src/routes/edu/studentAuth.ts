@@ -86,7 +86,6 @@ router.post("/student-login", studentLoginLimiter, async (req: AuthRequest, res:
         email: student.email,
         classId: student.class.id,
         className: student.class.name,
-        language: student.class.language,
         uiLanguage: student.uiLanguage
       }
     });
