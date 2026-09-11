@@ -87,6 +87,19 @@ const fromDateTimeLocalValue = (value: string) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 };
+const getAssignmentErrorMessage = (error: unknown, fallback: string) => {
+  const message = getErrorMessageFromUnknown(error, fallback);
+  switch (message) {
+    case "CLASS_HAS_NO_STUDENTS":
+      return "У цьому класі ще немає учнів. Додайте учнів, а потім відкрийте контрольну ще раз.";
+    case "CLASS_NOT_FOUND":
+      return "Клас для цієї теми не знайдено. Оновіть сторінку та перевірте прив’язку теми.";
+    case "ACCESS_DENIED":
+      return "У вас немає доступу, щоб змінити доступність цієї контрольної.";
+    default:
+      return message;
+  }
+};
 const previewTemplateForLanguage = (language: string) => {
   switch (language.toUpperCase()) {
     case "JAVA":
@@ -653,6 +666,9 @@ export const TopicStudioPage: React.FC = () => {
   };
 
   const toggleControl = async (control: Control) => {
+    if (assignmentBusyId === control.id) return;
+    setAssignmentBusyId(control.id);
+    setError(null);
     try {
       if (preview()) {
         setTopic((old) => old ? { ...old, controlWorks: (old.controlWorks || []).map((item) => item.id === control.id ? { ...item, isAssigned: !item.isAssigned } : item) } : old);
@@ -662,7 +678,9 @@ export const TopicStudioPage: React.FC = () => {
         await load();
       }
     } catch (caught) {
-      setError(getErrorMessageFromUnknown(caught, "Не вдалося змінити доступність контрольної."));
+      setError(getAssignmentErrorMessage(caught, "Не вдалося змінити доступність контрольної."));
+    } finally {
+      setAssignmentBusyId(null);
     }
   };
 
@@ -858,8 +876,8 @@ export const TopicStudioPage: React.FC = () => {
                         <p className="text-sm font-black">{control.title || "Контрольна робота"}</p>
                         <p className="mt-1 text-xs text-[#718075] dark:text-[#a6b4a9]">{control.timeLimitMinutes ? `${control.timeLimitMinutes} хв` : "Без обмеження часу"}</p>
                       </div>
-                      <button type="button" onClick={() => void toggleControl(control)} className={`rounded-full px-2.5 py-1 text-[11px] font-black ${control.isAssigned ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-white text-[#718075] dark:bg-white/[.06] dark:text-[#a6b4a9]"}`}>
-                        {control.isAssigned ? "активна" : "чернетка"}
+                      <button type="button" disabled={assignmentBusyId === control.id} onClick={() => void toggleControl(control)} aria-pressed={!!control.isAssigned} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition disabled:cursor-wait disabled:opacity-60 ${control.isAssigned ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-white text-[#718075] dark:bg-white/[.06] dark:text-[#a6b4a9]"}`}>
+                        {assignmentBusyId === control.id ? "зберігаю…" : control.isAssigned ? "активна" : "чернетка"}
                       </button>
                     </div>
                     <button type="button" onClick={() => navigate(`/edu/control-works/${control.id}${preview() ? "?preview=true" : ""}`)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-black text-[#32443a] shadow-sm dark:bg-[#0b130e] dark:text-[#d8e3db]">

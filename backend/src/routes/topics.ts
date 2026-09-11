@@ -52,7 +52,6 @@ const classRepo = () => AppDataSource.getRepository(Class);
 const userRepo = () => AppDataSource.getRepository(User);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
 const CONTROL_WORK_MAX_TASKS_COUNT = 3;
-const CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT = 1;
 const CONTROL_TASK_MAX_ATTEMPTS = 3;
 
 type UnknownRecord = Record<string, unknown>;
@@ -1926,17 +1925,6 @@ topicsRouter.post("/control-works/:controlWorkId/assign", authRequired, async (r
     if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     const cls = access.cls;
 
-    if (controlWork.hasPractice !== false) {
-      const controlTasksCount = await countControlTasksForControlWork(controlWork.id);
-      if (controlTasksCount < CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT) {
-        return res.status(400).json({
-          message: "CONTROL_WORK_REQUIRES_MINIMUM_PRACTICE_TASKS",
-          expected: CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT,
-          actual: controlTasksCount
-        });
-      }
-    }
-
     const students = await studentRepo().find({
       where: {
         class: {
@@ -2205,23 +2193,6 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
       }
     }
     const gradeRepo = () => AppDataSource.getRepository(EduGrade);
-
-    if (task.type === "CONTROL" && task.controlWork?.id) {
-      const cw = await controlWorkRepo().findOne({
-        where: { id: task.controlWork.id }
-      });
-
-      if (cw?.isAssigned && cw.hasPractice !== false) {
-        const currentControlTasksCount = await countControlTasksForControlWork(cw.id);
-        if (currentControlTasksCount <= CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT) {
-          return res.status(400).json({
-            message: "CONTROL_WORK_ASSIGNED_REQUIRES_MINIMUM_PRACTICE_TASKS",
-            expected: CONTROL_WORK_MIN_PRACTICE_TASKS_COUNT,
-            actual: currentControlTasksCount
-          });
-        }
-      }
-    }
 
     await gradeRepo().delete({
       topicTask: {
