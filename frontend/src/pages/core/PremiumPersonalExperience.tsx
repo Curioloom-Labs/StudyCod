@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   Award,
   BookOpen,
+  CalendarDays,
   Camera,
   Check,
   Clock3,
@@ -396,6 +397,139 @@ export const PremiumProfileV2: React.FC<{
     </div>
     {badgesOpen && <div className="fixed inset-0 z-[80] flex items-end justify-center bg-[#081009]/55 p-4 backdrop-blur-sm sm:items-center" role="dialog" aria-modal="true" aria-label={label("Колекція емблем", "Emblem collection")}><div className="max-h-[min(760px,calc(100dvh-2rem))] w-full max-w-3xl overflow-y-auto rounded-[28px] border border-[#152219]/10 bg-[#f8faf7] p-5 shadow-2xl dark:border-white/10 dark:bg-[#121b15] sm:p-7"><div className="flex items-start justify-between gap-4"><div><div className="text-sm font-semibold text-[#d97706]">{label("Досягнення", "Achievements")}</div><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{label("Твоя колекція емблем", "Your emblem collection")}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-[#6b7a70] dark:text-[#a4b2a7]">{label("Кожен бейдж має власні рівні. Нагорода з’являється тоді, коли ти доводиш навичку практикою.", "Every badge has its own levels. A reward appears when you prove the skill through practice.")}</p></div><div className="flex items-center gap-2"><div className="rounded-xl bg-[#fff0d5] px-3 py-2 text-xs font-bold text-[#8a5a14] dark:bg-[#ff8c00]/10 dark:text-[#ffc46e]">{badgePoints} {label("очків", "points")}</div><button type="button" onClick={() => setBadgesOpen(false)} className="rounded-xl bg-[#edf1ed] px-3 py-2 text-sm font-semibold text-[#526157] hover:bg-[#e1e8e2] dark:bg-white/[.08] dark:text-[#c0cdc2]">{label("Закрити", "Close")}</button></div></div><div className="mt-6 grid gap-3 sm:grid-cols-2">{PERSONAL_BADGES.map((badge) => { const value = getBadgeMetricValue(badge, badgeStats); const currentLevel = getBadgeLevel(badge, badgeStats); const nextLevel = getNextBadgeLevel(badge, badgeStats); const progress = getBadgeProgressPercent(badge, badgeStats); const unlocked = isPersonalBadgeUnlocked(badge, badgeStats); const displayLevel = currentLevel ?? badge.levels[0]; const Icon = badge.Icon; const emblemTone = displayLevel.rank >= 4 ? "bg-gradient-to-br from-[#b9a7ff] to-[#6d5bd0] text-white ring-[#a995ff]/60" : displayLevel.rank === 3 ? "bg-gradient-to-br from-[#ffe18a] to-[#e5a51c] text-[#5b3b00] ring-[#ffd76a]/70" : displayLevel.rank === 2 ? "bg-gradient-to-br from-[#e8eef3] to-[#9ba9b8] text-[#26313b] ring-[#d5e1eb]/70" : "bg-gradient-to-br from-[#e3a36a] to-[#9b5522] text-[#351b0a] ring-[#e5a36a]/60"; return <div key={badge.id} className={`rounded-2xl border p-4 transition ${unlocked ? "border-[#00c96d]/35 bg-[#eaf9ef] dark:bg-[#00ff88]/[.07]" : "border-[#152219]/10 bg-white/55 dark:border-white/10 dark:bg-white/[.025]"}`}><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-sm ring-2 ${emblemTone}`}><Icon className="h-5 w-5" /><span className="absolute -bottom-1 -right-1 grid h-5 w-5 place-items-center rounded-full border-2 border-[#f8faf7] bg-[#17251c] text-[9px] font-bold text-white dark:border-[#121b15]">{displayLevel.rank}</span></span><div><div className="font-semibold">{label(badge.nameUk, badge.nameEn)}</div><div className="mt-0.5 text-xs font-bold text-[#147b47] dark:text-[#72edb0]">{unlocked ? label(`Рівень ${displayLevel.rank} · ${displayLevel.nameUk}`, `Level ${displayLevel.rank} · ${displayLevel.nameEn}`) : label("Ще не відкрито", "Not unlocked yet")}</div></div></div><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${unlocked ? "bg-[#00c96d]/15 text-[#147b47] dark:text-[#72edb0]" : "bg-black/[.05] text-[#8a988d] dark:bg-white/[.06]"}`}>{unlocked ? `+${displayLevel.points} ${label("очків", "pts")}` : label("У процесі", "In progress")}</span></div><p className="mt-4 text-xs font-semibold text-[#526157] dark:text-[#c7d5ca]">{label(badge.detailUk, badge.detailEn)}</p><div className="mt-3 h-2 overflow-hidden rounded-full bg-[#dfe9e1] dark:bg-white/10"><div className={`h-full rounded-full ${unlocked ? "bg-[#00c96d]" : "bg-[#9caea0]"}`} style={{ width: `${progress}%` }} /></div><div className="mt-2 flex items-center justify-between text-[11px] text-[#718075] dark:text-[#9eada1]"><span>{value}/{nextLevel?.threshold ?? displayLevel.threshold}</span><span>{nextLevel ? label(`до ${nextLevel.nameUk}`, `to ${nextLevel.nameEn}`) : label("максимальний рівень", "max level")}</span></div><div className="mt-3 rounded-xl bg-white/70 px-3 py-2 text-xs leading-5 text-[#68776d] dark:bg-white/[.05] dark:text-[#b5c5b8]"><span className="font-semibold text-[#147b47] dark:text-[#72edb0]">{label("Нагорода: ", "Reward: ")}</span>{label((currentLevel ?? badge.levels[0]).rewardUk, (currentLevel ?? badge.levels[0]).rewardEn)}</div><div className="mt-2 text-[11px] text-[#718075] dark:text-[#9eada1]"><span className="font-semibold">{label("Що це доводить: ", "What it proves: ")}</span>{label(badge.valueUk, badge.valueEn)}</div></div>; })}</div></div></div>}
   </div></div>;
+};
+
+export type EduProfileClassSummary = {
+  id: number;
+  name: string;
+  studentsCount: number;
+};
+
+export type EduProfileReviewSummary = {
+  gradeId: number;
+  classId?: number | null;
+  className?: string | null;
+  studentName: string;
+  taskTitle: string;
+};
+
+export const EduProfileV2: React.FC<{
+  user: User;
+  avatarUrl: string;
+  className?: string | null;
+  organizationName?: string | null;
+  classes: EduProfileClassSummary[];
+  pendingReviews: EduProfileReviewSummary[];
+  skillEvidence?: SkillEvidence;
+  canEditProfile: boolean;
+  saving: boolean;
+  message: string | null;
+  email?: string | null;
+  emailPrefEnabled: boolean;
+  emailPrefLoading: boolean;
+  googleLinked: boolean;
+  linkingGoogle: boolean;
+  onAvatar: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onSave: () => void;
+  onNavigate: (path: string) => void;
+  onToggleEmail: () => void;
+  onLinkGoogle: () => void;
+}> = ({
+  user,
+  avatarUrl,
+  className,
+  organizationName,
+  classes,
+  pendingReviews,
+  skillEvidence,
+  canEditProfile,
+  saving,
+  message,
+  email,
+  emailPrefEnabled,
+  emailPrefLoading,
+  googleLinked,
+  linkingGoogle,
+  onAvatar,
+  onSave,
+  onNavigate,
+  onToggleEmail,
+  onLinkGoogle,
+}) => {
+  const { i18n } = useTranslation();
+  const uk = !i18n.language?.toLowerCase().startsWith("en");
+  const label = (ukText: string, enText: string) => uk ? ukText : enText;
+  const isStudent = Boolean(user.studentId);
+  const roleLabel = isStudent ? label("Учень", "Student") : label("Викладач", "Teacher");
+  const displayName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.username;
+  const totalStudents = classes.reduce((sum, item) => sum + Math.max(0, item.studentsCount || 0), 0);
+  const practicedTopics = skillEvidence?.topics.length ?? 0;
+  const solvedTasks = skillEvidence?.solvedTasks ?? 0;
+  const revisitedSolved = skillEvidence?.revisitedSolved ?? 0;
+  const placeLabel = isStudent
+    ? className || label("Клас не призначено", "No class assigned")
+    : organizationName || label("Заклад не вказано", "No institution listed");
+
+  return (
+    <div className="min-h-full bg-[#f7f8f5] px-4 py-8 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-6 lg:px-10 lg:py-12">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-8 flex flex-col justify-between gap-4 border-b border-[#152219]/10 pb-7 dark:border-white/10 sm:flex-row sm:items-end">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold text-[#147b47] dark:text-[#62ecaa]"><GraduationCap className="h-4 w-4" />{label("EDU акаунт", "EDU account")}</div>
+            <h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] sm:text-5xl">{label("Профіль EDU", "EDU profile")}</h1>
+            <p className="mt-3 max-w-xl text-base leading-7 text-[#65746a] dark:text-[#a4b3a8]">{isStudent ? label("Твій клас, навчальний прогрес і корисні переходи — в одному місці.", "Your class, learning progress, and useful shortcuts in one place.") : label("Класи, перевірки та робочі переходи — в одному місці.", "Classes, reviews, and daily work shortcuts in one place.")}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => onNavigate(isStudent ? "/edu/lessons" : "/edu")} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#152219]/10 bg-white px-4 py-3 text-sm font-semibold text-[#314139] transition hover:-translate-y-0.5 hover:bg-[#eef4ef] dark:border-white/10 dark:bg-white/[.05] dark:text-[#dce7df] dark:hover:bg-white/[.08]"><BookOpen className="h-4 w-4" />{isStudent ? label("Мої уроки", "My lessons") : label("Мої класи", "My classes")}</button>
+            <button type="button" onClick={() => onNavigate(isStudent ? "/edu/journal" : "/edu/calendar")} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-[#152219]/10 bg-white px-4 py-3 text-sm font-semibold text-[#314139] transition hover:-translate-y-0.5 hover:bg-[#eef4ef] dark:border-white/10 dark:bg-white/[.05] dark:text-[#dce7df] dark:hover:bg-white/[.08]"><CalendarDays className="h-4 w-4" />{isStudent ? label("Мій журнал", "My journal") : label("Календар", "Calendar")}</button>
+            {canEditProfile && <button type="button" onClick={onSave} disabled={saving} className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[#00c96d] px-5 py-3 text-sm font-semibold text-[#062112] shadow-[0_16px_28px_-17px_rgba(0,201,109,.78)] transition hover:-translate-y-0.5 hover:bg-[#00dc79] disabled:opacity-60">{saving ? label("Зберігаємо…", "Saving…") : label("Зберегти зміни", "Save changes")}</button>}
+          </div>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[.82fr_1.18fr]">
+          <aside className="overflow-hidden rounded-[26px] bg-[#17251c] p-6 text-white shadow-[0_24px_55px_-35px_rgba(4,21,10,.85)] sm:p-7">
+            <div className="flex items-start justify-between gap-3">
+              <div className="relative">
+                <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-[#eff5f0] text-3xl font-bold text-[#147b47]">{avatarUrl ? <img src={avatarUrl} alt="" width={80} height={80} loading="lazy" className="h-full w-full object-cover" /> : initials(user.username)}</div>
+                {canEditProfile && <label className="absolute -bottom-2 -right-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg bg-[#00d977] text-[#062112] shadow-lg"><input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" onChange={onAvatar} /><Camera className="h-4 w-4" /></label>}
+              </div>
+              <div className="rounded-xl bg-white/8 px-3 py-2 text-xs font-semibold text-[#b7c9ba]">ID {user.id > 0 ? user.id : "preview"}</div>
+            </div>
+            <h2 className="mt-7 text-2xl font-semibold tracking-[-.04em]">{displayName}</h2>
+            <p className="mt-1 text-sm text-[#a9bdaa]">{roleLabel} · {placeLabel}</p>
+            <div className="mt-7 border-t border-white/10 pt-6">
+              <div className="text-xs font-semibold uppercase tracking-[.14em] text-[#8ea992]">{isStudent ? label("Мій клас", "My class") : label("Мій заклад", "My institution")}</div>
+              <div className="mt-2 flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-xl bg-[#00ff88]/12 text-[#73ecae]"><GraduationCap className="h-5 w-5" /></div><div className="min-w-0 text-xl font-semibold tracking-[-.04em]">{placeLabel}</div></div>
+              <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full w-full rounded-full bg-[#00d977]" /></div>
+            </div>
+            <div className="mt-7 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl bg-white/[.07] p-4"><div className="text-2xl font-semibold">{isStudent ? practicedTopics : classes.length}</div><div className="mt-1 text-xs leading-5 text-[#a9bdaa]">{isStudent ? label("тем практикую", "topics practiced") : label("активних класів", "active classes")}</div></div>
+              <div className="rounded-2xl bg-white/[.07] p-4"><div className="text-2xl font-semibold">{isStudent ? solvedTasks : totalStudents}</div><div className="mt-1 text-xs leading-5 text-[#a9bdaa]">{isStudent ? label("задач вирішено", "tasks solved") : label("учнів у класах", "students in classes")}</div></div>
+            </div>
+          </aside>
+
+          <div className="space-y-6">
+            <section className="rounded-[26px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15] sm:p-7">
+              <div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-sm font-semibold text-[#147b47] dark:text-[#62ecaa]"><Layers3 className="h-4 w-4" />{label("Робочий контекст", "Working context")}</div><h2 className="mt-3 text-2xl font-semibold tracking-[-.04em]">{isStudent ? label("Мій навчальний ритм", "My learning rhythm") : label("Мій EDU-простір", "My EDU workspace")}</h2><p className="mt-2 max-w-lg text-sm leading-6 text-[#6c7a70] dark:text-[#a4b2a7]">{isStudent ? label("Тут видно головні результати навчання, без зайвих Personal-показників.", "The key learning signals, without unrelated Personal metrics.") : label("Основні показники викладача та швидкий доступ до щоденної роботи.", "The main teacher signals and shortcuts for daily work.")}</p></div><ShieldCheck className="h-5 w-5 text-[#147b47] dark:text-[#62ecaa]" /></div>
+              {isStudent ? <div className="mt-6 grid grid-cols-3 gap-2"><div className="rounded-xl bg-[#f5f8f5] px-3 py-4 dark:bg-white/[.04]"><div className="text-2xl font-semibold">{practicedTopics}</div><div className="mt-1 text-xs leading-5 text-[#718075] dark:text-[#9eada1]">{label("тем практиковано", "topics practiced")}</div></div><div className="rounded-xl bg-[#f5f8f5] px-3 py-4 dark:bg-white/[.04]"><div className="text-2xl font-semibold">{solvedTasks}</div><div className="mt-1 text-xs leading-5 text-[#718075] dark:text-[#9eada1]">{label("задач вирішено", "tasks solved")}</div></div><div className="rounded-xl bg-[#f5f8f5] px-3 py-4 dark:bg-white/[.04]"><div className="text-2xl font-semibold">{revisitedSolved}</div><div className="mt-1 text-xs leading-5 text-[#718075] dark:text-[#9eada1]">{label("повторних перемог", "revisited wins")}</div></div></div> : <div className="mt-6 grid grid-cols-3 gap-2"><div className="rounded-xl bg-[#f5f8f5] px-3 py-4 dark:bg-white/[.04]"><div className="text-2xl font-semibold">{classes.length}</div><div className="mt-1 text-xs leading-5 text-[#718075] dark:text-[#9eada1]">{label("класи", "classes")}</div></div><div className="rounded-xl bg-[#f5f8f5] px-3 py-4 dark:bg-white/[.04]"><div className="text-2xl font-semibold">{totalStudents}</div><div className="mt-1 text-xs leading-5 text-[#718075] dark:text-[#9eada1]">{label("учнів", "students")}</div></div><div className="rounded-xl bg-[#f5f8f5] px-3 py-4 dark:bg-white/[.04]"><div className="text-2xl font-semibold">{pendingReviews.length}</div><div className="mt-1 text-xs leading-5 text-[#718075] dark:text-[#9eada1]">{label("на перевірку", "to review")}</div></div></div>}
+              {message && <p className="mt-4 text-sm font-medium text-[#147b47] dark:text-[#62ecaa]">{message}</p>}
+            </section>
+
+            <section className="grid gap-4 sm:grid-cols-3">
+              {(isStudent ? [{ title: label("Уроки", "Lessons"), text: label("Відкрити поточні матеріали", "Open current materials"), path: "/edu/lessons", Icon: BookOpen }, { title: label("Журнал", "Journal"), text: label("Переглянути оцінки", "View grades"), path: "/edu/journal", Icon: GraduationCap }, { title: label("AI-тьютор", "AI tutor"), text: label("Поставити запитання", "Ask a question"), path: "/edu/tutor", Icon: Sparkles }] : [{ title: label("Класи", "Classes"), text: label("Відкрити робочий простір", "Open workspace"), path: "/edu", Icon: GraduationCap }, { title: label("Календар", "Calendar"), text: label("Побачити дедлайни", "See deadlines"), path: "/edu/calendar", Icon: CalendarDays }, { title: label("Бібліотека", "Library"), text: label("Знайти матеріали", "Find materials"), path: "/edu/library", Icon: BookOpen }]).map(({ title, text, path, Icon }) => <button type="button" key={path} onClick={() => onNavigate(path)} className="group rounded-2xl border border-[#152219]/10 bg-[#fbfcfa] p-5 text-left transition hover:-translate-y-0.5 hover:border-[#00c96d]/40 dark:border-white/10 dark:bg-[#101813]"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#e8f8ed] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]"><Icon className="h-5 w-5" /></span><h3 className="mt-4 text-lg font-semibold tracking-[-.03em]">{title}</h3><p className="mt-1 text-sm leading-6 text-[#718075] dark:text-[#a4b2a7]">{text}</p><span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[#147b47] dark:text-[#72edb0]">{label("Відкрити", "Open")} <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-1" /></span></button>)}
+            </section>
+          </div>
+        </div>
+
+        {isStudent ? <section className="mt-6 rounded-[26px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15] sm:p-7"><div className="flex items-start justify-between gap-4"><div><div className="text-xs font-semibold uppercase tracking-[.15em] text-[#147b47] dark:text-[#62ecaa]">{label("Прогрес за темами", "Topic progress")}</div><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{label("Що вже опрацьовано", "What you have covered")}</h2></div><TrendingUp className="h-5 w-5 text-[#147b47] dark:text-[#62ecaa]" /></div>{skillEvidence?.topics.length ? <div className="mt-6 grid gap-3 md:grid-cols-2">{skillEvidence.topics.slice(0, 8).map((topic) => { const progress = topic.practiced ? Math.round((topic.solved / topic.practiced) * 100) : 0; return <div key={topic.name} className="rounded-2xl border border-[#152219]/8 bg-[#fafcf9] p-4 dark:border-white/8 dark:bg-white/[.025]"><div className="flex items-center justify-between gap-3 text-sm"><span className="font-semibold">{topic.name}</span><span className="text-xs text-[#718075] dark:text-[#9eada1]">{topic.solved}/{topic.practiced}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e3ebe4] dark:bg-white/10"><div className="h-full rounded-full bg-[#00c96d]" style={{ width: `${Math.min(100, progress)}%` }} /></div></div>; })}</div> : <div className="mt-5 rounded-2xl border border-dashed border-[#152219]/15 p-5 text-sm text-[#718075] dark:border-white/10 dark:text-[#9eada1]">{label("Прогрес зʼявиться після перших перевірених робіт.", "Progress will appear after your first checked submissions.")}</div>}</section> : <div className="mt-6 grid gap-6 lg:grid-cols-[1.1fr_.9fr]"><section className="rounded-[26px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15] sm:p-7"><div className="flex items-center justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-[.15em] text-[#147b47] dark:text-[#62ecaa]">{label("Мої класи", "My classes")}</div><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{label("Навчальні потоки", "Teaching groups")}</h2></div><GraduationCap className="h-5 w-5 text-[#147b47] dark:text-[#62ecaa]" /></div><div className="mt-5 space-y-3">{classes.slice(0, 6).map((item) => <button type="button" key={item.id} onClick={() => onNavigate(`/edu/classes/${item.id}`)} className="group flex w-full items-center justify-between gap-3 rounded-2xl bg-[#fafcf9] p-4 text-left transition hover:bg-[#eef6f0] dark:bg-white/[.035] dark:hover:bg-white/[.07]"><span className="min-w-0"><strong className="block truncate text-sm">{item.name}</strong><span className="mt-1 block text-xs text-[#718075] dark:text-[#9eada1]">{item.studentsCount} {label("учнів", "students")}</span></span><ArrowRight className="h-4 w-4 shrink-0 text-[#8fa094] transition group-hover:translate-x-1" /></button>)}{classes.length === 0 && <div className="rounded-2xl border border-dashed border-[#152219]/15 p-5 text-sm text-[#718075] dark:border-white/10 dark:text-[#9eada1]">{label("Класів ще немає. Створіть перший клас, щоб почати роботу.", "No classes yet. Create your first class to get started.")}</div>}</div></section><section className="rounded-[26px] border border-[#ff8c00]/25 bg-[#fff8ec] p-6 dark:border-[#ff8c00]/20 dark:bg-[#ff8c00]/[.07] sm:p-7"><div className="flex items-center justify-between gap-3"><div><div className="text-xs font-semibold uppercase tracking-[.15em] text-[#d97706]">{label("Черга фідбеку", "Feedback queue")}</div><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{pendingReviews.length ? label("Роботи чекають", "Submissions waiting") : label("Черга порожня", "Queue is empty")}</h2></div><Clock3 className="h-5 w-5 text-[#d97706]" /></div><div className="mt-5 space-y-3">{pendingReviews.slice(0, 5).map((review) => <button type="button" key={review.gradeId} disabled={!review.classId} onClick={() => review.classId && onNavigate(`/edu/classes/${review.classId}/gradebook?review=${review.gradeId}`)} className="flex w-full items-center justify-between gap-3 rounded-xl bg-white/70 p-3 text-left transition enabled:hover:bg-white disabled:cursor-default disabled:opacity-70 dark:bg-white/[.06]"><span className="min-w-0"><strong className="block truncate text-sm">{review.taskTitle}</strong><span className="mt-1 block truncate text-xs text-[#776e5d] dark:text-[#c2b08e]">{review.studentName}{review.className ? ` · ${review.className}` : ""}</span></span><ArrowRight className="h-4 w-4 shrink-0 text-[#d97706]" /></button>)}{pendingReviews.length === 0 && <p className="rounded-xl bg-white/70 p-4 text-sm leading-6 text-[#776e5d] dark:bg-white/[.06] dark:text-[#c2b08e]">{label("Усі роботи переглянуті. Можна готувати наступне заняття.", "Everything is reviewed. You can prepare the next lesson.")}</p>}</div></section></div>}
+
+        <section className="mt-6 rounded-[26px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15] sm:p-7">
+          <div className="flex items-start justify-between gap-4"><div><div className="text-xs font-semibold uppercase tracking-[.15em] text-[#e87d00]">{label("Акаунт", "Account")}</div><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{label("Налаштування входу", "Account settings")}</h2><p className="mt-2 text-sm leading-6 text-[#68776d] dark:text-[#a4b2a7]">{label("Тільки те, що стосується акаунта: пошта, сповіщення та Google.", "Only account essentials: email, notifications, and Google.")}</p></div><ShieldCheck className="h-5 w-5 text-[#e87d00]" /></div>
+          <div className="mt-6 grid gap-3 lg:grid-cols-2"><div className="rounded-2xl bg-[#f5f8f5] p-4 dark:bg-white/[.04]"><div className="flex items-center justify-between gap-3"><div className="min-w-0"><div className="text-sm font-semibold">{label("Інформаційні листи", "Email updates")}</div><div className="mt-1 truncate text-xs text-[#718075] dark:text-[#9eada1]">{email || label("Пошту не підтверджено", "Email is not available")}</div></div>{email && <button type="button" onClick={onToggleEmail} disabled={emailPrefLoading} className={`rounded-xl px-3 py-2 text-xs font-semibold transition disabled:opacity-50 ${emailPrefEnabled ? "bg-[#e8f8ed] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-[#e9eeea] text-[#6d7c71] dark:bg-white/[.08] dark:text-[#a4b2a7]"}`}>{emailPrefLoading ? label("Збереження…", "Saving…") : emailPrefEnabled ? label("Увімкнено", "On") : label("Вимкнено", "Off")}</button>}</div></div><div className="rounded-2xl bg-[#f5f8f5] p-4 dark:bg-white/[.04]"><div className="flex items-center justify-between gap-3"><div><div className="text-sm font-semibold">Google</div><div className="mt-1 text-xs text-[#718075] dark:text-[#9eada1]">{googleLinked ? label("Акаунт підʼєднано", "Account connected") : label("Можна підʼєднати для швидкого входу", "Connect for faster sign in")}</div></div>{googleLinked ? <span className="rounded-xl bg-[#e8f8ed] px-3 py-2 text-xs font-semibold text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{label("Підʼєднано", "Connected")}</span> : <button type="button" onClick={onLinkGoogle} disabled={linkingGoogle} className="rounded-xl bg-[#17251c] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#20462d] disabled:opacity-50 dark:bg-[#edf3ef] dark:text-[#0b120e]">{linkingGoogle ? label("Підключення…", "Connecting…") : label("Підʼєднати", "Connect")}</button>}</div></div></div>
+        </section>
+      </div>
+    </div>
+  );
 };
 
 export const PremiumLibrary: React.FC<{

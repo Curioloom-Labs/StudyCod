@@ -33,10 +33,11 @@ const CountUp: React.FC<{ value: number; decimals?: number; className?: string }
 import { getEmailSubscription, updateEmailSubscription, updateProfile } from "../../lib/api/profile";
 import { prepareGoogleLinkSession } from "../../lib/api/auth";
 import { listGrades } from "../../lib/api/grades";
+import { getClasses, getPendingReviews } from "../../lib/api/edu";
 import { getMyLearningEvidence, listApprovedLibraryTasks, type JudgeLanguage, type LibraryTaskListItem, type LearningSkillEvidence } from "../../lib/api/library";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
-import { PremiumProfileV2, SkillEvidenceDetails, type SkillEvidence } from "../core/PremiumPersonalExperience";
+import { EduProfileV2, PremiumProfileV2, SkillEvidenceDetails, type EduProfileClassSummary, type EduProfileReviewSummary, type SkillEvidence } from "../core/PremiumPersonalExperience";
 
 function buildApiUrl(path: string): string {
   const base = String(import.meta.env.VITE_API_URL || window.location.origin || "")
@@ -226,6 +227,8 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryTasks, setLibraryTasks] = useState<LibraryTaskListItem[]>([]);
   const [learningEvidence, setLearningEvidence] = useState<LearningSkillEvidence | null>(null);
+  const [eduClasses, setEduClasses] = useState<EduProfileClassSummary[]>([]);
+  const [eduReviews, setEduReviews] = useState<EduProfileReviewSummary[]>([]);
 
   const [emailPrefLoading, setEmailPrefLoading] = useState(false);
   const [emailPrefEnabled, setEmailPrefEnabled] = useState<boolean>(user.marketingEmailsEnabled ?? true);
@@ -337,6 +340,53 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
       mounted = false;
     };
   }, [course, loadGrades, loadLibraryTasks, loadLearningEvidence]);
+
+  useEffect(() => {
+    if (!isEducational || isStudent) {
+      setEduClasses([]);
+      setEduReviews([]);
+      return;
+    }
+
+    let mounted = true;
+    if (isDesignPreview) {
+      setEduClasses([
+        { id: -31, name: "10-Б · StudyCod", studentsCount: 24 },
+        { id: -32, name: "9-А · Основи коду", studentsCount: 19 },
+      ]);
+      setEduReviews([
+        { gradeId: -501, classId: -31, className: "10-Б", studentName: "Софія Коваль", taskTitle: "Цикли та масиви" },
+        { gradeId: -502, classId: -32, className: "9-А", studentName: "Максим Бондар", taskTitle: "Умовні оператори" },
+      ]);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    void Promise.allSettled([getClasses(), getPendingReviews()]).then(([classesResult, reviewsResult]) => {
+      if (!mounted) return;
+      if (classesResult.status === "fulfilled") {
+        setEduClasses(classesResult.value.map((item) => ({
+          id: item.id,
+          name: item.name,
+          studentsCount: Number.isFinite(Number(item.studentsCount)) ? Number(item.studentsCount) : 0,
+        })));
+      }
+      if (reviewsResult.status === "fulfilled") {
+        setEduReviews(reviewsResult.value.pendingReviews.map((review) => ({
+          gradeId: review.gradeId,
+          classId: review.classId,
+          className: review.className,
+          studentName: [review.student.firstName, review.student.lastName].filter(Boolean).join(" "),
+          taskTitle: review.task?.title || `Робота #${review.gradeId}`,
+        })));
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [isDesignPreview, isEducational, isStudent]);
 
   const validGrades = useMemo(() => grades.filter((g) => Number.isFinite(Number(g.total))), [grades]);
 
@@ -451,23 +501,70 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
     }
   };
 
+  const handleEmailToggle = async () => {
+    if (!emailPrefEmail || emailPrefLoading) return;
+    const next = !emailPrefEnabled;
+    setEmailPrefEnabled(next);
+    try {
+      setEmailPrefLoading(true);
+      await updateEmailSubscription(next);
+      onUserChange({ ...user, marketingEmailsEnabled: next });
+    } catch (error: unknown) {
+      setEmailPrefEnabled(!next);
+      showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Не вдалося оновити налаштування", "Failed to update setting")) });
+    } finally {
+      setEmailPrefLoading(false);
+    }
+  };
+
+  const handleGoogleLink = async () => {
+    if (linkingGoogle) return;
+    setLinkingGoogle(true);
+    try {
+      await prepareGoogleLinkSession();
+      window.location.href = buildApiUrl("/auth/google?link=true");
+    } catch (error: unknown) {
+      setLinkingGoogle(false);
+      showToast({
+        type: "error",
+        message: getErrorMessageFromUnknown(error, tr("Не вдалося підготувати підключення Google.", "Failed to prepare Google linking.")),
+      });
+    }
+  };
+
+  const navigateFromEduProfile = (path: string) => {
+    const previewSuffix = isDesignPreview ? (path.includes("?") ? "&preview=true" : "?preview=true") : "";
+    window.location.assign(`${path}${previewSuffix}`);
+  };
+
+  const eduProfileClasses = isStudent && user.classId
+    ? [{ id: user.classId, name: user.className || tr("Мій клас", "My class"), studentsCount: 0 }]
+    : eduClasses;
+  const eduOrganizationName = user.eduContexts?.organizations?.find((organization) => organization.name)?.name ?? null;
+
   if (isEducational) {
     return (
-      <PremiumProfileV2
+      <EduProfileV2
         user={user}
         avatarUrl={avatarUrl}
-        course={course}
-        stats={profileStats}
-        currentIad={currentIad}
-        weeklyActiveDays={weeklyActiveDays}
+        className={user.className}
+        organizationName={eduOrganizationName}
+        classes={eduProfileClasses}
+        pendingReviews={isStudent ? [] : eduReviews}
         skillEvidence={skillEvidence}
+        canEditProfile={isStudent}
         saving={saving}
         message={msg}
+        email={emailPrefEmail}
+        emailPrefEnabled={emailPrefEnabled}
+        emailPrefLoading={emailPrefLoading}
+        googleLinked={Boolean(user.googleId)}
+        linkingGoogle={linkingGoogle}
         onAvatar={onSelectFile}
         onSave={handleSave}
-        isEducational
-        className={user.className}
-        canEditProfile={isStudent}
+        onNavigate={navigateFromEduProfile}
+        onToggleEmail={() => void handleEmailToggle()}
+        onLinkGoogle={() => void handleGoogleLink()}
       />
     );
   }
