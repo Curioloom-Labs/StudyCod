@@ -451,6 +451,27 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
     }
   };
 
+  if (isEducational) {
+    return (
+      <PremiumProfileV2
+        user={user}
+        avatarUrl={avatarUrl}
+        course={course}
+        stats={profileStats}
+        currentIad={currentIad}
+        weeklyActiveDays={weeklyActiveDays}
+        skillEvidence={skillEvidence}
+        saving={saving}
+        message={msg}
+        onAvatar={onSelectFile}
+        onSave={handleSave}
+        isEducational
+        className={user.className}
+        canEditProfile={isStudent}
+      />
+    );
+  }
+
   if (!isEducational) {
     return <>
       <PremiumProfileV2
