@@ -33,7 +33,8 @@ const AppShell = React.lazy(async () => {
 });
 
 function shouldCheckCookieSession() {
-  return window.location.pathname === "/" && !new URLSearchParams(window.location.search).has("auth");
+  const path = window.location.pathname;
+  return (path === "/" || path === "/landing") && !new URLSearchParams(window.location.search).has("auth");
 }
 
 function isStandaloneLandingPath() {
@@ -60,8 +61,8 @@ const RouteBootstrap: React.FC = () => {
     };
   }, []);
 
-  if (isStandaloneLandingPath()) return <PublicLandingPage />;
   if (session === "checking") return <BrandedPageLoader />;
+  if (isStandaloneLandingPath()) return <PublicLandingPage />;
   return session === "anonymous" ? <PublicLandingPage /> : <AppShell />;
 };
 
