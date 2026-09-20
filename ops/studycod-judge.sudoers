@@ -1,0 +1,1 @@
+studycod ALL=(root) NOPASSWD: /usr/local/sbin/studycod-judge-worker

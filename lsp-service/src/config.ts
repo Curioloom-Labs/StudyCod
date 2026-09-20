@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 export interface LspConfig {
@@ -66,6 +66,27 @@ function readAtLeast(name: string, fallback: number, minimum: number): number {
   return Math.max(minimum, readPositiveInt(name, fallback));
 }
 
+function resolveJdtlsLauncher(jdtlsHome: string): string {
+  const configured = readEnv("JDTLS_LAUNCHER");
+  if (configured) return configured;
+
+  const plugins = join(jdtlsHome, "plugins");
+  const generic = join(plugins, "org.eclipse.equinox.launcher.jar");
+  if (existsSync(generic)) return generic;
+
+  try {
+    const versioned = readdirSync(plugins)
+      .filter(name => /^org\.eclipse\.equinox\.launcher_[^/]+\.jar$/.test(name))
+      .sort()
+      .map(name => join(plugins, name));
+    if (versioned.length) return versioned[versioned.length - 1];
+  } catch {
+    // Keep the conventional path in the error from the child process.
+  }
+
+  return generic;
+}
+
 export function readLspConfig(): LspConfig {
   const jdtlsHome = readString("JDTLS_HOME", "/opt/jdtls");
   return {
@@ -78,7 +99,7 @@ export function readLspConfig(): LspConfig {
     clangdPath: readString("CLANGD_PATH", "/opt/swift/usr/bin/clangd"),
     pyrightLangserver: readString("PYRIGHT_LANGSERVER", "/opt/studycod-lsp/node_modules/.bin/pyright-langserver"),
     jdtlsHome,
-    jdtlsLauncher: readString("JDTLS_LAUNCHER", join(jdtlsHome, "plugins", "org.eclipse.equinox.launcher.jar")),
+    jdtlsLauncher: resolveJdtlsLauncher(jdtlsHome),
     jdtlsConfiguration: readString("JDTLS_CONFIGURATION", join(jdtlsHome, "config_linux")),
     javaPath: readString("JAVA_PATH", "java"),
     home: readString("LSP_HOME", "/tmp"),

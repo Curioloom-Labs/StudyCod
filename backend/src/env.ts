@@ -155,6 +155,8 @@ const EnvSchema = z.object({
   // it exfiltrates course/student content to an uncontrolled host.
   TRANSLATE_ALLOW_PUBLIC_FALLBACK: z.string().optional(),
   JUDGE_WORKER_ENTRY: z.string().optional(),
+  JUDGE_RUN_AS_ROOT: z.string().optional(),
+  JUDGE_ROOT_WORKER: z.string().optional(),
   NSJAIL_PATH: z.string().optional(),
   NSJAIL_CONFIG: z.string().optional(),
   NSJAIL_USE_CONFIG: z.string().optional(),

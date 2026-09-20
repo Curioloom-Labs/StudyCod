@@ -52,6 +52,40 @@ update_repo() {
   )
 }
 
+install_judge_root_helper() {
+  # The production judge uses a root-owned wrapper because nsjail needs the
+  # host mount namespace. Keep the privileged files outside the repository,
+  # but refresh them on every root-run deployment.
+  [[ "${EUID}" -eq 0 ]] || return 0
+  [[ -f "$ROOT/ops/studycod-judge-worker" ]] || {
+    echo "Judge root worker is missing: $ROOT/ops/studycod-judge-worker" >&2
+    exit 2
+  }
+  [[ -f "$ROOT/ops/studycod-judge.sudoers" ]] || {
+    echo "Judge sudoers policy is missing: $ROOT/ops/studycod-judge.sudoers" >&2
+    exit 2
+  }
+  [[ -d "$ROOT/judge/dist" ]] || {
+    echo "Built judge distribution is missing: $ROOT/judge/dist" >&2
+    exit 2
+  }
+  local root_judge_dir=/usr/local/lib/studycod-judge
+  install -d -o root -g root -m 0755 "$root_judge_dir"
+  rm -rf "$root_judge_dir/dist" "$root_judge_dir/sandbox"
+  cp -a "$ROOT/judge/dist" "$root_judge_dir/dist"
+  cp -a "$ROOT/judge/sandbox" "$root_judge_dir/sandbox"
+  chown -R root:root "$root_judge_dir"
+  find "$root_judge_dir" -type d -exec chmod 0755 {} +
+  find "$root_judge_dir" -type f -exec chmod 0644 {} +
+  install -o root -g root -m 0755 \
+    "$ROOT/ops/studycod-judge-worker" \
+    /usr/local/sbin/studycod-judge-worker
+  install -o root -g root -m 0440 \
+    "$ROOT/ops/studycod-judge.sudoers" \
+    /etc/sudoers.d/studycod-judge
+  visudo -cf /etc/sudoers >/dev/null
+}
+
 npm_install() {
   if [[ -f package-lock.json ]]; then npm ci; else npm install; fi
 }
@@ -178,6 +212,7 @@ main() {
 
   [[ "$BUILD_BACKEND" == "1" ]] && build_package "$ROOT/backend"
   [[ "$BUILD_JUDGE" == "1" ]] && build_package "$ROOT/judge"
+  install_judge_root_helper
   [[ "$BUILD_AI_SERVICE" == "1" && -d "$ROOT/ai-service" ]] && build_package "$ROOT/ai-service"
   [[ "$BUILD_AI_WORKER" == "1" && -d "$ROOT/ai-service/cloudflare-ai-worker" ]] && build_package "$ROOT/ai-service/cloudflare-ai-worker"
   [[ "$BUILD_FRONTEND" == "1" && -d "$ROOT/frontend" ]] && build_frontend_release

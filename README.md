@@ -565,13 +565,15 @@ All backend configuration is declared and validated in `backend/src/env.ts`. Cre
 | Variable | Notes |
 |----------|-------|
 | `JUDGE_WORKER_ENTRY` | Path to the judge worker entry |
+| `JUDGE_RUN_AS_ROOT` | Set to `1` on Linux when nsjail requires a root worker; deploy installs a root-owned judge copy and wrapper |
+| `JUDGE_ROOT_WORKER` | Root-owned wrapper path; default `/usr/local/sbin/studycod-judge-worker` |
 | `NSJAIL_PATH` | Default `/usr/bin/nsjail` |
 | `NSJAIL_CONFIG` | Sandbox config path (enables config mode; production must resolve a readable config) |
 | `NSJAIL_USE_CONFIG` | Force config mode (prod always config mode) |
 | `NSJAIL_CWD` | Default `/work` |
 | `NSJAIL_CHROOT` / `_JAVA` / `_CPP` / `_PYTHON` | Per-language chroots |
 | `JUDGE_LOCK_PATH` / `JUDGE_LOCK_STALE_MS` | Judge lock |
-| — | The bundled config maps sandbox root to host uid/gid `1000`; the runner keeps submission directories private with mode `0700`. |
+| — | The bundled config maps sandbox root to the production judge uid/gid; the runner keeps submission directories private with mode `0700`. |
 | `JUDGE_MAX_*` | Input/test/output/file size & count caps |
 
 ### Execution queue & rate limits

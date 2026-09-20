@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# This wrapper is invoked through a narrowly-scoped sudoers rule. It accepts no
+# arguments so callers cannot turn the root transition into an arbitrary command.
+if [[ "$#" -ne 0 ]]; then
+  echo "studycod-judge-worker does not accept arguments" >&2
+  exit 64
+fi
+
+export NODE_ENV=production
+export NSJAIL_USE_CONFIG=1
+JUDGE_ROOT_DIR=/usr/local/lib/studycod-judge
+export NSJAIL_CONFIG="$JUDGE_ROOT_DIR/sandbox/nsjail.cfg"
+exec /opt/nodejs/current/bin/node "$JUDGE_ROOT_DIR/dist/index.js"

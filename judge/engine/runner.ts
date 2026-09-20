@@ -121,8 +121,10 @@ type JudgeFile = { path: string; content: string };
 // Keep host-side submission directories private while still making them writable
 // by the mapped sandbox process. The old 0777 mode allowed local users to read
 // and tamper with submissions and test data.
-const NSJAIL_HOST_UID = 1000;
-const NSJAIL_HOST_GID = 1000;
+// Keep this aligned with judge/sandbox/nsjail.cfg and the unprivileged
+// `studycod` service account used in production.
+const NSJAIL_HOST_UID = 999;
+const NSJAIL_HOST_GID = 987;
 
 async function prepareSandboxWritableDir(dir: string): Promise<void> {
   if (process.platform !== "linux") return;

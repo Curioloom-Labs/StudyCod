@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { accessSync, constants as fsConstants } from "node:fs";
+import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join, normalize } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -97,7 +98,32 @@ function safeRelativePath(value: unknown, language: Language): string {
   return normalized;
 }
 
-function commandFor(language: Language, session: string): { command: string; args: string[] } {
+let jdtlsConfigurationPromise: Promise<string> | null = null;
+
+async function writableJdtlsConfiguration(): Promise<string> {
+  if (!jdtlsConfigurationPromise) {
+    jdtlsConfigurationPromise = (async () => {
+      try {
+        accessSync(CONFIG.jdtlsConfiguration, fsConstants.R_OK | fsConstants.W_OK);
+        return CONFIG.jdtlsConfiguration;
+      } catch {
+        // The bundled JDTLS config is commonly root-owned on production hosts.
+      }
+
+      const fallback = join(ROOT, "jdtls-config");
+      try {
+        accessSync(fallback, fsConstants.R_OK | fsConstants.W_OK);
+        return fallback;
+      } catch {
+        await cp(CONFIG.jdtlsConfiguration, fallback, { recursive: true });
+        return fallback;
+      }
+    })();
+  }
+  return jdtlsConfigurationPromise;
+}
+
+async function commandFor(language: Language, session: string): Promise<{ command: string; args: string[] }> {
   if (language === "cpp" || language === "c") {
     return { command: CONFIG.clangdPath, args: ["--background-index=false", "--clang-tidy=false", "--header-insertion=never", "--limit-results=200"] };
   }
@@ -106,7 +132,7 @@ function commandFor(language: Language, session: string): { command: string; arg
   }
 
   const launcher = CONFIG.jdtlsLauncher;
-  const configuration = CONFIG.jdtlsConfiguration;
+  const configuration = await writableJdtlsConfiguration();
   const data = join(ROOT, "jdtls", session);
   return {
     command: CONFIG.javaPath,
@@ -215,7 +241,7 @@ async function startSession(language: Language): Promise<LspSession> {
   const root = join(ROOT, "sessions", id);
   const workspace = join(root, "workspace");
   await mkdir(workspace, { recursive: true });
-  const spec = commandFor(language, id);
+  const spec = await commandFor(language, id);
   const child = spawn(spec.command, spec.args, { cwd: workspace, stdio: "pipe", env: childProcessEnvironment(CONFIG) });
   const session: LspSession = { id, language, root, workspace, process: child, buffer: Buffer.alloc(0), nextRequestId: 1, pending: new Map(), diagnostics: new Map(), diagnosticRevisions: new Map(), diagnosticWaiters: new Set(), lastUsedAt: Date.now(), closed: false };
   child.stdout.on("data", (chunk: Buffer) => { session.buffer = Buffer.concat([session.buffer, chunk]); consumeMessages(session); });

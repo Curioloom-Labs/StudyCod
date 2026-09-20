@@ -86,7 +86,10 @@ export class JudgeClient {
     const payload = JSON.stringify(request);
     const payloadBytes = Buffer.byteLength(payload, "utf8");
     const nodeBin = process.execPath;
-    const spawnArgs = [workerEntry];
+    const runAsRoot = process.platform === "linux" && String(env.JUDGE_RUN_AS_ROOT ?? "").trim() === "1";
+    const rootWorker = String(env.JUDGE_ROOT_WORKER || "/usr/local/sbin/studycod-judge-worker").trim();
+    const command = runAsRoot ? "/usr/bin/sudo" : nodeBin;
+    const spawnArgs = runAsRoot ? ["-n", "-u", "root", rootWorker] : [workerEntry];
 
     if (runOptions.signal?.aborted) {
       const reason = runOptions.signal.reason;
@@ -130,7 +133,7 @@ export class JudgeClient {
       logger.warn("[judge] spawn", {
         submissionId: request.submission_id,
         language: request.language,
-        command: nodeBin,
+        command,
         args: spawnArgs,
         workerEntry,
         payloadBytes,
@@ -141,7 +144,7 @@ export class JudgeClient {
         useConfig: childEnv.NSJAIL_USE_CONFIG
       });
     }
-    const child = spawn(nodeBin, spawnArgs, {
+    const child = spawn(command, spawnArgs, {
       stdio: ["pipe", "pipe", "pipe"],
       env: childEnv,
       windowsHide: true
