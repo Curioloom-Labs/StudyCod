@@ -36,6 +36,10 @@ function shouldCheckCookieSession() {
   return window.location.pathname === "/" && !new URLSearchParams(window.location.search).has("auth");
 }
 
+function isStandaloneLandingPath() {
+  return window.location.pathname === "/landing";
+}
+
 /**
  * Keep the public homepage on a small route-level entry. The authenticated
  * workspace is intentionally not imported until the URL needs it.
@@ -56,6 +60,7 @@ const RouteBootstrap: React.FC = () => {
     };
   }, []);
 
+  if (isStandaloneLandingPath()) return <PublicLandingPage />;
   if (session === "checking") return <BrandedPageLoader />;
   return session === "anonymous" ? <PublicLandingPage /> : <AppShell />;
 };
