@@ -2,7 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { AIResponseValidator } from "./AIResponseValidator";
 import { getCurriculumPolicyViolationForGeneratedTask } from "../ai/curriculumPolicy";
-import { createIntroductoryHelloWorldTask } from "./introductoryTask";
+import { createIntroductoryHelloWorldTask, shouldUseCanonicalIntroductoryPractice } from "./introductoryTask";
+
+test("repeated first-topic practice stays canonical instead of falling back to AI", () => {
+  assert.equal(shouldUseCanonicalIntroductoryPractice({ topicIndex: 0, numInTopic: 1 }), true);
+  assert.equal(shouldUseCanonicalIntroductoryPractice({ topicIndex: 0, numInTopic: 4 }), true);
+  assert.equal(shouldUseCanonicalIntroductoryPractice({ topicIndex: 1, numInTopic: 1 }), false);
+  assert.equal(shouldUseCanonicalIntroductoryPractice({ topicIndex: 0, numInTopic: 1, isControl: true }), false);
+});
 
 test("introductory practice is deterministic and valid for the first Python topic", () => {
   const task = createIntroductoryHelloWorldTask({

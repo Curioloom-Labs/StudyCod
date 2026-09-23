@@ -22,6 +22,35 @@ test("curriculumPolicy: first topic only allows Hello World-style output", () =>
   assert.equal(hello, null);
 });
 
+test("curriculumPolicy: Python topics before strings reject space-separated multiple inputs", () => {
+  const inlineInputs = getCurriculumPolicyViolationForGeneratedTask({
+    lang: "PYTHON",
+    topicIndex: 5,
+    topicTitle: "Зіставлення зі зразком: match/case",
+    title: "Класифікатор команд",
+    practicalTask: "Зчитайте команду та параметр як два слова, розділені пробілом в одному рядку."
+  });
+  assert.match(String(inlineInputs), /UNTAUGHT_CONCEPT.*split|UNTAUGHT_CONCEPT.*parsing/i);
+
+  const separateLines = getCurriculumPolicyViolationForGeneratedTask({
+    lang: "PYTHON",
+    topicIndex: 5,
+    topicTitle: "Зіставлення зі зразком: match/case",
+    title: "Класифікатор команд",
+    practicalTask: "Зчитайте команду з першого рядка, а параметр — з другого."
+  });
+  assert.equal(separateLines, null);
+
+  const stringsTopic = getCurriculumPolicyViolationForGeneratedTask({
+    lang: "PYTHON",
+    topicIndex: 7,
+    topicTitle: "Рядки та форматування",
+    title: "Розбір команди",
+    practicalTask: "Зчитайте команду та параметр, розділені пробілом."
+  });
+  assert.equal(stringsTopic, null);
+});
+
 test("curriculumPolicy: CPP early topics forbid variables (UA слово)", () => {
   const v = getCurriculumPolicyViolationForGeneratedTask({
     lang: "CPP",

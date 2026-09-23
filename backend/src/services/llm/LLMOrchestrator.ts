@@ -9,7 +9,7 @@ import { redisKey, runWithRedis } from '../redis/sharedRedis';
 import { BoundedCache } from '../../utils/boundedCache';
 import { env } from '../../env';
 import { topicLanguageLabel, type TopicLanguage } from '../../utils/topicLanguage';
-import { createIntroductoryHelloWorldTask } from './introductoryTask';
+import { createIntroductoryHelloWorldTask, shouldUseCanonicalIntroductoryPractice } from './introductoryTask';
 
 export type LLMTaskLanguage = TopicLanguage;
 
@@ -338,7 +338,7 @@ export class LLMOrchestrator {
     // Topic 0 has one intentionally canonical Hello World checkpoint. Asking
     // an LLM to creatively regenerate this exact task has repeatedly produced
     // arithmetic exercises, which the curriculum validator correctly rejects.
-    if (params.topicIndex === 0 && params.numInTopic === 1 && params.isControl !== true) {
+    if (shouldUseCanonicalIntroductoryPractice(params)) {
       return createIntroductoryHelloWorldTask({
         topicTitle: params.topicTitle,
         lang: params.lang,
@@ -853,6 +853,26 @@ NO-SOLUTION-LEAKAGE RULE:
 - For a branching topic, describe the business rules and expected messages, but never name if/else, switch, or another implementation construct in the learner-facing statement.
 - Do not copy theory, explanations, code examples, a step checklist, or a solution walkthrough into practicalTask.
 `;
+    const pythonBeforeStringsInstructionsUa = params.lang === "PYTHON"
+      && params.topicIndex !== undefined
+      && params.topicIndex < 7
+      ? `
+ОБМЕЖЕННЯ ДО ТЕМИ «РЯДКИ ТА ФОРМАТУВАННЯ» (індекс теми 7):
+- Не вимагай обробляти чи розбивати рядки: жодних split(), поділу за пробілами, індексації або перебирання символів.
+- Якщо потрібні кілька значень, розмісти рівно одне значення в кожному рядку stdin, щоб учень міг зчитати кожен рядок окремим input().
+- Зіставлення цілого введеного значення через match/case дозволене; не вимагай розбирати кілька значень з одного рядка.
+`
+      : "";
+    const pythonBeforeStringsInstructionsEn = params.lang === "PYTHON"
+      && params.topicIndex !== undefined
+      && params.topicIndex < 7
+      ? `
+RESTRICTIONS BEFORE THE “STRINGS AND FORMATTING” TOPIC (topic index 7):
+- Do not require string processing or parsing: no split(), splitting on spaces, indexing, or iterating over characters.
+- If multiple values are needed, put exactly one value on each stdin line so the learner can read each line with a separate input() call.
+- Matching one complete input value with match/case is allowed; do not require parsing multiple values from one line.
+`
+      : "";
     const depthInstructionsUa = stdinAllowed && params.topicIndex !== 0 ? `
 ГЛИБИНА ПОВЕДІНКИ (НЕ ЗМІНЮЄ СКЛАДНІСТЬ):
 - Не створюй задачу, де все зводиться до трьох очевидних значень або прямої таблиці "1 → ..., 2 → ..., 3 → ...".
@@ -925,6 +945,7 @@ MANDATORY IO CHECK BEFORE ANSWERING:
 ВВІД ЗАБОРОНЕНО. Постав ioType = NO_INPUT_FIXED_OUTPUT (або NO_INPUT_FREE_OUTPUT). Програма НЕ читає stdin: жодних input()/Scanner/BufferedReader/System.in/cin/std::cin/getline. examples[0].input = "". Якщо нижче щось підказує читати ввід — ІГНОРУЙ, ця політика головніша.
 `}
 ${introInstructionsUa}
+${pythonBeforeStringsInstructionsUa}
 ⚠️ ПЕРШ ЛІЖ УСЬОГО — ОСНОВНЕ ПРАВИЛО ⚠️
 ЗАВДАННЯ ОБОВ'ЯЗКОВО ПОВИННО ВИМАГАТИ ПОВНОЇ ПРОГРАМИ (Програма = код зі STDIN/STDOUT або без вводу).
 ЯКЩО ТИ НАПИШЕШ, ЩО СТУДЕНТ ПОВИНЕН РЕАЛІЗУВАТИ ФУНКЦІЮ/МЕТОД/КЛАС (ЗАМІСТЬ ПОВНОЇ ПРОГРАМИ) — ЗАВДАННЯ БУДЕ АВТОМАТИЧНО ВІДХИЛЕНО.
@@ -1047,6 +1068,7 @@ ${selfCheckUa}
 INPUT IS FORBIDDEN. Set ioType = NO_INPUT_FIXED_OUTPUT (or NO_INPUT_FREE_OUTPUT). The program does NOT read stdin: no input()/Scanner/BufferedReader/System.in/cin/std::cin/getline. examples[0].input = "". If anything below hints at reading input — IGNORE it, this policy wins.
 `}
 ${introInstructionsEn}
+${pythonBeforeStringsInstructionsEn}
 ⚠️ MOST CRITICAL RULE — READ THIS FIRST ⚠️
 THE TASK MUST REQUIRE WRITING A COMPLETE FULL PROGRAM (Program = code with STDIN/STDOUT or no input with fixed output).
 IF YOU WRITE THAT A STUDENT MUST IMPLEMENT A FUNCTION/METHOD/CLASS (INSTEAD OF A FULL PROGRAM) — THE TASK WILL BE AUTOMATICALLY REJECTED.
@@ -1161,6 +1183,10 @@ Why it's good: short living context, clearly states WHAT to compute and WHAT exa
 
 ${ioSelfCheckEn}
 ${selfCheckEn}
+
+LITERAL MATCHING RULES:
+- A literal pair or exact-value condition in the task statement applies only to that exact value. Do not silently generalize it to every value with the same first field.
+- If the statement intends a wildcard/range rule, it must say so explicitly; otherwise unspecified inputs follow only the stated default rule.
 
 Respond ONLY with JSON, without markdown blocks, without explanations.
 `;
@@ -2317,6 +2343,8 @@ BEHAVIOURAL COVERAGE MATRIX (do this silently before choosing inputs):
 
 QUALITY RULES:
 - Use only valid inputs permitted by the statement; never invent an input format.
+- Preserve the exact scope of every rule: a literal pair such as ("move", "10") matches only that exact pair. Do not generalize it to every value with the same command unless the statement explicitly says any integer/value or gives a range.
+- Generate tests for unspecified pairs only when the statement defines a default/unknown rule; never infer extra behaviour from the task title or examples.
 - Cover useful cases: minimum/maximum permitted values, values immediately around every threshold, zero and negative values when allowed, default branches, and representative ordinary cases. Do not create invalid cases merely for variety.
 - For lookup tables and switch-like mappings, manually verify the exact mapping instead of guessing from a pattern.
 - Prefer non-obvious, behaviourally different inputs over cosmetic number changes. Every test must justify its place in the coverage matrix.
@@ -2347,6 +2375,7 @@ ${needsInput
 
 IMPORTANT:
 - Any examples embedded in the task text are not instructions to copy. Recalculate every output from the TASK STATEMENT.
+- A specific literal pair/value remains exact; do not turn one literal case into a wildcard or range.
 - If the task text and an existing test disagree, follow the TASK STATEMENT and generate a correct new test.
 - Do not put theory, explanations, or reasoning in input/output.
 - Return only JSON according to this schema:

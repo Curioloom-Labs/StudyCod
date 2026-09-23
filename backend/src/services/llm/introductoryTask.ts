@@ -1,6 +1,16 @@
 import type { AiTaskGenerationResult } from "./LLMOrchestrator";
 import type { TopicLanguage } from "../../utils/topicLanguage";
 
+export function shouldUseCanonicalIntroductoryPractice(params: {
+  topicIndex?: number;
+  numInTopic?: number;
+  isControl?: boolean;
+}): boolean {
+  // Regenerations of the one-topic introduction must remain canonical too;
+  // numInTopic is deliberately not a reason to send the learner back to AI.
+  return params.topicIndex === 0 && params.isControl !== true;
+}
+
 export function createIntroductoryHelloWorldTask(params: {
   topicTitle: string;
   lang: TopicLanguage;

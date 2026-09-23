@@ -2,6 +2,21 @@ import type { TopicLanguage } from "../../utils/topicLanguage";
 
 export type SupportedLanguage = TopicLanguage;
 
+// In the Python Core course, string operations are introduced at zero-based
+// topic index 7. Before that point, requiring space-separated multi-value
+// parsing silently depends on string methods such as split().
+const PYTHON_STRING_PARSING_TOPIC_INDEX = 7;
+const PYTHON_SPACE_SEPARATED_MULTI_VALUE_PATTERNS = [
+  /\bspace[-\s]separated\b/i,
+  /\bwhitespace[-\s]separated\b/i,
+  /\bseparated by (?:a )?(?:space|whitespace)\b/i,
+  /\b(?:two|three|multiple|several)\s+(?:values|words|tokens|numbers)\b.{0,60}\b(?:same|single|one)\s+line\b/i,
+  /\b(?:same|single|one)\s+line\b.{0,60}\b(?:two|three|multiple|several)\s+(?:values|words|tokens|numbers)\b/i,
+  /(?:через\s+пробіл(?:ом|ами)?|розділен[іоа]?\s+(?:одним\s+)?пробіл(?:ом|ами)?)/i,
+  /(?:два|три|кілька)\s+(?:значенн(?:я|ь)|слова|числа|токени).{0,60}в\s+одному\s+рядку/i,
+  /в\s+одному\s+рядку.{0,60}(?:два|три|кілька)\s+(?:значенн(?:я|ь)|слова|числа|токени)/i,
+];
+
 function hasCreateVerbForScaffolding(text: string): boolean {
   return /(створ(и|іть|ити)|додай(те)?|зроб(и|іть|ити)|налашт(уй|уйте|увати)|setup|configure|create|add)/i.test(text);
 }
@@ -120,6 +135,15 @@ export function getCurriculumPolicyViolationForGeneratedTask(params: {
   const practicalText = String(params.practicalTask ?? "").toLowerCase();
 
   if (!text.trim()) return null;
+
+  if (
+    lang === "PYTHON"
+    && topicIndex !== null
+    && topicIndex < PYTHON_STRING_PARSING_TOPIC_INDEX
+    && PYTHON_SPACE_SEPARATED_MULTI_VALUE_PATTERNS.some((pattern) => pattern.test(text))
+  ) {
+    return `UNTAUGHT_CONCEPT: Python string splitting/parsing is not taught before topicIndex=${PYTHON_STRING_PARSING_TOPIC_INDEX}. Put each input value on its own line instead of requiring space-separated values.`;
+  }
 
   // Platform constraint: tasks must be judgeable in an online judge environment.
   // Reject tasks that require creating files/folders, IDE configuration, or project scaffolding.

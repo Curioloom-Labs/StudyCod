@@ -1,7 +1,16 @@
 import { AppDataSource } from "../data-source";
 
-const DEFAULT_PASS_GRADE = 60;
+// Keep judge cases for partially-scored tasks: a grade >=60 unlocks the next
+// lesson, but the learner may still have failed individual tests and need the
+// cases for review. Remove them only after a full score.
+const DEFAULT_PASS_GRADE = 100;
 const CLEANUP_BATCH_SIZE = 500;
+
+export function resolvePersonalTaskCleanupPassGrade(passGrade?: number): number {
+  return Number.isFinite(passGrade)
+    ? Math.max(0, Math.min(100, Math.floor(passGrade!)))
+    : DEFAULT_PASS_GRADE;
+}
 
 /**
  * Personal tasks keep their judge cases in `test_data`. Once a generated task
@@ -13,9 +22,7 @@ export async function cleanupCompletedPersonalTaskTests(params?: {
   taskId?: number;
   passGrade?: number;
 }): Promise<number> {
-  const passGrade = Number.isFinite(params?.passGrade)
-    ? Math.max(0, Math.min(100, Math.floor(params!.passGrade!)))
-    : DEFAULT_PASS_GRADE;
+  const passGrade = resolvePersonalTaskCleanupPassGrade(params?.passGrade);
   const taskId = Number(params?.taskId);
 
   const where = Number.isInteger(taskId) && taskId > 0
