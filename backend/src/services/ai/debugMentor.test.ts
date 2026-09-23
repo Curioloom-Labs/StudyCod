@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { stripCodeFromMentorReply, deterministicReply, type DebugMentorContext } from "./debugMentor";
+import {
+  DEBUG_MENTOR_SYSTEM_PROMPT,
+  stripCodeFromMentorReply,
+  deterministicReply,
+  type DebugMentorContext,
+} from "./debugMentor";
 
 const baseCtx = (over: Partial<DebugMentorContext> = {}): DebugMentorContext => ({
   taskTitle: "T",
@@ -20,6 +25,15 @@ test("stripCodeFromMentorReply removes fenced code blocks", () => {
 test("stripCodeFromMentorReply collapses stray backticks and tilde fences", () => {
   assert.ok(!stripCodeFromMentorReply("a ~~~code~~~ b").includes("~~~"));
   assert.ok(!stripCodeFromMentorReply("```").includes("```"));
+});
+
+test("mentor prompt answers direct concept questions without giving the full solution", () => {
+  assert.match(DEBUG_MENTOR_SYSTEM_PROMPT, /назву методу, функції чи оператора/);
+  assert.match(DEBUG_MENTOR_SYSTEM_PROMPT, /короткий приклад у рядку/);
+  assert.match(DEBUG_MENTOR_SYSTEM_PROMPT, /не продовжуй загадки/);
+  assert.match(DEBUG_MENTOR_SYSTEM_PROMPT, /не відсилай шукати відповідь у документації/);
+  assert.match(DEBUG_MENTOR_SYSTEM_PROMPT, /умова допускає кілька форматів вводу/);
+  assert.match(DEBUG_MENTOR_SYSTEM_PROMPT, /повний код чи повне розв’язання задачі/);
 });
 
 test("deterministicReply gives a Socratic question per error kind", () => {

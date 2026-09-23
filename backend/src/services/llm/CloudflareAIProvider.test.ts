@@ -23,5 +23,8 @@ describe("CloudflareAIProvider prompt shaping", () => {
     assert.equal(typeof built.schema, "object");
     assert.equal((built.schema as any).properties.tests.minItems, 5);
     assert.equal((built.schema as any).properties.tests.maxItems, 5);
+    assert.match(built.systemPrompt, /всі рядки у визначеному порядку/);
+    assert.match(built.prompt, /не пропускай рядок для нуля/);
+    assert.match(built.prompt, /підстав input у формулу/);
   });
 });
