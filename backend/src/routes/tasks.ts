@@ -38,6 +38,7 @@ import { executeCodeWithInput } from "../services/codeExecutionService";
 import { computeTotalFromParts, evaluateCodeWithAI } from "../ai/evaluator";
 import { judgeWithSemaphore } from "../services/judgeWorker";
 import { buildJudgeTests, loadTestContentByIds, sweepTestCache } from "../services/judgeWorker/testCache";
+import { sanitizeTestResultsForStudent } from "../services/grading/sanitizeStudentTestResults";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { normalizeMarkdownText } from "../utils/markdownNormalize";
 import { inferNeedsInput } from "../utils/inferNeedsInput";
@@ -314,18 +315,6 @@ function inferEffectiveIoTypeForPersonalTask(task: Task, tests: Array<{ input?: 
   return "NO_INPUT_FREE_OUTPUT";
 }
 
-function sanitizeTestResultsForStudent(results: unknown): Array<{ testId: number; passed: boolean; verdict?: string | null; errorKind?: string | null; error?: string | null }> {
-  if (!Array.isArray(results)) return [];
-  return results
-    .map((r: unknown) => ({
-      testId: Number(readProperty(r, "testId") ?? readProperty(r, "test_id") ?? 0),
-      passed: Boolean(readProperty(r, "passed")),
-      verdict: (readProperty(r, "verdict") as string | null | undefined) ?? null,
-      errorKind: (readProperty(r, "errorKind") ?? readProperty(r, "error_kind")) as string | null | undefined ?? null,
-      error: readProperty(r, "error") as string | null | undefined ?? null
-    }))
-    .filter(r => Number.isFinite(r.testId) && r.testId > 0);
-}
 const taskRepo = () => AppDataSource.getRepository(Task);
 const topicRepo = () => AppDataSource.getRepository(Topic);
 const gradeRepo = () => AppDataSource.getRepository(Grade);
@@ -5086,6 +5075,7 @@ tasksRouter.post(
     expectedOutput?: string;
     actualOutput: string;
     passed: boolean;
+    isPublic: boolean;
     verdict?: string | null;
     error?: string | null;
     errorKind?: string | null;
@@ -5162,6 +5152,7 @@ tasksRouter.post(
           expectedOutput: (t.expectedOutput ?? "").toString(),
           actualOutput: "",
           passed: false,
+          isPublic: !t.isHidden,
           verdict: "CE",
           error: compileErr || "Compilation error",
           errorKind: workerRes.compile.error_kind ?? null
@@ -5199,6 +5190,7 @@ tasksRouter.post(
           expectedOutput: (r?.expected ?? t.expectedOutput ?? "").toString(),
           actualOutput: r?.actual ?? "",
           passed,
+          isPublic: !t.isHidden,
           verdict: r?.verdict ?? null,
           error: r?.stderr ?? null,
           errorKind: r?.error_kind ?? null
