@@ -11,6 +11,7 @@ import { User } from "../entities/User";
 import { IsNull } from "typeorm";
 import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeFile, JudgeRequest } from "./judgeWorker/types";
+import { projectEntryFile } from "./learningCatalogProjectFiles";
 import {
   localizeCourseItem,
   localizedCourseMetadata,
@@ -65,12 +66,6 @@ function projectFilesHash(files: JudgeFile[] | undefined): string {
 function projectRuntime(enrollment: UserCourseEnrollment): "JAVA" | "PYTHON" | "CPP" {
   const runtime = String(enrollment.variant?.runtime || "PYTHON").toUpperCase();
   return runtime === "JAVA" || runtime === "CPP" ? runtime : "PYTHON";
-}
-
-function projectEntryFile(runtime: "JAVA" | "PYTHON" | "CPP"): string {
-  if (runtime === "JAVA") return "Main.java";
-  if (runtime === "CPP") return "main.cpp";
-  return "solution.py";
 }
 
 function projectStarterCode(runtime: "JAVA" | "PYTHON" | "CPP"): string {
