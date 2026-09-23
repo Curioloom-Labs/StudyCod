@@ -41,6 +41,16 @@ test("topic identity stays stable when the same source is loaded twice", () => {
   assert.deepEqual(first.map((topic) => [topic.key, topic.sourceHash]), second.map((topic) => [topic.key, topic.sourceHash]));
 });
 
+test("match/case practice section demonstrates match/case instead of an unrelated if condition", () => {
+  const course = validateCurriculum().topics["python-core"];
+  const topic = course.find((entry) => entry.title === "Зіставлення зі зразком: match/case")!;
+  const practice = topic.content.split("### На практиці")[1]?.split("### Підсумок")[0] || "";
+  assert.match(practice, /match command:/);
+  assert.match(practice, /case "pick":/);
+  assert.match(practice, /case _:/);
+  assert.doesNotMatch(practice, /if score\s*>=\s*60/);
+});
+
 test("specialised lessons are authored lessons, not padded generic notes", () => {
   const result = validateCurriculum();
   for (const courseKey of ["flask", "fastapi", "computer-vision"]) {
