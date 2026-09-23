@@ -110,6 +110,16 @@ function defaultOutputFormatByIo(ioType: string): string {
   return 'Виведіть результат у стандартний потік виводу (stdout) у форматі, описаному в умові.';
 }
 
+function normalizeMalformedPythonTypeRepr(value: string): string {
+  // Models occasionally double the opening quote in Python's built-in type
+  // representation (e.g. `<class ''str'>`), making expected output impossible
+  // to produce with type(value). Repair only this precise shape.
+  return value.replace(
+    /<class\s+''(bool|bytes|complex|dict|float|frozenset|int|list|set|str|tuple|type|NoneType)'>/g,
+    "<class '$1'>",
+  );
+}
+
 function defaultConstraintsText(): string {
   return 'Час виконання: до 1 с. Обмеження памʼяті: до 256 МБ. Використовуйте допустимі межі вхідних значень для вибраних типів даних.';
 }
@@ -815,7 +825,7 @@ export class AIResponseValidator {
         })
         .map(ex => ({
           input: String(ex.input ?? '').trim(),
-          output: String(ex.output || '').trim(),
+          output: normalizeMalformedPythonTypeRepr(String(ex.output || '').trim()),
           explanation: String(ex.explanation || '').trim() || 'Example',
         }));
 
@@ -859,7 +869,7 @@ export class AIResponseValidator {
     const outputFormat = typeof fixed.outputFormat === 'string' ? fixed.outputFormat.trim() : '';
     const constraints = typeof fixed.constraints === 'string' ? fixed.constraints.trim() : '';
     fixed.inputFormat = inputFormat || defaultInputFormatByIo(ioTypeHint);
-    fixed.outputFormat = outputFormat || defaultOutputFormatByIo(ioTypeHint);
+    fixed.outputFormat = normalizeMalformedPythonTypeRepr(outputFormat || defaultOutputFormatByIo(ioTypeHint));
     fixed.constraints = constraints || defaultConstraintsText();
 
     if (typeof fixed.practicalTask === 'string') {

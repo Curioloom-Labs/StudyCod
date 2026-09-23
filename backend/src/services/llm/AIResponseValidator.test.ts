@@ -72,6 +72,32 @@ test('AIResponseValidator.validateGenerateTask: allows a concise first Hello Wor
   assert.doesNotThrow(() => AIResponseValidator.validateGenerateTask(data, 'Introduction to Java', 0));
 });
 
+test('AIResponseValidator.validateGenerateTask: repairs a duplicated quote in Python type output', () => {
+  const malformedOutput = [
+    "42: <class 'int'>",
+    "3.14: <class 'float'>",
+    "Python: <class ''str'>",
+    "True: <class 'bool'>",
+  ].join('\n');
+  const expectedOutput = malformedOutput.replace("<class ''str'>", "<class 'str'>");
+  const result = AIResponseValidator.validateGenerateTask({
+    title: 'Demonstrating data types',
+    topic: 'Data types and variables',
+    difficulty: 2,
+    theoryMarkdown: 'Python values have types, and variables refer to values.',
+    practicalTask: 'Write a complete program that uses an integer, a floating-point number, a string, and a Boolean value. Print each value with its Python type on a separate line in the exact format shown.',
+    ioType: 'NO_INPUT_FIXED_OUTPUT',
+    inputFormat: 'There is no input.',
+    outputFormat: malformedOutput,
+    constraints: 'Use the four specified values exactly.',
+    examples: [{ input: '', output: malformedOutput, explanation: 'Each value is printed with its type.' }],
+    codeTemplate: '# write code here',
+  });
+
+  assert.equal(result.outputFormat, expectedOutput);
+  assert.equal(result.examples[0]?.output, expectedOutput);
+});
+
 test('AIResponseValidator.validateGenerateTask: rejects theory copied into practicalTask', () => {
   const data = {
     title: 'If and switch',
