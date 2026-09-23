@@ -41,7 +41,7 @@ import { buildJudgeTests, loadTestContentByIds, sweepTestCache } from "../servic
 import { sanitizeTestResultsForStudent } from "../services/grading/sanitizeStudentTestResults";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { normalizeMarkdownText } from "../utils/markdownNormalize";
-import { inferNeedsInput } from "../utils/inferNeedsInput";
+import { explicitlyDeclaresNoInput, inferNeedsInput } from "../utils/inferNeedsInput";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
@@ -2289,23 +2289,31 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   })();
 
   const aiIoRaw = typeof aiTask.ioType === "string" ? aiTask.ioType.trim() : "";
+  const examples = Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [];
   const inferredNeedsInput = inferNeedsInput({
     taskDescription: practicalOnly,
     aiInputFormat: typeof aiTask.inputFormat === "string" ? aiTask.inputFormat : null
   });
+  const explicitlyNoInput = explicitlyDeclaresNoInput({
+    taskDescription: practicalOnly,
+    aiInputFormat: typeof aiTask.inputFormat === "string" ? aiTask.inputFormat : null
+  });
   const deterministicNoInput = (params.lang === "PYTHON" && params.topic && isIntroPythonFixedSumTask(practicalOnly, params.topic.title)) || computeDeterministicNoInputExpectedOutput(practicalOnly) !== null;
-  const inferred = (isTaskIoType(aiIoRaw)
+  const hasFixedNoInputOutput = examples.some(example => String(example?.output ?? "").trim().length > 0);
+  const inferred = (isTaskIoType(aiIoRaw) && !(explicitlyNoInput && aiIoRaw === "STDIN_STDOUT")
     ? aiIoRaw
-    : (inferredNeedsInput
-        ? "STDIN_STDOUT"
-        : (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT"))) as TaskIoType;
+    : (explicitlyNoInput
+        ? (deterministicNoInput || hasFixedNoInputOutput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")
+        : (inferredNeedsInput
+            ? "STDIN_STDOUT"
+            : (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")))) as TaskIoType;
 
   const ioType: TaskIoType = (!stdinAllowed && inferred === "STDIN_STDOUT")
     ? (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")
     : inferred;
 
   const fixedNoInputExpected = ioType === "NO_INPUT_FIXED_OUTPUT" ? pickNoInputFixedExpectedOutput({
-    examples: Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [],
+    examples,
     outputFormat: aiTask.outputFormat
   }) : null;
 
@@ -2317,7 +2325,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
       : i18nText(params.userLanguage, "Вхідних даних немає.", "No input data."),
     outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || aiTask.outputFormat) : aiTask.outputFormat,
     constraints: aiTask.constraints,
-    examples: Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [],
+    examples,
     uiLanguage: params.userLanguage
   });
 
@@ -4103,16 +4111,24 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     // We still keep codeTemplate restrictions in prompts, but runtime uses our template.
     // template remains as computed above.
     const aiIoRaw = typeof aiTask.ioType === "string" ? aiTask.ioType.trim() : "";
+    const examples = Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [];
     const inferredNeedsInput = inferNeedsInput({
       taskDescription: practicalOnly,
       aiInputFormat: typeof aiTask.inputFormat === "string" ? aiTask.inputFormat : null
     });
+    const explicitlyNoInput = explicitlyDeclaresNoInput({
+      taskDescription: practicalOnly,
+      aiInputFormat: typeof aiTask.inputFormat === "string" ? aiTask.inputFormat : null
+    });
     const deterministicNoInput = (lang === "PYTHON" && isIntroPythonFixedSumTask(practicalOnly, topic.title)) || computeDeterministicNoInputExpectedOutput(practicalOnly) !== null;
-    const inferred = (isTaskIoType(aiIoRaw)
+    const hasFixedNoInputOutput = examples.some(example => String(example?.output ?? "").trim().length > 0);
+    const inferred = (isTaskIoType(aiIoRaw) && !(explicitlyNoInput && aiIoRaw === "STDIN_STDOUT")
       ? aiIoRaw
-      : (inferredNeedsInput
-          ? "STDIN_STDOUT"
-          : (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT"))) as "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
+      : (explicitlyNoInput
+          ? (deterministicNoInput || hasFixedNoInputOutput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")
+          : (inferredNeedsInput
+              ? "STDIN_STDOUT"
+              : (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")))) as "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
 
     // If stdin isn't allowed for this topic, never select STDIN_STDOUT.
     const ioType = (!stdinAllowed && inferred === "STDIN_STDOUT")
@@ -4120,7 +4136,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       : inferred;
 
     const fixedNoInputExpected = ioType === "NO_INPUT_FIXED_OUTPUT" ? pickNoInputFixedExpectedOutput({
-      examples: Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [],
+      examples,
       outputFormat: aiTask.outputFormat
     }) : null;
     const statementMarkdown = composeTaskStatementMarkdown({
@@ -4132,7 +4148,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       // For NO_INPUT_FIXED_OUTPUT we want the visible output section to match the exact expected output.
       outputFormat: ioType === "NO_INPUT_FIXED_OUTPUT" ? (fixedNoInputExpected || aiTask.outputFormat) : aiTask.outputFormat,
       constraints: aiTask.constraints,
-      examples: Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [],
+      examples,
       uiLanguage: userLanguage
     });
     description = statementMarkdown;
