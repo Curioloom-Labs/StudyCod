@@ -33,6 +33,33 @@ test("introductory practice is deterministic and valid for the first Python topi
   );
 });
 
+test("introductory practice accepts the catalog's Practice 1/1 title", () => {
+  const topicTitle = "Практика 1/1: Вступ до Python та інтерпретатора";
+  const task = createIntroductoryHelloWorldTask({
+    topicTitle,
+    lang: "PYTHON",
+    language: "uk",
+  });
+
+  const validated = AIResponseValidator.validateGenerateTask(
+    task,
+    topicTitle,
+    0,
+    ["NO_INPUT_FIXED_OUTPUT"],
+  );
+
+  assert.equal(
+    getCurriculumPolicyViolationForGeneratedTask({
+      lang: "PYTHON",
+      topicIndex: 0,
+      topicTitle,
+      title: validated.title,
+      practicalTask: validated.practicalTask,
+    }),
+    null,
+  );
+});
+
 test("introductory practice localizes the statement and retains a judgeable contract", () => {
   const task = createIntroductoryHelloWorldTask({
     topicTitle: "Introduction to Python",

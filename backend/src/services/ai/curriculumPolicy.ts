@@ -111,7 +111,12 @@ export function getCurriculumPolicyViolationForGeneratedTask(params: {
     ? Math.floor(params.topicIndex)
     : null;
 
-  const text = `${String(params.title ?? "")}\n${String(params.practicalTask ?? "")}`.toLowerCase();
+  // Catalog topic titles include labels such as "Практика 1/1:". Strip that
+  // sequence marker before scanning for numeric expressions, otherwise the
+  // fraction-like ordinal is mistaken for a division exercise on topic 0.
+  const text = `${String(params.title ?? "")}\n${String(params.practicalTask ?? "")}`
+    .replace(/(?:practice|практика)\s+\d+\s*\/\s*\d+\s*:/gi, " ")
+    .toLowerCase();
   const practicalText = String(params.practicalTask ?? "").toLowerCase();
 
   if (!text.trim()) return null;
