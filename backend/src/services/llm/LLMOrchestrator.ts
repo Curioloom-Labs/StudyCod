@@ -327,6 +327,14 @@ export class LLMOrchestrator {
     /** Inbound request id for trace correlation across HTTP -> orchestrator. */
     requestId?: string;
   }): Promise<AiTaskGenerationResult> {
+    if (params.topicIndex === 0) {
+      logger.info("[llm] introductory task generation parameters", {
+        requestId: params.requestId,
+        numInTopic: params.numInTopic,
+        isControl: params.isControl ?? null,
+      });
+    }
+
     // Topic 0 has one intentionally canonical Hello World checkpoint. Asking
     // an LLM to creatively regenerate this exact task has repeatedly produced
     // arithmetic exercises, which the curriculum validator correctly rejects.
