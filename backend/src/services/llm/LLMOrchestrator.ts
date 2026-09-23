@@ -9,6 +9,7 @@ import { redisKey, runWithRedis } from '../redis/sharedRedis';
 import { BoundedCache } from '../../utils/boundedCache';
 import { env } from '../../env';
 import { topicLanguageLabel, type TopicLanguage } from '../../utils/topicLanguage';
+import { createIntroductoryHelloWorldTask } from './introductoryTask';
 
 export type LLMTaskLanguage = TopicLanguage;
 
@@ -326,6 +327,17 @@ export class LLMOrchestrator {
     /** Inbound request id for trace correlation across HTTP -> orchestrator. */
     requestId?: string;
   }): Promise<AiTaskGenerationResult> {
+    // Topic 0 has one intentionally canonical Hello World checkpoint. Asking
+    // an LLM to creatively regenerate this exact task has repeatedly produced
+    // arithmetic exercises, which the curriculum validator correctly rejects.
+    if (params.topicIndex === 0 && params.numInTopic === 1 && params.isControl !== true) {
+      return createIntroductoryHelloWorldTask({
+        topicTitle: params.topicTitle,
+        lang: params.lang,
+        language: params.language,
+      });
+    }
+
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();

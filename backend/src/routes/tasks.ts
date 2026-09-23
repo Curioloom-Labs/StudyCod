@@ -2206,7 +2206,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
       points: points[index] ?? 1,
       personalTask: { id: saved.id },
     })));
-    logger.warn("[tasks] generated deterministic fallback task after AI provider failure", {
+    logger.warn("[tasks] generated deterministic fallback task after task generation failed", {
       requestId: params.requestId,
       userId: params.userId,
       lang: params.lang,
