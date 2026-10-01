@@ -34,7 +34,7 @@
     "esbuild": "0.28.1",
     "path-to-regexp": "8.4.2",
     "minimatch": "9.0.9",
-    "brace-expansion": "2.1.4"
+    "brace-expansion": "2.1.7"
   },
   "_moduleAliases": {
     "@shared": "../shared",

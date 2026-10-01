@@ -85,6 +85,6 @@
   },
   "overrides": {
     "deepmerge-ts": "8.0.1",
-    "ip-address": "10.5.0"
+    "ip-address": "10.7.2"
   }
 }
