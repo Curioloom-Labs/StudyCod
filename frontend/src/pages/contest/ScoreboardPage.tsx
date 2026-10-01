@@ -156,7 +156,7 @@ export const ScoreboardPage: React.FC = () => {
           className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-bg-surface/80 p-4 shadow-[0_18px_55px_-45px_rgba(0,0,0,.75)] sm:flex-row sm:items-start sm:justify-between sm:p-5"
         >
           <div>
-            <Button variant="ghost" onClick={() => navigate(`/contests/${Number.isFinite(contestId) ? contestId : ""}`)} className="mb-3">
+            <Button variant="ghost" onClick={() => navigate(`/contest/contests/${Number.isFinite(contestId) ? contestId : ""}`)} className="mb-3">
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("Назад", "Back")}
             </Button>

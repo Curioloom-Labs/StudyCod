@@ -917,6 +917,17 @@ export const ContestPage: React.FC = () => {
   const [joining, setJoining] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const closeContestSettings = React.useCallback(() => {
+    setSettingsOpen(false);
+    if (searchParams.has("settings")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("settings");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+  React.useEffect(() => {
+    if (data?.access.canManage && searchParams.get("settings") === "1") setSettingsOpen(true);
+  }, [data?.access.canManage, searchParams]);
   const [settingsSection, setSettingsSection] = React.useState<"general" | "schedule" | "access" | "appearance">("general");
   const [deleteContestOpen, setDeleteContestOpen] = React.useState(false);
   const [deleteContestConfirmation, setDeleteContestConfirmation] = React.useState("");
@@ -3264,7 +3275,7 @@ export const ContestPage: React.FC = () => {
         scoreboardVisibility: settingsScoreboardVisibility,
         participantAccessMode: settingsParticipantAccessMode,
       });
-      setSettingsOpen(false);
+      closeContestSettings();
       await load();
       if (tab === "problems") loadProgress();
     } catch (e: unknown) {
@@ -3317,7 +3328,7 @@ export const ContestPage: React.FC = () => {
       const preserved = new URLSearchParams(searchParams);
       preserved.delete("tab");
       const query = preserved.toString();
-      navigate(`/contests/${contestId}/scoreboard${query ? `?${query}` : ""}`, { replace: true });
+      navigate(`/contest/contests/${contestId}/scoreboard${query ? `?${query}` : ""}`, { replace: true });
       return;
     }
     if (!data.access.canManage && ["accounts", "participants", "certificates", "management"].includes(tab)) {
@@ -3501,7 +3512,7 @@ export const ContestPage: React.FC = () => {
   return (
     <div className="contest-page-shell">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <Link to="/contests" className="inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <Link to="/contest/contests" className="inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <ArrowLeft className="w-4 h-4 mr-2" />
           {tr("Контести", "Contests")}
         </Link>
@@ -3717,7 +3728,7 @@ export const ContestPage: React.FC = () => {
       <Modal
         open={settingsOpen}
         onClose={() => {
-          if (!settingsSaving && !settingsIconUploading && !settingsBannerUploading) setSettingsOpen(false);
+          if (!settingsSaving && !settingsIconUploading && !settingsBannerUploading) closeContestSettings();
         }}
         title={tr("Налаштування контесту", "Contest settings")}
       >
@@ -3912,7 +3923,7 @@ export const ContestPage: React.FC = () => {
           </div>
 
           <div className="contest-settings-footer">
-            <Button variant="ghost" onClick={() => setSettingsOpen(false)} disabled={settingsSaving || settingsIconUploading || settingsBannerUploading}>
+            <Button variant="ghost" onClick={closeContestSettings} disabled={settingsSaving || settingsIconUploading || settingsBannerUploading}>
               {tr("Скасувати", "Cancel")}
             </Button>
             <Button onClick={saveContestSettings} disabled={settingsSaving || settingsIconUploading || settingsBannerUploading}>
@@ -4353,7 +4364,7 @@ export const ContestPage: React.FC = () => {
                                 {disabled ? (
                                   <span className="contest-problem-row__disabled">{tr("Недоступна", "Unavailable")}</span>
                                 ) : (
-                                  <Link to={`/contests/${data.contest.id}/problems/${p.id}`} className="contest-problem-row__open">
+                                  <Link to={`/contest/contests/${data.contest.id}/problems/${p.id}`} className="contest-problem-row__open">
                                     {tr("До задачі", "Open problem")} <span aria-hidden="true">→</span>
                                   </Link>
                                 )}
