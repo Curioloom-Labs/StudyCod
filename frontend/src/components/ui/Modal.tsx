@@ -2,6 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
+import { lockBodyScroll } from "../../lib/bodyScrollLock";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { overlayVariants, modalVariants, reducedMotionTransition } from "../../lib/motion";
 interface Props {
@@ -104,11 +105,7 @@ export const Modal: React.FC<Props> = ({
 
   React.useEffect(() => {
     if (!resolvedOpen) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
+    return lockBodyScroll();
   }, [resolvedOpen]);
 
   const content = <AnimatePresence>

@@ -167,7 +167,7 @@ export const OutputDock: React.FC<OutputDockProps> = ({ examples, onPickExample,
       <div className="flex-1 min-h-0 overflow-auto p-3 space-y-3">
         {view === "tests" ? (
           <>
-            {examples.length === 0 ? <div className="rounded-lg border border-border bg-bg-base/70 p-2.5 text-xs text-text-secondary">No parsed examples found in this statement section yet.</div> : null}
+            {examples.length === 0 ? <div className="grid min-h-44 place-items-center rounded-2xl border border-dashed border-border bg-bg-base/45 px-5 py-7 text-center"><div><span className="mx-auto grid size-11 place-items-center rounded-xl bg-secondary/10 text-secondary"><FlaskConical aria-hidden="true" className="size-5" /></span><p className="mt-3 text-sm font-semibold text-text-primary">No sample tests in this section</p><p className="mx-auto mt-1 max-w-[26ch] text-xs leading-5 text-text-secondary">Use the Run tab to try your own input, or check the Examples section.</p></div></div> : null}
             {examples.map((ex) => (
               <div key={ex.id} className="w-full rounded-xl border border-border bg-bg-base/80 p-2.5">
                 <div className="mb-2 flex items-center justify-between gap-2">

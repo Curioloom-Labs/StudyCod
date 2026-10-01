@@ -1,4 +1,5 @@
 import React from "react";
+import { lockBodyScroll } from "../../lib/bodyScrollLock";
 
 type DialogA11yOptions = {
   open: boolean;
@@ -20,8 +21,7 @@ export const useDialogA11y = ({ open, onClose }: DialogA11yOptions) => {
     if (!open) return;
     lastFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const panel = panelRef.current;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const releaseScrollLock = lockBodyScroll();
     const focusable = () => panel?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [];
     const first = focusable()[0] ?? panel;
     const frame = window.requestAnimationFrame(() => first?.focus());
@@ -54,7 +54,7 @@ export const useDialogA11y = ({ open, onClose }: DialogA11yOptions) => {
     return () => {
       window.cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = previousOverflow;
+      releaseScrollLock();
       lastFocusedRef.current?.focus();
     };
   }, [open]);

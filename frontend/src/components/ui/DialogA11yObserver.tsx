@@ -1,4 +1,5 @@
 import React from "react";
+import { lockBodyScroll } from "../../lib/bodyScrollLock";
 
 const FOCUSABLE = "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
 const CLOSE_LABEL = /close|закрити|скасувати|закрыть|cancel/i;
@@ -10,7 +11,6 @@ type Props = {
 type ManagedDialog = {
   overlay: HTMLElement;
   panel: HTMLElement;
-  previousOverflow: string;
   previousPanelRole: string | null;
   previousPanelAriaModal: string | null;
   previousPanelTabIndex: string | null;
@@ -49,13 +49,13 @@ export const DialogA11yObserver: React.FC<Props> = ({ rootRef }) => {
     if (!root) return;
 
     let managed: ManagedDialog | null = null;
+    let releaseScrollLock: (() => void) | null = null;
     let frame = 0;
 
     const cleanup = (restoreFocus: boolean) => {
       if (!managed) return;
       document.removeEventListener("keydown", managed.onKeyDown);
       managed.overlay.removeEventListener("pointerdown", managed.onPointerDown);
-      document.body.style.overflow = managed.previousOverflow;
       if (restoreFocus) managed.lastFocused?.focus();
       managed = null;
     };
@@ -66,9 +66,12 @@ export const DialogA11yObserver: React.FC<Props> = ({ rootRef }) => {
       const overlay = candidates[candidates.length - 1] ?? null;
       if (!overlay) {
         cleanup(true);
+        releaseScrollLock?.();
+        releaseScrollLock = null;
         return;
       }
 
+      releaseScrollLock ??= lockBodyScroll();
       const panel = getPanel(overlay);
       if (managed?.overlay === overlay && managed.panel === panel) return;
       cleanup(false);
@@ -130,7 +133,6 @@ export const DialogA11yObserver: React.FC<Props> = ({ rootRef }) => {
       managed = {
         overlay,
         panel,
-        previousOverflow: document.body.style.overflow,
         previousPanelRole,
         previousPanelAriaModal,
         previousPanelTabIndex,
@@ -139,7 +141,6 @@ export const DialogA11yObserver: React.FC<Props> = ({ rootRef }) => {
         onKeyDown,
         onPointerDown,
       };
-      document.body.style.overflow = "hidden";
       document.addEventListener("keydown", onKeyDown);
       overlay.addEventListener("pointerdown", onPointerDown);
       frame = window.requestAnimationFrame(() => {
@@ -164,6 +165,8 @@ export const DialogA11yObserver: React.FC<Props> = ({ rootRef }) => {
         if (previousPanelLabel === null) panel.removeAttribute("aria-label"); else panel.setAttribute("aria-label", previousPanelLabel);
       }
       cleanup(true);
+      releaseScrollLock?.();
+      releaseScrollLock = null;
     };
   }, [rootRef]);
 

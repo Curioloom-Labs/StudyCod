@@ -25,23 +25,6 @@ export const TheoryModalPortal: React.FC<Props> = ({
     onAcknowledgeRef.current = onAcknowledge;
   }, [onAcknowledge]);
 
-  useEffect(() => {
-    if (!open) return;
-    const prevOverflow = document.body.style.overflow;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onAcknowledgeRef.current();
-      }
-    };
-
-    document.body.style.overflow = "hidden";
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
   if (!open) return null;
   if (typeof document === "undefined") return null;
   return createPortal(<div data-dialog-a11y="direct" data-material="theory-dialog-scrim" className="fixed inset-0 z-[9999] bg-bg-base/80" role="presentation" style={{

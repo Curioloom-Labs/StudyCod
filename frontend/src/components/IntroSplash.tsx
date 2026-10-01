@@ -1,6 +1,7 @@
 import React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Volume2, VolumeX, SkipForward } from "lucide-react";
+import { lockBodyScroll } from "../lib/bodyScrollLock";
 
 const SEEN_KEY = "studycod.introSeen.v1";
 
@@ -49,11 +50,7 @@ export const IntroSplash: React.FC<IntroSplashProps> = ({
     video?.play().catch(() => {
       /* autoplay may still be deferred; controls remain available */
     });
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
+    return lockBodyScroll();
   }, [show]);
 
   const toggleSound = () => {

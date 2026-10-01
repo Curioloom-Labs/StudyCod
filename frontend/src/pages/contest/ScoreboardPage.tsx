@@ -141,7 +141,7 @@ export const ScoreboardPage: React.FC = () => {
 
   return (
     <div className="w-full bg-bg-base px-4 py-6 md:px-8 md:py-8">
-      <div className="max-w-6xl w-full mx-auto space-y-6">
+      <div className="mx-auto w-full max-w-[1480px] space-y-6">
         {/* Hero */}
         <motion.div
           initial={prefersReducedMotion ? undefined : { opacity: 0, y: 10 }}
@@ -285,34 +285,34 @@ export const ScoreboardPage: React.FC = () => {
             ) : null}
 
             {board && !board.hidden && (
-              <div className="border border-border bg-bg-surface overflow-x-auto max-h-[70vh] overflow-y-auto rounded-lg">
-                <table className="w-full text-sm font-mono border-separate border-spacing-0">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="text-text-secondary text-xs uppercase tracking-[0.04em] bg-bg-base">
-                      <th className="px-4 py-3 text-left border-b border-border sticky left-0 bg-bg-base z-10">#</th>
-                      <th className="px-4 py-3 text-left border-b border-border">{tr("Учасник", "Participant")}</th>
+              <div className="max-h-[min(72vh,820px)] overflow-auto rounded-2xl border border-border/80 bg-bg-surface shadow-[0_18px_55px_-42px_rgba(0,0,0,.7)]">
+                <table className="w-full min-w-[860px] border-separate border-spacing-0 text-sm">
+                  <thead className="sticky top-0 z-20">
+                    <tr className="bg-[#111a14] text-xs font-bold uppercase tracking-[.08em] text-[#aebdb2]">
+                      <th scope="col" className="sticky left-0 z-20 border-b border-border/80 bg-[#111a14] px-4 py-4 text-left">#</th>
+                      <th scope="col" className="border-b border-border/80 px-4 py-4 text-left">{tr("Учасник", "Participant")}</th>
                       {problems.map((p) => (
-                        <th key={p.id} className="px-3 py-3 text-center border-b border-border" title={p.maxScore ? `max ${p.maxScore}` : undefined}>
+                        <th scope="col" key={p.id} className="border-b border-border/80 px-4 py-4 text-center" title={p.maxScore ? `max ${p.maxScore}` : undefined}>
                           {p.label}
                         </th>
                       ))}
-                      <th className="px-4 py-3 text-center border-b border-border">{mode === "ICPC" ? tr("Розв.", "Solved") : "Σ"}</th>
-                      <th className="px-4 py-3 text-center border-b border-border">{tr("Штраф", "Pen.")}</th>
+                      <th scope="col" className="border-b border-border/80 px-4 py-4 text-center">{mode === "ICPC" ? tr("Розв.", "Solved") : "Σ"}</th>
+                      <th scope="col" className="border-b border-border/80 px-4 py-4 text-center">{tr("Штраф", "Pen.")}</th>
                     </tr>
                     {/* Per-problem solve stats */}
-                    <tr className="text-[10px] text-text-muted bg-bg-base/70">
-                      <th className="px-4 py-1 border-b border-border sticky left-0 bg-bg-base/70" />
-                      <th className="px-4 py-1 border-b border-border text-left font-normal">{tr("розв./спроб", "solved/att")}</th>
+                    <tr className="bg-[#0d1510] text-[11px] text-text-muted">
+                      <th scope="col" className="sticky left-0 z-20 border-b border-border/80 bg-[#0d1510] px-4 py-2" />
+                      <th scope="col" className="border-b border-border/80 px-4 py-2 text-left font-medium">{tr("розв./спроб", "solved/att")}</th>
                       {problems.map((p) => {
                         const s = solveStats[p.id] ?? { solved: 0, attempted: 0 };
                         return (
-                          <th key={p.id} className="px-3 py-1 border-b border-border text-center font-normal">
-                            {s.solved}/{s.attempted}
+                          <th scope="col" key={p.id} className="border-b border-border/80 px-4 py-2 text-center font-medium tabular-nums">
+                            {s.solved}<span className="text-text-muted/70"> / </span>{s.attempted}
                           </th>
                         );
                       })}
-                      <th className="px-4 py-1 border-b border-border" />
-                      <th className="px-4 py-1 border-b border-border" />
+                      <th scope="col" className="border-b border-border/80 px-4 py-2" />
+                      <th scope="col" className="border-b border-border/80 px-4 py-2" />
                     </tr>
                   </thead>
                   <tbody>
@@ -324,18 +324,18 @@ export const ScoreboardPage: React.FC = () => {
                         <tr
                           key={r.participantId}
                           ref={me ? meRowRef : undefined}
-                          className={`${me ? "bg-secondary/10" : "odd:bg-bg-base/40 even:bg-bg-surface"} hover:bg-bg-hover transition-fast`}
+                          className={`group ${me ? "bg-secondary/[.12]" : "odd:bg-bg-base/50 even:bg-bg-surface"} hover:bg-bg-hover transition-colors`}
                         >
-                          <td className={`px-4 py-2.5 border-b border-border ${me ? "bg-secondary/10" : "bg-inherit"} sticky left-0`}>
-                            <span className={`inline-flex items-center justify-center min-w-7 h-7 px-1.5 rounded border text-xs font-bold font-mono ${rankBadgeTone(r.rank)}`}>
+                          <td className={`sticky left-0 z-10 border-b border-border/70 px-4 py-3 ${me ? "bg-[#153321]" : "bg-bg-surface group-odd:bg-bg-base"}`}>
+                            <span className={`inline-flex h-8 min-w-8 items-center justify-center rounded-lg border px-2 text-xs font-extrabold tabular-nums ${rankBadgeTone(r.rank)}`}>
                               {r.rank}
                             </span>
-                            <span className={`ml-1 text-xs font-mono ${moved === "↑" ? "text-accent-success" : "text-accent-error"}`}>{moved}</span>
+                            {moved && <span aria-label={moved === "↑" ? tr("Піднявся в рейтингу", "Moved up") : tr("Опустився в рейтингу", "Moved down")} className={`ml-2 text-xs font-bold ${moved === "↑" ? "text-accent-success" : "text-accent-error"}`}>{moved}</span>}
                           </td>
-                          <td className="px-4 py-2.5 border-b border-border text-text-primary">
-                            {me ? <Crown className="inline w-3.5 h-3.5 text-secondary mr-1 -mt-0.5" /> : null}
-                            {r.displayName}
-                            {me ? <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-secondary/20 text-secondary">{tr("ви", "you")}</span> : null}
+                          <td className="max-w-[360px] border-b border-border/70 px-4 py-3 text-text-primary">
+                            {me ? <Crown aria-hidden="true" className="mr-2 inline size-4 text-secondary align-[-2px]" /> : null}
+                            <span className="inline-block max-w-[280px] truncate align-bottom font-semibold">{r.displayName}</span>
+                            {me ? <span className="ml-2 rounded-md bg-secondary/15 px-2 py-1 text-[10px] font-bold text-secondary">{tr("ви", "you")}</span> : null}
                           </td>
                           {problems.map((p) => {
                             const cell = r.problems.find((x) => x.problemId === p.id);
@@ -345,7 +345,7 @@ export const ScoreboardPage: React.FC = () => {
                             if (mode === "ICPC") {
                               const attempted = (cell.attempts ?? 0) > 0;
                               return (
-                                <td key={p.id} className={`px-3 py-2.5 border-b border-border text-center ${pending ? "bg-accent-warn/10" : firstBlood ? "bg-yellow-400/10" : ""}`} title={pending ? tr("Очікує (заморожено)", "Pending (frozen)") : cell.penaltyMinutes ? `${cell.penaltyMinutes} min` : undefined}>
+                                <td key={p.id} className={`border-b border-border/70 px-4 py-3 text-center font-semibold tabular-nums ${pending ? "bg-accent-warn/10" : firstBlood ? "bg-yellow-400/10" : ""}`} title={pending ? tr("Очікує (заморожено)", "Pending (frozen)") : cell.penaltyMinutes ? `${cell.penaltyMinutes} min` : undefined}>
                                   {cell.solved ? (
                                     <span className="text-accent-success">
                                       {firstBlood ? "⚡" : "✓"}{(cell.attempts ?? 1) > 1 ? `(${cell.attempts})` : ""}
@@ -363,21 +363,21 @@ export const ScoreboardPage: React.FC = () => {
                             }
                             const hasSub = Boolean(cell.bestAt) || (cell.score ?? 0) > 0;
                             return (
-                              <td key={p.id} className={`px-3 py-2.5 border-b border-border text-center ${pending ? "bg-accent-warn/10" : firstBlood ? "bg-yellow-400/10" : ""} ${ioiTone(cell.score ?? 0, problemMax(p.id))}`} title={pending ? tr("Очікує (заморожено)", "Pending (frozen)") : undefined}>
+                              <td key={p.id} className={`border-b border-border/70 px-4 py-3 text-center font-semibold tabular-nums ${pending ? "bg-accent-warn/10" : firstBlood ? "bg-yellow-400/10" : ""} ${ioiTone(cell.score ?? 0, problemMax(p.id))}`} title={pending ? tr("Очікує (заморожено)", "Pending (frozen)") : undefined}>
                                 {firstBlood ? "⚡" : ""}{hasSub ? (cell.score ?? 0) : "—"}{pending ? <span className="text-accent-warn">?</span> : null}
                               </td>
                             );
                           })}
-                          <td className="px-4 py-2.5 border-b border-border text-center text-text-primary font-bold">
+                          <td className="border-b border-border/70 px-4 py-3 text-center font-bold tabular-nums text-text-primary">
                             {mode === "ICPC" ? (r.solved ?? 0) : r.totalScore}
                           </td>
-                          <td className="px-4 py-2.5 border-b border-border text-center text-text-secondary">{r.penalty ?? 0}</td>
+                          <td className="border-b border-border/70 px-4 py-3 text-center tabular-nums text-text-secondary">{r.penalty ?? 0}</td>
                         </tr>
                       );
                     })}
                     {filteredRows.length === 0 && (
                       <tr>
-                        <td colSpan={problems.length + 4} className="px-4 py-6 text-center text-text-secondary border-b border-border">
+                        <td colSpan={problems.length + 4} className="border-b border-border px-4 py-10 text-center text-text-secondary">
                           {query.trim()
                             ? tr("Нічого не знайдено.", "No matches.")
                             : tr("Ще немає сабмішнів.", "No submissions yet.")}
