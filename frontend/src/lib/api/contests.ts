@@ -581,7 +581,7 @@ export async function getContestProblemSubmissions(
   return res.data;
 }
 
-export async function getContestMyProgress(contestId: number): Promise<{ contestId: number; participantId: number; problems: ContestMyProgressProblem[] }> {
+export async function getContestMyProgress(contestId: number): Promise<{ contestId: number; participantId: number | null; problems: ContestMyProgressProblem[] }> {
   const res = await api.get(`/contests/${contestId}/my-progress`);
   return res.data;
 }

@@ -480,6 +480,35 @@ async function isContestOrganizer(contestId: number, userId: number): Promise<bo
   }
 }
 
+async function getContestOrganizerUserIds(contestId: number, creatorUserId?: number | null): Promise<Set<number>> {
+  const organizerIds = new Set<number>();
+  const creatorId = Number(creatorUserId);
+  if (Number.isFinite(creatorId) && creatorId > 0) organizerIds.add(creatorId);
+  try {
+    await ensureContestAdminTables();
+    const rows = (await AppDataSource.query(
+      `SELECT user_id as userId FROM contest_organizers WHERE contest_id = ?`,
+      [contestId]
+    )) as Array<UnknownRecord>;
+    for (const row of rows) {
+      const userId = Number(row.userId);
+      if (Number.isFinite(userId) && userId > 0) organizerIds.add(userId);
+    }
+  } catch (error: unknown) {
+    logger.warn("[contests] Could not load organizer ids for participant filtering", {
+      contestId,
+      error: errorMessage(error),
+    });
+  }
+  return organizerIds;
+}
+
+function isOrganizerParticipant(participant: ContestParticipant, organizerUserIds: Set<number>): boolean {
+  return participant.principalType === "USER"
+    && participant.user?.id != null
+    && organizerUserIds.has(Number(participant.user.id));
+}
+
 async function getContestPausedState(contestId: number): Promise<boolean> {
   if (!Number.isFinite(contestId) || contestId <= 0) return false;
   try {
@@ -709,7 +738,7 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
     const contestId = parseInt(req.params.id, 10);
     if (isNaN(contestId)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId } });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     if (!(await canAccessContest({ contest, req }))) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -722,21 +751,22 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
       return res.json({ rows: [], generatedAtMs: Date.now(), hidden: true, releaseAt: contest.endsAt ? new Date(contest.endsAt).toISOString() : null, hiddenReason: organizersOnly ? "ORGANIZERS_ONLY" : "AFTER_END" });
     }
 
+    const organizerUserIds = await getContestOrganizerUserIds(contestId, contest.createdBy?.id);
     const subs = await submissionRepo().find({
       where: { contest: { id: contestId } },
-      relations: ["participant", "problem"],
+      relations: ["participant", "participant.user", "problem"],
     });
 
+    const officialSubs = subs.filter((s) => s.participant && s.problem && !isOrganizerParticipant(s.participant, organizerUserIds));
     const endsAtMs = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
-    const submissionTimes = subs.map((s) => new Date(s.createdAt).getTime());
+    const submissionTimes = officialSubs.map((s) => new Date(s.createdAt).getTime());
     const startMs = contest.startsAt
       ? new Date(contest.startsAt).getTime()
       : submissionTimes.length
         ? Math.min(...submissionTimes)
         : Date.now();
 
-    const scoreSubs: ScoreboardSubmission[] = subs
-      .filter((s) => s.participant && s.problem)
+    const scoreSubs: ScoreboardSubmission[] = officialSubs
       .map((s) => ({
         participantId: s.participant.id,
         problemId: s.problem.id,
@@ -750,7 +780,7 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
 
     const participants: Record<number, string> = {};
     const problems: Record<number, string> = {};
-    for (const s of subs) {
+    for (const s of officialSubs) {
       if (s.participant) participants[s.participant.id] = String(s.participant.displayName ?? `#${s.participant.id}`);
       if (s.problem) problems[s.problem.id] = String(s.problem.label ?? `#${s.problem.id}`);
     }
@@ -1188,11 +1218,25 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
     }
     const participantCountByContest = new Map<number, number>();
     if (visible.length > 0) {
+      await ensureContestAdminTables();
       const counts = await participantRepo().createQueryBuilder("participant")
         .innerJoin("participant.contest", "participantContest")
+        .leftJoin("participant.user", "participantUser")
+        .innerJoin("participantContest.createdBy", "contestCreator")
         .select("participantContest.id", "contestId")
         .addSelect("COUNT(participant.id)", "participantCount")
         .where("participantContest.id IN (:...contestIds)", { contestIds: visible.map((contest) => contest.id) })
+        .andWhere(`(
+          participant.principalType <> 'USER'
+          OR (
+            participantUser.id <> contestCreator.id
+            AND NOT EXISTS (
+              SELECT 1 FROM contest_organizers co
+              WHERE co.contest_id = participantContest.id
+                AND co.user_id = participantUser.id
+            )
+          )
+        )`)
         .groupBy("participantContest.id")
         .getRawMany<{ contestId: string | number; participantCount: string | number }>();
       for (const row of counts) participantCountByContest.set(Number(row.contestId), Number(row.participantCount) || 0);
@@ -1501,9 +1545,11 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
     const canContent = await canAccessContest({ contest, req });
     const isPaused = await getContestPausedState(id);
 
+    const organizerUserIds = await getContestOrganizerUserIds(id, contest.createdBy?.id);
+    const isManager = req.userId ? await canManageContest({ contest, req }) : false;
     const joined = await (async () => {
       const principalId = req.userId ?? req.studentId ?? null;
-      if (!principalId) return null;
+      if (!principalId || (req.userId && organizerUserIds.has(req.userId))) return null;
       return participantRepo().findOne({
         where: {
           contest: { id },
@@ -1518,14 +1564,14 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
       relations: ["libraryTask"],
       order: { order: "ASC" },
     });
-    const participantsCount = await participantRepo().count({ where: { contest: { id } } });
+    const participants = await participantRepo().find({ where: { contest: { id } }, relations: ["user"] });
+    const participantsCount = participants.filter((participant) => !isOrganizerParticipant(participant, organizerUserIds)).length;
 
     const now = Date.now();
     const startsAtMs = contest.startsAt ? new Date(contest.startsAt).getTime() : null;
     const endsAtMs = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
 
-    const isCreator = req.userId ? contest.createdBy?.id === req.userId : false;
-    const isPrivileged = isCreator || req.userRole === "SYSTEM_ADMIN";
+    const isPrivileged = isManager;
     const isBeforeStart = startsAtMs !== null && now < startsAtMs;
 
     // If contest hasn't started yet, hide problems for non-creator.
@@ -2222,10 +2268,12 @@ contestsRouter.get("/:id/admin/participants", authRequired, async (req: AuthRequ
     const canManage = await canManageContest({ contest, req });
     if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
 
-    const participants = await participantRepo().find({
+    const organizerUserIds = await getContestOrganizerUserIds(contestId, contest.createdBy?.id);
+    const participants = (await participantRepo().find({
       where: { contest: { id: contestId } },
+      relations: ["user"],
       order: { joinedAt: "ASC" },
-    });
+    })).filter((participant) => !isOrganizerParticipant(participant, organizerUserIds));
 
     // Aggregate integrity events per participant (focus loss / paste / fullscreen exit).
     await ensureContestAdminTables();
@@ -3588,6 +3636,13 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
+    // Managers are not contest participants. The page requests personal
+    // progress while opening the problems tab, so never auto-register staff
+    // through this read-only endpoint.
+    if (req.userId && await canManageContest({ contest, req })) {
+      return res.json({ contestId, participantId: null, problems: [] });
+    }
+
     const participant = await getOrCreateParticipant({ contestId, req });
 
     const problems = await problemRepo().find({
@@ -3815,8 +3870,17 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       return Number.isFinite(tid) && tid > 0 ? (maxByTask.get(tid) ?? 0) : 0;
     };
 
-    const participants = await participantRepo().find({ where: { contest: { id: contestId } }, order: { joinedAt: "ASC" } });
-    const activeParticipants = participants.filter((p) => !p.isDisqualified);
+    const organizerUserIds = await getContestOrganizerUserIds(contestId, contest.createdBy?.id);
+    const participants = await participantRepo().find({
+      where: { contest: { id: contestId } },
+      relations: ["user"],
+      order: { joinedAt: "ASC" },
+    });
+    const organizerParticipantIds = new Set(
+      participants.filter((participant) => isOrganizerParticipant(participant, organizerUserIds)).map((participant) => participant.id)
+    );
+    const contestParticipants = participants.filter((participant) => !isOrganizerParticipant(participant, organizerUserIds));
+    const activeParticipants = contestParticipants.filter((participant) => !participant.isDisqualified);
 
     await ensureContestAdminTables();
     const annulmentRows = (await AppDataSource.query(
@@ -3872,14 +3936,14 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
         rows: [],
         firstBlood: {},
         freeze: { enabled: freezeAtMs != null, freezeAtMs, frozen: viewerFrozen, isManagerView: isManager },
-        disqualifiedCount: participants.length,
+        disqualifiedCount: contestParticipants.length,
         generatedAtMs: nowMs,
       });
     }
 
     // Fetch all contest-phase submissions once; derive both IOI best scores and
     // ICPC stats in JS so the freeze cutoff can be applied uniformly.
-    const allSubs = (await AppDataSource.query(
+    const allSubs = ((await AppDataSource.query(
       `
       SELECT id,
              participant_id as participantId,
@@ -3892,7 +3956,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       ORDER BY created_at ASC, id ASC
       `,
       [contestId]
-    )) as Array<UnknownRecord>;
+    )) as Array<UnknownRecord>).filter((submission) => !organizerParticipantIds.has(Number(submission.participantId)));
 
     // IOI best score per (participant, problem) as of the freeze cutoff, and a
     // "pending" flag for cells whose latest activity is hidden behind the freeze.
@@ -4008,7 +4072,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       rows,
       firstBlood,
       freeze: { enabled: freezeAtMs != null, freezeAtMs, frozen: viewerFrozen, isManagerView: isManager },
-      disqualifiedCount: participants.length - activeParticipants.length,
+      disqualifiedCount: contestParticipants.length - activeParticipants.length,
       generatedAtMs: nowMs,
     });
   } catch (error: unknown) {
