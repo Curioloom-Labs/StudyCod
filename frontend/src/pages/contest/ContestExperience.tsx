@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import {
   checkContestProblem,
-  createContest,
   getContestDetails,
   getContestMyProgress,
   getContestProblemStatement,
@@ -41,6 +40,7 @@ import {
 import { enabledJudgeLanguages } from "../../lib/judgeLanguages";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
+import { ContestSetupDialog } from "./ContestSetupDialog";
 
 const isPreview = () =>
   import.meta.env.DEV &&
@@ -368,17 +368,6 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
   const [joinBusy, setJoinBusy] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [title, setTitle] = React.useState("");
-  const [description, setDescription] = React.useState("");
-  const [tagsDraft, setTagsDraft] = React.useState("");
-  const [difficultyDraft, setDifficultyDraft] = React.useState<"EASY" | "MEDIUM" | "HARD" | "">("");
-  const [visibility, setVisibility] = React.useState<"PUBLIC" | "PRIVATE_CODE">("PUBLIC");
-  const [joinCodeDraft, setJoinCodeDraft] = React.useState("");
-  const [startsAtDraft, setStartsAtDraft] = React.useState("");
-  const [endsAtDraft, setEndsAtDraft] = React.useState("");
-  const [scoringModeDraft, setScoringModeDraft] = React.useState<"IOI" | "ICPC">("IOI");
-  const [allowUpsolveDraft, setAllowUpsolveDraft] = React.useState(true);
-  const [creating, setCreating] = React.useState(false);
 
   React.useEffect(() => {
     try { window.localStorage.setItem(favoriteStorageKey, JSON.stringify(favoriteIds)); } catch { /* storage may be unavailable */ }
@@ -460,60 +449,6 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
       setJoinBusy(false);
     }
   };
-  const submitCreate = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (title.trim().length < 3) {
-      setError("Назва має містити щонайменше 3 символи.");
-      return;
-    }
-    if (visibility === "PRIVATE_CODE" && joinCodeDraft.trim().length < 4) {
-      setError("Код доступу має містити щонайменше 4 символи.");
-      return;
-    }
-    const startsAt = startsAtDraft ? new Date(startsAtDraft) : null;
-    const endsAt = endsAtDraft ? new Date(endsAtDraft) : null;
-    if ((startsAt && Number.isNaN(startsAt.getTime())) || (endsAt && Number.isNaN(endsAt.getTime()))) {
-      setError("Перевір дату й час старту та фінішу.");
-      return;
-    }
-    if (startsAt && endsAt && endsAt <= startsAt) {
-      setError("Фініш має бути пізніше за старт.");
-      return;
-    }
-    const tags = Array.from(new Set(tagsDraft.split(",").map((tag) => tag.trim()).filter(Boolean)));
-    if (tags.length > 8 || tags.some((tag) => tag.length > 32)) {
-      setError("Додай не більше 8 тем, кожна до 32 символів.");
-      return;
-    }
-    setCreating(true);
-    setError(null);
-    try {
-      const result = await createContest({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        tags,
-        difficulty: difficultyDraft || null,
-        visibility,
-        joinCode: visibility === "PRIVATE_CODE" ? joinCodeDraft.trim() : undefined,
-        startsAt: startsAt?.toISOString(),
-        endsAt: endsAt?.toISOString(),
-        isPublished: false,
-        allowUpsolve: allowUpsolveDraft,
-        scoringMode: scoringModeDraft,
-      });
-      navigate(`/contest/contests/${result.id}`);
-    } catch (caught) {
-      setError(
-        getErrorMessageFromUnknown(
-          caught,
-          "Не вдалося створити чернетку контесту.",
-        ),
-      );
-    } finally {
-      setCreating(false);
-    }
-  };
-
   return (
     <Shell
       eyebrow="StudyCod Contest"
@@ -684,142 +619,24 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
         </nav>}
         </>
       )}
-      {(joinOpen || createOpen) && (
-        <div data-material="contest-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 px-4 backdrop-blur-sm" role="presentation">
-          <form
-            onSubmit={joinOpen ? submitCode : submitCreate}
-            role="dialog"
-            aria-modal="true"
-            aria-label={joinOpen ? "Приєднатися до контесту" : "Почати новий контест"}
-            tabIndex={-1}
-            className="w-full max-w-[460px] rounded-[26px] border border-white/55 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]"
-          >
-            <div className="mb-6 flex items-start justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d]">
-                  {joinOpen ? "Доступ" : "Чернетка"}
-                </p>
-                <h2 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">
-                  {joinOpen
-                    ? "Приєднатися до контесту"
-                    : "Почати новий контест"}
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setJoinOpen(false);
-                  setCreateOpen(false);
-                }}
-                className="rounded-lg px-2 py-1 text-lg text-[#68786e]"
-              >
-                ×
-              </button>
+      {joinOpen && (
+        <div data-material="contest-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/50 px-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setJoinOpen(false); }}>
+          <form onSubmit={submitCode} role="dialog" aria-modal="true" aria-labelledby="contest-join-title" className="w-full max-w-[440px] rounded-[26px] border border-white/55 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d]">Доступ</p><h2 id="contest-join-title" className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">Приєднатися до контесту</h2></div>
+              <button type="button" onClick={() => { setJoinOpen(false); setError(null); }} aria-label="Закрити вікно" className="grid size-9 shrink-0 place-items-center rounded-xl text-[#68786e] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:hover:bg-white/[.06]"><span aria-hidden="true" className="text-xl">×</span></button>
             </div>
-            {joinOpen ? (
-              <label htmlFor="contest-access-code" className="block text-sm font-bold">
-                Код доступу
-                <input
-                  id="contest-access-code"
-                  name="code"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={code}
-                  onChange={(event) => setCode(event.target.value)}
-                  className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 text-base outline-none ring-[#00ff88]/30 focus-visible:ring-4 dark:border-white/10 dark:bg-[#0d1510]"
-                  placeholder="Наприклад, CLASS-24…"
-                />
-              </label>
-            ) : (
-              <>
-                <label htmlFor="contest-title" className="block text-sm font-bold">
-                  Назва
-                  <input
-                    id="contest-title"
-                    name="title"
-                    autoComplete="off"
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 text-base outline-none ring-[#00ff88]/30 focus-visible:ring-4 dark:border-white/10 dark:bg-[#0d1510]"
-                    placeholder="Наприклад, Осінній спринт…"
-                  />
-                </label>
-                <label htmlFor="contest-description" className="mt-4 block text-sm font-bold">
-                  Що буде всередині
-                  <textarea
-                    id="contest-description"
-                    name="description"
-                    autoComplete="off"
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                    className="mt-2 min-h-24 w-full resize-none rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 text-base outline-none ring-[#00ff88]/30 focus-visible:ring-4 dark:border-white/10 dark:bg-[#0d1510]"
-                    placeholder="Короткий опис для учасників…"
-                  />
-                </label>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <label htmlFor="contest-tags" className="block text-sm font-bold">
-                    Теми
-                    <input id="contest-tags" name="tags" autoComplete="off" value={tagsDraft} onChange={(event) => setTagsDraft(event.target.value)} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#0d1510]" placeholder="Масиви, графи, Python…" />
-                    <span className="mt-1 block text-xs font-normal text-[#718075] dark:text-[#a9b7ad]">Розділяй комами, до 8 тем.</span>
-                  </label>
-                  <label htmlFor="contest-difficulty-draft" className="block text-sm font-bold">
-                    Рівень
-                    <select id="contest-difficulty-draft" name="difficulty" value={difficultyDraft} onChange={(event) => setDifficultyDraft(event.target.value as typeof difficultyDraft)} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-3 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#0d1510]">
-                      <option value="">Ще не визначено</option>
-                      <option value="EASY">Початковий</option>
-                      <option value="MEDIUM">Середній</option>
-                      <option value="HARD">Складний</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <label htmlFor="contest-visibility" className="block text-sm font-bold">
-                    Доступ
-                    <select id="contest-visibility" name="visibility" value={visibility} onChange={(event) => setVisibility(event.target.value as "PUBLIC" | "PRIVATE_CODE")} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-3 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#0d1510]">
-                      <option value="PUBLIC">Відкритий для всіх</option>
-                      <option value="PRIVATE_CODE">За кодом запрошення</option>
-                    </select>
-                  </label>
-                  <label htmlFor="contest-scoring" className="block text-sm font-bold">
-                    Оцінювання
-                    <select id="contest-scoring" name="scoringMode" value={scoringModeDraft} onChange={(event) => setScoringModeDraft(event.target.value as "IOI" | "ICPC")} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-3 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#0d1510]">
-                      <option value="IOI">Часткові бали (IOI)</option>
-                      <option value="ICPC">Задачі й штрафи (ICPC)</option>
-                    </select>
-                  </label>
-                </div>
-                {visibility === "PRIVATE_CODE" && <label htmlFor="contest-join-code" className="mt-3 block text-sm font-bold">
-                  Код запрошення
-                  <input id="contest-join-code" name="joinCode" autoComplete="off" spellCheck={false} value={joinCodeDraft} onChange={(event) => setJoinCodeDraft(event.target.value)} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#0d1510]" placeholder="Наприклад, OSIN-24…" />
-                </label>}
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <label htmlFor="contest-starts-at" className="block text-sm font-bold">
-                    Старт
-                    <input id="contest-starts-at" name="startsAt" type="datetime-local" value={startsAtDraft} onChange={(event) => setStartsAtDraft(event.target.value)} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-3 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#0d1510]" />
-                  </label>
-                  <label htmlFor="contest-ends-at" className="block text-sm font-bold">
-                    Фініш
-                    <input id="contest-ends-at" name="endsAt" type="datetime-local" value={endsAtDraft} onChange={(event) => setEndsAtDraft(event.target.value)} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-3 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#0d1510]" />
-                  </label>
-                </div>
-                <label className="mt-4 flex items-start gap-3 rounded-xl bg-[#f0f5f1] px-3 py-3 text-sm dark:bg-white/[.05]">
-                  <input type="checkbox" name="allowUpsolve" checked={allowUpsolveDraft} onChange={(event) => setAllowUpsolveDraft(event.target.checked)} className="mt-0.5 accent-[#00b869]" />
-                  <span><span className="block font-bold">Дозволити дорішування</span><span className="mt-0.5 block text-xs font-normal text-[#718075] dark:text-[#a9b7ad]">Після фінішу учасники зможуть розв’язувати задачі без зміни офіційного результату.</span></span>
-                </label>
-              </>
-            )}
-            <button type="submit"
-              disabled={joinBusy || creating}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3.5 text-sm font-bold text-[#072514] transition hover:bg-[#00ff88] disabled:opacity-60"
-            >
-              {(joinBusy || creating) && (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-              )}
-              {joinOpen ? "Приєднатися" : "Створити чернетку"}
+            <label htmlFor="contest-access-code" className="block text-sm font-bold">Код доступу
+              <input id="contest-access-code" name="code" autoComplete="off" spellCheck={false} value={code} onChange={(event) => setCode(event.target.value)} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 font-mono text-base uppercase tracking-wider outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#0d1510]" placeholder="Наприклад, CLASS-24…" />
+            </label>
+            {error && <p role="alert" aria-live="polite" className="mt-3 rounded-xl bg-[#fff1ef] px-3 py-2 text-sm font-semibold text-[#a93232] dark:bg-[#451d1a] dark:text-[#ffb0a6]">{error}</p>}
+            <button type="submit" disabled={joinBusy || !code.trim()} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 text-sm font-bold text-[#072514] transition hover:bg-[#00ff88] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] disabled:cursor-wait disabled:opacity-60">
+              {joinBusy ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <LockKeyhole aria-hidden="true" className="size-4" />}{joinBusy ? "Приєднання…" : "Приєднатися"}
             </button>
           </form>
         </div>
       )}
+      {createOpen && <ContestSetupDialog scope={favoriteScope} onClose={() => setCreateOpen(false)} onCreated={(createdId) => navigate(`/contest/contests/${createdId}`)} />}
     </Shell>
   );
 };

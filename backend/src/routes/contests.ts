@@ -1239,7 +1239,7 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       tags: z.array(z.string().trim().min(1).max(32)).max(8).optional(),
       difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).nullable().optional(),
       visibility: z.enum(["PUBLIC", "PRIVATE_CODE", "CLASS"]).default("PUBLIC"),
-      joinCode: z.string().min(4).max(64).optional(),
+      joinCode: z.string().trim().min(4).max(64).optional(),
       classId: z.number().int().positive().optional(),
       startsAt: z.string().datetime().optional(),
       endsAt: z.string().datetime().optional(),
@@ -1252,6 +1252,10 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
     }
     const data = parsed.data;
+
+    if (data.startsAt && data.endsAt && new Date(data.endsAt).getTime() <= new Date(data.startsAt).getTime()) {
+      return res.status(400).json({ message: "END_BEFORE_START" });
+    }
 
     if (data.visibility === "PRIVATE_CODE") {
       if (!data.joinCode) return res.status(400).json({ message: "JOIN_CODE_REQUIRED" });
@@ -1311,6 +1315,9 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
         description: z.string().max(50_000).nullable().optional(),
         tags: z.array(z.string().trim().min(1).max(32)).max(8).optional(),
         difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).nullable().optional(),
+        visibility: z.enum(["PUBLIC", "PRIVATE_CODE", "CLASS"]).optional(),
+        joinCode: z.string().trim().min(4).max(64).optional(),
+        classId: z.number().int().positive().nullable().optional(),
         startsAt: z.string().datetime().nullable().optional(),
         endsAt: z.string().datetime().nullable().optional(),
         isPublished: z.boolean().optional(),
@@ -1325,9 +1332,47 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
     }
     const data = parsed.data;
 
+    const nextVisibility = data.visibility ?? contest.visibility;
+    if (data.joinCode !== undefined && nextVisibility !== "PRIVATE_CODE") {
+      return res.status(400).json({ message: "JOIN_CODE_ONLY_FOR_PRIVATE_CONTESTS" });
+    }
+    if (data.classId !== undefined && nextVisibility !== "CLASS") {
+      return res.status(400).json({ message: "CLASS_ID_ONLY_FOR_CLASS_CONTESTS" });
+    }
+
+    if (nextVisibility === "PRIVATE_CODE") {
+      const nextJoinCode = data.joinCode?.trim() ?? (contest.visibility === "PRIVATE_CODE" ? contest.joinCode : null);
+      if (!nextJoinCode || nextJoinCode.length < 4) {
+        return res.status(400).json({ message: "JOIN_CODE_REQUIRED" });
+      }
+      contest.visibility = "PRIVATE_CODE";
+      contest.joinCode = nextJoinCode;
+      contest.class = null;
+    } else if (nextVisibility === "CLASS") {
+      const currentClassId = contest.class?.id ?? null;
+      const nextClassId = data.classId === undefined ? currentClassId : data.classId;
+      if (!nextClassId) {
+        return res.status(400).json({ message: "CLASS_ID_REQUIRED" });
+      }
+      if (nextClassId !== currentClassId) {
+        const selectedClass = await classRepo().findOne({ where: { id: nextClassId }, relations: ["teacher"] });
+        if (!selectedClass) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+        if (selectedClass.teacher.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") {
+          return res.status(403).json({ message: "ACCESS_DENIED" });
+        }
+      }
+      contest.visibility = "CLASS";
+      contest.class = { id: nextClassId } as Class;
+      contest.joinCode = null;
+    } else {
+      contest.visibility = "PUBLIC";
+      contest.class = null;
+      contest.joinCode = null;
+    }
+
     const nextStartsAt = data.startsAt !== undefined ? (data.startsAt ? new Date(data.startsAt) : null) : contest.startsAt;
     const nextEndsAt = data.endsAt !== undefined ? (data.endsAt ? new Date(data.endsAt) : null) : contest.endsAt;
-    if (nextStartsAt && nextEndsAt && nextEndsAt.getTime() < nextStartsAt.getTime()) {
+    if (nextStartsAt && nextEndsAt && nextEndsAt.getTime() <= nextStartsAt.getTime()) {
       return res.status(400).json({ message: "END_BEFORE_START" });
     }
 
@@ -1346,6 +1391,8 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
       id: saved.id,
       isPublished: saved.isPublished,
       title: saved.title,
+      visibility: saved.visibility,
+      classId: saved.class?.id ?? null,
       tags: saved.tags ?? [],
       difficulty: saved.difficulty ?? null,
       startsAt: saved.startsAt ? new Date(saved.startsAt).toISOString() : null,
