@@ -67,6 +67,7 @@ export type ContestDetails = {
     joinRequired: boolean;
     accountRequired?: boolean;
     canManage?: boolean;
+    canDelete?: boolean;
     isPaused?: boolean;
   };
   problems: ContestProblemListItem[];
@@ -542,6 +543,11 @@ export async function updateContest(contestId: number, payload: UpdateContestReq
   allowUpsolve: boolean;
 }> {
   const res = await api.patch(`/contests/${contestId}`, payload);
+  return res.data;
+}
+
+export async function deleteContest(contestId: number, confirmTitle: string): Promise<{ deleted: boolean; contestId: number }> {
+  const res = await api.delete(`/contests/${contestId}`, { data: { confirmTitle } });
   return res.data;
 }
 

@@ -205,6 +205,17 @@ async function canViewContestMeta(params: { contest: Contest; req: AuthRequest }
     return false;
   }
 
+  // Issued contest accounts may only discover their assigned contest, even
+  // when another contest is public or uses self-registration.
+  if (isContestOnlyUser(req)) {
+    if (!req.userId) return false;
+    const issuedParticipant = await participantRepo().findOne({
+      where: { contest: { id: contest.id }, user: { id: req.userId } },
+      select: { id: true },
+    });
+    return Boolean(issuedParticipant);
+  }
+
   if (contest.participantAccessMode === "ISSUED_ACCOUNTS") {
     // Public contests stay discoverable, while the content endpoint below
     // still checks whether this account was issued for this contest.
@@ -337,6 +348,15 @@ async function canAccessContest(params: { contest: Contest; req: AuthRequest }):
       if (row?.createdBy?.id === req.userId) return true;
     }
     return false;
+  }
+
+  if (isContestOnlyUser(req)) {
+    if (!req.userId) return false;
+    const issuedParticipant = await participantRepo().findOne({
+      where: { contest: { id: contest.id }, user: { id: req.userId } },
+      select: { id: true },
+    });
+    return Boolean(issuedParticipant);
   }
 
   if (contest.participantAccessMode === "ISSUED_ACCOUNTS") {
@@ -1134,7 +1154,21 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
       .leftJoinAndSelect("contest.createdBy", "createdBy")
       .leftJoinAndSelect("contest.class", "contestClass");
 
-    if (isAdmin) {
+    if (isContestOnlyUser(req)) {
+      // Scope both the returned page and its total before pagination.
+      if (!userId) {
+        query.where("1 = 0");
+      } else {
+        query.where(
+          `EXISTS (
+            SELECT 1 FROM contest_participants issued
+            WHERE issued.contest_id = contest.id
+              AND issued.user_id = :contestOnlyUserId
+          )`,
+          { contestOnlyUserId: userId },
+        );
+      }
+    } else if (isAdmin) {
       // Administrators may inspect every contest, including private drafts.
     } else {
       query.where(new Brackets((visible) => {
@@ -1530,6 +1564,93 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
   }
 });
 
+// Permanently remove a contest and its scoped records. Contest-only accounts
+// are deleted only if they have no other contest assignments or ownership.
+contestsRouter.delete("/:id", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    if (!Number.isSafeInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+
+    const schema = z.object({ confirmTitle: z.string().min(1).max(255) });
+    const parsed = schema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "CONFIRM_TITLE_REQUIRED" });
+
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    const canDelete = contest.createdBy?.id === req.userId || req.userRole === "SYSTEM_ADMIN";
+    if (!canDelete) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (parsed.data.confirmTitle !== contest.title) return res.status(409).json({ message: "CONFIRM_TITLE_MISMATCH" });
+
+    await ensureContestAdminTables();
+    await ensureContestCommunityTables();
+
+    await AppDataSource.transaction(async (manager) => {
+      const current = await manager.getRepository(Contest).findOne({
+        where: { id: contestId },
+        relations: ["createdBy"],
+      });
+      if (!current) throw new HttpError(404, "NOT_FOUND", { expose: true });
+      if (current.createdBy?.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") {
+        throw new HttpError(403, "ACCESS_DENIED", { expose: true });
+      }
+      if (parsed.data.confirmTitle !== current.title) {
+        throw new HttpError(409, "CONFIRM_TITLE_MISMATCH", { expose: true });
+      }
+
+      const temporaryUsers = (await manager.query(
+        `SELECT DISTINCT u.id AS userId
+         FROM users u
+         INNER JOIN contest_participants participant ON participant.user_id = u.id
+         WHERE participant.contest_id = ?
+           AND u.user_mode = 'CONTEST'
+           AND NOT EXISTS (
+             SELECT 1 FROM contest_participants other_participation
+             WHERE other_participation.user_id = u.id
+               AND other_participation.contest_id <> ?
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM contest_organizers other_organizer
+             WHERE other_organizer.user_id = u.id
+               AND other_organizer.contest_id <> ?
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM contests other_contest
+             WHERE other_contest.created_by_user_id = u.id
+               AND other_contest.id <> ?
+           )`,
+        [contestId, contestId, contestId, contestId],
+      )) as Array<{ userId: number | string }>;
+      const temporaryUserIds = temporaryUsers
+        .map((row) => Number(row.userId))
+        .filter((userId) => Number.isSafeInteger(userId) && userId > 0);
+
+      for (const table of [
+        "contest_organizers",
+        "contest_runtime_state",
+        "contest_annulments",
+        "contest_integrity_events",
+        "contest_questions",
+        "contest_announcements",
+      ]) {
+        await manager.query(`DELETE FROM ${table} WHERE contest_id = ?`, [contestId]);
+      }
+      await manager.getRepository(Contest).delete(contestId);
+      if (temporaryUserIds.length) await manager.getRepository(User).delete(temporaryUserIds);
+    });
+
+    return res.json({ deleted: true, contestId });
+  } catch (error: unknown) {
+    const status = readProperty(error, "statusCode");
+    const message = errorMessage(error);
+    if (typeof status === "number" && status >= 400 && status < 500) {
+      return res.status(status).json({ message });
+    }
+    logger.error("[contests] DELETE /:id error", { requestId: req.requestId, userId: req.userId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 // Contest details + problems list
 contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response) => {
   try {
@@ -1547,6 +1668,7 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
 
     const organizerUserIds = await getContestOrganizerUserIds(id, contest.createdBy?.id);
     const isManager = req.userId ? await canManageContest({ contest, req }) : false;
+    const canDelete = req.userRole === "SYSTEM_ADMIN" || Boolean(req.userId && contest.createdBy?.id === req.userId);
     const joined = await (async () => {
       const principalId = req.userId ?? req.studentId ?? null;
       if (!principalId || (req.userId && organizerUserIds.has(req.userId))) return null;
@@ -1606,6 +1728,7 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
         joinRequired: (contest.visibility === "PRIVATE_CODE" || contest.participantAccessMode === "ISSUED_ACCOUNTS") && !canContent,
         accountRequired: contest.participantAccessMode === "ISSUED_ACCOUNTS" && !canContent,
         canManage: isPrivileged,
+        canDelete,
         isPaused,
       },
       participantsCount,
@@ -1706,13 +1829,20 @@ contestsRouter.get("/:id/account", authRequired, async (req: AuthRequest, res: R
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
-    const participant = await getOrCreateParticipant({ contestId, req });
+    const existingParticipant = await participantRepo().findOne({
+      where: {
+        contest: { id: contestId },
+        ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }),
+      },
+    });
+    const isManager = req.userId ? await canManageContest({ contest, req }) : false;
+    const participant = existingParticipant ?? (isManager ? null : await getOrCreateParticipant({ contestId, req }));
     return res.json({
       contestId,
-      account: {
+      account: participant ? {
         handle: participant.contestAccountHandle ?? null,
         note: participant.contestAccountNote ?? null,
-      },
+      } : null,
     });
   } catch (error: unknown) {
     logger.error("[contests] GET /:id/account error", { requestId: req.requestId, err: error });
@@ -1732,6 +1862,16 @@ contestsRouter.put("/:id/account", authRequired, async (req: AuthRequest, res: R
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
+    const existingParticipant = await participantRepo().findOne({
+      where: {
+        contest: { id: contestId },
+        ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }),
+      },
+    });
+    if (!existingParticipant && req.userId && await canManageContest({ contest, req })) {
+      return res.status(403).json({ message: "NOT_A_PARTICIPANT" });
+    }
+
     const schema = z
       .object({
         handle: z.string().max(120).nullable().optional(),
@@ -1747,7 +1887,7 @@ contestsRouter.put("/:id/account", authRequired, async (req: AuthRequest, res: R
       return s.slice(0, max);
     };
 
-    const participant = await getOrCreateParticipant({ contestId, req });
+    const participant = existingParticipant ?? await getOrCreateParticipant({ contestId, req });
     if (Object.prototype.hasOwnProperty.call(parsed.data, "handle")) {
       participant.contestAccountHandle = norm(parsed.data.handle, 120);
     }

@@ -671,11 +671,13 @@ export const ContestDetailPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [details, score, progress] = await Promise.all([
+      const [details, score] = await Promise.all([
         getContestDetails(contestId),
         getContestScoreboard(contestId).catch(() => null),
-        getContestMyProgress(contestId).catch(() => null),
       ]);
+      const progress = details.access.canManage && !details.access.isJoined
+        ? null
+        : await getContestMyProgress(contestId).catch(() => null);
       setData(details);
       setStandings(score);
       setMyProgress(progress?.problems ?? []);
@@ -1183,6 +1185,7 @@ export const ContestProblemPage: React.FC = () => {
     onSave={() => undefined}
     onReset={() => setCode(statement.task.templatesByLanguage?.[language] || statement.task.template || "")}
     onBack={() => navigate(`/contest/contests/${contestId}`)}
+    disableAiAssistance
     runResult={ideRunResult}
     checkResult={ideCheckResult}
   />;

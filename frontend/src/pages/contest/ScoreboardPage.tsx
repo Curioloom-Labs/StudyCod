@@ -14,6 +14,7 @@ import {
 } from "../../lib/api/contests";
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 import { getCachedMeUser } from "../../lib/api/profile";
+import { ContestSectionNav } from "./ContestSectionNav";
 
 function currentUserLabel(): string | null {
   const user = getCachedMeUser();
@@ -39,6 +40,7 @@ export const ScoreboardPage: React.FC = () => {
 
   const [board, setBoard] = useState<ContestStandings | null>(null);
   const [title, setTitle] = useState<string>("");
+  const [canManage, setCanManage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(true);
   const [query, setQuery] = useState("");
@@ -53,7 +55,11 @@ export const ScoreboardPage: React.FC = () => {
     let cancelled = false;
 
     getContestDetails(contestId)
-      .then((d) => { if (!cancelled) setTitle(d.contest.title); })
+      .then((d) => {
+        if (cancelled) return;
+        setTitle(d.contest.title);
+        setCanManage(Boolean(d.access.canManage));
+      })
       .catch(() => {});
 
     const tick = async () => {
@@ -195,6 +201,8 @@ export const ScoreboardPage: React.FC = () => {
           </div>
         </motion.div>
 
+        {Number.isFinite(contestId) ? <ContestSectionNav contestId={contestId} active="standings" canManage={canManage} /> : null}
+
         {!Number.isFinite(contestId) ? (
           <div className="text-sm text-text-secondary">{tr("Невірний контест.", "Invalid contest.")}</div>
         ) : (
@@ -291,7 +299,7 @@ export const ScoreboardPage: React.FC = () => {
             )}
 
             {board && !board.hidden && board.rows.length > 0 && (
-              <div className="overflow-auto rounded-2xl border border-border/80 bg-bg-surface shadow-[0_18px_55px_-42px_rgba(0,0,0,.7)]">
+              <div className="overflow-x-auto rounded-2xl border border-border/80 bg-bg-surface shadow-[0_18px_55px_-42px_rgba(0,0,0,.7)]">
                 <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
                   <thead className="sticky top-0 z-20">
                     <tr className="bg-[#111a14] text-xs font-bold uppercase tracking-[.08em] text-[#aebdb2]">

@@ -899,8 +899,48 @@ const AppContent: React.FC = React.memo(() => {
 });
 AppContent.displayName = "AppContent";
 AppContent.displayName = "AppContent";
+
+const ContestOnlySurfaceGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const location = useLocation();
+  const isContestPath = /^\/(?:contest|contests)(?:\/|$)/.test(location.pathname);
+  const isDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
+  const [result, setResult] = React.useState<{ path: string; decision: "checking" | "allowed" | "contest-only" }>(() => ({
+    path: "",
+    decision: "checking",
+  }));
+  const decision = result.path === location.pathname ? result.decision : "checking";
+
+  React.useEffect(() => {
+    const path = location.pathname;
+    if (isDevPreview || isContestPath) {
+      setResult({ path, decision: "allowed" });
+      return;
+    }
+
+    const cachedUser = getCachedMeUser();
+    if (cachedUser) {
+      setResult({ path, decision: cachedUser.userMode === "CONTEST" ? "contest-only" : "allowed" });
+      return;
+    }
+
+    let active = true;
+    setResult({ path, decision: "checking" });
+    void getMe({ suppressAuthRedirect: true }).then((user) => {
+      if (active) setResult({ path, decision: user.userMode === "CONTEST" ? "contest-only" : "allowed" });
+    }).catch(() => {
+      if (active) setResult({ path, decision: "allowed" });
+    });
+    return () => { active = false; };
+  }, [isContestPath, isDevPreview, location.pathname]);
+
+  if (decision === "checking") return <PageLoader />;
+  if (decision === "contest-only") return <Navigate to="/contest/contests" replace state={{ from: `${location.pathname}${location.search}` }} />;
+  return <>{children}</>;
+};
+
 export const App: React.FC = () => {
   const location = useLocation();
+  const isContestSurface = /^\/(?:contest|contests)(?:\/|$)/.test(location.pathname);
   const { i18n } = useTranslation();
   const topLevelRouteKey = useMemo(() => {
     const path = location.pathname || "/";
@@ -931,10 +971,11 @@ export const App: React.FC = () => {
   }, [location.pathname, subdomainNavigate]);
   return <TheoryModalProvider>
         <ToastViewport />
-        <GlobalQuickSearch />
+        {!isContestSurface && <GlobalQuickSearch />}
         <NetworkStatus />
-        <MascotCompanion />
+        {!isContestSurface && <MascotCompanion />}
         <AnimatePresence mode="sync">
+          <ContestOnlySurfaceGuard>
           <Routes location={location} key={topLevelRouteKey}>
           {(import.meta.env.DEV || import.meta.env.VITE_BROWSER_CONTRACT === "1") ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
@@ -1169,6 +1210,7 @@ export const App: React.FC = () => {
               </Suspense>} />
             <Route path="*" element={<AppContent />} />
           </Routes>
+          </ContestOnlySurfaceGuard>
         </AnimatePresence>
     </TheoryModalProvider>;
 };
@@ -1316,7 +1358,7 @@ const ContestRoutes: React.FC = React.memo(() => {
     navigate("/contest", { replace: true });
     window.location.reload();
   }}>
-      <main id="main-content" className="min-h-0 overflow-y-auto">
+      <div className="min-w-0">
         <Suspense fallback={<PageLoader />}>
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
@@ -1330,7 +1372,7 @@ const ContestRoutes: React.FC = React.memo(() => {
             </Routes>
           </AnimatePresence>
         </Suspense>
-      </main>
+      </div>
     </PremiumModuleShell>;
 });
 ContestRoutes.displayName = "ContestRoutes";
