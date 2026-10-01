@@ -1122,6 +1122,8 @@ export const ContestPage: React.FC = () => {
   const [settingsError, setSettingsError] = React.useState<string | null>(null);
   const [settingsTitle, setSettingsTitle] = React.useState("");
   const [settingsDescription, setSettingsDescription] = React.useState("");
+  const [settingsTags, setSettingsTags] = React.useState("");
+  const [settingsDifficulty, setSettingsDifficulty] = React.useState<"EASY" | "MEDIUM" | "HARD" | "">("");
   const [settingsStartsAt, setSettingsStartsAt] = React.useState("");
   const [settingsEndsAt, setSettingsEndsAt] = React.useState("");
   const [settingsAllowUpsolve, setSettingsAllowUpsolve] = React.useState(true);
@@ -3292,6 +3294,8 @@ export const ContestPage: React.FC = () => {
     setSettingsError(null);
     setSettingsTitle(String(data.contest.title ?? ""));
     setSettingsDescription(String(data.contest.description ?? ""));
+    setSettingsTags(Array.isArray(data.contest.tags) ? data.contest.tags.join(", ") : "");
+    setSettingsDifficulty(data.contest.difficulty ?? "");
     setSettingsStartsAt(toDateTimeLocalInput(data.contest.startsAt));
     setSettingsEndsAt(toDateTimeLocalInput(data.contest.endsAt));
     setSettingsAllowUpsolve(Boolean(data.contest.allowUpsolve));
@@ -3303,6 +3307,12 @@ export const ContestPage: React.FC = () => {
     const title = settingsTitle.trim();
     if (title.length < 3) {
       setSettingsError(tr("Назва контесту занадто коротка", "Contest title is too short"));
+      return;
+    }
+
+    const tags = Array.from(new Set(settingsTags.split(",").map((tag) => tag.trim()).filter(Boolean)));
+    if (tags.length > 8 || tags.some((tag) => tag.length > 32)) {
+      setSettingsError(tr("Додай не більше 8 тегів, кожен до 32 символів", "Use at most 8 tags, each up to 32 characters"));
       return;
     }
 
@@ -3321,6 +3331,8 @@ export const ContestPage: React.FC = () => {
         description: settingsDescription.trim() ? settingsDescription.trim() : null,
         startsAt: startsAtIso,
         endsAt: endsAtIso,
+        tags,
+        difficulty: settingsDifficulty || null,
         allowUpsolve: settingsAllowUpsolve,
         scoringMode: settingsScoringMode,
       });
@@ -3770,6 +3782,29 @@ export const ContestPage: React.FC = () => {
               rows={6}
               className="w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus:outline-none"
             />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Input
+              label={tr("Теги через кому", "Tags separated by commas")}
+              value={settingsTags}
+              onChange={(e) => setSettingsTags(e.target.value)}
+              placeholder={tr("алгоритми, графи, Python", "algorithms, graphs, Python")}
+            />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="contest-settings-difficulty" className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Рівень складності", "Difficulty")}</label>
+              <select
+                id="contest-settings-difficulty"
+                value={settingsDifficulty}
+                onChange={(e) => setSettingsDifficulty(e.target.value as typeof settingsDifficulty)}
+                className="w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <option value="">{tr("Не вказано", "Not set")}</option>
+                <option value="EASY">{tr("Початковий", "Beginner")}</option>
+                <option value="MEDIUM">{tr("Середній", "Intermediate")}</option>
+                <option value="HARD">{tr("Складний", "Advanced")}</option>
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

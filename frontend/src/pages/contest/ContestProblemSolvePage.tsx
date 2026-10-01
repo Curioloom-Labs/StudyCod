@@ -1,7 +1,8 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
 import {
+  askContestProblemTutor,
   checkContestProblem,
   getContestCommunity,
   getContestDetails,
@@ -54,6 +55,7 @@ type ContestMeta = {
   title: string;
   startsAt: string | null;
   endsAt: string | null;
+  allowUpsolve: boolean;
 };
 
 type ContestAnnouncementEvent = {
@@ -142,7 +144,10 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [statement, setStatement] = React.useState<ContestProblemStatement | null>(null);
-  const [contestMeta, setContestMeta] = React.useState<ContestMeta>({ title: "Contest", startsAt: null, endsAt: null });
+  const [contestMeta, setContestMeta] = React.useState<ContestMeta>({ title: "Contest", startsAt: null, endsAt: null, allowUpsolve: true });
+  const [tutorAnswer, setTutorAnswer] = React.useState<{ answer: string; tips: string[] } | null>(null);
+  const [tutorError, setTutorError] = React.useState<string | null>(null);
+  const [askingTutor, setAskingTutor] = React.useState(false);
 
   const [judgeLanguage, setJudgeLanguage] = React.useState<JudgeLanguage>("java");
   const [judgeCompiler, setJudgeCompiler] = React.useState<string>(defaultCompilerForFamily("java"));
@@ -265,6 +270,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         title: contest.contest.title,
         startsAt: contest.contest.startsAt,
         endsAt: contest.contest.endsAt,
+        allowUpsolve: contest.contest.allowUpsolve,
       });
       hydrateDraft(stmt);
     } catch (e: unknown) {
@@ -578,6 +584,26 @@ export const ContestProblemSolvePage: React.FC = () => {
     }
   };
 
+  const askContestTutor = async () => {
+    if (!contestId || !problemId || !statement || askingTutor) return;
+    setAskingTutor(true);
+    setTutorError(null);
+    try {
+      const result = await askContestProblemTutor({
+        contestId,
+        problemId,
+        question: "Підкажи, як перевірити мій підхід і знайти можливу помилку, не показуючи готовий розв'язок.",
+        code: code.slice(0, 1200),
+        language: judgeLanguage,
+      });
+      setTutorAnswer(result.tutor);
+    } catch (caught: unknown) {
+      setTutorError(getErrorMessage(caught) || "AI-підказка зараз недоступна.");
+    } finally {
+      setAskingTutor(false);
+    }
+  };
+
   const askOrganizer = async (question: string) => {
     if (!contestId || !problemId || !hasToken || !statement) return;
     const problemTitle = statement.task.title || "Unknown";
@@ -643,6 +669,20 @@ export const ContestProblemSolvePage: React.FC = () => {
           {subsLoading ? <span className="text-text-muted">Syncing submissions…</span> : null}
         </div>
       </div>
+
+      {contestMeta.allowUpsolve && contestMeta.endsAt && Date.now() > new Date(contestMeta.endsAt).getTime() ? (
+        <Card className="flex flex-col gap-4 border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 font-semibold text-text-primary"><Sparkles className="h-4 w-4 text-primary" /> Дорішування з AI-тьютором</div>
+            <p className="mt-1 text-sm text-text-secondary">Попроси підказку про свій підхід. Тьютор пояснить наступний крок, не підміняючи твоє рішення.</p>
+            {tutorError && <p role="alert" aria-live="polite" className="mt-2 text-sm text-accent-error">{tutorError}</p>}
+            {tutorAnswer && <div className="mt-3 rounded-xl bg-bg-base p-3 text-sm leading-6 text-text-primary"><p className="whitespace-pre-wrap">{tutorAnswer.answer}</p>{tutorAnswer.tips.length > 0 && <ul className="mt-2 list-inside list-disc text-text-secondary">{tutorAnswer.tips.map((tip, index) => <li key={`${index}-${tip}`}>{tip}</li>)}</ul>}</div>}
+          </div>
+          <Button variant="secondary" onClick={() => void askContestTutor()} disabled={askingTutor} className="shrink-0">
+            <Sparkles className="mr-2 h-4 w-4" />{askingTutor ? "Готуємо підказку…" : tutorAnswer ? "Ще одна підказка" : "Попросити підказку"}
+          </Button>
+        </Card>
+      ) : null}
 
       {turnstileEnabled ? (
         <div className="px-1">

@@ -8,6 +8,7 @@ import {
   Moon,
   ShieldCheck,
   Sun,
+  Trophy,
   UserRound,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -69,6 +70,11 @@ export const PremiumModuleShell: React.FC<Props> = ({
             path: "/profile",
             Icon: UserRound,
           },
+          {
+            label: uk ? "Контести" : "Contests",
+            path: "/contest/contests",
+            Icon: Trophy,
+          },
         ]
       : product === "EDU"
         ? isTeacher
@@ -89,6 +95,11 @@ export const PremiumModuleShell: React.FC<Props> = ({
                 label: uk ? "Календар" : "Calendar",
                 path: "/edu/calendar",
                 Icon: CalendarDays,
+              },
+              {
+                label: uk ? "Контести" : "Contests",
+                path: "/contest/contests",
+                Icon: Trophy,
               },
               {
                 label: uk ? "Курси" : "Courses",
@@ -123,6 +134,11 @@ export const PremiumModuleShell: React.FC<Props> = ({
                 Icon: CalendarDays,
               },
               {
+                label: uk ? "Контести" : "Contests",
+                path: "/contest/contests",
+                Icon: Trophy,
+              },
+              {
                 label: uk ? "Бібліотека" : "Library",
                 path: "/edu/library",
                 Icon: BookOpen,
@@ -137,7 +153,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
             {
               label: uk ? "Контести" : "Contests",
               path: "/contest/contests",
-              Icon: GraduationCap,
+              Icon: Trophy,
             },
             {
               label: uk ? "Профіль" : "Profile",
@@ -381,15 +397,15 @@ export const PremiumModuleShell: React.FC<Props> = ({
           className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 md:hidden"
           aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}
         >
-          <div className="grid grid-cols-5 gap-1">
-            {nav.slice(0, 5).map(({ label, path, Icon }) => (
+          <div className="flex gap-1 overflow-x-auto">
+            {nav.map(({ label, path, Icon }) => (
               <button
                 key={path}
                 type="button"
                 onClick={() => onNavigate(path)}
                 aria-current={isActive(path) ? "page" : undefined}
                 data-motion-press
-                className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition motion-safe:active:scale-[.97] ${isActive(path) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}
+                className={`flex min-h-12 min-w-[4.25rem] flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition motion-safe:active:scale-[.97] ${isActive(path) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}
               >
                 <Icon className="size-4" />
                 <span className="max-w-full truncate leading-none">

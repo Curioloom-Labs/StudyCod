@@ -119,7 +119,9 @@ const TaskLibraryPage = React.lazy(() => import("./pages/library/TaskLibraryPage
 const LibraryTaskSolvePage = React.lazy(() => import("./pages/library/LibraryTaskSolvePage").then(mod => ({ default: mod.LibraryTaskSolvePage })));
 const ContestsPage = React.lazy(() => import("./pages/contest/ContestExperience").then(mod => ({ default: mod.ContestLobbyPage })));
 const ContestPage = React.lazy(() => import("./pages/contest/ContestExperience").then(mod => ({ default: mod.ContestDetailPage })));
-const ContestProblemSolvePage = React.lazy(() => import("./pages/contest/ContestExperience").then(mod => ({ default: mod.ContestProblemPage })));
+const ContestManagePage = React.lazy(() => import("./pages/contest/ContestPage").then(mod => ({ default: mod.ContestPage })));
+const ContestProblemSolvePage = React.lazy(() => import("./pages/contest/ContestProblemSolvePage").then(mod => ({ default: mod.ContestProblemSolvePage })));
+const ContestScoreboardPage = React.lazy(() => import("./pages/contest/ScoreboardPage").then(mod => ({ default: mod.ScoreboardPage })));
 const DevEditorPage = React.lazy(() => import("./pages/system/DevEditorPage").then(mod => ({ default: mod.DevEditorPage })));
 const CollabDemoPage = React.lazy(() => import("./pages/system/CollabDemoPage").then(mod => ({ default: mod.CollabDemoPage })));
 const OnboardingEntry = React.lazy(() => import("./components/onboarding/OnboardingEntry").then(mod => ({ default: mod.OnboardingEntry })));
@@ -1116,7 +1118,7 @@ export const App: React.FC = () => {
                   </Suspense>
                 </StandaloneShell>
               </RequireToken>} />
-          <Route path="/contests/:id/scoreboard" element={<Navigate to="/contest/contests" replace />} />
+          <Route path="/contests/:id/scoreboard" element={<LegacyContestRouteRedirect />} />
           <Route path="/profile" element={<RequireToken>
                 <Navigate to="/?app=profile" replace />
               </RequireToken>} />
@@ -1132,9 +1134,9 @@ export const App: React.FC = () => {
           <Route path="/dashboard" element={<RequireToken>
                 <Navigate to="/" replace />
               </RequireToken>} />
-          <Route path="/contests" element={<Navigate to="/contest/contests" replace />} />
-          <Route path="/contests/:id" element={<Navigate to="/contest/contests" replace />} />
-          <Route path="/contests/:id/problems/:problemId" element={<Navigate to="/contest/contests" replace />} />
+          <Route path="/contests" element={<LegacyContestRouteRedirect />} />
+          <Route path="/contests/:id" element={<LegacyContestRouteRedirect />} />
+          <Route path="/contests/:id/problems/:problemId" element={<LegacyContestRouteRedirect />} />
           <Route path="/u/:username" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <PublicProfilePage />
@@ -1244,6 +1246,12 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   return <>{children}</>;
 };
 
+const LegacyContestRouteRedirect: React.FC = () => {
+  const location = useLocation();
+  const destination = location.pathname.replace(/^\/contests(?=\/|$)/, "/contest/contests");
+  return <Navigate to={{ pathname: destination, search: location.search, hash: location.hash }} replace />;
+};
+
 const ContestRoutes: React.FC = React.memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -1270,10 +1278,6 @@ const ContestRoutes: React.FC = React.memo(() => {
     getMe({ force: true, suppressAuthRedirect: true })
       .then((nextUser) => {
         if (!active) return;
-        if (nextUser.userMode !== "CONTEST") {
-          navigate("/", { replace: true });
-          return;
-        }
         setUser(nextUser);
       })
       .catch(() => active && setUser(null))
@@ -1297,12 +1301,8 @@ const ContestRoutes: React.FC = React.memo(() => {
     return <Suspense fallback={<PageLoader />}>
       <AuthPage
         initialMode="login"
-        initialUserMode="CONTEST"
+        initialUserMode="PERSONAL"
         onAuth={(u) => {
-          if (u.userMode !== "CONTEST") {
-            navigate("/", { replace: true });
-            return;
-          }
           navigate("/contest/contests", { replace: true });
           window.location.reload();
         }}
@@ -1321,7 +1321,9 @@ const ContestRoutes: React.FC = React.memo(() => {
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
               <Route index element={<Navigate to="contests" replace />} />
-              <Route path="contests" element={<AnimatedPage><ContestsPage /></AnimatedPage>} />
+              <Route path="contests" element={<AnimatedPage><ContestsPage canCreate={user.userMode !== "CONTEST"} canJoinPrivateByCode={user.userMode !== "CONTEST"} favoriteScope={String(user.id)} /></AnimatedPage>} />
+              <Route path="contests/:id/scoreboard" element={<AnimatedPage><ContestScoreboardPage /></AnimatedPage>} />
+              <Route path="contests/:id/manage" element={<AnimatedPage><ContestManagePage /></AnimatedPage>} />
               <Route path="contests/:id" element={<AnimatedPage><ContestPage /></AnimatedPage>} />
               <Route path="contests/:id/problems/:problemId" element={<AnimatedPage><ContestProblemSolvePage /></AnimatedPage>} />
               <Route path="*" element={<Navigate to="contests" replace />} />

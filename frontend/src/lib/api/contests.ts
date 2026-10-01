@@ -6,6 +6,9 @@ export type ContestListItem = {
   id: number;
   title: string;
   description: string | null;
+  tags: string[];
+  difficulty: "EASY" | "MEDIUM" | "HARD" | null;
+  participantsCount: number;
   visibility: ContestVisibility;
   startsAt: string | null;
   endsAt: string | null;
@@ -32,6 +35,8 @@ export type ContestDetails = {
     id: number;
     title: string;
     description: string | null;
+    tags: string[];
+    difficulty: "EASY" | "MEDIUM" | "HARD" | null;
     visibility: ContestVisibility;
     startsAt: string | null;
     endsAt: string | null;
@@ -49,6 +54,7 @@ export type ContestDetails = {
     isPaused?: boolean;
   };
   problems: ContestProblemListItem[];
+  participantsCount: number;
   serverTime: string;
   phase: { started: boolean; finished: boolean };
 };
@@ -56,6 +62,8 @@ export type ContestDetails = {
 export type CreateContestRequest = {
   title: string;
   description?: string;
+  tags?: string[];
+  difficulty?: "EASY" | "MEDIUM" | "HARD" | null;
   visibility?: ContestVisibility;
   joinCode?: string;
   classId?: number;
@@ -69,6 +77,8 @@ export type CreateContestRequest = {
 export type UpdateContestRequest = {
   title?: string;
   description?: string | null;
+  tags?: string[];
+  difficulty?: "EASY" | "MEDIUM" | "HARD" | null;
   startsAt?: string | null;
   endsAt?: string | null;
   isPublished?: boolean;
@@ -316,8 +326,27 @@ export type ContestAnnulmentItem = {
   updatedAt: string | null;
 };
 
-export async function listContests(): Promise<{ contests: ContestListItem[] }> {
-  const res = await api.get("/contests");
+export type ContestListQuery = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  phase?: "all" | "live" | "soon" | "ended";
+  sort?: "newest" | "soonest" | "title";
+  difficulty?: "EASY" | "MEDIUM" | "HARD";
+  ids?: string;
+};
+
+export type ContestListResponse = {
+  contests: ContestListItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  serverTime: string;
+};
+
+export async function listContests(params: ContestListQuery = {}): Promise<ContestListResponse> {
+  const res = await api.get("/contests", { params });
   return res.data;
 }
 
@@ -338,6 +367,21 @@ export async function joinContestByCode(code: string): Promise<{ joined: boolean
 
 export async function getContestProblemStatement(contestId: number, problemId: number): Promise<ContestProblemStatement> {
   const res = await api.get(`/contests/${contestId}/problems/${problemId}`);
+  return res.data;
+}
+
+export async function askContestProblemTutor(params: {
+  contestId: number;
+  problemId: number;
+  question: string;
+  code?: string;
+  language?: string;
+}): Promise<{ tutor: { answer: string; tips: string[] } }> {
+  const res = await api.post(`/contests/${params.contestId}/problems/${params.problemId}/tutor`, {
+    question: params.question,
+    code: params.code,
+    language: params.language,
+  });
   return res.data;
 }
 
