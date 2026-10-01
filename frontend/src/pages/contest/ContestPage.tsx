@@ -917,6 +917,7 @@ export const ContestPage: React.FC = () => {
   const [joining, setJoining] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [settingsSection, setSettingsSection] = React.useState<"general" | "schedule" | "access" | "appearance">("general");
   const [deleteContestOpen, setDeleteContestOpen] = React.useState(false);
   const [deleteContestConfirmation, setDeleteContestConfirmation] = React.useState("");
   const [deleteContestLoading, setDeleteContestLoading] = React.useState(false);
@@ -1000,7 +1001,7 @@ export const ContestPage: React.FC = () => {
 
   const [certificateMode, setCertificateMode] = React.useState<"none" | "studycod" | "custom">("studycod");
   const [certificateEditorOpen, setCertificateEditorOpen] = React.useState(false);
-  const [certificateUiSimpleMode, setCertificateUiSimpleMode] = React.useState(true);
+  const certificateUiSimpleMode = true;
   const [certificateUiAdvancedOpen, setCertificateUiAdvancedOpen] = React.useState(false);
   const [certificateAutoSyncLayout, setCertificateAutoSyncLayout] = React.useState(true);
   const [certificateCanvasFocusMode, setCertificateCanvasFocusMode] = React.useState(true);
@@ -3167,6 +3168,7 @@ export const ContestPage: React.FC = () => {
 
   React.useEffect(() => {
     if (!settingsOpen || !data?.contest) return;
+    setSettingsSection("general");
     setSettingsError(null);
     setSettingsTitle(String(data.contest.title ?? ""));
     setSettingsDescription(String(data.contest.description ?? ""));
@@ -3506,8 +3508,6 @@ export const ContestPage: React.FC = () => {
         {data?.access.canManage ? <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{tr("Організатор", "Organizer")}</span> : null}
       </div>
 
-      {data && contestId ? <ContestSectionNav contestId={contestId} active={tab} canManage={!!data.access.canManage} /> : null}
-
       <Modal
         open={addOpen}
         onClose={() => {
@@ -3721,22 +3721,63 @@ export const ContestPage: React.FC = () => {
         }}
         title={tr("Налаштування контесту", "Contest settings")}
       >
-        <div className="space-y-4">
+        <div className="contest-settings-dialog">
           {settingsError ? <div className="text-sm text-accent-error">{settingsError}</div> : null}
 
+          <div className="contest-settings-tabs" role="tablist" aria-label={tr("Розділи налаштувань", "Settings sections")}>
+            {([
+              ["general", tr("Основне", "Basics"), tr("Назва, опис і теми", "Title, description, topics")],
+              ["schedule", tr("Формат", "Format"), tr("Час і підрахунок", "Schedule and scoring")],
+              ["access", tr("Доступ", "Access"), tr("Учасники й рейтинг", "Participants and standings")],
+              ["appearance", tr("Вигляд", "Appearance"), tr("Іконка й обкладинка", "Icon and banner")],
+            ] as const).map(([id, label, detail]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                id={`contest-settings-tab-${id}`}
+                aria-selected={settingsSection === id}
+                aria-controls="contest-settings-panel"
+                onClick={() => setSettingsSection(id)}
+                className={`contest-settings-tab${settingsSection === id ? " is-active" : ""}`}
+              >
+                <span>{label}</span>
+                <small>{detail}</small>
+              </button>
+            ))}
+          </div>
+
+          <div id="contest-settings-panel" role="tabpanel" aria-labelledby={`contest-settings-tab-${settingsSection}`} className="contest-settings-panel">
+          {settingsSection === "general" ? <section className="contest-settings-section">
+            <div className="contest-settings-section__intro"><h3>{tr("Інформація для учасників", "What participants will see")}</h3><p>{tr("Дай контесту зрозумілу назву й короткий опис.", "Give the contest a clear name and a short description.")}</p></div>
           <Input label={tr("Назва", "Title")} value={settingsTitle} onChange={(e) => setSettingsTitle(e.target.value)} />
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Опис", "Description")}</label>
+            <label className="text-sm font-semibold text-text-primary">{tr("Опис і правила", "Description and rules")}</label>
             <textarea
               value={settingsDescription}
               onChange={(e) => setSettingsDescription(e.target.value)}
-              rows={6}
-              className="w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus:outline-none"
+              rows={4}
+              className="w-full resize-y bg-bg-code border border-border text-text-primary rounded-xl px-4 py-3 leading-6 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              placeholder={tr("Коротко поясни формат, правила та важливі деталі…", "Summarize the format, rules, and any important details…")}
             />
           </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Input label={tr("Теми через кому", "Topics separated by commas")} value={settingsTags} onChange={(e) => setSettingsTags(e.target.value)} placeholder={tr("алгоритми, графи, Python", "algorithms, graphs, Python")} />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="contest-settings-difficulty" className="text-sm font-semibold text-text-primary">{tr("Складність", "Difficulty")}</label>
+              <select id="contest-settings-difficulty" value={settingsDifficulty} onChange={(e) => setSettingsDifficulty(e.target.value as typeof settingsDifficulty)} className="w-full rounded-xl border border-border bg-bg-code px-4 py-2.5 text-text-primary focus-visible:ring-2 focus-visible:ring-primary">
+                <option value="">{tr("Не вказано", "Not set")}</option>
+                <option value="EASY">{tr("Початковий", "Beginner")}</option>
+                <option value="MEDIUM">{tr("Середній", "Intermediate")}</option>
+                <option value="HARD">{tr("Складний", "Advanced")}</option>
+              </select>
+            </div>
+          </div>
+          </section> : null}
 
-          <section className="rounded-xl border border-border bg-bg-base/60 p-4">
+          {settingsSection === "appearance" ? <section className="contest-settings-section">
+            <div className="contest-settings-section__intro"><h3>{tr("Візуальний стиль", "Visual identity")}</h3><p>{tr("Обкладинка та іконка допоможуть відрізнити контест у списку.", "A banner and icon make the contest easier to recognize.")}</p></div>
             <div className="text-sm font-semibold text-text-primary">{tr("Оформлення", "Branding")}</div>
             <div className="mt-3 flex flex-wrap gap-2">
               {CONTEST_ICONS.map((icon) => <button key={icon} type="button" aria-label={tr(`Обрати іконку ${icon}`, `Choose icon ${icon}`)} aria-pressed={!settingsIconImageUrl && settingsIcon === icon} onClick={() => { setSettingsIconImageUrl(null); setSettingsIcon(icon); }} className={`grid size-10 place-items-center rounded-lg border text-xl ${!settingsIconImageUrl && settingsIcon === icon ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "border-border hover:bg-bg-hover"}`}>{icon}</button>)}
@@ -3763,9 +3804,11 @@ export const ContestPage: React.FC = () => {
               {settingsBannerImageUrl && <Button variant="ghost" onClick={() => setSettingsBannerImageUrl(null)} disabled={settingsSaving || settingsBannerUploading}>{tr("Прибрати", "Remove")}</Button>}
               <span className="text-xs text-text-secondary">PNG, JPG, WebP, AVIF · 8 MB</span>
             </div>
-          </section>
+          </section> : null}
 
-          <section className="rounded-xl border border-border bg-bg-base/60 p-4">
+          {settingsSection === "access" ? <section className="contest-settings-section">
+          <div className="contest-settings-section__intro"><h3>{tr("Хто може брати участь", "Who can participate")}</h3><p>{tr("Визнач, хто побачить контест і як люди отримають доступ.", "Choose who can see the contest and how they get access.")}</p></div>
+          <section className="rounded-2xl border border-border bg-bg-base/45 p-4">
             <div className="text-sm font-semibold text-text-primary">{tr("Хто має доступ", "Who can access")}</div>
             <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Зміна доступу одразу оновить видимість контесту для учасників.", "Changing access immediately updates contest visibility for participants.")}</p>
             <label htmlFor="contest-settings-visibility" className="mt-3 block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Формат доступу", "Access type")}</label>
@@ -3794,7 +3837,7 @@ export const ContestPage: React.FC = () => {
             </div>}
           </section>
 
-          <section className="rounded-xl border border-border bg-bg-base/60 p-4">
+          <section className="rounded-2xl border border-border bg-bg-base/45 p-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="contest-settings-participant-access" className="text-sm font-semibold text-text-primary">{tr("Реєстрація учасників", "Participant registration")}</label>
@@ -3815,30 +3858,10 @@ export const ContestPage: React.FC = () => {
               </div>
             </div>
           </section>
+          </section> : null}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Input
-              label={tr("Теги через кому", "Tags separated by commas")}
-              value={settingsTags}
-              onChange={(e) => setSettingsTags(e.target.value)}
-              placeholder={tr("алгоритми, графи, Python", "algorithms, graphs, Python")}
-            />
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="contest-settings-difficulty" className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Рівень складності", "Difficulty")}</label>
-              <select
-                id="contest-settings-difficulty"
-                value={settingsDifficulty}
-                onChange={(e) => setSettingsDifficulty(e.target.value as typeof settingsDifficulty)}
-                className="w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <option value="">{tr("Не вказано", "Not set")}</option>
-                <option value="EASY">{tr("Початковий", "Beginner")}</option>
-                <option value="MEDIUM">{tr("Середній", "Intermediate")}</option>
-                <option value="HARD">{tr("Складний", "Advanced")}</option>
-              </select>
-            </div>
-          </div>
-
+          {settingsSection === "schedule" ? <section className="contest-settings-section">
+          <div className="contest-settings-section__intro"><h3>{tr("Час і правила підрахунку", "Schedule and scoring")}</h3><p>{tr("Зміни правила, за якими рахуватимуть результати контесту.", "Set when the contest runs and how results are calculated.")}</p></div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Старт", "Start")}</label>
@@ -3884,8 +3907,11 @@ export const ContestPage: React.FC = () => {
               ))}
             </div>
           </div>
+          </section> : null}
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          </div>
+
+          <div className="contest-settings-footer">
             <Button variant="ghost" onClick={() => setSettingsOpen(false)} disabled={settingsSaving || settingsIconUploading || settingsBannerUploading}>
               {tr("Скасувати", "Cancel")}
             </Button>
@@ -4056,9 +4082,9 @@ export const ContestPage: React.FC = () => {
         </Card>
       ) : !data ? null : (
         <div className="space-y-4">
-          <Card className="overflow-hidden border border-border/70 p-4 sm:p-6">
+          <Card className="contest-hero-card overflow-hidden border border-primary/20 p-0">
             {data.contest.bannerImageUrl ? (
-              <div className="mb-5 overflow-hidden rounded-2xl border border-border/70 bg-bg-base">
+              <div className="contest-hero-card__image-wrap" aria-hidden="true">
                 <img
                   src={data.contest.bannerImageUrl}
                   alt=""
@@ -4066,18 +4092,19 @@ export const ContestPage: React.FC = () => {
                   width={1200}
                   height={360}
                   fetchPriority="high"
-                  className="block h-24 w-full object-cover sm:h-32"
+                  className="contest-hero-card__image"
                 />
               </div>
             ) : null}
+            <div className="contest-hero-card__content">
             {/* Hero heading */}
             <div className="space-y-1.5">
               <PageEyebrow label="contest" />
-              <div className="flex flex-wrap items-start gap-2">
-                <h1 className="flex min-w-0 flex-1 items-center gap-3 break-words text-2xl font-semibold leading-tight tracking-tight text-text-primary md:text-3xl [text-wrap:balance]">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <h1 className="flex min-w-0 flex-1 items-center gap-3 break-words text-3xl font-bold leading-tight tracking-tight text-text-primary md:text-4xl [text-wrap:balance]">
                   <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-2xl">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" width={44} height={44} fetchPriority="high" className="size-full object-cover" /> : data.contest.icon || "🏆"}</span>{data.contest.title}
                 </h1>
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
                   {(() => {
                     const chip = contestPhaseChip({
                       started: data.phase.started,
@@ -4094,20 +4121,18 @@ export const ContestPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="h-px bg-gradient-to-r from-primary/30 via-border to-transparent my-3" />
-
-            <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-3">
-                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Підрахунок", "Scoring")}</div>
-                <div className="text-text-primary mt-1 font-semibold">{data.contest.scoringMode === "ICPC" ? tr("ICPC · задачі та штраф", "ICPC · solved and penalty") : tr("IOI · бали за задачі", "IOI · points per problem")}</div>
+            <div className="contest-hero-stats" aria-label={tr("Коротко про контест", "Contest overview")}>
+              <div className="contest-hero-stat">
+                <div className="contest-hero-stat__label">{tr("Підрахунок", "Scoring")}</div>
+                <div className="contest-hero-stat__value">{data.contest.scoringMode === "ICPC" ? tr("ICPC · задачі та штраф", "ICPC · solved and penalty") : tr("IOI · бали за задачі", "IOI · points per problem")}</div>
               </div>
-              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-3">
-                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Учасники", "Participants")}</div>
-                <div className="mt-1 font-semibold tabular-nums text-text-primary">{data.participantsCount}</div>
+              <div className="contest-hero-stat">
+                <div className="contest-hero-stat__label">{tr("Учасники", "Participants")}</div>
+                <div className="contest-hero-stat__value contest-hero-stat__value--number">{data.participantsCount}</div>
               </div>
-              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-3">
-                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Задачі", "Problems")}</div>
-                <div className="mt-1 font-semibold tabular-nums text-text-primary">{data.problems.length}</div>
+              <div className="contest-hero-stat">
+                <div className="contest-hero-stat__label">{tr("Задачі", "Problems")}</div>
+                <div className="contest-hero-stat__value contest-hero-stat__value--number">{data.problems.length}</div>
               </div>
             </div>
 
@@ -4133,13 +4158,10 @@ export const ContestPage: React.FC = () => {
               </div>
             ) : null}
 
-            <div className="text-xs text-text-secondary mt-2 flex flex-wrap gap-3">
-              <span>
-                {tr("Старт", "Start")}: {fmtDateTime(data.contest.startsAt, i18n.language)}
-              </span>
-              <span>
-                {tr("Фініш", "End")}: {fmtDateTime(data.contest.endsAt, i18n.language)}
-              </span>
+            <div className="contest-hero-schedule">
+              <span><span className="contest-hero-schedule__label">{tr("Старт", "Start")}</span>{fmtDateTime(data.contest.startsAt, i18n.language)}</span>
+              <span aria-hidden="true" className="contest-hero-schedule__separator" />
+              <span><span className="contest-hero-schedule__label">{tr("Фініш", "End")}</span>{fmtDateTime(data.contest.endsAt, i18n.language)}</span>
             </div>
 
             {data.phase.finished && data.contest.allowUpsolve ? (
@@ -4190,11 +4212,14 @@ export const ContestPage: React.FC = () => {
                 <div className="mt-3"><MarkdownView content={data.contest.description} /></div>
               </details>
             ) : null}
+            </div>
           </Card>
+
+          {contestId ? <ContestSectionNav contestId={contestId} active={tab} canManage={!!data.access.canManage} /> : null}
 
           {tab === "problems" ? (
             <>
-              <Card className="border border-border/70 bg-bg-surface/80 p-4 sm:p-5">
+              <Card className="contest-problems-card border border-border/70 bg-bg-surface/80">
               <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold tracking-tight text-text-primary">{tr("Задачі", "Problems")}</h2>
@@ -4254,27 +4279,12 @@ export const ContestPage: React.FC = () => {
               {progressLoading ? (
                 <div className="space-y-2">
                   {Array.from({ length: 6 }).map((_, i) => (
-                    <Skeleton key={i} className="h-10 w-full" />
+                    <Skeleton key={i} className="h-[84px] w-full rounded-2xl" />
                   ))}
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-border/80">
-                  <table className="w-full min-w-[760px] border-collapse text-sm">
-                    <caption className="sr-only">
-                      {tr("Прогрес учасника за задачами контесту", "Participant progress by contest problem")}
-                    </caption>
-                    <thead className="bg-bg-hover text-xs uppercase tracking-wide text-text-secondary">
-                      <tr>
-                        <th scope="col" className="px-4 py-3 text-left">{tr("Задача", "Problem")}</th>
-                        <th scope="col" className="hidden md:table-cell px-4 py-3 text-left">{tr("Назва", "Title")}</th>
-                        <th scope="col" className="px-4 py-3 text-center">{tr("Бали", "Points")}</th>
-                        <th scope="col" className="px-4 py-3 text-center">{tr("Кращий", "Best")}</th>
-                        <th scope="col" className="px-4 py-3 text-center">{tr("Остання подача", "Last")}</th>
-                        <th scope="col" className="px-4 py-3 text-right">{tr("Дія", "Action")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.problems.map((p) => {
+                <div className="contest-problem-list" role="list" aria-label={tr("Задачі контесту", "Contest problems")}>
+                  {data.problems.map((p) => {
                         const disabled = !p.libraryTaskId;
                         const pr = progressByProblemId.get(p.id) ?? null;
                         const bestText = pr
@@ -4291,66 +4301,68 @@ export const ContestPage: React.FC = () => {
                               : "—"
                           : "—";
                         const isSolved = pr != null && pr.maxScore != null && pr.bestContestScore >= pr.maxScore;
-                        const isAttempted = pr != null && pr.bestContestScore > 0 && !isSolved;
+                        const isAttempted = pr?.last != null && !isSolved;
 
                         return (
-                          <tr key={p.id} className={`border-t border-border/70 transition-colors hover:bg-bg-hover ${isSolved ? "border-l-2 border-l-accent-success" : isAttempted ? "border-l-2 border-l-accent-warn" : ""}`}>
-                            <td className="px-4 py-3">
-                              <span className="inline-flex min-w-9 items-center justify-center rounded-lg border border-border bg-bg-base px-2 py-1 font-mono font-bold text-primary">{p.label}</span>
-                              <span className="ml-3 text-sm font-semibold text-text-primary md:hidden">{p.title}</span>
-                            </td>
-                            <td className="hidden md:table-cell max-w-[520px] px-4 py-3 text-text-primary">
-                              <div className="truncate">{p.title}</div>
-                            </td>
-                            <td className="px-4 py-3 text-center tabular-nums text-text-secondary">{p.points != null ? p.points : "—"}</td>
-                            <td className="px-4 py-3 text-center tabular-nums font-semibold text-text-primary">{bestText}</td>
-                            <td className="px-4 py-3 text-center">
-                              {last ? (
-                                <div className="flex flex-col items-center gap-1">
-                                  <div className="flex items-center gap-2">
-                                    {(() => {
-                                      const v = verdictChip(last.verdict, tr);
-                                      return <StatusChip glyph={v.glyph} label={v.label} tone={v.tone} size="sm" />;
-                                    })()}
-                                    {(() => {
-                                      const p = submissionPhaseChip(last.phase, tr);
-                                      return <StatusChip glyph={p.glyph} label={p.label} tone={p.tone} size="sm" />;
-                                    })()}
-                                    <span className="text-text-secondary">{lastScoreText}</span>
-                                  </div>
-                                  <div className="hidden md:block text-xs text-text-secondary">{fmtDateTime(last.createdAt, i18n.language)}</div>
+                          <article key={p.id} role="listitem" className={`contest-problem-row${isSolved ? " is-solved" : isAttempted ? " is-attempted" : ""}`}>
+                            <div className="contest-problem-row__identity">
+                              <span className="contest-problem-row__letter">{p.label}</span>
+                              <div className="min-w-0">
+                                <h3 className="contest-problem-row__title" title={p.title}>{p.title}</h3>
+                                <div className="contest-problem-row__subtitle">
+                                  <span>{p.points != null ? `${p.points} ${tr("балів", "pts")}` : tr("без окремої ваги", "unweighted")}</span>
+                                  <span aria-hidden="true">·</span>
+                                  <span>{isSolved ? tr("Розв’язано", "Solved") : isAttempted ? tr("Є спроба", "Attempted") : tr("Ще не розпочато", "Not started")}</span>
                                 </div>
-                              ) : (
-                                "—"
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <div className="flex flex-wrap items-center justify-end gap-2">
+                              </div>
+                            </div>
+
+                            <div className="contest-problem-row__best">
+                              <span>{tr("Найкращий результат", "Best result")}</span>
+                              <strong>{bestText}</strong>
+                            </div>
+
+                            <div className="contest-problem-row__last">
+                              <span>{tr("Остання подача", "Latest submission")}</span>
+                              {last ? (
+                                <div className="contest-problem-row__verdict">
+                                  {(() => {
+                                    const v = verdictChip(last.verdict, tr);
+                                    return <StatusChip glyph={v.glyph} label={v.label} tone={v.tone} size="sm" />;
+                                  })()}
+                                  {(() => {
+                                    const phase = submissionPhaseChip(last.phase, tr);
+                                    return <StatusChip glyph={phase.glyph} label={phase.label} tone={phase.tone} size="sm" />;
+                                  })()}
+                                  <span className="tabular-nums">{lastScoreText}</span>
+                                </div>
+                              ) : <strong className="contest-problem-row__empty">{tr("Подач поки немає", "No submissions yet")}</strong>}
+                              {last?.createdAt ? <time className="contest-problem-row__time" dateTime={last.createdAt}>{fmtDateTime(last.createdAt, i18n.language)}</time> : null}
+                            </div>
+
+                            <div className="contest-problem-row__actions">
                                 {hasToken && data.access.canManage && p.libraryTaskId ? (
                                   <Link
                                     to={`/library?view=mine&sel=${p.libraryTaskId}&edit=1`}
-                                    className="inline-flex min-h-9 items-center rounded-lg px-3 text-xs font-semibold text-text-secondary hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                    className="contest-problem-row__edit"
                                     title={tr("Редагувати тести/бали", "Edit tests/points")}
                                   >
-                                    {tr("Бали/тести", "Points/tests")}
+                                    {tr("Налаштувати", "Settings")}
                                   </Link>
                                 ) : null}
                                 {disabled ? (
-                                  <span className="rounded-lg border border-border px-3 py-2 text-xs text-text-muted">{tr("Недоступна", "Unavailable")}</span>
+                                  <span className="contest-problem-row__disabled">{tr("Недоступна", "Unavailable")}</span>
                                 ) : (
-                                  <Link to={`/contests/${data.contest.id}/problems/${p.id}`} className="inline-flex min-h-9 items-center rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                                    {tr("Відкрити", "Open")}
+                                  <Link to={`/contests/${data.contest.id}/problems/${p.id}`} className="contest-problem-row__open">
+                                    {tr("До задачі", "Open problem")} <span aria-hidden="true">→</span>
                                   </Link>
                                 )}
-                              </div>
-                            </td>
-                          </tr>
+                            </div>
+                          </article>
                         );
-                      })}
-                    </tbody>
-                  </table>
+                  })}
 
-                  <div className="text-xs text-text-secondary mt-2">
+                  <div className="contest-problem-note">
                     {tr(
                       "“Кращий” рахується лише за офіційні подачі в межах контесту. “Остання” може бути як з контесту, так і з дорішування.",
                       "“Best” counts only official contest submissions. “Last” may be from contest or upsolve."
@@ -4383,30 +4395,15 @@ export const ContestPage: React.FC = () => {
                               variant={certificateGlobalSettingsOpen ? "secondary" : "ghost"}
                               onClick={() => setCertificateGlobalSettingsOpen((v) => !v)}
                             >
-                              {certificateGlobalSettingsOpen ? tr("Сховати загальні налаштування", "Hide global settings") : tr("Загальні налаштування", "Global settings")}
+                              {certificateGlobalSettingsOpen ? tr("Сховати параметри сертифікатів", "Hide certificate settings") : tr("Параметри сертифікатів", "Certificate settings")}
                             </Button>
                           ) : null}
                           <Button
-                            variant={certificateUiSimpleMode ? "secondary" : "ghost"}
-                            onClick={() => {
-                              setCertificateUiSimpleMode(true);
-                              setCertificateUiAdvancedOpen(false);
-                              setCertificateCanvasFocusMode(true);
-                              setCertificateGlobalSettingsOpen(false);
-                            }}
+                            aria-expanded={certificateUiAdvancedOpen}
+                            variant={certificateUiAdvancedOpen ? "secondary" : "ghost"}
+                            onClick={() => setCertificateUiAdvancedOpen((open) => !open)}
                           >
-                            {tr("Візуальний", "Visual")}
-                          </Button>
-                          <Button
-                            variant={!certificateUiSimpleMode ? "secondary" : "ghost"}
-                            onClick={() => {
-                              setCertificateUiSimpleMode(false);
-                              setCertificateUiAdvancedOpen(true);
-                              setCertificateCanvasFocusMode(false);
-                              setCertificateGlobalSettingsOpen(true);
-                            }}
-                          >
-                            {tr("Розширено", "Advanced")}
+                            {certificateUiAdvancedOpen ? tr("Сховати параметри", "Hide options") : tr("Додаткові параметри", "More options")}
                           </Button>
                         </>}
                         <Button aria-expanded={certificateEditorOpen} variant={certificateEditorOpen ? "ghost" : "secondary"} onClick={() => setCertificateEditorOpen((open) => !open)}>
@@ -4452,7 +4449,7 @@ export const ContestPage: React.FC = () => {
                       </div>
                     ) : null}
 
-                    {certificateMode === "studycod" ? (
+                    {certificateMode === "studycod" && (!certificateUiSimpleMode || certificateGlobalSettingsOpen) ? (
                       <div className="space-y-2 mb-3 border border-border bg-bg-base p-3">
                         <div className="rounded border border-border bg-bg-surface/60 px-3 py-2 text-xs text-text-secondary">
                           {tr(
@@ -4509,19 +4506,14 @@ export const ContestPage: React.FC = () => {
                             <span>{tr("Візуальний режим: drag, guides, resize, presets", "Visual mode: drag, guides, resize, presets")}</span>
                             <div className="flex items-center gap-2">
                               <Button variant={certificateCanvasFocusMode ? "secondary" : "ghost"} onClick={() => setCertificateCanvasFocusMode((v) => !v)}>
-                                {certificateCanvasFocusMode ? tr("Focus Canvas: ON", "Focus Canvas: ON") : tr("Focus Canvas: OFF", "Focus Canvas: OFF")}
-                              </Button>
-                              <Button variant="ghost" onClick={() => setCertificateUiAdvancedOpen((v) => !v)}>
-                                {certificateUiAdvancedOpen ? tr("Сховати технічні панелі", "Hide technical panels") : tr("Показати технічні панелі", "Show technical panels")}
+                                {certificateCanvasFocusMode ? tr("Показати всі панелі", "Show all panels") : tr("Сховати панелі", "Hide panels")}
                               </Button>
                             </div>
                           </div>
                         ) : null}
                         {certificateUiSimpleMode ? (
-                          <div className="rounded border border-border bg-bg-surface/60 px-2 py-2 space-y-2">
-                            <div className="text-xs text-text-secondary">
-                              {tr("Як працювати: 1) Вмикай поля кнопками нижче, додавай власні об'єкти кнопками над Canvas (або ПКМ по Canvas), 2) Перетягуй їх на Canvas, 3) Змінюй розмір за маркери. Що бачиш на Canvas — те й буде у PDF.", "How it works: 1) Toggle fields with the buttons below, add your own objects with the buttons above the Canvas (or right-click the Canvas), 2) Drag them on the Canvas, 3) Resize with the handles. What you see on the Canvas is exactly what the PDF will contain.")}
-                            </div>
+                          <div className="rounded-xl border border-border bg-bg-surface/60 px-3 py-3 space-y-2">
+                            <p className="text-xs text-text-secondary">{tr("Перетягни поля на макет і змінюй їх розмір маркерами. PDF повторить вигляд полотна.", "Drag fields onto the canvas and resize them with the handles. The PDF matches the canvas.")}</p>
                             <div className="flex flex-wrap gap-1.5">
                               {CERTIFICATE_FIELD_KEYS.map((key) => {
                                 const enabled = Boolean(certificateFields[key]?.isEnabled);
@@ -4547,6 +4539,10 @@ export const ContestPage: React.FC = () => {
                                 );
                               })}
                             </div>
+                            <details className="text-xs text-text-secondary">
+                              <summary className="w-fit cursor-pointer font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Як користуватися редактором", "How to use the editor")}</summary>
+                              <p className="mt-2 leading-5">{tr("Увімкни потрібні поля кнопками. Власний текст, зображення й фігури додаються над полотном або через контекстне меню. Перетягни елемент на місце; маркерами зміни його розмір.", "Enable the fields you need. Add custom text, images, and shapes above the canvas or from its context menu. Drag items into place and use their handles to resize them.")}</p>
+                            </details>
                           </div>
                         ) : null}
                         {!certificateCanvasFocusMode || !certificateUiSimpleMode ? (

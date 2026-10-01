@@ -338,6 +338,14 @@ async function ensureContestParticipantNotificationColumns(): Promise<void> {
 
 async function canAccessContest(params: { contest: Contest; req: AuthRequest }): Promise<boolean> {
   const { contest, req } = params;
+  // Contest organizers need access even when the contest is private, not yet
+  // published, or they have not joined as participants. Issued-account users
+  // remain scoped to their assigned contest and never inherit organizer access.
+  const requiresPrivilegeCheck = contest.isPublished === false
+    || contest.participantAccessMode === "ISSUED_ACCOUNTS"
+    || contest.visibility !== "PUBLIC";
+  if (requiresPrivilegeCheck && req.userId && !isContestOnlyUser(req) && await canManageContest({ contest, req })) return true;
+
   if (contest.isPublished === false) {
     // Only creator and SYSTEM_ADMIN can see unpublished contests.
     if (req.userRole === "SYSTEM_ADMIN" && req.userId) return true;

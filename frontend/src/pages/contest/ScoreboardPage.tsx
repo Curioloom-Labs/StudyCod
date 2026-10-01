@@ -86,7 +86,7 @@ export const ScoreboardPage: React.FC = () => {
         const raw = String(import.meta.env.VITE_API_URL || window.location.origin).trim();
         const base = raw.replace(/\/+$/, "").replace(/\/api\/?$/i, "");
         const url = `${base}/api/contests/${contestId}/events`;
-        es = new EventSource(url);
+        es = new EventSource(url, { withCredentials: true });
         es.addEventListener("scoreboard", () => { void tick(); });
       } catch {
         es = null;
