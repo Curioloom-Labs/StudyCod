@@ -589,6 +589,7 @@ ${JSON.stringify(schema, null, 2)}
     count: number;
     ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
     userId?: number;
+    validationFeedback?: string;
   }, options?: LLMGenerateOptions): Promise<Array<{
     input: string;
     output: string;
@@ -602,7 +603,7 @@ ${JSON.stringify(schema, null, 2)}
       ioType: params.ioType
     });
     const response = await this.callCloudflareWorker('generate-test-data', {
-      prompt: built.prompt,
+      prompt: built.prompt + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nReturn corrected tests and resolve every reported issue.` : ''),
       systemPrompt: built.systemPrompt,
       schema: built.schema
     }, {

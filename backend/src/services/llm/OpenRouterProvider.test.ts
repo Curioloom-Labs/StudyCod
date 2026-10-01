@@ -1037,3 +1037,35 @@ test('OpenRouterProvider respects OPENROUTER_DISABLE_TIMEOUT and does not abort 
   process.env.OPENROUTER_DISABLE_TIMEOUT = old.OPENROUTER_DISABLE_TIMEOUT;
   process.env.OPENROUTER_DISABLE_TIMEOUTS = old.OPENROUTER_DISABLE_TIMEOUTS;
 });
+
+test('external cancellation remains connected while a response body is still generating', async (t) => {
+  const names = ['OPENROUTER_API_KEY', 'OPENROUTER_BACKUP_API_KEYS', 'OPENROUTER_MODEL', 'OPENROUTER_URL'];
+  const previous = names.map(name => process.env[name]);
+  t.after(() => names.forEach((name, index) => {
+    if (previous[index] === undefined) delete process.env[name];
+    else process.env[name] = previous[index];
+  }));
+  process.env.OPENROUTER_API_KEY = 'sk-or-v1-body_abort_test';
+  process.env.OPENROUTER_BACKUP_API_KEYS = '';
+  process.env.OPENROUTER_MODEL = 'openai/gpt-4o-mini';
+  process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+  const controller = new AbortController();
+  let requests = 0;
+  t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit | undefined) => {
+    requests++;
+    return {
+      ok: true,
+      json: async () => new Promise((_resolve, reject) => {
+        if (init?.signal?.aborted) {
+          reject(new DOMException('Body read aborted', 'AbortError'));
+          return;
+        }
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('Body read aborted', 'AbortError')), { once: true });
+        // fetch has already returned headers when the caller cancels.
+        setImmediate(() => controller.abort());
+      }),
+    } as Response;
+  });
+  await assert.rejects(new OpenRouterProvider().generateText('hello', undefined, { signal: controller.signal, maxRetries: 0 }), /deadline exceeded/);
+  assert.equal(requests, 1);
+});

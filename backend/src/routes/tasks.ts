@@ -33,7 +33,7 @@ import { SubmissionIntegrity } from "../entities/SubmissionIntegrity";
 import { SolveSession } from "../entities/SolveSession";
 import { boundSnapshots, type ReplaySnapshot } from "../services/replay/replaySession";
 import { getStableDifus } from "../utils/adaptiveDifficulty";
-import { shouldUseGenericPersonalFallback } from "../utils/taskGenerationPolicy";
+import { canUseTaskExamplesAfterTestFailure, shouldUseGenericPersonalFallback } from "../utils/taskGenerationPolicy";
 import { executeCodeWithInput } from "../services/codeExecutionService";
 import { computeTotalFromParts, evaluateCodeWithAI } from "../ai/evaluator";
 import { judgeWithSemaphore } from "../services/judgeWorker";
@@ -2297,6 +2297,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
         lang: params.lang,
         count: remainingCount,
         ioType,
+        publicExamples: aiExamples,
         userId: params.userId
       }, {
         expectedCount: ioType === "STDIN_STDOUT" ? remainingCount : 1,
@@ -2307,8 +2308,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
       });
       if (!testDataResult.success) {
         const status = Number(testDataResult.error?.statusCode ?? 0);
-        const isValidationFailure = testDataResult.error?.details?.mode === "generateTestData";
-        const canFallback = status === 429 || status === 503 || status === 504 || isValidationFailure;
+        const canFallback = canUseTaskExamplesAfterTestFailure(testDataResult.error);
         if (!canFallback) {
           await taskRepo().remove(saved);
           throw testDataResult.error;
@@ -2317,7 +2317,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
           await taskRepo().remove(saved);
           throw testDataResult.error;
         }
-        logger.warn("[tasks] generateTestData rate-limited; using task examples as fallback tests", {
+        logger.warn("[tasks] generateTestData unavailable; using reviewed task examples as fallback tests", {
           requestId: params.requestId,
           userId: params.userId,
           lang: params.lang,
@@ -4107,6 +4107,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
           lang,
           count: remainingCount,
           ioType,
+          publicExamples: aiExamples,
           userId
         }, {
           expectedCount: ioType === "STDIN_STDOUT" ? remainingCount : 1,
@@ -4119,8 +4120,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
           // If upstream AI is rate-limited/unavailable, fall back to examples produced by the task generation itself.
           // This avoids failing the whole task generation flow under provider pressure.
           const status = Number(testDataResult.error?.statusCode ?? 0);
-          const isValidationFailure = testDataResult.error?.details?.mode === "generateTestData";
-          const canFallback = status === 429 || status === 503 || status === 504 || isValidationFailure;
+          const canFallback = canUseTaskExamplesAfterTestFailure(testDataResult.error);
           if (!canFallback) {
             await taskRepo().remove(saved);
             return sendAIError(res, testDataResult.error);
@@ -4134,7 +4134,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
             return sendAIError(res, testDataResult.error);
           }
 
-          logger.warn("[tasks] generateTestData rate-limited; using task examples as fallback tests", {
+          logger.warn("[tasks] generateTestData unavailable; using reviewed task examples as fallback tests", {
             requestId: req.requestId,
             userId,
             topicId: topic.id,

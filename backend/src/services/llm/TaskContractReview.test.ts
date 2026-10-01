@@ -4,7 +4,7 @@ import type { LLMProvider } from './LLMProvider';
 import { LLMOrchestrator, getLLMOrchestrator, type AiTaskGenerationResult } from './LLMOrchestrator';
 import { safeAICall } from '../ai/safeAICall';
 import { makeAIValidationError } from './AIResponseValidator';
-import { MAX_TASK_DESCRIPTION_CHARS, requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTask, reviewGeneratedTests } from './TaskContractReview';
+import { MAX_TASK_DESCRIPTION_CHARS, TaskContractReviewError, requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTask, reviewGeneratedTests } from './TaskContractReview';
 
 const task: AiTaskGenerationResult = {
   title: 'Sum', topic: 'Arithmetic', difficulty: 1, theoryMarkdown: 'Addition combines values.',
@@ -26,14 +26,14 @@ function fakeProvider(responses: unknown[], calls: string[] = []): LLMProvider {
 }
 
 test('task review rejects missing rounding rules instead of completing them', async () => {
-  const provider = fakeProvider([{ valid: false, issues: ['Specify rounding and decimal precision.'] }]);
+  const provider = fakeProvider([{ valid: false, invalidSource: 'statement', issues: ['Specify rounding and decimal precision.'] }]);
   await assert.rejects(reviewGeneratedTask(provider, task), /TASK_CONTRACT_REVIEW_FAILED.*rounding/);
 });
 
 test('task review receives every public example and only the visible contract', async () => {
   const calls: string[] = [];
   const examples = [...task.examples, { input: '0 0', output: '0', explanation: 'Zero.' }];
-  await reviewGeneratedTask(fakeProvider([{ valid: true, issues: [] }], calls), { ...task, examples });
+  await reviewGeneratedTask(fakeProvider([{ valid: true, invalidSource: 'none', issues: [] }], calls), { ...task, examples });
   const payload = JSON.parse(calls[0]);
   assert.equal(payload.publicExamples.length, 2);
   assert.equal(payload.practicalTask, task.practicalTask);
@@ -44,11 +44,11 @@ test('task review receives every public example and only the visible contract', 
 });
 
 test('test review rejects a mathematically wrong expected answer', async () => {
-  await assert.rejects(reviewGeneratedTests(fakeProvider([{ valid: false, issues: ['Test 1: 2 + 3 is 5, not 6.'] }]), 'Read two integers and print their sum.', 'STDIN_STDOUT', [{ input: '2 3', output: '6' }]), /Test 1/);
+  await assert.rejects(reviewGeneratedTests(fakeProvider([{ valid: false, invalidSource: 'candidateTests', issues: ['Test 1: 2 + 3 is 5, not 6.'] }]), 'Read two integers and print their sum.', 'STDIN_STDOUT', [{ input: '2 3', output: '6' }]), /Test 1/);
 });
 
 test('review fails closed for missing, malformed, or inconsistent verdicts', async () => {
-  for (const verdict of [{}, { valid: 'true', issues: [] }, { valid: true, issues: ['Wrong answer.'] }, { valid: false, issues: [] }]) {
+  for (const verdict of [{}, { valid: 'true', invalidSource: 'none', issues: [] }, { valid: true, invalidSource: 'statement', issues: ['Wrong answer.'] }, { valid: false, invalidSource: 'statement', issues: [] }, { valid: false, invalidSource: 'none', issues: ['Wrong answer.'] }]) {
     await assert.rejects(reviewGeneratedTask(fakeProvider([verdict]), task), /TASK_CONTRACT_REVIEW_FAILED/);
   }
 });
@@ -76,20 +76,22 @@ test('IO inference uses the statement and rejects unspecified input modes', () =
 
 // Exercise the generation/review/retry sequence with a provider double, without
 // external AI calls or environment-dependent provider routing.
-test('test generation rejects bad answers and retries with reviewer feedback and the full statement', async () => {
+test('test generation retries once through safeAICall with reviewer feedback and the full statement', async (t) => {
   const calls: string[] = [];
   const statement = 'Read two integers in [-100, 100] and print their sum.\n' + 'Context. '.repeat(700) + '\nFINAL RULE: Print exactly one integer.';
   const provider = fakeProvider([
     { tests: [{ input: '2 3', output: '6' }] },
-    { valid: false, issues: ['Test 1: expected sum is 5.'] },
+    { valid: false, invalidSource: 'candidateTests', issues: ['Test 1: expected sum is 5.'] },
     { tests: [{ input: '2 3', output: '5' }] },
-    { valid: true, issues: [] },
+    { valid: true, invalidSource: 'none', issues: [] },
   ], calls);
   const orchestrator = new LLMOrchestrator() as unknown as {
     generateTestDataWithAI_OpenRouter(params: object, provider: LLMProvider): Promise<unknown>;
   };
-  const result = await orchestrator.generateTestDataWithAI_OpenRouter({ taskDescription: statement, taskTitle: 'Sum', lang: 'PYTHON', count: 1, ioType: 'STDIN_STDOUT' }, provider);
-  assert.deepEqual(result, [{ input: '2 3', output: '5', explanation: undefined }]);
+  t.mock.method(getLLMOrchestrator(), 'generateTestDataWithAI', async (params: { executeReference?: unknown }) => orchestrator.generateTestDataWithAI_OpenRouter({ ...params, executeReference: undefined }, provider));
+  const result = await safeAICall('generateTestData', { taskDescription: statement, taskTitle: 'Sum', lang: 'PYTHON', count: 1, ioType: 'STDIN_STDOUT' }, { maxAttempts: 2 });
+  assert.equal(result.success, true);
+  if (result.success) assert.deepEqual(result.data, [{ input: '2 3', output: '5', explanation: undefined }]);
   assert.equal(calls.length, 4);
   assert.ok(calls[0].includes('FINAL RULE:'));
   assert.equal(JSON.parse(calls[1]).statement, statement);
@@ -100,9 +102,9 @@ test('task generation reviews public examples before returning and retries an am
   const calls: string[] = [];
   const provider = fakeProvider([
     task,
-    { valid: false, issues: ['Missing bounds for input a.'] },
+    { valid: false, invalidSource: 'statement', issues: ['Missing bounds for input a.'] },
     task,
-    { valid: true, issues: [] },
+    { valid: true, invalidSource: 'none', issues: [] },
   ], calls);
   const orchestrator = new LLMOrchestrator() as unknown as {
     generateTaskFromAnchor(params: object, provider: LLMProvider): Promise<AiTaskGenerationResult>;
@@ -111,6 +113,34 @@ test('task generation reviews public examples before returning and retries an am
   assert.equal(result.examples[0].output, '5');
   assert.equal(calls.length, 4);
   assert.ok(calls[2].includes('Missing bounds for input a.'));
+});
+
+test('a broken statement or public example stops test retries immediately', async (t) => {
+  for (const invalidSource of ['statement', 'publicExamples'] as const) {
+    let attempts = 0;
+    t.mock.method(getLLMOrchestrator(), 'generateTestDataWithAI', async () => {
+      attempts++;
+      throw new TaskContractReviewError('generateTestData', invalidSource, ['Triangle example: expected 10.0, got 12.0.']);
+    });
+    const result = await safeAICall('generateTestData', { taskDescription: 'Read radius width height. Print their areas.', taskTitle: 'Areas', lang: 'JAVA', count: 10, ioType: 'STDIN_STDOUT' }, { maxAttempts: 3 });
+    assert.equal(result.success, false);
+    assert.equal(attempts, 1);
+    if (!result.success) assert.match(String(result.error.details?.validationError), /expected 10.0/);
+    t.mock.restoreAll();
+  }
+});
+
+test('rejected candidates cannot trigger a second hidden semantic retry loop', async () => {
+  const calls: string[] = [];
+  const provider = fakeProvider([
+    { tests: [{ input: '2 3', output: '6' }] },
+    { valid: false, invalidSource: 'candidateTests', issues: ['Test 1: expected 5, got 6.'] },
+  ], calls);
+  const orchestrator = new LLMOrchestrator() as unknown as {
+    generateTestDataWithAI_OpenRouter(params: object, provider: LLMProvider): Promise<unknown>;
+  };
+  await assert.rejects(orchestrator.generateTestDataWithAI_OpenRouter({ taskDescription: 'Read a and b in [-100,100]; print a+b.', taskTitle: 'Sum', lang: 'PYTHON', count: 1, ioType: 'STDIN_STDOUT' }, provider), /expected 5/);
+  assert.equal(calls.length, 2);
 });
 
 test('safe test generation preserves the statement including literals and Markdown fences', async (t) => {

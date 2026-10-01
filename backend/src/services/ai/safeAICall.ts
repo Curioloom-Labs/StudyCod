@@ -5,7 +5,9 @@ import { logger } from '../../utils/logger';
 import { getCurriculumPolicyViolationForGeneratedTask } from './curriculumPolicy';
 import { isAiCircuitOpen, recordAiCircuitSuccess, recordAiCircuitFailure } from './aiCircuitBreaker';
 import { normalizeTopicLanguage, TOPIC_LANGUAGES } from '../../utils/topicLanguage';
-import { requireCompleteTaskDescription, resolveTestDataIoType } from '../llm/TaskContractReview';
+import { cannotRepairByRegeneratingTests, requireCompleteTaskDescription, resolveTestDataIoType } from '../llm/TaskContractReview';
+import { executeReferenceTests } from '../executeReferenceTests';
+import { REFERENCE_LANGUAGE } from '../llm/ReferenceTestData';
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 export interface AIError {
   statusCode: number;
@@ -680,6 +682,14 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
               lang: requiredTaskLanguage(sanitizedParams.lang),
               count: Number(sanitizedParams.count),
               ioType: testIoType,
+              validationFeedback: optionalString(sanitizedParams.validationFeedback),
+              publicExamples: Array.isArray(sanitizedParams.publicExamples) ? sanitizedParams.publicExamples.map(example => ({
+                input: requiredString(asJsonObject(example).input, 'publicExamples.input'),
+                output: requiredString(asJsonObject(example).output, 'publicExamples.output'),
+              })) : [],
+              ...(testIoType === 'STDIN_STDOUT' ? {
+                executeReference: (source: string, inputs: string[], examples: Array<{ input: string; output: string }>, signal?: AbortSignal) => executeReferenceTests(source, REFERENCE_LANGUAGE, inputs, examples, signal),
+              } : {}),
               userId: optionalNumber(sanitizedParams.userId),
               language,
               signal: controller?.signal
@@ -703,7 +713,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
         if (looksLikeValidationError) {
           // Some validation errors are transient/model-specific. For generation modes, retry a few times
           // instead of failing fast (bounded by maxAttempts and totalTimeoutMs).
-          const canRetryValidation = (mode === 'generateTask' || mode === 'generateTestData') && attempt < maxAttempts;
+          const canRetryValidation = (mode === 'generateTask' || (mode === 'generateTestData' && !cannotRepairByRegeneratingTests(error))) && attempt < maxAttempts;
           if (canRetryValidation) {
             sanitizedParams.validationFeedback = errorMsg.slice(0, 8000);
             logger.debug('[ai] invalid response (retrying)', {

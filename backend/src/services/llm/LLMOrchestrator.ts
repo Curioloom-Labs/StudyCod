@@ -11,6 +11,7 @@ import { env } from '../../env';
 import { topicLanguageLabel, type TopicLanguage } from '../../utils/topicLanguage';
 import { createIntroductoryHelloWorldTask, shouldUseCanonicalIntroductoryPractice } from './introductoryTask';
 import { requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTask, reviewGeneratedTests, TASK_PRECISION_INSTRUCTIONS } from './TaskContractReview';
+import { generateReferenceTestData, type ReferenceTestExecutor } from './ReferenceTestData';
 
 export type LLMTaskLanguage = TopicLanguage;
 
@@ -2202,6 +2203,9 @@ public class Main {
     language?: "uk" | "en";
     userId?: number;
     signal?: AbortSignal;
+    validationFeedback?: string;
+    publicExamples?: TestDataExample[];
+    executeReference?: ReferenceTestExecutor;
   }): Promise<TestDataExample[]> {
     requireCompleteTaskDescription(params.taskDescription);
     params = { ...params, ioType: resolveTestDataIoType(params.taskDescription, params.ioType) };
@@ -2214,12 +2218,16 @@ public class Main {
       : Math.max(1, Math.floor(params.count));
 
     const tryCloudflare = async () => {
+      if (params.executeReference && params.ioType === 'STDIN_STDOUT') {
+        return generateReferenceTestData(this.cloudflareProvider, { ...params, executeReference: params.executeReference });
+      }
       const raw = await this.cloudflareProvider.generateTestDataWithAI({
         taskDescription: params.taskDescription,
         taskTitle: params.taskTitle,
         lang: params.lang,
         count: generationCount,
         ioType: params.ioType,
+        validationFeedback: params.validationFeedback,
         userId: params.userId
       }, {
         signal: params.signal
@@ -2287,8 +2295,14 @@ public class Main {
     language?: "uk" | "en";
     userId?: number;
     signal?: AbortSignal;
+    validationFeedback?: string;
+    publicExamples?: TestDataExample[];
+    executeReference?: ReferenceTestExecutor;
   }, providerOverride?: LLMProvider): Promise<TestDataExample[]> {
     const provider = providerOverride ?? this.openRouterProvider;
+    if (params.executeReference && params.ioType === 'STDIN_STDOUT') {
+      return generateReferenceTestData(provider, { ...params, executeReference: params.executeReference });
+    }
     const langName = topicLanguageLabel(params.lang);
     const taskDesc = requireCompleteTaskDescription(params.taskDescription);
     const ioTypeLabel = resolveTestDataIoType(taskDesc, params.ioType);
@@ -2314,18 +2328,16 @@ public class Main {
                 type: "string",
                 description: "Очікуваний вивід програми"
               },
-              explanation: {
-                type: "string",
-                description: "Пояснення тесту (опціонально)"
-              }
             },
-            required: ["input", "output"]
+            required: ["input", "output"],
+            additionalProperties: false
           },
           minItems: desiredCount,
           maxItems: desiredCount
         }
       },
-      required: ["tests"]
+      required: ["tests"],
+      additionalProperties: false
     };
     const systemPrompt = `
 You are a deterministic judge-test designer and a careful programming teacher.
@@ -2350,7 +2362,8 @@ BEHAVIOURAL COVERAGE MATRIX (do this silently before choosing inputs):
 - First derive every distinct behaviour class from the TASK STATEMENT. A behaviour class is a different rule/output path, not merely another number.
 - Cover every allowed branch/rule at least once, then add boundary and near-boundary values, an ordinary middle value, and default/unknown values when the statement allows them.
 - For ranges, use values at the minimum, just inside, just outside a threshold, in the middle, and at the maximum. For multiple inputs, vary their relationship and order, not just one field at a time.
-- Do not generate a row of obvious sequential inputs (1, 2, 3, ...), copies of the examples, or several tests that exercise the same path.
+- Do not copy the examples or generate only an obvious sequence (1, 2, 3, ...).
+- A task may have only one execution path (for example, a formula). Repeated coverage of that path is necessary and allowed: vary boundary values, fractions, zero, and relationships between inputs where permitted. Never invent branches to make tests different.
 - If the statement permits fewer unique inputs than the requested count, do not fabricate duplicates or conflicting outputs; this indicates that the task itself needs a richer input domain.
 
 QUALITY RULES:
@@ -2359,11 +2372,11 @@ QUALITY RULES:
 - Generate tests for unspecified pairs only when the statement defines a default/unknown rule; never infer extra behaviour from the task title or examples.
 - Cover useful cases: minimum/maximum permitted values, values immediately around every threshold, zero and negative values when allowed, default branches, and representative ordinary cases. Do not create invalid cases merely for variety.
 - For lookup tables and switch-like mappings, manually verify the exact mapping instead of guessing from a pattern.
-- Prefer non-obvious, behaviourally different inputs over cosmetic number changes. Every test must justify its place in the coverage matrix.
+- Cover different branches when they exist, then fill the remaining count with distinct representative valid inputs. For arithmetic, prefer values whose results can be computed exactly; keep fractional/truncation cases when relevant.
 - For arrays/strings, provide the complete stdin text exactly as a student would enter it.
 - Never return an empty output string. The judge requires concrete stdout; an empty-result branch must use the explicit non-empty sentinel defined by the task statement.
 - Do not use placeholders such as input="1" output="1" unless the statement mathematically requires that result.
-- Return no chain of thought, no explanations, no prose, and no markdown. Return only the JSON object matching the schema.`.trim();
+- Return no chain of thought, no explanations, no prose, and no markdown. Each test has only input and output. Return only the JSON object matching the schema.`.trim();
     const userPrompt = `
 ${isEnglish ? "TASK TO TEST" : "ЗАВДАННЯ ДЛЯ ПЕРЕВІРКИ"}
 Title: ${params.taskTitle}
@@ -2390,44 +2403,23 @@ IMPORTANT:
 - A specific literal pair/value remains exact; do not turn one literal case into a wildcard or range.
 - If the task text and an existing test disagree, follow the TASK STATEMENT and generate a correct new test.
 - Do not put theory, explanations, or reasoning in input/output.
-- Return only JSON according to this schema:
-${JSON.stringify(jsonSchema, null, 2)}
+- Return only JSON matching the supplied schema.
 `.trim();
-    const validationAttempts = 2;
-    let lastError: unknown = null;
-    for (let attempt = 1; attempt <= validationAttempts; attempt++) {
-      try {
-        const parsed = await provider.generateJSON<{
-          tests: TestDataExample[];
-        }>(userPrompt + (lastError ? `\nPREVIOUS VALIDATION FAILURE: ${errorMessage(lastError)}\nReturn corrected tests and resolve every reported issue.` : ''), jsonSchema, systemPrompt, {
-          timeout: 30000,
-          maxRetries: 1,
-          userId: params.userId,
-          signal: params.signal,
-          temperature: 0.08,
-          maxTokens: 3000
-        });
-        const validated = AIResponseValidator.validateGenerateTestData(parsed, desiredCount, ioTypeLabel);
-        await reviewGeneratedTests(provider, taskDesc, ioTypeLabel, validated, { signal: params.signal, userId: params.userId });
-        return validated;
-      } catch (error: unknown) {
-        lastError = error;
-        const isValidationFailure = readProperty(error, 'name') === 'AIValidationError';
-        logger.warn('[llm] test data generation failed', {
-          message: errorMessage(error),
-          attempt,
-          validationAttempts,
-          isValidationFailure,
-        });
-        // A provider can return syntactically valid JSON with duplicate input
-        // rows or conflicting outputs. Give it one fresh semantic response;
-        // network/provider errors are still handled by the outer fallback
-        // chain and should not be duplicated here.
-        if (!isValidationFailure || attempt >= validationAttempts) throw error;
-        await new Promise(resolve => setTimeout(resolve, 350));
-      }
-    }
-    throw lastError instanceof Error ? lastError : new Error('AI_GENERATION_FAILED: test data validation retries exhausted');
+    // safeAICall owns semantic retries and carries the failure into the next
+    // attempt. Retrying here multiplied model calls and then lost that feedback.
+    const parsed = await provider.generateJSON<{ tests: TestDataExample[] }>(
+      userPrompt + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nReturn corrected tests and resolve every reported issue.` : ''),
+      jsonSchema, systemPrompt, {
+        timeout: 30000,
+        maxRetries: 1,
+        userId: params.userId,
+        signal: params.signal,
+        temperature: 0.08,
+        maxTokens: 3000
+      });
+    const validated = AIResponseValidator.validateGenerateTestData(parsed, desiredCount, ioTypeLabel);
+    await reviewGeneratedTests(provider, taskDesc, ioTypeLabel, validated, { signal: params.signal, userId: params.userId });
+    return validated;
   }
 }
 let orchestratorInstance: LLMOrchestrator | null = null;

@@ -692,11 +692,13 @@ export class OpenRouterProvider implements LLMProvider {
 
     let lastError: unknown = null;
     for (let i = 0; i < candidates.length; i++) {
+      if (options.signal?.aborted) throw new Error('AI_GENERATION_FAILED: Request aborted (deadline exceeded)');
       const model = candidates[i];
       try {
         const response = await this.callOpenRouter(requestFactory(model), options);
         return { response, model };
       } catch (error: unknown) {
+        if (options.signal?.aborted) throw error;
         lastError = error;
         const hasNext = i < candidates.length - 1;
         const canFallback = hasNext && shouldFallbackToNextModel(error);
@@ -859,6 +861,7 @@ export class OpenRouterProvider implements LLMProvider {
       }
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const attemptStartedAt = Date.now();
         const controller = new AbortController();
         const onAbort = () => controller.abort();
         let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -920,10 +923,8 @@ export class OpenRouterProvider implements LLMProvider {
             }),
             signal: controller.signal
           });
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
-          if (signal) signal.removeEventListener('abort', onAbort);
+          // Headers may arrive before generation finishes. Keep cancellation
+          // connected until the entire response body has been consumed.
           if (!response.ok) {
             const errorText = await response.text();
             const error = new Error(`OpenRouter HTTP ${response.status}: ${errorText}`);
@@ -1054,16 +1055,11 @@ export class OpenRouterProvider implements LLMProvider {
 
           logger.info("OpenRouter request succeeded", {
             ...logContext,
-            responseId
+            responseId,
+            durationMs: Date.now() - attemptStartedAt
           });
           return data;
         } catch (err: unknown) {
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-          }
-          if (signal) {
-            signal.removeEventListener('abort', onAbort);
-          }
           const errName = readProperty(err, 'name');
           const errMessage = errorMessage(err);
           const normalizedError = err instanceof Error ? err : new Error(errMessage);
@@ -1105,6 +1101,9 @@ export class OpenRouterProvider implements LLMProvider {
             delay
           });
           await new Promise(resolve => setTimeout(resolve, delay));
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+          if (signal) signal.removeEventListener('abort', onAbort);
         }
       }
     }
