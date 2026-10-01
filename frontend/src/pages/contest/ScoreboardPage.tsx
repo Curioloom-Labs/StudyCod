@@ -140,31 +140,31 @@ export const ScoreboardPage: React.FC = () => {
   const problemMax = (problemId: number) => problems.find((p) => p.id === problemId)?.maxScore ?? 0;
 
   return (
-    <div className="w-full bg-bg-base px-4 py-6 md:px-8 md:py-8">
-      <div className="mx-auto w-full max-w-[1480px] space-y-6">
+    <div className="w-full bg-bg-base px-3 py-4 sm:px-6 md:py-6">
+      <div className="mx-auto w-full max-w-6xl space-y-5">
         {/* Hero */}
         <motion.div
           initial={prefersReducedMotion ? undefined : { opacity: 0, y: 10 }}
           animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: easeOutQuint }}
-          className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+          className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-bg-surface/80 p-4 shadow-[0_18px_55px_-45px_rgba(0,0,0,.75)] sm:flex-row sm:items-start sm:justify-between sm:p-5"
         >
           <div>
             <Button variant="ghost" onClick={() => navigate(`/contests/${Number.isFinite(contestId) ? contestId : ""}`)} className="mb-3">
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("Назад", "Back")}
             </Button>
-            <PageEyebrow label="scoreboard" />
-            <h1 className="mt-2 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
-              {title || tr("Скорборд", "Scoreboard")}
+            <PageEyebrow label="standings" />
+            <h1 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.035em] text-text-primary md:text-3xl">
+              {title || tr("Таблиця результатів", "Contest standings")}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-primary/40 bg-primary/10 text-[11px] font-mono font-medium uppercase tracking-[0.06em] text-primary">
                 <Trophy className="w-3 h-3" />
                 {mode === "ICPC" ? tr("ICPC · бали + штраф", "ICPC · solved + penalty") : tr("IOI · сума балів", "IOI · points")}
               </span>
-              <p className="text-sm font-mono text-text-secondary">
-                {board?.hidden ? tr("Таблицю приховано відповідно до налаштувань контесту.", "The scoreboard is hidden by contest settings.") : tr("Оновлюється наживо кожні 7 секунд.", "Updates live every 7 seconds.")}
+              <p className="text-sm text-text-secondary">
+                {board?.hidden ? tr("Таблицю приховано відповідно до налаштувань контесту.", "The scoreboard is hidden by contest settings.") : tr("Таблиця оновлюється автоматично.", "Standings update automatically.")}
               </p>
             </div>
           </div>
@@ -195,8 +195,6 @@ export const ScoreboardPage: React.FC = () => {
           </div>
         </motion.div>
 
-        <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
-
         {!Number.isFinite(contestId) ? (
           <div className="text-sm text-text-secondary">{tr("Невірний контест.", "Invalid contest.")}</div>
         ) : (
@@ -226,7 +224,7 @@ export const ScoreboardPage: React.FC = () => {
                 variants={prefersReducedMotion ? undefined : staggerContainer}
                 initial={prefersReducedMotion ? undefined : "initial"}
                 animate={prefersReducedMotion ? undefined : "animate"}
-                className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+                className="grid grid-cols-1 gap-3 sm:grid-cols-3"
               >
                 {podium.map((r, i) => {
                   const PodiumIcon = i === 0 ? Crown : i === 1 ? Trophy : Medal;
@@ -235,18 +233,18 @@ export const ScoreboardPage: React.FC = () => {
                     <motion.div
                       key={r.participantId}
                       variants={prefersReducedMotion ? undefined : fadeUpItem}
-                      className={`rounded-xl border p-4 transition-fast hover:-translate-y-0.5 ${rankBadgeTone(i + 1)} ${isMe(r) ? "ring-1 ring-secondary" : ""}`}
+                      className={`rounded-2xl border p-4 transition-fast hover:-translate-y-0.5 ${rankBadgeTone(i + 1)} ${isMe(r) ? "ring-1 ring-secondary" : ""}`}
                     >
                       <div className="flex items-center gap-2">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${i === 0 ? "bg-yellow-400/15" : i === 1 ? "bg-slate-400/15" : "bg-amber-500/15"}`}>
                           <PodiumIcon className={`w-4 h-4 ${iconCls}`} />
                         </div>
                         <div className="min-w-0">
-                          <div className="font-mono text-sm text-text-primary truncate">{r.displayName}</div>
-                          <div className="text-[11px] font-mono text-text-muted">{tr("місце", "place")} #{i + 1}</div>
+                          <div className="truncate text-sm font-semibold text-text-primary">{r.displayName}</div>
+                          <div className="text-xs text-text-muted">{tr("місце", "place")} #{i + 1}</div>
                         </div>
                       </div>
-                      <div className="mt-2 text-xs font-mono text-text-secondary">
+                      <div className="mt-2 text-sm font-medium tabular-nums text-text-secondary">
                         {mode === "ICPC"
                           ? `${r.solved ?? 0} ${tr("розв.", "solved")} · ${tr("штраф", "pen")} ${r.penalty ?? 0}`
                           : `${r.totalScore} ${tr("балів", "pts")}`}
@@ -267,7 +265,7 @@ export const ScoreboardPage: React.FC = () => {
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={tr("Пошук учасника…", "Search participant…")}
                     aria-label={tr("Пошук учасника", "Search participant")}
-                    className="w-full h-10 pl-9 pr-3 rounded-lg bg-bg-surface border border-border text-sm font-mono text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
+                  className="h-11 w-full rounded-xl border border-border bg-bg-surface pl-10 pr-3 text-sm text-text-primary outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
                   />
                 </div>
                 {meLabel && (board.rows ?? []).some(isMe) ? (
@@ -284,9 +282,17 @@ export const ScoreboardPage: React.FC = () => {
               </div>
             ) : null}
 
-            {board && !board.hidden && (
-              <div className="max-h-[min(72vh,820px)] overflow-auto rounded-2xl border border-border/80 bg-bg-surface shadow-[0_18px_55px_-42px_rgba(0,0,0,.7)]">
-                <table className="w-full min-w-[860px] border-separate border-spacing-0 text-sm">
+            {board && !board.hidden && board.rows.length === 0 && (
+              <div className="rounded-2xl border border-border/70 bg-bg-surface/80 px-6 py-12 text-center">
+                <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary"><Trophy className="size-6" aria-hidden="true" /></div>
+                <h2 className="mt-4 text-lg font-semibold text-text-primary">{tr("У таблиці поки порожньо", "The standings are empty for now")}</h2>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-secondary">{tr("Результати учасників з’являться тут після перших офіційних подач.", "Participant results will appear here after the first official submissions.")}</p>
+              </div>
+            )}
+
+            {board && !board.hidden && board.rows.length > 0 && (
+              <div className="overflow-auto rounded-2xl border border-border/80 bg-bg-surface shadow-[0_18px_55px_-42px_rgba(0,0,0,.7)]">
+                <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
                   <thead className="sticky top-0 z-20">
                     <tr className="bg-[#111a14] text-xs font-bold uppercase tracking-[.08em] text-[#aebdb2]">
                       <th scope="col" className="sticky left-0 z-20 border-b border-border/80 bg-[#111a14] px-4 py-4 text-left">#</th>
@@ -324,7 +330,7 @@ export const ScoreboardPage: React.FC = () => {
                         <tr
                           key={r.participantId}
                           ref={me ? meRowRef : undefined}
-                          className={`group ${me ? "bg-secondary/[.12]" : "odd:bg-bg-base/50 even:bg-bg-surface"} hover:bg-bg-hover transition-colors`}
+                      className={`group transition-colors hover:bg-bg-hover ${me ? "bg-secondary/[.12]" : "odd:bg-bg-base/50 even:bg-bg-surface"}`}
                         >
                           <td className={`sticky left-0 z-10 border-b border-border/70 px-4 py-3 ${me ? "bg-[#153321]" : "bg-bg-surface group-odd:bg-bg-base"}`}>
                             <span className={`inline-flex h-8 min-w-8 items-center justify-center rounded-lg border px-2 text-xs font-extrabold tabular-nums ${rankBadgeTone(r.rank)}`}>
@@ -380,7 +386,7 @@ export const ScoreboardPage: React.FC = () => {
                         <td colSpan={problems.length + 4} className="border-b border-border px-4 py-10 text-center text-text-secondary">
                           {query.trim()
                             ? tr("Нічого не знайдено.", "No matches.")
-                            : tr("Ще немає сабмішнів.", "No submissions yet.")}
+                            : tr("У таблиці поки немає учасників.", "No participants are on the table yet.")}
                         </td>
                       </tr>
                     )}
