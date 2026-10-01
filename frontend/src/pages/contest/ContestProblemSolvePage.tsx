@@ -1,29 +1,25 @@
 import React from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { MessageSquareText, Radio, Trophy, X } from "lucide-react";
 import {
-  askContestProblemTutor,
   checkContestProblem,
   getContestCommunity,
   getContestDetails,
   getContestProblemStatement,
   getContestProblemSubmissions,
-  getContestScoreboard,
   recordContestIntegrityEvent,
   runContestProblem,
   type ContestCommunityAnnouncement,
-  type ContestCheckResult,
   type ContestProblemStatement,
-  type ContestRunResult,
   type ContestSubmissionListItem,
   type JudgeLanguage,
-  type ScoreboardRow,
 } from "../../lib/api/contests";
-import { enabledJudgeLanguages, defaultCompilerForFamily } from "../../lib/judgeLanguages";
+import { JUDGE_ENTRY_FILES, enabledJudgeLanguages, defaultCompilerForFamily } from "../../lib/judgeLanguages";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
+import { Modal } from "../../components/ui/Modal";
 import { Skeleton } from "../../components/ui/Skeleton";
-import { Workspace } from "../../components/contest-workspace/Workspace";
+import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
 import { createSupportChatConversation } from "../../lib/api/support";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { tracePlayground, type TraceResult } from "../../lib/api/playground";
@@ -53,9 +49,7 @@ declare global {
 
 type ContestMeta = {
   title: string;
-  startsAt: string | null;
   endsAt: string | null;
-  allowUpsolve: boolean;
 };
 
 type ContestAnnouncementEvent = {
@@ -67,6 +61,18 @@ type ContestAnnouncementEvent = {
 
 function getErrorMessage(error: unknown): string {
   return getErrorMessageFromUnknown(error, "");
+}
+
+function examplesFromStatement(markdown: string): Array<{ testId: number; input: string; expectedOutput: string }> {
+  const blocks = Array.from(String(markdown ?? "").matchAll(/```(?:[\w+-]*)\n([\s\S]*?)```/g))
+    .map((match) => String(match[1] ?? "").trim());
+  const examples: Array<{ testId: number; input: string; expectedOutput: string }> = [];
+  for (let index = 0; index < blocks.length; index += 2) {
+    const input = blocks[index] ?? "";
+    const expectedOutput = blocks[index + 1] ?? "";
+    if (input || expectedOutput) examples.push({ testId: examples.length + 1, input, expectedOutput });
+  }
+  return examples;
 }
 
 function templateForLanguage(task: { template: string; templatesByLanguage: Record<string, string> | null }, lang: JudgeLanguage) {
@@ -88,14 +94,6 @@ function draftScopeFromUser(user: ReturnType<typeof getCachedMeUser>): string {
   if (user?.studentId != null) return `student:${user.studentId}`;
   if (user?.id != null) return `user:${user.id}`;
   return "anon";
-}
-
-function userLabelFromUser(user: ReturnType<typeof getCachedMeUser>): string | null {
-  const candidates = [user?.username, user?.firstName, user?.email, user?.id != null ? String(user.id) : null];
-  for (const c of candidates) {
-    if (typeof c === "string" && c.trim()) return c.trim();
-  }
-  return null;
 }
 
 function apiHttpBase(): string {
@@ -144,10 +142,7 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [statement, setStatement] = React.useState<ContestProblemStatement | null>(null);
-  const [contestMeta, setContestMeta] = React.useState<ContestMeta>({ title: "Contest", startsAt: null, endsAt: null, allowUpsolve: true });
-  const [tutorAnswer, setTutorAnswer] = React.useState<{ answer: string; tips: string[] } | null>(null);
-  const [tutorError, setTutorError] = React.useState<string | null>(null);
-  const [askingTutor, setAskingTutor] = React.useState(false);
+  const [contestMeta, setContestMeta] = React.useState<ContestMeta>({ title: "Contest", endsAt: null });
 
   const [judgeLanguage, setJudgeLanguage] = React.useState<JudgeLanguage>("java");
   const [judgeCompiler, setJudgeCompiler] = React.useState<string>(defaultCompilerForFamily("java"));
@@ -157,23 +152,24 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [runInput, setRunInput] = React.useState("");
   const [running, setRunning] = React.useState(false);
   const [checking, setChecking] = React.useState(false);
-  const [runResult, setRunResult] = React.useState<ContestRunResult | null>(null);
-  const [checkResult, setCheckResult] = React.useState<ContestCheckResult | null>(null);
+  const [runResult, setRunResult] = React.useState<StudyCodIdeRunResult | null>(null);
+  const [checkResult, setCheckResult] = React.useState<StudyCodIdeCheckResult | null>(null);
   const [trace, setTrace] = React.useState<TraceResult | null>(null);
   const [tracing, setTracing] = React.useState(false);
 
   const [subsLoading, setSubsLoading] = React.useState(false);
   const [submissions, setSubmissions] = React.useState<ContestSubmissionListItem[]>([]);
-  const [scoreboardLoading, setScoreboardLoading] = React.useState(false);
-  const [scoreboardRows, setScoreboardRows] = React.useState<ScoreboardRow[]>([]);
 
   const [wsStatus, setWsStatus] = React.useState<"connecting" | "connected" | "offline">("offline");
   const [latestVerdict, setLatestVerdict] = React.useState<string | null>(null);
   const [latestVerdictAt, setLatestVerdictAt] = React.useState(0);
 
-  const [focusMode, setFocusMode] = React.useState(false);
   const [announcements, setAnnouncements] = React.useState<ContestCommunityAnnouncement[]>([]);
-  const [focusLostCount, setFocusLostCount] = React.useState(0);
+  const [dismissedAnnouncementId, setDismissedAnnouncementId] = React.useState<number | null>(null);
+  const [draftSavedAt, setDraftSavedAt] = React.useState<string | null>(null);
+  const [organizerDialogOpen, setOrganizerDialogOpen] = React.useState(false);
+  const [organizerQuestion, setOrganizerQuestion] = React.useState("");
+  const [askingOrganizer, setAskingOrganizer] = React.useState(false);
   const liveSyncInFlightRef = React.useRef(false);
   const liveSyncLastAtRef = React.useRef(0);
 
@@ -181,8 +177,6 @@ export const ContestProblemSolvePage: React.FC = () => {
     if (!contestId || !problemId) return null;
     return `contest:${contestId}:problem:${problemId}:${draftScopeFromUser(sessionUser)}`;
   }, [contestId, problemId, sessionUser]);
-
-  const currentUserLabel = React.useMemo(() => userLabelFromUser(sessionUser), [sessionUser]);
 
   const loadSubmissions = React.useCallback(async (opts?: { silent?: boolean }) => {
     if (!contestId || !problemId || !hasToken) return;
@@ -203,20 +197,6 @@ export const ContestProblemSolvePage: React.FC = () => {
     }
   }, [contestId, problemId, hasToken]);
 
-  const loadScoreboard = React.useCallback(async (opts?: { silent?: boolean }) => {
-    if (!contestId) return;
-    const silent = !!opts?.silent;
-    if (!silent) setScoreboardLoading(true);
-    try {
-      const res = await getContestScoreboard(contestId);
-      setScoreboardRows(Array.isArray(res.rows) ? res.rows : []);
-    } catch {
-      setScoreboardRows([]);
-    } finally {
-      if (!silent) setScoreboardLoading(false);
-    }
-  }, [contestId]);
-
   const syncLiveData = React.useCallback(async (force = false) => {
     const now = Date.now();
     if (!force && now - liveSyncLastAtRef.current < 1500) return;
@@ -224,11 +204,11 @@ export const ContestProblemSolvePage: React.FC = () => {
     liveSyncInFlightRef.current = true;
     liveSyncLastAtRef.current = now;
     try {
-      await Promise.all([loadSubmissions({ silent: true }), loadScoreboard({ silent: true })]);
+      await loadSubmissions({ silent: true });
     } finally {
       liveSyncInFlightRef.current = false;
     }
-  }, [loadSubmissions, loadScoreboard]);
+  }, [loadSubmissions]);
 
   const hydrateDraft = React.useCallback(
     (stmt: ContestProblemStatement) => {
@@ -249,8 +229,6 @@ export const ContestProblemSolvePage: React.FC = () => {
         const savedInput = localStorage.getItem(`${storageBase}:runInput`);
         setRunInput(savedInput ?? "");
 
-        const savedFocus = localStorage.getItem(`${storageBase}:focus`) === "1";
-        setFocusMode(savedFocus);
       } catch {
         // ignore
       }
@@ -268,9 +246,7 @@ export const ContestProblemSolvePage: React.FC = () => {
       setStatement(stmt);
       setContestMeta({
         title: contest.contest.title,
-        startsAt: contest.contest.startsAt,
         endsAt: contest.contest.endsAt,
-        allowUpsolve: contest.contest.allowUpsolve,
       });
       hydrateDraft(stmt);
     } catch (e: unknown) {
@@ -288,8 +264,7 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   React.useEffect(() => {
     loadSubmissions();
-    loadScoreboard();
-  }, [loadSubmissions, loadScoreboard]);
+  }, [loadSubmissions]);
 
   React.useEffect(() => {
     if (!turnstileEnabled) return;
@@ -370,27 +345,47 @@ export const ContestProblemSolvePage: React.FC = () => {
       localStorage.setItem(`${storageBase}:lang`, judgeLanguage);
       localStorage.setItem(`${storageBase}:draft:${judgeLanguage}:code`, code);
       localStorage.setItem(`${storageBase}:runInput`, runInput);
-      localStorage.setItem(`${storageBase}:focus`, focusMode ? "1" : "0");
+      setDraftSavedAt(new Date().toISOString());
     } catch {
-      // ignore
+      setDraftSavedAt(null);
     }
-  }, [statement, storageBase, judgeLanguage, code, runInput, focusMode]);
+  }, [statement, storageBase, judgeLanguage, code, runInput]);
 
-  React.useEffect(() => {
-    if (!statement || !storageBase) return;
+  const switchLanguage = (nextLanguage: JudgeLanguage) => {
+    if (!statement || nextLanguage === judgeLanguage) return;
+    const template = templateForLanguage(
+      { template: statement.task.template, templatesByLanguage: statement.task.templatesByLanguage },
+      nextLanguage,
+    );
+    let nextCode = template;
     try {
-      const saved = localStorage.getItem(`${storageBase}:draft:${judgeLanguage}:code`);
-      if (saved != null) {
-        setCode(saved);
-        return;
+      if (storageBase) {
+        localStorage.setItem(`${storageBase}:lang`, judgeLanguage);
+        localStorage.setItem(`${storageBase}:draft:${judgeLanguage}:code`, code);
+        nextCode = localStorage.getItem(`${storageBase}:draft:${nextLanguage}:code`) ?? template;
       }
-      const tpl = templateForLanguage({ template: statement.task.template, templatesByLanguage: statement.task.templatesByLanguage }, judgeLanguage);
-      setCode(tpl);
     } catch {
-      const tpl = templateForLanguage({ template: statement.task.template, templatesByLanguage: statement.task.templatesByLanguage }, judgeLanguage);
-      setCode(tpl);
+      // Use the language template when browser storage is unavailable.
     }
-  }, [judgeLanguage, statement, storageBase]);
+    setJudgeLanguage(nextLanguage);
+    setJudgeCompiler(defaultCompilerForFamily(nextLanguage));
+    setCode(nextCode);
+    setRunResult(null);
+    setCheckResult(null);
+  };
+
+  const saveDraft = () => {
+    if (!storageBase) return;
+    try {
+      localStorage.setItem(`${storageBase}:lang`, judgeLanguage);
+      localStorage.setItem(`${storageBase}:draft:${judgeLanguage}:code`, code);
+      localStorage.setItem(`${storageBase}:runInput`, runInput);
+      setDraftSavedAt(new Date().toISOString());
+      setError(null);
+    } catch {
+      setError("Could not save this draft in browser storage.");
+    }
+  };
 
   React.useEffect(() => {
     if (!liveUpdatesEnabled || !contestId || !hasToken || typeof window === "undefined" || typeof EventSource === "undefined") {
@@ -481,7 +476,6 @@ export const ContestProblemSolvePage: React.FC = () => {
     };
     const onHidden = () => {
       if (document.visibilityState === "hidden") {
-        setFocusLostCount((n) => n + 1);
         report("FOCUS_LOST");
       }
     };
@@ -561,7 +555,25 @@ export const ContestProblemSolvePage: React.FC = () => {
         code,
         turnstileToken: tokenForSubmit,
       });
-      setCheckResult(res);
+      const firstPublicFailure = res.firstFailure && !res.firstFailure.hidden ? res.firstFailure : null;
+      setCheckResult({
+        verdict: res.verdict,
+        testsPassed: res.testsPassed,
+        testsTotal: res.testsTotal,
+        score: res.score,
+        maxScore: res.maxScore,
+        compileError: res.compileError,
+        groupScores: res.groupScores,
+        publicTestResults: firstPublicFailure ? [{
+          testId: firstPublicFailure.index,
+          input: firstPublicFailure.input,
+          expectedOutput: firstPublicFailure.expected,
+          actualOutput: firstPublicFailure.actual,
+          passed: false,
+          verdict: firstPublicFailure.verdict,
+          stderr: firstPublicFailure.stderr,
+        }] : [],
+      });
       setError(null);
       setLatestVerdict(normalizeVerdict(res.verdict));
       setLatestVerdictAt(Date.now());
@@ -584,28 +596,8 @@ export const ContestProblemSolvePage: React.FC = () => {
     }
   };
 
-  const askContestTutor = async () => {
-    if (!contestId || !problemId || !statement || askingTutor) return;
-    setAskingTutor(true);
-    setTutorError(null);
-    try {
-      const result = await askContestProblemTutor({
-        contestId,
-        problemId,
-        question: "Підкажи, як перевірити мій підхід і знайти можливу помилку, не показуючи готовий розв'язок.",
-        code: code.slice(0, 1200),
-        language: judgeLanguage,
-      });
-      setTutorAnswer(result.tutor);
-    } catch (caught: unknown) {
-      setTutorError(getErrorMessage(caught) || "AI-підказка зараз недоступна.");
-    } finally {
-      setAskingTutor(false);
-    }
-  };
-
   const askOrganizer = async (question: string) => {
-    if (!contestId || !problemId || !hasToken || !statement) return;
+    if (!contestId || !problemId || !hasToken || !statement || askingOrganizer || !question.trim()) return;
     const problemTitle = statement.task.title || "Unknown";
     const body = [
       `Contest: #${contestId} (${contestMeta.title || "Unknown"})`,
@@ -615,16 +607,20 @@ export const ContestProblemSolvePage: React.FC = () => {
       question.trim()
     ].join("\n");
 
+    setAskingOrganizer(true);
     try {
       const res = await createSupportChatConversation({
         subject: `Contest #${contestId} · Problem #${problemId}`,
         message: body
       });
+      setOrganizerDialogOpen(false);
+      setOrganizerQuestion("");
       navigate(`/support?conversationId=${res.conversation.id}`);
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
       setError(msg || "Failed to create support conversation");
-      throw e;
+    } finally {
+      setAskingOrganizer(false);
     }
   };
 
@@ -656,85 +652,136 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   if (!statement) return null;
 
+  const entryFile = JUDGE_ENTRY_FILES[judgeLanguage];
+  const publicExamples = examplesFromStatement(statement.task.description);
+  const latestAnnouncement = announcements[0] ?? null;
+  const showAnnouncement = latestAnnouncement && latestAnnouncement.id !== dismissedAnnouncementId;
+
   return (
-    <div className="p-2 sm:p-3 space-y-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1 border-b border-border/50 pb-2">
-        <Button variant="ghost" onClick={() => navigate(`/contests/${contestId ?? ""}`)} className="w-full sm:w-auto">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to contest
-        </Button>
-
-        <div className="text-xs font-mono text-text-secondary w-full sm:w-auto flex items-center gap-3">
-          {error ? <span role="alert" aria-live="assertive" className="text-accent-error">{error}</span> : null}
-          {subsLoading ? <span className="text-text-muted">Syncing submissions…</span> : null}
-        </div>
-      </div>
-
-      {contestMeta.allowUpsolve && contestMeta.endsAt && Date.now() > new Date(contestMeta.endsAt).getTime() ? (
-        <Card className="flex flex-col gap-4 border-primary/20 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 font-semibold text-text-primary"><Sparkles className="h-4 w-4 text-primary" /> Дорішування з AI-тьютором</div>
-            <p className="mt-1 text-sm text-text-secondary">Попроси підказку про свій підхід. Тьютор пояснить наступний крок, не підміняючи твоє рішення.</p>
-            {tutorError && <p role="alert" aria-live="polite" className="mt-2 text-sm text-accent-error">{tutorError}</p>}
-            {tutorAnswer && <div className="mt-3 rounded-xl bg-bg-base p-3 text-sm leading-6 text-text-primary"><p className="whitespace-pre-wrap">{tutorAnswer.answer}</p>{tutorAnswer.tips.length > 0 && <ul className="mt-2 list-inside list-disc text-text-secondary">{tutorAnswer.tips.map((tip, index) => <li key={`${index}-${tip}`}>{tip}</li>)}</ul>}</div>}
+    <div className="min-h-full space-y-2 bg-[#0b120e] p-2 text-[#edf3ef] pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:space-y-3 sm:p-4">
+      {showAnnouncement ? (
+        <aside className="flex items-start gap-3 rounded-2xl border border-[#00d978]/20 bg-[#0d1b13] px-4 py-3 sm:items-center" aria-live="polite">
+          <Radio className="mt-0.5 size-4 shrink-0 text-[#72edb0] sm:mt-0" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-bold uppercase tracking-[.14em] text-[#72edb0]">Оголошення організатора</div>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-[#dce8df]">{latestAnnouncement.text}</p>
           </div>
-          <Button variant="secondary" onClick={() => void askContestTutor()} disabled={askingTutor} className="shrink-0">
-            <Sparkles className="mr-2 h-4 w-4" />{askingTutor ? "Готуємо підказку…" : tutorAnswer ? "Ще одна підказка" : "Попросити підказку"}
-          </Button>
-        </Card>
+          <button type="button" onClick={() => setDismissedAnnouncementId(latestAnnouncement.id)} className="grid size-8 shrink-0 place-items-center rounded-lg text-[#82968a] transition hover:bg-white/[.06] hover:text-white" aria-label="Закрити оголошення">
+            <X className="size-4" />
+          </button>
+        </aside>
       ) : null}
 
       {turnstileEnabled ? (
-        <div className="px-1">
-          <Card className="p-3 border-border/70">
-            <div className="text-xs text-text-secondary mb-2">
+        <Card className="flex flex-wrap items-center gap-3 border-white/10 bg-[#0d1510] p-3">
+            <div className="min-w-0 flex-1 text-xs text-[#a7b5aa]">
               {turnstileLoadFailed
                 ? "Human verification widget is unavailable in browser. Submit still works if server does not require verification."
                 : "Human verification is required before submission."}
             </div>
             <div ref={turnstileContainerRef} />
-          </Card>
+        </Card>
+      ) : null}
+
+      {error ? (
+        <div role="alert" aria-live="assertive" className="flex items-start gap-3 rounded-xl border border-[#ff6b9d]/30 bg-[#ff6b9d]/10 px-3 py-2.5 text-sm text-[#ffb2c9]">
+          <span className="min-w-0 flex-1">{error}</span>
+          <button type="button" onClick={() => setError(null)} className="shrink-0 rounded-md p-1 hover:bg-white/[.08]" aria-label="Закрити повідомлення про помилку"><X className="size-4" /></button>
         </div>
       ) : null}
 
-      <Workspace
-        contestTitle={contestMeta.title}
-        contestStartsAt={contestMeta.startsAt}
-        contestEndsAt={contestMeta.endsAt}
-        statement={statement}
+      <StudyCodIDEWorkspace
+        task={{
+          id: `contest-${contestId}-${problemId}`,
+          title: statement.task.title,
+          description: statement.task.description,
+          section: `Контест · ${contestMeta.title} · ${statement.problem.label}`,
+        }}
+        theory={null}
         language={judgeLanguage}
-        onLanguageChange={setJudgeLanguage}
+        onLanguageChange={switchLanguage}
         compiler={judgeCompiler}
         onCompilerChange={setJudgeCompiler}
+        languageOptions={enabledJudgeLanguages()}
         code={code}
         onCodeChange={setCode}
-        onRun={doRun}
-        onSubmit={doSubmit}
+        files={[{ path: entryFile, content: code }]}
+        onFilesChange={(nextFiles) => setCode(nextFiles.find((file) => file.path === entryFile)?.content ?? nextFiles[0]?.content ?? "")}
+        useFiles={false}
+        onEnableFiles={() => undefined}
+        entryFile={entryFile}
+        stdin={runInput}
+        onStdinChange={setRunInput}
+        firstExampleInput={publicExamples[0]?.input}
+        onUseExampleInput={() => setRunInput(publicExamples[0]?.input ?? "")}
+        publicExamples={publicExamples}
         running={running}
         checking={checking}
-        runInput={runInput}
-        onRunInputChange={setRunInput}
+        onRun={() => void doRun()}
+        onCheck={() => void doSubmit()}
+        onSave={saveDraft}
+        onReset={() => {
+          setCode(templateForLanguage({ template: statement.task.template, templatesByLanguage: statement.task.templatesByLanguage }, judgeLanguage));
+          setRunResult(null);
+          setCheckResult(null);
+        }}
+        onBack={() => navigate(`/contest/contests/${contestId ?? ""}`)}
         runResult={runResult}
         checkResult={checkResult}
-        submissions={submissions}
-        scoreboardRows={scoreboardRows}
-        scoreboardLoading={scoreboardLoading}
-        onRefreshScoreboard={loadScoreboard}
-        onRefreshSubmissions={loadSubmissions}
-        wsStatus={wsStatus}
-        latestVerdict={latestVerdict}
-        latestVerdictAt={latestVerdictAt}
-        currentUserLabel={currentUserLabel}
-        focusMode={focusMode}
-        onFocusModeChange={setFocusMode}
-        canAskOrganizer={hasToken}
-        onAskOrganizer={askOrganizer}
-        announcements={announcements}
-        focusLostCount={focusLostCount}
+        attemptsUsed={submissions.length}
+        resultCards={submissions.length ? (
+          <section className="mt-3 rounded-xl border border-white/10 bg-white/[.025] p-3" aria-label="Останні надсилання">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <h3 className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">Останні надсилання</h3>
+              <span className="text-[10px] text-[#82968a]">{submissions.length}{submissions.length === 30 ? "+" : ""}</span>
+            </div>
+            <div className="space-y-1.5">
+              {submissions.slice(0, 4).map((submission) => (
+                <div key={submission.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-black/15 px-2.5 py-2 text-[11px]">
+                  <div className="min-w-0">
+                    <span className={`font-bold ${String(submission.verdict ?? "").toUpperCase() === "AC" ? "text-[#72edb0]" : "text-[#ffca7e]"}`}>{submission.verdict || "В черзі"}</span>
+                    <span className="ml-2 text-[#82968a]">{submission.createdAt ? new Date(submission.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Щойно"}</span>
+                  </div>
+                  <span className="shrink-0 tabular-nums text-[#c8d6cc]">{submission.score ?? 0}/{submission.maxScore ?? 0}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        disableAiAssistance
+        submitMode
+        saveStatus={draftSavedAt ? "saved" : "dirty"}
+        lastSavedAt={draftSavedAt}
         trace={trace}
         tracing={tracing}
         onTrace={doTrace}
+        toolbar={(
+          <>
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-[#a7b5aa]" title={wsStatus === "connected" ? "Live updates connected" : "Live updates reconnect automatically"}>
+              <span className={`size-1.5 rounded-full ${wsStatus === "connected" ? "bg-[#00d978]" : wsStatus === "connecting" ? "animate-pulse bg-[#ffb454]" : "bg-[#82968a]"}`} />
+              {wsStatus === "connected" ? "LIVE" : wsStatus === "connecting" ? "SYNC" : "OFFLINE"}
+            </span>
+            {contestMeta.endsAt ? <span className="hidden h-8 items-center rounded-lg border border-white/10 px-2 text-[10px] font-semibold text-[#a7b5aa] xl:inline-flex" title="Час завершення контесту">До {new Date(contestMeta.endsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span> : null}
+            {latestVerdict ? <span className="inline-flex h-8 max-w-28 items-center truncate rounded-lg border border-white/10 px-2 text-[10px] font-bold text-[#c8d6cc]" title={latestVerdictAt ? `Updated ${new Date(latestVerdictAt).toLocaleTimeString()}` : "Latest verdict"}>{latestVerdict}</span> : null}
+            {subsLoading ? <span className="hidden text-[10px] text-[#82968a] xl:inline">Syncing…</span> : null}
+            <Link to={`/contest/contests/${contestId}/scoreboard`} className="grid size-8 place-items-center rounded-lg border border-white/10 text-[#c8d6cc] transition hover:border-[#ffb454]/30 hover:bg-[#ffb454]/10 hover:text-[#ffca7e]" aria-label="Таблиця контесту" title="Таблиця контесту">
+              <Trophy className="size-3.5" />
+            </Link>
+            {hasToken ? <button type="button" onClick={() => setOrganizerDialogOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 px-2 text-[10px] font-semibold text-[#c8d6cc] transition hover:bg-white/[.06]" title="Поставити питання організатору"><MessageSquareText className="size-3.5" /><span className="hidden xl:inline">Організатор</span></button> : null}
+          </>
+        )}
       />
+
+      <Modal open={organizerDialogOpen} onClose={() => setOrganizerDialogOpen(false)} title="Питання організатору" description="Питання буде надіслано в службу підтримки разом із назвою контесту та задачі." panelClassName="max-w-[620px]">
+        <form onSubmit={(event) => { event.preventDefault(); void askOrganizer(organizerQuestion); }} className="space-y-4">
+          <label className="block text-sm font-semibold text-text-primary" htmlFor="contest-organizer-question">Твоє питання</label>
+          <textarea id="contest-organizer-question" value={organizerQuestion} onChange={(event) => setOrganizerQuestion(event.target.value)} rows={5} maxLength={4000} required placeholder="Опиши проблему з умовою, доступом або проведенням контесту…" className="w-full resize-y rounded-xl border border-border bg-bg-base px-3 py-2.5 text-sm leading-6 text-text-primary outline-none transition placeholder:text-text-muted focus:border-primary/50 focus:ring-2 focus:ring-primary/15" />
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-text-muted">{organizerQuestion.length}/4000</span>
+            <Button type="submit" disabled={askingOrganizer || !organizerQuestion.trim()}>{askingOrganizer ? "Надсилаємо…" : "Надіслати питання"}</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
