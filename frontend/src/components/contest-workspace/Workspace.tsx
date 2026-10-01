@@ -114,7 +114,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
 
   const [dockCollapsed, setDockCollapsed] = React.useState(false);
   const [dockPopOut, setDockPopOut] = React.useState(false);
-  const [dockWidth, setDockWidth] = React.useState(370);
+  const [dockWidth, setDockWidth] = React.useState(330);
   const [dockAttention, setDockAttention] = React.useState(false);
   const [rightPanelTab, setRightPanelTab] = React.useState<"output" | "mentor" | "debugger">("output");
   const [traceStep, setTraceStep] = React.useState(0);
@@ -492,7 +492,7 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
   };
 
   return (
-    <div className="relative h-[calc(100dvh-3.25rem)] min-h-[calc(100dvh-4.25rem)] lg:min-h-[680px] w-full px-2 md:px-3 pb-3">
+    <div className="relative h-[calc(100dvh-12rem)] min-h-[480px] max-h-[1000px] w-full px-2 pb-3 sm:px-3">
       <div className="h-full rounded-3xl bg-bg-surface border border-border/60 overflow-hidden shadow-[0_8px_24px_rgba(0,0,0,0.24)] flex flex-col">
         <header className="h-12 border-b border-border/60 bg-bg-surface px-3 flex items-center justify-between gap-3">
           <div className="min-w-0 flex items-center gap-2 text-xs">

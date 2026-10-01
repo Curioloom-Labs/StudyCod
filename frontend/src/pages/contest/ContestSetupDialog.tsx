@@ -20,6 +20,7 @@ import { createContest, type ContestBannerTheme, type ContestParticipantAccessMo
 import { getClasses, uploadStatementImage, type Class } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { CONTEST_BANNER_THEMES, CONTEST_ICONS } from "./contestBranding";
+import { lockBodyScroll } from "../../lib/bodyScrollLock";
 
 type SetupStep = "details" | "access" | "schedule";
 type ContestDifficulty = "EASY" | "MEDIUM" | "HARD" | "";
@@ -160,8 +161,7 @@ export function ContestSetupDialog({
   uploadingRef.current = iconUploading || bannerUploading;
 
   React.useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const releaseScrollLock = lockBodyScroll();
     const restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     titleRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
@@ -186,7 +186,7 @@ export function ContestSetupDialog({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
+      releaseScrollLock();
       document.removeEventListener("keydown", onKeyDown);
       restoreFocus?.focus();
     };

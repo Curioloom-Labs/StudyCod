@@ -768,9 +768,11 @@ export const ContestDetailPage: React.FC = () => {
           <Notice tone="error">{error}</Notice>
         </div>
       )}
-      <section className="relative overflow-hidden rounded-[30px] px-6 py-7 text-white sm:px-9 sm:py-9" style={{ background: data.contest.bannerImageUrl ? `linear-gradient(110deg, rgba(8, 22, 13, .93) 0%, rgba(8, 22, 13, .72) 55%, rgba(8, 22, 13, .28) 100%), url("${data.contest.bannerImageUrl}") center / cover` : CONTEST_BANNER_THEMES[contestTheme(data.contest.bannerTheme)].background }}>
-        <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full blur-3xl" style={{ background: CONTEST_BANNER_THEMES[contestTheme(data.contest.bannerTheme)].glow }} />
-        <div className="relative grid gap-8 lg:grid-cols-[1.3fr_.7fr]">
+      <section className="relative isolate overflow-hidden rounded-[30px] border border-white/[.08] px-6 py-7 text-white shadow-[0_28px_70px_-48px_rgba(0,0,0,.8)] sm:px-9 sm:py-9" style={{ background: data.contest.bannerImageUrl ? "#0b1b12" : CONTEST_BANNER_THEMES[contestTheme(data.contest.bannerTheme)].background }}>
+        {data.contest.bannerImageUrl ? <img src={data.contest.bannerImageUrl} alt="" aria-hidden="true" width={1600} height={600} className="absolute inset-0 -z-20 size-full object-cover object-center" /> : null}
+        <div aria-hidden="true" className={`absolute inset-0 -z-10 ${data.contest.bannerImageUrl ? "bg-gradient-to-r from-[#07150c]/95 via-[#0a1b11]/85 to-[#0a1b11]/55" : "bg-[#07150c]/25"}`} />
+        <div aria-hidden="true" className="absolute -right-16 -top-24 -z-10 h-72 w-72 rounded-full blur-3xl" style={{ background: CONTEST_BANNER_THEMES[contestTheme(data.contest.bannerTheme)].glow }} />
+        <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(340px,.8fr)]">
           <div>
             <div className="mb-4 flex items-center gap-3"><span className="grid size-14 place-items-center rounded-2xl bg-white/[.12] text-3xl shadow-inner" aria-hidden="true">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" className="size-10 rounded-xl border border-white/25 object-cover" /> : data.contest.icon || "🏆"}</span><div><p className="text-xs font-bold uppercase tracking-[.14em] text-white/65">StudyCod Contests</p>{data.contest.participantAccessMode === "ISSUED_ACCOUNTS" && <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/90"><KeyRound className="size-3.5" aria-hidden="true" />Тимчасові акаунти</span>}</div></div>
             <div className="mb-6 flex flex-wrap gap-2">
@@ -829,45 +831,50 @@ export const ContestDetailPage: React.FC = () => {
             {officialStanding && <p className="mt-4 text-sm font-semibold text-[#a9cbb5]">Твоє місце: <span className="font-extrabold text-white">#{officialStanding.rank}</span> · {officialStanding.totalScore} балів</p>}
           </div>
           <div className="grid grid-cols-2 gap-3 self-end sm:grid-cols-3">
-            <div className="rounded-2xl bg-white/[.09] p-4">
-              <p className="text-xs font-bold uppercase tracking-[.12em] text-[#9db7a6]">
+            <div className="rounded-2xl border border-white/[.11] bg-[#06150d]/45 p-4 shadow-lg backdrop-blur-md">
+              <p className="text-xs font-bold uppercase tracking-[.12em] text-white/70">
                 Фініш
               </p>
               <p className="mt-2 text-sm font-bold">
                 {date(data.contest.endsAt)}
               </p>
             </div>
-            <div className="rounded-2xl bg-white/[.09] p-4">
-              <p className="text-xs font-bold uppercase tracking-[.12em] text-[#9db7a6]">
+            <div className="rounded-2xl border border-white/[.11] bg-[#06150d]/45 p-4 shadow-lg backdrop-blur-md">
+              <p className="text-xs font-bold uppercase tracking-[.12em] text-white/70">
                 Задачі
               </p>
               <p className="mt-2 text-2xl font-bold tracking-[-.04em]">
                 {data.problems.length}
               </p>
             </div>
-            <div className="rounded-2xl bg-white/[.09] p-4">
-              <p className="text-xs font-bold uppercase tracking-[.12em] text-[#9db7a6]">Учасники</p>
+            <div className="rounded-2xl border border-white/[.11] bg-[#06150d]/45 p-4 shadow-lg backdrop-blur-md">
+              <p className="text-xs font-bold uppercase tracking-[.12em] text-white/70">Учасники</p>
               <p className="mt-2 text-2xl font-bold tracking-[-.04em] tabular-nums">{data.participantsCount}</p>
             </div>
           </div>
         </div>
       </section>
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.32fr_.68fr]">
-        <section className="rounded-[28px] border border-[#19291d]/10 bg-white p-5 dark:border-white/[.09] dark:bg-[#111b14] sm:p-6">
-          <div className="mb-5 flex items-center justify-between">
+        <section className="rounded-[28px] border border-[#19291d]/10 bg-white p-5 shadow-[0_18px_50px_-44px_rgba(16,41,24,.65)] dark:border-white/[.09] dark:bg-[#111b14] sm:p-6">
+          <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.14em] text-[#ff8c00]">
                 Задачі
               </p>
               <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">
-                Твій список старту
+                Твій маршрут
               </h2>
             </div>
-            <FileCode2 className="h-5 w-5 text-[#6a7b70]" />
+            <span className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#f0f5f0] px-3 py-2 text-sm font-bold tabular-nums text-[#526257] dark:bg-white/[.06] dark:text-[#c2d0c6]"><FileCode2 className="h-4 w-4 text-[#16834d] dark:text-[#72edb0]" aria-hidden="true" />{data.problems.length}</span>
           </div>
-          <div className="space-y-2">
-            {data.problems.map((problem) => (
-              <button type="button"
+          <div className="space-y-2.5">
+            {data.problems.map((problem) => {
+              const progress = progressByProblem.get(problem.id);
+              const score = progress?.bestContestScore ?? 0;
+              const maxScore = progress?.maxScore ?? problem.points ?? 100;
+              const scorePercent = progress && maxScore > 0 ? Math.max(0, Math.min(100, (score / maxScore) * 100)) : 0;
+              const solved = Boolean(progress && scorePercent >= 100);
+              return <button type="button"
                 key={problem.id}
                 disabled={!access}
                 onClick={() =>
@@ -875,25 +882,24 @@ export const ContestDetailPage: React.FC = () => {
                     `/contest/contests/${contestId}/problems/${problem.id}`,
                   )
                 }
-                className="group flex w-full items-center gap-4 rounded-2xl px-3 py-3 text-left transition hover:bg-[#f1f5f1] disabled:cursor-not-allowed disabled:opacity-55 dark:hover:bg-white/[.055]"
+                className="group flex w-full items-center gap-3 rounded-2xl border border-[#17271c]/[.08] bg-[#f8faf8] px-3 py-3.5 text-left transition duration-200 hover:-translate-y-px hover:border-[#16834d]/25 hover:bg-[#f1f7f2] hover:shadow-[0_12px_26px_-22px_rgba(15,64,34,.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] disabled:cursor-not-allowed disabled:opacity-55 dark:border-white/[.08] dark:bg-white/[.025] dark:hover:border-[#00d978]/25 dark:hover:bg-white/[.05]"
               >
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#ebf5ee] text-sm font-extrabold text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+                <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#16834d]/10 bg-[#e8f5ec] font-[family-name:var(--font-display)] text-base font-black text-[#147b47] shadow-sm dark:border-[#00d978]/15 dark:bg-[#00d978]/10 dark:text-[#72edb0]">
                   {problem.label}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block font-bold text-[#1a271e] dark:text-[#edf3ef]">
+                  <span className="block break-words font-bold leading-5 text-[#1a271e] dark:text-[#edf3ef]">
                     {problem.title}
                   </span>
-                  <span className="mt-0.5 block text-sm text-[#708075] dark:text-[#9faea3]">
-                    {progressByProblem.has(problem.id)
-                      ? `Твій результат: ${progressByProblem.get(problem.id)?.bestContestScore ?? 0}${progressByProblem.get(problem.id)?.maxScore != null ? `/${progressByProblem.get(problem.id)?.maxScore}` : ""}`
-                      : `${problem.points ?? 100} балів`}
+                  <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-[#637368] dark:text-[#aab8ae]">
+                    {progress ? <><span className="tabular-nums">Найкращий результат: <strong className="font-bold text-[#263b2d] dark:text-[#e4eee7]">{score}{progress.maxScore != null ? ` / ${progress.maxScore}` : ""}</strong></span>{maxScore > 0 && <span aria-hidden="true" className="h-1.5 w-16 overflow-hidden rounded-full bg-[#dfe8e1] dark:bg-white/10"><span className="block h-full rounded-full bg-[#00b963]" style={{ width: `${scorePercent}%` }} /></span>}</> : <span>До {problem.points ?? 100} балів</span>}
                   </span>
                 </span>
-                {hasCompletedContest && data.contest.allowUpsolve && <span className="shrink-0 rounded-full bg-[#fff0d7] px-3 py-1.5 text-xs font-bold text-[#965200] dark:bg-[#ff8c00]/12 dark:text-[#ffbd72]">Дорішати</span>}
-                <ChevronRight className="h-5 w-5 text-[#9aa79e] transition group-hover:translate-x-1" />
-              </button>
-            ))}
+                {hasCompletedContest && data.contest.allowUpsolve ? <span className="shrink-0 rounded-lg border border-[#ffb454]/20 bg-[#fff4df] px-2.5 py-1.5 text-xs font-bold text-[#895000] dark:bg-[#ffb454]/10 dark:text-[#ffca7e]">Дорішати</span> : solved ? <span className="hidden shrink-0 items-center gap-1.5 rounded-lg bg-[#e7f7ed] px-2.5 py-1.5 text-xs font-bold text-[#147b47] sm:inline-flex dark:bg-[#00d978]/10 dark:text-[#72edb0]"><Check className="size-3.5" aria-hidden="true" />Готово</span> : <span className="hidden shrink-0 rounded-lg bg-[#edf1ed] px-2.5 py-1.5 text-xs font-bold text-[#657368] sm:inline-flex dark:bg-white/[.06] dark:text-[#aab8ae]">Відкрити</span>}
+                <ChevronRight className="size-5 shrink-0 text-[#9aa79e] transition-transform group-hover:translate-x-0.5 group-hover:text-[#16834d] dark:group-hover:text-[#72edb0]" aria-hidden="true" />
+              </button>;
+            })}
+            {data.problems.length === 0 && <p className="rounded-xl border border-dashed border-[#17271c]/15 px-4 py-6 text-center text-sm text-[#708075] dark:border-white/10 dark:text-[#a5b3a8]">Задачі ще не додано.</p>}
           </div>
         </section>
         <section className="rounded-[28px] border border-[#19291d]/10 bg-[#fafbf9] p-5 dark:border-white/[.09] dark:bg-[#101913] sm:p-6">
@@ -913,21 +919,21 @@ export const ContestDetailPage: React.FC = () => {
           ) : data.access.accountRequired ? (
             <p className="mt-5 rounded-xl bg-[#f1f5f1] px-3 py-3 text-sm leading-6 text-[#708075] dark:bg-white/[.05] dark:text-[#a5b3a8]">Для перегляду таблиці ввійди в акаунт, виданий організатором для цього контесту.</p>
           ) : standings?.rows.length ? (
-            <div className="mt-5 space-y-1">
+            <div className="mt-5 space-y-2">
               {standings.rows.slice(0, 5).map((row) => (
                 <div
                   key={row.participantId}
-                  className="flex items-center gap-3 rounded-xl px-2 py-2.5"
+                  className={`flex min-h-12 items-center gap-3 rounded-xl border px-3 py-2.5 ${row.rank === 1 ? "border-[#e8b84c]/25 bg-[#fff8e8] dark:border-[#ffd66e]/15 dark:bg-[#ffd66e]/[.06]" : "border-[#17271c]/[.07] bg-white dark:border-white/[.06] dark:bg-white/[.025]"}`}
                 >
                   <span
-                    className={`w-5 text-sm font-bold ${row.rank === 1 ? "text-[#d47b00]" : "text-[#849287]"}`}
+                    className={`grid size-7 shrink-0 place-items-center rounded-lg text-xs font-extrabold tabular-nums ${row.rank === 1 ? "bg-[#f3d98e]/50 text-[#805600] dark:bg-[#ffd66e]/10 dark:text-[#ffd66e]" : "bg-[#eef2ee] text-[#718075] dark:bg-white/[.06] dark:text-[#aab8ae]"}`}
                   >
                     {row.rank}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#24352a] dark:text-[#e5eee7]">
                     {row.displayName}
                   </span>
-                  <span className="text-sm font-extrabold text-[#16834d] dark:text-[#72edb0]">
+                  <span className="text-sm font-extrabold tabular-nums text-[#16834d] dark:text-[#72edb0]">
                     {row.totalScore}
                   </span>
                 </div>

@@ -94,14 +94,14 @@ export const ProblemTab: React.FC<ProblemTabProps> = ({ statement, onInjectExamp
                 role="tab"
                 aria-pressed={segment === key}
                 aria-selected={segment === key}
-                className={`h-10 px-3 rounded-lg text-xs border transition-fast ${segment === key ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
+                className={`h-10 px-3 rounded-lg text-[13px] font-medium border transition-fast ${segment === key ? "border-primary/60 text-primary bg-primary/10" : "border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover"}`}
               >
                 {label}
               </button>
             ))}
           </div>
 
-          <div className="text-xs text-text-secondary">Now reading: <span className="text-text-primary">{segmentTitle}</span></div>
+          <div className="text-[13px] text-text-secondary">Now reading: <span className="font-medium text-text-primary">{segmentTitle}</span></div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-auto px-4 py-4 space-y-4">

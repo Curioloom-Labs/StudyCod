@@ -161,9 +161,9 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     <div className="h-full min-h-0 rounded-2xl border border-border/70 bg-bg-surface shadow-[0_6px_18px_rgba(0,0,0,0.2)] flex flex-col overflow-hidden">
       <div className="px-4 py-3 border-b border-border/70 flex flex-wrap items-center justify-between gap-3 bg-bg-surface">
         <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-[0.08em] text-text-secondary">{statement.problem.label} · Solve workspace</div>
-          <div className="text-lg text-text-primary font-semibold truncate">{statement.task.title}</div>
-          <div className="mt-1 flex items-center gap-2 text-[11px] text-text-secondary">
+          <div className="text-xs font-semibold uppercase tracking-[0.08em] text-text-secondary">{statement.problem.label} · Solve workspace</div>
+          <div className="text-lg text-text-primary font-semibold leading-tight truncate">{statement.task.title}</div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-text-secondary">
             <span className="px-2 py-1 rounded-md bg-bg-base border border-border/70">TL: {statement.task.timeLimitMs ?? "—"} ms</span>
             <span className="px-2 py-1 rounded-md bg-bg-base border border-border/70">ML: {statement.task.memoryLimitMb ?? "—"} MB</span>
             <Badge color={difficulty === "HARD" ? "warn" : difficulty === "MEDIUM" ? "info" : "success"}>{difficulty}</Badge>
@@ -203,7 +203,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
             <button type="button" onClick={() => adjustFont(-1)} disabled={fontSize <= FONT_MIN} className="h-11 w-9 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40" aria-label="Decrease font size" title="Decrease font size">
               <Minus className="w-3.5 h-3.5" />
             </button>
-            <span className="px-1.5 text-[11px] text-text-secondary tabular-nums w-7 text-center" aria-live="polite">{fontSize}</span>
+            <span className="px-1.5 text-xs text-text-secondary tabular-nums w-7 text-center" aria-live="polite">{fontSize}</span>
             <button type="button" onClick={() => adjustFont(1)} disabled={fontSize >= FONT_MAX} className="h-11 w-9 flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40" aria-label="Increase font size" title="Increase font size">
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -263,19 +263,19 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
           <Button variant="secondary" onClick={runSolution} disabled={running || checking} className="h-11 px-4" aria-label="Run code">
             <Play className="w-4 h-4 mr-2" />
-            {running ? "Running…" : "Run (Ctrl/Cmd+Enter)"}
+            {running ? "Running…" : "Run"}
           </Button>
 
           <Button onClick={submitSolution} disabled={checking || running} className="h-11 px-4" aria-label="Submit solution">
             <Rocket className="w-4 h-4 mr-2" />
-            {checking ? "Submitting…" : "Submit (Ctrl/Cmd+Shift+Enter)"}
+            {checking ? "Submitting…" : "Submit"}
           </Button>
         </div>
       </div>
 
-      <div className="px-4 py-2 text-[11px] text-text-secondary border-b border-border/60 bg-bg-base/60 flex items-center justify-between gap-3">
-        <span>
-          Hotkeys: <span className="text-text-primary">Ctrl/Cmd+Enter</span> run · <span className="text-text-primary">Ctrl/Cmd+Shift+Enter</span> submit · Drafts auto-save by problem and language
+      <div className="px-4 py-2.5 text-xs text-text-secondary border-b border-border/60 bg-bg-base/60 flex items-center justify-between gap-3">
+        <span className="min-w-0 leading-5">
+          <span className="font-medium text-text-primary">Ctrl/Cmd+Enter</span> run · <span className="font-medium text-text-primary">Ctrl/Cmd+Shift+Enter</span> submit · Draft auto-saves
         </span>
         <span className="hidden shrink-0 tabular-nums text-text-muted sm:inline" aria-live="polite">
           {lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Saving…"}
@@ -312,7 +312,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
           aria-label="Custom run input"
           autoComplete="off"
           spellCheck={false}
-          className="w-full min-h-[120px] sm:min-h-[108px] max-h-[220px] resize-y rounded-xl bg-bg-base border border-border px-3 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-secondary/50"
+          className="w-full min-h-[120px] sm:min-h-[108px] max-h-[220px] resize-y rounded-xl bg-bg-base border border-border px-3 py-2 text-[13px] leading-5 text-text-primary focus:outline-none focus:ring-2 focus:ring-secondary/50"
           placeholder="Paste input to validate edge cases before submit…"
         />
       </div>
