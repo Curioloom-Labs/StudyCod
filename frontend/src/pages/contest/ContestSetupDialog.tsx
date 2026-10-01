@@ -14,10 +14,12 @@ import {
   Trophy,
   UsersRound,
   X,
+  ImagePlus,
 } from "lucide-react";
-import { createContest, type ContestScoringMode, type ContestVisibility } from "../../lib/api/contests";
-import { getClasses, type Class } from "../../lib/api/edu";
+import { createContest, type ContestBannerTheme, type ContestParticipantAccessMode, type ContestScoringMode, type ContestScoreboardVisibility, type ContestVisibility } from "../../lib/api/contests";
+import { getClasses, uploadStatementImage, type Class } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { CONTEST_BANNER_THEMES, CONTEST_ICONS } from "./contestBranding";
 
 type SetupStep = "details" | "access" | "schedule";
 type ContestDifficulty = "EASY" | "MEDIUM" | "HARD" | "";
@@ -32,6 +34,11 @@ type ContestDraft = {
   joinCode: string;
   classId: string;
   scoringMode: ContestScoringMode;
+  icon: string;
+  bannerTheme: ContestBannerTheme;
+  bannerImageUrl: string | null;
+  scoreboardVisibility: ContestScoreboardVisibility;
+  participantAccessMode: ContestParticipantAccessMode;
   allowUpsolve: boolean;
   scheduleEnabled: boolean;
   startsAt: string;
@@ -48,6 +55,11 @@ const DEFAULT_DRAFT: ContestDraft = {
   joinCode: "",
   classId: "",
   scoringMode: "IOI",
+  icon: "🏆",
+  bannerTheme: "forest",
+  bannerImageUrl: null,
+  scoreboardVisibility: "LIVE",
+  participantAccessMode: "SELF_REGISTRATION",
   allowUpsolve: true,
   scheduleEnabled: false,
   startsAt: "",
@@ -118,7 +130,7 @@ export function ContestSetupDialog({
 }: {
   scope: string;
   onClose: () => void;
-  onCreated: (contestId: number) => void;
+  onCreated: (contestId: number, openAccounts: boolean) => void;
 }) {
   const storageKey = React.useMemo(() => getDraftStorageKey(scope), [scope]);
   const [initial] = React.useState(() => readSavedDraft(scope));
@@ -133,6 +145,7 @@ export function ContestSetupDialog({
   const [classesLoaded, setClassesLoaded] = React.useState(false);
   const [classesRetry, setClassesRetry] = React.useState(0);
   const [copiedCode, setCopiedCode] = React.useState(false);
+  const [bannerUploading, setBannerUploading] = React.useState(false);
   const dialogRef = React.useRef<HTMLDivElement>(null);
   const titleRef = React.useRef<HTMLInputElement>(null);
   const closeRef = React.useRef(onClose);
@@ -180,7 +193,9 @@ export function ContestSetupDialog({
       safeDraft.title.trim() || safeDraft.description.trim() || safeDraft.tags.length ||
       safeDraft.difficulty || safeDraft.visibility !== "PUBLIC" || safeDraft.classId ||
       safeDraft.scheduleEnabled || safeDraft.startsAt || safeDraft.endsAt ||
-      safeDraft.scoringMode !== "IOI" || !safeDraft.allowUpsolve,
+      safeDraft.scoringMode !== "IOI" || !safeDraft.allowUpsolve ||
+      safeDraft.icon !== "🏆" || safeDraft.bannerTheme !== "forest" || Boolean(safeDraft.bannerImageUrl) ||
+      safeDraft.scoreboardVisibility !== "LIVE" || safeDraft.participantAccessMode !== "SELF_REGISTRATION",
     );
     try {
       if (hasContent) window.localStorage.setItem(storageKey, JSON.stringify(safeDraft));
@@ -218,6 +233,24 @@ export function ContestSetupDialog({
     if (key === "joinCode") setCopiedCode(false);
     setStepError("");
     setFieldError("");
+  };
+
+  const uploadBanner = async (file: File | undefined) => {
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp", "image/avif"].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      setFieldError("Додай PNG, JPG, WebP або AVIF до 8 МБ.");
+      return;
+    }
+    setBannerUploading(true);
+    setFieldError("");
+    try {
+      const uploaded = await uploadStatementImage(file);
+      update("bannerImageUrl", uploaded.url);
+    } catch (error: unknown) {
+      setFieldError(getErrorMessageFromUnknown(error, "Не вдалося завантажити банер."));
+    } finally {
+      setBannerUploading(false);
+    }
   };
 
   const addTag = (raw: string) => {
@@ -333,6 +366,10 @@ export function ContestSetupDialog({
         return false;
       }
     }
+    if (target === "schedule" && draft.scoreboardVisibility === "AFTER_END" && !draft.scheduleEnabled) {
+      setFieldError("Щоб відкрити таблицю після завершення, задай час фінішу в розкладі.");
+      return false;
+    }
     setFieldError("");
     return true;
   };
@@ -371,9 +408,14 @@ export function ContestSetupDialog({
         isPublished: false,
         allowUpsolve: draft.allowUpsolve,
         scoringMode: draft.scoringMode,
+        icon: draft.icon,
+        bannerTheme: draft.bannerTheme,
+        bannerImageUrl: draft.bannerImageUrl,
+        scoreboardVisibility: draft.scoreboardVisibility,
+        participantAccessMode: draft.participantAccessMode,
       });
       try { window.localStorage.removeItem(storageKey); } catch { /* ignore unavailable storage */ }
-      onCreated(result.id);
+      onCreated(result.id, draft.participantAccessMode === "ISSUED_ACCOUNTS");
     } catch (error: unknown) {
       setStepError(getErrorMessageFromUnknown(error, "Не вдалося створити чернетку контесту."));
     } finally {
@@ -446,6 +488,27 @@ export function ContestSetupDialog({
                         <textarea id="contest-setup-description" name="description" autoComplete="off" maxLength={50000} value={draft.description} onChange={(event) => update("description", event.target.value)} rows={4} className={`${fieldClass} min-h-28 resize-y leading-6`} placeholder="Що розв’язуватимуть? Для кого цей контест? Додай важливі деталі…" />
                         <span className="mt-1 block text-right text-xs font-normal tabular-nums text-[#819087] dark:text-[#8f9e93]">{draft.description.length}/50&nbsp;000</span>
                       </label>
+                      <fieldset>
+                        <legend className="text-sm font-bold text-[#26352a] dark:text-[#e5eee7]">Іконка</legend>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {CONTEST_ICONS.map((icon) => <button key={icon} type="button" onClick={() => update("icon", icon)} aria-label={`Обрати іконку ${icon}`} aria-pressed={draft.icon === icon} className={`grid size-11 place-items-center rounded-xl border text-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] ${draft.icon === icon ? "border-[#16834d]/55 bg-[#e8f5ec] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/10" : "border-[#18271c]/10 hover:bg-[#f5f8f5] dark:border-white/10 dark:hover:bg-white/[.04]"}`}>{icon}</button>)}
+                        </div>
+                      </fieldset>
+                      <fieldset>
+                        <legend className="text-sm font-bold text-[#26352a] dark:text-[#e5eee7]">Обкладинка</legend>
+                        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {(Object.entries(CONTEST_BANNER_THEMES) as Array<[ContestBannerTheme, (typeof CONTEST_BANNER_THEMES)[ContestBannerTheme]]>).map(([theme, item]) => <button key={theme} type="button" onClick={() => update("bannerTheme", theme)} aria-pressed={draft.bannerTheme === theme} className={`h-14 rounded-xl border px-3 text-left text-xs font-bold text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] ${draft.bannerTheme === theme ? "ring-2 ring-[#00c875] ring-offset-2 dark:ring-offset-[#101a13]" : "border-white/20 opacity-80 hover:opacity-100"}`} style={{ background: item.background }}>{item.label}</button>)}
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          {draft.bannerImageUrl && <img src={draft.bannerImageUrl} alt="Попередній перегляд банера" className="h-14 w-28 rounded-xl border border-[#18271c]/10 object-cover dark:border-white/10" />}
+                          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[#18271c]/10 px-3 py-2 text-sm font-semibold text-[#425146] transition hover:bg-white focus-within:ring-2 focus-within:ring-[#00c875] dark:border-white/10 dark:text-[#dce7df] dark:hover:bg-white/[.06]">
+                            <ImagePlus aria-hidden="true" className="size-4" />{bannerUploading ? "Завантажую…" : draft.bannerImageUrl ? "Замінити банер" : "Додати зображення"}
+                            <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="sr-only" disabled={bannerUploading} onChange={(event) => { void uploadBanner(event.target.files?.[0]); event.target.value = ""; }} />
+                          </label>
+                          {draft.bannerImageUrl && <button type="button" onClick={() => update("bannerImageUrl", null)} className="text-sm font-semibold text-[#69776d] underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#a9b7ad]">Прибрати зображення</button>}
+                          <span className="text-xs text-[#819087] dark:text-[#8f9e93]">PNG, JPG, WebP або AVIF · до 8 МБ</span>
+                        </div>
+                      </fieldset>
                       <div>
                         <label htmlFor="contest-setup-tag-input" className="block text-sm font-bold text-[#26352a] dark:text-[#e5eee7]">Теми й технології</label>
                         <div className="mt-2 flex min-h-12 flex-wrap items-center gap-2 rounded-xl border border-[#18271c]/14 bg-white px-3 py-2 focus-within:ring-2 focus-within:ring-[#00c875] dark:border-white/10 dark:bg-[#0d1510]">
@@ -503,6 +566,22 @@ export function ContestSetupDialog({
                     </div>}
 
                     <fieldset>
+                      <legend className="text-sm font-bold text-[#26352a] dark:text-[#e5eee7]">Реєстрація учасників</legend>
+                      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                        <button type="button" aria-pressed={draft.participantAccessMode === "SELF_REGISTRATION"} onClick={() => update("participantAccessMode", "SELF_REGISTRATION")} className={`${cardClass} ${draft.participantAccessMode === "SELF_REGISTRATION" ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""}`}><UsersRound aria-hidden="true" className="size-5 text-[#16834d] dark:text-[#72edb0]" /><span className="mt-3 block text-sm font-bold text-[#233329] dark:text-[#e5eee7]">Самостійна реєстрація</span><span className="mt-1 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">Учасники приєднуються через сторінку контесту.</span></button>
+                        <button type="button" aria-pressed={draft.participantAccessMode === "ISSUED_ACCOUNTS"} onClick={() => update("participantAccessMode", "ISSUED_ACCOUNTS")} className={`${cardClass} ${draft.participantAccessMode === "ISSUED_ACCOUNTS" ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""}`}><LockKeyhole aria-hidden="true" className="size-5 text-[#16834d] dark:text-[#72edb0]" /><span className="mt-3 block text-sm font-bold text-[#233329] dark:text-[#e5eee7]">Тимчасові акаунти</span><span className="mt-1 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">Організатор додає список людей і видає окремі доступи.</span></button>
+                      </div>
+                      {draft.participantAccessMode === "ISSUED_ACCOUNTS" && <p className="mt-2 rounded-xl bg-[#f1f6f2] px-3 py-2 text-xs leading-5 text-[#69776d] dark:bg-white/[.04] dark:text-[#a9b7ad]">Після створення відкриється розділ акаунтів: завантаж XLSX, XLS, ODS, CSV чи TSV або встав список людей, перевір його й згенеруй доступи.</p>}
+                    </fieldset>
+
+                    <fieldset className="mt-5">
+                      <legend className="text-sm font-bold text-[#26352a] dark:text-[#e5eee7]">Таблиця результатів</legend>
+                      <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                        {([ ["LIVE", "Показувати одразу", "Учасники бачать поточний рейтинг."], ["AFTER_END", "Після завершення", "Відкривається після часу фінішу."], ["ORGANIZERS_ONLY", "Лише організаторам", "Прихована від учасників постійно."] ] as Array<[ContestScoreboardVisibility, string, string]>).map(([mode, label, description]) => <button key={mode} type="button" aria-pressed={draft.scoreboardVisibility === mode} onClick={() => update("scoreboardVisibility", mode)} className={`${cardClass} ${draft.scoreboardVisibility === mode ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""}`}><span className="block text-sm font-bold text-[#233329] dark:text-[#e5eee7]">{label}</span><span className="mt-1 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">{description}</span></button>)}
+                      </div>
+                    </fieldset>
+
+                    <fieldset className="mt-5">
                       <legend className="text-sm font-bold text-[#26352a] dark:text-[#e5eee7]">Модель оцінювання</legend>
                       <div className="mt-2 grid gap-3 sm:grid-cols-2">
                         {([["IOI", "Часткові бали · IOI", "Кожна задача дає бали за пройдені тести. Підходить для тренувань і олімпіад."], ["ICPC", "Розв’язання + штраф · ICPC", "Рейтинг за кількістю повністю розв’язаних задач і штрафним часом."]] as Array<[ContestScoringMode, string, string]>).map(([mode, label, description]) => <button key={mode} type="button" aria-pressed={draft.scoringMode === mode} onClick={() => update("scoringMode", mode)} className={`${cardClass} ${draft.scoringMode === mode ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""}`}><span className="flex items-center justify-between gap-3"><span className="text-sm font-bold text-[#233329] dark:text-[#e5eee7]">{label}</span>{draft.scoringMode === mode && <Check aria-hidden="true" className="size-4 shrink-0 text-[#16834d]" />}</span><span className="mt-2 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">{description}</span></button>)}
@@ -538,12 +617,17 @@ export function ContestSetupDialog({
 
                 <aside aria-label="Підсумок налаштувань" className="h-fit rounded-[22px] border border-[#18271c]/10 bg-[#f5f8f5] p-4 dark:border-white/10 dark:bg-white/[.035] xl:sticky xl:top-0">
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]"><Sparkles aria-hidden="true" className="size-4" />Підсумок</div>
-                  <h3 className="mt-3 break-words text-lg font-bold leading-snug text-[#1a2a1e] dark:text-[#edf3ef]">{draft.title.trim() || "Назва твого контесту"}</h3>
+                  <div className="mt-3 overflow-hidden rounded-2xl p-4 text-white" style={{ background: draft.bannerImageUrl ? `linear-gradient(90deg, rgba(8, 22, 13, .78), rgba(8, 22, 13, .18)), url("${draft.bannerImageUrl}") center / cover` : CONTEST_BANNER_THEMES[draft.bannerTheme].background }}>
+                    <div className="text-3xl" aria-hidden="true">{draft.icon}</div>
+                    <h3 className="mt-2 break-words text-lg font-bold leading-snug">{draft.title.trim() || "Назва твого контесту"}</h3>
+                  </div>
                   <p className="mt-2 line-clamp-3 break-words text-sm leading-5 text-[#718075] dark:text-[#9eaca1]">{draft.description.trim() || "Короткий опис з’явиться тут."}</p>
                   <div className="mt-4 flex flex-wrap gap-1.5">{draft.tags.length ? draft.tags.map((tag) => <span key={tag} className="max-w-full truncate rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#66746a] dark:bg-white/[.06] dark:text-[#b7c4ba]">{tag}</span>) : <span className="text-xs text-[#8a968d]">Без тем</span>}</div>
                   <dl className="mt-4 space-y-3 border-t border-[#18271c]/10 pt-4 text-xs dark:border-white/10">
                     <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Доступ</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.visibility === "PUBLIC" ? "Відкритий" : draft.visibility === "PRIVATE_CODE" ? "За кодом" : selectedClass?.name || (draft.classId ? `Клас #${draft.classId}` : "Клас не обрано")}</dd></div>
                     <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Оцінювання</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.scoringMode === "IOI" ? "Часткові бали · IOI" : "Розв’язання · ICPC"}</dd></div>
+                    <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Реєстрація</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.participantAccessMode === "ISSUED_ACCOUNTS" ? "Тимчасові акаунти" : "Самостійна"}</dd></div>
+                    <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Таблиця</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.scoreboardVisibility === "LIVE" ? "Одразу" : draft.scoreboardVisibility === "AFTER_END" ? "Після фінішу" : "Лише організаторам"}</dd></div>
                     <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Старт</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.scheduleEnabled ? displayDate(draft.startsAt) : "Без розкладу"}</dd></div>
                     <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Фініш</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.scheduleEnabled ? displayDate(draft.endsAt) : "Без розкладу"}</dd></div>
                     <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Дорішування</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.allowUpsolve ? "Дозволено" : "Вимкнено"}</dd></div>
@@ -558,7 +642,7 @@ export function ContestSetupDialog({
               {stepIndex > 0 ? <button type="button" onClick={() => { setStep(STEPS[stepIndex - 1].id); setStepError(""); setFieldError(""); }} disabled={creating} className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-[#59675d] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#b7c4ba] dark:hover:bg-white/[.06]"><ArrowLeft aria-hidden="true" className="size-4" />Назад</button> : <button type="button" onClick={onClose} disabled={creating} className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-[#59675d] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#b7c4ba] dark:hover:bg-white/[.06]">Скасувати</button>}
               <span className="hidden text-xs text-[#819087] dark:text-[#8f9e93] sm:inline">Крок {stepIndex + 1} з {STEPS.length}</span>
             </div>
-            <button type="submit" disabled={creating || (step === "access" && draft.visibility === "CLASS" && (classesLoading || !classes.length))} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#153321] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(20,67,40,.16)] transition hover:bg-[#214a31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] disabled:cursor-wait disabled:opacity-60 dark:bg-[#00d978] dark:text-[#062211] dark:hover:bg-[#35ed94]">
+            <button type="submit" disabled={creating || bannerUploading || (step === "access" && draft.visibility === "CLASS" && (classesLoading || !classes.length))} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#153321] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(20,67,40,.16)] transition hover:bg-[#214a31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] disabled:cursor-wait disabled:opacity-60 dark:bg-[#00d978] dark:text-[#062211] dark:hover:bg-[#35ed94]">
               {creating ? <><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />Створюю чернетку…</> : step === "schedule" ? <>Створити чернетку<ArrowRight aria-hidden="true" className="size-4" /></> : <>Далі<ArrowRight aria-hidden="true" className="size-4" /></>}
             </button>
           </footer>

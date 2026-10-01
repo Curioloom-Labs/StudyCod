@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ListOrdered, Table2, KeyRound, RefreshCw, Trophy, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, Flame, ShieldCheck, Users2, Award, Sparkles } from "lucide-react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, ListOrdered, Table2, KeyRound, RefreshCw, Trophy, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, Flame, ShieldCheck, Users2, Award, Sparkles, ImagePlus } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
@@ -48,8 +48,12 @@ import {
   type ScoreboardRow,
   type ContestSimilarityPair,
   type ContestVisibility,
+  type ContestBannerTheme,
+  type ContestParticipantAccessMode,
+  type ContestScoreboardVisibility,
 } from "../../lib/api/contests";
-import { getClasses, type Class as EduClass } from "../../lib/api/edu";
+import { getClasses, uploadStatementImage, type Class as EduClass } from "../../lib/api/edu";
+import { CONTEST_BANNER_THEMES, CONTEST_ICONS } from "./contestBranding";
 import {
   importLibraryTaskArchive,
   listApprovedLibraryTasks,
@@ -173,49 +177,78 @@ function inferDifficultyFromTests(tests: Array<{ points?: number }>): "EASY" | "
 }
 
 function parseRosterInput(raw: string): Array<{ fullName: string; email: string }> {
-  const lines = String(raw ?? "")
-    .split(/\r?\n/)
-    .map((x) => x.trim())
-    .filter(Boolean);
-
-  const out: Array<{ fullName: string; email: string }> = [];
-  for (const line of lines) {
-    const parts = line.split(/[;,\t]/).map((x) => x.trim()).filter(Boolean);
-    if (parts.length < 2) continue;
-    const email = String(parts[parts.length - 1] ?? "").trim();
-    const fullName = parts.slice(0, -1).join(" ").trim();
-    if (!fullName || !email) continue;
-    out.push({ fullName, email });
-  }
-  return out;
+  return parseRosterTextDetailed(raw).entries;
 }
 
-function parseCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let cur = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    const next = line[i + 1];
-    if (ch === '"') {
-      if (inQuotes && next === '"') {
-        cur += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-    if (ch === "," && !inQuotes) {
-      out.push(cur);
-      cur = "";
-      continue;
-    }
-    cur += ch;
+function parseDelimitedLine(line: string, delimiter: string): string[] {
+  const cells: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"') {
+      if (quoted && line[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else quoted = !quoted;
+    } else if (char === delimiter && !quoted) {
+      cells.push(cell.trim());
+      cell = "";
+    } else cell += char;
   }
-  out.push(cur);
-  return out.map((x) => String(x ?? "").trim());
+  cells.push(cell.trim());
+  return cells;
+}
+
+function normalizeRosterHeader(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+function parseRosterMatrixDetailed(matrix: unknown[][]): RosterCsvParseResult {
+  const rows = matrix.map((row) => Array.isArray(row) ? row.map((cell) => String(cell ?? "").replace(/^\uFEFF/, "").trim()) : []);
+  const firstNonEmpty = rows.findIndex((row) => row.some(Boolean));
+  if (firstNonEmpty < 0) return { entries: [], invalidLines: [], duplicateEmails: [] };
+
+  const headers = rows[firstNonEmpty].map(normalizeRosterHeader);
+  const emailIndex = headers.findIndex((cell) => cell.includes("email") || cell.includes("пошта") || cell.includes("електроннаадреса"));
+  const fullNameIndex = headers.findIndex((cell) => cell.includes("піб") || cell.includes("fullname") || cell.includes("учасник") || cell.includes("participant"));
+  const firstNameIndex = headers.findIndex((cell) => ["імя", "firstname", "givenname"].includes(cell));
+  const surnameIndex = headers.findIndex((cell) => cell.includes("прізвище") || cell.includes("surname") || cell.includes("lastname"));
+  const middleNameIndex = headers.findIndex((cell) => cell.includes("побатькові") || cell.includes("middlename"));
+  const genericNameIndex = fullNameIndex >= 0 ? fullNameIndex : headers.findIndex((cell) => cell === "name");
+  const hasHeader = emailIndex >= 0 || genericNameIndex >= 0 || firstNameIndex >= 0 || surnameIndex >= 0 || middleNameIndex >= 0;
+  const dataRows = hasHeader ? rows.slice(firstNonEmpty + 1) : rows.slice(firstNonEmpty);
+  const entries: Array<{ fullName: string; email: string }> = [];
+  const invalidLines: string[] = [];
+  const emailHit = new Map<string, number>();
+
+  for (const row of dataRows) {
+    if (!row.some(Boolean)) continue;
+    const emailCell = emailIndex >= 0 ? row[emailIndex] ?? "" : row.find((cell) => /\S+@\S+\.\S+/.test(cell)) ?? "";
+    const email = emailCell.trim();
+    const nameCell = genericNameIndex >= 0 ? row[genericNameIndex] ?? "" : "";
+    const orderedNameIndexes = [firstNameIndex, surnameIndex, middleNameIndex].filter((index) => index >= 0).sort((a, b) => a - b);
+    const splitName = orderedNameIndexes.map((index) => String(row[index] ?? "").trim()).filter(Boolean).join(" ");
+    const fullName = nameCell.trim() || splitName || (hasHeader ? "" : String(row[0] ?? "").trim());
+
+    if (!fullName || (email && !/\S+@\S+\.\S+/.test(email))) {
+      invalidLines.push(row.join("\t"));
+      continue;
+    }
+    if (email) emailHit.set(email.toLowerCase(), (emailHit.get(email.toLowerCase()) ?? 0) + 1);
+    entries.push({ fullName, email });
+  }
+
+  const duplicateEmails = Array.from(emailHit.entries()).filter(([, count]) => count > 1).map(([email]) => email);
+  if (entries.length > 300) invalidLines.push(...entries.splice(300).map((entry) => entry.fullName));
+  return { entries, invalidLines, duplicateEmails };
+}
+
+function parseRosterTextDetailed(raw: string): RosterCsvParseResult {
+  const lines = String(raw ?? "").split(/\r?\n/).filter((line) => line.trim());
+  const first = lines[0] ?? "";
+  const delimiter = first.includes("\t") ? "\t" : (first.split(";").length > first.split(",").length ? ";" : ",");
+  return parseRosterMatrixDetailed(lines.map((line) => parseDelimitedLine(line, delimiter)));
 }
 
 type RosterCsvParseResult = {
@@ -225,50 +258,7 @@ type RosterCsvParseResult = {
 };
 
 function parseRosterCsvTextDetailed(raw: string): RosterCsvParseResult {
-  const lines = String(raw ?? "")
-    .split(/\r?\n/)
-    .map((x) => x.trim())
-    .filter(Boolean);
-
-  const entries: Array<{ fullName: string; email: string }> = [];
-  const invalidLines: string[] = [];
-  const emailHit = new Map<string, number>();
-
-  for (const line of lines) {
-    const cells = parseCsvLine(line);
-    if (cells.length < 2) {
-      invalidLines.push(line);
-      continue;
-    }
-
-    const first = String(cells[0] ?? "").toLowerCase();
-    const second = String(cells[1] ?? "").toLowerCase();
-    const isHeader =
-      first.includes("fullname") ||
-      first.includes("full_name") ||
-      first.includes("піб") ||
-      first.includes("name") ||
-      second.includes("email");
-    if (isHeader) continue;
-
-    const fullName = String(cells[0] ?? "").trim();
-    const email = String(cells[1] ?? "").trim();
-    const emailOk = /\S+@\S+\.\S+/.test(email);
-    if (!fullName || !email || !emailOk) {
-      invalidLines.push(line);
-      continue;
-    }
-
-    const emailKey = email.toLowerCase();
-    emailHit.set(emailKey, (emailHit.get(emailKey) ?? 0) + 1);
-    entries.push({ fullName, email });
-  }
-
-  const duplicateEmails = Array.from(emailHit.entries())
-    .filter(([, count]) => count > 1)
-    .map(([email]) => email);
-
-  return { entries, invalidLines, duplicateEmails };
+  return parseRosterTextDetailed(raw);
 }
 
 type RosterInputAnalysis = {
@@ -278,44 +268,12 @@ type RosterInputAnalysis = {
 };
 
 function analyzeRosterInput(raw: string): RosterInputAnalysis {
-  const lines = String(raw ?? "")
-    .split(/\r?\n/)
-    .map((x) => x.trim())
-    .filter(Boolean);
-
-  const entries: Array<{ fullName: string; email: string }> = [];
-  const invalidLines: string[] = [];
-  const emailHit = new Map<string, number>();
-
-  for (const line of lines) {
-    const parts = line.split(/[;,\t]/).map((x) => x.trim()).filter(Boolean);
-    if (parts.length < 2) {
-      invalidLines.push(line);
-      continue;
-    }
-
-    const email = String(parts[parts.length - 1] ?? "").trim();
-    const fullName = parts.slice(0, -1).join(" ").trim();
-    const emailOk = /\S+@\S+\.\S+/.test(email);
-    if (!fullName || !email || !emailOk) {
-      invalidLines.push(line);
-      continue;
-    }
-
-    const emailKey = email.toLowerCase();
-    emailHit.set(emailKey, (emailHit.get(emailKey) ?? 0) + 1);
-    entries.push({ fullName, email });
-  }
-
-  const duplicateEmails = Array.from(emailHit.entries())
-    .filter(([, count]) => count > 1)
-    .map(([email]) => email);
-
-  return { entries, invalidLines, duplicateEmails };
+  return parseRosterTextDetailed(raw);
 }
 
 function makeRosterRowKey(row: { fullName: string; email: string }): string {
-  return `${row.email.trim().toLowerCase()}|${row.fullName.trim().toLowerCase()}`;
+  const email = row.email.trim().toLowerCase();
+  return email ? `email:${email}` : `name:${row.fullName.trim().toLowerCase()}`;
 }
 
 function mergeRosterRows(
@@ -945,6 +903,9 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
   const [disqualifiedCount, setDisqualifiedCount] = React.useState(0);
   const [scoringMode, setScoringMode] = React.useState<"IOI" | "ICPC">("IOI");
   const [frozen, setFrozen] = React.useState(false);
+  const [hidden, setHidden] = React.useState(false);
+  const [hiddenReason, setHiddenReason] = React.useState<"AFTER_END" | "ORGANIZERS_ONLY" | undefined>();
+  const [releaseAt, setReleaseAt] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const load = React.useCallback(() => {
@@ -957,6 +918,9 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
         setDisqualifiedCount(Number(r.disqualifiedCount ?? 0) || 0);
         setScoringMode(r.scoringMode === "ICPC" ? "ICPC" : "IOI");
         setFrozen(Boolean(r.freeze?.frozen));
+        setHidden(Boolean(r.hidden));
+        setHiddenReason(r.hiddenReason);
+        setReleaseAt(r.releaseAt ?? null);
       })
       .catch((e: unknown) => {
         const msg = getErrorMessage(e);
@@ -964,6 +928,9 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
         setProblems([]);
         setRows([]);
         setDisqualifiedCount(0);
+        setHidden(false);
+        setHiddenReason(undefined);
+        setReleaseAt(null);
       })
       .finally(() => setLoading(false));
   }, [contestId, tr]);
@@ -1014,6 +981,10 @@ const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ cont
         </div>
       ) : error ? (
         <div className="text-sm text-accent-error">{error}</div>
+      ) : hidden ? (
+        <div role="status" className="rounded-xl border border-border bg-bg-base p-5 text-sm leading-6 text-text-secondary">
+          <div className="flex items-start gap-3"><KeyRound aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" /><span><span className="block font-semibold text-text-primary">{hiddenReason === "ORGANIZERS_ONLY" ? tr("Таблиця доступна організаторам", "Scoreboard is available to organizers") : tr("Результати будуть після фінішу", "Results will be available after the finish")}</span>{hiddenReason === "ORGANIZERS_ONLY" ? tr("Поточні місця та результати приховані для учасників.", "Live ranks and results are hidden from participants.") : releaseAt ? `${tr("Таблицю буде відкрито", "The scoreboard opens")}: ${fmtDateTime(releaseAt, i18n.language)}.` : tr("Щоб таблиця відкрилась автоматично, задайте час завершення контесту.", "Set an end time to reveal the scoreboard automatically.")}</span></div>
+        </div>
       ) : rows.length === 0 ? (
         <div className="text-sm text-text-secondary">{tr("Поки що немає учасників.", "No participants yet.")}</div>
       ) : (
@@ -1098,6 +1069,7 @@ export const ContestPage: React.FC = () => {
   const isEn = (i18n.language ?? "").toLowerCase().startsWith("en");
   const tr = React.useCallback((uk: string, en: string) => (isEn ? en : uk), [isEn]);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const params = useParams<{ id?: string }>();
   const contestId = React.useMemo(() => {
     const v = Number(params.id);
@@ -1110,7 +1082,7 @@ export const ContestPage: React.FC = () => {
   const [data, setData] = React.useState<ContestDetails | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [tab, setTab] = React.useState<"problems" | "standings" | "community">("problems");
+  const [tab, setTab] = React.useState<"problems" | "standings" | "community">(() => searchParams.get("tab") === "accounts" ? "standings" : "problems");
   const [standingsVersion, setStandingsVersion] = React.useState(0);
 
   const [communityQuestionText, setCommunityQuestionText] = React.useState("");
@@ -1140,6 +1112,12 @@ export const ContestPage: React.FC = () => {
   const [settingsVisibility, setSettingsVisibility] = React.useState<ContestVisibility>("PUBLIC");
   const [settingsJoinCode, setSettingsJoinCode] = React.useState("");
   const [settingsClassId, setSettingsClassId] = React.useState("");
+  const [settingsIcon, setSettingsIcon] = React.useState("🏆");
+  const [settingsBannerTheme, setSettingsBannerTheme] = React.useState<ContestBannerTheme>("forest");
+  const [settingsBannerImageUrl, setSettingsBannerImageUrl] = React.useState<string | null>(null);
+  const [settingsBannerUploading, setSettingsBannerUploading] = React.useState(false);
+  const [settingsScoreboardVisibility, setSettingsScoreboardVisibility] = React.useState<ContestScoreboardVisibility>("LIVE");
+  const [settingsParticipantAccessMode, setSettingsParticipantAccessMode] = React.useState<ContestParticipantAccessMode>("SELF_REGISTRATION");
   const [settingsClasses, setSettingsClasses] = React.useState<EduClass[]>([]);
   const [settingsClassesLoading, setSettingsClassesLoading] = React.useState(false);
   const [settingsClassesError, setSettingsClassesError] = React.useState<string | null>(null);
@@ -2817,7 +2795,7 @@ export const ContestPage: React.FC = () => {
     if (!contestId || !data?.access?.canManage) return;
     const entries = parseRosterInput(accountRosterText);
     if (entries.length === 0) {
-      setAccountGenError(tr("Додайте хоча б 1 рядок у форматі: ПІБ, email", "Add at least one row in format: Full name, email"));
+      setAccountGenError(tr("Додайте хоча б одне ім’я учасника", "Add at least one participant name"));
       return;
     }
 
@@ -2843,10 +2821,28 @@ export const ContestPage: React.FC = () => {
   const importRosterCsvFile = async (file: File | null) => {
     if (!file) return;
     try {
-      const text = await file.text();
-      const parsed = parseRosterCsvTextDetailed(text);
+      if (file.size > 10 * 1024 * 1024) {
+        setAccountGenError(tr("Файл має бути меншим за 10 МБ", "File must be smaller than 10 MB"));
+        return;
+      }
+      const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+      let parsed: RosterCsvParseResult;
+      if (["xlsx", "xls", "ods"].includes(extension)) {
+        const XLSX = await import("@e965/xlsx");
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false, sheetRows: 301 });
+        const firstSheetName = workbook.SheetNames[0];
+        const firstSheet = firstSheetName ? workbook.Sheets[firstSheetName] : undefined;
+        if (!firstSheet) {
+          setAccountGenError(tr("У таблиці немає аркушів з даними", "The spreadsheet has no data sheets"));
+          return;
+        }
+        const matrix = XLSX.utils.sheet_to_json<unknown[]>(firstSheet, { header: 1, raw: false, defval: "", blankrows: false });
+        parsed = parseRosterMatrixDetailed(matrix);
+      } else {
+        parsed = parseRosterCsvTextDetailed(await file.text());
+      }
       if (parsed.entries.length === 0) {
-        setAccountGenError(tr("CSV не містить валідних рядків ПІБ,email", "CSV has no valid fullName,email rows"));
+        setAccountGenError(tr("Таблиця не містить валідних імен учасників", "The table has no valid participant names"));
         return;
       }
       setAccountRosterImportFileName(String(file.name ?? ""));
@@ -2857,7 +2853,7 @@ export const ContestPage: React.FC = () => {
       setAccountGenError(null);
       setAccountGenMessage(null);
     } catch {
-      setAccountGenError(tr("Не вдалося прочитати CSV файл", "Failed to read CSV file"));
+      setAccountGenError(tr("Не вдалося прочитати файл таблиці", "Could not read the spreadsheet file"));
     } finally {
       setAccountRosterImportKey((k) => k + 1);
     }
@@ -2880,15 +2876,15 @@ export const ContestPage: React.FC = () => {
     const existing = parseRosterInput(accountRosterText);
     const beforeUniqueCount = mergeRosterRows(existing, []).length;
     const merged = mergeRosterRows(existing, accountRosterImportEntries);
-    const lines = merged.map((r) => `${r.fullName}, ${r.email}`);
+    const lines = merged.map((r) => [r.fullName, r.email].filter(Boolean).join(", "));
     const addedCount = Math.max(0, merged.length - beforeUniqueCount);
 
     setAccountRosterText(lines.join("\n"));
     setAccountGenError(null);
     setAccountGenMessage(
       tr(
-        `Імпортовано з CSV: ${accountRosterImportEntries.length}. Додано нових: ${addedCount}. Всього в списку: ${lines.length}`,
-        `Imported from CSV: ${accountRosterImportEntries.length}. Added new: ${addedCount}. Total in roster: ${lines.length}`
+        `Імпортовано: ${accountRosterImportEntries.length}. Додано нових: ${addedCount}. Всього в списку: ${lines.length}`,
+        `Imported: ${accountRosterImportEntries.length}. Added new: ${addedCount}. Total in roster: ${lines.length}`
       )
     );
     cancelRosterCsvImportPreview();
@@ -3010,13 +3006,40 @@ export const ContestPage: React.FC = () => {
 
   const downloadGeneratedAccountsCsv = () => {
     if (!generatedAccountsCsv || typeof window === "undefined") return;
-    const blob = new Blob([generatedAccountsCsv], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["\uFEFF", generatedAccountsCsv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `contest-${contestId}-accounts.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const downloadGeneratedAccountsXlsx = async () => {
+    if (!generatedAccounts.length || typeof window === "undefined") return;
+    try {
+      const XLSX = await import("@e965/xlsx");
+      const worksheet = XLSX.utils.json_to_sheet(generatedAccounts.map((account) => ({
+        "ПІБ": account.fullName ?? "",
+        "Email": account.email ?? "",
+        "Логін": account.username,
+        "Пароль": account.password,
+        "User ID": account.userId,
+        "Participant ID": account.participantId,
+      })));
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Акаунти");
+      const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `contest-${contestId}-accounts.xlsx`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setAccountGenError(tr("Не вдалося створити файл XLSX", "Could not create the XLSX file"));
+    }
   };
 
   const adminSubsProblemOptions = React.useMemo(() => {
@@ -3319,6 +3342,11 @@ export const ContestPage: React.FC = () => {
     setSettingsVisibility(data.contest.visibility ?? "PUBLIC");
     setSettingsJoinCode("");
     setSettingsClassId(data.contest.classId ? String(data.contest.classId) : "");
+    setSettingsIcon(data.contest.icon || "🏆");
+    setSettingsBannerTheme(data.contest.bannerTheme || "forest");
+    setSettingsBannerImageUrl(data.contest.bannerImageUrl ?? null);
+    setSettingsScoreboardVisibility(data.contest.scoreboardVisibility || "LIVE");
+    setSettingsParticipantAccessMode(data.contest.participantAccessMode || "SELF_REGISTRATION");
     setSettingsClassesError(null);
   }, [settingsOpen, data?.contest]);
 
@@ -3365,6 +3393,10 @@ export const ContestPage: React.FC = () => {
 
     const startsAtIso = fromDateTimeLocalInput(settingsStartsAt);
     const endsAtIso = fromDateTimeLocalInput(settingsEndsAt);
+    if (settingsScoreboardVisibility === "AFTER_END" && !endsAtIso) {
+      setSettingsError(tr("Задай час фінішу, щоб відкрити таблицю після завершення", "Set an end time to reveal the scoreboard after the contest"));
+      return;
+    }
     if (startsAtIso && endsAtIso && new Date(endsAtIso).getTime() <= new Date(startsAtIso).getTime()) {
       setSettingsError(tr("Завершення має бути пізніше за старт", "End must be after the start"));
       return;
@@ -3385,6 +3417,11 @@ export const ContestPage: React.FC = () => {
         ...(settingsVisibility === "CLASS" ? { classId: Number(settingsClassId) } : {}),
         allowUpsolve: settingsAllowUpsolve,
         scoringMode: settingsScoringMode,
+        icon: settingsIcon,
+        bannerTheme: settingsBannerTheme,
+        bannerImageUrl: settingsBannerImageUrl,
+        scoreboardVisibility: settingsScoreboardVisibility,
+        participantAccessMode: settingsParticipantAccessMode,
       });
       setSettingsOpen(false);
       await load();
@@ -3396,6 +3433,30 @@ export const ContestPage: React.FC = () => {
       setSettingsSaving(false);
     }
   };
+
+  const uploadContestBanner = async (file: File | undefined) => {
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp", "image/avif"].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      setSettingsError(tr("Додай PNG, JPG, WebP або AVIF до 8 МБ", "Use PNG, JPG, WebP, or AVIF up to 8 MB"));
+      return;
+    }
+    setSettingsBannerUploading(true);
+    setSettingsError(null);
+    try {
+      const uploaded = await uploadStatementImage(file);
+      setSettingsBannerImageUrl(uploaded.url);
+    } catch (e: unknown) {
+      setSettingsError(getErrorMessage(e) || tr("Не вдалося завантажити банер", "Could not upload banner"));
+    } finally {
+      setSettingsBannerUploading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (tab !== "standings" || searchParams.get("tab") !== "accounts") return;
+    const timer = window.setTimeout(() => document.getElementById("contest-account-generation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 250);
+    return () => window.clearTimeout(timer);
+  }, [tab, searchParams, data?.contest.id]);
 
   const resetAddForm = React.useCallback(() => {
     setAddError(null);
@@ -3603,6 +3664,9 @@ export const ContestPage: React.FC = () => {
             <MessageSquare className="w-4 h-4 mr-2" />
             {tr("Ком'юніті", "Community")}
           </Button>
+          {data?.access.canManage && <Button variant="ghost" onClick={() => { setTab("standings"); window.setTimeout(() => document.getElementById("contest-account-generation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100); }} title={tr("Тимчасові акаунти учасників", "Temporary participant accounts")}>
+            <KeyRound className="w-4 h-4 mr-2" />{tr("Акаунти", "Accounts")}
+          </Button>}
         </div>
       </div>
 
@@ -3835,6 +3899,25 @@ export const ContestPage: React.FC = () => {
           </div>
 
           <section className="rounded-xl border border-border bg-bg-base/60 p-4">
+            <div className="text-sm font-semibold text-text-primary">{tr("Оформлення", "Branding")}</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {CONTEST_ICONS.map((icon) => <button key={icon} type="button" aria-label={tr(`Обрати іконку ${icon}`, `Choose icon ${icon}`)} aria-pressed={settingsIcon === icon} onClick={() => setSettingsIcon(icon)} className={`grid size-10 place-items-center rounded-lg border text-xl ${settingsIcon === icon ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "border-border hover:bg-bg-hover"}`}>{icon}</button>)}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {(Object.entries(CONTEST_BANNER_THEMES) as Array<[ContestBannerTheme, (typeof CONTEST_BANNER_THEMES)[ContestBannerTheme]]>).map(([theme, preset]) => <button key={theme} type="button" aria-pressed={settingsBannerTheme === theme} onClick={() => setSettingsBannerTheme(theme)} className={`h-12 rounded-lg border px-3 text-left text-xs font-semibold text-white ${settingsBannerTheme === theme ? "ring-2 ring-primary ring-offset-1" : "border-white/20 opacity-80 hover:opacity-100"}`} style={{ background: preset.background }}>{tr(preset.label, theme)}</button>)}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {settingsBannerImageUrl && <img src={settingsBannerImageUrl} alt={tr("Попередній перегляд банера", "Banner preview")} className="h-14 w-28 rounded-lg border border-border object-cover" />}
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-primary hover:bg-bg-hover focus-within:ring-2 focus-within:ring-primary">
+                <ImagePlus aria-hidden="true" className="size-4" />{settingsBannerUploading ? tr("Завантажую…", "Uploading…") : tr("Завантажити банер", "Upload banner")}
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="sr-only" disabled={settingsBannerUploading || settingsSaving} onChange={(event) => { void uploadContestBanner(event.target.files?.[0]); event.target.value = ""; }} />
+              </label>
+              {settingsBannerImageUrl && <Button variant="ghost" onClick={() => setSettingsBannerImageUrl(null)} disabled={settingsSaving}>{tr("Прибрати", "Remove")}</Button>}
+              <span className="text-xs text-text-secondary">PNG, JPG, WebP, AVIF · 8 MB</span>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-border bg-bg-base/60 p-4">
             <div className="text-sm font-semibold text-text-primary">{tr("Хто має доступ", "Who can access")}</div>
             <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Зміна доступу одразу оновить видимість контесту для учасників.", "Changing access immediately updates contest visibility for participants.")}</p>
             <label htmlFor="contest-settings-visibility" className="mt-3 block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Формат доступу", "Access type")}</label>
@@ -3861,6 +3944,28 @@ export const ContestPage: React.FC = () => {
               {settingsClassesError && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-accent-error"><p role="alert">{settingsClassesError}</p><button type="button" onClick={() => { setSettingsClassesError(null); setSettingsClassesRetry((current) => current + 1); }} className="font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Спробувати ще раз", "Try again")}</button></div>}
               {!settingsClassesLoading && !settingsClassesError && settingsClasses.length === 0 && <p className="mt-2 text-xs text-text-secondary">{tr("Список класів порожній або недоступний для цього акаунту.", "No classes are available for this account.")}</p>}
             </div>}
+          </section>
+
+          <section className="rounded-xl border border-border bg-bg-base/60 p-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="contest-settings-participant-access" className="text-sm font-semibold text-text-primary">{tr("Реєстрація учасників", "Participant registration")}</label>
+                <select id="contest-settings-participant-access" value={settingsParticipantAccessMode} onChange={(event) => setSettingsParticipantAccessMode(event.target.value as ContestParticipantAccessMode)} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
+                  <option value="SELF_REGISTRATION">{tr("Самостійна реєстрація", "Self-registration")}</option>
+                  <option value="ISSUED_ACCOUNTS">{tr("Тимчасові акаунти від організатора", "Temporary accounts issued by organizer")}</option>
+                </select>
+                <p className="mt-1.5 text-xs leading-5 text-text-secondary">{settingsParticipantAccessMode === "ISSUED_ACCOUNTS" ? tr("Учасники входять лише через акаунти, створені у розділі «Акаунти».", "Only accounts created in the Accounts section can enter.") : tr("Учасники можуть приєднатися самостійно згідно з форматом доступу вище.", "Participants can join themselves according to the access type above.")}</p>
+              </div>
+              <div>
+                <label htmlFor="contest-settings-scoreboard-visibility" className="text-sm font-semibold text-text-primary">{tr("Видимість таблиці", "Scoreboard visibility")}</label>
+                <select id="contest-settings-scoreboard-visibility" value={settingsScoreboardVisibility} onChange={(event) => setSettingsScoreboardVisibility(event.target.value as ContestScoreboardVisibility)} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
+                  <option value="LIVE">{tr("Показувати наживо", "Show live")}</option>
+                  <option value="AFTER_END">{tr("Відкрити після завершення", "Reveal after finish")}</option>
+                  <option value="ORGANIZERS_ONLY">{tr("Лише організаторам", "Organizers only")}</option>
+                </select>
+                <p className="mt-1.5 text-xs leading-5 text-text-secondary">{tr("Приховані результати не повертаються API учасникам до заданого часу.", "Hidden results are not returned to participants before the release time.")}</p>
+              </div>
+            </div>
           </section>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -3936,8 +4041,8 @@ export const ContestPage: React.FC = () => {
             <Button variant="ghost" onClick={() => setSettingsOpen(false)} disabled={settingsSaving}>
               {tr("Скасувати", "Cancel")}
             </Button>
-            <Button onClick={saveContestSettings} disabled={settingsSaving}>
-              {settingsSaving ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
+            <Button onClick={saveContestSettings} disabled={settingsSaving || settingsBannerUploading}>
+              {settingsBannerUploading ? tr("Завантажую банер…", "Uploading banner…") : settingsSaving ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
             </Button>
           </div>
         </div>
@@ -3946,13 +4051,13 @@ export const ContestPage: React.FC = () => {
       <Modal
         open={accountRosterImportPreviewOpen}
         onClose={cancelRosterCsvImportPreview}
-        title={tr("Перевірка CSV перед імпортом", "CSV import preview")}
+        title={tr("Перевірка таблиці перед імпортом", "Spreadsheet import preview")}
       >
         <div className="space-y-3">
           <div className="text-xs text-text-secondary">
             {accountRosterImportFileName
               ? tr(`Файл: ${accountRosterImportFileName}`, `File: ${accountRosterImportFileName}`)
-              : tr("Файл CSV", "CSV file")}
+              : tr("Файл таблиці", "Spreadsheet file")}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-2 text-xs font-mono">
@@ -4013,7 +4118,7 @@ export const ContestPage: React.FC = () => {
                     <td className="p-2 border-b border-border">
                       {row.isDuplicateInImport ? (
                         <span className="inline-flex items-center rounded px-2 py-0.5 border border-accent-warn/60 bg-accent-warn/10 text-accent-warn">
-                          {tr("Дубль у CSV", "Duplicate in CSV")}
+                          {tr("Дубль у таблиці", "Duplicate in table")}
                         </span>
                       ) : row.isExisting ? (
                         <span className="inline-flex items-center rounded px-2 py-0.5 border border-primary/50 bg-primary/10 text-primary">
@@ -4070,8 +4175,8 @@ export const ContestPage: React.FC = () => {
             <div className="space-y-1.5">
               <PageEyebrow label="contest" />
               <div className="flex flex-wrap items-start gap-2">
-                <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-text-primary leading-tight flex-1">
-                  {data.contest.title}
+                <h1 className="flex flex-1 items-center gap-3 text-2xl font-semibold leading-tight tracking-tight text-text-primary md:text-3xl">
+                  <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-2xl">{data.contest.icon || "🏆"}</span>{data.contest.title}
                 </h1>
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
                   {(() => {
@@ -4147,7 +4252,12 @@ export const ContestPage: React.FC = () => {
               </div>
             ) : null}
 
-            {data.access.joinRequired ? (
+            {data.access.joinRequired && data.access.accountRequired ? (
+              <div className="mt-4 flex items-start gap-3 border border-border bg-bg-base p-3 text-sm text-text-secondary">
+                <KeyRound aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
+                <span><span className="block font-semibold text-text-primary">{tr("Потрібен тимчасовий акаунт", "Temporary account required")}</span>{tr("Організатор надає окремий логін і пароль для участі. Самостійна реєстрація вимкнена.", "The organizer provides a separate login and password. Self-registration is disabled.")}</span>
+              </div>
+            ) : data.access.joinRequired ? (
               <div className="mt-4 border border-border bg-bg-base p-3">
                 <div className="flex items-center gap-2 mb-2 text-sm font-mono text-text-primary">
                   <KeyRound className="w-4 h-4" />
@@ -5699,26 +5809,27 @@ export const ContestPage: React.FC = () => {
                     </div>
                   </Card>
 
-                  <Card className="p-4">
+                  <Card id="contest-account-generation" className="scroll-mt-4 p-4">
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="font-mono text-text-primary flex items-center gap-2"><KeyRound className="w-4 h-4 text-primary" />{tr("Генерація контест-акаунтів", "Contest account generation")}</div>
+                      <div><div className="font-mono text-text-primary flex items-center gap-2"><KeyRound className="w-4 h-4 text-primary" />{tr("Тимчасові акаунти", "Temporary accounts")}</div><p className="mt-1 text-xs text-text-secondary">{tr("Додай список учасників, перевір дані та створи окремі логіни для цього контесту.", "Import a roster, review the entries, and create separate logins for this contest.")}</p></div>
                     </div>
 
                     <div className="space-y-2 mb-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <input
                           key={accountRosterImportKey}
                           type="file"
-                          accept=".csv,text/csv"
+                          accept=".xlsx,.xls,.ods,.csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                           onChange={(e) => void importRosterCsvFile(e.target.files?.[0] ?? null)}
                           className="block text-xs text-text-secondary"
                         />
+                        <span className="text-xs text-text-secondary">XLSX · XLS · ODS · CSV · TSV · TXT (перший аркуш)</span>
                       </div>
                       <textarea
                         value={accountRosterText}
                         onChange={(e) => setAccountRosterText(e.target.value)}
                         className="w-full min-h-[120px] px-3 py-2 bg-bg-base border border-border text-text-primary font-mono"
-                        placeholder={tr("Формат рядка: ПІБ, email\nПриклад: Іван Петренко, ivan@example.com", "Row format: Full name, email\nExample: John Smith, john@example.com")}
+                        placeholder={tr("Одне ім’я на рядок або ПІБ, email (email необов’язковий)\nІван Петренко\nОлена Коваль, olena@example.com", "One name per row or full name, email (email is optional)\nJohn Smith\nAlex Green, alex@example.com")}
                       />
                       <div className="text-xs text-text-secondary">
                         {tr(
@@ -5756,7 +5867,7 @@ export const ContestPage: React.FC = () => {
                               {rosterPreviewRows.map((row, idx) => (
                                 <tr key={`${row.email}-${idx}`} className="odd:bg-bg-base even:bg-bg-surface">
                                   <td className="p-2 border-b border-border">{row.fullName}</td>
-                                  <td className="p-2 border-b border-border">{row.email}</td>
+                                  <td className="p-2 border-b border-border">{row.email || "—"}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -5788,11 +5899,14 @@ export const ContestPage: React.FC = () => {
                         <Button variant="ghost" onClick={downloadGeneratedAccountsCsv} disabled={!generatedAccounts.length}>
                           {tr("Завантажити CSV", "Download CSV")}
                         </Button>
+                        <Button variant="ghost" onClick={() => void downloadGeneratedAccountsXlsx()} disabled={!generatedAccounts.length}>
+                          {tr("Завантажити XLSX", "Download XLSX")}
+                        </Button>
                       </div>
                     </div>
 
                     <div className="text-xs text-text-secondary mb-2">
-                      {tr("Система видає CSV у форматі: ПІБ, email, username, password. Паролі показуються лише один раз після генерації.", "System returns CSV in format: fullName, email, username, password. Passwords are shown only once after generation.")}
+                      {tr("Можна вставити лише ПІБ; email потрібен тільки для розсилки. Збережи CSV або XLSX одразу: паролі показуються лише після генерації.", "Names are enough; email is only needed for sending credentials by email. Save the CSV or XLSX now: passwords are shown only after generation.")}
                     </div>
 
                     {accountGenError ? <div className="text-sm text-accent-error mb-3">{accountGenError}</div> : null}

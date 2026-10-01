@@ -557,6 +557,22 @@ async function ensureContestsTable(): Promise<void> {
         await query("ALTER TABLE `contests` ADD COLUMN scoring_mode ENUM('IOI','ICPC') NOT NULL DEFAULT 'IOI'");
         logger.info("[DB Patch] Added column contests.scoring_mode");
       }
+
+      const contestColumns: Array<[string, string]> = [
+        ["icon", "VARCHAR(16) NOT NULL DEFAULT '🏆'"],
+        ["banner_theme", "VARCHAR(20) NOT NULL DEFAULT 'forest'"],
+        ["banner_image_url", "VARCHAR(512) NULL"],
+        ["scoreboard_visibility", "ENUM('LIVE','AFTER_END','ORGANIZERS_ONLY') NOT NULL DEFAULT 'LIVE'"],
+        ["participant_access_mode", "ENUM('SELF_REGISTRATION','ISSUED_ACCOUNTS') NOT NULL DEFAULT 'SELF_REGISTRATION'"],
+      ];
+      for (const [name, definition] of contestColumns) {
+        const column = (await query(`SHOW COLUMNS FROM \`contests\` LIKE '${name}'`)) as Array<SqlRow>;
+        if (!Array.isArray(column) || column.length === 0) {
+          logger.warn(`[DB Patch] Column contests.${name} is missing. Adding...`);
+          await query(`ALTER TABLE \`contests\` ADD COLUMN \`${name}\` ${definition}`);
+          logger.info(`[DB Patch] Added column contests.${name}`);
+        }
+      }
       return;
     }
 
@@ -575,6 +591,11 @@ async function ensureContestsTable(): Promise<void> {
         is_published TINYINT(1) NOT NULL DEFAULT 1,
         allow_upsolve TINYINT(1) NOT NULL DEFAULT 1,
         scoring_mode ENUM('IOI','ICPC') NOT NULL DEFAULT 'IOI',
+        icon VARCHAR(16) NOT NULL DEFAULT '🏆',
+        banner_theme VARCHAR(20) NOT NULL DEFAULT 'forest',
+        banner_image_url VARCHAR(512) NULL,
+        scoreboard_visibility ENUM('LIVE','AFTER_END','ORGANIZERS_ONLY') NOT NULL DEFAULT 'LIVE',
+        participant_access_mode ENUM('SELF_REGISTRATION','ISSUED_ACCOUNTS') NOT NULL DEFAULT 'SELF_REGISTRATION',
         created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
         updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
         PRIMARY KEY (id),
