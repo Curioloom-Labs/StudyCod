@@ -33,7 +33,9 @@ export const ContestSectionNav: React.FC<ContestSectionNavProps> = ({ contestId,
   preserved.delete("tab");
   const preservedQuery = preserved.toString();
   const suffix = preservedQuery ? `?${preservedQuery}` : "";
-  const basePath = `/contests/${contestId}`;
+  // Contest routes live under /contest. Avoid sending every tab click through
+  // the legacy /contests redirect, which remounts the contest surface.
+  const basePath = `/contest/contests/${contestId}`;
   const sections = canManage ? [...mainSections, ...organizerSections] : mainSections;
 
   const hrefFor = (id: ContestSection) => {
