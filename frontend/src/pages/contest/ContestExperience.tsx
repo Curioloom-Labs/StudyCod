@@ -652,6 +652,9 @@ export const ContestDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const contestId = Number(id);
+  const requestedTab = searchParams.get("tab");
+  const sectionSearch = searchParams.toString();
+  const hasLegacySection = ["problems", "standings", "community", "accounts", "participants", "certificates", "management"].includes(requestedTab ?? "");
   const [data, setData] = React.useState<ContestDetails | null>(null);
   const [standings, setStandings] = React.useState<ContestStandings | null>(
     null,
@@ -662,6 +665,17 @@ export const ContestDetailPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [joining, setJoining] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!hasLegacySection || !Number.isFinite(contestId) || contestId <= 0) return;
+    const query = new URLSearchParams(sectionSearch);
+    if (requestedTab === "standings") {
+      query.delete("tab");
+      const search = query.toString();
+      navigate(`/contest/contests/${contestId}/scoreboard${search ? `?${search}` : ""}`, { replace: true });
+      return;
+    }
+    navigate(`/contest/contests/${contestId}/manage?${query.toString()}`, { replace: true });
+  }, [contestId, hasLegacySection, navigate, requestedTab, sectionSearch]);
   React.useEffect(() => {
     const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -697,8 +711,8 @@ export const ContestDetailPage: React.FC = () => {
     }
   }, [contestId]);
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    if (!hasLegacySection) void load();
+  }, [hasLegacySection, load]);
   const join = async () => {
     setJoining(true);
     setError(null);
@@ -759,7 +773,7 @@ export const ContestDetailPage: React.FC = () => {
         {canManage && data.contest.participantAccessMode === "ISSUED_ACCOUNTS" && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=accounts`)} className="inline-flex items-center gap-2 rounded-xl border border-[#1a2a1e]/10 px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
           <KeyRound className="h-4 w-4" aria-hidden="true" /> Акаунти
         </button>}
-        {canManage && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage`)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-3 py-2 text-sm font-bold text-white hover:bg-[#214a31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:bg-[#00d978] dark:text-[#062211]">
+        {canManage && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=management&settings=1`)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-3 py-2 text-sm font-bold text-white hover:bg-[#214a31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:bg-[#00d978] dark:text-[#062211]">
           <FileCode2 className="h-4 w-4" aria-hidden="true" /> Налаштувати
         </button>}
         <button type="button" onClick={() => navigate("/contest/contests")} className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
