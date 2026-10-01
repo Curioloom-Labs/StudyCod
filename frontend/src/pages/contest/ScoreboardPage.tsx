@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Trophy, Search, Snowflake, Crown, Locate, Medal, RefreshCw } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Trophy, Search, Snowflake, Crown, Locate, Medal } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
@@ -33,6 +33,7 @@ function ioiTone(score: number, max: number): string {
 }
 
 export const ScoreboardPage: React.FC = () => {
+  const navigate = useNavigate();
   const params = useParams<{ id?: string }>();
   const contestId = Number(params.id);
   const prefersReducedMotion = useReducedMotion();
@@ -45,7 +46,6 @@ export const ScoreboardPage: React.FC = () => {
   const [query, setQuery] = useState("");
 
   const timerRef = useRef<number | null>(null);
-  const refreshNowRef = useRef<(() => Promise<void>) | null>(null);
   const prevRankRef = useRef<Record<number, number>>({});
   const meRowRef = useRef<HTMLTableRowElement | null>(null);
   const meLabel = useMemo(() => currentUserLabel(), []);
@@ -76,7 +76,6 @@ export const ScoreboardPage: React.FC = () => {
         if (!cancelled) setError(tr("Не вдалося оновити таблицю.", "Failed to refresh."));
       }
     };
-    refreshNowRef.current = tick;
     void tick();
 
     // Live push via SSE: refetch immediately when the board changes. Polling
@@ -98,7 +97,6 @@ export const ScoreboardPage: React.FC = () => {
     return () => {
       cancelled = true;
       if (timerRef.current) window.clearInterval(timerRef.current);
-      refreshNowRef.current = null;
       try { es?.close(); } catch { /* ignore */ }
     };
   }, [contestId, live]);
@@ -148,23 +146,23 @@ export const ScoreboardPage: React.FC = () => {
   const problemMax = (problemId: number) => problems.find((p) => p.id === problemId)?.maxScore ?? 0;
 
   return (
-    <div className="w-full bg-bg-base px-4 py-6 md:px-8 md:py-8">
-      <div className="mx-auto w-full max-w-[1480px] space-y-5">
+    <div className="w-full bg-bg-base px-3 py-4 sm:px-6 md:py-6">
+      <div className="mx-auto w-full max-w-6xl space-y-5">
         {/* Hero */}
         <motion.div
           initial={prefersReducedMotion ? undefined : { opacity: 0, y: 10 }}
           animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: easeOutQuint }}
-          className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+          className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-bg-surface/80 p-4 shadow-[0_18px_55px_-45px_rgba(0,0,0,.75)] sm:flex-row sm:items-start sm:justify-between sm:p-5"
         >
           <div>
-            <Link to={`/contests/${Number.isFinite(contestId) ? contestId : ""}`} className="mb-3 inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            <Button variant="ghost" onClick={() => navigate(`/contests/${Number.isFinite(contestId) ? contestId : ""}`)} className="mb-3">
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("Назад", "Back")}
-            </Link>
-            <PageEyebrow label="scoreboard" />
-            <h1 className="mt-2 break-words text-2xl font-semibold tracking-tight text-text-primary md:text-3xl [text-wrap:balance]">
-              {title || tr("Скорборд", "Scoreboard")}
+            </Button>
+            <PageEyebrow label="standings" />
+            <h1 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.035em] text-text-primary md:text-3xl">
+              {title || tr("Таблиця результатів", "Contest standings")}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-primary/40 bg-primary/10 text-[11px] font-mono font-medium uppercase tracking-[0.06em] text-primary">
@@ -172,15 +170,11 @@ export const ScoreboardPage: React.FC = () => {
                 {mode === "ICPC" ? tr("ICPC · бали + штраф", "ICPC · solved + penalty") : tr("IOI · сума балів", "IOI · points")}
               </span>
               <p className="text-sm text-text-secondary">
-                {board?.hidden ? tr("Таблицю приховано відповідно до налаштувань контесту.", "The scoreboard is hidden by contest settings.") : tr("Оновлюється автоматично, коли ввімкнено live-режим.", "Updates automatically while live updates are on.")}
+                {board?.hidden ? tr("Таблицю приховано відповідно до налаштувань контесту.", "The scoreboard is hidden by contest settings.") : tr("Таблиця оновлюється автоматично.", "Standings update automatically.")}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {!board?.hidden ? <Button variant="secondary" onClick={() => void refreshNowRef.current?.()} disabled={!board && !error}>
-              <RefreshCw aria-hidden="true" className="mr-2 size-4" />
-              {tr("Оновити", "Refresh")}
-            </Button> : null}
             {board?.freeze?.frozen ? (
               <span className="inline-flex items-center gap-1 text-[11px] font-mono text-accent-warn border border-accent-warn/50 bg-accent-warn/10 px-2 py-1 rounded-lg">
                 <Snowflake className="w-3.5 h-3.5" /> {tr("Заморожено", "Frozen")}
@@ -208,8 +202,6 @@ export const ScoreboardPage: React.FC = () => {
         </motion.div>
 
         {Number.isFinite(contestId) ? <ContestSectionNav contestId={contestId} active="standings" canManage={canManage} /> : null}
-
-        <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
 
         {!Number.isFinite(contestId) ? (
           <div className="text-sm text-text-secondary">{tr("Невірний контест.", "Invalid contest.")}</div>
@@ -240,7 +232,7 @@ export const ScoreboardPage: React.FC = () => {
                 variants={prefersReducedMotion ? undefined : staggerContainer}
                 initial={prefersReducedMotion ? undefined : "initial"}
                 animate={prefersReducedMotion ? undefined : "animate"}
-                className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+                className="grid grid-cols-1 gap-3 sm:grid-cols-3"
               >
                 {podium.map((r, i) => {
                   const PodiumIcon = i === 0 ? Crown : i === 1 ? Trophy : Medal;
@@ -249,18 +241,18 @@ export const ScoreboardPage: React.FC = () => {
                     <motion.div
                       key={r.participantId}
                       variants={prefersReducedMotion ? undefined : fadeUpItem}
-                      className={`rounded-xl border p-4 transition-fast hover:-translate-y-0.5 ${rankBadgeTone(i + 1)} ${isMe(r) ? "ring-1 ring-secondary" : ""}`}
+                      className={`rounded-2xl border p-4 transition-fast hover:-translate-y-0.5 ${rankBadgeTone(i + 1)} ${isMe(r) ? "ring-1 ring-secondary" : ""}`}
                     >
                       <div className="flex items-center gap-2">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${i === 0 ? "bg-yellow-400/15" : i === 1 ? "bg-slate-400/15" : "bg-amber-500/15"}`}>
                           <PodiumIcon className={`w-4 h-4 ${iconCls}`} />
                         </div>
                         <div className="min-w-0">
-                          <div className="font-mono text-sm text-text-primary truncate">{r.displayName}</div>
-                          <div className="text-[11px] font-mono text-text-muted">{tr("місце", "place")} #{i + 1}</div>
+                          <div className="truncate text-sm font-semibold text-text-primary">{r.displayName}</div>
+                          <div className="text-xs text-text-muted">{tr("місце", "place")} #{i + 1}</div>
                         </div>
                       </div>
-                      <div className="mt-2 text-xs font-mono text-text-secondary">
+                      <div className="mt-2 text-sm font-medium tabular-nums text-text-secondary">
                         {mode === "ICPC"
                           ? `${r.solved ?? 0} ${tr("розв.", "solved")} · ${tr("штраф", "pen")} ${r.penalty ?? 0}`
                           : `${r.totalScore} ${tr("балів", "pts")}`}
@@ -273,7 +265,7 @@ export const ScoreboardPage: React.FC = () => {
 
             {/* Controls */}
             {board && !board.hidden && (board.rows ?? []).length > 0 ? (
-              <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-bg-surface p-3">
+              <div className="flex flex-wrap items-center gap-2">
                 <div className="relative flex-1 min-w-[200px]">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                   <input
@@ -281,7 +273,7 @@ export const ScoreboardPage: React.FC = () => {
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={tr("Пошук учасника…", "Search participant…")}
                     aria-label={tr("Пошук учасника", "Search participant")}
-                    className="w-full h-10 pl-9 pr-3 rounded-xl bg-bg-base border border-border text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  className="h-11 w-full rounded-xl border border-border bg-bg-surface pl-10 pr-3 text-sm text-text-primary outline-none transition focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
                   />
                 </div>
                 {meLabel && (board.rows ?? []).some(isMe) ? (
@@ -290,7 +282,6 @@ export const ScoreboardPage: React.FC = () => {
                     {tr("До мене", "Jump to me")}
                   </Button>
                 ) : null}
-                <span className="ml-auto text-xs tabular-nums text-text-secondary">{tr("Учасники", "Participants")}: {filteredRows.length}/{board.rows.length}</span>
                 {typeof board.disqualifiedCount === "number" && board.disqualifiedCount > 0 ? (
                   <span className="text-[11px] font-mono text-text-secondary">
                     {tr(`Дискваліфіковано: ${board.disqualifiedCount}`, `Disqualified: ${board.disqualifiedCount}`)}
@@ -299,20 +290,20 @@ export const ScoreboardPage: React.FC = () => {
               </div>
             ) : null}
 
-            {board && !board.hidden && (board.rows ?? []).length === 0 ? (
-              <div role="status" className="rounded-2xl border border-border bg-bg-surface px-6 py-12 text-center">
-                <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary"><Trophy aria-hidden="true" className="size-6" /></div>
-                <h2 className="mt-4 text-lg font-semibold text-text-primary">{tr("Таблиця поки порожня", "The standings are empty")}</h2>
-                <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-text-secondary">{tr("Учасники з’являться тут після перших офіційних подань. Організатори не входять до рейтингу.", "Participants will appear after the first official submissions. Organizers are not ranked.")}</p>
+            {board && !board.hidden && board.rows.length === 0 && (
+              <div className="rounded-2xl border border-border/70 bg-bg-surface/80 px-6 py-12 text-center">
+                <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary"><Trophy className="size-6" aria-hidden="true" /></div>
+                <h2 className="mt-4 text-lg font-semibold text-text-primary">{tr("У таблиці поки порожньо", "The standings are empty for now")}</h2>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-secondary">{tr("Результати учасників з’являться тут після перших офіційних подач.", "Participant results will appear here after the first official submissions.")}</p>
               </div>
-            ) : null}
+            )}
 
-            {board && !board.hidden && (board.rows ?? []).length > 0 && (
+            {board && !board.hidden && board.rows.length > 0 && (
               <div className="overflow-x-auto rounded-2xl border border-border/80 bg-bg-surface shadow-[0_18px_55px_-42px_rgba(0,0,0,.7)]">
-                <table className="w-full min-w-[860px] border-separate border-spacing-0 text-sm">
-                  <thead>
-                    <tr className="bg-bg-hover text-xs font-bold uppercase tracking-[.08em] text-text-secondary">
-                      <th scope="col" className="sticky left-0 z-20 border-b border-border/80 bg-bg-hover px-4 py-4 text-left">#</th>
+                <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
+                  <thead className="sticky top-0 z-20">
+                    <tr className="bg-[#111a14] text-xs font-bold uppercase tracking-[.08em] text-[#aebdb2]">
+                      <th scope="col" className="sticky left-0 z-20 border-b border-border/80 bg-[#111a14] px-4 py-4 text-left">#</th>
                       <th scope="col" className="border-b border-border/80 px-4 py-4 text-left">{tr("Учасник", "Participant")}</th>
                       {problems.map((p) => (
                         <th scope="col" key={p.id} className="border-b border-border/80 px-4 py-4 text-center" title={p.maxScore ? `max ${p.maxScore}` : undefined}>
@@ -323,8 +314,8 @@ export const ScoreboardPage: React.FC = () => {
                       <th scope="col" className="border-b border-border/80 px-4 py-4 text-center">{tr("Штраф", "Pen.")}</th>
                     </tr>
                     {/* Per-problem solve stats */}
-                    <tr className="bg-bg-surface text-[11px] text-text-muted">
-                      <th scope="col" className="sticky left-0 z-20 border-b border-border/80 bg-bg-surface px-4 py-2" />
+                    <tr className="bg-[#0d1510] text-[11px] text-text-muted">
+                      <th scope="col" className="sticky left-0 z-20 border-b border-border/80 bg-[#0d1510] px-4 py-2" />
                       <th scope="col" className="border-b border-border/80 px-4 py-2 text-left font-medium">{tr("розв./спроб", "solved/att")}</th>
                       {problems.map((p) => {
                         const s = solveStats[p.id] ?? { solved: 0, attempted: 0 };
@@ -347,7 +338,7 @@ export const ScoreboardPage: React.FC = () => {
                         <tr
                           key={r.participantId}
                           ref={me ? meRowRef : undefined}
-                          className={`group ${me ? "bg-secondary/[.12]" : "odd:bg-bg-base/50 even:bg-bg-surface"} hover:bg-bg-hover transition-colors`}
+                      className={`group transition-colors hover:bg-bg-hover ${me ? "bg-secondary/[.12]" : "odd:bg-bg-base/50 even:bg-bg-surface"}`}
                         >
                           <td className={`sticky left-0 z-10 border-b border-border/70 px-4 py-3 ${me ? "bg-[#153321]" : "bg-bg-surface group-odd:bg-bg-base"}`}>
                             <span className={`inline-flex h-8 min-w-8 items-center justify-center rounded-lg border px-2 text-xs font-extrabold tabular-nums ${rankBadgeTone(r.rank)}`}>
@@ -403,7 +394,7 @@ export const ScoreboardPage: React.FC = () => {
                         <td colSpan={problems.length + 4} className="border-b border-border px-4 py-10 text-center text-text-secondary">
                           {query.trim()
                             ? tr("Нічого не знайдено.", "No matches.")
-                            : tr("Ще немає сабмішнів.", "No submissions yet.")}
+                            : tr("У таблиці поки немає учасників.", "No participants are on the table yet.")}
                         </td>
                       </tr>
                     )}
