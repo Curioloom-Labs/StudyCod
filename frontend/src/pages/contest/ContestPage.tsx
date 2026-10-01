@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ListOrdered, Table2, KeyRound, RefreshCw, Trophy, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, Flame, ShieldCheck, Users2, Award, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound } from "lucide-react";
+import { ArrowLeft, KeyRound, RefreshCw, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, ShieldCheck, Users2, Award, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
@@ -19,9 +19,9 @@ import {
   getContestCommunity,
   getContestDetails,
   generateContestAccounts,
+  deleteContest as deleteContestRequest,
   sendContestAccountsEmails,
   getContestMyProgress,
-  getContestScoreboard,
   listContestOrganizers,
   listContestAnnulments,
   listContestAdminParticipants,
@@ -44,8 +44,6 @@ import {
   type ContestAnnulmentItem,
   type ContestOrganizerListItem,
   type ContestMyProgressProblem,
-  type ScoreboardProblem,
-  type ScoreboardRow,
   type ContestSimilarityPair,
   type ContestVisibility,
   type ContestBannerTheme,
@@ -68,6 +66,7 @@ import {
   updateContestCertificateSettings,
 } from "../../lib/api/certificates";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { ContestSectionNav, type ContestSection } from "./ContestSectionNav";
 import {
   CERTIFICATE_CANVAS_HEIGHT,
   CERTIFICATE_CANVAS_WIDTH,
@@ -872,16 +871,6 @@ function verdictChip(verdictRaw: string | null | undefined, tr: TrFn) {
   };
 }
 
-function problemScoreTone(score: number | null | undefined, hasSubmission: boolean): string {
-  if (!hasSubmission) return "border-border bg-bg-surface text-text-secondary";
-  const value = Number(score ?? 0);
-  if (value >= 100) return "border-accent-success/60 bg-accent-success/10 text-accent-success";
-  if (value >= 50) return "border-accent-warn/60 bg-accent-warn/10 text-accent-warn";
-  if (value >= 1) return "border-accent-error/60 bg-accent-error/10 text-accent-error";
-  // 0 with a real submission is a valid score, not an error state.
-  return "border-primary/40 bg-primary/10 text-primary";
-}
-
 function submissionScoreTone(score: number | null | undefined): StatusChipTone {
   if (score == null || !Number.isFinite(Number(score))) return "neutral";
   const value = Number(score);
@@ -892,184 +881,12 @@ function submissionScoreTone(score: number | null | undefined): StatusChipTone {
   return "info";
 }
 
-const Scoreboard: React.FC<{ contestId: number; canManage?: boolean }> = ({ contestId, canManage }) => {
-  const { i18n } = useTranslation();
-  const isEn = (i18n.language ?? "").toLowerCase().startsWith("en");
-  const tr = React.useCallback((uk: string, en: string) => (isEn ? en : uk), [isEn]);
-
-  const [loading, setLoading] = React.useState(true);
-  const [problems, setProblems] = React.useState<ScoreboardProblem[]>([]);
-  const [rows, setRows] = React.useState<ScoreboardRow[]>([]);
-  const [disqualifiedCount, setDisqualifiedCount] = React.useState(0);
-  const [scoringMode, setScoringMode] = React.useState<"IOI" | "ICPC">("IOI");
-  const [frozen, setFrozen] = React.useState(false);
-  const [hidden, setHidden] = React.useState(false);
-  const [hiddenReason, setHiddenReason] = React.useState<"AFTER_END" | "ORGANIZERS_ONLY" | undefined>();
-  const [releaseAt, setReleaseAt] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-
-  const load = React.useCallback(() => {
-    setLoading(true);
-    setError(null);
-    getContestScoreboard(contestId)
-      .then((r) => {
-        setProblems(Array.isArray(r.problems) ? r.problems : []);
-        setRows(Array.isArray(r.rows) ? r.rows : []);
-        setDisqualifiedCount(Number(r.disqualifiedCount ?? 0) || 0);
-        setScoringMode(r.scoringMode === "ICPC" ? "ICPC" : "IOI");
-        setFrozen(Boolean(r.freeze?.frozen));
-        setHidden(Boolean(r.hidden));
-        setHiddenReason(r.hiddenReason);
-        setReleaseAt(r.releaseAt ?? null);
-      })
-      .catch((e: unknown) => {
-        const msg = getErrorMessage(e);
-        setError(msg || tr("Не вдалося завантажити таблицю", "Failed to load standings"));
-        setProblems([]);
-        setRows([]);
-        setDisqualifiedCount(0);
-        setHidden(false);
-        setHiddenReason(undefined);
-        setReleaseAt(null);
-      })
-      .finally(() => setLoading(false));
-  }, [contestId, tr]);
-
-  React.useEffect(() => {
-    load();
-  }, [load]);
-
-  // Auto-refresh standings every 15s so the board feels live.
-  React.useEffect(() => {
-    const id = window.setInterval(load, 15000);
-    return () => window.clearInterval(id);
-  }, [load]);
-
-  const medalTone = (rank: number): string => {
-    if (rank === 1) return "border-yellow-400/60 bg-yellow-400/10 text-yellow-300";
-    if (rank === 2) return "border-border bg-bg-hover text-text-secondary";
-    if (rank === 3) return "border-amber-600/60 bg-amber-600/10 text-amber-400";
-    return "border-primary/50 bg-primary/10 text-primary";
-  };
-
-  return (
-    <Card className="p-4 border border-border/70 bg-bg-surface/80">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="font-mono text-text-primary flex items-center gap-2">
-          <Flame className="w-4 h-4 text-primary" />
-          {tr("Таблиця", "Standings")}
-          <span className="text-[10px] px-1.5 py-0.5 rounded border border-border bg-bg-base text-text-secondary uppercase tracking-wider">
-            {scoringMode === "ICPC" ? tr("ICPC · бали/штраф", "ICPC · solved/penalty") : tr("IOI · сума балів", "IOI · points")}
-          </span>
-          {frozen ? (
-            <span className="text-[10px] px-1.5 py-0.5 rounded border border-accent-warn/50 bg-accent-warn/10 text-accent-warn uppercase tracking-wider">
-              ❄ {tr("Заморожено", "Frozen")}
-            </span>
-          ) : null}
-        </div>
-        <Button variant="secondary" onClick={load} disabled={loading}>
-          <RefreshCw className="w-4 h-4 mr-2" />
-          {tr("Оновити", "Refresh")}
-        </Button>
-      </div>
-
-      {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full" />
-          ))}
-        </div>
-      ) : error ? (
-        <div className="text-sm text-accent-error">{error}</div>
-      ) : hidden ? (
-        <div role="status" className="rounded-xl border border-border bg-bg-base p-5 text-sm leading-6 text-text-secondary">
-          <div className="flex items-start gap-3"><KeyRound aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" /><span><span className="block font-semibold text-text-primary">{hiddenReason === "ORGANIZERS_ONLY" ? tr("Таблиця доступна організаторам", "Scoreboard is available to organizers") : tr("Результати будуть після фінішу", "Results will be available after the finish")}</span>{hiddenReason === "ORGANIZERS_ONLY" ? tr("Поточні місця та результати приховані для учасників.", "Live ranks and results are hidden from participants.") : releaseAt ? `${tr("Таблицю буде відкрито", "The scoreboard opens")}: ${fmtDateTime(releaseAt, i18n.language)}.` : tr("Щоб таблиця відкрилась автоматично, задайте час завершення контесту.", "Set an end time to reveal the scoreboard automatically.")}</span></div>
-        </div>
-      ) : rows.length === 0 ? (
-        <div className="text-sm text-text-secondary">{tr("Поки що немає учасників.", "No participants yet.")}</div>
-      ) : (
-        <div className="space-y-2">
-          {rows.map((r) => (
-            <div key={r.participantId} className={`rounded-xl border bg-bg-base/80 p-3 ${r.rank <= 3 ? medalTone(r.rank).replace(/text-[^\s]+/, "") : "border-border"}`}>
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-lg border text-xs font-bold ${medalTone(r.rank)}`}>
-                    {r.rank <= 3 ? ["🥇", "🥈", "🥉"][r.rank - 1] : `#${r.rank}`}
-                  </span>
-                  <span className="text-sm font-mono text-text-primary truncate">{r.displayName}</span>
-                </div>
-                {scoringMode === "ICPC" ? (
-                  <div className="flex items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 rounded-lg border border-accent-success/40 bg-accent-success/10 px-2 py-1 text-xs font-mono text-accent-success">
-                      <Trophy className="w-3.5 h-3.5" /> {Number(r.solved ?? 0)}
-                    </span>
-                    <span className="inline-flex items-center rounded-lg border border-border bg-bg-surface px-2 py-1 text-xs font-mono text-text-secondary">
-                      {tr("штраф", "pen")} {Number(r.penalty ?? 0)}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="inline-flex items-center gap-1 rounded-lg border border-accent-success/40 bg-accent-success/10 px-2 py-1 text-xs font-mono text-accent-success">
-                    <Trophy className="w-3.5 h-3.5" /> {tr("Сума", "Total")}: {r.totalScore}
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {problems.map((p) => {
-                  const hit = r.problems.find((x) => x.problemId === p.id);
-                  const score = Number(hit?.score ?? 0);
-                  const hasSubmission = Boolean(hit?.bestAt) || Number(hit?.attempts ?? 0) > 0;
-                  const solved = Boolean(hit?.solved);
-                  const attempts = Number(hit?.attempts ?? 0);
-                  const firstBlood = Boolean(hit?.isFirstBlood);
-                  const pending = Boolean(hit?.pending);
-                  const cellTone = pending
-                    ? "border-accent-warn/40 bg-accent-warn/10 text-accent-warn"
-                    : scoringMode === "ICPC"
-                    ? (solved ? "border-accent-success/50 bg-accent-success/15 text-accent-success" : hasSubmission ? "border-accent-error/40 bg-accent-error/10 text-accent-error" : "border-border bg-bg-surface text-text-muted")
-                    : problemScoreTone(score, hasSubmission);
-                  return (
-                    <span
-                      key={p.id}
-                      title={pending ? tr("Очікує (заморожено)", "Pending (frozen)") : firstBlood ? tr("Перше розв'язання!", "First to solve!") : undefined}
-                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-mono ${cellTone} ${firstBlood ? "ring-1 ring-yellow-400/60" : ""}`}
-                    >
-                      {firstBlood ? <span title={tr("Перше розв'язання", "First to solve")}>⚡</span> : null}
-                      <span className="opacity-80">{p.label}</span>
-                      {scoringMode === "ICPC" ? (
-                        <span>{solved ? `+${attempts > 1 ? attempts : ""}` : pending ? "?" : hasSubmission ? `−${attempts}` : "·"}</span>
-                      ) : (
-                        <span>{hasSubmission ? score : "—"}{pending ? "?" : ""}</span>
-                      )}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-
-          <div className="text-xs text-text-secondary mt-2">
-            {tr(
-              "Таблиця рахує лише подачі в межах контесту. Дорішування не впливає на результат.",
-              "Standings include only official contest submissions. Upsolving does not affect results."
-            )}
-            {canManage && disqualifiedCount > 0 ? (
-              <span className="ml-2">
-                {tr(`Дискваліфіковано: ${disqualifiedCount}`, `Disqualified: ${disqualifiedCount}`)}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      )}
-    </Card>
-  );
-};
-
 export const ContestPage: React.FC = () => {
   const { i18n } = useTranslation();
   const isEn = (i18n.language ?? "").toLowerCase().startsWith("en");
   const tr = React.useCallback((uk: string, en: string) => (isEn ? en : uk), [isEn]);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const params = useParams<{ id?: string }>();
   const contestId = React.useMemo(() => {
     const v = Number(params.id);
@@ -1082,9 +899,9 @@ export const ContestPage: React.FC = () => {
   const [data, setData] = React.useState<ContestDetails | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [tab, setTab] = React.useState<"problems" | "standings" | "community">(() => searchParams.get("tab") === "accounts" ? "standings" : "problems");
-  const [accountFocusMode, setAccountFocusMode] = React.useState(() => searchParams.get("tab") === "accounts");
-  const [standingsVersion, setStandingsVersion] = React.useState(0);
+  const requestedSection = searchParams.get("tab");
+  const tab: ContestSection = (["problems", "standings", "community", "accounts", "participants", "certificates", "management"] as string[])
+    .includes(requestedSection ?? "") ? requestedSection as ContestSection : "problems";
 
   const [communityQuestionText, setCommunityQuestionText] = React.useState("");
   const [communityAnnouncementText, setCommunityAnnouncementText] = React.useState("");
@@ -1100,6 +917,10 @@ export const ContestPage: React.FC = () => {
   const [joining, setJoining] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [deleteContestOpen, setDeleteContestOpen] = React.useState(false);
+  const [deleteContestConfirmation, setDeleteContestConfirmation] = React.useState("");
+  const [deleteContestLoading, setDeleteContestLoading] = React.useState(false);
+  const [deleteContestError, setDeleteContestError] = React.useState<string | null>(null);
   const [settingsSaving, setSettingsSaving] = React.useState(false);
   const [settingsError, setSettingsError] = React.useState<string | null>(null);
   const [settingsTitle, setSettingsTitle] = React.useState("");
@@ -1311,7 +1132,7 @@ export const ContestPage: React.FC = () => {
       setProgress(null);
       return;
     }
-    if (!data?.access?.canAccessContent) {
+    if (!data?.access?.canAccessContent || (data.access.canManage && !data.access.isJoined)) {
       setProgress(null);
       return;
     }
@@ -1328,7 +1149,7 @@ export const ContestPage: React.FC = () => {
         setProgress(null);
       })
       .finally(() => setProgressLoading(false));
-  }, [contestId, hasToken, data?.access?.canAccessContent, tr]);
+  }, [contestId, hasToken, data?.access?.canAccessContent, data?.access?.canManage, data?.access?.isJoined, tr]);
 
   React.useEffect(() => {
     if (tab !== "problems") return;
@@ -1438,7 +1259,7 @@ export const ContestPage: React.FC = () => {
   }, [contestId, data?.access?.canManage, tr]);
 
   React.useEffect(() => {
-    if (tab !== "standings") return;
+    if (tab !== "participants") return;
     loadAdminParticipants();
   }, [tab, loadAdminParticipants]);
 
@@ -1474,7 +1295,7 @@ export const ContestPage: React.FC = () => {
   }, [contestId, data?.access?.canManage, tr]);
 
   React.useEffect(() => {
-    if (tab !== "standings") return;
+    if (tab !== "management") return;
     loadOrganizers();
   }, [tab, loadOrganizers]);
 
@@ -1499,7 +1320,7 @@ export const ContestPage: React.FC = () => {
   }, [contestId, data?.access?.canManage, tr]);
 
   React.useEffect(() => {
-    if (tab !== "standings") return;
+    if (tab !== "management") return;
     loadAnnulments();
   }, [tab, loadAnnulments]);
 
@@ -1515,6 +1336,20 @@ export const ContestPage: React.FC = () => {
       setError(msg || tr("Не вдалося змінити стан паузи", "Failed to change pause state"));
     } finally {
       setPauseSaving(false);
+    }
+  };
+
+  const confirmDeleteContest = async () => {
+    if (!contestId || !data?.access.canDelete || deleteContestConfirmation !== data.contest.title) return;
+    setDeleteContestLoading(true);
+    setDeleteContestError(null);
+    try {
+      await deleteContestRequest(contestId, deleteContestConfirmation);
+      navigate("/contest/contests", { replace: true });
+    } catch (e: unknown) {
+      setDeleteContestError(getErrorMessage(e) || tr("Не вдалося видалити контест", "Could not delete the contest"));
+    } finally {
+      setDeleteContestLoading(false);
     }
   };
 
@@ -1940,7 +1775,7 @@ export const ContestPage: React.FC = () => {
   );
 
   React.useEffect(() => {
-    if (tab !== "standings") return;
+    if (tab !== "certificates") return;
     if (!data?.access?.canManage) return;
     void loadCertificateTemplatesCatalog();
   }, [data?.access?.canManage, loadCertificateTemplatesCatalog, tab]);
@@ -2813,7 +2648,6 @@ export const ContestPage: React.FC = () => {
       setGeneratedAccounts(Array.isArray(r.created) ? r.created : []);
       setAccountGenMessage(tr(`Згенеровано акаунтів: ${Array.isArray(r.created) ? r.created.length : 0}`, `Generated accounts: ${Array.isArray(r.created) ? r.created.length : 0}`));
       await loadAdminParticipants();
-      setStandingsVersion((v) => v + 1);
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
       setAccountGenError(msg || tr("Не вдалося згенерувати акаунти", "Failed to generate accounts"));
@@ -3286,7 +3120,6 @@ export const ContestPage: React.FC = () => {
       }
 
       await loadAdminParticipants();
-      setStandingsVersion((v) => v + 1);
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
       setAdminParticipantsActionTone("error");
@@ -3477,10 +3310,20 @@ export const ContestPage: React.FC = () => {
   };
 
   React.useEffect(() => {
-    if (tab !== "standings" || !accountFocusMode) return;
-    const timer = window.setTimeout(() => document.getElementById("contest-account-generation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 250);
-    return () => window.clearTimeout(timer);
-  }, [tab, accountFocusMode, data?.contest.id]);
+    if (!contestId || !data) return;
+    if (requestedSection === "standings") {
+      const preserved = new URLSearchParams(searchParams);
+      preserved.delete("tab");
+      const query = preserved.toString();
+      navigate(`/contests/${contestId}/scoreboard${query ? `?${query}` : ""}`, { replace: true });
+      return;
+    }
+    if (!data.access.canManage && ["accounts", "participants", "certificates", "management"].includes(tab)) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("tab");
+      setSearchParams(next, { replace: true });
+    }
+  }, [contestId, data, navigate, requestedSection, searchParams, setSearchParams, tab]);
 
   const resetAddForm = React.useCallback(() => {
     setAddError(null);
@@ -3654,45 +3497,16 @@ export const ContestPage: React.FC = () => {
   };
 
   return (
-    <div className="p-3 sm:p-4 md:p-6 max-w-6xl mx-auto">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Button variant="ghost" onClick={() => navigate("/contests")}
-          title={tr("Назад до списку", "Back to list")}
-        >
+    <div className="contest-page-shell">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <Link to="/contests" className="inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <ArrowLeft className="w-4 h-4 mr-2" />
           {tr("Контести", "Contests")}
-        </Button>
-
-        <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">
-          <Button variant={tab === "problems" ? "secondary" : "ghost"} onClick={() => { setTab("problems"); setAccountFocusMode(false); }}
-            title={tr("Задачі", "Problems")}
-          >
-            <ListOrdered className="w-4 h-4 mr-2" />
-            {tr("Задачі", "Problems")}
-          </Button>
-          <Button variant="ghost" onClick={() => navigate(`/contests/${params.id}/scoreboard`)}
-            title={tr("Жива таблиця результатів", "Live scoreboard")}
-          >
-            <Trophy className="w-4 h-4 mr-2" />
-            {tr("Скорборд", "Scoreboard")}
-          </Button>
-          <Button variant={tab === "standings" && !accountFocusMode ? "secondary" : "ghost"} onClick={() => { setTab("standings"); setAccountFocusMode(false); }}
-            title={tr("Таблиця", "Standings")}
-          >
-            <Table2 className="w-4 h-4 mr-2" />
-            {tr("Таблиця", "Standings")}
-          </Button>
-          <Button variant={tab === "community" ? "secondary" : "ghost"} onClick={() => { setTab("community"); setAccountFocusMode(false); }}
-            title={tr("Ком'юніті", "Community")}
-          >
-            <MessageSquare className="w-4 h-4 mr-2" />
-            {tr("Ком'юніті", "Community")}
-          </Button>
-          {data?.access.canManage && <Button variant={accountFocusMode ? "secondary" : "ghost"} onClick={() => { setTab("standings"); setAccountFocusMode(true); window.setTimeout(() => document.getElementById("contest-account-generation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100); }} title={tr("Тимчасові акаунти учасників", "Temporary participant accounts")}>
-            <KeyRound className="w-4 h-4 mr-2" />{tr("Акаунти", "Accounts")}
-          </Button>}
-        </div>
+        </Link>
+        {data?.access.canManage ? <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{tr("Організатор", "Organizer")}</span> : null}
       </div>
+
+      {data && contestId ? <ContestSectionNav contestId={contestId} active={tab} canManage={!!data.access.canManage} /> : null}
 
       <Modal
         open={addOpen}
@@ -4083,6 +3897,44 @@ export const ContestPage: React.FC = () => {
       </Modal>
 
       <Modal
+        open={deleteContestOpen}
+        onClose={() => {
+          if (deleteContestLoading) return;
+          setDeleteContestOpen(false);
+          setDeleteContestConfirmation("");
+          setDeleteContestError(null);
+        }}
+        title={tr("Видалити контест назавжди?", "Delete this contest permanently?")}
+        description={tr("Цю дію не можна скасувати. Для підтвердження введи точну назву контесту.", "This action cannot be undone. Type the exact contest title to confirm.")}
+      >
+        <div className="space-y-4">
+          {deleteContestError ? <div role="alert" className="rounded-lg border border-accent-error/30 bg-accent-error/10 p-3 text-sm text-accent-error">{deleteContestError}</div> : null}
+          <div className="rounded-xl border border-accent-error/25 bg-accent-error/[.04] p-3 text-sm leading-6 text-text-secondary">
+            {tr("Буде видалено задачі контесту, всі подачі й результати, спільноту, сертифікати та видані тільки для цього контесту акаунти.", "Contest problems, submissions and results, community posts, certificates, and accounts issued only for this contest will be deleted.")}
+          </div>
+          <Input
+            label={tr(`Назва контесту: ${data?.contest.title ?? ""}`, `Contest title: ${data?.contest.title ?? ""}`)}
+            value={deleteContestConfirmation}
+            onChange={(event) => setDeleteContestConfirmation(event.target.value)}
+            autoComplete="off"
+          />
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDeleteContestOpen(false)} disabled={deleteContestLoading}>
+              {tr("Скасувати", "Cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => void confirmDeleteContest()}
+              disabled={deleteContestLoading || !data || deleteContestConfirmation !== data.contest.title}
+            >
+              <Trash2 aria-hidden="true" className="mr-2 size-4" />
+              {deleteContestLoading ? tr("Видаляю…", "Deleting…") : tr("Видалити назавжди", "Delete permanently")}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         open={accountRosterImportPreviewOpen}
         onClose={cancelRosterCsvImportPreview}
         title={tr("Перевірка таблиці перед імпортом", "Spreadsheet import preview")}
@@ -4204,13 +4056,26 @@ export const ContestPage: React.FC = () => {
         </Card>
       ) : !data ? null : (
         <div className="space-y-4">
-          <Card className="p-5 border border-border/70">
+          <Card className="overflow-hidden border border-border/70 p-4 sm:p-6">
+            {data.contest.bannerImageUrl ? (
+              <div className="mb-5 overflow-hidden rounded-2xl border border-border/70 bg-bg-base">
+                <img
+                  src={data.contest.bannerImageUrl}
+                  alt=""
+                  aria-hidden="true"
+                  width={1200}
+                  height={360}
+                  fetchPriority="high"
+                  className="block h-24 w-full object-cover sm:h-32"
+                />
+              </div>
+            ) : null}
             {/* Hero heading */}
             <div className="space-y-1.5">
               <PageEyebrow label="contest" />
               <div className="flex flex-wrap items-start gap-2">
-                <h1 className="flex flex-1 items-center gap-3 text-2xl font-semibold leading-tight tracking-tight text-text-primary md:text-3xl">
-                  <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-2xl">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" className="size-full object-cover" /> : data.contest.icon || "🏆"}</span>{data.contest.title}
+                <h1 className="flex min-w-0 flex-1 items-center gap-3 break-words text-2xl font-semibold leading-tight tracking-tight text-text-primary md:text-3xl [text-wrap:balance]">
+                  <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-2xl">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" width={44} height={44} fetchPriority="high" className="size-full object-cover" /> : data.contest.icon || "🏆"}</span>{data.contest.title}
                 </h1>
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
                   {(() => {
@@ -4231,18 +4096,18 @@ export const ContestPage: React.FC = () => {
 
             <div className="h-px bg-gradient-to-r from-primary/30 via-border to-transparent my-3" />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-2 hover:border-primary/40 transition-fast">
-                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Формат", "Format")}</div>
-                <div className="text-text-primary font-mono mt-0.5">{tr("IOI-стиль · partial scoring", "IOI-style · partial scoring")}</div>
+            <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-3">
+                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Підрахунок", "Scoring")}</div>
+                <div className="text-text-primary mt-1 font-semibold">{data.contest.scoringMode === "ICPC" ? tr("ICPC · задачі та штраф", "ICPC · solved and penalty") : tr("IOI · бали за задачі", "IOI · points per problem")}</div>
               </div>
-              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-2 hover:border-primary/40 transition-fast">
-                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Режим", "Mode")}</div>
-                <div className="text-text-primary font-mono mt-0.5">{data.access.isPaused ? tr("Пауза", "Paused") : tr("Змагальний", "Competitive")}</div>
+              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-3">
+                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Учасники", "Participants")}</div>
+                <div className="mt-1 font-semibold tabular-nums text-text-primary">{data.participantsCount}</div>
               </div>
-              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-2 hover:border-primary/40 transition-fast">
-                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Платформа", "Platform")}</div>
-                <div className="text-text-primary font-mono mt-0.5">StudyCod Contests</div>
+              <div className="rounded-xl border border-border bg-bg-base/70 px-3 py-3">
+                <div className="text-text-muted font-mono uppercase tracking-[0.06em] text-[10px]">{tr("Задачі", "Problems")}</div>
+                <div className="mt-1 font-semibold tabular-nums text-text-primary">{data.problems.length}</div>
               </div>
             </div>
 
@@ -4320,17 +4185,21 @@ export const ContestPage: React.FC = () => {
             ) : null}
 
             {data.contest.description ? (
-              <div className="mt-4">
-                <MarkdownView content={data.contest.description} />
-              </div>
+              <details className="mt-4 rounded-xl border border-border bg-bg-base/50 px-4 py-3">
+                <summary className="cursor-pointer text-sm font-semibold text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Опис і правила", "Description and rules")}</summary>
+                <div className="mt-3"><MarkdownView content={data.contest.description} /></div>
+              </details>
             ) : null}
           </Card>
 
           {tab === "problems" ? (
             <>
-              <Card className="p-4">
+              <Card className="border border-border/70 bg-bg-surface/80 p-4 sm:p-5">
               <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">{tr("// задачі", "// problems")}</div>
+                <div>
+                  <h2 className="text-lg font-semibold tracking-tight text-text-primary">{tr("Задачі", "Problems")}</h2>
+                  <p className="mt-1 text-sm text-text-secondary">{tr("Відкрий задачу або переглянь останній результат.", "Open a problem or review your latest result.")}</p>
+                </div>
                 <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                   {hasToken && data.access.canAccessContent ? (
                     <Button variant="secondary" onClick={loadProgress} disabled={progressLoading}>
@@ -4389,19 +4258,19 @@ export const ContestPage: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <div className="overflow-auto">
-                  <table className="min-w-[620px] md:min-w-[760px] w-full text-sm font-mono border border-border">
+                <div className="overflow-x-auto rounded-xl border border-border/80">
+                  <table className="w-full min-w-[760px] border-collapse text-sm">
                     <caption className="sr-only">
                       {tr("Прогрес учасника за задачами контесту", "Participant progress by contest problem")}
                     </caption>
-                    <thead className="bg-bg-hover">
+                    <thead className="bg-bg-hover text-xs uppercase tracking-wide text-text-secondary">
                       <tr>
-                        <th className="p-2 border-b border-border text-left">{tr("Задача", "Problem")}</th>
-                        <th className="hidden lg:table-cell p-2 border-b border-border text-left">{tr("Назва", "Title")}</th>
-                        <th className="p-2 border-b border-border text-center">{tr("Бали", "Points")}</th>
-                        <th className="p-2 border-b border-border text-center">{tr("Кращий", "Best")}</th>
-                        <th className="p-2 border-b border-border text-center">{tr("Остання подача", "Last")}</th>
-                        <th className="p-2 border-b border-border text-right">{tr("Дія", "Action")}</th>
+                        <th scope="col" className="px-4 py-3 text-left">{tr("Задача", "Problem")}</th>
+                        <th scope="col" className="hidden md:table-cell px-4 py-3 text-left">{tr("Назва", "Title")}</th>
+                        <th scope="col" className="px-4 py-3 text-center">{tr("Бали", "Points")}</th>
+                        <th scope="col" className="px-4 py-3 text-center">{tr("Кращий", "Best")}</th>
+                        <th scope="col" className="px-4 py-3 text-center">{tr("Остання подача", "Last")}</th>
+                        <th scope="col" className="px-4 py-3 text-right">{tr("Дія", "Action")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -4425,23 +4294,17 @@ export const ContestPage: React.FC = () => {
                         const isAttempted = pr != null && pr.bestContestScore > 0 && !isSolved;
 
                         return (
-                          <tr key={p.id} className={`odd:bg-bg-base even:bg-bg-surface ${isSolved ? "border-l-2 border-l-accent-success" : isAttempted ? "border-l-2 border-l-accent-warn" : ""}`}>
-                            <td className="p-2 border-b border-border">
-                              <button type="button"
-                                className="text-primary hover:underline"
-                                disabled={disabled}
-                                onClick={() => navigate(`/contests/${data.contest.id}/problems/${p.id}`)}
-                                title={tr("Відкрити задачу", "Open problem")}
-                              >
-                                {p.label}
-                              </button>
+                          <tr key={p.id} className={`border-t border-border/70 transition-colors hover:bg-bg-hover ${isSolved ? "border-l-2 border-l-accent-success" : isAttempted ? "border-l-2 border-l-accent-warn" : ""}`}>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex min-w-9 items-center justify-center rounded-lg border border-border bg-bg-base px-2 py-1 font-mono font-bold text-primary">{p.label}</span>
+                              <span className="ml-3 text-sm font-semibold text-text-primary md:hidden">{p.title}</span>
                             </td>
-                            <td className="hidden lg:table-cell p-2 border-b border-border">
-                              <div className="truncate max-w-[520px]">{p.title}</div>
+                            <td className="hidden md:table-cell max-w-[520px] px-4 py-3 text-text-primary">
+                              <div className="truncate">{p.title}</div>
                             </td>
-                            <td className="p-2 border-b border-border text-center">{p.points != null ? p.points : "—"}</td>
-                            <td className="p-2 border-b border-border text-center">{bestText}</td>
-                            <td className="p-2 border-b border-border text-center">
+                            <td className="px-4 py-3 text-center tabular-nums text-text-secondary">{p.points != null ? p.points : "—"}</td>
+                            <td className="px-4 py-3 text-center tabular-nums font-semibold text-text-primary">{bestText}</td>
+                            <td className="px-4 py-3 text-center">
                               {last ? (
                                 <div className="flex flex-col items-center gap-1">
                                   <div className="flex items-center gap-2">
@@ -4461,24 +4324,24 @@ export const ContestPage: React.FC = () => {
                                 "—"
                               )}
                             </td>
-                            <td className="p-2 border-b border-border text-right">
+                            <td className="px-4 py-3 text-right">
                               <div className="flex flex-wrap items-center justify-end gap-2">
                                 {hasToken && data.access.canManage && p.libraryTaskId ? (
-                                  <Button
-                                    variant="ghost"
-                                    onClick={() => navigate(`/library?view=mine&sel=${p.libraryTaskId}&edit=1`)}
+                                  <Link
+                                    to={`/library?view=mine&sel=${p.libraryTaskId}&edit=1`}
+                                    className="inline-flex min-h-9 items-center rounded-lg px-3 text-xs font-semibold text-text-secondary hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                                     title={tr("Редагувати тести/бали", "Edit tests/points")}
                                   >
                                     {tr("Бали/тести", "Points/tests")}
-                                  </Button>
+                                  </Link>
                                 ) : null}
-                                <Button
-                                  variant={disabled ? "secondary" : "primary"}
-                                  disabled={disabled}
-                                  onClick={() => navigate(`/contests/${data.contest.id}/problems/${p.id}`)}
-                                >
-                                  {tr("Відкрити задачу", "Open problem")}
-                                </Button>
+                                {disabled ? (
+                                  <span className="rounded-lg border border-border px-3 py-2 text-xs text-text-muted">{tr("Недоступна", "Unavailable")}</span>
+                                ) : (
+                                  <Link to={`/contests/${data.contest.id}/problems/${p.id}`} className="inline-flex min-h-9 items-center rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground transition-colors hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                                    {tr("Відкрити", "Open")}
+                                  </Link>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -4505,12 +4368,11 @@ export const ContestPage: React.FC = () => {
               ) : null}
               </Card>
             </>
-          ) : tab === "standings" ? (
-            <div className={`space-y-4${accountFocusMode ? " contest-accounts-focus" : ""}`}>
-              <Scoreboard key={`sb-${standingsVersion}`} contestId={data.contest.id} canManage={!!data.access.canManage} />
-
+          ) : ["standings", "accounts", "participants", "certificates", "management"].includes(tab) ? (
+            <div className="space-y-4">
               {hasToken && data.access.canManage ? (
                 <>
+                  {tab === "certificates" ? (
                   <Card className="rounded-2xl p-4 sm:p-5">
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2 text-base font-semibold text-text-primary"><Award className="w-4 h-4 text-primary" />{tr("Сертифікати", "Certificates")}</div>
@@ -5857,13 +5719,15 @@ export const ContestPage: React.FC = () => {
                       </div>
                     )}
                   </Card>
+                  ) : null}
 
-                  <Card id="contest-account-generation" className="scroll-mt-6 overflow-hidden rounded-[28px] border border-[#19291d]/10 bg-white p-4 shadow-[0_18px_50px_-44px_rgba(16,41,24,.65)] dark:border-white/[.09] dark:bg-[#111b14] sm:p-6">
+                  {tab === "accounts" ? (
+                  <Card id="contest-account-generation" className="scroll-mt-6 overflow-hidden rounded-2xl border border-border bg-bg-surface p-4 shadow-sm sm:p-5">
                     <div className="flex flex-col gap-4 border-b border-[#17271c]/[.08] pb-5 dark:border-white/[.08] sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-start gap-3">
                         <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#e8f5ec] text-[#16834d] dark:bg-[#00d978]/10 dark:text-[#72edb0]"><KeyRound aria-hidden="true" className="size-5" /></span>
                         <div>
-                          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#ff8c00]">{tr("УЧАСНИКИ", "PARTICIPANTS")}</p>
+                          <p className="text-xs font-bold uppercase tracking-[.12em] text-primary">{tr("ДОСТУПИ УЧАСНИКІВ", "PARTICIPANT ACCESS")}</p>
                           <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em] text-[#1a271e] dark:text-[#edf3ef]">{tr("Тимчасові акаунти", "Temporary accounts")}</h2>
                           <p className="mt-1 max-w-2xl text-sm leading-6 text-[#637368] dark:text-[#aab8ae]">{tr("Додай список людей і створи окремі логіни для цього контесту.", "Add a roster and create separate logins for this contest.")}</p>
                         </div>
@@ -5990,10 +5854,12 @@ export const ContestPage: React.FC = () => {
                       </div>
                     </section>}
                   </Card>
+                  ) : null}
 
-                  <Card className="p-4">
+                  {tab === "management" ? <>
+                  <Card className="p-4 sm:p-5">
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="font-mono text-text-primary flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-primary" />{tr("Організатори та пауза", "Organizers and pause")}</div>
+                      <h2 className="text-base font-semibold text-text-primary flex items-center gap-2"><ShieldCheck aria-hidden="true" className="w-4 h-4 text-primary" />{tr("Організатори та стан контесту", "Organizers and contest status")}</h2>
                       <Button variant="secondary" onClick={loadOrganizers} disabled={organizersLoading}>
                         <RefreshCw className="w-4 h-4 mr-2" />
                         {tr("Оновити", "Refresh")}
@@ -6051,9 +5917,9 @@ export const ContestPage: React.FC = () => {
                     )}
                   </Card>
 
-                  <Card className="p-4">
+                  <Card className="p-4 sm:p-5">
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="font-mono text-text-primary">{tr("Анулювання задач", "Problem annulments")}</div>
+                      <h2 className="text-base font-semibold text-text-primary">{tr("Анулювання задач", "Problem annulments")}</h2>
                       <Button variant="secondary" onClick={loadAnnulments} disabled={annulmentsLoading}>
                         <RefreshCw className="w-4 h-4 mr-2" />
                         {tr("Оновити", "Refresh")}
@@ -6111,7 +5977,7 @@ export const ContestPage: React.FC = () => {
                     ) : annulments.length === 0 ? (
                       <div className="text-sm text-text-secondary">{tr("Немає записів анулювання", "No annulment records")}</div>
                     ) : (
-                      <div className="space-y-2 max-h-[260px] overflow-auto">
+                      <div className="space-y-2">
                         {annulments.map((a) => (
                           <div key={a.id} className="border border-border bg-bg-base px-3 py-2 text-sm font-mono">
                             <div>#{a.id} · P{a.problemId} · {a.participantId ? `U${a.participantId}` : tr("для всіх", "for all")}</div>
@@ -6125,9 +5991,36 @@ export const ContestPage: React.FC = () => {
                     )}
                   </Card>
 
-                  <Card className="p-4">
+                  {data.access.canDelete ? (
+                    <Card className="border border-accent-error/35 bg-accent-error/[.035] p-4 sm:p-5">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <h2 className="flex items-center gap-2 text-base font-semibold text-accent-error">
+                            <Trash2 aria-hidden="true" className="size-4" />
+                            {tr("Небезпечна дія", "Danger zone")}
+                          </h2>
+                          <p className="mt-1 max-w-2xl text-sm leading-6 text-text-secondary">
+                            {tr("Видалити контест разом із задачами, подачами, сертифікатами та виданими лише для нього тимчасовими акаунтами. Звичайні акаунти учасників залишаться.", "Delete the contest, its problems, submissions, certificates, and temporary accounts issued only for it. Regular participant accounts are kept.")}
+                          </p>
+                        </div>
+                        <Button variant="destructive" className="shrink-0" onClick={() => {
+                          setDeleteContestConfirmation("");
+                          setDeleteContestError(null);
+                          setDeleteContestOpen(true);
+                        }}>
+                          <Trash2 aria-hidden="true" className="mr-2 size-4" />
+                          {tr("Видалити контест", "Delete contest")}
+                        </Button>
+                      </div>
+                    </Card>
+                  ) : null}
+
+                  </> : null}
+
+                  {tab === "participants" ? <>
+                  <Card className="p-4 sm:p-5">
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="font-mono text-text-primary flex items-center gap-2"><Users2 className="w-4 h-4 text-primary" />{tr("Модерація учасників", "Participant moderation")}</div>
+                      <h2 className="text-base font-semibold text-text-primary flex items-center gap-2"><Users2 aria-hidden="true" className="w-4 h-4 text-primary" />{tr("Список і модерація учасників", "Participants and moderation")}</h2>
                       <Button variant="secondary" onClick={loadAdminParticipants} disabled={adminParticipantsLoading}>
                         <RefreshCw className="w-4 h-4 mr-2" />
                         {tr("Оновити", "Refresh")}
@@ -6330,6 +6223,7 @@ export const ContestPage: React.FC = () => {
                       </div>
                     </div>
                   ) : null}
+                  </> : null}
                 </>
               ) : null}
             </div>
@@ -6345,16 +6239,17 @@ export const ContestPage: React.FC = () => {
                     {tr("Оновити", "Refresh")}
                   </Button>
                 </div>
-                {communityError ? <div className="text-sm text-accent-error mt-2">{communityError}</div> : null}
+                {communityError ? <div role="alert" className="text-sm text-accent-error mt-2">{communityError}</div> : null}
                 {!data.access.canAccessContent ? (
                   <div className="text-sm text-text-secondary mt-2">{tr("Немає доступу до ком'юніті цього контесту.", "You don't have access to this contest community.")}</div>
                 ) : null}
               </Card>
 
+              <div className="contest-community-grid">
               <Card className="p-4">
-                <div className="text-sm font-mono text-text-primary mb-2 flex items-center gap-2">
-                  <MessageSquare className="w-4 h-4" /> {tr("Питання до організатора", "Questions to organizer")}
-                </div>
+                <h2 className="text-base font-semibold text-text-primary mb-2 flex items-center gap-2">
+                  <MessageSquare aria-hidden="true" className="w-4 h-4 text-primary" /> {tr("Питання до організатора", "Questions to organizer")}
+                </h2>
                 <div className="text-xs text-text-secondary mb-3">
                   {tr(
                     "Це приватні звернення: учасник бачить лише власні питання та відповіді організаторів.",
@@ -6362,7 +6257,7 @@ export const ContestPage: React.FC = () => {
                   )}
                 </div>
 
-                <div className="space-y-2 mb-3 max-h-[360px] overflow-auto pr-1">
+                <div className="space-y-3 mb-4">
                   {communityLoading ? (
                     <div className="space-y-2">
                       {Array.from({ length: 4 }).map((_, i) => (
@@ -6410,7 +6305,7 @@ export const ContestPage: React.FC = () => {
                       aria-label={tr("Питання до організатора", "Question for the organizer")}
                       value={communityQuestionText}
                       onChange={(e) => setCommunityQuestionText(e.target.value)}
-                      className="w-full min-h-[90px] rounded-xl bg-bg-code border border-border px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
+                      className="w-full min-h-[90px] rounded-xl bg-bg-code border border-border px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       placeholder={tr("Постав запитання щодо задач, правил або тестів…", "Ask about tasks, rules, or tests…")}
                     />
                     <div className="flex justify-end">
@@ -6425,16 +6320,19 @@ export const ContestPage: React.FC = () => {
               </Card>
 
               <Card className="p-4">
-                <div className="text-sm font-mono text-text-primary mb-2 flex items-center gap-2">
-                  <Megaphone className="w-4 h-4" /> {tr("Оголошення", "Announcements")}
-                </div>
+                <h2 className="text-base font-semibold text-text-primary mb-2 flex items-center gap-2">
+                  <Megaphone aria-hidden="true" className="w-4 h-4 text-primary" /> {tr("Оголошення", "Announcements")}
+                </h2>
 
                 {data.access.canManage ? (
                   <div className="space-y-2 mb-3">
                     <textarea
+                      id="contest-community-announcement"
+                      name="communityAnnouncement"
+                      aria-label={tr("Текст оголошення", "Announcement text")}
                       value={communityAnnouncementText}
                       onChange={(e) => setCommunityAnnouncementText(e.target.value)}
-                      className="w-full min-h-[80px] rounded-xl bg-bg-code border border-border px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-secondary"
+                      className="w-full min-h-[80px] rounded-xl bg-bg-code border border-border px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       placeholder={tr("Наприклад: о 18:00 оновлено умову задачі B", "Example: at 18:00 problem B statement updated")}
                     />
                     <div className="flex justify-end">
@@ -6445,7 +6343,7 @@ export const ContestPage: React.FC = () => {
                   </div>
                 ) : null}
 
-                <div className="space-y-2 max-h-[320px] overflow-auto pr-1">
+                <div className="space-y-3">
                   {communityLoading ? (
                     <div className="space-y-2">
                       {Array.from({ length: 3 }).map((_, i) => (
@@ -6464,6 +6362,7 @@ export const ContestPage: React.FC = () => {
                   )}
                 </div>
               </Card>
+              </div>
             </div>
           )}
         </div>

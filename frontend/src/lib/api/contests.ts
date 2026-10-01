@@ -67,6 +67,7 @@ export type ContestDetails = {
     joinRequired: boolean;
     accountRequired?: boolean;
     canManage?: boolean;
+    canDelete?: boolean;
     isPaused?: boolean;
   };
   problems: ContestProblemListItem[];
@@ -545,6 +546,11 @@ export async function updateContest(contestId: number, payload: UpdateContestReq
   return res.data;
 }
 
+export async function deleteContest(contestId: number, confirmTitle: string): Promise<{ deleted: boolean; contestId: number }> {
+  const res = await api.delete(`/contests/${contestId}`, { data: { confirmTitle } });
+  return res.data;
+}
+
 export async function addContestProblem(
   contestId: number,
   payload:
@@ -581,7 +587,7 @@ export async function getContestProblemSubmissions(
   return res.data;
 }
 
-export async function getContestMyProgress(contestId: number): Promise<{ contestId: number; participantId: number; problems: ContestMyProgressProblem[] }> {
+export async function getContestMyProgress(contestId: number): Promise<{ contestId: number; participantId: number | null; problems: ContestMyProgressProblem[] }> {
   const res = await api.get(`/contests/${contestId}/my-progress`);
   return res.data;
 }

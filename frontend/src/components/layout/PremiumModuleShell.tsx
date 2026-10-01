@@ -51,6 +51,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
     product === "EDU" &&
     user.eduContexts?.organizations?.some((org) => org.role === "ORG_ADMIN");
   const isEduAdmin = isSystemAdmin || isOrgManager;
+  const isContestOnly = product === "CONTEST" && user.userMode === "CONTEST";
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef<HTMLDivElement | null>(null);
   const accountTriggerRef = React.useRef<HTMLButtonElement | null>(null);
@@ -149,7 +150,15 @@ export const PremiumModuleShell: React.FC<Props> = ({
                 Icon: UserRound,
               },
             ]
-        : [
+        : isContestOnly
+          ? [
+              {
+                label: uk ? "Мій контест" : "My contest",
+                path: "/contest/contests",
+                Icon: Trophy,
+              },
+            ]
+          : [
             {
               label: uk ? "Контести" : "Contests",
               path: "/contest/contests",
@@ -358,20 +367,18 @@ export const PremiumModuleShell: React.FC<Props> = ({
                         ))}
                       </div>
                     ) : null}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAccountOpen(false);
-                        onNavigate(
-                          product === "EDU" ? "/edu/profile" : "/profile",
-                        );
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[#314037] hover:bg-[#f2f5f2] dark:text-[#dce8de] dark:hover:bg-white/[.06]"
-                      role="menuitem"
-                    >
-                      <UserRound className="size-4" />
-                      {uk ? "Профіль" : "Profile"}
-                    </button>
+                    {!isContestOnly && <button
+                        type="button"
+                        onClick={() => {
+                          setAccountOpen(false);
+                          onNavigate(product === "EDU" ? "/edu/profile" : "/profile");
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[#314037] hover:bg-[#f2f5f2] dark:text-[#dce8de] dark:hover:bg-white/[.06]"
+                        role="menuitem"
+                      >
+                        <UserRound className="size-4" />
+                        {uk ? "Профіль" : "Profile"}
+                      </button>}
                     <button
                       type="button"
                       onClick={() => {
@@ -419,7 +426,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
       <main className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0">
         {children}
       </main>
-      {!navigationHidden && <PlatformFooter />}
+      {!navigationHidden && !isContestOnly && <PlatformFooter />}
     </div>
   );
 };
