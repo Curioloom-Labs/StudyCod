@@ -9,6 +9,7 @@ export type ContestListItem = {
   id: number;
   title: string;
   icon?: string;
+  iconImageUrl?: string | null;
   bannerTheme?: ContestBannerTheme;
   bannerImageUrl?: string | null;
   description: string | null;
@@ -43,6 +44,7 @@ export type ContestDetails = {
     id: number;
     title: string;
     icon?: string;
+    iconImageUrl?: string | null;
     bannerTheme?: ContestBannerTheme;
     bannerImageUrl?: string | null;
     description: string | null;
@@ -87,6 +89,7 @@ export type CreateContestRequest = {
   allowUpsolve?: boolean;
   scoringMode?: ContestScoringMode;
   icon?: string;
+  iconImageUrl?: string | null;
   bannerTheme?: ContestBannerTheme;
   bannerImageUrl?: string | null;
   scoreboardVisibility?: ContestScoreboardVisibility;
@@ -107,6 +110,7 @@ export type UpdateContestRequest = {
   allowUpsolve?: boolean;
   scoringMode?: ContestScoringMode;
   icon?: string;
+  iconImageUrl?: string | null;
   bannerTheme?: ContestBannerTheme;
   bannerImageUrl?: string | null;
   scoreboardVisibility?: ContestScoreboardVisibility;

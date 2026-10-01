@@ -1212,6 +1212,7 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
         isPublished: c.isPublished,
         allowUpsolve: c.allowUpsolve ?? true,
         icon: c.icon ?? "🏆",
+        iconImageUrl: c.iconImageUrl ?? null,
         bannerTheme: c.bannerTheme ?? "forest",
         bannerImageUrl: c.bannerImageUrl ?? null,
         scoreboardVisibility: c.scoreboardVisibility ?? "LIVE",
@@ -1289,6 +1290,7 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       allowUpsolve: z.boolean().optional(),
       scoringMode: z.enum(["IOI", "ICPC"]).optional(),
       icon: z.enum(["🏆", "⚡", "🎯", "🧠", "🚀", "🧩", "💻", "📚", "🔥", "🌟"]).optional(),
+      iconImageUrl: z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/).nullable().optional(),
       bannerTheme: z.enum(["forest", "ocean", "violet", "sunset"]).optional(),
       bannerImageUrl: z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/).nullable().optional(),
       scoreboardVisibility: z.enum(["LIVE", "AFTER_END", "ORGANIZERS_ONLY"]).optional(),
@@ -1335,6 +1337,7 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       allowUpsolve: typeof data.allowUpsolve === "boolean" ? data.allowUpsolve : true,
       scoringMode: data.scoringMode ?? "IOI",
       icon: data.icon ?? "🏆",
+      iconImageUrl: data.iconImageUrl ?? null,
       bannerTheme: data.bannerTheme ?? "forest",
       bannerImageUrl: data.bannerImageUrl ?? null,
       scoreboardVisibility: data.scoreboardVisibility ?? "LIVE",
@@ -1379,6 +1382,7 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
         allowUpsolve: z.boolean().optional(),
         scoringMode: z.enum(["IOI", "ICPC"]).optional(),
         icon: z.enum(["🏆", "⚡", "🎯", "🧠", "🚀", "🧩", "💻", "📚", "🔥", "🌟"]).optional(),
+        iconImageUrl: z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/).nullable().optional(),
         bannerTheme: z.enum(["forest", "ocean", "violet", "sunset"]).optional(),
         bannerImageUrl: z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/).nullable().optional(),
         scoreboardVisibility: z.enum(["LIVE", "AFTER_END", "ORGANIZERS_ONLY"]).optional(),
@@ -1450,6 +1454,7 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
     if (data.allowUpsolve !== undefined) contest.allowUpsolve = data.allowUpsolve;
     if (data.scoringMode !== undefined) contest.scoringMode = data.scoringMode;
     if (data.icon !== undefined) contest.icon = data.icon;
+    if (data.iconImageUrl !== undefined) contest.iconImageUrl = data.iconImageUrl;
     if (data.bannerTheme !== undefined) contest.bannerTheme = data.bannerTheme;
     if (data.bannerImageUrl !== undefined) contest.bannerImageUrl = data.bannerImageUrl;
     if (data.scoreboardVisibility !== undefined) contest.scoreboardVisibility = data.scoreboardVisibility;
@@ -1469,6 +1474,7 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
       allowUpsolve: saved.allowUpsolve ?? true,
       scoringMode: saved.scoringMode ?? "IOI",
       icon: saved.icon ?? "🏆",
+      iconImageUrl: saved.iconImageUrl ?? null,
       bannerTheme: saved.bannerTheme ?? "forest",
       bannerImageUrl: saved.bannerImageUrl ?? null,
       scoreboardVisibility: saved.scoreboardVisibility ?? "LIVE",
@@ -1531,6 +1537,7 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
         id: contest.id,
         title: contest.title,
         icon: contest.icon ?? "🏆",
+        iconImageUrl: contest.iconImageUrl ?? null,
         bannerTheme: contest.bannerTheme ?? "forest",
         bannerImageUrl: contest.bannerImageUrl ?? null,
         description: contest.description ?? null,

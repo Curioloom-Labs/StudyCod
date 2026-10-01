@@ -567,7 +567,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
                 className="group relative flex min-h-[275px] flex-col overflow-hidden rounded-[24px] border border-[#1a2a1e]/10 bg-white p-6 shadow-[0_16px_45px_rgba(28,44,32,.05)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_50px_rgba(28,44,32,.11)] dark:border-white/[.09] dark:bg-[#111b14] dark:shadow-none"
               >
                 <div className="relative -mx-6 -mt-6 mb-4 flex h-[92px] items-end overflow-hidden px-5 pb-3" style={{ background: item.bannerImageUrl ? `linear-gradient(90deg, rgba(8, 22, 13, .68), rgba(8, 22, 13, .08)), url("${item.bannerImageUrl}") center / cover` : CONTEST_BANNER_THEMES[contestTheme(item.bannerTheme)].background }}>
-                  <span className="text-3xl drop-shadow" aria-hidden="true">{item.icon || "🏆"}</span>
+                  {item.iconImageUrl ? <img src={item.iconImageUrl} alt="" aria-hidden="true" className="size-9 rounded-lg border border-white/25 object-cover shadow" /> : <span className="text-3xl drop-shadow" aria-hidden="true">{item.icon || "🏆"}</span>}
                 </div>
                 <div className="relative flex items-start justify-between gap-4">
                   <span
@@ -772,7 +772,7 @@ export const ContestDetailPage: React.FC = () => {
         <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full blur-3xl" style={{ background: CONTEST_BANNER_THEMES[contestTheme(data.contest.bannerTheme)].glow }} />
         <div className="relative grid gap-8 lg:grid-cols-[1.3fr_.7fr]">
           <div>
-            <div className="mb-4 flex items-center gap-3"><span className="grid size-14 place-items-center rounded-2xl bg-white/[.12] text-3xl shadow-inner" aria-hidden="true">{data.contest.icon || "🏆"}</span><div><p className="text-xs font-bold uppercase tracking-[.14em] text-white/65">StudyCod Contests</p>{data.contest.participantAccessMode === "ISSUED_ACCOUNTS" && <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/90"><KeyRound className="size-3.5" aria-hidden="true" />Тимчасові акаунти</span>}</div></div>
+            <div className="mb-4 flex items-center gap-3"><span className="grid size-14 place-items-center rounded-2xl bg-white/[.12] text-3xl shadow-inner" aria-hidden="true">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" className="size-10 rounded-xl border border-white/25 object-cover" /> : data.contest.icon || "🏆"}</span><div><p className="text-xs font-bold uppercase tracking-[.14em] text-white/65">StudyCod Contests</p>{data.contest.participantAccessMode === "ISSUED_ACCOUNTS" && <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/90"><KeyRound className="size-3.5" aria-hidden="true" />Тимчасові акаунти</span>}</div></div>
             <div className="mb-6 flex flex-wrap gap-2">
               <span className="rounded-full bg-white/12 px-3 py-1.5 text-xs font-bold text-[#baf9d4]">
                 {phaseCopy[state]}

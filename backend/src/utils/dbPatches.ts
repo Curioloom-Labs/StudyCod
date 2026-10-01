@@ -560,6 +560,7 @@ async function ensureContestsTable(): Promise<void> {
 
       const contestColumns: Array<[string, string]> = [
         ["icon", "VARCHAR(16) NOT NULL DEFAULT '🏆'"],
+        ["icon_image_url", "VARCHAR(512) NULL"],
         ["banner_theme", "VARCHAR(20) NOT NULL DEFAULT 'forest'"],
         ["banner_image_url", "VARCHAR(512) NULL"],
         ["scoreboard_visibility", "ENUM('LIVE','AFTER_END','ORGANIZERS_ONLY') NOT NULL DEFAULT 'LIVE'"],
@@ -592,6 +593,7 @@ async function ensureContestsTable(): Promise<void> {
         allow_upsolve TINYINT(1) NOT NULL DEFAULT 1,
         scoring_mode ENUM('IOI','ICPC') NOT NULL DEFAULT 'IOI',
         icon VARCHAR(16) NOT NULL DEFAULT '🏆',
+        icon_image_url VARCHAR(512) NULL,
         banner_theme VARCHAR(20) NOT NULL DEFAULT 'forest',
         banner_image_url VARCHAR(512) NULL,
         scoreboard_visibility ENUM('LIVE','AFTER_END','ORGANIZERS_ONLY') NOT NULL DEFAULT 'LIVE',

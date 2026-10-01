@@ -39,6 +39,9 @@ export class Contest {
   @Column({ type: "varchar", length: 16, default: "🏆" })
   icon!: string;
 
+  @Column({ type: "varchar", length: 512, nullable: true, name: "icon_image_url" })
+  iconImageUrl?: string | null;
+
   @Column({ type: "varchar", length: 20, default: "forest", name: "banner_theme" })
   bannerTheme!: ContestBannerTheme;
 

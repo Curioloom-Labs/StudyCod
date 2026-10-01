@@ -1113,6 +1113,8 @@ export const ContestPage: React.FC = () => {
   const [settingsJoinCode, setSettingsJoinCode] = React.useState("");
   const [settingsClassId, setSettingsClassId] = React.useState("");
   const [settingsIcon, setSettingsIcon] = React.useState("🏆");
+  const [settingsIconImageUrl, setSettingsIconImageUrl] = React.useState<string | null>(null);
+  const [settingsIconUploading, setSettingsIconUploading] = React.useState(false);
   const [settingsBannerTheme, setSettingsBannerTheme] = React.useState<ContestBannerTheme>("forest");
   const [settingsBannerImageUrl, setSettingsBannerImageUrl] = React.useState<string | null>(null);
   const [settingsBannerUploading, setSettingsBannerUploading] = React.useState(false);
@@ -3343,6 +3345,7 @@ export const ContestPage: React.FC = () => {
     setSettingsJoinCode("");
     setSettingsClassId(data.contest.classId ? String(data.contest.classId) : "");
     setSettingsIcon(data.contest.icon || "🏆");
+    setSettingsIconImageUrl(data.contest.iconImageUrl ?? null);
     setSettingsBannerTheme(data.contest.bannerTheme || "forest");
     setSettingsBannerImageUrl(data.contest.bannerImageUrl ?? null);
     setSettingsScoreboardVisibility(data.contest.scoreboardVisibility || "LIVE");
@@ -3418,6 +3421,7 @@ export const ContestPage: React.FC = () => {
         allowUpsolve: settingsAllowUpsolve,
         scoringMode: settingsScoringMode,
         icon: settingsIcon,
+        iconImageUrl: settingsIconImageUrl,
         bannerTheme: settingsBannerTheme,
         bannerImageUrl: settingsBannerImageUrl,
         scoreboardVisibility: settingsScoreboardVisibility,
@@ -3449,6 +3453,24 @@ export const ContestPage: React.FC = () => {
       setSettingsError(getErrorMessage(e) || tr("Не вдалося завантажити банер", "Could not upload banner"));
     } finally {
       setSettingsBannerUploading(false);
+    }
+  };
+
+  const uploadContestIcon = async (file: File | undefined) => {
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp", "image/avif"].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      setSettingsError(tr("Додай PNG, JPG, WebP або AVIF до 8 МБ", "Use PNG, JPG, WebP, or AVIF up to 8 MB"));
+      return;
+    }
+    setSettingsIconUploading(true);
+    setSettingsError(null);
+    try {
+      const uploaded = await uploadStatementImage(file);
+      setSettingsIconImageUrl(uploaded.url);
+    } catch (e: unknown) {
+      setSettingsError(getErrorMessage(e) || tr("Не вдалося завантажити іконку", "Could not upload the icon"));
+    } finally {
+      setSettingsIconUploading(false);
     }
   };
 
@@ -3879,7 +3901,7 @@ export const ContestPage: React.FC = () => {
       <Modal
         open={settingsOpen}
         onClose={() => {
-          if (!settingsSaving) setSettingsOpen(false);
+          if (!settingsSaving && !settingsIconUploading && !settingsBannerUploading) setSettingsOpen(false);
         }}
         title={tr("Налаштування контесту", "Contest settings")}
       >
@@ -3901,8 +3923,18 @@ export const ContestPage: React.FC = () => {
           <section className="rounded-xl border border-border bg-bg-base/60 p-4">
             <div className="text-sm font-semibold text-text-primary">{tr("Оформлення", "Branding")}</div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {CONTEST_ICONS.map((icon) => <button key={icon} type="button" aria-label={tr(`Обрати іконку ${icon}`, `Choose icon ${icon}`)} aria-pressed={settingsIcon === icon} onClick={() => setSettingsIcon(icon)} className={`grid size-10 place-items-center rounded-lg border text-xl ${settingsIcon === icon ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "border-border hover:bg-bg-hover"}`}>{icon}</button>)}
+              {CONTEST_ICONS.map((icon) => <button key={icon} type="button" aria-label={tr(`Обрати іконку ${icon}`, `Choose icon ${icon}`)} aria-pressed={!settingsIconImageUrl && settingsIcon === icon} onClick={() => { setSettingsIconImageUrl(null); setSettingsIcon(icon); }} className={`grid size-10 place-items-center rounded-lg border text-xl ${!settingsIconImageUrl && settingsIcon === icon ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "border-border hover:bg-bg-hover"}`}>{icon}</button>)}
             </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {settingsIconImageUrl && <img src={settingsIconImageUrl} alt="" className="size-10 rounded-lg border border-border bg-bg-surface object-cover" />}
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-primary hover:bg-bg-hover focus-within:ring-2 focus-within:ring-primary">
+                <ImagePlus aria-hidden="true" className="size-4" />{settingsIconUploading ? tr("Завантажую іконку…", "Uploading icon…") : settingsIconImageUrl ? tr("Замінити зображення", "Replace image") : tr("Завантажити зображення", "Upload image")}
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="sr-only" disabled={settingsIconUploading || settingsSaving} onChange={(event) => { void uploadContestIcon(event.target.files?.[0]); event.target.value = ""; }} />
+              </label>
+              {settingsIconImageUrl && <Button variant="ghost" onClick={() => setSettingsIconImageUrl(null)} disabled={settingsIconUploading || settingsSaving}>{tr("Прибрати", "Remove")}</Button>}
+              <span className="text-xs text-text-secondary">PNG, JPG, WebP, AVIF · 8 MB</span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Зображення замінить emoji в картці та на сторінці контесту. Без зображення використовується обрана emoji-іконка.", "The image replaces the emoji in the contest card and page. Without an image, the selected emoji is used.")}</p>
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {(Object.entries(CONTEST_BANNER_THEMES) as Array<[ContestBannerTheme, (typeof CONTEST_BANNER_THEMES)[ContestBannerTheme]]>).map(([theme, preset]) => <button key={theme} type="button" aria-pressed={settingsBannerTheme === theme} onClick={() => setSettingsBannerTheme(theme)} className={`h-12 rounded-lg border px-3 text-left text-xs font-semibold text-white ${settingsBannerTheme === theme ? "ring-2 ring-primary ring-offset-1" : "border-white/20 opacity-80 hover:opacity-100"}`} style={{ background: preset.background }}>{tr(preset.label, theme)}</button>)}
             </div>
@@ -3912,7 +3944,7 @@ export const ContestPage: React.FC = () => {
                 <ImagePlus aria-hidden="true" className="size-4" />{settingsBannerUploading ? tr("Завантажую…", "Uploading…") : tr("Завантажити банер", "Upload banner")}
                 <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="sr-only" disabled={settingsBannerUploading || settingsSaving} onChange={(event) => { void uploadContestBanner(event.target.files?.[0]); event.target.value = ""; }} />
               </label>
-              {settingsBannerImageUrl && <Button variant="ghost" onClick={() => setSettingsBannerImageUrl(null)} disabled={settingsSaving}>{tr("Прибрати", "Remove")}</Button>}
+              {settingsBannerImageUrl && <Button variant="ghost" onClick={() => setSettingsBannerImageUrl(null)} disabled={settingsSaving || settingsBannerUploading}>{tr("Прибрати", "Remove")}</Button>}
               <span className="text-xs text-text-secondary">PNG, JPG, WebP, AVIF · 8 MB</span>
             </div>
           </section>
@@ -4038,11 +4070,11 @@ export const ContestPage: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button variant="ghost" onClick={() => setSettingsOpen(false)} disabled={settingsSaving}>
+            <Button variant="ghost" onClick={() => setSettingsOpen(false)} disabled={settingsSaving || settingsIconUploading || settingsBannerUploading}>
               {tr("Скасувати", "Cancel")}
             </Button>
-            <Button onClick={saveContestSettings} disabled={settingsSaving || settingsBannerUploading}>
-              {settingsBannerUploading ? tr("Завантажую банер…", "Uploading banner…") : settingsSaving ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
+            <Button onClick={saveContestSettings} disabled={settingsSaving || settingsIconUploading || settingsBannerUploading}>
+              {settingsIconUploading ? tr("Завантажую іконку…", "Uploading icon…") : settingsBannerUploading ? tr("Завантажую банер…", "Uploading banner…") : settingsSaving ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
             </Button>
           </div>
         </div>
@@ -4176,7 +4208,7 @@ export const ContestPage: React.FC = () => {
               <PageEyebrow label="contest" />
               <div className="flex flex-wrap items-start gap-2">
                 <h1 className="flex flex-1 items-center gap-3 text-2xl font-semibold leading-tight tracking-tight text-text-primary md:text-3xl">
-                  <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-2xl">{data.contest.icon || "🏆"}</span>{data.contest.title}
+                  <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-2xl">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" className="size-full object-cover" /> : data.contest.icon || "🏆"}</span>{data.contest.title}
                 </h1>
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
                   {(() => {
