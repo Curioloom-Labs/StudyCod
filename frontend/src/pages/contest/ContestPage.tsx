@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, ListOrdered, Table2, KeyRound, RefreshCw, Trophy, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, Flame, ShieldCheck, Users2, Award, Sparkles, ImagePlus } from "lucide-react";
+import { ArrowLeft, ListOrdered, Table2, KeyRound, RefreshCw, Trophy, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, Flame, ShieldCheck, Users2, Award, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
@@ -5858,156 +5858,137 @@ export const ContestPage: React.FC = () => {
                     )}
                   </Card>
 
-                  <Card id="contest-account-generation" className="scroll-mt-4 p-4">
-                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div><div className="font-mono text-text-primary flex items-center gap-2"><KeyRound className="w-4 h-4 text-primary" />{tr("Тимчасові акаунти", "Temporary accounts")}</div><p className="mt-1 text-xs text-text-secondary">{tr("Додай список учасників, перевір дані та створи окремі логіни для цього контесту.", "Import a roster, review the entries, and create separate logins for this contest.")}</p></div>
+                  <Card id="contest-account-generation" className="scroll-mt-6 overflow-hidden rounded-[28px] border border-[#19291d]/10 bg-white p-4 shadow-[0_18px_50px_-44px_rgba(16,41,24,.65)] dark:border-white/[.09] dark:bg-[#111b14] sm:p-6">
+                    <div className="flex flex-col gap-4 border-b border-[#17271c]/[.08] pb-5 dark:border-white/[.08] sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#e8f5ec] text-[#16834d] dark:bg-[#00d978]/10 dark:text-[#72edb0]"><KeyRound aria-hidden="true" className="size-5" /></span>
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#ff8c00]">{tr("УЧАСНИКИ", "PARTICIPANTS")}</p>
+                          <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em] text-[#1a271e] dark:text-[#edf3ef]">{tr("Тимчасові акаунти", "Temporary accounts")}</h2>
+                          <p className="mt-1 max-w-2xl text-sm leading-6 text-[#637368] dark:text-[#aab8ae]">{tr("Додай список людей і створи окремі логіни для цього контесту.", "Add a roster and create separate logins for this contest.")}</p>
+                        </div>
+                      </div>
+                      {generatedAccounts.length > 0 && <span className="inline-flex w-fit items-center gap-2 rounded-full bg-[#e8f5ec] px-3 py-1.5 text-xs font-bold text-[#147b47] dark:bg-[#00d978]/10 dark:text-[#72edb0]"><UsersRound aria-hidden="true" className="size-3.5" />{tr(`Доступів створено: ${generatedAccounts.length}`, `Accounts created: ${generatedAccounts.length}`)}</span>}
                     </div>
 
-                    <div className="space-y-2 mb-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <input
-                          key={accountRosterImportKey}
-                          type="file"
-                          accept=".xlsx,.xls,.ods,.csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                          onChange={(e) => void importRosterCsvFile(e.target.files?.[0] ?? null)}
-                          className="block text-xs text-text-secondary"
-                        />
-                        <span className="text-xs text-text-secondary">XLSX · XLS · ODS · CSV · TSV · TXT (перший аркуш)</span>
+                    <div className="mt-5 rounded-2xl border border-[#17271c]/[.08] bg-[#f8faf8] p-3.5 dark:border-white/[.08] dark:bg-white/[.025] sm:p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="flex items-center gap-2 text-sm font-bold text-[#24352a] dark:text-[#e5eee7]"><FileSpreadsheet aria-hidden="true" className="size-4 shrink-0 text-[#16834d] dark:text-[#72edb0]" /><span className="truncate">{accountRosterImportFileName || tr("Завантажити список", "Upload a roster")}</span></p>
+                          <p className="mt-1 text-xs text-[#708075] dark:text-[#a5b3a8]">{tr("XLSX, XLS, ODS, CSV, TSV або TXT · до 10 МБ", "XLSX, XLS, ODS, CSV, TSV, or TXT · up to 10 MB")}</p>
+                        </div>
+                        <label htmlFor="contest-roster-file" className="inline-flex min-h-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#17271c]/10 bg-white px-4 py-2 text-sm font-bold text-[#263b2d] transition-colors hover:bg-[#f1f7f2] focus-within:outline-none focus-within:ring-2 focus-within:ring-[#00c875] dark:border-white/10 dark:bg-white/[.06] dark:text-[#e7f0e9] dark:hover:bg-white/[.1]">
+                          <Upload aria-hidden="true" className="size-4 text-[#16834d] dark:text-[#72edb0]" />{tr("Обрати файл", "Choose file")}
+                          <input
+                            key={accountRosterImportKey}
+                            id="contest-roster-file"
+                            type="file"
+                            accept=".xlsx,.xls,.ods,.csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                            onChange={(e) => void importRosterCsvFile(e.target.files?.[0] ?? null)}
+                            className="sr-only"
+                          />
+                        </label>
                       </div>
+                    </div>
+
+                    <div className="mt-5">
+                      <label htmlFor="contest-roster-text" className="block text-sm font-bold text-[#24352a] dark:text-[#e5eee7]">{tr("Список учасників", "Participant list")}</label>
+                      <p className="mt-1 text-xs leading-5 text-[#708075] dark:text-[#a5b3a8]">{tr("Одне ім’я на рядок. Email можна додати після коми — він потрібен лише для розсилки.", "One name per line. Add an email after a comma if you want to send credentials by email.")}</p>
                       <textarea
+                        id="contest-roster-text"
                         value={accountRosterText}
-                        onChange={(e) => setAccountRosterText(e.target.value)}
-                        className="w-full min-h-[120px] px-3 py-2 bg-bg-base border border-border text-text-primary font-mono"
-                        placeholder={tr("Одне ім’я на рядок або ПІБ, email (email необов’язковий)\nІван Петренко\nОлена Коваль, olena@example.com", "One name per row or full name, email (email is optional)\nJohn Smith\nAlex Green, alex@example.com")}
+                        onChange={(e) => { setAccountRosterText(e.target.value); setAccountGenError(null); setAccountGenMessage(null); }}
+                        className="mt-3 min-h-[150px] w-full resize-y rounded-2xl border border-[#17271c]/10 bg-[#fbfcfa] px-4 py-3 text-sm leading-6 text-[#24352a] outline-none transition-[border-color,box-shadow] placeholder:text-[#849288] focus:border-[#16834d]/45 focus:ring-2 focus:ring-[#00c875]/15 dark:border-white/10 dark:bg-[#0b140e] dark:text-[#e5eee7] dark:placeholder:text-[#809087]"
+                        placeholder={tr("Іван Петренко\nОлена Коваль, olena@example.com", "John Smith\nAlex Green, alex@example.com")}
                       />
-                      <div className="text-xs text-text-secondary">
-                        {tr(
-                          `Розпізнано: ${rosterInputAnalysis.entries.length}. Невалідних рядків: ${rosterInputAnalysis.invalidLines.length}.`,
-                          `Parsed: ${rosterInputAnalysis.entries.length}. Invalid rows: ${rosterInputAnalysis.invalidLines.length}.`
-                        )}
-                      </div>
-                      {rosterInputAnalysis.duplicateEmails.length > 0 ? (
-                        <div className="text-xs text-accent-warn">
-                          {tr(
-                            `Увага: повторювані email (${rosterInputAnalysis.duplicateEmails.length}): ${rosterInputAnalysis.duplicateEmails.slice(0, 5).join(", ")}`,
-                            `Warning: duplicate emails (${rosterInputAnalysis.duplicateEmails.length}): ${rosterInputAnalysis.duplicateEmails.slice(0, 5).join(", ")}`
-                          )}
-                        </div>
-                      ) : null}
-                      {rosterInputAnalysis.invalidLines.length > 0 ? (
-                        <div className="text-xs text-accent-error">
-                          {tr(
-                            `Некоректні рядки (перші 3): ${rosterInputAnalysis.invalidLines.slice(0, 3).join(" | ")}`,
-                            `Invalid rows (first 3): ${rosterInputAnalysis.invalidLines.slice(0, 3).join(" | ")}`
-                          )}
-                        </div>
-                      ) : null}
 
-                      {rosterPreviewRows.length > 0 ? (
-                        <div className="border border-border bg-bg-surface/60 rounded-lg overflow-auto max-h-[180px]">
-                          <table className="min-w-[560px] w-full text-xs font-mono">
-                            <thead className="bg-bg-hover">
-                              <tr>
-                                <th className="p-2 border-b border-border text-left">{tr("ПІБ", "Full name")}</th>
-                                <th className="p-2 border-b border-border text-left">email</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {rosterPreviewRows.map((row, idx) => (
-                                <tr key={`${row.email}-${idx}`} className="odd:bg-bg-base even:bg-bg-surface">
-                                  <td className="p-2 border-b border-border">{row.fullName}</td>
-                                  <td className="p-2 border-b border-border">{row.email || "—"}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                          {rosterInputAnalysis.entries.length > rosterPreviewRows.length ? (
-                            <div className="px-2 py-1 text-[11px] text-text-secondary border-t border-border">
-                              {tr(
-                                `Показано ${rosterPreviewRows.length} з ${rosterInputAnalysis.entries.length}`,
-                                `Showing ${rosterPreviewRows.length} of ${rosterInputAnalysis.entries.length}`
-                              )}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
+                      {accountRosterText.trim() ? <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f5ec] px-2.5 py-1 text-xs font-semibold text-[#147b47] dark:bg-[#00d978]/10 dark:text-[#72edb0]"><CircleCheck aria-hidden="true" className="size-3.5" />{tr(`${rosterInputAnalysis.entries.length} розпізнано`, `${rosterInputAnalysis.entries.length} recognized`)}</span>
+                        {rosterInputAnalysis.invalidLines.length > 0 && <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff1e8] px-2.5 py-1 text-xs font-semibold text-[#a34710] dark:bg-[#ff8c00]/10 dark:text-[#ffb760]"><TriangleAlert aria-hidden="true" className="size-3.5" />{tr(`${rosterInputAnalysis.invalidLines.length} помилок`, `${rosterInputAnalysis.invalidLines.length} invalid`)}</span>}
+                        {rosterInputAnalysis.duplicateEmails.length > 0 && <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff7e5] px-2.5 py-1 text-xs font-semibold text-[#8a5a00] dark:bg-[#ffb547]/10 dark:text-[#ffd18a]"><TriangleAlert aria-hidden="true" className="size-3.5" />{tr(`${rosterInputAnalysis.duplicateEmails.length} повторів email`, `${rosterInputAnalysis.duplicateEmails.length} duplicate emails`)}</span>}
+                      </div> : <p className="mt-3 text-xs text-[#708075] dark:text-[#a5b3a8]">{tr("Після вставлення побачиш кількість розпізнаних імен та помилки формату.", "Once you paste names, you’ll see how many were recognized and any formatting issues.")}</p>}
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button variant="secondary" onClick={generateAccounts} disabled={accountGenLoading}>
-                          {accountGenLoading ? tr("Генерація…", "Generating…") : tr("Згенерувати акаунти", "Generate accounts")}
-                        </Button>
-                        <Button variant="ghost" onClick={clearRosterInput} disabled={!accountRosterText.trim()}>
-                          {tr("Очистити список", "Clear roster")}
-                        </Button>
-                        <Button variant="ghost" onClick={clearGeneratedAccounts} disabled={!generatedAccounts.length}>
-                          {tr("Очистити згенеровані", "Clear generated")}
-                        </Button>
-                        <Button variant="ghost" onClick={copyGeneratedAccounts} disabled={!generatedAccounts.length}>
-                          {tr("Скопіювати CSV", "Copy CSV")}
-                        </Button>
-                        <Button variant="ghost" onClick={downloadGeneratedAccountsCsv} disabled={!generatedAccounts.length}>
-                          {tr("Завантажити CSV", "Download CSV")}
-                        </Button>
-                        <Button variant="ghost" onClick={() => void downloadGeneratedAccountsXlsx()} disabled={!generatedAccounts.length}>
-                          {tr("Завантажити XLSX", "Download XLSX")}
-                        </Button>
-                      </div>
+                      {rosterInputAnalysis.duplicateEmails.length > 0 && <div role="status" className="mt-3 rounded-xl border border-[#f0d99d] bg-[#fffaf0] px-3 py-2.5 text-xs leading-5 text-[#805900] dark:border-[#ffb547]/20 dark:bg-[#ffb547]/[.06] dark:text-[#ffd18a]">
+                        {tr(`Повторювані email: ${rosterInputAnalysis.duplicateEmails.slice(0, 5).join(", ")}`, `Duplicate emails: ${rosterInputAnalysis.duplicateEmails.slice(0, 5).join(", ")}`)}
+                      </div>}
+                      {rosterInputAnalysis.invalidLines.length > 0 && <div role="alert" className="mt-3 rounded-xl border border-[#f2c8b8] bg-[#fff5f1] px-3 py-2.5 text-xs leading-5 text-[#9b3416] dark:border-[#ff755a]/20 dark:bg-[#ff755a]/[.06] dark:text-[#ffad9b]">
+                        {tr(`Перевір рядки: ${rosterInputAnalysis.invalidLines.slice(0, 3).join(" · ")}`, `Check these rows: ${rosterInputAnalysis.invalidLines.slice(0, 3).join(" · ")}`)}
+                      </div>}
                     </div>
 
-                    <div className="text-xs text-text-secondary mb-2">
-                      {tr("Можна вставити лише ПІБ; email потрібен тільки для розсилки. Збережи CSV або XLSX одразу: паролі показуються лише після генерації.", "Names are enough; email is only needed for sending credentials by email. Save the CSV or XLSX now: passwords are shown only after generation.")}
-                    </div>
-
-                    {accountGenError ? <div className="text-sm text-accent-error mb-3">{accountGenError}</div> : null}
-                    {accountGenMessage ? <div className="text-sm text-accent-success mb-3">{accountGenMessage}</div> : null}
-
-                    {generatedAccounts.length > 0 ? (
-                      <>
-                      <div className="overflow-auto border border-border max-h-[260px] mb-3">
-                        <table className="min-w-[620px] md:min-w-[760px] w-full text-sm font-mono">
-                          <caption className="sr-only">{tr("Згенеровані облікові записи учасників", "Generated participant accounts")}</caption>
-                          <thead className="bg-bg-hover">
-                            <tr>
-                              <th className="p-2 border-b border-border text-left">{tr("ПІБ", "Full name")}</th>
-                              <th className="hidden md:table-cell p-2 border-b border-border text-left">email</th>
-                              <th className="p-2 border-b border-border text-left">username</th>
-                              <th className="p-2 border-b border-border text-left">password</th>
-                              <th className="hidden lg:table-cell p-2 border-b border-border text-left">userId</th>
-                              <th className="hidden lg:table-cell p-2 border-b border-border text-left">participantId</th>
-                            </tr>
+                    {rosterPreviewRows.length > 0 && <div className="mt-5 overflow-hidden rounded-2xl border border-[#17271c]/10 dark:border-white/10">
+                      <div className="flex items-center justify-between gap-3 bg-[#f8faf8] px-4 py-3 dark:bg-white/[.035]">
+                        <p className="text-sm font-bold text-[#24352a] dark:text-[#e5eee7]">{tr("Перевірка списку", "Roster preview")}</p>
+                        <span className="text-xs font-medium text-[#708075] dark:text-[#a5b3a8]">{tr(`${rosterPreviewRows.length} з ${rosterInputAnalysis.entries.length}`, `${rosterPreviewRows.length} of ${rosterInputAnalysis.entries.length}`)}</span>
+                      </div>
+                      <div className="max-h-[220px] overflow-auto">
+                        <table className="min-w-[520px] w-full text-sm">
+                          <thead className="sticky top-0 bg-white text-left text-xs font-semibold text-[#708075] dark:bg-[#111b14] dark:text-[#a5b3a8]">
+                            <tr><th className="px-4 py-2.5">{tr("Ім’я", "Name")}</th><th className="px-4 py-2.5">Email</th></tr>
                           </thead>
                           <tbody>
-                            {generatedAccounts.map((a) => (
-                              <tr key={`${a.userId}-${a.participantId}-${a.email ?? ""}`} className="odd:bg-bg-base even:bg-bg-surface">
-                                <td className="p-2 border-b border-border">{a.fullName ?? "—"}</td>
-                                <td className="hidden md:table-cell p-2 border-b border-border">{a.email ?? "—"}</td>
-                                <td className="p-2 border-b border-border">{a.username}</td>
-                                <td className="p-2 border-b border-border">{a.password}</td>
-                                <td className="hidden lg:table-cell p-2 border-b border-border">{a.userId}</td>
-                                <td className="hidden lg:table-cell p-2 border-b border-border">{a.participantId}</td>
-                              </tr>
-                            ))}
+                            {rosterPreviewRows.map((row, idx) => <tr key={`${row.email}-${idx}`} className="border-t border-[#17271c]/[.07] text-[#34483a] odd:bg-white even:bg-[#f8faf8] dark:border-white/[.06] dark:text-[#d7e2da] dark:odd:bg-[#111b14] dark:even:bg-white/[.02]">
+                              <td className="px-4 py-2.5 font-medium">{row.fullName}</td><td className="px-4 py-2.5 text-[#637368] dark:text-[#aab8ae]">{row.email || "—"}</td>
+                            </tr>)}
                           </tbody>
                         </table>
                       </div>
+                    </div>}
 
-                      <div className="space-y-2">
+                    <div className="mt-5 flex flex-col gap-3 border-t border-[#17271c]/[.08] pt-4 dark:border-white/[.08] sm:flex-row sm:flex-wrap sm:items-center">
+                      <Button variant="default" onClick={generateAccounts} disabled={accountGenLoading || rosterInputAnalysis.entries.length === 0} className="min-h-10 gap-2 rounded-xl bg-[#00d978] px-4 text-sm font-bold text-[#062211] hover:bg-[#00ff88] focus-visible:ring-[#00c875]">
+                        <UsersRound aria-hidden="true" className="size-4" />{accountGenLoading ? tr("Створюю акаунти…", "Creating accounts…") : tr("Згенерувати акаунти", "Generate accounts")}
+                      </Button>
+                      {accountRosterText.trim() && <Button variant="ghost" onClick={clearRosterInput} className="min-h-10 gap-2 rounded-xl px-3 text-[#657368] hover:bg-[#f1f5f1] dark:text-[#aab8ae] dark:hover:bg-white/[.06]">
+                        <Trash2 aria-hidden="true" className="size-4" />{tr("Очистити список", "Clear list")}
+                      </Button>}
+                      {generatedAccounts.length > 0 && <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                        <Button variant="outline" onClick={copyGeneratedAccounts} className="min-h-9 gap-2 rounded-xl border-[#17271c]/10 bg-white px-3 text-xs font-semibold text-[#3a4d3f] hover:bg-[#f1f7f2] dark:border-white/10 dark:bg-white/[.04] dark:text-[#dce7df] dark:hover:bg-white/[.08]"><Copy aria-hidden="true" className="size-3.5" />{tr("Копіювати CSV", "Copy CSV")}</Button>
+                        <Button variant="outline" onClick={downloadGeneratedAccountsCsv} className="min-h-9 gap-2 rounded-xl border-[#17271c]/10 bg-white px-3 text-xs font-semibold text-[#3a4d3f] hover:bg-[#f1f7f2] dark:border-white/10 dark:bg-white/[.04] dark:text-[#dce7df] dark:hover:bg-white/[.08]"><Download aria-hidden="true" className="size-3.5" />CSV</Button>
+                        <Button variant="outline" onClick={() => void downloadGeneratedAccountsXlsx()} className="min-h-9 gap-2 rounded-xl border-[#17271c]/10 bg-white px-3 text-xs font-semibold text-[#3a4d3f] hover:bg-[#f1f7f2] dark:border-white/10 dark:bg-white/[.04] dark:text-[#dce7df] dark:hover:bg-white/[.08]"><Download aria-hidden="true" className="size-3.5" />XLSX</Button>
+                        <Button variant="ghost" onClick={clearGeneratedAccounts} className="min-h-9 gap-2 rounded-xl px-3 text-xs font-semibold text-[#8c4e42] hover:bg-[#fff2ef] dark:text-[#ffad9b] dark:hover:bg-[#ff755a]/10"><Trash2 aria-hidden="true" className="size-3.5" />{tr("Очистити доступи", "Clear accounts")}</Button>
+                      </div>}
+                    </div>
+
+                    {accountGenError && <div role="alert" className="mt-3 rounded-xl border border-[#f2c8b8] bg-[#fff5f1] px-3 py-2.5 text-sm text-[#9b3416] dark:border-[#ff755a]/20 dark:bg-[#ff755a]/[.06] dark:text-[#ffad9b]">{accountGenError}</div>}
+                    {accountGenMessage && <div role="status" className="mt-3 rounded-xl border border-[#bfe5cd] bg-[#effaf2] px-3 py-2.5 text-sm text-[#176b3c] dark:border-[#00d978]/20 dark:bg-[#00d978]/[.06] dark:text-[#8deeb6]">{accountGenMessage}</div>}
+
+                    {generatedAccounts.length > 0 && <section className="mt-5 overflow-hidden rounded-2xl border border-[#17271c]/10 dark:border-white/10">
+                      <div className="flex flex-col gap-3 bg-[#f8faf8] px-4 py-4 dark:bg-white/[.035] sm:flex-row sm:items-center sm:justify-between">
+                        <div><h3 className="font-[family-name:var(--font-display)] text-lg font-bold text-[#1a271e] dark:text-[#edf3ef]">{tr("Згенеровані доступи", "Generated accounts")}</h3><p className="mt-1 text-xs leading-5 text-[#708075] dark:text-[#a5b3a8]">{tr("Збережи файл зараз: паролі доступні лише після генерації.", "Save a copy now: passwords are only shown after generation.")}</p></div>
+                        <span className="inline-flex w-fit items-center rounded-full bg-[#e8f5ec] px-3 py-1.5 text-xs font-bold text-[#147b47] dark:bg-[#00d978]/10 dark:text-[#72edb0]">{tr(`${generatedAccounts.length} доступів`, `${generatedAccounts.length} accounts`)}</span>
+                      </div>
+                      <div className="max-h-[320px] overflow-auto">
+                        <table className="min-w-[620px] w-full text-sm">
+                          <caption className="sr-only">{tr("Згенеровані облікові записи учасників", "Generated participant accounts")}</caption>
+                          <thead className="sticky top-0 bg-white text-left text-xs font-semibold text-[#708075] dark:bg-[#111b14] dark:text-[#a5b3a8]">
+                            <tr><th className="px-4 py-3">{tr("Ім’я", "Name")}</th><th className="hidden px-4 py-3 md:table-cell">Email</th><th className="px-4 py-3">{tr("Логін", "Username")}</th><th className="px-4 py-3">{tr("Пароль", "Password")}</th><th className="hidden px-4 py-3 lg:table-cell">userId</th><th className="hidden px-4 py-3 lg:table-cell">participantId</th></tr>
+                          </thead>
+                          <tbody>
+                            {generatedAccounts.map((a) => <tr key={`${a.userId}-${a.participantId}-${a.email ?? ""}`} className="border-t border-[#17271c]/[.07] text-[#34483a] odd:bg-white even:bg-[#f8faf8] dark:border-white/[.06] dark:text-[#d7e2da] dark:odd:bg-[#111b14] dark:even:bg-white/[.02]">
+                              <td className="px-4 py-3 font-medium">{a.fullName ?? "—"}</td><td className="hidden px-4 py-3 text-[#637368] md:table-cell dark:text-[#aab8ae]">{a.email ?? "—"}</td><td className="px-4 py-3 font-mono text-xs">{a.username}</td><td className="px-4 py-3 font-mono text-xs">{a.password}</td><td className="hidden px-4 py-3 font-mono text-xs lg:table-cell">{a.userId}</td><td className="hidden px-4 py-3 font-mono text-xs lg:table-cell">{a.participantId}</td>
+                            </tr>)}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="border-t border-[#17271c]/[.08] bg-white p-4 dark:border-white/[.08] dark:bg-[#111b14] sm:p-5">
+                        <label htmlFor="contest-account-email-message" className="block text-sm font-bold text-[#24352a] dark:text-[#e5eee7]">{tr("Повідомлення для учасників", "Message to participants")} <span className="font-normal text-[#819087] dark:text-[#8f9e93]">{tr("(необов’язково)", "(optional)")}</span></label>
                         <textarea
+                          id="contest-account-email-message"
                           value={accountMailCustomMessage}
                           onChange={(e) => setAccountMailCustomMessage(e.target.value)}
-                          className="w-full min-h-[84px] px-3 py-2 bg-bg-base border border-border text-text-primary"
-                          placeholder={tr("Додаткове повідомлення для листа (опційно)", "Additional email message (optional)")}
+                          className="mt-2 min-h-[88px] w-full resize-y rounded-xl border border-[#17271c]/10 bg-[#fbfcfa] px-3.5 py-3 text-sm leading-6 text-[#24352a] outline-none transition-[border-color,box-shadow] placeholder:text-[#849288] focus:border-[#16834d]/45 focus:ring-2 focus:ring-[#00c875]/15 dark:border-white/10 dark:bg-[#0b140e] dark:text-[#e5eee7] dark:placeholder:text-[#809087]"
+                          placeholder={tr("Напиши коротке привітання або інструкцію для входу", "Add a short welcome or sign-in instruction")}
                         />
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button variant="secondary" onClick={sendGeneratedAccountsByEmail} disabled={accountMailLoading}>
-                            {accountMailLoading ? tr("Розсилка…", "Sending…") : tr("Розіслати дані та контест через пошту", "Send credentials and contest info by email")}
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <Button variant="default" onClick={sendGeneratedAccountsByEmail} disabled={accountMailLoading} className="min-h-10 gap-2 rounded-xl bg-[#00d978] px-4 text-sm font-bold text-[#062211] hover:bg-[#00ff88] focus-visible:ring-[#00c875]">
+                            <Send aria-hidden="true" className="size-4" />{accountMailLoading ? tr("Надсилаю…", "Sending…") : tr("Надіслати доступи поштою", "Email access details")}
                           </Button>
+                          {accountMailError && <span role="alert" className="text-sm text-[#9b3416] dark:text-[#ffad9b]">{accountMailError}</span>}
+                          {accountMailResult && <span role="status" className="text-sm text-[#176b3c] dark:text-[#8deeb6]">{accountMailResult}</span>}
                         </div>
-                        {accountMailError ? <div className="text-sm text-accent-error">{accountMailError}</div> : null}
-                        {accountMailResult ? <div className="text-sm text-accent-success">{accountMailResult}</div> : null}
                       </div>
-                      </>
-                    ) : null}
+                    </section>}
                   </Card>
 
                   <Card className="p-4">
