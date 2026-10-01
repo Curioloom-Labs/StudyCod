@@ -1083,6 +1083,7 @@ export const ContestPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
 
   const [tab, setTab] = React.useState<"problems" | "standings" | "community">(() => searchParams.get("tab") === "accounts" ? "standings" : "problems");
+  const [accountFocusMode, setAccountFocusMode] = React.useState(() => searchParams.get("tab") === "accounts");
   const [standingsVersion, setStandingsVersion] = React.useState(0);
 
   const [communityQuestionText, setCommunityQuestionText] = React.useState("");
@@ -1177,6 +1178,7 @@ export const ContestPage: React.FC = () => {
   const [accountMailCustomMessage, setAccountMailCustomMessage] = React.useState("");
 
   const [certificateMode, setCertificateMode] = React.useState<"none" | "studycod" | "custom">("studycod");
+  const [certificateEditorOpen, setCertificateEditorOpen] = React.useState(false);
   const [certificateUiSimpleMode, setCertificateUiSimpleMode] = React.useState(true);
   const [certificateUiAdvancedOpen, setCertificateUiAdvancedOpen] = React.useState(false);
   const [certificateAutoSyncLayout, setCertificateAutoSyncLayout] = React.useState(true);
@@ -3475,10 +3477,10 @@ export const ContestPage: React.FC = () => {
   };
 
   React.useEffect(() => {
-    if (tab !== "standings" || searchParams.get("tab") !== "accounts") return;
+    if (tab !== "standings" || !accountFocusMode) return;
     const timer = window.setTimeout(() => document.getElementById("contest-account-generation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 250);
     return () => window.clearTimeout(timer);
-  }, [tab, searchParams, data?.contest.id]);
+  }, [tab, accountFocusMode, data?.contest.id]);
 
   const resetAddForm = React.useCallback(() => {
     setAddError(null);
@@ -3662,7 +3664,7 @@ export const ContestPage: React.FC = () => {
         </Button>
 
         <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:overflow-visible sm:pb-0">
-          <Button variant={tab === "problems" ? "secondary" : "ghost"} onClick={() => setTab("problems")}
+          <Button variant={tab === "problems" ? "secondary" : "ghost"} onClick={() => { setTab("problems"); setAccountFocusMode(false); }}
             title={tr("Задачі", "Problems")}
           >
             <ListOrdered className="w-4 h-4 mr-2" />
@@ -3674,19 +3676,19 @@ export const ContestPage: React.FC = () => {
             <Trophy className="w-4 h-4 mr-2" />
             {tr("Скорборд", "Scoreboard")}
           </Button>
-          <Button variant={tab === "standings" ? "secondary" : "ghost"} onClick={() => setTab("standings")}
+          <Button variant={tab === "standings" && !accountFocusMode ? "secondary" : "ghost"} onClick={() => { setTab("standings"); setAccountFocusMode(false); }}
             title={tr("Таблиця", "Standings")}
           >
             <Table2 className="w-4 h-4 mr-2" />
             {tr("Таблиця", "Standings")}
           </Button>
-          <Button variant={tab === "community" ? "secondary" : "ghost"} onClick={() => setTab("community")}
+          <Button variant={tab === "community" ? "secondary" : "ghost"} onClick={() => { setTab("community"); setAccountFocusMode(false); }}
             title={tr("Ком'юніті", "Community")}
           >
             <MessageSquare className="w-4 h-4 mr-2" />
             {tr("Ком'юніті", "Community")}
           </Button>
-          {data?.access.canManage && <Button variant="ghost" onClick={() => { setTab("standings"); window.setTimeout(() => document.getElementById("contest-account-generation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100); }} title={tr("Тимчасові акаунти учасників", "Temporary participant accounts")}>
+          {data?.access.canManage && <Button variant={accountFocusMode ? "secondary" : "ghost"} onClick={() => { setTab("standings"); setAccountFocusMode(true); window.setTimeout(() => document.getElementById("contest-account-generation")?.scrollIntoView({ behavior: "smooth", block: "start" }), 100); }} title={tr("Тимчасові акаунти учасників", "Temporary participant accounts")}>
             <KeyRound className="w-4 h-4 mr-2" />{tr("Акаунти", "Accounts")}
           </Button>}
         </div>
@@ -4504,48 +4506,54 @@ export const ContestPage: React.FC = () => {
               </Card>
             </>
           ) : tab === "standings" ? (
-            <div className="space-y-4">
+            <div className={`space-y-4${accountFocusMode ? " contest-accounts-focus" : ""}`}>
               <Scoreboard key={`sb-${standingsVersion}`} contestId={data.contest.id} canManage={!!data.access.canManage} />
 
               {hasToken && data.access.canManage ? (
                 <>
-                  <Card className="p-4">
+                  <Card className="rounded-2xl p-4 sm:p-5">
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="font-mono text-text-primary flex items-center gap-2"><Award className="w-4 h-4 text-primary" />{tr("Сертифікати", "Certificates")}</div>
+                      <div className="flex items-center gap-2 text-base font-semibold text-text-primary"><Award className="w-4 h-4 text-primary" />{tr("Сертифікати", "Certificates")}</div>
                       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                        {certificateUiSimpleMode ? (
+                        {certificateEditorOpen && <>
+                          {certificateUiSimpleMode ? (
+                            <Button
+                              variant={certificateGlobalSettingsOpen ? "secondary" : "ghost"}
+                              onClick={() => setCertificateGlobalSettingsOpen((v) => !v)}
+                            >
+                              {certificateGlobalSettingsOpen ? tr("Сховати загальні налаштування", "Hide global settings") : tr("Загальні налаштування", "Global settings")}
+                            </Button>
+                          ) : null}
                           <Button
-                            variant={certificateGlobalSettingsOpen ? "secondary" : "ghost"}
-                            onClick={() => setCertificateGlobalSettingsOpen((v) => !v)}
+                            variant={certificateUiSimpleMode ? "secondary" : "ghost"}
+                            onClick={() => {
+                              setCertificateUiSimpleMode(true);
+                              setCertificateUiAdvancedOpen(false);
+                              setCertificateCanvasFocusMode(true);
+                              setCertificateGlobalSettingsOpen(false);
+                            }}
                           >
-                            {certificateGlobalSettingsOpen ? tr("Сховати загальні налаштування", "Hide global settings") : tr("Загальні налаштування", "Global settings")}
+                            {tr("Візуальний", "Visual")}
                           </Button>
-                        ) : null}
-                        <Button
-                          variant={certificateUiSimpleMode ? "secondary" : "ghost"}
-                          onClick={() => {
-                            setCertificateUiSimpleMode(true);
-                            setCertificateUiAdvancedOpen(false);
-                            setCertificateCanvasFocusMode(true);
-                            setCertificateGlobalSettingsOpen(false);
-                          }}
-                        >
-                          {tr("Візуальний", "Visual")}
-                        </Button>
-                        <Button
-                          variant={!certificateUiSimpleMode ? "secondary" : "ghost"}
-                          onClick={() => {
-                            setCertificateUiSimpleMode(false);
-                            setCertificateUiAdvancedOpen(true);
-                            setCertificateCanvasFocusMode(false);
-                            setCertificateGlobalSettingsOpen(true);
-                          }}
-                        >
-                          {tr("Розширено", "Advanced")}
+                          <Button
+                            variant={!certificateUiSimpleMode ? "secondary" : "ghost"}
+                            onClick={() => {
+                              setCertificateUiSimpleMode(false);
+                              setCertificateUiAdvancedOpen(true);
+                              setCertificateCanvasFocusMode(false);
+                              setCertificateGlobalSettingsOpen(true);
+                            }}
+                          >
+                            {tr("Розширено", "Advanced")}
+                          </Button>
+                        </>}
+                        <Button aria-expanded={certificateEditorOpen} variant={certificateEditorOpen ? "ghost" : "secondary"} onClick={() => setCertificateEditorOpen((open) => !open)}>
+                          {certificateEditorOpen ? tr("Згорнути редактор", "Collapse editor") : tr("Відкрити редактор", "Open editor")}
                         </Button>
                       </div>
                     </div>
 
+                    {certificateEditorOpen ? <>
                     {certificateUiSimpleMode ? (
                       <div className="mb-3 text-xs text-text-secondary rounded border border-border bg-bg-surface/60 px-2 py-1.5">
                         {tr("Режим", "Mode")}: {certificateMode === "none" ? tr("Вимкнено", "Disabled") : certificateMode === "studycod" ? "StudyCod" : "Custom"}
@@ -5839,6 +5847,15 @@ export const ContestPage: React.FC = () => {
                         "Tip: if Template ID is empty, custom mode creates a template from HTML/CSS and StudyCod mode creates one from the style/fields form above."
                       )}
                     </div>
+                    </> : (
+                      <div className="flex flex-col gap-3 rounded-xl border border-border bg-bg-surface/45 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-text-primary">{certificateMode === "none" ? tr("Сертифікати вимкнено", "Certificates are disabled") : certificateMode === "studycod" ? tr("Шаблон StudyCod", "StudyCod template") : tr("Власний HTML/CSS-шаблон", "Custom HTML/CSS template")}</p>
+                          <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Макет, поля та надсилання поштою — у редакторі.", "Layout, fields, and email delivery are in the editor.")}</p>
+                        </div>
+                        <span className="inline-flex shrink-0 items-center rounded-full border border-border px-2.5 py-1 text-xs font-medium text-text-secondary">{certificateSendEmailEnabled ? tr("Email увімкнено", "Email enabled") : tr("Email вимкнено", "Email disabled")}</span>
+                      </div>
+                    )}
                   </Card>
 
                   <Card id="contest-account-generation" className="scroll-mt-4 p-4">

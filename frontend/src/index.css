@@ -1014,3 +1014,6 @@
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 }
+.contest-accounts-focus > :not(#contest-account-generation) {
+  display: none;
+}
