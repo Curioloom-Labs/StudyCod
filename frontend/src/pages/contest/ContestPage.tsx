@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ListOrdered, Table2, KeyRound, RefreshCw, Trophy, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, Flame, ShieldCheck, Users2, Award } from "lucide-react";
+import { ArrowLeft, ListOrdered, Table2, KeyRound, RefreshCw, Trophy, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, Flame, ShieldCheck, Users2, Award, Sparkles } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
@@ -47,7 +47,9 @@ import {
   type ScoreboardProblem,
   type ScoreboardRow,
   type ContestSimilarityPair,
+  type ContestVisibility,
 } from "../../lib/api/contests";
+import { getClasses, type Class as EduClass } from "../../lib/api/edu";
 import {
   importLibraryTaskArchive,
   listApprovedLibraryTasks,
@@ -102,6 +104,13 @@ function toCodeEditorLanguage(value: unknown): CodeEditorLanguage {
 
 function getErrorMessage(error: unknown): string {
   return getErrorMessageFromUnknown(error, "");
+}
+
+function createContestInviteCode(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const values = new Uint8Array(8);
+  window.crypto.getRandomValues(values);
+  return `SC-${Array.from(values, (value) => alphabet[value % alphabet.length]).join("")}`;
 }
 
 function fmtDateTime(iso: string | null | undefined, locale: string) {
@@ -1128,6 +1137,13 @@ export const ContestPage: React.FC = () => {
   const [settingsEndsAt, setSettingsEndsAt] = React.useState("");
   const [settingsAllowUpsolve, setSettingsAllowUpsolve] = React.useState(true);
   const [settingsScoringMode, setSettingsScoringMode] = React.useState<"IOI" | "ICPC">("IOI");
+  const [settingsVisibility, setSettingsVisibility] = React.useState<ContestVisibility>("PUBLIC");
+  const [settingsJoinCode, setSettingsJoinCode] = React.useState("");
+  const [settingsClassId, setSettingsClassId] = React.useState("");
+  const [settingsClasses, setSettingsClasses] = React.useState<EduClass[]>([]);
+  const [settingsClassesLoading, setSettingsClassesLoading] = React.useState(false);
+  const [settingsClassesError, setSettingsClassesError] = React.useState<string | null>(null);
+  const [settingsClassesRetry, setSettingsClassesRetry] = React.useState(0);
 
   const [addOpen, setAddOpen] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
@@ -3300,13 +3316,44 @@ export const ContestPage: React.FC = () => {
     setSettingsEndsAt(toDateTimeLocalInput(data.contest.endsAt));
     setSettingsAllowUpsolve(Boolean(data.contest.allowUpsolve));
     setSettingsScoringMode(data.contest.scoringMode === "ICPC" ? "ICPC" : "IOI");
+    setSettingsVisibility(data.contest.visibility ?? "PUBLIC");
+    setSettingsJoinCode("");
+    setSettingsClassId(data.contest.classId ? String(data.contest.classId) : "");
+    setSettingsClassesError(null);
   }, [settingsOpen, data?.contest]);
+
+  React.useEffect(() => {
+    if (!settingsOpen || settingsVisibility !== "CLASS") return;
+    let active = true;
+    setSettingsClassesLoading(true);
+    setSettingsClassesError(null);
+    getClasses()
+      .then((items) => { if (active) setSettingsClasses(Array.isArray(items) ? items : []); })
+      .catch((e: unknown) => {
+        if (active) setSettingsClassesError(getErrorMessage(e) || tr("Не вдалося завантажити список класів", "Could not load classes"));
+      })
+      .finally(() => { if (active) setSettingsClassesLoading(false); });
+    return () => { active = false; };
+  }, [settingsOpen, settingsVisibility, settingsClassesRetry, tr]);
 
   const saveContestSettings = async () => {
     if (!contestId || !data?.access?.canManage) return;
     const title = settingsTitle.trim();
     if (title.length < 3) {
       setSettingsError(tr("Назва контесту занадто коротка", "Contest title is too short"));
+      return;
+    }
+
+    if (settingsVisibility === "PRIVATE_CODE" && settingsJoinCode.trim().length > 0 && settingsJoinCode.trim().length < 4) {
+      setSettingsError(tr("Код має містити щонайменше 4 символи", "Join code must contain at least 4 characters"));
+      return;
+    }
+    if (settingsVisibility === "PRIVATE_CODE" && data.contest.visibility !== "PRIVATE_CODE" && settingsJoinCode.trim().length < 4) {
+      setSettingsError(tr("Вкажи код для приватного контесту", "Enter a code for a private contest"));
+      return;
+    }
+    if (settingsVisibility === "CLASS" && (!Number.isSafeInteger(Number(settingsClassId)) || Number(settingsClassId) <= 0)) {
+      setSettingsError(tr("Оберіть клас для контесту", "Select a class for the contest"));
       return;
     }
 
@@ -3318,8 +3365,8 @@ export const ContestPage: React.FC = () => {
 
     const startsAtIso = fromDateTimeLocalInput(settingsStartsAt);
     const endsAtIso = fromDateTimeLocalInput(settingsEndsAt);
-    if (startsAtIso && endsAtIso && new Date(endsAtIso).getTime() < new Date(startsAtIso).getTime()) {
-      setSettingsError(tr("Кінець не може бути раніше старту", "End cannot be before start"));
+    if (startsAtIso && endsAtIso && new Date(endsAtIso).getTime() <= new Date(startsAtIso).getTime()) {
+      setSettingsError(tr("Завершення має бути пізніше за старт", "End must be after the start"));
       return;
     }
 
@@ -3333,6 +3380,9 @@ export const ContestPage: React.FC = () => {
         endsAt: endsAtIso,
         tags,
         difficulty: settingsDifficulty || null,
+        visibility: settingsVisibility,
+        ...(settingsVisibility === "PRIVATE_CODE" && settingsJoinCode.trim() ? { joinCode: settingsJoinCode.trim() } : {}),
+        ...(settingsVisibility === "CLASS" ? { classId: Number(settingsClassId) } : {}),
         allowUpsolve: settingsAllowUpsolve,
         scoringMode: settingsScoringMode,
       });
@@ -3783,6 +3833,35 @@ export const ContestPage: React.FC = () => {
               className="w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus:outline-none"
             />
           </div>
+
+          <section className="rounded-xl border border-border bg-bg-base/60 p-4">
+            <div className="text-sm font-semibold text-text-primary">{tr("Хто має доступ", "Who can access")}</div>
+            <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Зміна доступу одразу оновить видимість контесту для учасників.", "Changing access immediately updates contest visibility for participants.")}</p>
+            <label htmlFor="contest-settings-visibility" className="mt-3 block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Формат доступу", "Access type")}</label>
+            <select id="contest-settings-visibility" name="visibility" value={settingsVisibility} onChange={(e) => { setSettingsVisibility(e.target.value as ContestVisibility); setSettingsError(null); }} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
+              <option value="PUBLIC">{tr("Відкритий — доступний усім", "Public — available to everyone")}</option>
+              <option value="PRIVATE_CODE">{tr("За кодом — приватне запрошення", "Private — invite code required")}</option>
+              <option value="CLASS">{tr("Для класу — тільки учні класу", "Class — only students in a class")}</option>
+            </select>
+            {settingsVisibility === "PRIVATE_CODE" && <div className="mt-3">
+              <label htmlFor="contest-settings-join-code" className="block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Код-запрошення", "Invite code")}</label>
+              <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
+                <input id="contest-settings-join-code" name="joinCode" autoComplete="off" spellCheck={false} maxLength={64} value={settingsJoinCode} onChange={(e) => setSettingsJoinCode(e.target.value)} className="min-w-0 flex-1 bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 font-mono uppercase focus-visible:ring-2 focus-visible:ring-primary" placeholder={data?.contest.visibility === "PRIVATE_CODE" ? tr("Не змінювати поточний код", "Leave blank to keep current code") : tr("Введи або згенеруй код", "Enter or generate a code")} />
+                <Button type="button" variant="secondary" onClick={() => setSettingsJoinCode(createContestInviteCode())}><Sparkles className="mr-2 size-4" />{tr("Згенерувати", "Generate")}</Button>
+              </div>
+              <p className="mt-1.5 text-xs text-text-secondary">{data?.contest.visibility === "PRIVATE_CODE" ? tr("Залиш поле порожнім, щоб зберегти поточний код. Новий код замінить старий.", "Leave blank to keep the current code. A new code replaces it.") : tr("Код має містити від 4 до 64 символів.", "Use 4–64 characters.")}</p>
+            </div>}
+            {settingsVisibility === "CLASS" && <div className="mt-3">
+              <label htmlFor="contest-settings-class" className="block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Клас", "Class")}</label>
+              <select id="contest-settings-class" name="classId" value={settingsClassId} onChange={(e) => setSettingsClassId(e.target.value)} disabled={settingsClassesLoading} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60">
+                <option value="">{settingsClassesLoading ? tr("Завантажую класи…", "Loading classes…") : tr("Оберіть клас", "Select a class")}</option>
+                {settingsClassId && !settingsClasses.some((item) => item.id === Number(settingsClassId)) && <option value={settingsClassId}>{tr(`Поточний клас #${settingsClassId}`, `Current class #${settingsClassId}`)}</option>}
+                {settingsClasses.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.studentsCount} {tr("учнів", "students")}</option>)}
+              </select>
+              {settingsClassesError && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-accent-error"><p role="alert">{settingsClassesError}</p><button type="button" onClick={() => { setSettingsClassesError(null); setSettingsClassesRetry((current) => current + 1); }} className="font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Спробувати ще раз", "Try again")}</button></div>}
+              {!settingsClassesLoading && !settingsClassesError && settingsClasses.length === 0 && <p className="mt-2 text-xs text-text-secondary">{tr("Список класів порожній або недоступний для цього акаунту.", "No classes are available for this account.")}</p>}
+            </div>}
+          </section>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Input

@@ -79,6 +79,9 @@ export type UpdateContestRequest = {
   description?: string | null;
   tags?: string[];
   difficulty?: "EASY" | "MEDIUM" | "HARD" | null;
+  visibility?: ContestVisibility;
+  joinCode?: string;
+  classId?: number | null;
   startsAt?: string | null;
   endsAt?: string | null;
   isPublished?: boolean;
@@ -501,6 +504,8 @@ export async function updateContest(contestId: number, payload: UpdateContestReq
   id: number;
   isPublished: boolean;
   title: string;
+  visibility: ContestVisibility;
+  classId: number | null;
   startsAt: string | null;
   endsAt: string | null;
   allowUpsolve: boolean;
