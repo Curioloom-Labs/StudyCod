@@ -15,6 +15,7 @@ import { ContestParticipant } from "./ContestParticipant";
 
 export type ContestVisibility = "PUBLIC" | "PRIVATE_CODE" | "CLASS";
 export type ContestScoringMode = "IOI" | "ICPC";
+export type ContestDifficulty = "EASY" | "MEDIUM" | "HARD";
 
 @Entity("contests")
 export class Contest {
@@ -34,6 +35,12 @@ export class Contest {
 
   @Column({ type: "text", nullable: true })
   description?: string | null;
+
+  @Column({ type: "simple-json", nullable: true })
+  tags?: string[] | null;
+
+  @Column({ type: "varchar", length: 12, nullable: true })
+  difficulty?: ContestDifficulty | null;
 
   @Column({
     type: "enum",

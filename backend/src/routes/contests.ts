@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import type { FindManyOptions } from "typeorm";
+import { Brackets } from "typeorm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
@@ -30,8 +30,11 @@ import { certificateService } from "../services/certificates/CertificateService"
 import { computeScoreboard, type ScoreboardSubmission } from "../services/contest/scoreboard";
 import { publishContestEvent, subscribeContestEvents, type ContestEvent } from "../services/contest/contestEvents";
 import { ALL_JUDGE_LANGUAGES } from "../config/judgeLanguages";
+import { createRouteLimiter } from "../middleware/routeRateLimit";
+import { askTutor } from "../services/edu/aiTutor";
 
 const contestsRouter = Router();
+const contestTutorLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 8, message: "RATE_LIMIT" });
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -203,7 +206,7 @@ async function canViewContestMeta(params: { contest: Contest; req: AuthRequest }
   }
 
   if (contest.visibility === "PUBLIC") {
-    // Contest-only accounts must not discover unrelated public contests.
+    // Public contests are discoverable to every account type; private and class contests remain access-checked below.
     if (isContestOnlyUser(req)) {
       return canAccessContest({ contest, req });
     }
@@ -321,17 +324,9 @@ async function canAccessContest(params: { contest: Contest; req: AuthRequest }):
   }
 
   if (contest.visibility === "PUBLIC") {
-    if (!isContestOnlyUser(req)) return true;
-
-    // Contest-only accounts can access only contests where they are participants.
-    if (!req.userId) return false;
-    const participant = await participantRepo().findOne({
-      where: {
-        contest: { id: contest.id },
-        user: { id: req.userId },
-      },
-    });
-    return !!participant;
+    // Public contests are discoverable to every account type. Contest-only
+    // accounts remain restricted from creating contests and joining by code.
+    return true;
   }
 
   // For PRIVATE_CODE and CLASS: require auth and either joined or eligible.
@@ -1054,39 +1049,117 @@ contestsRouter.post("/:id/community/announcements", authRequired, async (req: Au
 contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) => {
   try {
     const isAdmin = req.userRole === "SYSTEM_ADMIN";
-    const shouldIncludeUnpublishedCandidates = Boolean(req.userId) || isAdmin;
+    const userId = Number(req.userId ?? 0) || null;
+    const studentId = Number(req.studentId ?? 0) || null;
+    const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
+    const pageSize = Math.max(1, Math.min(48, Math.floor(Number(req.query.pageSize) || 12)));
+    const search = String(req.query.search ?? "").trim().slice(0, 120);
+    const phase = String(req.query.phase ?? "all");
+    const sort = String(req.query.sort ?? "newest");
+    const difficulty = String(req.query.difficulty ?? "");
+    const requestedIds = String(req.query.ids ?? "").split(",").slice(0, 100)
+      .map((value) => Number(value.trim())).filter((id) => Number.isSafeInteger(id) && id > 0);
+    const now = new Date();
 
-    const findOptions: FindManyOptions<Contest> = {
-      order: { createdAt: "DESC" },
-      relations: ["createdBy", "class"],
-      take: 300,
-    };
-    if (!shouldIncludeUnpublishedCandidates) {
-      findOptions.where = { isPublished: true };
+    // Filter access before pagination so older public contests cannot be
+    // crowded out by newer private drafts.
+    const query = contestRepo()
+      .createQueryBuilder("contest")
+      .leftJoinAndSelect("contest.createdBy", "createdBy")
+      .leftJoinAndSelect("contest.class", "contestClass");
+
+    if (isAdmin) {
+      // Administrators may inspect every contest, including private drafts.
+    } else {
+      query.where(new Brackets((visible) => {
+        visible.where("(contest.isPublished = 1 AND contest.visibility = 'PUBLIC')");
+        if (userId) {
+          visible.orWhere("contest.created_by_user_id = :contestUserId", { contestUserId: userId });
+          visible.orWhere(
+            `EXISTS (
+              SELECT 1 FROM contest_participants cp
+              WHERE cp.contest_id = contest.id
+                AND contest.is_published = 1
+                AND cp.user_id = :contestParticipantUserId
+            )`,
+            { contestParticipantUserId: userId }
+          );
+          visible.orWhere(
+            `EXISTS (
+              SELECT 1 FROM classes contest_teacher_class
+              WHERE contest_teacher_class.id = contest.class_id
+                AND contest.is_published = 1
+                AND contest_teacher_class.teacher_id = :contestTeacherId
+            )`,
+            { contestTeacherId: userId }
+          );
+        }
+        if (studentId) {
+          visible.orWhere(
+            `EXISTS (
+              SELECT 1 FROM contest_participants cp
+              WHERE cp.contest_id = contest.id
+                AND contest.is_published = 1
+                AND cp.student_id = :contestParticipantStudentId
+            )`,
+            { contestParticipantStudentId: studentId }
+          );
+          visible.orWhere(
+            "(contest.isPublished = 1 AND contest.visibility = 'CLASS' AND contest.class_id = (SELECT student_class.class_id FROM students student_class WHERE student_class.id = :contestStudentId LIMIT 1))",
+            { contestStudentId: studentId }
+          );
+        }
+      }));
     }
 
-    const contests = await contestRepo().find(findOptions);
-
-    let contestOnlyUserParticipantContestIds: Set<number> | null = null;
-    if (isContestOnlyUser(req) && req.userId) {
-      const rows = await participantRepo().find({
-        where: { user: { id: req.userId } },
-        relations: ["contest"],
+    if (search) {
+      query.andWhere("(LOWER(contest.title) LIKE :contestSearch OR LOWER(COALESCE(contest.description, '')) LIKE :contestSearch OR LOWER(COALESCE(contest.tags, '')) LIKE :contestSearch)", {
+        contestSearch: `%${search.toLowerCase().replace(/[\\%_]/g, "\\$&")}%`,
       });
-      contestOnlyUserParticipantContestIds = new Set(
-        rows
-          .map((row) => Number(row.contest?.id))
-          .filter((id) => Number.isFinite(id) && id > 0)
-      );
+    }
+    if (difficulty === "EASY" || difficulty === "MEDIUM" || difficulty === "HARD") {
+      query.andWhere("contest.difficulty = :contestDifficulty", { contestDifficulty: difficulty });
+    }
+    if (req.query.ids !== undefined) {
+      if (requestedIds.length > 0) query.andWhere("contest.id IN (:...requestedContestIds)", { requestedContestIds: requestedIds });
+      else query.andWhere("1 = 0");
+    }
+    if (phase === "live") {
+      query.andWhere("(contest.startsAt IS NULL OR contest.startsAt <= :contestNow) AND (contest.endsAt IS NULL OR contest.endsAt >= :contestNow)", { contestNow: now });
+    } else if (phase === "soon") {
+      query.andWhere("contest.startsAt > :contestNow", { contestNow: now });
+    } else if (phase === "ended") {
+      query.andWhere("contest.endsAt < :contestNow", { contestNow: now });
     }
 
+    if (sort === "soonest") {
+      query.addOrderBy("CASE WHEN contest.startsAt IS NULL THEN 1 ELSE 0 END", "ASC")
+        .addOrderBy("contest.startsAt", "ASC")
+        .addOrderBy("contest.createdAt", "DESC");
+    } else if (sort === "title") {
+      query.orderBy("contest.title", "ASC").addOrderBy("contest.createdAt", "DESC");
+    } else {
+      query.orderBy("contest.createdAt", "DESC");
+    }
+
+    const [contests, total] = await query
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
     const visible: Contest[] = [];
-    for (const c of contests) {
-      if (contestOnlyUserParticipantContestIds && !contestOnlyUserParticipantContestIds.has(c.id)) {
-        continue;
-      }
-      const canMeta = await canViewContestMeta({ contest: c, req });
-      if (canMeta) visible.push(c);
+    for (const contest of contests) {
+      if (await canViewContestMeta({ contest, req })) visible.push(contest);
+    }
+    const participantCountByContest = new Map<number, number>();
+    if (visible.length > 0) {
+      const counts = await participantRepo().createQueryBuilder("participant")
+        .innerJoin("participant.contest", "participantContest")
+        .select("participantContest.id", "contestId")
+        .addSelect("COUNT(participant.id)", "participantCount")
+        .where("participantContest.id IN (:...contestIds)", { contestIds: visible.map((contest) => contest.id) })
+        .groupBy("participantContest.id")
+        .getRawMany<{ contestId: string | number; participantCount: string | number }>();
+      for (const row of counts) participantCountByContest.set(Number(row.contestId), Number(row.participantCount) || 0);
     }
 
     return res.json({
@@ -1094,6 +1167,9 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
         id: c.id,
         title: c.title,
         description: c.description ?? null,
+        tags: c.tags ?? [],
+        difficulty: c.difficulty ?? null,
+        participantsCount: participantCountByContest.get(c.id) ?? 0,
         visibility: c.visibility,
         startsAt: c.startsAt ? new Date(c.startsAt).toISOString() : null,
         endsAt: c.endsAt ? new Date(c.endsAt).toISOString() : null,
@@ -1103,6 +1179,11 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
         createdBy: c.createdBy ? { id: c.createdBy.id, username: c.createdBy.username } : null,
         classId: c.class?.id ?? null,
       })),
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      serverTime: now.toISOString(),
     });
   } catch (error: unknown) {
     logger.error("[contests] GET / error", { requestId: req.requestId, err: error });
@@ -1155,6 +1236,8 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
     const schema = z.object({
       title: z.string().min(3).max(255),
       description: z.string().max(50_000).optional(),
+      tags: z.array(z.string().trim().min(1).max(32)).max(8).optional(),
+      difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).nullable().optional(),
       visibility: z.enum(["PUBLIC", "PRIVATE_CODE", "CLASS"]).default("PUBLIC"),
       joinCode: z.string().min(4).max(64).optional(),
       classId: z.number().int().positive().optional(),
@@ -1187,6 +1270,8 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       createdBy: { id: req.userId } as User,
       title: data.title.trim(),
       description: data.description?.trim() ?? null,
+      tags: data.tags ? Array.from(new Set(data.tags.map((tag) => tag.trim()).filter(Boolean))).slice(0, 8) : [],
+      difficulty: data.difficulty ?? null,
       visibility: data.visibility as ContestVisibility,
       joinCode: data.visibility === "PRIVATE_CODE" ? String(data.joinCode).trim() : null,
       class: data.visibility === "CLASS" ? ({ id: data.classId } as Class) : null,
@@ -1224,6 +1309,8 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
       .object({
         title: z.string().min(3).max(255).optional(),
         description: z.string().max(50_000).nullable().optional(),
+        tags: z.array(z.string().trim().min(1).max(32)).max(8).optional(),
+        difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).nullable().optional(),
         startsAt: z.string().datetime().nullable().optional(),
         endsAt: z.string().datetime().nullable().optional(),
         isPublished: z.boolean().optional(),
@@ -1246,6 +1333,8 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
 
     if (data.title !== undefined) contest.title = data.title.trim();
     if (data.description !== undefined) contest.description = data.description === null ? null : data.description.trim();
+    if (data.tags !== undefined) contest.tags = Array.from(new Set(data.tags.map((tag) => tag.trim()).filter(Boolean))).slice(0, 8);
+    if (data.difficulty !== undefined) contest.difficulty = data.difficulty;
     if (data.startsAt !== undefined) contest.startsAt = nextStartsAt;
     if (data.endsAt !== undefined) contest.endsAt = nextEndsAt;
     if (data.isPublished !== undefined) contest.isPublished = data.isPublished;
@@ -1257,6 +1346,8 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
       id: saved.id,
       isPublished: saved.isPublished,
       title: saved.title,
+      tags: saved.tags ?? [],
+      difficulty: saved.difficulty ?? null,
       startsAt: saved.startsAt ? new Date(saved.startsAt).toISOString() : null,
       endsAt: saved.endsAt ? new Date(saved.endsAt).toISOString() : null,
       allowUpsolve: saved.allowUpsolve ?? true,
@@ -1300,6 +1391,7 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
       relations: ["libraryTask"],
       order: { order: "ASC" },
     });
+    const participantsCount = await participantRepo().count({ where: { contest: { id } } });
 
     const now = Date.now();
     const startsAtMs = contest.startsAt ? new Date(contest.startsAt).getTime() : null;
@@ -1318,6 +1410,8 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
         id: contest.id,
         title: contest.title,
         description: contest.description ?? null,
+        tags: contest.tags ?? [],
+        difficulty: contest.difficulty ?? null,
         visibility: contest.visibility,
         startsAt: contest.startsAt ? new Date(contest.startsAt).toISOString() : null,
         endsAt: contest.endsAt ? new Date(contest.endsAt).toISOString() : null,
@@ -1334,6 +1428,7 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
         canManage: isPrivileged,
         isPaused,
       },
+      participantsCount,
       problems: showProblems
         ? problems.map((p) => ({
             id: p.id,
@@ -1366,10 +1461,6 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
 // Join contest
 contestsRouter.post("/:id/join", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    if (isContestOnlyUser(req)) {
-      return res.status(403).json({ message: "CONTEST_MODE_RESTRICTED" });
-    }
-
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "INVALID_ID" });
     const principalId = req.userId ?? req.studentId ?? null;
@@ -1377,6 +1468,9 @@ contestsRouter.post("/:id/join", authRequired, async (req: AuthRequest, res: Res
 
     const contest = await contestRepo().findOne({ where: { id }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (isContestOnlyUser(req) && contest.visibility !== "PUBLIC") {
+      return res.status(403).json({ message: "CONTEST_MODE_RESTRICTED" });
+    }
     if (contest.isPublished === false && req.userRole !== "SYSTEM_ADMIN" && contest.createdBy?.id !== req.userId) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
@@ -2638,6 +2732,75 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
     });
   } catch (error: unknown) {
     logger.error("[contests] GET /:id/problems/:problemId error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Post-contest tutor. It receives the participant's own attempt and returns
+// hints only; hidden tests and other participants' submissions stay private.
+contestsRouter.post("/:id/problems/:problemId/tutor", authRequired, contestTutorLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.id);
+    const problemId = Number(req.params.problemId);
+    if (!Number.isFinite(contestId) || contestId <= 0 || !Number.isFinite(problemId) || problemId <= 0) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (!(await canAccessContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (!getContestTimeState(contest).finished || !contest.allowUpsolve) {
+      return res.status(403).json({ message: "TUTOR_AVAILABLE_AFTER_CONTEST" });
+    }
+
+    const participant = await participantRepo().findOne({
+      where: {
+        contest: { id: contestId },
+        ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }),
+      },
+    });
+    if (!participant) return res.status(403).json({ message: "JOIN_CONTEST_FIRST" });
+
+    const problem = await problemRepo().findOne({
+      where: { id: problemId, contest: { id: contestId } },
+      relations: ["libraryTask"],
+    });
+    if (!problem?.libraryTask) return res.status(404).json({ message: "PROBLEM_NOT_FOUND" });
+
+    const schema = z.object({
+      question: z.string().trim().min(1).max(800),
+      code: z.string().max(1200).optional(),
+      language: z.string().max(20).optional(),
+    });
+    const parsed = schema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+
+    const latest = await submissionRepo().findOne({
+      where: { contest: { id: contestId }, problem: { id: problemId }, participant: { id: participant.id } },
+      order: { createdAt: "DESC" },
+    });
+    const language = normalizeJudgeLanguage(parsed.data.language) ?? latest?.language ?? "unknown";
+    const question = [
+      `Питання: ${parsed.data.question}`,
+      `Контест: ${contest.title}`,
+      `Задача: ${problem.libraryTask.title}`,
+      `Мова: ${language}`,
+      latest ? `Останній результат: ${latest.verdict ?? "—"}, ${latest.score ?? 0}/${latest.maxScore ?? 0} балів.` : "Подач ще немає.",
+      parsed.data.code ? `Мій фрагмент коду:\n${parsed.data.code}` : "",
+    ].filter(Boolean).join("\n\n");
+
+    try {
+      const tutor = await askTutor({
+        question,
+        context: "Учасник дорішує задачу після завершення контесту. Дай навідну підказку, поясни можливий напрямок перевірки. Не розкривай приховані тести й не видавай повний розв'язок.",
+      });
+      return res.json({ tutor });
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message === "AI_UNAVAILABLE") return res.status(503).json({ message: "AI_UNAVAILABLE" });
+      throw error;
+    }
+  } catch (error: unknown) {
+    logger.error("[contests] POST /:id/problems/:problemId/tutor error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

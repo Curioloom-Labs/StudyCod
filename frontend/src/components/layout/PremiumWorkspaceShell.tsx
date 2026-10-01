@@ -24,7 +24,7 @@ import { SelectMenu } from "../ui/SelectMenu";
 import { DialogA11yObserver } from "../ui/DialogA11yObserver";
 
 type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "student" | "admin";
-type NavId = Page | "library" | "playground";
+type NavId = Page | "library" | "playground" | "contests";
 type NavItem = { id: NavId; label: string; Icon: React.ElementType<{ className?: string }>; onClick?: () => void };
 
 type ShellProps = {
@@ -106,6 +106,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   const routeIsActive = (path: string) => window.location.pathname === path || window.location.pathname.startsWith(`${path}/`);
   const nav: NavItem[] = [
     { id: "home", label: uk ? "Навчання" : "Learning", Icon: Home },
+    { id: "contests", label: uk ? "Контести" : "Contests", Icon: Trophy, onClick: () => navigate("/contest/contests") },
     { id: "library", label: uk ? "Бібліотека" : "Library", Icon: Library, onClick: onLibrary },
     { id: "playground", label: uk ? "Пісочниця" : "Playground", Icon: PlaySquare, onClick: onPlayground },
     ...(user.role === "SYSTEM_ADMIN"
@@ -114,6 +115,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   ];
 
   const active = (id: NavId) => {
+    if (id === "contests") return routeIsActive("/contest/contests");
     if (id === "library") return routeIsActive("/lab/library") || routeIsActive("/library");
     if (id === "playground") return routeIsActive("/lab/playground") || routeIsActive("/playground");
     return page === id;
@@ -295,9 +297,10 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
         </div>
       ) : null}
       <nav data-material="premium-mobile-nav" className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 lg:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-4 gap-1">
           {[
             { id: "home" as const, label: nav.find((item) => item.id === "home")?.label ?? "Home", Icon: Home, onClick: () => onNavigate("home") },
+            { id: "contests" as const, label: nav.find((item) => item.id === "contests")?.label ?? "Contests", Icon: Trophy, onClick: () => navigate("/contest/contests") },
             { id: "library" as const, label: nav.find((item) => item.id === "library")?.label ?? "Library", Icon: Library, onClick: onLibrary },
             { id: "playground" as const, label: nav.find((item) => item.id === "playground")?.label ?? "Playground", Icon: PlaySquare, onClick: onPlayground },
           ].map(({ id, label, Icon, onClick }) => (
