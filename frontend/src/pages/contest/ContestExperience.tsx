@@ -642,7 +642,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
           </form>
         </div>
       )}
-      {createOpen && <ContestSetupDialog scope={favoriteScope} onClose={() => setCreateOpen(false)} onCreated={(createdId, openAccounts) => navigate(openAccounts ? `/contest/contests/${createdId}/manage?tab=accounts` : `/contest/contests/${createdId}`)} />}
+      {createOpen && <ContestSetupDialog scope={favoriteScope} onClose={() => setCreateOpen(false)} onCreated={(createdId, openAccounts) => navigate(openAccounts ? `/contest/contests/${createdId}?setup=accounts` : `/contest/contests/${createdId}`)} />}
     </Shell>
   );
 };
@@ -650,6 +650,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
 export const ContestDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const contestId = Number(id);
   const [data, setData] = React.useState<ContestDetails | null>(null);
   const [standings, setStandings] = React.useState<ContestStandings | null>(
@@ -738,6 +739,7 @@ export const ContestDetailPage: React.FC = () => {
   const hasCompletedContest = state === "ended";
   const officialStanding = standings?.rows.find((row) => row.participantId === myParticipantId);
   const canManage = Boolean(data.access.canManage);
+  const shouldSetUpAccounts = canManage && searchParams.get("setup") === "accounts";
   return (
     <Shell
       eyebrow={
@@ -854,6 +856,15 @@ export const ContestDetailPage: React.FC = () => {
           </div>
         </div>
       </section>
+      {shouldSetUpAccounts && <section className="mt-5 flex flex-col gap-4 rounded-2xl border border-[#00c875]/25 bg-[#eaf8ef] p-4 dark:bg-[#00d978]/[.07] sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="flex items-start gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#d8f2e2] text-[#16834d] dark:bg-[#00d978]/15 dark:text-[#72edb0]"><KeyRound className="size-5" aria-hidden="true" /></span>
+          <div><p className="font-bold text-[#183422] dark:text-[#e5eee7]">Чернетку контесту створено</p><p className="mt-1 text-sm leading-6 text-[#52675a] dark:text-[#aebdb2]">Додай список учасників, щоб згенерувати для них окремі акаунти. До цього розділу можна повернутися будь-коли.</p></div>
+        </div>
+        <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=accounts`)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-2.5 text-sm font-bold text-[#062211] transition hover:bg-[#00ff88] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16834d]">
+          <UsersRound className="size-4" aria-hidden="true" /> Додати учасників
+        </button>
+      </section>}
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.32fr_.68fr]">
         <section className="rounded-[28px] border border-[#19291d]/10 bg-white p-5 shadow-[0_18px_50px_-44px_rgba(16,41,24,.65)] dark:border-white/[.09] dark:bg-[#111b14] sm:p-6">
           <div className="mb-5 flex items-center justify-between gap-3">
