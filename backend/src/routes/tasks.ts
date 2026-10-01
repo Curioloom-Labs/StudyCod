@@ -41,7 +41,8 @@ import { buildJudgeTests, loadTestContentByIds, sweepTestCache } from "../servic
 import { sanitizeTestResultsForStudent } from "../services/grading/sanitizeStudentTestResults";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { normalizeMarkdownText } from "../utils/markdownNormalize";
-import { explicitlyDeclaresNoInput, inferNeedsInput } from "../utils/inferNeedsInput";
+import { sanitizeGeneratedTestText, compactOutputFormatForLearner, pickNoInputFixedExpectedOutput, formatStatementSectionValueForMarkdown } from "../services/generatedTaskIO";
+import { inferNeedsInput } from "../utils/inferNeedsInput";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
@@ -125,7 +126,7 @@ function errorMessage(error: unknown): string {
   return String(message ?? "");
 }
 
-function isTaskIoType(value: string): value is TaskIoType {
+function isTaskIoType(value: unknown): value is TaskIoType {
   return value === "STDIN_STDOUT" || value === "NO_INPUT_FIXED_OUTPUT" || value === "NO_INPUT_FREE_OUTPUT";
 }
 
@@ -910,23 +911,6 @@ function catalogPracticeSequenceFromTask(task: Task): number | null {
   return Number.isInteger(titleSequence) && titleSequence > 0 ? titleSequence : null;
 }
 
-function sanitizeGeneratedTestText(raw: unknown, kind: "input" | "output"): string {
-  let s = normalizeMarkdownText(String(raw ?? ""));
-  if (!s) return "";
-
-  // Remove markdown fences if model wrapped values as code blocks.
-  s = s.replace(/^```[a-zA-Z0-9_-]*\s*/g, "").replace(/```$/g, "").trim();
-
-  // Remove common field prefixes that occasionally leak from model formatting.
-  if (kind === "input") {
-    s = s.replace(/^\s*(input|stdin|вхід|вхідні\s+дані)\s*[:：]\s*/i, "").trim();
-  } else {
-    s = s.replace(/^\s*(output|stdout|expected(?:\s+output)?|вихід|вихідні\s+дані|очікуван(?:ий|а)\s+вивід)\s*[:：]\s*/i, "").trim();
-  }
-
-  return s;
-}
-
 function looksLikeJudgeSuccessText(text: string): boolean {
   const s = String(text ?? "").trim().toLowerCase();
   if (!s) return false;
@@ -963,7 +947,7 @@ function sanitizeGeneratedTestExample(params: {
 
 function normalizeTestInputKey(input: string, ioType: TaskIoType): string {
   if (ioType === "NO_INPUT_FIXED_OUTPUT" || ioType === "NO_INPUT_FREE_OUTPUT") return "__NO_INPUT__";
-  return String(input ?? "").replace(/\r\n/g, "\n").trim();
+  return String(input ?? "").replace(/\r\n/g, "\n");
 }
 
 function mergeConsistentExamples(params: {
@@ -1015,7 +999,7 @@ function buildTestDataPrompt(params: {
   const statement = String(params.statement ?? "").trim();
   const examples = params.existingExamples
     .map((example) => ({
-      input: String(example.input ?? "").trim(),
+      input: String(example.input ?? ""),
       output: String(example.output ?? "").trim()
     }))
     .filter((example) => example.output.length > 0)
@@ -1030,106 +1014,6 @@ function buildTestDataPrompt(params: {
     ? "Every new test must use a different non-empty input from all existing tests, while preserving the exact input format."
     : "The task has no input; do not invent additional inputs and keep input as an empty string.";
   return `--- TASK STATEMENT (SOURCE OF TRUTH) ---\n${statement}\n--- END TASK STATEMENT ---\n\n--- EXISTING TEST DATA (REFERENCE ONLY; DO NOT COPY OR MODIFY) ---\n${rendered}\n--- END EXISTING TEST DATA ---\n\nIO RULE: ${inputRule}\nTEST DEPTH: derive a coverage matrix from the statement before choosing inputs. Cover distinct behaviour classes, thresholds/boundaries, ordinary values, and default/unknown cases when allowed. Do not spend all tests on obvious sequential values or the same execution path.\nOUTPUT CONTRACT: include every output line required by the statement, in the stated order, for every input. A zero value is still an output line; never omit it. Follow only rounding/truncation rules explicitly stated in the task, and preserve all specified precision.\nCalculate every output from the TASK STATEMENT. Before returning each test, substitute its input into the task's formulas and verify every output line. If an existing test conflicts with the task statement, ignore that test and create a correct new one.`.trim();
-}
-
-function looksLikeNumberedChecklistPracticalTask(text: string): boolean {
-  const lines = String(text ?? "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !/^#{1,6}\s+/.test(line));
-
-  if (lines.length < 3) return false;
-
-  const sample = lines.slice(0, Math.min(lines.length, 8));
-  const numbered = sample.filter((line) => /^\d+[\.)]\s+/.test(line)).length;
-  const bullets = sample.filter((line) => /^[-*•]\s+/.test(line)).length;
-  const markers = numbered + bullets;
-
-  if (numbered < 2 && markers < 4) return false;
-  return markers / sample.length >= 0.55;
-}
-
-function rewriteChecklistPracticalTaskToNarrative(text: string): string {
-  const source = String(text ?? "").trim();
-  if (!source) return "";
-  if (!looksLikeNumberedChecklistPracticalTask(source)) return source;
-
-  const fragments = source
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !/^#{1,6}\s+/.test(line))
-    .map((line) => line.replace(/^\s*(?:\d+[\.)]|[-*•])\s+/, "").trim())
-    .filter(Boolean)
-    .map((part) => {
-      const compact = part.replace(/\s+/g, " ").trim();
-      if (!compact) return "";
-      return /[.!?…:]$/.test(compact) ? compact : `${compact}.`;
-    })
-    .filter(Boolean);
-
-  if (fragments.length < 2) return source;
-  return fragments.join(" ");
-}
-
-function formatStatementSectionValueForMarkdown(value: string, options?: {
-  preferCodeBlock?: boolean;
-}): string {
-  const normalized = normalizeMarkdownText(String(value ?? ""))
-    .split(/\r?\n/)
-    .filter(line => !/^\s*```(?:[a-z0-9_-]+)?\s*$/i.test(line))
-    .join("\n")
-    .trim();
-  if (!normalized) return "";
-
-  const sanitized = normalized
-    .replace(/```/g, "")
-    .split(/\r?\n/)
-    .map(line => line.replace(/^\s*`([^`\n]*)`\s*$/, "$1"))
-    .join("\n")
-    .trim();
-  if (options?.preferCodeBlock) {
-    return `\`\`\`text\n${sanitized}\n\`\`\``;
-  }
-
-  return sanitized;
-}
-
-function compactOutputFormatForLearner(raw: string, ioType: TaskIoType | null | undefined, uiLanguage: UiLanguage): string {
-  let value = normalizeMarkdownText(String(raw ?? "")).trim();
-  if (!value) return "";
-
-  // For interactive tasks the output format is a short contract, not a second
-  // task statement. Public examples are rendered in their own section below.
-  if (ioType !== "NO_INPUT_FIXED_OUTPUT") {
-    const exampleMarker = /(?:^|\s)(?:example|examples|for example|e\.g\.|приклад|приклади|наприклад)\s*:/i.exec(value);
-    if (exampleMarker && typeof exampleMarker.index === "number") {
-      value = value.slice(0, exampleMarker.index).trim();
-    }
-
-    if (uiLanguage === "en") {
-      const twoLineMatch = /^the program should (?:output|print)\s+(.+?),\s*followed by a newline character,\s*and then\s+(.+?)(?:,\s*also)?\s+followed by a newline character\.?$/i.exec(value);
-      if (twoLineMatch) {
-        return `Print two lines: ${twoLineMatch[1].trim()}, then ${twoLineMatch[2].trim()}.`;
-      }
-      value = value
-        .replace(/^the program should (?:output|print)\s+/i, "Print ")
-        .replace(/,?\s*(?:also\s+)?followed by a newline character/gi, "")
-        .replace(/\s{2,}/g, " ")
-        .trim();
-    } else {
-      const twoLineMatch = /^програма має\s+(?:вивести|надрукувати)\s+(.+?),\s*після цього новий рядок,\s*а потім\s+(.+?)(?:,\s*також)?\s*з нового рядка\.?$/i.exec(value);
-      if (twoLineMatch) {
-        return `Виведіть два рядки: ${twoLineMatch[1].trim()}, потім ${twoLineMatch[2].trim()}.`;
-      }
-      value = value
-        .replace(/^програма має\s+(?:вивести|надрукувати)\s+/i, "Виведіть ")
-        .replace(/,?\s*(?:також\s+)?(?:з нового рядка|після чого новий рядок)/gi, "")
-        .replace(/\s{2,}/g, " ")
-        .trim();
-    }
-  }
-
-  return value;
 }
 
 function outputFormatNeedsCodeBlock(value: string): boolean {
@@ -1159,7 +1043,7 @@ function renderPublicExamples(params: {
   const isEnglish = params.uiLanguage === "en";
   const sections = [isEnglish ? "#### Examples" : "#### Приклади"];
   examples.forEach((example, index) => {
-    const input = example.input.trim() || (isEnglish ? "(no input)" : "(немає вводу)");
+    const input = example.input || (isEnglish ? "(no input)" : "(немає вводу)");
     const output = example.output.trim();
     sections.push(
       `${isEnglish ? `##### Example ${index + 1}` : `##### Приклад ${index + 1}`}\n\n` +
@@ -1179,17 +1063,15 @@ function composeTaskStatementMarkdown(params: {
   examples?: Array<{ input?: unknown; output?: unknown }>;
   uiLanguage?: UiLanguage;
 }): string {
-  const practical = rewriteChecklistPracticalTaskToNarrative(
-    normalizeMarkdownText(String(params.practicalTask ?? "")).trim()
-  );
+  const practical = String(params.practicalTask ?? "").replace(/\r\n/g, "\n").trim();
   const uiLanguage = params.uiLanguage ?? "uk";
-  const inputFormat = normalizeMarkdownText(String(params.inputFormat ?? "")).trim();
+  const inputFormat = String(params.inputFormat ?? "").replace(/\r\n/g, "\n").trim();
   const outputFormat = compactOutputFormatForLearner(
     String(params.outputFormat ?? ""),
     params.ioType,
     uiLanguage
   );
-  const constraints = normalizeMarkdownText(String(params.constraints ?? "")).trim();
+  const constraints = String(params.constraints ?? "").replace(/\r\n/g, "\n").trim();
 
   const sections: string[] = [];
   if (practical) sections.push(practical);
@@ -1203,7 +1085,7 @@ function composeTaskStatementMarkdown(params: {
     : fallbackInputFormat;
   const renderedOutputFormat = outputFormat
     ? formatStatementSectionValueForMarkdown(outputFormat, {
-        preferCodeBlock: outputFormatNeedsCodeBlock(outputFormat)
+        preferCodeBlock: params.ioType === "NO_INPUT_FIXED_OUTPUT" || outputFormatNeedsCodeBlock(outputFormat)
       })
     : fallbackOutputFormat;
 
@@ -1377,18 +1259,6 @@ function validateVariableDeclarationTaskSubmission(task: Task, source: string, u
   );
 }
 
-function pickNoInputFixedExpectedOutput(params: {
-  examples?: Array<{ input?: unknown; output?: unknown }>;
-  outputFormat?: unknown;
-}): string | null {
-  const examples = Array.isArray(params.examples) ? params.examples : [];
-  const first = examples.length ? examples[0] : null;
-  const fromExample = first && typeof first.output === "string" ? first.output.trim() : "";
-  if (fromExample) return fromExample;
-  const fromOutputFormat = typeof params.outputFormat === "string" ? String(params.outputFormat).trim() : "";
-  if (fromOutputFormat) return fromOutputFormat;
-  return null;
-}
 /* Legacy theory fallback superseded by getTopicTheoryInfo.
 function getTopicTheoryMarkdown(task: Task, uiLanguage: UiLanguage = "uk"): string {
   const fromBlock = task.topic?.theoryBlock?.content;
@@ -2288,30 +2158,10 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     ].join("\n");
   })();
 
-  const aiIoRaw = typeof aiTask.ioType === "string" ? aiTask.ioType.trim() : "";
+  // Keep the IO contract that passed validation and semantic review.
   const examples = Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [];
-  const inferredNeedsInput = inferNeedsInput({
-    taskDescription: practicalOnly,
-    aiInputFormat: typeof aiTask.inputFormat === "string" ? aiTask.inputFormat : null
-  });
-  const explicitlyNoInput = explicitlyDeclaresNoInput({
-    taskDescription: practicalOnly,
-    aiInputFormat: typeof aiTask.inputFormat === "string" ? aiTask.inputFormat : null
-  });
-  const deterministicNoInput = (params.lang === "PYTHON" && params.topic && isIntroPythonFixedSumTask(practicalOnly, params.topic.title)) || computeDeterministicNoInputExpectedOutput(practicalOnly) !== null;
-  const hasFixedNoInputOutput = examples.some(example => String(example?.output ?? "").trim().length > 0);
-  const inferred = (isTaskIoType(aiIoRaw) && !(explicitlyNoInput && aiIoRaw === "STDIN_STDOUT")
-    ? aiIoRaw
-    : (explicitlyNoInput
-        ? (deterministicNoInput || hasFixedNoInputOutput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")
-        : (inferredNeedsInput
-            ? "STDIN_STDOUT"
-            : (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")))) as TaskIoType;
-
-  const ioType: TaskIoType = (!stdinAllowed && inferred === "STDIN_STDOUT")
-    ? (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")
-    : inferred;
-
+  if (!isTaskIoType(aiTask.ioType)) throw new Error("AI_GENERATION_FAILED: missing validated IO type");
+  const ioType = aiTask.ioType;
   const fixedNoInputExpected = ioType === "NO_INPUT_FIXED_OUTPUT" ? pickNoInputFixedExpectedOutput({
     examples,
     outputFormat: aiTask.outputFormat
@@ -2398,7 +2248,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
 
   if (testExamples.length < REQUIRED_TEST_COUNT) {
     const remainingBeforeTests = params.requestBudgetMs - (Date.now() - params.requestStartedAt);
-    const testsBudgetMs = Math.max(4_000, Math.min(10_000, remainingBeforeTests - 1500));
+    const testsBudgetMs = Math.max(4_000, Math.min(30_000, remainingBeforeTests - 1500));
     const remainingCount = REQUIRED_TEST_COUNT - testExamples.length;
 
     // Same protection as /tasks/generate: if we're near the nginx timeout, do not start test generation.
@@ -4110,31 +3960,10 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     // (AI templates often include implementation or drift in structure.)
     // We still keep codeTemplate restrictions in prompts, but runtime uses our template.
     // template remains as computed above.
-    const aiIoRaw = typeof aiTask.ioType === "string" ? aiTask.ioType.trim() : "";
+    // Keep the IO contract that passed validation and semantic review.
     const examples = Array.isArray(aiTask.examples) ? aiTask.examples as Array<GeneratedTestExample> : [];
-    const inferredNeedsInput = inferNeedsInput({
-      taskDescription: practicalOnly,
-      aiInputFormat: typeof aiTask.inputFormat === "string" ? aiTask.inputFormat : null
-    });
-    const explicitlyNoInput = explicitlyDeclaresNoInput({
-      taskDescription: practicalOnly,
-      aiInputFormat: typeof aiTask.inputFormat === "string" ? aiTask.inputFormat : null
-    });
-    const deterministicNoInput = (lang === "PYTHON" && isIntroPythonFixedSumTask(practicalOnly, topic.title)) || computeDeterministicNoInputExpectedOutput(practicalOnly) !== null;
-    const hasFixedNoInputOutput = examples.some(example => String(example?.output ?? "").trim().length > 0);
-    const inferred = (isTaskIoType(aiIoRaw) && !(explicitlyNoInput && aiIoRaw === "STDIN_STDOUT")
-      ? aiIoRaw
-      : (explicitlyNoInput
-          ? (deterministicNoInput || hasFixedNoInputOutput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")
-          : (inferredNeedsInput
-              ? "STDIN_STDOUT"
-              : (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")))) as "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
-
-    // If stdin isn't allowed for this topic, never select STDIN_STDOUT.
-    const ioType = (!stdinAllowed && inferred === "STDIN_STDOUT")
-      ? (deterministicNoInput ? "NO_INPUT_FIXED_OUTPUT" : "NO_INPUT_FREE_OUTPUT")
-      : inferred;
-
+    if (!isTaskIoType(aiTask.ioType)) throw new Error("AI_GENERATION_FAILED: missing validated IO type");
+    const ioType = aiTask.ioType;
     const fixedNoInputExpected = ioType === "NO_INPUT_FIXED_OUTPUT" ? pickNoInputFixedExpectedOutput({
       examples,
       outputFormat: aiTask.outputFormat
@@ -4229,7 +4058,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       const taskDescriptionForTests = statementMarkdown || practicalOnly;
 
       const remainingBeforeTests = REQUEST_BUDGET_MS - (Date.now() - requestStartedAt);
-      const testsBudgetMs = Math.max(4_000, Math.min(10_000, remainingBeforeTests - 1500));
+      const testsBudgetMs = Math.max(4_000, Math.min(30_000, remainingBeforeTests - 1500));
 
       // If we're close to the nginx timeout, skip test-data generation to guarantee a timely response.
       // We'll fall back to examples produced by the task generation itself.

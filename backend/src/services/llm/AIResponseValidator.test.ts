@@ -2,6 +2,60 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AIResponseValidator } from './AIResponseValidator';
 
+const contractTask = {
+  title: 'Sum', topic: 'Arithmetic', difficulty: 1, theoryMarkdown: 'Addition combines values.',
+  practicalTask: 'Read two integers a and b and calculate their sum. Print exactly one integer containing a + b, with no labels, extra values or explanations. The input contains the two integers on one line separated by a space.',
+  ioType: 'STDIN_STDOUT', inputFormat: 'Two integers a and b on one line separated by a space.',
+  outputFormat: 'Print one integer: the sum of a and b.', constraints: '-100 <= a, b <= 100.',
+  examples: [{ input: '2 3', output: '5', explanation: '2 + 3 = 5.' }], codeTemplate: '# TODO',
+};
+
+test('task validation never fabricates missing examples or empty stdin', () => {
+  for (const examples of [undefined, [], [{ input: '', output: '5', explanation: 'Missing input.' }]]) {
+    assert.throws(() => AIResponseValidator.validateGenerateTask({ ...contractTask, examples }));
+  }
+});
+
+test('task validation rejects missing IO rules instead of filling generic defaults', () => {
+  for (const field of ['inputFormat', 'outputFormat', 'constraints', 'practicalTask']) {
+    assert.throws(() => AIResponseValidator.validateGenerateTask({ ...contractTask, [field]: '' }));
+  }
+});
+
+test('task validation rejects a bad later example even when the first one is valid', () => {
+  assert.throws(() => AIResponseValidator.validateGenerateTask({
+    ...contractTask,
+    examples: [...contractTask.examples, { input: '', output: '3', explanation: 'Broken example.' }],
+  }), /Example 2/);
+});
+
+test('task validation rejects contradictory public examples for the same input', () => {
+  assert.throws(() => AIResponseValidator.validateGenerateTask({
+    ...contractTask,
+    examples: [...contractTask.examples, { input: '2 3', output: '6', explanation: 'Wrong sum.' }],
+  }), /conflicting outputs/);
+});
+
+test('fixed output examples must agree with the explicit stdout contract', () => {
+  assert.throws(() => AIResponseValidator.validateGenerateTask({
+    ...contractTask,
+    practicalTask: 'Print exactly READY once. There is no input; the program must only print the fixed status message specified here and must not add labels, explanations, or extra output. The required output consists of one line.',
+    ioType: 'NO_INPUT_FIXED_OUTPUT', inputFormat: 'There is no input.', outputFormat: 'READY',
+    examples: [{ input: '', output: 'WRONG', explanation: 'Wrong status.' }],
+  }), /contradicts outputFormat/);
+});
+
+test('a single generated test must obey the explicit IO mode', () => {
+  assert.throws(() => AIResponseValidator.validateGenerateTestData([{ input: '', output: '5' }], 1, 'STDIN_STDOUT'), /requires input/);
+  assert.throws(() => AIResponseValidator.validateGenerateTestData([{ input: '2', output: 'READY' }], 1, 'NO_INPUT_FIXED_OUTPUT'), /empty stdin/);
+  assert.throws(() => AIResponseValidator.validateGenerateTestData([{ input: '2', output: '  ' }], 1, 'STDIN_STDOUT'), /non-empty/);
+});
+
+test('legitimate identity tests are accepted and significant input whitespace is preserved', () => {
+  const result = AIResponseValidator.validateGenerateTestData([{ input: '1', output: '1' }, { input: '  text  ', output: 'text' }], 2, 'STDIN_STDOUT');
+  assert.equal(result[1].input, '  text  ');
+});
+
 test('AIResponseValidator.validateGenerateTestData: rejects conflicting outputs for the same input', () => {
   assert.throws(
     () => AIResponseValidator.validateGenerateTestData({

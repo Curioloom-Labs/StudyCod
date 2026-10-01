@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AiQuizResult, AiTaskGenerationResult, AiTheoryResult, TestDataExample } from './LLMOrchestrator';
+import type { AiQuizResult, AiTaskGenerationResult, AiTheoryResult, TestDataExample } from './LLMOrchestrator';
 import { isFunctionsTopic, looksLikeFunctionImplementationTask } from '../ai/curriculumPolicy';
 
 const TaskGenerationSchema = z.object({
@@ -103,13 +103,6 @@ function defaultInputFormatByIo(ioType: string): string {
   return 'Зчитайте вхідні дані зі стандартного потоку вводу (stdin) у форматі, описаному в умові.';
 }
 
-function defaultOutputFormatByIo(ioType: string): string {
-  if (ioType === 'NO_INPUT_FREE_OUTPUT') {
-    return 'Виведіть будь-який непорожній коректний рядок у stdout згідно вимоги задачі.';
-  }
-  return 'Виведіть результат у стандартний потік виводу (stdout) у форматі, описаному в умові.';
-}
-
 function normalizeMalformedPythonTypeRepr(value: string): string {
   // Models occasionally double the opening quote in Python's built-in type
   // representation (e.g. `<class ''str'>`), making expected output impossible
@@ -118,10 +111,6 @@ function normalizeMalformedPythonTypeRepr(value: string): string {
     /<class\s+''(bool|bytes|complex|dict|float|frozenset|int|list|set|str|tuple|type|NoneType)'>/g,
     "<class '$1'>",
   );
-}
-
-function defaultConstraintsText(): string {
-  return 'Час виконання: до 1 с. Обмеження памʼяті: до 256 МБ. Використовуйте допустимі межі вхідних значень для вибраних типів даних.';
 }
 
 function normalizeIoType(raw: unknown, context?: { practicalTask?: string; inputFormat?: string; outputFormat?: string }): "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT" {
@@ -721,6 +710,31 @@ export class AIResponseValidator {
         }
       }
 
+      // Every public example becomes judge data; checking only examples[0]
+      // allowed later contradictory or malformed rows to reach students.
+      const outputByInput = new Map<string, string>();
+      for (const [index, example] of validated.examples.entries()) {
+        const exampleContext = { ...ctx, exInput: example.input.trim(), exOutput: example.output.trim() };
+        for (const rule of TASK_VALIDATION_RULES) {
+          if (rule.applies && !rule.applies(exampleContext)) continue;
+          if (rule.fails(exampleContext)) {
+            throw makeAIValidationError('generateTask', `Example ${index + 1}: ${rule.message}`);
+          }
+        }
+        if (ioType !== 'STDIN_STDOUT' && example.input !== '') {
+          throw makeAIValidationError('generateTask', `Example ${index + 1}: no-input tasks require empty stdin`);
+        }
+        if (ioType === 'NO_INPUT_FIXED_OUTPUT' && example.output.replace(/\r\n/g, '\n').trim() !== outFmt.replace(/\r\n/g, '\n').trim()) {
+          throw makeAIValidationError('generateTask', `Example ${index + 1}: fixed output contradicts outputFormat`);
+        }
+        const inputKey = example.input.replace(/\r\n/g, '\n');
+        const known = outputByInput.get(inputKey);
+        if (ioType !== 'NO_INPUT_FREE_OUTPUT' && known !== undefined && known !== example.output) {
+          throw makeAIValidationError('generateTask', `Example ${index + 1}: conflicting outputs for the same input`);
+        }
+        outputByInput.set(inputKey, example.output);
+      }
+
       if (expectedTopic) {
         const expectedTopicLower = expectedTopic.toLowerCase().trim();
         let out = validated;
@@ -775,7 +789,6 @@ export class AIResponseValidator {
     fixed.ioType = normalizedIoType;
 
     const allowed = Array.isArray(allowedIoTypes) ? allowedIoTypes : [];
-    let coercedToNoInput = false;
     if (allowed.length > 0 && !allowed.includes(normalizedIoType)) {
       const noInputOptions = allowed.filter((value) => value !== 'STDIN_STDOUT');
       const semanticText = `${String(fixed.practicalTask ?? '')}\n${String(fixed.inputFormat ?? '')}`;
@@ -790,7 +803,6 @@ export class AIResponseValidator {
           : noInputOptions.includes('NO_INPUT_FIXED_OUTPUT')
             ? 'NO_INPUT_FIXED_OUTPUT'
             : noInputOptions[0];
-        coercedToNoInput = true;
       }
     }
 
@@ -807,44 +819,18 @@ export class AIResponseValidator {
       fixed.difficulty = 3;
     }
 
-    const defaultExample = {
-      input: isNoInputIoType ? '' : '1',
-      output: '1',
-      explanation: 'Default example',
-    };
-
     if (Array.isArray(fixed.examples)) {
-      let normalizedExamples = fixed.examples
-        .filter((raw): raw is JsonRecord => asJsonRecord(raw) !== null)
-        .map(raw => asJsonRecord(raw)!)
-        .filter(ex => {
-          const output = String(ex.output || '').trim();
-          // For NO_INPUT_* tasks, empty input is required and must be preserved.
-          // For STDIN_STDOUT tasks, input may still be empty in broken model outputs; let semantic validator handle it.
-          return output.length > 0;
-        })
-        .map(ex => ({
-          input: String(ex.input ?? '').trim(),
-          output: normalizeMalformedPythonTypeRepr(String(ex.output || '').trim()),
-          explanation: String(ex.explanation || '').trim() || 'Example',
-        }));
-
-      if (coercedToNoInput) {
-        normalizedExamples = normalizedExamples.map(example => ({ ...example, input: '' }));
-      }
-
-      fixed.examples = normalizedExamples.length > 0 ? normalizedExamples : [defaultExample];
-    } else {
-      fixed.examples = [defaultExample];
-    }
-
-    const normalizedExamples = fixed.examples as JsonRecord[];
-    if (
-      ioTypeHint === 'STDIN_STDOUT'
-      && normalizedExamples.length > 0
-      && normalizedExamples.every(ex => String(ex.input ?? '').trim().length === 0)
-    ) {
-      normalizedExamples[0].input = '1';
+      fixed.examples = fixed.examples.map(raw => {
+        const ex = asJsonRecord(raw);
+        if (!ex) return raw;
+        return {
+          ...ex,
+          // stdin is data: leading/trailing spaces may be significant.
+          input: ex.input,
+          output: typeof ex.output === 'string' ? normalizeMalformedPythonTypeRepr(ex.output.trim()) : ex.output,
+          explanation: typeof ex.explanation === 'string' && ex.explanation.trim() ? ex.explanation.trim() : 'Example',
+        };
+      });
     }
 
     const stringFields = ['title', 'theoryMarkdown', 'practicalTask', 'codeTemplate'] as const;
@@ -857,8 +843,6 @@ export class AIResponseValidator {
           fixed[field] = fixed.lang === 'PYTHON'
             ? '# write code here\n'
             : 'public class Main {\n  public static void main(String[] args) {\n  }\n}';
-        } else {
-          fixed[field] = `Default ${field}`;
         }
       } else {
         fixed[field] = String(raw).trim();
@@ -868,9 +852,9 @@ export class AIResponseValidator {
     const inputFormat = typeof fixed.inputFormat === 'string' ? fixed.inputFormat.trim() : '';
     const outputFormat = typeof fixed.outputFormat === 'string' ? fixed.outputFormat.trim() : '';
     const constraints = typeof fixed.constraints === 'string' ? fixed.constraints.trim() : '';
-    fixed.inputFormat = inputFormat || defaultInputFormatByIo(ioTypeHint);
-    fixed.outputFormat = normalizeMalformedPythonTypeRepr(outputFormat || defaultOutputFormatByIo(ioTypeHint));
-    fixed.constraints = constraints || defaultConstraintsText();
+    fixed.inputFormat = inputFormat || (isNoInputIoType ? defaultInputFormatByIo(ioTypeHint) : '');
+    fixed.outputFormat = normalizeMalformedPythonTypeRepr(outputFormat);
+    fixed.constraints = constraints;
 
     if (typeof fixed.practicalTask === 'string') {
       fixed.practicalTask = rewriteChecklistPracticalTaskToNarrative(fixed.practicalTask);
@@ -978,7 +962,7 @@ export class AIResponseValidator {
       throw new AIValidationError('generateTaskTemplate', emptyZod(), `Task template validation failed: ${unknownErr(error)}`);
     }
   }
-  static validateGenerateTestData(data: unknown, expectedCount?: number): TestDataExample[] {
+  static validateGenerateTestData(data: unknown, expectedCount?: number, ioType?: AiTaskGenerationResult['ioType']): TestDataExample[] {
     try {
       const rawTests = this.normalizeTestDataContainer(data);
       // Providers occasionally return one extra valid row despite an exact
@@ -1008,15 +992,21 @@ export class AIResponseValidator {
         }
       });
       const normalized = tests.map(t => ({
-        input: String(t.input ?? '').trim(),
+        input: String(t.input ?? ''),
         output: String(t.output ?? '').trim(),
         explanation: t.explanation ? String(t.explanation).trim() : undefined
       }));
-      if (expectedCount !== undefined && expectedCount > 1) {
-        const emptyInputs = normalized.filter(t => !t.input).length;
+      if (normalized.some(test => !test.output)) {
+        throw makeAIValidationError('generateTestData', 'Test data validation failed: expected stdout must be non-empty');
+      }
+      if (ioType === 'STDIN_STDOUT' || (ioType === undefined && expectedCount !== undefined && expectedCount > 1)) {
+        const emptyInputs = normalized.filter(t => !t.input.trim()).length;
         if (emptyInputs > 0) {
           throw new AIValidationError('generateTestData', emptyZod(), `Test data validation failed: ${emptyInputs} tests have empty input, but task requires input`, data);
         }
+      }
+      if (ioType && ioType !== 'STDIN_STDOUT' && normalized.some(test => test.input !== '')) {
+        throw makeAIValidationError('generateTestData', 'No-input task tests must have empty stdin');
       }
       const pairKey = (t: {
         input: string;
@@ -1038,10 +1028,6 @@ export class AIResponseValidator {
           );
         }
         outputByInput.set(test.input, test.output);
-      }
-      const placeholderCount = normalized.filter(t => t.input === '1' && t.output === '1').length;
-      if (expectedCount !== undefined && expectedCount > 1 && placeholderCount > 0) {
-        throw new AIValidationError('generateTestData', emptyZod(), 'Test data validation failed: placeholder tests (input=1/output=1) detected', data);
       }
       if (expectedCount !== undefined && expectedCount >= 5) {
         const uniqueInputs = new Set(normalized.map(t => t.input));

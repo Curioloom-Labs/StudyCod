@@ -7,6 +7,23 @@ import { CloudflareAIProvider } from "./CloudflareAIProvider";
 // via a thin access to private helpers using bracket notation.
 
 describe("CloudflareAIProvider prompt shaping", () => {
+  test("provider response keeps significant stdin whitespace and rejects missing input", async () => {
+    const p = new CloudflareAIProvider() as any;
+    p.callCloudflareWorker = async () => ({ content: JSON.stringify({ tests: [{ input: '  text  ', output: 'text' }] }) });
+    const params = { taskDescription: 'Read one line and print it.', taskTitle: 'Echo', lang: 'PYTHON', count: 1, ioType: 'STDIN_STDOUT' };
+    const result = await p.generateTestDataWithAI(params);
+    assert.equal(result[0].input, '  text  ');
+    p.callCloudflareWorker = async () => ({ content: JSON.stringify({ tests: [{ input: '', output: 'text' }] }) });
+    await assert.rejects(() => p.generateTestDataWithAI(params), /requires input/);
+  });
+  test("a single stdin test and the last statement rule survive prompt shaping", () => {
+    const p = new CloudflareAIProvider() as any;
+    const description = 'Read N and print N. ' + 'Context. '.repeat(1000) + '\nFINAL RULE: Preserve every output line.';
+    const built = p.buildTestDataPrompt({ taskDescription: description, taskTitle: 'Echo', lang: 'PYTHON', count: 1 });
+    assert.ok(built.prompt.includes(description));
+    assert.ok(built.prompt.includes('IO TYPE: STDIN_STDOUT'));
+    assert.equal(built.schema.properties.tests.minItems, 1);
+  });
   test("buildTestDataPrompt produces schema with exact count", () => {
     const p = new CloudflareAIProvider() as any;
     const built = p.buildTestDataPrompt({

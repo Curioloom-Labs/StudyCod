@@ -2,9 +2,10 @@ import { Response } from 'express';
 import { getLLMOrchestrator, type LLMTaskLanguage } from '../llm/LLMOrchestrator';
 import { AIResponseValidator, AIValidationError, makeAIValidationError } from '../llm/AIResponseValidator';
 import { logger } from '../../utils/logger';
-import { getCurriculumPolicyViolationForGeneratedTask, rewriteNonJudgeablePracticalTaskToJudgeable } from './curriculumPolicy';
+import { getCurriculumPolicyViolationForGeneratedTask } from './curriculumPolicy';
 import { isAiCircuitOpen, recordAiCircuitSuccess, recordAiCircuitFailure } from './aiCircuitBreaker';
 import { normalizeTopicLanguage, TOPIC_LANGUAGES } from '../../utils/topicLanguage';
+import { requireCompleteTaskDescription, resolveTestDataIoType } from '../llm/TaskContractReview';
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 export interface AIError {
   statusCode: number;
@@ -184,7 +185,13 @@ function sanitizeParams(mode: AIMode, params: unknown): JsonObject {
   if ('topicTitle' in p) p.topicTitle = sanitizeText(p.topicTitle, 200);
   if ('theory' in p) p.theory = sanitizeText(p.theory, 12_000);
   if ('prevTopics' in p) p.prevTopics = sanitizeText(p.prevTopics, 2000);
-  if ('taskDescription' in p) p.taskDescription = sanitizeText(p.taskDescription, 8000);
+  if ('taskDescription' in p) {
+    const description = String(p.taskDescription ?? '');
+    if (mode === 'generateTestData') requireCompleteTaskDescription(description);
+    // Test generation must see the actual statement, including literal data
+    // and Markdown fences. The generation/review system prompts treat it as data.
+    p.taskDescription = mode === 'generateTestData' ? description : sanitizeText(description, 8000);
+  }
   if ('taskTitle' in p) p.taskTitle = sanitizeText(p.taskTitle, 200);
   if ('description' in p) p.description = sanitizeText(p.description, 8000);
   if ('responseLanguage' in p) p.responseLanguage = sanitizeText(p.responseLanguage, 64);
@@ -496,7 +503,8 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
               language,
               signal: controller?.signal,
               requestId: options?.requestId,
-              semanticRetries: optionalNumber(sanitizedParams.semanticRetries)
+              semanticRetries: optionalNumber(sanitizedParams.semanticRetries),
+              validationFeedback: optionalString(sanitizedParams.validationFeedback)
             });
             const taskResult = AIResponseValidator.validateGenerateTask(
               result,
@@ -508,45 +516,13 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
 
             // Curriculum stage policy enforcement (e.g., prevent tasks requiring concepts not taught yet).
             {
-              let violation = getCurriculumPolicyViolationForGeneratedTask({
+              const violation = getCurriculumPolicyViolationForGeneratedTask({
                 lang: taskLanguage,
                 topicIndex: optionalNumber(sanitizedParams.topicIndex),
                 topicTitle: optionalString(sanitizedParams.topicTitle),
                 title: taskResult.title,
                 practicalTask: taskResult.practicalTask
               });
-
-              if (violation && violation.includes('NON_JUDGEABLE_TASK')) {
-                const originalPracticalTask = taskResult.practicalTask;
-                const rewrittenPracticalTask = rewriteNonJudgeablePracticalTaskToJudgeable(originalPracticalTask);
-
-                if (rewrittenPracticalTask && rewrittenPracticalTask !== originalPracticalTask) {
-                  const rewrittenViolation = getCurriculumPolicyViolationForGeneratedTask({
-                    lang: taskLanguage,
-                    topicIndex: optionalNumber(sanitizedParams.topicIndex),
-                    topicTitle: optionalString(sanitizedParams.topicTitle),
-                    title: taskResult.title,
-                    practicalTask: rewrittenPracticalTask
-                  });
-
-                  if (!rewrittenViolation) {
-                    taskResult.practicalTask = rewrittenPracticalTask;
-                    violation = null;
-                    logger.info('[ai] auto-rewrote non-judgeable practicalTask', {
-                      mode,
-                      requestId: options?.requestId ?? null,
-                      attempt,
-                      lang: taskLanguage,
-                      topicIndex: optionalNumber(sanitizedParams.topicIndex),
-                      title: taskResult.title,
-                      beforePreview: sanitizeText(originalPracticalTask, 220),
-                      afterPreview: sanitizeText(rewrittenPracticalTask, 220)
-                    });
-                  } else {
-                    violation = rewrittenViolation;
-                  }
-                }
-              }
 
               if (violation) {
                 throw makeAIValidationError('generateTask', `Task generation validation failed: ${violation}`, {
@@ -697,20 +673,19 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
             result = AIResponseValidator.validateGenerateTaskTemplate(result);
             break;
           case 'generateTestData':
+            const testIoType = resolveTestDataIoType(requiredString(sanitizedParams.taskDescription, 'taskDescription'), optionalTaskIoType(sanitizedParams.ioType));
             result = await orchestrator.generateTestDataWithAI({
               taskDescription: requiredString(sanitizedParams.taskDescription, 'taskDescription'),
               taskTitle: requiredString(sanitizedParams.taskTitle, 'taskTitle'),
               lang: requiredTaskLanguage(sanitizedParams.lang),
               count: Number(sanitizedParams.count),
-              ioType: optionalTaskIoType(sanitizedParams.ioType),
+              ioType: testIoType,
               userId: optionalNumber(sanitizedParams.userId),
               language,
               signal: controller?.signal
             });
-            const expectedTestCount = options?.expectedCount
-              || (sanitizedParams.ioType && sanitizedParams.ioType !== 'STDIN_STDOUT' ? 1 : optionalNumber(sanitizedParams.count))
-              || 12;
-            result = AIResponseValidator.validateGenerateTestData(result, expectedTestCount);
+            const expectedTestCount = testIoType === 'STDIN_STDOUT' ? (options?.expectedCount || optionalNumber(sanitizedParams.count) || 12) : 1;
+            result = AIResponseValidator.validateGenerateTestData(result, expectedTestCount, testIoType);
             break;
           default:
             throw new Error(`Unknown AI mode: ${mode}`);
@@ -730,6 +705,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
           // instead of failing fast (bounded by maxAttempts and totalTimeoutMs).
           const canRetryValidation = (mode === 'generateTask' || mode === 'generateTestData') && attempt < maxAttempts;
           if (canRetryValidation) {
+            sanitizedParams.validationFeedback = errorMsg.slice(0, 8000);
             logger.debug('[ai] invalid response (retrying)', {
               mode,
               requestId: options?.requestId ?? null,
