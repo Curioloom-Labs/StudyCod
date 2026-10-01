@@ -35,6 +35,7 @@ type ContestDraft = {
   classId: string;
   scoringMode: ContestScoringMode;
   icon: string;
+  iconImageUrl: string | null;
   bannerTheme: ContestBannerTheme;
   bannerImageUrl: string | null;
   scoreboardVisibility: ContestScoreboardVisibility;
@@ -56,6 +57,7 @@ const DEFAULT_DRAFT: ContestDraft = {
   classId: "",
   scoringMode: "IOI",
   icon: "🏆",
+  iconImageUrl: null,
   bannerTheme: "forest",
   bannerImageUrl: null,
   scoreboardVisibility: "LIVE",
@@ -145,14 +147,17 @@ export function ContestSetupDialog({
   const [classesLoaded, setClassesLoaded] = React.useState(false);
   const [classesRetry, setClassesRetry] = React.useState(0);
   const [copiedCode, setCopiedCode] = React.useState(false);
+  const [iconUploading, setIconUploading] = React.useState(false);
   const [bannerUploading, setBannerUploading] = React.useState(false);
   const dialogRef = React.useRef<HTMLDivElement>(null);
   const titleRef = React.useRef<HTMLInputElement>(null);
   const closeRef = React.useRef(onClose);
   const creatingRef = React.useRef(creating);
+  const uploadingRef = React.useRef(false);
   const restored = Boolean(initial);
   closeRef.current = onClose;
   creatingRef.current = creating;
+  uploadingRef.current = iconUploading || bannerUploading;
 
   React.useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -160,7 +165,7 @@ export function ContestSetupDialog({
     const restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     titleRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !creatingRef.current) {
+      if (event.key === "Escape" && !creatingRef.current && !uploadingRef.current) {
         event.preventDefault();
         closeRef.current();
       }
@@ -194,7 +199,7 @@ export function ContestSetupDialog({
       safeDraft.difficulty || safeDraft.visibility !== "PUBLIC" || safeDraft.classId ||
       safeDraft.scheduleEnabled || safeDraft.startsAt || safeDraft.endsAt ||
       safeDraft.scoringMode !== "IOI" || !safeDraft.allowUpsolve ||
-      safeDraft.icon !== "🏆" || safeDraft.bannerTheme !== "forest" || Boolean(safeDraft.bannerImageUrl) ||
+      safeDraft.icon !== "🏆" || Boolean(safeDraft.iconImageUrl) || safeDraft.bannerTheme !== "forest" || Boolean(safeDraft.bannerImageUrl) ||
       safeDraft.scoreboardVisibility !== "LIVE" || safeDraft.participantAccessMode !== "SELF_REGISTRATION",
     );
     try {
@@ -250,6 +255,24 @@ export function ContestSetupDialog({
       setFieldError(getErrorMessageFromUnknown(error, "Не вдалося завантажити банер."));
     } finally {
       setBannerUploading(false);
+    }
+  };
+
+  const uploadIconImage = async (file: File | undefined) => {
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp", "image/avif"].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      setFieldError("Додай PNG, JPG, WebP або AVIF до 8 МБ.");
+      return;
+    }
+    setIconUploading(true);
+    setFieldError("");
+    try {
+      const uploaded = await uploadStatementImage(file);
+      update("iconImageUrl", uploaded.url);
+    } catch (error: unknown) {
+      setFieldError(getErrorMessageFromUnknown(error, "Не вдалося завантажити іконку."));
+    } finally {
+      setIconUploading(false);
     }
   };
 
@@ -409,6 +432,7 @@ export function ContestSetupDialog({
         allowUpsolve: draft.allowUpsolve,
         scoringMode: draft.scoringMode,
         icon: draft.icon,
+        iconImageUrl: draft.iconImageUrl,
         bannerTheme: draft.bannerTheme,
         bannerImageUrl: draft.bannerImageUrl,
         scoreboardVisibility: draft.scoreboardVisibility,
@@ -431,7 +455,7 @@ export function ContestSetupDialog({
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "локальний час";
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#071009]/60 p-2 backdrop-blur-sm sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget && !creating) onClose(); }}>
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-[#071009]/60 p-2 backdrop-blur-sm sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget && !creating && !iconUploading && !bannerUploading) onClose(); }}>
       <div
         ref={dialogRef}
         role="dialog"
@@ -449,7 +473,7 @@ export function ContestSetupDialog({
             </div>
             <span className="hidden rounded-full bg-[#f0f5f1] px-3 py-1 text-xs font-semibold text-[#607067] dark:bg-white/[.06] dark:text-[#a9b7ad] sm:inline-flex">{restored ? "Чернетку відновлено" : "Автозбереження увімкнено"}</span>
           </div>
-          <button type="button" onClick={onClose} disabled={creating} aria-label="Закрити налаштування контесту" className="grid size-10 shrink-0 place-items-center rounded-xl text-[#6d7a70] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] disabled:opacity-50 dark:text-[#a9b7ad] dark:hover:bg-white/[.07]"><X aria-hidden="true" className="size-5" /></button>
+          <button type="button" onClick={onClose} disabled={creating || iconUploading || bannerUploading} aria-label="Закрити налаштування контесту" className="grid size-10 shrink-0 place-items-center rounded-xl text-[#6d7a70] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] disabled:opacity-50 dark:text-[#a9b7ad] dark:hover:bg-white/[.07]"><X aria-hidden="true" className="size-5" /></button>
         </header>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
@@ -491,7 +515,16 @@ export function ContestSetupDialog({
                       <fieldset>
                         <legend className="text-sm font-bold text-[#26352a] dark:text-[#e5eee7]">Іконка</legend>
                         <div className="mt-2 flex flex-wrap gap-2">
-                          {CONTEST_ICONS.map((icon) => <button key={icon} type="button" onClick={() => update("icon", icon)} aria-label={`Обрати іконку ${icon}`} aria-pressed={draft.icon === icon} className={`grid size-11 place-items-center rounded-xl border text-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] ${draft.icon === icon ? "border-[#16834d]/55 bg-[#e8f5ec] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/10" : "border-[#18271c]/10 hover:bg-[#f5f8f5] dark:border-white/10 dark:hover:bg-white/[.04]"}`}>{icon}</button>)}
+                          {CONTEST_ICONS.map((icon) => <button key={icon} type="button" onClick={() => { update("iconImageUrl", null); update("icon", icon); }} aria-label={`Обрати іконку ${icon}`} aria-pressed={!draft.iconImageUrl && draft.icon === icon} className={`grid size-11 place-items-center rounded-xl border text-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] ${!draft.iconImageUrl && draft.icon === icon ? "border-[#16834d]/55 bg-[#e8f5ec] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/10" : "border-[#18271c]/10 hover:bg-[#f5f8f5] dark:border-white/10 dark:hover:bg-white/[.04]"}`}>{icon}</button>)}
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          {draft.iconImageUrl && <img src={draft.iconImageUrl} alt="" className="size-11 rounded-xl border border-[#18271c]/10 bg-white object-cover dark:border-white/10 dark:bg-white/[.05]" />}
+                          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[#18271c]/10 px-3 py-2 text-sm font-semibold text-[#425146] transition hover:bg-white focus-within:ring-2 focus-within:ring-[#00c875] dark:border-white/10 dark:text-[#dce7df] dark:hover:bg-white/[.06]">
+                            <ImagePlus aria-hidden="true" className="size-4" />{iconUploading ? "Завантажую іконку…" : draft.iconImageUrl ? "Замінити зображення" : "Завантажити зображення"}
+                            <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="sr-only" disabled={iconUploading} onChange={(event) => { void uploadIconImage(event.target.files?.[0]); event.target.value = ""; }} />
+                          </label>
+                          {draft.iconImageUrl && <button type="button" onClick={() => update("iconImageUrl", null)} disabled={iconUploading} className="text-sm font-semibold text-[#69776d] underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#a9b7ad]">Прибрати</button>}
+                          <span className="text-xs text-[#819087] dark:text-[#8f9e93]">PNG, JPG, WebP або AVIF · до 8 МБ</span>
                         </div>
                       </fieldset>
                       <fieldset>
@@ -618,7 +651,7 @@ export function ContestSetupDialog({
                 <aside aria-label="Підсумок налаштувань" className="h-fit rounded-[22px] border border-[#18271c]/10 bg-[#f5f8f5] p-4 dark:border-white/10 dark:bg-white/[.035] xl:sticky xl:top-0">
                   <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]"><Sparkles aria-hidden="true" className="size-4" />Підсумок</div>
                   <div className="mt-3 overflow-hidden rounded-2xl p-4 text-white" style={{ background: draft.bannerImageUrl ? `linear-gradient(90deg, rgba(8, 22, 13, .78), rgba(8, 22, 13, .18)), url("${draft.bannerImageUrl}") center / cover` : CONTEST_BANNER_THEMES[draft.bannerTheme].background }}>
-                    <div className="text-3xl" aria-hidden="true">{draft.icon}</div>
+                    {draft.iconImageUrl ? <img src={draft.iconImageUrl} alt="" className="size-11 rounded-xl border border-white/20 object-cover shadow" /> : <div className="text-3xl" aria-hidden="true">{draft.icon}</div>}
                     <h3 className="mt-2 break-words text-lg font-bold leading-snug">{draft.title.trim() || "Назва твого контесту"}</h3>
                   </div>
                   <p className="mt-2 line-clamp-3 break-words text-sm leading-5 text-[#718075] dark:text-[#9eaca1]">{draft.description.trim() || "Короткий опис з’явиться тут."}</p>
@@ -639,10 +672,10 @@ export function ContestSetupDialog({
 
           <footer className="flex shrink-0 flex-col-reverse gap-3 border-t border-[#19291d]/10 bg-[#fbfcfa] px-4 py-3 dark:border-white/10 dark:bg-[#101a13] sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
             <div className="flex items-center gap-2">
-              {stepIndex > 0 ? <button type="button" onClick={() => { setStep(STEPS[stepIndex - 1].id); setStepError(""); setFieldError(""); }} disabled={creating} className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-[#59675d] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#b7c4ba] dark:hover:bg-white/[.06]"><ArrowLeft aria-hidden="true" className="size-4" />Назад</button> : <button type="button" onClick={onClose} disabled={creating} className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-[#59675d] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#b7c4ba] dark:hover:bg-white/[.06]">Скасувати</button>}
+              {stepIndex > 0 ? <button type="button" onClick={() => { setStep(STEPS[stepIndex - 1].id); setStepError(""); setFieldError(""); }} disabled={creating || iconUploading || bannerUploading} className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-[#59675d] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#b7c4ba] dark:hover:bg-white/[.06]"><ArrowLeft aria-hidden="true" className="size-4" />Назад</button> : <button type="button" onClick={onClose} disabled={creating || iconUploading || bannerUploading} className="inline-flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold text-[#59675d] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#b7c4ba] dark:hover:bg-white/[.06]">Скасувати</button>}
               <span className="hidden text-xs text-[#819087] dark:text-[#8f9e93] sm:inline">Крок {stepIndex + 1} з {STEPS.length}</span>
             </div>
-            <button type="submit" disabled={creating || bannerUploading || (step === "access" && draft.visibility === "CLASS" && (classesLoading || !classes.length))} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#153321] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(20,67,40,.16)] transition hover:bg-[#214a31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] disabled:cursor-wait disabled:opacity-60 dark:bg-[#00d978] dark:text-[#062211] dark:hover:bg-[#35ed94]">
+            <button type="submit" disabled={creating || iconUploading || bannerUploading || (step === "access" && draft.visibility === "CLASS" && (classesLoading || !classes.length))} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#153321] px-5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(20,67,40,.16)] transition hover:bg-[#214a31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] disabled:cursor-wait disabled:opacity-60 dark:bg-[#00d978] dark:text-[#062211] dark:hover:bg-[#35ed94]">
               {creating ? <><LoaderCircle aria-hidden="true" className="size-4 animate-spin" />Створюю чернетку…</> : step === "schedule" ? <>Створити чернетку<ArrowRight aria-hidden="true" className="size-4" /></> : <>Далі<ArrowRight aria-hidden="true" className="size-4" /></>}
             </button>
           </footer>
