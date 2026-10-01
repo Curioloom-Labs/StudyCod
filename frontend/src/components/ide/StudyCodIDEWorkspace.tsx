@@ -141,6 +141,8 @@ type Props = {
   onTheoryComplete?: () => void;
   toolbar?: React.ReactNode;
   languageOptions?: JudgeLanguage[];
+  disableAiAssistance?: boolean;
+  submitMode?: boolean;
   readOnly?: boolean;
   onBack?: () => void;
   disableLanguageChange?: boolean;
@@ -446,6 +448,9 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       setActiveFile(props.entryFile);
     }
   }, [props.entryFile, props.task.id, props.theory, taskTheoryKey]);
+  React.useEffect(() => {
+    if (props.disableAiAssistance) setAssistantTab("task");
+  }, [props.disableAiAssistance]);
   React.useEffect(() => {
     try {
       localStorage.setItem(scopedStorageKey(ACTIVE_FILE_KEY, props.task.id), activeFile);
@@ -1327,11 +1332,11 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           type="button"
           onClick={checkWithTab}
           disabled={props.readOnly || props.running || props.checking}
-          title={tr("Перевірити (Ctrl+Shift+Enter)", "Test (Ctrl+Shift+Enter)")}
+          title={props.submitMode ? tr("Надіслати на перевірку (Ctrl+Shift+Enter)", "Submit for judging (Ctrl+Shift+Enter)") : tr("Перевірити (Ctrl+Shift+Enter)", "Test (Ctrl+Shift+Enter)")}
           className="hidden h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:opacity-50 sm:inline-flex"
         >
-          {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : <TestTube2 className="size-3.5" />}
-          {props.checking ? tr("Тестуємо…", "Testing…") : tr("Test", "Test")}
+          {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : props.submitMode ? <Rocket className="size-3.5" /> : <TestTube2 className="size-3.5" />}
+          {props.checking ? (props.submitMode ? tr("Надсилаємо…", "Submitting…") : tr("Тестуємо…", "Testing…")) : props.submitMode ? tr("Надіслати", "Submit") : tr("Test", "Test")}
         </button>
         <button
           type="button"
@@ -1353,7 +1358,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         >
           <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#00d978]/10 text-[#72edb0]"><FileText className="size-3.5" /></span>
           <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[#dce8df]">
-            {tr("Умова задачі та підказки", "Task context and hints")}
+            {props.disableAiAssistance ? tr("Умова задачі", "Task statement") : tr("Умова задачі та підказки", "Task context and hints")}
           </span>
           <ChevronDown className={`size-4 shrink-0 text-[#82968a] transition-transform ${mobileContextOpen ? "rotate-180" : ""}`} />
         </button>
@@ -1362,7 +1367,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             <div className="rounded-xl border border-[#203428] bg-[#111b14] p-3">
               <MarkdownView content={taskBody} variant="task" />
             </div>
-            {props.hints?.length ? (
+            {!props.disableAiAssistance && props.hints?.length ? (
               <div className="mt-3 space-y-2">
                 <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">{tr("Підказки", "Hints")}</p>
                 {props.hints.map((hint, index) => {
@@ -1683,23 +1688,27 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 <FileText className="size-3.5" />
                 {tr("Завдання", "Task")}
               </button>
-              <button
-                type="button"
-                onClick={() => setAssistantTab("hints")}
-                className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "hints" ? "border-[#00d978]/25 bg-[#00d978]/10 text-[#72edb0]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
-              >
-                <Lightbulb className="size-3.5" />
-                {tr("Підказки", "Hints")}
-                {props.hints?.length ? ` (${props.hints.length})` : ""}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAssistantTab("mentor")}
-                className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "mentor" ? "border-[#6ca8ff]/25 bg-[#6ca8ff]/10 text-[#9bc5ff]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
-              >
-                <Bot className="size-3.5" />
-                {tr("Ментор", "Mentor")}
-              </button>
+              {!props.disableAiAssistance ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setAssistantTab("hints")}
+                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "hints" ? "border-[#00d978]/25 bg-[#00d978]/10 text-[#72edb0]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
+                  >
+                    <Lightbulb className="size-3.5" />
+                    {tr("Підказки", "Hints")}
+                    {props.hints?.length ? ` (${props.hints.length})` : ""}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAssistantTab("mentor")}
+                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "mentor" ? "border-[#6ca8ff]/25 bg-[#6ca8ff]/10 text-[#9bc5ff]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
+                  >
+                    <Bot className="size-3.5" />
+                    {tr("Ментор", "Mentor")}
+                  </button>
+                </>
+              ) : null}
               <button
                 type="button"
                 onClick={() => updateLayout({ rightCollapsed: true })}
@@ -2137,7 +2146,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           <Play className="size-3.5" />{props.running ? "…" : tr("Запустити", "Run")}
         </button>
         <button type="button" onClick={checkWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#00d978] px-3 text-xs font-bold text-[#062211] disabled:opacity-50">
-          {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : <TestTube2 className="size-3.5" />}{props.checking ? tr("Тестуємо…", "Testing…") : tr("Перевірити", "Test")}
+          {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : props.submitMode ? <Rocket className="size-3.5" /> : <TestTube2 className="size-3.5" />}{props.checking ? (props.submitMode ? tr("Надсилаємо…", "Submitting…") : tr("Тестуємо…", "Testing…")) : props.submitMode ? tr("Надіслати", "Submit") : tr("Перевірити", "Test")}
         </button>
       </div>
       {diffOpen ? (
