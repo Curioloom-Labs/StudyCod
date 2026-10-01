@@ -397,7 +397,7 @@ export const ContestProblemSolvePage: React.FC = () => {
     setWsStatus("connecting");
 
     const url = `${apiHttpBase()}/contests/${contestId}/events`;
-    const es = new EventSource(url);
+    const es = new EventSource(url, { withCredentials: true });
 
     es.addEventListener("ready", () => {
       if (!closed) setWsStatus("connected");
