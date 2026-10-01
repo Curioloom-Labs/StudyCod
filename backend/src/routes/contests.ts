@@ -205,6 +205,22 @@ async function canViewContestMeta(params: { contest: Contest; req: AuthRequest }
     return false;
   }
 
+  if (contest.participantAccessMode === "ISSUED_ACCOUNTS") {
+    // Public contests stay discoverable, while the content endpoint below
+    // still checks whether this account was issued for this contest.
+    if (contest.visibility === "PUBLIC") return true;
+    if (req.userId && await canManageContest({ contest, req })) return true;
+    const principalId = req.userId ?? req.studentId ?? null;
+    if (!principalId) return false;
+    const issuedParticipant = await participantRepo().findOne({
+      where: {
+        contest: { id: contest.id },
+        ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }),
+      },
+    });
+    return isContestOnlyUser(req) && Boolean(issuedParticipant);
+  }
+
   if (contest.visibility === "PUBLIC") {
     // Public contests are discoverable to every account type; private and class contests remain access-checked below.
     if (isContestOnlyUser(req)) {
@@ -321,6 +337,19 @@ async function canAccessContest(params: { contest: Contest; req: AuthRequest }):
       if (row?.createdBy?.id === req.userId) return true;
     }
     return false;
+  }
+
+  if (contest.participantAccessMode === "ISSUED_ACCOUNTS") {
+    if (req.userId && await canManageContest({ contest, req })) return true;
+    const principalId = req.userId ?? req.studentId ?? null;
+    if (!principalId || !isContestOnlyUser(req)) return false;
+    const issuedParticipant = await participantRepo().findOne({
+      where: {
+        contest: { id: contest.id },
+        user: { id: principalId },
+      },
+    });
+    return Boolean(issuedParticipant);
   }
 
   if (contest.visibility === "PUBLIC") {
@@ -682,8 +711,15 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
 
     const contest = await contestRepo().findOne({ where: { id: contestId } });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
-    if (contest.visibility !== "PUBLIC" && !(await canAccessContest({ contest, req }))) {
+    if (!(await canAccessContest({ contest, req }))) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+    const canManage = req.userId ? await canManageContest({ contest, req }) : false;
+    const afterEnd = contest.scoreboardVisibility === "AFTER_END" && (!contest.endsAt || Date.now() < new Date(contest.endsAt).getTime());
+    const organizersOnly = contest.scoreboardVisibility === "ORGANIZERS_ONLY" && !canManage;
+    if ((afterEnd || organizersOnly) && !canManage) {
+      res.set("Cache-Control", "no-store");
+      return res.json({ rows: [], generatedAtMs: Date.now(), hidden: true, releaseAt: contest.endsAt ? new Date(contest.endsAt).toISOString() : null, hiddenReason: organizersOnly ? "ORGANIZERS_ONLY" : "AFTER_END" });
     }
 
     const subs = await submissionRepo().find({
@@ -1175,6 +1211,11 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
         endsAt: c.endsAt ? new Date(c.endsAt).toISOString() : null,
         isPublished: c.isPublished,
         allowUpsolve: c.allowUpsolve ?? true,
+        icon: c.icon ?? "🏆",
+        bannerTheme: c.bannerTheme ?? "forest",
+        bannerImageUrl: c.bannerImageUrl ?? null,
+        scoreboardVisibility: c.scoreboardVisibility ?? "LIVE",
+        participantAccessMode: c.participantAccessMode ?? "SELF_REGISTRATION",
         createdAt: c.createdAt ? new Date(c.createdAt).toISOString() : null,
         createdBy: c.createdBy ? { id: c.createdBy.id, username: c.createdBy.username } : null,
         classId: c.class?.id ?? null,
@@ -1214,6 +1255,7 @@ contestsRouter.post("/join-by-code", authRequired, async (req: AuthRequest, res:
 
     // Don't reveal anything: same response for wrong/unknown code.
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (contest.participantAccessMode === "ISSUED_ACCOUNTS") return res.status(404).json({ message: "NOT_FOUND" });
 
     const participant = await getOrCreateParticipant({ contestId: contest.id, req });
     return res.json({ joined: true, contestId: contest.id, participantId: participant.id });
@@ -1246,6 +1288,11 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       isPublished: z.boolean().optional(),
       allowUpsolve: z.boolean().optional(),
       scoringMode: z.enum(["IOI", "ICPC"]).optional(),
+      icon: z.enum(["🏆", "⚡", "🎯", "🧠", "🚀", "🧩", "💻", "📚", "🔥", "🌟"]).optional(),
+      bannerTheme: z.enum(["forest", "ocean", "violet", "sunset"]).optional(),
+      bannerImageUrl: z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/).nullable().optional(),
+      scoreboardVisibility: z.enum(["LIVE", "AFTER_END", "ORGANIZERS_ONLY"]).optional(),
+      participantAccessMode: z.enum(["SELF_REGISTRATION", "ISSUED_ACCOUNTS"]).optional(),
     });
     const parsed = schema.safeParse(req.body ?? {});
     if (!parsed.success) {
@@ -1255,6 +1302,9 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
 
     if (data.startsAt && data.endsAt && new Date(data.endsAt).getTime() <= new Date(data.startsAt).getTime()) {
       return res.status(400).json({ message: "END_BEFORE_START" });
+    }
+    if ((data.scoreboardVisibility ?? "LIVE") === "AFTER_END" && !data.endsAt) {
+      return res.status(400).json({ message: "SCOREBOARD_REQUIRES_END_TIME" });
     }
 
     if (data.visibility === "PRIVATE_CODE") {
@@ -1284,6 +1334,11 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       isPublished: typeof data.isPublished === "boolean" ? data.isPublished : false,
       allowUpsolve: typeof data.allowUpsolve === "boolean" ? data.allowUpsolve : true,
       scoringMode: data.scoringMode ?? "IOI",
+      icon: data.icon ?? "🏆",
+      bannerTheme: data.bannerTheme ?? "forest",
+      bannerImageUrl: data.bannerImageUrl ?? null,
+      scoreboardVisibility: data.scoreboardVisibility ?? "LIVE",
+      participantAccessMode: data.participantAccessMode ?? "SELF_REGISTRATION",
     });
     const saved: Contest = await contestRepo().save(contest);
     return res.json({ id: saved.id });
@@ -1323,6 +1378,11 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
         isPublished: z.boolean().optional(),
         allowUpsolve: z.boolean().optional(),
         scoringMode: z.enum(["IOI", "ICPC"]).optional(),
+        icon: z.enum(["🏆", "⚡", "🎯", "🧠", "🚀", "🧩", "💻", "📚", "🔥", "🌟"]).optional(),
+        bannerTheme: z.enum(["forest", "ocean", "violet", "sunset"]).optional(),
+        bannerImageUrl: z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/).nullable().optional(),
+        scoreboardVisibility: z.enum(["LIVE", "AFTER_END", "ORGANIZERS_ONLY"]).optional(),
+        participantAccessMode: z.enum(["SELF_REGISTRATION", "ISSUED_ACCOUNTS"]).optional(),
       })
       .refine((v) => Object.keys(v).length > 0, { message: "EMPTY_PATCH" });
 
@@ -1375,6 +1435,10 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
     if (nextStartsAt && nextEndsAt && nextEndsAt.getTime() <= nextStartsAt.getTime()) {
       return res.status(400).json({ message: "END_BEFORE_START" });
     }
+    const nextScoreboardVisibility = data.scoreboardVisibility ?? contest.scoreboardVisibility ?? "LIVE";
+    if (nextScoreboardVisibility === "AFTER_END" && !nextEndsAt) {
+      return res.status(400).json({ message: "SCOREBOARD_REQUIRES_END_TIME" });
+    }
 
     if (data.title !== undefined) contest.title = data.title.trim();
     if (data.description !== undefined) contest.description = data.description === null ? null : data.description.trim();
@@ -1385,6 +1449,11 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
     if (data.isPublished !== undefined) contest.isPublished = data.isPublished;
     if (data.allowUpsolve !== undefined) contest.allowUpsolve = data.allowUpsolve;
     if (data.scoringMode !== undefined) contest.scoringMode = data.scoringMode;
+    if (data.icon !== undefined) contest.icon = data.icon;
+    if (data.bannerTheme !== undefined) contest.bannerTheme = data.bannerTheme;
+    if (data.bannerImageUrl !== undefined) contest.bannerImageUrl = data.bannerImageUrl;
+    if (data.scoreboardVisibility !== undefined) contest.scoreboardVisibility = data.scoreboardVisibility;
+    if (data.participantAccessMode !== undefined) contest.participantAccessMode = data.participantAccessMode;
 
     const saved = await contestRepo().save(contest);
     return res.json({
@@ -1399,6 +1468,11 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
       endsAt: saved.endsAt ? new Date(saved.endsAt).toISOString() : null,
       allowUpsolve: saved.allowUpsolve ?? true,
       scoringMode: saved.scoringMode ?? "IOI",
+      icon: saved.icon ?? "🏆",
+      bannerTheme: saved.bannerTheme ?? "forest",
+      bannerImageUrl: saved.bannerImageUrl ?? null,
+      scoreboardVisibility: saved.scoreboardVisibility ?? "LIVE",
+      participantAccessMode: saved.participantAccessMode ?? "SELF_REGISTRATION",
     });
   } catch (error: unknown) {
     logger.error("[contests] PATCH /:id error", { requestId: req.requestId, userId: req.userId, err: error });
@@ -1450,12 +1524,15 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
 
     // If contest hasn't started yet, hide problems for non-creator.
     // If contest requires joining (PRIVATE_CODE) and user hasn't joined, hide problems.
-    const showProblems = (isPrivileged || !isBeforeStart) && (canContent || contest.visibility === "PUBLIC");
+    const showProblems = (isPrivileged || !isBeforeStart) && canContent;
 
     return res.json({
       contest: {
         id: contest.id,
         title: contest.title,
+        icon: contest.icon ?? "🏆",
+        bannerTheme: contest.bannerTheme ?? "forest",
+        bannerImageUrl: contest.bannerImageUrl ?? null,
         description: contest.description ?? null,
         tags: contest.tags ?? [],
         difficulty: contest.difficulty ?? null,
@@ -1465,13 +1542,16 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
         isPublished: contest.isPublished,
         allowUpsolve: contest.allowUpsolve ?? true,
         scoringMode: contest.scoringMode ?? "IOI",
+        scoreboardVisibility: contest.scoreboardVisibility ?? "LIVE",
+        participantAccessMode: contest.participantAccessMode ?? "SELF_REGISTRATION",
         createdBy: contest.createdBy ? { id: contest.createdBy.id, username: contest.createdBy.username } : null,
         classId: contest.class?.id ?? null,
       },
       access: {
         canAccessContent: canContent,
         isJoined,
-        joinRequired: contest.visibility === "PRIVATE_CODE" && !canContent,
+        joinRequired: (contest.visibility === "PRIVATE_CODE" || contest.participantAccessMode === "ISSUED_ACCOUNTS") && !canContent,
+        accountRequired: contest.participantAccessMode === "ISSUED_ACCOUNTS" && !canContent,
         canManage: isPrivileged,
         isPaused,
       },
@@ -1515,11 +1595,21 @@ contestsRouter.post("/:id/join", authRequired, async (req: AuthRequest, res: Res
 
     const contest = await contestRepo().findOne({ where: { id }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
-    if (isContestOnlyUser(req) && contest.visibility !== "PUBLIC") {
-      return res.status(403).json({ message: "CONTEST_MODE_RESTRICTED" });
-    }
     if (contest.isPublished === false && req.userRole !== "SYSTEM_ADMIN" && contest.createdBy?.id !== req.userId) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+
+    const existingParticipant = await participantRepo().findOne({
+      where: { contest: { id }, ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }) },
+    });
+    if (existingParticipant && (contest.participantAccessMode !== "ISSUED_ACCOUNTS" || isContestOnlyUser(req))) {
+      return res.json({ joined: true, participantId: existingParticipant.id });
+    }
+    if (contest.participantAccessMode === "ISSUED_ACCOUNTS") {
+      return res.status(403).json({ message: "ISSUED_ACCOUNT_REQUIRED" });
+    }
+    if (isContestOnlyUser(req) && contest.visibility !== "PUBLIC") {
+      return res.status(403).json({ message: "CONTEST_MODE_RESTRICTED" });
     }
 
     if (contest.visibility === "PRIVATE_CODE") {
@@ -1789,7 +1879,7 @@ contestsRouter.post("/:id/admin/accounts/generate", authRequired, async (req: Au
     const schema = z.object({
       entries: z.array(z.object({
         fullName: z.string().min(1).max(160),
-        email: z.string().email().max(255),
+        email: z.union([z.string().email().max(255), z.literal("")]).optional(),
       })).min(1).max(300).optional(),
 
       // Legacy fallback mode (kept for backward compatibility)
@@ -1802,7 +1892,7 @@ contestsRouter.post("/:id/admin/accounts/generate", authRequired, async (req: Au
     const roster = Array.isArray(parsed.data.entries) && parsed.data.entries.length > 0
       ? parsed.data.entries.map((e) => ({
           fullName: splitFullName(e.fullName).fullName,
-          email: String(e.email).trim().toLowerCase(),
+          email: String(e.email ?? "").trim().toLowerCase(),
         }))
       : Array.from({ length: parsed.data.count ?? 1 }).map(() => ({
           fullName: "",
@@ -3680,6 +3770,26 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
+    const isManager = req.userId ? await canManageContest({ contest, req }) : false;
+    const scoreboardIsHidden = contest.scoreboardVisibility === "ORGANIZERS_ONLY"
+      ? !isManager
+      : contest.scoreboardVisibility === "AFTER_END"
+        ? !isManager && (!contest.endsAt || Date.now() < new Date(contest.endsAt).getTime())
+        : false;
+    if (scoreboardIsHidden) {
+      res.set("Cache-Control", "no-store");
+      return res.json({
+        contestId,
+        scoringMode: contest.scoringMode ?? "IOI",
+        problems: [],
+        rows: [],
+        hidden: true,
+        releaseAt: contest.endsAt ? new Date(contest.endsAt).toISOString() : null,
+        hiddenReason: contest.scoreboardVisibility === "ORGANIZERS_ONLY" ? "ORGANIZERS_ONLY" : "AFTER_END",
+        generatedAtMs: Date.now(),
+      });
+    }
+
     const scoringMode: "IOI" | "ICPC" = contest.scoringMode;
 
     const problems = await problemRepo().find({
@@ -3737,7 +3847,6 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
     const frozen = freezeAtMs != null && nowMs >= freezeAtMs && !finished;
     // Managers/admins always see the live board; participants see a frozen board
     // (submissions after the freeze cutoff are withheld) during the freeze window.
-    const isManager = req.userId ? await canManageContest({ contest, req }) : false;
     const viewerFrozen = frozen && !isManager;
     const cutoffMs = viewerFrozen && freezeAtMs != null ? freezeAtMs : null;
 

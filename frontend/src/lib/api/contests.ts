@@ -1,10 +1,16 @@
 import { api } from "./client";
 
 export type ContestVisibility = "PUBLIC" | "PRIVATE_CODE" | "CLASS";
+export type ContestScoreboardVisibility = "LIVE" | "AFTER_END" | "ORGANIZERS_ONLY";
+export type ContestParticipantAccessMode = "SELF_REGISTRATION" | "ISSUED_ACCOUNTS";
+export type ContestBannerTheme = "forest" | "ocean" | "violet" | "sunset";
 
 export type ContestListItem = {
   id: number;
   title: string;
+  icon?: string;
+  bannerTheme?: ContestBannerTheme;
+  bannerImageUrl?: string | null;
   description: string | null;
   tags: string[];
   difficulty: "EASY" | "MEDIUM" | "HARD" | null;
@@ -14,6 +20,8 @@ export type ContestListItem = {
   endsAt: string | null;
   isPublished: boolean;
   allowUpsolve: boolean;
+  scoreboardVisibility?: ContestScoreboardVisibility;
+  participantAccessMode?: ContestParticipantAccessMode;
   createdAt: string | null;
   createdBy: { id: number; username: string } | null;
   classId: number | null;
@@ -34,6 +42,9 @@ export type ContestDetails = {
   contest: {
     id: number;
     title: string;
+    icon?: string;
+    bannerTheme?: ContestBannerTheme;
+    bannerImageUrl?: string | null;
     description: string | null;
     tags: string[];
     difficulty: "EASY" | "MEDIUM" | "HARD" | null;
@@ -43,6 +54,8 @@ export type ContestDetails = {
     isPublished: boolean;
     allowUpsolve: boolean;
     scoringMode?: ContestScoringMode;
+    scoreboardVisibility?: ContestScoreboardVisibility;
+    participantAccessMode?: ContestParticipantAccessMode;
     createdBy: { id: number; username: string } | null;
     classId: number | null;
   };
@@ -50,6 +63,7 @@ export type ContestDetails = {
     canAccessContent: boolean;
     isJoined: boolean;
     joinRequired: boolean;
+    accountRequired?: boolean;
     canManage?: boolean;
     isPaused?: boolean;
   };
@@ -72,6 +86,11 @@ export type CreateContestRequest = {
   isPublished?: boolean;
   allowUpsolve?: boolean;
   scoringMode?: ContestScoringMode;
+  icon?: string;
+  bannerTheme?: ContestBannerTheme;
+  bannerImageUrl?: string | null;
+  scoreboardVisibility?: ContestScoreboardVisibility;
+  participantAccessMode?: ContestParticipantAccessMode;
 };
 
 export type UpdateContestRequest = {
@@ -87,6 +106,11 @@ export type UpdateContestRequest = {
   isPublished?: boolean;
   allowUpsolve?: boolean;
   scoringMode?: ContestScoringMode;
+  icon?: string;
+  bannerTheme?: ContestBannerTheme;
+  bannerImageUrl?: string | null;
+  scoreboardVisibility?: ContestScoreboardVisibility;
+  participantAccessMode?: ContestParticipantAccessMode;
 };
 
 import type { JudgeLanguage } from "../judgeLanguages";
@@ -197,6 +221,9 @@ export type ContestStandings = {
   freeze?: { enabled: boolean; freezeAtMs: number | null; frozen: boolean; isManagerView?: boolean };
   disqualifiedCount?: number;
   generatedAtMs?: number;
+  hidden?: boolean;
+  releaseAt?: string | null;
+  hiddenReason?: "AFTER_END" | "ORGANIZERS_ONLY";
 };
 
 export type ContestSubmissionListItem = {

@@ -16,6 +16,9 @@ import { ContestParticipant } from "./ContestParticipant";
 export type ContestVisibility = "PUBLIC" | "PRIVATE_CODE" | "CLASS";
 export type ContestScoringMode = "IOI" | "ICPC";
 export type ContestDifficulty = "EASY" | "MEDIUM" | "HARD";
+export type ContestScoreboardVisibility = "LIVE" | "AFTER_END" | "ORGANIZERS_ONLY";
+export type ContestParticipantAccessMode = "SELF_REGISTRATION" | "ISSUED_ACCOUNTS";
+export type ContestBannerTheme = "forest" | "ocean" | "violet" | "sunset";
 
 @Entity("contests")
 export class Contest {
@@ -32,6 +35,15 @@ export class Contest {
 
   @Column({ type: "varchar", length: 255 })
   title!: string;
+
+  @Column({ type: "varchar", length: 16, default: "🏆" })
+  icon!: string;
+
+  @Column({ type: "varchar", length: 20, default: "forest", name: "banner_theme" })
+  bannerTheme!: ContestBannerTheme;
+
+  @Column({ type: "varchar", length: 512, nullable: true, name: "banner_image_url" })
+  bannerImageUrl?: string | null;
 
   @Column({ type: "text", nullable: true })
   description?: string | null;
@@ -78,6 +90,22 @@ export class Contest {
     name: "scoring_mode",
   })
   scoringMode!: ContestScoringMode;
+
+  @Column({
+    type: "enum",
+    enum: ["LIVE", "AFTER_END", "ORGANIZERS_ONLY"],
+    default: "LIVE",
+    name: "scoreboard_visibility",
+  })
+  scoreboardVisibility!: ContestScoreboardVisibility;
+
+  @Column({
+    type: "enum",
+    enum: ["SELF_REGISTRATION", "ISSUED_ACCOUNTS"],
+    default: "SELF_REGISTRATION",
+    name: "participant_access_mode",
+  })
+  participantAccessMode!: ContestParticipantAccessMode;
 
   @OneToMany(() => ContestProblem, (p) => p.contest)
   problems!: ContestProblem[];

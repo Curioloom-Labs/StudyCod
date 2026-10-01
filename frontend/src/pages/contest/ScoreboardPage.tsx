@@ -164,7 +164,7 @@ export const ScoreboardPage: React.FC = () => {
                 {mode === "ICPC" ? tr("ICPC · бали + штраф", "ICPC · solved + penalty") : tr("IOI · сума балів", "IOI · points")}
               </span>
               <p className="text-sm font-mono text-text-secondary">
-                {tr("Оновлюється наживо кожні 7 секунд.", "Updates live every 7 seconds.")}
+                {board?.hidden ? tr("Таблицю приховано відповідно до налаштувань контесту.", "The scoreboard is hidden by contest settings.") : tr("Оновлюється наживо кожні 7 секунд.", "Updates live every 7 seconds.")}
               </p>
             </div>
           </div>
@@ -174,7 +174,7 @@ export const ScoreboardPage: React.FC = () => {
                 <Snowflake className="w-3.5 h-3.5" /> {tr("Заморожено", "Frozen")}
               </span>
             ) : null}
-            {live && (
+            {live && !board?.hidden && (
               <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-accent-error">
                 <span className="relative inline-flex h-2 w-2">
                   {!prefersReducedMotion ? (
@@ -189,9 +189,9 @@ export const ScoreboardPage: React.FC = () => {
                 LIVE
               </span>
             )}
-            <Button variant="secondary" onClick={() => setLive((v) => !v)}>
+            {!board?.hidden && <Button variant="secondary" onClick={() => setLive((v) => !v)}>
               {live ? tr("Пауза", "Pause") : tr("Наживо", "Go live")}
-            </Button>
+            </Button>}
           </div>
         </motion.div>
 
@@ -214,8 +214,14 @@ export const ScoreboardPage: React.FC = () => {
               </div>
             )}
 
+            {board?.hidden && <div role="status" className="rounded-2xl border border-border bg-bg-surface p-8 text-center">
+              <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary"><Trophy className="size-6" aria-hidden="true" /></div>
+              <h2 className="mt-4 text-lg font-semibold text-text-primary">{board.hiddenReason === "ORGANIZERS_ONLY" ? tr("Таблиця доступна організаторам", "Scoreboard is available to organizers") : tr("Результати будуть після фінішу", "Results will be available after the finish")}</h2>
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-secondary">{board.hiddenReason === "ORGANIZERS_ONLY" ? tr("Організатор обрав не показувати поточні результати учасникам.", "The organizer chose to keep current results private.") : board.releaseAt ? `${tr("Таблицю буде відкрито", "The scoreboard opens")}: ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(board.releaseAt))}.` : tr("Організатору потрібно задати час завершення, щоб відкрити таблицю автоматично.", "The organizer needs to set an end time to reveal the scoreboard automatically.")}</p>
+            </div>}
+
             {/* Podium */}
-            {board && podium.length > 0 ? (
+            {board && !board.hidden && podium.length > 0 ? (
               <motion.div
                 variants={prefersReducedMotion ? undefined : staggerContainer}
                 initial={prefersReducedMotion ? undefined : "initial"}
@@ -252,7 +258,7 @@ export const ScoreboardPage: React.FC = () => {
             ) : null}
 
             {/* Controls */}
-            {board && (board.rows ?? []).length > 0 ? (
+            {board && !board.hidden && (board.rows ?? []).length > 0 ? (
               <div className="flex flex-wrap items-center gap-2">
                 <div className="relative flex-1 min-w-[200px]">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
@@ -278,7 +284,7 @@ export const ScoreboardPage: React.FC = () => {
               </div>
             ) : null}
 
-            {board && (
+            {board && !board.hidden && (
               <div className="border border-border bg-bg-surface overflow-x-auto max-h-[70vh] overflow-y-auto rounded-lg">
                 <table className="w-full text-sm font-mono border-separate border-spacing-0">
                   <thead className="sticky top-0 z-10">
