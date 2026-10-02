@@ -205,6 +205,16 @@ async function canViewContestMeta(params: { contest: Contest; req: AuthRequest }
     return false;
   }
 
+  if (contest.visibility === "TEMPORARY_ACCOUNTS") {
+    if (req.userId && await canManageContest({ contest, req })) return true;
+    if (!isContestOnlyUser(req) || !req.userId) return false;
+    const participant = await participantRepo().findOne({
+      where: { contest: { id: contest.id }, user: { id: req.userId } },
+      select: { id: true },
+    });
+    return Boolean(participant);
+  }
+
   // Issued contest accounts may only discover their assigned contest, even
   // when another contest is public or uses self-registration.
   if (isContestOnlyUser(req)) {
@@ -356,6 +366,15 @@ async function canAccessContest(params: { contest: Contest; req: AuthRequest }):
       if (row?.createdBy?.id === req.userId) return true;
     }
     return false;
+  }
+
+  if (contest.visibility === "TEMPORARY_ACCOUNTS") {
+    if (!isContestOnlyUser(req) || !req.userId) return false;
+    const participant = await participantRepo().findOne({
+      where: { contest: { id: contest.id }, user: { id: req.userId } },
+      select: { id: true },
+    });
+    return Boolean(participant);
   }
 
   if (isContestOnlyUser(req)) {
@@ -1367,7 +1386,7 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       description: z.string().max(50_000).optional(),
       tags: z.array(z.string().trim().min(1).max(32)).max(8).optional(),
       difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).nullable().optional(),
-      visibility: z.enum(["PUBLIC", "PRIVATE_CODE", "CLASS"]).default("PUBLIC"),
+      visibility: z.enum(["PUBLIC", "PRIVATE_CODE", "CLASS", "TEMPORARY_ACCOUNTS"]).default("PUBLIC"),
       joinCode: z.string().trim().min(4).max(64).optional(),
       classId: z.number().int().positive().optional(),
       startsAt: z.string().datetime().optional(),
@@ -1427,7 +1446,7 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       bannerTheme: data.bannerTheme ?? "forest",
       bannerImageUrl: data.bannerImageUrl ?? null,
       scoreboardVisibility: data.scoreboardVisibility ?? "LIVE",
-      participantAccessMode: data.participantAccessMode ?? "SELF_REGISTRATION",
+      participantAccessMode: data.visibility === "TEMPORARY_ACCOUNTS" ? "ISSUED_ACCOUNTS" : data.participantAccessMode ?? "SELF_REGISTRATION",
     });
     const saved: Contest = await contestRepo().save(contest);
     return res.json({ id: saved.id });
@@ -1459,7 +1478,7 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
         description: z.string().max(50_000).nullable().optional(),
         tags: z.array(z.string().trim().min(1).max(32)).max(8).optional(),
         difficulty: z.enum(["EASY", "MEDIUM", "HARD"]).nullable().optional(),
-        visibility: z.enum(["PUBLIC", "PRIVATE_CODE", "CLASS"]).optional(),
+        visibility: z.enum(["PUBLIC", "PRIVATE_CODE", "CLASS", "TEMPORARY_ACCOUNTS"]).optional(),
         joinCode: z.string().trim().min(4).max(64).optional(),
         classId: z.number().int().positive().nullable().optional(),
         startsAt: z.string().datetime().nullable().optional(),
@@ -1514,6 +1533,11 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
       contest.visibility = "CLASS";
       contest.class = { id: nextClassId } as Class;
       contest.joinCode = null;
+    } else if (nextVisibility === "TEMPORARY_ACCOUNTS") {
+      contest.visibility = "TEMPORARY_ACCOUNTS";
+      contest.class = null;
+      contest.joinCode = null;
+      contest.participantAccessMode = "ISSUED_ACCOUNTS";
     } else {
       contest.visibility = "PUBLIC";
       contest.class = null;
@@ -1544,7 +1568,7 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
     if (data.bannerTheme !== undefined) contest.bannerTheme = data.bannerTheme;
     if (data.bannerImageUrl !== undefined) contest.bannerImageUrl = data.bannerImageUrl;
     if (data.scoreboardVisibility !== undefined) contest.scoreboardVisibility = data.scoreboardVisibility;
-    if (data.participantAccessMode !== undefined) contest.participantAccessMode = data.participantAccessMode;
+    if (nextVisibility !== "TEMPORARY_ACCOUNTS" && data.participantAccessMode !== undefined) contest.participantAccessMode = data.participantAccessMode;
 
     const saved = await contestRepo().save(contest);
     return res.json({
@@ -1733,8 +1757,8 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
       access: {
         canAccessContent: canContent,
         isJoined,
-        joinRequired: (contest.visibility === "PRIVATE_CODE" || contest.participantAccessMode === "ISSUED_ACCOUNTS") && !canContent,
-        accountRequired: contest.participantAccessMode === "ISSUED_ACCOUNTS" && !canContent,
+        joinRequired: (contest.visibility === "PRIVATE_CODE" || contest.visibility === "TEMPORARY_ACCOUNTS" || contest.participantAccessMode === "ISSUED_ACCOUNTS") && !canContent,
+        accountRequired: (contest.visibility === "TEMPORARY_ACCOUNTS" || contest.participantAccessMode === "ISSUED_ACCOUNTS") && !canContent,
         canManage: isPrivileged,
         canDelete,
         isPaused,

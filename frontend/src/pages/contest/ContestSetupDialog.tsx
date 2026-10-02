@@ -234,7 +234,18 @@ export function ContestSetupDialog({
   }, [classesLoaded, classesRetry, draft.visibility]);
 
   const update = <K extends keyof ContestDraft>(key: K, value: ContestDraft[K]) => {
-    setDraft((current) => ({ ...current, [key]: value }));
+    if (key === "participantAccessMode" && value === "SELF_REGISTRATION" && draft.visibility === "TEMPORARY_ACCOUNTS") return;
+    setDraft((current) => key === "visibility"
+      ? {
+          ...current,
+          visibility: value as ContestVisibility,
+          ...(value === "TEMPORARY_ACCOUNTS"
+            ? { participantAccessMode: "ISSUED_ACCOUNTS" as const }
+            : current.visibility === "TEMPORARY_ACCOUNTS"
+              ? { participantAccessMode: "SELF_REGISTRATION" as const }
+              : {}),
+        }
+      : { ...current, [key]: value });
     if (key === "joinCode") setCopiedCode(false);
     setStepError("");
     setFieldError("");
@@ -436,7 +447,7 @@ export function ContestSetupDialog({
         bannerTheme: draft.bannerTheme,
         bannerImageUrl: draft.bannerImageUrl,
         scoreboardVisibility: draft.scoreboardVisibility,
-        participantAccessMode: draft.participantAccessMode,
+        participantAccessMode: draft.visibility === "TEMPORARY_ACCOUNTS" ? "ISSUED_ACCOUNTS" : draft.participantAccessMode,
       });
       try { window.localStorage.removeItem(storageKey); } catch { /* ignore unavailable storage */ }
       onCreated(result.id, draft.participantAccessMode === "ISSUED_ACCOUNTS");
@@ -571,10 +582,11 @@ export function ContestSetupDialog({
                       </div>
                       <p className="mt-2 text-xs text-[#819087] dark:text-[#8f9e93]">Шаблон задає доступ, оцінювання та дорішування — кожне поле можна змінити нижче.</p>
                     </div>
-                    <div className="mb-5 grid gap-3 md:grid-cols-3">
+                    <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <button type="button" onClick={() => update("visibility", "PUBLIC")} aria-pressed={draft.visibility === "PUBLIC"} className={`${cardClass} ${draft.visibility === "PUBLIC" ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""}`}><UsersRound aria-hidden="true" className="size-5 text-[#16834d] dark:text-[#72edb0]" /><span className="mt-3 block text-sm font-bold text-[#233329] dark:text-[#e5eee7]">Відкритий</span><span className="mt-1 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">Знайдуть у каталозі й зможуть зареєструватися.</span></button>
                       <button type="button" onClick={() => update("visibility", "PRIVATE_CODE")} aria-pressed={draft.visibility === "PRIVATE_CODE"} className={`${cardClass} ${draft.visibility === "PRIVATE_CODE" ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""}`}><LockKeyhole aria-hidden="true" className="size-5 text-[#16834d] dark:text-[#72edb0]" /><span className="mt-3 block text-sm font-bold text-[#233329] dark:text-[#e5eee7]">За кодом</span><span className="mt-1 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">Доступ лише для тих, хто має код-запрошення.</span></button>
                       <button type="button" onClick={() => update("visibility", "CLASS")} aria-pressed={draft.visibility === "CLASS"} className={`${cardClass} ${draft.visibility === "CLASS" ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""}`}><CalendarClock aria-hidden="true" className="size-5 text-[#16834d] dark:text-[#72edb0]" /><span className="mt-3 block text-sm font-bold text-[#233329] dark:text-[#e5eee7]">Для класу</span><span className="mt-1 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">Контест доступний учням обраного класу.</span></button>
+                      <button type="button" onClick={() => update("visibility", "TEMPORARY_ACCOUNTS")} aria-pressed={draft.visibility === "TEMPORARY_ACCOUNTS"} className={`${cardClass} ${draft.visibility === "TEMPORARY_ACCOUNTS" ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""}`}><LockKeyhole aria-hidden="true" className="size-5 text-[#16834d] dark:text-[#72edb0]" /><span className="mt-3 block text-sm font-bold text-[#233329] dark:text-[#e5eee7]">Лише тимчасовий доступ</span><span className="mt-1 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">Вхід за даними, які організатор видає учасникам зі списку.</span></button>
                     </div>
 
                     {draft.visibility === "PRIVATE_CODE" && <div className="mb-5 rounded-2xl border border-[#18271c]/10 bg-[#f7faf7] p-4 dark:border-white/10 dark:bg-white/[.035]">
@@ -601,10 +613,10 @@ export function ContestSetupDialog({
                     <fieldset>
                       <legend className="text-sm font-bold text-[#26352a] dark:text-[#e5eee7]">Реєстрація учасників</legend>
                       <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                        <button type="button" aria-pressed={draft.participantAccessMode === "SELF_REGISTRATION"} onClick={() => update("participantAccessMode", "SELF_REGISTRATION")} className={`${cardClass} ${draft.participantAccessMode === "SELF_REGISTRATION" ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""}`}><UsersRound aria-hidden="true" className="size-5 text-[#16834d] dark:text-[#72edb0]" /><span className="mt-3 block text-sm font-bold text-[#233329] dark:text-[#e5eee7]">Самостійна реєстрація</span><span className="mt-1 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">Учасники приєднуються через сторінку контесту.</span></button>
-                        <button type="button" aria-pressed={draft.participantAccessMode === "ISSUED_ACCOUNTS"} onClick={() => update("participantAccessMode", "ISSUED_ACCOUNTS")} className={`${cardClass} ${draft.participantAccessMode === "ISSUED_ACCOUNTS" ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""}`}><LockKeyhole aria-hidden="true" className="size-5 text-[#16834d] dark:text-[#72edb0]" /><span className="mt-3 block text-sm font-bold text-[#233329] dark:text-[#e5eee7]">Тимчасові акаунти</span><span className="mt-1 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">Організатор додає список людей і видає окремі доступи.</span></button>
+                        <button type="button" disabled={draft.visibility === "TEMPORARY_ACCOUNTS"} aria-pressed={draft.participantAccessMode === "SELF_REGISTRATION"} onClick={() => update("participantAccessMode", "SELF_REGISTRATION")} className={`${cardClass} ${draft.participantAccessMode === "SELF_REGISTRATION" ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""} disabled:cursor-not-allowed disabled:opacity-50`}><UsersRound aria-hidden="true" className="size-5 text-[#16834d] dark:text-[#72edb0]" /><span className="mt-3 block text-sm font-bold text-[#233329] dark:text-[#e5eee7]">Самостійна реєстрація</span><span className="mt-1 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">Учасники приєднуються через сторінку контесту.</span></button>
+                        <button type="button" aria-pressed={draft.participantAccessMode === "ISSUED_ACCOUNTS"} onClick={() => update("participantAccessMode", "ISSUED_ACCOUNTS")} className={`${cardClass} ${draft.participantAccessMode === "ISSUED_ACCOUNTS" ? "border-[#16834d]/55 bg-[#f0faf3] ring-1 ring-[#16834d]/25 dark:bg-[#00ff88]/[.07]" : ""}`}><LockKeyhole aria-hidden="true" className="size-5 text-[#16834d] dark:text-[#72edb0]" /><span className="mt-3 block text-sm font-bold text-[#233329] dark:text-[#e5eee7]">Доступи від організатора</span><span className="mt-1 block text-xs leading-5 text-[#738076] dark:text-[#9eaca1]">Організатор додає список людей і видає кожному дані для входу.</span></button>
                       </div>
-                      {draft.participantAccessMode === "ISSUED_ACCOUNTS" && <p className="mt-2 rounded-xl bg-[#f1f6f2] px-3 py-2 text-xs leading-5 text-[#69776d] dark:bg-white/[.04] dark:text-[#a9b7ad]">Після створення відкриється огляд контесту з окремим переходом до списку учасників. Завантаж XLSX, XLS, ODS, CSV чи TSV або встав список людей, перевір його й згенеруй доступи.</p>}
+                      {draft.participantAccessMode === "ISSUED_ACCOUNTS" && <p className="mt-2 rounded-xl bg-[#f1f6f2] px-3 py-2 text-xs leading-5 text-[#69776d] dark:bg-white/[.04] dark:text-[#a9b7ad]">{draft.visibility === "TEMPORARY_ACCOUNTS" ? "Після створення контест буде доступний лише учасникам із виданими даними для входу. Додай список у розділі «Учасники» та згенеруй доступи." : "Після створення відкриється огляд контесту з окремим переходом до списку учасників. Завантаж XLSX, XLS, ODS, CSV чи TSV або встав список людей, перевір його й згенеруй доступи."}</p>}
                     </fieldset>
 
                     <fieldset className="mt-5">
@@ -657,9 +669,9 @@ export function ContestSetupDialog({
                   <p className="mt-2 line-clamp-3 break-words text-sm leading-5 text-[#718075] dark:text-[#9eaca1]">{draft.description.trim() || "Короткий опис з’явиться тут."}</p>
                   <div className="mt-4 flex flex-wrap gap-1.5">{draft.tags.length ? draft.tags.map((tag) => <span key={tag} className="max-w-full truncate rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#66746a] dark:bg-white/[.06] dark:text-[#b7c4ba]">{tag}</span>) : <span className="text-xs text-[#8a968d]">Без тем</span>}</div>
                   <dl className="mt-4 space-y-3 border-t border-[#18271c]/10 pt-4 text-xs dark:border-white/10">
-                    <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Доступ</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.visibility === "PUBLIC" ? "Відкритий" : draft.visibility === "PRIVATE_CODE" ? "За кодом" : selectedClass?.name || (draft.classId ? `Клас #${draft.classId}` : "Клас не обрано")}</dd></div>
+                    <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Доступ</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.visibility === "PUBLIC" ? "Відкритий" : draft.visibility === "PRIVATE_CODE" ? "За кодом" : draft.visibility === "TEMPORARY_ACCOUNTS" ? "Лише тимчасовий доступ" : selectedClass?.name || (draft.classId ? `Клас #${draft.classId}` : "Клас не обрано")}</dd></div>
                     <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Оцінювання</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.scoringMode === "IOI" ? "Часткові бали · IOI" : "Розв’язання · ICPC"}</dd></div>
-                    <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Реєстрація</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.participantAccessMode === "ISSUED_ACCOUNTS" ? "Тимчасові акаунти" : "Самостійна"}</dd></div>
+                    <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Реєстрація</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.participantAccessMode === "ISSUED_ACCOUNTS" ? "Доступи від організатора" : "Самостійна"}</dd></div>
                     <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Таблиця</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.scoreboardVisibility === "LIVE" ? "Одразу" : draft.scoreboardVisibility === "AFTER_END" ? "Після фінішу" : "Лише організаторам"}</dd></div>
                     <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Старт</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.scheduleEnabled ? displayDate(draft.startsAt) : "Без розкладу"}</dd></div>
                     <div className="flex items-start justify-between gap-3"><dt className="shrink-0 text-[#819087] dark:text-[#8f9e93]">Фініш</dt><dd className="text-right font-semibold text-[#38483c] dark:text-[#dce7df]">{draft.scheduleEnabled ? displayDate(draft.endsAt) : "Без розкладу"}</dd></div>

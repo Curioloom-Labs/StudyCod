@@ -1,6 +1,6 @@
 import { api } from "./client";
 
-export type ContestVisibility = "PUBLIC" | "PRIVATE_CODE" | "CLASS";
+export type ContestVisibility = "PUBLIC" | "PRIVATE_CODE" | "CLASS" | "TEMPORARY_ACCOUNTS";
 export type ContestScoreboardVisibility = "LIVE" | "AFTER_END" | "ORGANIZERS_ONLY";
 export type ContestParticipantAccessMode = "SELF_REGISTRATION" | "ISSUED_ACCOUNTS";
 export type ContestBannerTheme = "forest" | "ocean" | "violet" | "sunset";

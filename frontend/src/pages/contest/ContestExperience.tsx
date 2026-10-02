@@ -576,7 +576,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
                       {item.isPublished ? phaseCopy[state] : "Чернетка"}
                     </span>
                     <span className="min-w-0 truncate rounded-full bg-[#f1f5f1] px-3 py-1.5 text-xs font-semibold text-[#627168] dark:bg-white/[.06] dark:text-[#b5c1b8]">
-                      {item.visibility === "PRIVATE_CODE" ? "За кодом" : item.visibility === "CLASS" ? "Для класу" : "Відкритий"}
+                      {item.visibility === "PRIVATE_CODE" ? "За кодом" : item.visibility === "CLASS" ? "Для класу" : item.visibility === "TEMPORARY_ACCOUNTS" ? "Тимчасовий доступ" : "Відкритий"}
                     </span>
                     <button type="button" onClick={() => toggleFavorite(item.id)} aria-label={favoriteIds.includes(item.id) ? `Прибрати ${item.title} зі збережених` : `Зберегти ${item.title}`} aria-pressed={favoriteIds.includes(item.id)} className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-[#748277] transition hover:bg-[#edf3ed] hover:text-[#17834d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#a9b7ad] dark:hover:bg-white/[.08] dark:hover:text-[#72edb0]">
                       <Bookmark className={`size-4 ${favoriteIds.includes(item.id) ? "fill-current text-[#16834d] dark:text-[#72edb0]" : ""}`} aria-hidden="true" />

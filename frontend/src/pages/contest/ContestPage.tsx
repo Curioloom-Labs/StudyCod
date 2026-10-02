@@ -3275,7 +3275,7 @@ export const ContestPage: React.FC = () => {
         bannerTheme: settingsBannerTheme,
         bannerImageUrl: settingsBannerImageUrl,
         scoreboardVisibility: settingsScoreboardVisibility,
-        participantAccessMode: settingsParticipantAccessMode,
+        participantAccessMode: settingsVisibility === "TEMPORARY_ACCOUNTS" ? "ISSUED_ACCOUNTS" : settingsParticipantAccessMode,
       });
       await load();
       setSettingsSaved(true);
@@ -3941,7 +3941,7 @@ export const ContestPage: React.FC = () => {
                     });
                     return <StatusChip glyph={chip.glyph} label={chip.label} tone={chip.tone} />;
                   })()}
-                  {data.contest.visibility === "PUBLIC" ? <Badge color="info">Public</Badge> : data.contest.visibility === "PRIVATE_CODE" ? <Badge color="warn">{tr("За кодом", "Code")}</Badge> : <Badge color="info">Class</Badge>}
+                  {data.contest.visibility === "PUBLIC" ? <Badge color="info">Public</Badge> : data.contest.visibility === "PRIVATE_CODE" ? <Badge color="warn">{tr("За кодом", "Code")}</Badge> : data.contest.visibility === "TEMPORARY_ACCOUNTS" ? <Badge color="warn">{tr("Лише тимчасовий доступ", "Temporary access only")}</Badge> : <Badge color="info">Class</Badge>}
                   {data.contest.isPublished ? <Badge color="success">{tr("Опубліковано", "Published")}</Badge> : <Badge color="warn">{tr("Чернетка", "Draft")}</Badge>}
                   {data.contest.allowUpsolve ? <Badge color="info">{tr("Дорішування", "Upsolve")}</Badge> : null}
                 </div>
@@ -3981,7 +3981,7 @@ export const ContestPage: React.FC = () => {
             {data.access.joinRequired && data.access.accountRequired ? (
               <div className="mt-4 flex items-start gap-3 border border-border bg-bg-base p-3 text-sm text-text-secondary">
                 <KeyRound aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
-                <span><span className="block font-semibold text-text-primary">{tr("Потрібен тимчасовий акаунт", "Temporary account required")}</span>{tr("Організатор надає окремий логін і пароль для участі. Самостійна реєстрація вимкнена.", "The organizer provides a separate login and password. Self-registration is disabled.")}</span>
+                <span><span className="block font-semibold text-text-primary">{tr("Потрібен виданий доступ", "Issued access required")}</span>{tr("Використай дані для входу, які надав організатор. Самостійна реєстрація недоступна.", "Use the sign-in details provided by the organizer. Self-registration is unavailable.")}</span>
               </div>
             ) : data.access.joinRequired ? (
               <div className="mt-4 border border-border bg-bg-base p-3">
@@ -5802,11 +5802,13 @@ export const ContestPage: React.FC = () => {
             <div className="text-sm font-semibold text-text-primary">{tr("Хто має доступ", "Who can access")}</div>
             <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Зміна доступу одразу оновить видимість контесту для учасників.", "Changing access immediately updates contest visibility for participants.")}</p>
             <label htmlFor="contest-settings-visibility" className="mt-3 block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Формат доступу", "Access type")}</label>
-            <select id="contest-settings-visibility" name="visibility" value={settingsVisibility} onChange={(e) => { setSettingsVisibility(e.target.value as ContestVisibility); setSettingsError(null); }} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
+            <select id="contest-settings-visibility" name="visibility" value={settingsVisibility} onChange={(e) => { const visibility = e.target.value as ContestVisibility; setSettingsVisibility(visibility); if (visibility === "TEMPORARY_ACCOUNTS") setSettingsParticipantAccessMode("ISSUED_ACCOUNTS"); else if (settingsVisibility === "TEMPORARY_ACCOUNTS") setSettingsParticipantAccessMode("SELF_REGISTRATION"); setSettingsError(null); }} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
               <option value="PUBLIC">{tr("Відкритий — доступний усім", "Public — available to everyone")}</option>
               <option value="PRIVATE_CODE">{tr("За кодом — приватне запрошення", "Private — invite code required")}</option>
               <option value="CLASS">{tr("Для класу — тільки учні класу", "Class — only students in a class")}</option>
+              <option value="TEMPORARY_ACCOUNTS">{tr("Лише тимчасовий доступ — тільки видані учасникам дані входу", "Temporary access only — issued credentials required")}</option>
             </select>
+            {settingsVisibility === "TEMPORARY_ACCOUNTS" && <p className="mt-2 text-xs leading-5 text-text-secondary">{tr("Контест не показується у відкритому каталозі. Доступ матимуть лише учасники з виданими організатором даними входу.", "This contest stays out of the public catalog. Only participants with credentials issued by the organizer can enter.")}</p>}
             {settingsVisibility === "PRIVATE_CODE" && <div className="mt-3">
               <label htmlFor="contest-settings-join-code" className="block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Код-запрошення", "Invite code")}</label>
               <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
@@ -5831,11 +5833,11 @@ export const ContestPage: React.FC = () => {
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="contest-settings-participant-access" className="text-sm font-semibold text-text-primary">{tr("Реєстрація учасників", "Participant registration")}</label>
-                <select id="contest-settings-participant-access" value={settingsParticipantAccessMode} onChange={(event) => setSettingsParticipantAccessMode(event.target.value as ContestParticipantAccessMode)} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
-                  <option value="SELF_REGISTRATION">{tr("Самостійна реєстрація", "Self-registration")}</option>
-                  <option value="ISSUED_ACCOUNTS">{tr("Тимчасові акаунти від організатора", "Temporary accounts issued by organizer")}</option>
+                <select id="contest-settings-participant-access" value={settingsVisibility === "TEMPORARY_ACCOUNTS" ? "ISSUED_ACCOUNTS" : settingsParticipantAccessMode} onChange={(event) => setSettingsParticipantAccessMode(event.target.value as ContestParticipantAccessMode)} disabled={settingsVisibility === "TEMPORARY_ACCOUNTS"} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-70">
+                  <option value="SELF_REGISTRATION" disabled={settingsVisibility === "TEMPORARY_ACCOUNTS"}>{tr("Самостійна реєстрація", "Self-registration")}</option>
+                  <option value="ISSUED_ACCOUNTS">{tr("Доступи, видані організатором", "Access issued by organizer")}</option>
                 </select>
-                <p className="mt-1.5 text-xs leading-5 text-text-secondary">{settingsParticipantAccessMode === "ISSUED_ACCOUNTS" ? tr("Учасники входять лише через акаунти, створені у розділі «Акаунти».", "Only accounts created in the Accounts section can enter.") : tr("Учасники можуть приєднатися самостійно згідно з форматом доступу вище.", "Participants can join themselves according to the access type above.")}</p>
+                <p className="mt-1.5 text-xs leading-5 text-text-secondary">{settingsVisibility === "TEMPORARY_ACCOUNTS" ? tr("Формат доступу автоматично вимагає дані для входу від організатора й обмежує контест призначеними учасниками.", "This access type requires sign-in details from the organizer and limits the contest to assigned participants.") : settingsParticipantAccessMode === "ISSUED_ACCOUNTS" ? tr("Учасники входять лише за даними, створеними у розділі «Акаунти».", "Only participants with details issued in the Accounts section can enter.") : tr("Учасники можуть приєднатися самостійно згідно з форматом доступу вище.", "Participants can join themselves according to the access type above.")}</p>
               </div>
               <div>
                 <label htmlFor="contest-settings-scoreboard-visibility" className="text-sm font-semibold text-text-primary">{tr("Видимість таблиці", "Scoreboard visibility")}</label>
