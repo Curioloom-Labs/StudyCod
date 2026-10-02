@@ -976,6 +976,7 @@ export const ContestPage: React.FC = () => {
   const [importingArchive, setImportingArchive] = React.useState(false);
 
   const [manageOpen, setManageOpen] = React.useState(false);
+  const [focusedProblemSettingsId, setFocusedProblemSettingsId] = React.useState<number | null>(null);
   const [savingProblemSettingsId, setSavingProblemSettingsId] = React.useState<number | null>(null);
   const [problemSettingsError, setProblemSettingsError] = React.useState<string | null>(null);
   const [problemSettingsDraft, setProblemSettingsDraft] = React.useState<Record<number, { label: string; points: string; order: string }>>({});
@@ -3504,6 +3505,14 @@ export const ContestPage: React.FC = () => {
     setProblemSettingsError(null);
   }, [manageOpen, data?.problems]);
 
+  React.useEffect(() => {
+    if (!manageOpen || focusedProblemSettingsId == null) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.querySelector(`[data-contest-problem-settings="${focusedProblemSettingsId}"]`)?.scrollIntoView({ block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [manageOpen, focusedProblemSettingsId]);
+
   const saveProblemSettings = async (problemId: number) => {
     if (!contestId) return;
     const d = problemSettingsDraft[problemId];
@@ -3770,7 +3779,11 @@ export const ContestPage: React.FC = () => {
                     const draft = problemSettingsDraft[p.id] ?? { label: p.label, points: p.points != null ? String(p.points) : "", order: String(p.order) };
                     const savingThis = savingProblemSettingsId === p.id;
                     return (
-                      <tr key={p.id} className="odd:bg-bg-base even:bg-bg-surface">
+                      <tr
+                        key={p.id}
+                        data-contest-problem-settings={p.id}
+                        className={`${focusedProblemSettingsId === p.id ? "bg-primary/10" : "odd:bg-bg-base even:bg-bg-surface"}`}
+                      >
                         <td className="hidden md:table-cell p-2 border-b border-border">{p.id}</td>
                         <td className="p-2 border-b border-border">{p.title}</td>
                         <td className="p-2 border-b border-border text-center">
@@ -4230,14 +4243,18 @@ export const ContestPage: React.FC = () => {
                             </div>
 
                             <div className="contest-problem-row__actions">
-                                {hasToken && data.access.canManage && p.libraryTaskId ? (
-                                  <Link
-                                    to={`/lab/library?view=mine&sel=${p.libraryTaskId}&edit=1`}
+                                {hasToken && data.access.canManage ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFocusedProblemSettingsId(p.id);
+                                      setManageOpen(true);
+                                    }}
                                     className="contest-problem-row__edit"
-                                    title={tr("Редагувати тести/бали", "Edit tests/points")}
+                                    title={tr("Налаштувати задачу в контесті", "Configure this contest problem")}
                                   >
                                     {tr("Налаштувати", "Settings")}
-                                  </Link>
+                                  </button>
                                 ) : null}
                                 {disabled ? (
                                   <span className="contest-problem-row__disabled">{tr("Недоступна", "Unavailable")}</span>
