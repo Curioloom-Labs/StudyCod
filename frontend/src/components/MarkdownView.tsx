@@ -572,9 +572,11 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
   }, [mathPlugins.remarkMath]);
 
   const rehypePlugins = useMemo(() => {
-    const plugins: PluggableList = [rehypeRaw];
+    // Sanitize author-provided HTML before KaTeX runs. Sanitizing the generated
+    // KaTeX tree strips its accessibility/display classes and exposes both the
+    // MathML and visual representations as duplicated text.
+    const plugins: PluggableList = [rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]];
     if (mathPlugins.rehypeKatex) plugins.push(mathPlugins.rehypeKatex);
-    plugins.push([rehypeSanitize, markdownSanitizeSchema]);
     return plugins;
   }, [mathPlugins.rehypeKatex]);
 
