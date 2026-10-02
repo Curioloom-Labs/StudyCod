@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, KeyRound, RefreshCw, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, ShieldCheck, Users2, Award, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound } from "lucide-react";
+import { ArrowLeft, KeyRound, RefreshCw, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, ShieldCheck, Users2, Award, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound, Layers3, Type, Square, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
@@ -67,6 +67,7 @@ import {
 } from "../../lib/api/certificates";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { ContestSectionNav, type ContestSection } from "./ContestSectionNav";
+import "./CertificateStudio.css";
 import {
   CERTIFICATE_CANVAS_HEIGHT,
   CERTIFICATE_CANVAS_WIDTH,
@@ -1007,11 +1008,12 @@ export const ContestPage: React.FC = () => {
   const [accountMailCustomMessage, setAccountMailCustomMessage] = React.useState("");
 
   const [certificateMode, setCertificateMode] = React.useState<"none" | "studycod" | "custom">("studycod");
-  const [certificateEditorOpen, setCertificateEditorOpen] = React.useState(false);
+  const [certificateEditorOpen, setCertificateEditorOpen] = React.useState(true);
   const certificateUiSimpleMode = true;
   const [certificateUiAdvancedOpen, setCertificateUiAdvancedOpen] = React.useState(false);
   const [certificateAutoSyncLayout, setCertificateAutoSyncLayout] = React.useState(true);
-  const [certificateCanvasFocusMode, setCertificateCanvasFocusMode] = React.useState(true);
+  const certificateCanvasFocusMode = true;
+  const [certificateZoom, setCertificateZoom] = React.useState(100);
   const [certificateGlobalSettingsOpen, setCertificateGlobalSettingsOpen] = React.useState(false);
   const [certificateSendEmailEnabled, setCertificateSendEmailEnabled] = React.useState(true);
   const [certificateForceRegenerate, setCertificateForceRegenerate] = React.useState(false);
@@ -2208,6 +2210,7 @@ export const ContestPage: React.FC = () => {
       },
     }));
     setCertificateLayoutSelectedField(key);
+    setCertificateLayoutSelectedExtraObjectId(null);
     setCertificateLayoutContextMenu(null);
   };
 
@@ -4184,9 +4187,9 @@ export const ContestPage: React.FC = () => {
               {hasToken && data.access.canManage ? (
                 <>
                   {tab === "certificates" ? (
-                  <Card className="rounded-2xl p-4 sm:p-5">
+                  <Card className="certificate-studio-card rounded-2xl p-4 sm:p-5">
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-2 text-base font-semibold text-text-primary"><Award className="w-4 h-4 text-primary" />{tr("Сертифікати", "Certificates")}</div>
+                      <div className="flex items-center gap-2 text-base font-semibold text-text-primary"><Award className="w-4 h-4 text-primary" />{tr("Редактор сертифікатів", "Certificate studio")}</div>
                       <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                         {certificateEditorOpen && <>
                           {certificateUiSimpleMode ? (
@@ -4299,50 +4302,63 @@ export const ContestPage: React.FC = () => {
                     ) : null}
 
                     {certificateMode !== "none" ? (
-                      <div className="space-y-2 mb-3 border border-border bg-bg-base p-3">
+                      <div className="mb-3 border border-border bg-bg-base p-3 certificate-studio">
                         {certificateUiSimpleMode ? (
-                          <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border bg-bg-surface/60 px-2 py-1.5 text-xs text-text-secondary">
-                            <span>{tr("Візуальний режим: drag, guides, resize, presets", "Visual mode: drag, guides, resize, presets")}</span>
-                            <div className="flex items-center gap-2">
-                              <Button variant={certificateCanvasFocusMode ? "secondary" : "ghost"} onClick={() => setCertificateCanvasFocusMode((v) => !v)}>
-                                {certificateCanvasFocusMode ? tr("Показати всі панелі", "Show all panels") : tr("Сховати панелі", "Hide panels")}
-                              </Button>
-                            </div>
+                          <div className="certificate-studio-intro rounded border border-border bg-bg-surface/60 px-2 py-1.5 text-xs text-text-secondary">
+                            {tr("Збирай макет на полотні: додай потрібні поля, перетягни їх і налаштуй справа.", "Build the layout on the canvas: add fields, drag them into place, and edit them on the right.")}
                           </div>
                         ) : null}
                         {certificateUiSimpleMode ? (
-                          <div className="rounded-xl border border-border bg-bg-surface/60 px-3 py-3 space-y-2">
-                            <p className="text-xs text-text-secondary">{tr("Перетягни поля на макет і змінюй їх розмір маркерами. PDF повторить вигляд полотна.", "Drag fields onto the canvas and resize them with the handles. The PDF matches the canvas.")}</p>
-                            <div className="flex flex-wrap gap-1.5">
+                          <aside className="certificate-studio-layers rounded-xl border border-border bg-bg-surface/60 px-3 py-3 space-y-2">
+                            <div className="certificate-studio-panel-title"><Layers3 aria-hidden="true" />{tr("Шари", "Layers")}</div>
+                            <p className="text-xs text-text-secondary">{tr("Поля сертифіката", "Certificate fields")}</p>
+                            <div className="flex flex-col gap-1.5">
                               {CERTIFICATE_FIELD_KEYS.map((key) => {
                                 const enabled = Boolean(certificateFields[key]?.isEnabled);
+                                const selected = enabled && certificateLayoutSelectedField === key;
                                 return (
                                   <button
                                     key={`quick-field-${key}`}
                                     type="button"
-                                    onClick={() =>
-                                      setCertificateFields((prev) => ({
-                                        ...prev,
-                                        [key]: {
-                                          ...prev[key],
-                                          isEnabled: !prev[key].isEnabled,
-                                          isRequired: !prev[key].isEnabled ? prev[key].isRequired : false,
-                                        },
-                                      }))
-                                    }
-                                    className={`px-2 py-1 rounded border text-[11px] font-mono ${enabled ? "border-primary/60 bg-primary/10 text-primary" : "border-border bg-bg-base text-text-secondary"}`}
+                                    onClick={() => {
+                                      if (enabled) {
+                                        setCertificateLayoutSelectedField(key);
+                                        setCertificateLayoutSelectedExtraObjectId(null);
+                                      } else {
+                                        addCertificateFieldAtPosition(key, certificateLayout[key].x, certificateLayout[key].y);
+                                      }
+                                    }}
+                                    className={`certificate-studio-layer px-2 py-1 rounded border text-[11px] font-mono ${selected ? "is-selected" : enabled ? "is-enabled" : "border-border bg-bg-base text-text-secondary"}`}
                                   >
-                                    {enabled ? "✓ " : "+ "}
-                                    {certificateFieldLabel(key, tr)}
+                                    <span className="certificate-studio-layer-dot">{enabled ? (selected ? "●" : "✓") : "+"}</span>
+                                    <span>{certificateFieldLabel(key, tr)}</span>
                                   </button>
                                 );
                               })}
+                            </div>
+                            {sortedCertificateLayoutExtraObjects.length ? <>
+                              <p className="certificate-studio-subtitle">{tr("Власні елементи", "Custom elements")}</p>
+                              <div className="flex flex-col gap-1.5">
+                                {sortedCertificateLayoutExtraObjects.map((obj) => {
+                                  const selected = certificateLayoutSelectedExtraObjectId === obj.id;
+                                  return <button key={obj.id} type="button" className={`certificate-studio-layer ${selected ? "is-selected" : ""}`} onClick={() => { setCertificateLayoutSelectedField(null); setCertificateLayoutSelectedExtraObjectId(obj.id); }}>
+                                    <span className="certificate-studio-layer-dot">{obj.type === "text" ? <Type aria-hidden="true" /> : obj.type === "image" ? <ImagePlus aria-hidden="true" /> : <Square aria-hidden="true" />}</span>
+                                    <span>{obj.type === "text" ? (obj.text.trim().slice(0, 22) || tr("Текст", "Text")) : certificateExtraObjectTypeLabel(obj.type, tr)}</span>
+                                  </button>;
+                                })}
+                              </div>
+                            </> : null}
+                            <div className="certificate-studio-add-tools">
+                              <span className="certificate-studio-subtitle">{tr("Додати", "Add")}</span>
+                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("text", 50, 50)}><Type aria-hidden="true" />{tr("Текст", "Text")}</button>
+                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("image", 50, 50)}><ImagePlus aria-hidden="true" />{tr("Зображення", "Image")}</button>
+                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("shape", 50, 50)}><Square aria-hidden="true" />{tr("Фігура", "Shape")}</button>
                             </div>
                             <details className="text-xs text-text-secondary">
                               <summary className="w-fit cursor-pointer font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Як користуватися редактором", "How to use the editor")}</summary>
                               <p className="mt-2 leading-5">{tr("Увімкни потрібні поля кнопками. Власний текст, зображення й фігури додаються над полотном або через контекстне меню. Перетягни елемент на місце; маркерами зміни його розмір.", "Enable the fields you need. Add custom text, images, and shapes above the canvas or from its context menu. Drag items into place and use their handles to resize them.")}</p>
                             </details>
-                          </div>
+                          </aside>
                         ) : null}
                         {!certificateCanvasFocusMode || !certificateUiSimpleMode ? (
                           <Input
@@ -4410,7 +4426,7 @@ export const ContestPage: React.FC = () => {
                             </div>
                           </>
                         ) : null}
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 certificate-studio-background">
                           <Input
                             label={tr("Фон layout-превʼю (опційно)", "Layout preview background (optional)")}
                             value={certificateLayoutBackgroundUrl}
@@ -4455,9 +4471,9 @@ export const ContestPage: React.FC = () => {
                           ) : null}
                         </div>
 
-                        <div className="border border-border rounded-lg p-3 bg-bg-surface/60 space-y-2">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="text-xs text-text-secondary">{tr("Візуальний layout полів", "Visual field layout")}</div>
+                        <div className="border border-border rounded-lg p-3 bg-bg-surface/60 certificate-studio-layout">
+                          <div className="flex flex-wrap items-center justify-between gap-2 certificate-studio-toolbar">
+                            <div className="text-xs text-text-secondary">{tr("Макет сертифіката", "Certificate layout")}</div>
                             <div className="flex items-center gap-2">
                               <label className="inline-flex items-center gap-1.5 text-[11px] text-text-secondary border border-border rounded px-2 py-1 bg-bg-base">
                                 <input
@@ -4468,13 +4484,13 @@ export const ContestPage: React.FC = () => {
                                 {tr("Автосинк HTML/CSS", "Auto-sync HTML/CSS")}
                               </label>
                               <Button variant="ghost" onClick={undoCertificateLayout} disabled={!canUndoCertificateLayout}>
-                                {tr("Undo", "Undo")}
+                                {tr("Скасувати", "Undo")}
                               </Button>
                               <Button variant="ghost" onClick={redoCertificateLayout} disabled={!canRedoCertificateLayout}>
-                                {tr("Redo", "Redo")}
+                                {tr("Повторити", "Redo")}
                               </Button>
                               <Button variant="ghost" onClick={resetCertificateLayout}>
-                                {tr("Скинути layout", "Reset layout")}
+                                {tr("Скинути", "Reset")}
                               </Button>
                               <Button variant="ghost" onClick={applyAutoLayoutToTemplate}>
                                 {tr("Відобразити в HTML + CSS", "Apply to HTML + CSS")}
@@ -4493,7 +4509,7 @@ export const ContestPage: React.FC = () => {
                             </div>
                           ) : null}
 
-                          <div className={`grid grid-cols-1 ${certificateCanvasFocusMode && certificateUiSimpleMode ? "md:grid-cols-3" : "md:grid-cols-4"} gap-2`}>
+                          <div className={`grid grid-cols-1 ${certificateCanvasFocusMode && certificateUiSimpleMode ? "md:grid-cols-3" : "md:grid-cols-4"} gap-2 certificate-studio-canvas-settings`}>
                             <label className="inline-flex items-center gap-2 text-[11px] text-text-secondary border border-border rounded px-2 py-1.5 bg-bg-base">
                               <input
                                 type="checkbox"
@@ -4665,8 +4681,8 @@ export const ContestPage: React.FC = () => {
                             </div>
                           ) : null}
 
-                          <div className="border border-border rounded-lg bg-bg-base p-2">
-                            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                          <div className="border border-border rounded-lg bg-bg-base p-2 certificate-studio-canvas-shell">
+                            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap certificate-studio-canvas-tools">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="text-[11px] text-text-secondary mr-1">{tr("Додати:", "Add:")}</span>
                                 <button
@@ -4694,16 +4710,23 @@ export const ContestPage: React.FC = () => {
                                   + {tr("Фігура", "Shape")}
                                 </button>
                               </div>
-                              <div className="text-[11px] text-text-secondary font-mono">
-                                {tr("Розмір", "Size")}: 1123×794 px · A4 L (297×210 mm)
+                              <div className="certificate-studio-zoom">
+                                <span>{tr("A4 · альбомна", "A4 · landscape")}</span>
+                                <button type="button" aria-label={tr("Зменшити масштаб", "Zoom out")} onClick={() => setCertificateZoom((zoom) => Math.max(50, zoom - 10))}><ZoomOut aria-hidden="true" /></button>
+                                <span className="certificate-studio-zoom-value">{certificateZoom}%</span>
+                                <button type="button" aria-label={tr("Збільшити масштаб", "Zoom in")} onClick={() => setCertificateZoom((zoom) => Math.min(150, zoom + 10))}><ZoomIn aria-hidden="true" /></button>
+                                <button type="button" onClick={() => setCertificateZoom(100)}>{tr("Вписати", "Fit")}</button>
                               </div>
                             </div>
                             <div
                               ref={certificateLayoutCanvasRef}
-                              className="relative w-full overflow-hidden rounded border border-border/70"
+                              className="relative w-full overflow-hidden rounded border border-border/70 certificate-studio-canvas"
                               tabIndex={0}
                               style={{
                                 aspectRatio: "1123 / 794",
+                                width: `${certificateZoom}%`,
+                                maxWidth: "none",
+                                marginInline: "auto",
                                 backgroundImage: certificateLayoutBackgroundUrl
                                   ? `${toCssUrlValue(certificateLayoutBackgroundUrl)}, linear-gradient(135deg, #ffffff, #f1f5f9)`
                                   : "linear-gradient(135deg, #ffffff, #f1f5f9)",
@@ -5116,7 +5139,7 @@ export const ContestPage: React.FC = () => {
                             </div>
                           </div>
 
-                          {certificateCanvasFocusMode && certificateUiSimpleMode ? (() => {
+                          {certificateCanvasFocusMode && certificateUiSimpleMode ? <aside className="certificate-studio-inspector">{(() => {
                             const key = certificateLayoutSelectedField;
                             const selectedExtra = certificateLayoutExtraObjects.find((obj) => obj.id === certificateLayoutSelectedExtraObjectId) ?? null;
                             if (!key && !selectedExtra) {
@@ -5328,14 +5351,15 @@ export const ContestPage: React.FC = () => {
                                     </select>
                                   </label>
                                 </div>
+                                <Button variant="ghost" onClick={hideSelectedCertificateField}>{tr("Прибрати поле з макета", "Remove field from layout")}</Button>
                               </div>
                             );
-                          })() : null}
+                          })()}</aside> : null}
                         </div>
 
                         {!certificateUiSimpleMode || certificateUiAdvancedOpen ? (
                           <>
-                            <div className="space-y-1.5">
+                            <div className="space-y-1.5 certificate-studio-code">
                               <label className="text-xs text-text-secondary">HTML</label>
                               <textarea
                                 value={certificateTemplateHtml}
@@ -5377,7 +5401,7 @@ export const ContestPage: React.FC = () => {
                                 </div>
                               ) : null}
                             </div>
-                            <div className="space-y-1.5">
+                            <div className="space-y-1.5 certificate-studio-code">
                               <label className="text-xs text-text-secondary">CSS</label>
                               <textarea
                                 value={certificateTemplateCss}
@@ -5388,7 +5412,7 @@ export const ContestPage: React.FC = () => {
                             </div>
                           </>
                         ) : null}
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 certificate-studio-preview-actions">
                           <Button variant="secondary" onClick={() => void createCustomCertificateTemplate()} disabled={certificateCreatingTemplate || certificateUnknownPlaceholders.length > 0 || certificateMissingRequiredPlaceholders.length > 0}>
                             {certificateCreatingTemplate ? tr("Створення…", "Creating…") : tr("Створити шаблон", "Create template")}
                           </Button>
