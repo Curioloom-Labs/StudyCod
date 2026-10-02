@@ -67,6 +67,10 @@ const LegacyCourseRouteRedirect: React.FC = () => {
   const { courseId } = useParams();
   return <Navigate to={`/learning/course/${courseId}/overview`} replace />;
 };
+const LegacyLibraryRedirect: React.FC = () => {
+  const location = useLocation();
+  return <Navigate to={{ pathname: "/lab/library", search: location.search, hash: location.hash }} replace />;
+};
 const LegacyGradesRedirect: React.FC = () => {
   const [target, setTarget] = React.useState<string | null>(null);
   React.useEffect(() => { void getLearningMe().then((me) => setTarget(me.current ? `/learning/course/${me.current.courseId}/progress` : "/learning/catalog")).catch(() => setTarget("/learning/catalog")); }, []);
@@ -1115,7 +1119,7 @@ export const App: React.FC = () => {
                   <TaskLibraryPage />
                 </AnimatedPage>
               </Suspense></PersonalRouteShell></RequireToken>} />
-          <Route path="/library" element={<Navigate to="/lab/library" replace />} />
+          <Route path="/library" element={<LegacyLibraryRedirect />} />
           <Route path="/lab/library/solve/:taskKey" element={<RequireToken><PersonalRouteShell area="lab"><Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <LibraryTaskSolvePage />
