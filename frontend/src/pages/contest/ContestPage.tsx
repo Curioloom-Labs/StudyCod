@@ -4232,7 +4232,7 @@ export const ContestPage: React.FC = () => {
                             <div className="contest-problem-row__actions">
                                 {hasToken && data.access.canManage && p.libraryTaskId ? (
                                   <Link
-                                    to={`/library?view=mine&sel=${p.libraryTaskId}&edit=1`}
+                                    to={`/lab/library?view=mine&sel=${p.libraryTaskId}&edit=1`}
                                     className="contest-problem-row__edit"
                                     title={tr("Редагувати тести/бали", "Edit tests/points")}
                                   >

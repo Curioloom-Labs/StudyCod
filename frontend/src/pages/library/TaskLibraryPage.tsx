@@ -381,6 +381,7 @@ export const TaskLibraryPage: React.FC = () => {
   };
 
   const [canManage, setCanManage] = useState(false);
+  const [canManageResolved, setCanManageResolved] = useState(false);
 
   const [view, setView] = useState<"approved" | "mine">("approved");
   const [judgeLang, setJudgeLang] = useState<JudgeLanguage | "ALL">("ALL");
@@ -527,15 +528,17 @@ export const TaskLibraryPage: React.FC = () => {
     getMe()
       .then((u) => {
         setCanManage(!u.studentId);
+        setCanManageResolved(true);
       })
       .catch(() => {
         setCanManage(false);
+        setCanManageResolved(true);
       });
   }, []);
 
   useEffect(() => {
     // Hydrate initial state from URL query once (supports refresh/share/back).
-    if (hydratedFromUrlRef.current) return;
+    if (hydratedFromUrlRef.current || !canManageResolved) return;
 
     const sp = new URLSearchParams(location.search || "");
     const parseBool = (v: string | null) => {
@@ -586,7 +589,7 @@ export const TaskLibraryPage: React.FC = () => {
 
     hydratedFromUrlRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canManage]);
+  }, [canManage, canManageResolved]);
 
   useEffect(() => {
     // Sync state to URL (persistence/shareability). Keep it lightweight & stable.
@@ -605,6 +608,8 @@ export const TaskLibraryPage: React.FC = () => {
     if (onlySolved) sp.set("solved", "1");
     if (onlyFavorites) sp.set("fav", "1");
     if (selectedId) sp.set("sel", String(selectedId));
+    const requestedEdit = new URLSearchParams(location.search || "").get("edit");
+    if (requestedEdit && !autoEditHandledRef.current) sp.set("edit", requestedEdit);
 
     const next = sp.toString();
     const cur = (location.search || "").replace(/^\?/, "");
@@ -712,6 +717,10 @@ export const TaskLibraryPage: React.FC = () => {
 
     autoEditHandledRef.current = true;
     void openEdit(selectedId);
+    const nextParams = new URLSearchParams(location.search || "");
+    nextParams.delete("edit");
+    const nextSearch = nextParams.toString();
+    navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManage, selectedId, location.search]);
 
