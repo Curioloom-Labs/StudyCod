@@ -773,7 +773,7 @@ export const ContestDetailPage: React.FC = () => {
         {canManage && data.contest.participantAccessMode === "ISSUED_ACCOUNTS" && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=accounts`)} className="inline-flex items-center gap-2 rounded-xl border border-[#1a2a1e]/10 px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
           <KeyRound className="h-4 w-4" aria-hidden="true" /> Акаунти
         </button>}
-        {canManage && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=management&settings=1`)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-3 py-2 text-sm font-bold text-white hover:bg-[#214a31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:bg-[#00d978] dark:text-[#062211]">
+        {canManage && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=management`)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-3 py-2 text-sm font-bold text-white hover:bg-[#214a31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:bg-[#00d978] dark:text-[#062211]">
           <FileCode2 className="h-4 w-4" aria-hidden="true" /> Налаштувати
         </button>}
         <button type="button" onClick={() => navigate("/contest/contests")} className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
