@@ -720,7 +720,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     return processed;
   }, [content]);
   const taskMarkdownClasses = variant === "task"
-    ? "prose-p:my-3 prose-p:text-[13px] prose-p:leading-[1.7] prose-p:text-[#b9c9bd] prose-headings:mb-2 prose-headings:mt-6 prose-headings:text-[15px] prose-headings:leading-6 prose-headings:tracking-[-.01em] prose-h1:text-[18px] prose-h2:text-[17px] prose-h3:text-[15px] prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-li:text-[13px] prose-li:leading-6 prose-strong:text-[#edf5ee] [&>pre]:my-3 [&>pre]:border-[#294333] [&>pre]:bg-[#08100b] [&>pre]:p-3 [&>pre]:shadow-none [&>pre>code]:text-[12px] [&>pre>code]:leading-6"
+    ? "prose-p:my-3 prose-p:text-[14px] prose-p:leading-[1.75] prose-p:text-[#b9c9bd] prose-headings:mb-2 prose-headings:mt-6 prose-headings:text-[15px] prose-headings:leading-6 prose-headings:tracking-[-.01em] prose-h1:text-[18px] prose-h2:text-[17px] prose-h3:text-[15px] prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-li:text-[14px] prose-li:leading-6 prose-strong:text-[#edf5ee] [&>pre]:my-3 [&>pre]:border-[#294333] [&>pre]:bg-[#08100b] [&>pre]:p-3 [&>pre]:shadow-none [&>pre>code]:text-[12px] [&>pre>code]:leading-6"
     : "";
   return <div className={`${variant === "handbook" ? "docs-handbook-prose font-sans" : "font-sans prose-invert"} ${variant === "task" ? "task-markdown" : ""} prose max-w-none
       prose-pre:bg-transparent prose-pre:p-0 prose-pre:my-4 prose-pre:border-0
