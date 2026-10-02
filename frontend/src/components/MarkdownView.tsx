@@ -8,8 +8,22 @@ import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { decodeEscapedInputText, normalizeMarkdownEscapes } from "../utils/inputTextNormalization";
 import { InteractiveBlock, parseInteractiveSpec } from "./theory/InteractiveBlock";
-const MATH_MARKUP_RE = /(\$\$[^$]+?\$\$)|(\$[^$\n]+?\$)|\\\(|\\\[|\\begin\{/;
+const MATH_MARKUP_RE = /(\$\$[^$]+?\$\$)|(\$[^$\n]+?\$)|\\\(|\\\[|\\begin\{|\\(?:leq?|geq?|neq|ne|approx|times|cdot|div|pm|mp|infty|sum|prod|sqrt|frac|binom|alpha|beta|gamma|delta|theta|lambda|mu|pi|sigma|omega|text|mathrm|mathbb)\b/;
 const CODE_FENCE_RE = /(^|\n)\s*```[^\n]*\n/;
+const PROTECTED_MARKDOWN_RE = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`+[^`\n]*?`+|\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\))/g;
+const MATH_ATOM = String.raw`(?:\\[A-Za-z]+(?:\{[^{}\n]*\})*|[A-Za-z][A-Za-z0-9]*|\d+(?:\.\d+)?|\{[^{}\n]*\}|\([^()\n]*\))`;
+const MATH_OPERATOR = String.raw`(?:\\(?:leq?|geq?|neq|ne|approx|times|cdot|div|pm|mp|infty|in|notin|to|rightarrow|leftarrow|Rightarrow|land|lor)\b|[=<>≤≥≠≈+*/^_])`;
+const BARE_MATH_EXPRESSION_RE = new RegExp(
+  String.raw`(?<![\w$])${MATH_ATOM}(?:\s*${MATH_OPERATOR}\s*${MATH_ATOM})+|(?<![\w$])\\(?:frac|sqrt|binom|sum|prod|int|lim)\{[^{}\n]*\}(?:\{[^{}\n]*\})?`,
+  "g",
+);
+
+function wrapBareLatex(markdown: string): string {
+  return markdown.split(PROTECTED_MARKDOWN_RE).map((part) => {
+    if (!part || /^(?:```|~~~|`|\$|\\\[|\\\()/.test(part)) return part;
+    return part.replace(BARE_MATH_EXPRESSION_RE, (expression) => `$${expression}$`);
+  }).join("");
+}
 
 function normalizeLanguageLessFenceOpenings(raw: string): string {
   const lines = String(raw ?? "").split("\n");
@@ -695,6 +709,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     processed = processed.replace(/\\textbf\{([^}]+)\}/g, "**$1**");
     processed = processed.replace(/\\textit\{([^}]+)\}/g, "*$1*");
     processed = processed.replace(/\\emph\{([^}]+)\}/g, "*$1*");
+    processed = wrapBareLatex(processed);
     // react-markdown 10 does not expose the parent <pre> to the `code`
     // renderer. Give only opening language-less fences an explicit marker;
     // converting closing fences too leaves the whole document inside one
