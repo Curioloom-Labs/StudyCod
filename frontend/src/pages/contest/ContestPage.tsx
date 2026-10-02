@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, KeyRound, RefreshCw, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, ShieldCheck, Users2, Award, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound, Layers3, Type, Square, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, KeyRound, RefreshCw, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, ShieldCheck, Users2, Award, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound, Layers3, Type, Square, ZoomIn, ZoomOut, Archive, X, Check, FileArchive, AlertCircle } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
@@ -53,7 +53,7 @@ import {
 import { getClasses, uploadStatementImage, type Class as EduClass } from "../../lib/api/edu";
 import { CONTEST_BANNER_THEMES, CONTEST_ICONS } from "./contestBranding";
 import {
-  importLibraryTaskArchive,
+  importLibraryTaskArchives,
   listApprovedLibraryTasks,
   listMyLibraryTasks,
   type LibraryTaskListItem,
@@ -969,7 +969,9 @@ export const ContestPage: React.FC = () => {
   const [copyQuery, setCopyQuery] = React.useState("");
   const [copyLoading, setCopyLoading] = React.useState(false);
   const [copyItems, setCopyItems] = React.useState<LibraryTaskListItem[]>([]);
-  const [archiveFile, setArchiveFile] = React.useState<File | null>(null);
+  const [archiveFiles, setArchiveFiles] = React.useState<File[]>([]);
+  const [archiveImportResult, setArchiveImportResult] = React.useState<{ attached: string[]; failures: Array<{ name: string; message: string }> } | null>(null);
+  const [archiveDropActive, setArchiveDropActive] = React.useState(false);
   const [importingArchive, setImportingArchive] = React.useState(false);
 
   const [manageOpen, setManageOpen] = React.useState(false);
@@ -3349,7 +3351,9 @@ export const ContestPage: React.FC = () => {
     setCopyLibraryTaskId("");
     setCopyQuery("");
     setCopyItems([]);
-    setArchiveFile(null);
+    setArchiveFiles([]);
+    setArchiveImportResult(null);
+    setArchiveDropActive(false);
   }, []);
 
   const loadCopyItems = React.useCallback(async () => {
@@ -3377,24 +3381,40 @@ export const ContestPage: React.FC = () => {
 
   const importArchiveAndAttach = async () => {
     if (!contestId) return;
-    if (!archiveFile) {
-      setAddError(tr("Оберіть zip-архів", "Select a zip archive"));
+    if (!archiveFiles.length) {
+      setAddError(tr("Додай хоча б один ZIP-архів", "Add at least one ZIP archive"));
       return;
     }
     setImportingArchive(true);
     setAddError(null);
+    setArchiveImportResult(null);
     try {
-      const imported = await importLibraryTaskArchive(archiveFile, { hideFromLibrary: true });
-      const taskId = Number(imported?.task?.id);
-      if (!Number.isFinite(taskId) || taskId <= 0) {
-        setAddError(tr("Не вдалося імпортувати задачу", "Failed to import task"));
-        return;
+      const imported = await importLibraryTaskArchives(archiveFiles, { hideFromLibrary: true });
+      const tasks = imported.tasks?.length ? imported.tasks : imported.task ? [imported.task] : [];
+      const failures = (imported.failures ?? []).map((failure) => ({ name: failure.source, message: failure.message }));
+      const attached: string[] = [];
+      for (const task of tasks) {
+        const taskId = Number(task?.id);
+        if (!Number.isFinite(taskId) || taskId <= 0) {
+          failures.push({ name: task?.title || tr("Невідома задача", "Unknown problem"), message: tr("Сервер не повернув ID задачі", "The server did not return a task ID") });
+          continue;
+        }
+        try {
+          await addContestProblem(contestId, { mode: "COPY", libraryTaskId: taskId });
+          attached.push(String(task.title || `#${taskId}`));
+        } catch (error: unknown) {
+          failures.push({ name: String(task.title || `#${taskId}`), message: getErrorMessage(error) || tr("Не вдалося додати задачу до контесту", "Could not add the problem to the contest") });
+        }
       }
-      await addContestProblem(contestId, { mode: "COPY", libraryTaskId: taskId });
-      setAddOpen(false);
-      resetAddForm();
-      await load();
-      if (tab === "problems") loadProgress();
+      setArchiveImportResult({ attached, failures });
+      setArchiveFiles([]);
+      if (attached.length) {
+        await load();
+        if (tab === "problems") loadProgress();
+      }
+      if (!attached.length && !failures.length) {
+        setAddError(tr("В архівах не знайдено задач для імпорту", "No problems were found in the selected archives"));
+      }
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
       setAddError(msg || tr("Помилка імпорту архіву", "Archive import failed"));
@@ -3522,15 +3542,17 @@ export const ContestPage: React.FC = () => {
       <Modal
         open={addOpen}
         onClose={() => {
+          if (importingArchive) return;
           setAddOpen(false);
           setAddError(null);
         }}
+        closable={!importingArchive}
         title={tr("Додати задачу", "Add problem")}
       >
         <div className="space-y-4">
           {addError ? <div className="text-sm text-accent-error">{addError}</div> : null}
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-bg-base/50 p-1">
             <Button variant={addMode === "CREATE" ? "secondary" : "ghost"} onClick={() => setAddMode("CREATE")}>
               {tr("Нова", "Create")}
             </Button>
@@ -3623,31 +3645,93 @@ export const ContestPage: React.FC = () => {
               </div>
             </div>
           ) : (
-            <div className="space-y-3">
-              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider block">{tr("Імпорт архіву .zip", "Import .zip archive")}</label>
-              <input
-                type="file"
-                accept=".zip,application/zip"
-                onChange={(e) => setArchiveFile(e.target.files?.[0] ?? null)}
-                className="block w-full text-sm text-text-secondary"
-              />
-              <div className="text-xs text-text-secondary">
-                {tr("Архів імпортується в бібліотеку як чернетка і одразу додається в контест.", "Archive is imported to library as draft and then attached to this contest.")}
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-border bg-bg-surface/60 p-4 sm:p-5">
+                <div className="mb-4 flex items-start gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent-primary/10 text-accent-primary"><Archive className="h-5 w-5" /></span>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-text-primary">{tr("Пакетний імпорт задач", "Bulk problem import")}</h3>
+                    <p className="mt-1 text-sm leading-relaxed text-text-secondary">{tr("Завантаж один ZIP із ZIP-архівами задач усередині або вибери кілька архівів задач окремо.", "Upload one ZIP containing task ZIPs, or select several task archives at once.")}</p>
+                  </div>
+                </div>
+                <input
+                  id="contest-task-archives"
+                  type="file"
+                  accept=".zip,application/zip"
+                  multiple
+                  className="sr-only"
+                  onChange={(event) => {
+                    const selected = Array.from(event.currentTarget.files ?? []).filter((file) => file.name.toLowerCase().endsWith(".zip"));
+                    setArchiveFiles((current) => [...current, ...selected].filter((file, index, all) => all.findIndex((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified) === index));
+                    setArchiveImportResult(null);
+                    setAddError(null);
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <label
+                  htmlFor="contest-task-archives"
+                  onDragOver={(event) => { event.preventDefault(); setArchiveDropActive(true); }}
+                  onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setArchiveDropActive(false); }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setArchiveDropActive(false);
+                    const selected = Array.from(event.dataTransfer.files).filter((file) => file.name.toLowerCase().endsWith(".zip"));
+                    setArchiveFiles((current) => [...current, ...selected].filter((file, index, all) => all.findIndex((item) => item.name === file.name && item.size === file.size && item.lastModified === file.lastModified) === index));
+                    setArchiveImportResult(null);
+                    setAddError(null);
+                  }}
+                  className={`flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-5 py-6 text-center transition-colors ${archiveDropActive ? "border-accent-primary bg-accent-primary/10" : "border-border bg-bg-base/40 hover:border-accent-primary/60 hover:bg-bg-hover/50"}`}
+                >
+                  <Upload className="mb-2 h-6 w-6 text-accent-primary" />
+                  <span className="font-semibold text-text-primary">{tr("Перетягни ZIP сюди або вибери файли", "Drop ZIP files here or browse")}</span>
+                  <span className="mt-1 text-xs text-text-secondary">{tr("Можна додати кілька архівів за раз", "You can add multiple archives at once")}</span>
+                </label>
+                {archiveFiles.length ? (
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="font-semibold text-text-primary">{tr("Вибрано архівів", "Selected archives")} <span className="text-accent-primary">{archiveFiles.length}</span></span>
+                      <button type="button" className="rounded-md px-2 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-hover hover:text-text-primary" onClick={() => { setArchiveFiles([]); setArchiveImportResult(null); }}>{tr("Очистити список", "Clear list")}</button>
+                    </div>
+                    <ul className="max-h-48 space-y-2 overflow-y-auto pr-1">
+                      {archiveFiles.map((file, index) => (
+                        <li key={`${file.name}-${file.size}-${file.lastModified}`} className="flex items-center gap-3 rounded-xl border border-border bg-bg-base/40 px-3 py-2.5">
+                          <FileArchive className="h-4 w-4 shrink-0 text-text-secondary" />
+                          <span className="min-w-0 flex-1 truncate text-sm text-text-primary" title={file.name}>{file.name}</span>
+                          <span className="shrink-0 text-xs text-text-muted">{file.size < 1024 * 1024 ? `${Math.max(1, Math.round(file.size / 1024))} KB` : `${(file.size / (1024 * 1024)).toFixed(1)} MB`}</span>
+                          <button type="button" aria-label={tr(`Видалити ${file.name}`, `Remove ${file.name}`)} className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-text-muted hover:bg-bg-hover hover:text-text-primary" onClick={() => { setArchiveFiles((current) => current.filter((_, itemIndex) => itemIndex !== index)); setArchiveImportResult(null); }}><X className="h-4 w-4" /></button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <p className="mt-4 border-t border-border pt-3 text-xs leading-relaxed text-text-muted">{tr("Задачі імпортуються як чернетки, одразу додаються до цього контесту та не публікуються в загальній бібліотеці.", "Problems are imported as drafts, attached to this contest, and kept out of the public library.")}</p>
               </div>
-              <div>
-                <Button variant="secondary" onClick={importArchiveAndAttach} disabled={importingArchive || !archiveFile}>
-                  {importingArchive ? tr("Імпорт…", "Importing…") : tr("Імпортувати й додати", "Import and add")}
-                </Button>
-              </div>
+              {archiveImportResult ? (
+                <div className="space-y-3 rounded-xl border border-border bg-bg-base/40 p-4" aria-live="polite">
+                  {archiveImportResult.attached.length ? <div className="flex items-center gap-2 font-semibold text-accent-primary"><Check className="h-4 w-4" />{tr(`Додано задач: ${archiveImportResult.attached.length}`, `Problems added: ${archiveImportResult.attached.length}`)}</div> : null}
+                  {archiveImportResult.attached.length ? <ul className="max-h-32 space-y-1 overflow-y-auto pl-6 text-sm text-text-secondary">{archiveImportResult.attached.map((name, index) => <li key={`${name}-${index}`} className="list-disc">{name}</li>)}</ul> : null}
+                  {archiveImportResult.failures.length ? <div className="space-y-2 border-t border-border pt-3">
+                    <div className="flex items-center gap-2 font-semibold text-accent-error"><AlertCircle className="h-4 w-4" />{tr(`Не вдалося додати: ${archiveImportResult.failures.length}`, `Could not add: ${archiveImportResult.failures.length}`)}</div>
+                    <ul className="max-h-36 space-y-2 overflow-y-auto">{archiveImportResult.failures.map((failure, index) => <li key={`${failure.name}-${index}`} className="rounded-lg border border-accent-error/30 px-3 py-2 text-sm"><span className="block break-all font-medium text-text-primary">{failure.name}</span><span className="text-xs text-text-secondary">{failure.message}</span></li>)}</ul>
+                  </div> : null}
+                </div>
+              ) : null}
             </div>
           )}
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button variant="ghost" onClick={() => setAddOpen(false)} disabled={adding}>
-              {tr("Скасувати", "Cancel")}
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+            <Button variant="ghost" onClick={() => { if (importingArchive) return; setAddOpen(false); }} disabled={adding || importingArchive}>
+              {addMode === "IMPORT" ? tr("Закрити", "Close") : tr("Скасувати", "Cancel")}
             </Button>
-            <Button onClick={submitAddProblem} disabled={adding}>
-              {adding ? tr("Додавання…", "Adding…") : tr("Додати", "Add")}
+            <Button onClick={() => {
+              if (addMode === "IMPORT" && archiveImportResult) {
+                setAddOpen(false);
+                resetAddForm();
+                return;
+              }
+              return addMode === "IMPORT" ? importArchiveAndAttach() : submitAddProblem();
+            }} disabled={adding || importingArchive || (addMode === "IMPORT" && !archiveImportResult && archiveFiles.length === 0)}>
+              {addMode === "IMPORT" ? importingArchive ? tr("Імпорт і додавання…", "Importing and adding…") : archiveImportResult ? tr("Готово", "Done") : tr("Імпортувати й додати", "Import and add") : adding ? tr("Додавання…", "Adding…") : tr("Додати", "Add")}
             </Button>
           </div>
         </div>
