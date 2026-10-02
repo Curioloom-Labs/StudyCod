@@ -585,7 +585,7 @@ async function ensureContestsTable(): Promise<void> {
         class_id INT NULL,
         title VARCHAR(255) NOT NULL,
         description TEXT NULL,
-        visibility ENUM('PUBLIC','PRIVATE_CODE','CLASS') NOT NULL DEFAULT 'PUBLIC',
+        visibility ENUM('PUBLIC','PRIVATE_CODE','CLASS','TEMPORARY_ACCOUNTS') NOT NULL DEFAULT 'PUBLIC',
         join_code VARCHAR(64) NULL,
         starts_at DATETIME NULL,
         ends_at DATETIME NULL,

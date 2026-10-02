@@ -13,7 +13,7 @@ import { Class } from "./Class";
 import { ContestProblem } from "./ContestProblem";
 import { ContestParticipant } from "./ContestParticipant";
 
-export type ContestVisibility = "PUBLIC" | "PRIVATE_CODE" | "CLASS";
+export type ContestVisibility = "PUBLIC" | "PRIVATE_CODE" | "CLASS" | "TEMPORARY_ACCOUNTS";
 export type ContestScoringMode = "IOI" | "ICPC";
 export type ContestDifficulty = "EASY" | "MEDIUM" | "HARD";
 export type ContestScoreboardVisibility = "LIVE" | "AFTER_END" | "ORGANIZERS_ONLY";
@@ -59,7 +59,7 @@ export class Contest {
 
   @Column({
     type: "enum",
-    enum: ["PUBLIC", "PRIVATE_CODE", "CLASS"],
+    enum: ["PUBLIC", "PRIVATE_CODE", "CLASS", "TEMPORARY_ACCOUNTS"],
     default: "PUBLIC",
   })
   visibility!: ContestVisibility;
