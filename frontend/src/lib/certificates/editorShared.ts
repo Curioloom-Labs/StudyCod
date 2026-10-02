@@ -110,6 +110,7 @@ export type CertificateExtraObject = {
   opacity: number;
   borderRadius: number;
   rotation: number;
+  isVisible?: boolean;
 };
 
 export function defaultCertificateLayoutState(): CertificateLayoutState {
@@ -156,7 +157,7 @@ export function buildCustomAutoLayoutHtml(
       ? `<img class="cf-field cf-${key} cf-qr-image" src="{{${key}}}" alt="qr" />`
       : `<div class="cf-field cf-${key}">{{${key}}}</div>`);
 
-  const extraLines = extraObjects.map((obj) => {
+  const extraLines = extraObjects.filter((obj) => obj.isVisible !== false).map((obj) => {
     const cls = `cf-extra-${cssClassSafeId(obj.id)}`;
     if (obj.type === "image") {
       const src = String(obj.imageUrl ?? "").trim();
@@ -194,7 +195,7 @@ export function buildCustomAutoLayoutCss(params: {
     return `.cf-${key} { left: ${x}%; top: ${y}%; width: ${width}%; font-size: ${size}px; font-weight: ${weight}; text-align: ${align}; transform: ${translate}; }`;
   });
 
-  const extraRules = params.extraObjects.map((obj) => {
+  const extraRules = params.extraObjects.filter((obj) => obj.isVisible !== false).map((obj) => {
     const cls = `.cf-extra-${cssClassSafeId(obj.id)}`;
     const x = clampNumber(Number(obj.x ?? 50), 0, 100);
     const y = clampNumber(Number(obj.y ?? 50), 0, 100);
