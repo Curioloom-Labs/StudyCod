@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, KeyRound, RefreshCw, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, ShieldCheck, Users2, Award, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound, Layers3, Type, Square, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, KeyRound, RefreshCw, Eye, EyeOff, Ban, RotateCcw, MessageSquare, Megaphone, Send, ShieldCheck, Users2, Award, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound, Layers3, Type, Square, ZoomIn, ZoomOut, ArrowUp, ArrowDown, FileText, Settings2 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
@@ -395,6 +395,7 @@ type CertificateExtraObject = {
   opacity: number;
   borderRadius: number;
   rotation: number;
+  isVisible?: boolean;
 };
 
 function createDefaultCertificateExtraObject(type: CertificateExtraObjectType, x = 50, y = 50): CertificateExtraObject {
@@ -1008,12 +1009,13 @@ export const ContestPage: React.FC = () => {
   const [accountMailCustomMessage, setAccountMailCustomMessage] = React.useState("");
 
   const [certificateMode, setCertificateMode] = React.useState<"none" | "studycod" | "custom">("studycod");
-  const [certificateEditorOpen, setCertificateEditorOpen] = React.useState(true);
+  const certificateEditorOpen = true;
   const certificateUiSimpleMode = true;
   const [certificateUiAdvancedOpen, setCertificateUiAdvancedOpen] = React.useState(false);
   const [certificateAutoSyncLayout, setCertificateAutoSyncLayout] = React.useState(true);
   const certificateCanvasFocusMode = true;
   const [certificateZoom, setCertificateZoom] = React.useState(100);
+  const [certificateInspectorTab, setCertificateInspectorTab] = React.useState<"design" | "page">("design");
   const [certificateGlobalSettingsOpen, setCertificateGlobalSettingsOpen] = React.useState(false);
   const [certificateSendEmailEnabled, setCertificateSendEmailEnabled] = React.useState(true);
   const [certificateForceRegenerate, setCertificateForceRegenerate] = React.useState(false);
@@ -2267,6 +2269,7 @@ export const ContestPage: React.FC = () => {
 
   const addCertificateExtraObjectAtPosition = (type: CertificateExtraObjectType, x: number, y: number) => {
     const obj = createDefaultCertificateExtraObject(type, applySnap(x), applySnap(y));
+    obj.isVisible = true;
     const maxZ = certificateLayoutExtraObjects.reduce((m, o) => Math.max(m, Number(o.zIndex ?? 0)), 0);
     obj.zIndex = Math.max(1, maxZ + 1);
     setCertificateLayoutExtraObjects((prev) => [...prev, obj]);
@@ -4188,45 +4191,17 @@ export const ContestPage: React.FC = () => {
                 <>
                   {tab === "certificates" ? (
                   <Card className="certificate-studio-card rounded-2xl p-4 sm:p-5">
-                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-2 text-base font-semibold text-text-primary"><Award className="w-4 h-4 text-primary" />{tr("Редактор сертифікатів", "Certificate studio")}</div>
-                      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                        {certificateEditorOpen && <>
-                          {certificateUiSimpleMode ? (
-                            <Button
-                              variant={certificateGlobalSettingsOpen ? "secondary" : "ghost"}
-                              onClick={() => setCertificateGlobalSettingsOpen((v) => !v)}
-                            >
-                              {certificateGlobalSettingsOpen ? tr("Сховати параметри сертифікатів", "Hide certificate settings") : tr("Параметри сертифікатів", "Certificate settings")}
-                            </Button>
-                          ) : null}
-                          <Button
-                            aria-expanded={certificateUiAdvancedOpen}
-                            variant={certificateUiAdvancedOpen ? "secondary" : "ghost"}
-                            onClick={() => setCertificateUiAdvancedOpen((open) => !open)}
-                          >
-                            {certificateUiAdvancedOpen ? tr("Сховати параметри", "Hide options") : tr("Додаткові параметри", "More options")}
-                          </Button>
-                        </>}
-                        <Button aria-expanded={certificateEditorOpen} variant={certificateEditorOpen ? "ghost" : "secondary"} onClick={() => setCertificateEditorOpen((open) => !open)}>
-                          {certificateEditorOpen ? tr("Згорнути редактор", "Collapse editor") : tr("Відкрити редактор", "Open editor")}
-                        </Button>
+                    <div className="certificate-studio-page-header">
+                      <div><span>{tr("СЕРТИФІКАТИ", "CERTIFICATES")}</span><h2>{tr("Редактор сертифікатів", "Certificate studio")}</h2><p>{tr("Створи макет і одразу побач результат на полотні.", "Create a layout and see it on the canvas as you work.")}</p></div>
+                      <div className="certificate-studio-page-header-actions">
+                        <Button variant={certificateGlobalSettingsOpen ? "secondary" : "ghost"} onClick={() => setCertificateGlobalSettingsOpen((v) => !v)}>{certificateGlobalSettingsOpen ? tr("Закрити налаштування", "Close settings") : tr("Параметри", "Settings")}</Button>
+                        <Button aria-expanded={certificateUiAdvancedOpen} variant={certificateUiAdvancedOpen ? "secondary" : "ghost"} onClick={() => setCertificateUiAdvancedOpen((open) => !open)}>{certificateUiAdvancedOpen ? tr("Сховати код", "Hide code") : tr("Розширений режим", "Advanced")}</Button>
                       </div>
                     </div>
 
                     {certificateEditorOpen ? <>
-                    {certificateUiSimpleMode ? (
-                      <div className="mb-3 text-xs text-text-secondary rounded border border-border bg-bg-surface/60 px-2 py-1.5">
-                        {tr("Режим", "Mode")}: {certificateMode === "none" ? tr("Вимкнено", "Disabled") : certificateMode === "studycod" ? "StudyCod" : "Custom"}
-                        {" · "}
-                        {certificateSendEmailEnabled
-                          ? tr("Email-розсилка увімкнена", "Email sending enabled")
-                          : tr("Email-розсилка вимкнена", "Email sending disabled")}
-                      </div>
-                    ) : null}
-
                     {!certificateUiSimpleMode || certificateGlobalSettingsOpen ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                      <div className="certificate-studio-settings-panel grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                         <div className="space-y-1.5">
                           <label className="text-xs text-text-secondary">{tr("Режим", "Mode")}</label>
                           <select
@@ -4302,7 +4277,7 @@ export const ContestPage: React.FC = () => {
                     ) : null}
 
                     {certificateMode !== "none" ? (
-                      <div className="mb-3 border border-border bg-bg-base p-3 certificate-studio">
+                      <div className="mb-3 border border-border bg-bg-base p-3 certificate-studio" data-advanced={certificateUiAdvancedOpen}>
                         {certificateUiSimpleMode ? (
                           <div className="certificate-studio-intro rounded border border-border bg-bg-surface/60 px-2 py-1.5 text-xs text-text-secondary">
                             {tr("Збирай макет на полотні: додай потрібні поля, перетягни їх і налаштуй справа.", "Build the layout on the canvas: add fields, drag them into place, and edit them on the right.")}
@@ -4310,49 +4285,53 @@ export const ContestPage: React.FC = () => {
                         ) : null}
                         {certificateUiSimpleMode ? (
                           <aside className="certificate-studio-layers rounded-xl border border-border bg-bg-surface/60 px-3 py-3 space-y-2">
-                            <div className="certificate-studio-panel-title"><Layers3 aria-hidden="true" />{tr("Шари", "Layers")}</div>
-                            <p className="text-xs text-text-secondary">{tr("Поля сертифіката", "Certificate fields")}</p>
-                            <div className="flex flex-col gap-1.5">
+                            <div className="certificate-studio-panel-title"><Layers3 aria-hidden="true" /><span>{tr("Шари", "Layers")}</span><span className="certificate-studio-layer-count">{CERTIFICATE_FIELD_KEYS.filter((key) => certificateFields[key]?.isEnabled).length + sortedCertificateLayoutExtraObjects.length}</span></div>
+                            <p className="text-xs text-text-secondary">{tr("Видимі на сертифікаті", "Shown on the certificate")}</p>
+                            <div className="certificate-studio-layer-group">
+                              <span className="certificate-studio-subtitle">{tr("Поля", "Fields")}</span>
                               {CERTIFICATE_FIELD_KEYS.map((key) => {
                                 const enabled = Boolean(certificateFields[key]?.isEnabled);
                                 const selected = enabled && certificateLayoutSelectedField === key;
                                 return (
-                                  <button
-                                    key={`quick-field-${key}`}
-                                    type="button"
-                                    onClick={() => {
+                                  <div key={`quick-field-${key}`} className={`certificate-studio-layer-row ${selected ? "is-selected" : ""} ${enabled ? "" : "is-hidden"}`}>
+                                    <button type="button" className="certificate-studio-layer" onClick={() => {
+                                      if (!enabled) addCertificateFieldAtPosition(key, certificateLayout[key].x, certificateLayout[key].y);
+                                      else { setCertificateLayoutSelectedField(key); setCertificateLayoutSelectedExtraObjectId(null); setCertificateInspectorTab("design"); }
+                                    }}>
+                                      <span className="certificate-studio-layer-dot">{certificateFieldLabel(key, tr).slice(0, 1)}</span>
+                                      <span>{certificateFieldLabel(key, tr)}</span>
+                                    </button>
+                                    <button type="button" className="certificate-studio-layer-visibility" aria-label={enabled ? tr(`Приховати ${certificateFieldLabel(key, tr)}`, `Hide ${certificateFieldLabel(key, tr)}`) : tr(`Показати ${certificateFieldLabel(key, tr)}`, `Show ${certificateFieldLabel(key, tr)}`)} title={enabled ? tr("Приховати поле", "Hide field") : tr("Показати поле", "Show field")} onClick={() => {
                                       if (enabled) {
-                                        setCertificateLayoutSelectedField(key);
-                                        setCertificateLayoutSelectedExtraObjectId(null);
-                                      } else {
-                                        addCertificateFieldAtPosition(key, certificateLayout[key].x, certificateLayout[key].y);
-                                      }
-                                    }}
-                                    className={`certificate-studio-layer px-2 py-1 rounded border text-[11px] font-mono ${selected ? "is-selected" : enabled ? "is-enabled" : "border-border bg-bg-base text-text-secondary"}`}
-                                  >
-                                    <span className="certificate-studio-layer-dot">{enabled ? (selected ? "●" : "✓") : "+"}</span>
-                                    <span>{certificateFieldLabel(key, tr)}</span>
-                                  </button>
+                                        setCertificateFields((prev) => ({ ...prev, [key]: { ...prev[key], isEnabled: false, isRequired: false } }));
+                                        if (certificateLayoutSelectedField === key) setCertificateLayoutSelectedField(null);
+                                      } else addCertificateFieldAtPosition(key, certificateLayout[key].x, certificateLayout[key].y);
+                                    }}>{enabled ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}</button>
+                                  </div>
                                 );
                               })}
                             </div>
                             {sortedCertificateLayoutExtraObjects.length ? <>
-                              <p className="certificate-studio-subtitle">{tr("Власні елементи", "Custom elements")}</p>
-                              <div className="flex flex-col gap-1.5">
-                                {sortedCertificateLayoutExtraObjects.map((obj) => {
+                              <div className="certificate-studio-layer-group">
+                              <span className="certificate-studio-subtitle">{tr("Елементи", "Elements")}</span>
+                                {sortedCertificateLayoutExtraObjects.slice().reverse().map((obj) => {
                                   const selected = certificateLayoutSelectedExtraObjectId === obj.id;
-                                  return <button key={obj.id} type="button" className={`certificate-studio-layer ${selected ? "is-selected" : ""}`} onClick={() => { setCertificateLayoutSelectedField(null); setCertificateLayoutSelectedExtraObjectId(obj.id); }}>
-                                    <span className="certificate-studio-layer-dot">{obj.type === "text" ? <Type aria-hidden="true" /> : obj.type === "image" ? <ImagePlus aria-hidden="true" /> : <Square aria-hidden="true" />}</span>
-                                    <span>{obj.type === "text" ? (obj.text.trim().slice(0, 22) || tr("Текст", "Text")) : certificateExtraObjectTypeLabel(obj.type, tr)}</span>
-                                  </button>;
+                                  const name = obj.type === "text" ? (obj.text.trim().slice(0, 22) || tr("Текст", "Text")) : certificateExtraObjectTypeLabel(obj.type, tr);
+                                  return <div key={obj.id} className={`certificate-studio-layer-row ${selected ? "is-selected" : ""} ${obj.isVisible === false ? "is-hidden" : ""}`}>
+                                    <button type="button" className="certificate-studio-layer" onClick={() => { setCertificateLayoutSelectedField(null); setCertificateLayoutSelectedExtraObjectId(obj.id); setCertificateInspectorTab("design"); }}>
+                                      <span className="certificate-studio-layer-dot">{obj.type === "text" ? <Type aria-hidden="true" /> : obj.type === "image" ? <ImagePlus aria-hidden="true" /> : <Square aria-hidden="true" />}</span>
+                                      <span>{name}</span>
+                                    </button>
+                                    <button type="button" className="certificate-studio-layer-visibility" aria-label={obj.isVisible === false ? tr("Показати елемент", "Show element") : tr("Приховати елемент", "Hide element")} title={obj.isVisible === false ? tr("Показати", "Show") : tr("Приховати", "Hide")} onClick={() => setCertificateLayoutExtraObjects((prev) => prev.map((item) => item.id === obj.id ? { ...item, isVisible: item.isVisible === false } : item))}>{obj.isVisible === false ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</button>
+                                  </div>;
                                 })}
                               </div>
                             </> : null}
                             <div className="certificate-studio-add-tools">
-                              <span className="certificate-studio-subtitle">{tr("Додати", "Add")}</span>
-                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("text", 50, 50)}><Type aria-hidden="true" />{tr("Текст", "Text")}</button>
-                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("image", 50, 50)}><ImagePlus aria-hidden="true" />{tr("Зображення", "Image")}</button>
-                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("shape", 50, 50)}><Square aria-hidden="true" />{tr("Фігура", "Shape")}</button>
+                              <span className="certificate-studio-subtitle">{tr("Вставити", "Insert")}</span>
+                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("text", 50, 50)}><Type aria-hidden="true" /><span>{tr("Текст", "Text")}</span></button>
+                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("image", 50, 50)}><ImagePlus aria-hidden="true" /><span>{tr("Фото", "Image")}</span></button>
+                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("shape", 50, 50)}><Square aria-hidden="true" /><span>{tr("Фігура", "Shape")}</span></button>
                             </div>
                             <details className="text-xs text-text-secondary">
                               <summary className="w-fit cursor-pointer font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Як користуватися редактором", "How to use the editor")}</summary>
@@ -4471,9 +4450,13 @@ export const ContestPage: React.FC = () => {
                           ) : null}
                         </div>
 
-                        <div className="border border-border rounded-lg p-3 bg-bg-surface/60 certificate-studio-layout">
+                        <div className="border border-border rounded-lg p-3 bg-bg-surface/60 certificate-studio-layout" data-advanced={certificateUiAdvancedOpen}>
                           <div className="flex flex-wrap items-center justify-between gap-2 certificate-studio-toolbar">
-                            <div className="text-xs text-text-secondary">{tr("Макет сертифіката", "Certificate layout")}</div>
+                            <div className="certificate-studio-document-title">
+                              <FileText aria-hidden="true" />
+                              <input aria-label={tr("Назва шаблону", "Template name")} value={certificateTemplateName} onChange={(e) => setCertificateTemplateName(e.target.value)} />
+                        <span>{tr("Чернетка", "Draft")}</span>
+                            </div>
                             <div className="flex items-center gap-2">
                               <label className="inline-flex items-center gap-1.5 text-[11px] text-text-secondary border border-border rounded px-2 py-1 bg-bg-base">
                                 <input
@@ -4491,6 +4474,9 @@ export const ContestPage: React.FC = () => {
                               </Button>
                               <Button variant="ghost" onClick={resetCertificateLayout}>
                                 {tr("Скинути", "Reset")}
+                              </Button>
+                              <Button onClick={saveCertificateSettings} disabled={certificateSaving}>
+                                {certificateSaving ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
                               </Button>
                               <Button variant="ghost" onClick={applyAutoLayoutToTemplate}>
                                 {tr("Відобразити в HTML + CSS", "Apply to HTML + CSS")}
@@ -4890,6 +4876,7 @@ export const ContestPage: React.FC = () => {
                                     onMouseDown={(e) => {
                                       e.preventDefault();
                                       setCertificateLayoutSelectedField(key);
+                                      setCertificateInspectorTab("design");
                                       setCertificateLayoutSelectedExtraObjectId(null);
                                       setCertificateLayoutDraggingField(key);
                                       certificateLayoutCanvasRef.current?.focus();
@@ -4918,6 +4905,7 @@ export const ContestPage: React.FC = () => {
                                             e.preventDefault();
                                             e.stopPropagation();
                                             setCertificateLayoutSelectedField(key);
+                                            setCertificateInspectorTab("design");
                                             setCertificateLayoutDraggingField(null);
                                             certificateLayoutCanvasRef.current?.focus();
                                             setCertificateLayoutResizingField(key);
@@ -4957,6 +4945,7 @@ export const ContestPage: React.FC = () => {
                                       width: `${clampNumber(obj.width, 2, 96)}%`,
                                       height: `${clampNumber(obj.height, 2, 96)}%`,
                                       opacity: clampNumber(obj.opacity, 0.05, 1),
+                                      display: obj.isVisible === false ? "none" : "flex",
                                       textAlign: obj.align,
                                       fontSize: `${Math.max(8, obj.fontSize)}px`,
                                       fontWeight: obj.fontWeight,
@@ -4970,7 +4959,6 @@ export const ContestPage: React.FC = () => {
                                       borderRadius: `${clampNumber(obj.borderRadius, 0, 48)}px`,
                                       zIndex: clampNumber(Number(obj.zIndex ?? 20), 1, 999),
                                       overflow: "hidden",
-                                      display: "flex",
                                       alignItems: "center",
                                       justifyContent: obj.align === "left" ? "flex-start" : obj.align === "right" ? "flex-end" : "center",
                                     }}
@@ -4978,6 +4966,7 @@ export const ContestPage: React.FC = () => {
                                       e.preventDefault();
                                       e.stopPropagation();
                                       setCertificateLayoutSelectedField(null);
+                                      setCertificateInspectorTab("design");
                                       setCertificateLayoutSelectedExtraObjectId(obj.id);
                                       setCertificateLayoutDraggingField(null);
                                       setCertificateLayoutResizingExtraObjectId(null);
@@ -5018,6 +5007,7 @@ export const ContestPage: React.FC = () => {
                                             e.preventDefault();
                                             e.stopPropagation();
                                             setCertificateLayoutSelectedField(null);
+                                            setCertificateInspectorTab("design");
                                             setCertificateLayoutSelectedExtraObjectId(obj.id);
                                             setCertificateLayoutDraggingExtraObjectId(null);
                                             setCertificateLayoutResizingExtraObjectId(obj.id);
@@ -5139,20 +5129,55 @@ export const ContestPage: React.FC = () => {
                             </div>
                           </div>
 
-                          {certificateCanvasFocusMode && certificateUiSimpleMode ? <aside className="certificate-studio-inspector">{(() => {
+                          {certificateCanvasFocusMode && certificateUiSimpleMode ? <aside className="certificate-studio-inspector">
+                            <div className="certificate-studio-inspector-header">
+                              <div className="certificate-studio-panel-title"><Settings2 aria-hidden="true" />{tr("Властивості", "Properties")}</div>
+                              <div className="certificate-studio-inspector-tabs" role="tablist" aria-label={tr("Панель властивостей", "Properties panel")}>
+                                <button type="button" role="tab" aria-selected={certificateInspectorTab === "design"} onClick={() => setCertificateInspectorTab("design")}>{tr("Елемент", "Element")}</button>
+                                <button type="button" role="tab" aria-selected={certificateInspectorTab === "page"} onClick={() => setCertificateInspectorTab("page")}>{tr("Сторінка", "Page")}</button>
+                              </div>
+                            </div>
+                            {certificateInspectorTab === "page" ? (
+                              <div className="certificate-studio-property-stack">
+                                <div className="certificate-studio-property-section">
+                                  <h3>{tr("Макет", "Document")}</h3>
+                                  <Input label={tr("Назва шаблону", "Template name")} value={certificateTemplateName} onChange={(e) => setCertificateTemplateName(e.target.value)} />
+                                  <p>{tr("A4 · альбомна орієнтація · 1123 × 794 px", "A4 · landscape · 1123 × 794 px")}</p>
+                                </div>
+                                <div className="certificate-studio-property-section">
+                                  <h3>{tr("Фон сторінки", "Page background")}</h3>
+                                  <Input label={tr("URL зображення", "Image URL")} value={certificateLayoutBackgroundUrl} onChange={(e) => updateCertificateLayoutBackgroundUrl(e.target.value)} placeholder="https://example.com/…" />
+                                  <div className="certificate-studio-page-actions">
+                                    <label className="certificate-studio-upload-button">
+                                      <input type="file" accept="image/*" onChange={(e) => { uploadCertificateLayoutBackgroundFile(e.target.files?.[0] ?? null); e.currentTarget.value = ""; }} />
+                                      <Upload aria-hidden="true" />{tr("Завантажити", "Upload")}
+                                    </label>
+                                    <button type="button" disabled={!certificateLayoutBackgroundUrl} onClick={() => updateCertificateLayoutBackgroundUrl("")}>{tr("Очистити фон", "Remove background")}</button>
+                                  </div>
+                                  {certificateLayoutBackgroundStatus === "error" && certificateLayoutBackgroundError ? <p className="text-accent-error">{certificateLayoutBackgroundError}</p> : null}
+                                </div>
+                                <div className="certificate-studio-property-section">
+                                  <h3>{tr("Допоміжні лінії", "Guides")}</h3>
+                                  <label className="certificate-studio-check"><input type="checkbox" checked={certificateLayoutSnapEnabled} onChange={(e) => setCertificateLayoutSnapEnabled(e.target.checked)} />{tr("Прив’язувати до сітки", "Snap to grid")}</label>
+                                  <label className="certificate-studio-check"><input type="checkbox" checked={certificateLayoutShowGuides} onChange={(e) => setCertificateLayoutShowGuides(e.target.checked)} />{tr("Показувати напрямні", "Show guides")}</label>
+                                </div>
+                              </div>
+                            ) : <>{(() => {
                             const key = certificateLayoutSelectedField;
                             const selectedExtra = certificateLayoutExtraObjects.find((obj) => obj.id === certificateLayoutSelectedExtraObjectId) ?? null;
                             if (!key && !selectedExtra) {
                               return (
-                                <div className="text-[11px] text-text-secondary border border-border rounded px-2 py-1.5 bg-bg-base">
+                                <div className="certificate-studio-empty-selection">
                                   {tr("Оберіть елемент на canvas, щоб редагувати його властивості", "Select an element on canvas to edit its properties")}
                                 </div>
                               );
                             }
                             if (!key && selectedExtra) {
                               return (
-                                <div className="border border-border rounded px-2 py-2 bg-bg-base space-y-2">
-                                  <div className="text-xs font-mono text-text-primary">{certificateExtraObjectTypeLabel(selectedExtra.type, tr)}</div>
+                                <div className="certificate-studio-property-stack">
+                                  <div className="certificate-studio-property-heading">{selectedExtra.type === "text" ? <Type aria-hidden="true" /> : selectedExtra.type === "image" ? <ImagePlus aria-hidden="true" /> : <Square aria-hidden="true" />}<h3>{certificateExtraObjectTypeLabel(selectedExtra.type, tr)}</h3></div>
+                                  <section className="certificate-studio-property-section">
+                                  <h4>{tr("Розташування", "Position and size")}</h4>
                                   <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5">
                                     <label className="text-[11px] text-text-secondary">X%
                                       <input type="number" min={0} max={100} value={selectedExtra.x} onChange={(e) => {
@@ -5184,7 +5209,7 @@ export const ContestPage: React.FC = () => {
                                         setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, rotation: value } : obj));
                                       }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
                                     </label>
-                                  </div>
+                                  </div></section>
                                   <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5">
                                     <label className="text-[11px] text-text-secondary">Z-index
                                       <input
@@ -5215,10 +5240,10 @@ export const ContestPage: React.FC = () => {
                                     </label>
                                     <div className="col-span-2 md:col-span-3 flex items-end gap-1.5">
                                       <Button variant="ghost" onClick={() => changeSelectedCertificateExtraObjectLayer(-1)}>
-                                        {tr("Шар вниз", "Layer down")}
+                                        <ArrowDown aria-hidden="true" className="mr-1 inline size-3.5" />{tr("Нижче", "Send backward")}
                                       </Button>
                                       <Button variant="ghost" onClick={() => changeSelectedCertificateExtraObjectLayer(1)}>
-                                        {tr("Шар вгору", "Layer up")}
+                                        <ArrowUp aria-hidden="true" className="mr-1 inline size-3.5" />{tr("Вище", "Bring forward")}
                                       </Button>
                                       <Button variant="ghost" onClick={duplicateSelectedCertificateExtraObject}>
                                         {tr("Дублювати", "Duplicate")}
@@ -5310,8 +5335,10 @@ export const ContestPage: React.FC = () => {
                             if (!key) return null;
                             const l = certificateLayout[key];
                             return (
-                              <div className="border border-border rounded px-2 py-2 bg-bg-base space-y-2">
-                                <div className="text-xs font-mono text-text-primary">{certificateFieldLabel(key, tr)}</div>
+                              <div className="certificate-studio-property-stack">
+                                <div className="certificate-studio-property-heading"><span className="certificate-studio-layer-dot">{certificateFieldLabel(key, tr).slice(0, 1)}</span><h3>{certificateFieldLabel(key, tr)}</h3></div>
+                                <section className="certificate-studio-property-section">
+                                <h4>{tr("Розташування та стиль", "Position and style")}</h4>
                                 <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5">
                                   <label className="text-[11px] text-text-secondary">X%
                                     <input type="number" min={0} max={100} value={l.x} onChange={(e) => {
@@ -5350,11 +5377,11 @@ export const ContestPage: React.FC = () => {
                                       <option value="right">{tr("Право", "Right")}</option>
                                     </select>
                                   </label>
-                                </div>
+                                </div></section>
                                 <Button variant="ghost" onClick={hideSelectedCertificateField}>{tr("Прибрати поле з макета", "Remove field from layout")}</Button>
                               </div>
                             );
-                          })()}</aside> : null}
+                          })()}</>}</aside> : null}
                         </div>
 
                         {!certificateUiSimpleMode || certificateUiAdvancedOpen ? (
@@ -5424,7 +5451,7 @@ export const ContestPage: React.FC = () => {
                           </Button>
                         </div>
                         {certificatePreviewOpen ? (
-                          <div className="border border-border bg-bg-base rounded-lg overflow-hidden">
+                          <div className="border border-border bg-bg-base rounded-lg overflow-hidden certificate-studio-preview">
                             <div className="px-2 py-1 text-xs text-text-secondary border-b border-border">
                               {tr("Локальне прев'ю шаблону", "Local template preview")}
                             </div>
