@@ -51,7 +51,7 @@ export const ContestSectionNav: React.FC<ContestSectionNavProps> = ({ contestId,
       <div className="contest-section-nav__items">
         {sections.map(({ id, icon: Icon, uk, en }, index) => (
           <React.Fragment key={id}>
-            {canManage && index === mainSections.length ? <span aria-hidden="true" className="contest-section-nav__divider" /> : null}
+            {canManage && index === mainSections.length ? <span className="contest-section-nav__group">{isEn ? "Organizer" : "Організатор"}</span> : null}
             <Link
               to={hrefFor(id)}
               aria-current={active === id ? "page" : undefined}

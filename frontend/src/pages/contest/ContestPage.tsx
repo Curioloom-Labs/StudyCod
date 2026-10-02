@@ -916,18 +916,14 @@ export const ContestPage: React.FC = () => {
   const [joinCode, setJoinCode] = React.useState("");
   const [joining, setJoining] = React.useState(false);
   const [publishing, setPublishing] = React.useState(false);
-  const [settingsOpen, setSettingsOpen] = React.useState(false);
-  const closeContestSettings = React.useCallback(() => {
-    setSettingsOpen(false);
-    if (searchParams.has("settings")) {
-      const next = new URLSearchParams(searchParams);
-      next.delete("settings");
-      setSearchParams(next, { replace: true });
-    }
-  }, [searchParams, setSearchParams]);
+  const [settingsSaved, setSettingsSaved] = React.useState(false);
   React.useEffect(() => {
-    if (data?.access.canManage && searchParams.get("settings") === "1") setSettingsOpen(true);
-  }, [data?.access.canManage, searchParams]);
+    if (!searchParams.has("settings")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("settings");
+    next.set("tab", "management");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [settingsSection, setSettingsSection] = React.useState<"general" | "schedule" | "access" | "appearance">("general");
   const [deleteContestOpen, setDeleteContestOpen] = React.useState(false);
   const [deleteContestConfirmation, setDeleteContestConfirmation] = React.useState("");
@@ -3178,8 +3174,7 @@ export const ContestPage: React.FC = () => {
   };
 
   React.useEffect(() => {
-    if (!settingsOpen || !data?.contest) return;
-    setSettingsSection("general");
+    if (tab !== "management" || !data?.access.canManage || !data.contest) return;
     setSettingsError(null);
     setSettingsTitle(String(data.contest.title ?? ""));
     setSettingsDescription(String(data.contest.description ?? ""));
@@ -3199,10 +3194,10 @@ export const ContestPage: React.FC = () => {
     setSettingsScoreboardVisibility(data.contest.scoreboardVisibility || "LIVE");
     setSettingsParticipantAccessMode(data.contest.participantAccessMode || "SELF_REGISTRATION");
     setSettingsClassesError(null);
-  }, [settingsOpen, data?.contest]);
+  }, [tab, data?.access.canManage, data?.contest]);
 
   React.useEffect(() => {
-    if (!settingsOpen || settingsVisibility !== "CLASS") return;
+    if (tab !== "management" || settingsVisibility !== "CLASS") return;
     let active = true;
     setSettingsClassesLoading(true);
     setSettingsClassesError(null);
@@ -3213,7 +3208,7 @@ export const ContestPage: React.FC = () => {
       })
       .finally(() => { if (active) setSettingsClassesLoading(false); });
     return () => { active = false; };
-  }, [settingsOpen, settingsVisibility, settingsClassesRetry, tr]);
+  }, [tab, settingsVisibility, settingsClassesRetry, tr]);
 
   const saveContestSettings = async () => {
     if (!contestId || !data?.access?.canManage) return;
@@ -3254,6 +3249,7 @@ export const ContestPage: React.FC = () => {
     }
 
     setSettingsSaving(true);
+    setSettingsSaved(false);
     setSettingsError(null);
     try {
       await updateContest(contestId, {
@@ -3275,9 +3271,8 @@ export const ContestPage: React.FC = () => {
         scoreboardVisibility: settingsScoreboardVisibility,
         participantAccessMode: settingsParticipantAccessMode,
       });
-      closeContestSettings();
       await load();
-      if (tab === "problems") loadProgress();
+      setSettingsSaved(true);
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
       setSettingsError(msg || tr("Не вдалося зберегти налаштування контесту", "Failed to save contest settings"));
@@ -3296,6 +3291,7 @@ export const ContestPage: React.FC = () => {
     setSettingsError(null);
     try {
       const uploaded = await uploadStatementImage(file);
+      setSettingsSaved(false);
       setSettingsBannerImageUrl(uploaded.url);
     } catch (e: unknown) {
       setSettingsError(getErrorMessage(e) || tr("Не вдалося завантажити банер", "Could not upload banner"));
@@ -3314,6 +3310,7 @@ export const ContestPage: React.FC = () => {
     setSettingsError(null);
     try {
       const uploaded = await uploadStatementImage(file);
+      setSettingsSaved(false);
       setSettingsIconImageUrl(uploaded.url);
     } catch (e: unknown) {
       setSettingsError(getErrorMessage(e) || tr("Не вдалося завантажити іконку", "Could not upload the icon"));
@@ -3725,213 +3722,7 @@ export const ContestPage: React.FC = () => {
         </div>
       </Modal>
 
-      <Modal
-        open={settingsOpen}
-        onClose={() => {
-          if (!settingsSaving && !settingsIconUploading && !settingsBannerUploading) closeContestSettings();
-        }}
-        title={tr("Налаштування контесту", "Contest settings")}
-      >
-        <div className="contest-settings-dialog">
-          {settingsError ? <div className="text-sm text-accent-error">{settingsError}</div> : null}
 
-          <div className="contest-settings-tabs" role="tablist" aria-label={tr("Розділи налаштувань", "Settings sections")}>
-            {([
-              ["general", tr("Основне", "Basics"), tr("Назва, опис і теми", "Title, description, topics")],
-              ["schedule", tr("Формат", "Format"), tr("Час і підрахунок", "Schedule and scoring")],
-              ["access", tr("Доступ", "Access"), tr("Учасники й рейтинг", "Participants and standings")],
-              ["appearance", tr("Вигляд", "Appearance"), tr("Іконка й обкладинка", "Icon and banner")],
-            ] as const).map(([id, label, detail]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                id={`contest-settings-tab-${id}`}
-                aria-selected={settingsSection === id}
-                aria-controls="contest-settings-panel"
-                onClick={() => setSettingsSection(id)}
-                className={`contest-settings-tab${settingsSection === id ? " is-active" : ""}`}
-              >
-                <span>{label}</span>
-                <small>{detail}</small>
-              </button>
-            ))}
-          </div>
-
-          <div id="contest-settings-panel" role="tabpanel" aria-labelledby={`contest-settings-tab-${settingsSection}`} className="contest-settings-panel">
-          {settingsSection === "general" ? <section className="contest-settings-section">
-            <div className="contest-settings-section__intro"><h3>{tr("Інформація для учасників", "What participants will see")}</h3><p>{tr("Дай контесту зрозумілу назву й короткий опис.", "Give the contest a clear name and a short description.")}</p></div>
-          <Input label={tr("Назва", "Title")} value={settingsTitle} onChange={(e) => setSettingsTitle(e.target.value)} />
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-semibold text-text-primary">{tr("Опис і правила", "Description and rules")}</label>
-            <textarea
-              value={settingsDescription}
-              onChange={(e) => setSettingsDescription(e.target.value)}
-              rows={4}
-              className="w-full resize-y bg-bg-code border border-border text-text-primary rounded-xl px-4 py-3 leading-6 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              placeholder={tr("Коротко поясни формат, правила та важливі деталі…", "Summarize the format, rules, and any important details…")}
-            />
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <Input label={tr("Теми через кому", "Topics separated by commas")} value={settingsTags} onChange={(e) => setSettingsTags(e.target.value)} placeholder={tr("алгоритми, графи, Python", "algorithms, graphs, Python")} />
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="contest-settings-difficulty" className="text-sm font-semibold text-text-primary">{tr("Складність", "Difficulty")}</label>
-              <select id="contest-settings-difficulty" value={settingsDifficulty} onChange={(e) => setSettingsDifficulty(e.target.value as typeof settingsDifficulty)} className="w-full rounded-xl border border-border bg-bg-code px-4 py-2.5 text-text-primary focus-visible:ring-2 focus-visible:ring-primary">
-                <option value="">{tr("Не вказано", "Not set")}</option>
-                <option value="EASY">{tr("Початковий", "Beginner")}</option>
-                <option value="MEDIUM">{tr("Середній", "Intermediate")}</option>
-                <option value="HARD">{tr("Складний", "Advanced")}</option>
-              </select>
-            </div>
-          </div>
-          </section> : null}
-
-          {settingsSection === "appearance" ? <section className="contest-settings-section">
-            <div className="contest-settings-section__intro"><h3>{tr("Візуальний стиль", "Visual identity")}</h3><p>{tr("Обкладинка та іконка допоможуть відрізнити контест у списку.", "A banner and icon make the contest easier to recognize.")}</p></div>
-            <div className="text-sm font-semibold text-text-primary">{tr("Оформлення", "Branding")}</div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {CONTEST_ICONS.map((icon) => <button key={icon} type="button" aria-label={tr(`Обрати іконку ${icon}`, `Choose icon ${icon}`)} aria-pressed={!settingsIconImageUrl && settingsIcon === icon} onClick={() => { setSettingsIconImageUrl(null); setSettingsIcon(icon); }} className={`grid size-10 place-items-center rounded-lg border text-xl ${!settingsIconImageUrl && settingsIcon === icon ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "border-border hover:bg-bg-hover"}`}>{icon}</button>)}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              {settingsIconImageUrl && <img src={settingsIconImageUrl} alt="" className="size-10 rounded-lg border border-border bg-bg-surface object-cover" />}
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-primary hover:bg-bg-hover focus-within:ring-2 focus-within:ring-primary">
-                <ImagePlus aria-hidden="true" className="size-4" />{settingsIconUploading ? tr("Завантажую іконку…", "Uploading icon…") : settingsIconImageUrl ? tr("Замінити зображення", "Replace image") : tr("Завантажити зображення", "Upload image")}
-                <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="sr-only" disabled={settingsIconUploading || settingsSaving} onChange={(event) => { void uploadContestIcon(event.target.files?.[0]); event.target.value = ""; }} />
-              </label>
-              {settingsIconImageUrl && <Button variant="ghost" onClick={() => setSettingsIconImageUrl(null)} disabled={settingsIconUploading || settingsSaving}>{tr("Прибрати", "Remove")}</Button>}
-              <span className="text-xs text-text-secondary">PNG, JPG, WebP, AVIF · 8 MB</span>
-            </div>
-            <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Зображення замінить emoji в картці та на сторінці контесту. Без зображення використовується обрана emoji-іконка.", "The image replaces the emoji in the contest card and page. Without an image, the selected emoji is used.")}</p>
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {(Object.entries(CONTEST_BANNER_THEMES) as Array<[ContestBannerTheme, (typeof CONTEST_BANNER_THEMES)[ContestBannerTheme]]>).map(([theme, preset]) => <button key={theme} type="button" aria-pressed={settingsBannerTheme === theme} onClick={() => setSettingsBannerTheme(theme)} className={`h-12 rounded-lg border px-3 text-left text-xs font-semibold text-white ${settingsBannerTheme === theme ? "ring-2 ring-primary ring-offset-1" : "border-white/20 opacity-80 hover:opacity-100"}`} style={{ background: preset.background }}>{tr(preset.label, theme)}</button>)}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              {settingsBannerImageUrl && <img src={settingsBannerImageUrl} alt={tr("Попередній перегляд банера", "Banner preview")} className="h-14 w-28 rounded-lg border border-border object-cover" />}
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-primary hover:bg-bg-hover focus-within:ring-2 focus-within:ring-primary">
-                <ImagePlus aria-hidden="true" className="size-4" />{settingsBannerUploading ? tr("Завантажую…", "Uploading…") : tr("Завантажити банер", "Upload banner")}
-                <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="sr-only" disabled={settingsBannerUploading || settingsSaving} onChange={(event) => { void uploadContestBanner(event.target.files?.[0]); event.target.value = ""; }} />
-              </label>
-              {settingsBannerImageUrl && <Button variant="ghost" onClick={() => setSettingsBannerImageUrl(null)} disabled={settingsSaving || settingsBannerUploading}>{tr("Прибрати", "Remove")}</Button>}
-              <span className="text-xs text-text-secondary">PNG, JPG, WebP, AVIF · 8 MB</span>
-            </div>
-          </section> : null}
-
-          {settingsSection === "access" ? <section className="contest-settings-section">
-          <div className="contest-settings-section__intro"><h3>{tr("Хто може брати участь", "Who can participate")}</h3><p>{tr("Визнач, хто побачить контест і як люди отримають доступ.", "Choose who can see the contest and how they get access.")}</p></div>
-          <section className="rounded-2xl border border-border bg-bg-base/45 p-4">
-            <div className="text-sm font-semibold text-text-primary">{tr("Хто має доступ", "Who can access")}</div>
-            <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Зміна доступу одразу оновить видимість контесту для учасників.", "Changing access immediately updates contest visibility for participants.")}</p>
-            <label htmlFor="contest-settings-visibility" className="mt-3 block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Формат доступу", "Access type")}</label>
-            <select id="contest-settings-visibility" name="visibility" value={settingsVisibility} onChange={(e) => { setSettingsVisibility(e.target.value as ContestVisibility); setSettingsError(null); }} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
-              <option value="PUBLIC">{tr("Відкритий — доступний усім", "Public — available to everyone")}</option>
-              <option value="PRIVATE_CODE">{tr("За кодом — приватне запрошення", "Private — invite code required")}</option>
-              <option value="CLASS">{tr("Для класу — тільки учні класу", "Class — only students in a class")}</option>
-            </select>
-            {settingsVisibility === "PRIVATE_CODE" && <div className="mt-3">
-              <label htmlFor="contest-settings-join-code" className="block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Код-запрошення", "Invite code")}</label>
-              <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
-                <input id="contest-settings-join-code" name="joinCode" autoComplete="off" spellCheck={false} maxLength={64} value={settingsJoinCode} onChange={(e) => setSettingsJoinCode(e.target.value)} className="min-w-0 flex-1 bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 font-mono uppercase focus-visible:ring-2 focus-visible:ring-primary" placeholder={data?.contest.visibility === "PRIVATE_CODE" ? tr("Не змінювати поточний код", "Leave blank to keep current code") : tr("Введи або згенеруй код", "Enter or generate a code")} />
-                <Button type="button" variant="secondary" onClick={() => setSettingsJoinCode(createContestInviteCode())}><Sparkles className="mr-2 size-4" />{tr("Згенерувати", "Generate")}</Button>
-              </div>
-              <p className="mt-1.5 text-xs text-text-secondary">{data?.contest.visibility === "PRIVATE_CODE" ? tr("Залиш поле порожнім, щоб зберегти поточний код. Новий код замінить старий.", "Leave blank to keep the current code. A new code replaces it.") : tr("Код має містити від 4 до 64 символів.", "Use 4–64 characters.")}</p>
-            </div>}
-            {settingsVisibility === "CLASS" && <div className="mt-3">
-              <label htmlFor="contest-settings-class" className="block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Клас", "Class")}</label>
-              <select id="contest-settings-class" name="classId" value={settingsClassId} onChange={(e) => setSettingsClassId(e.target.value)} disabled={settingsClassesLoading} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60">
-                <option value="">{settingsClassesLoading ? tr("Завантажую класи…", "Loading classes…") : tr("Оберіть клас", "Select a class")}</option>
-                {settingsClassId && !settingsClasses.some((item) => item.id === Number(settingsClassId)) && <option value={settingsClassId}>{tr(`Поточний клас #${settingsClassId}`, `Current class #${settingsClassId}`)}</option>}
-                {settingsClasses.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.studentsCount} {tr("учнів", "students")}</option>)}
-              </select>
-              {settingsClassesError && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-accent-error"><p role="alert">{settingsClassesError}</p><button type="button" onClick={() => { setSettingsClassesError(null); setSettingsClassesRetry((current) => current + 1); }} className="font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Спробувати ще раз", "Try again")}</button></div>}
-              {!settingsClassesLoading && !settingsClassesError && settingsClasses.length === 0 && <p className="mt-2 text-xs text-text-secondary">{tr("Список класів порожній або недоступний для цього акаунту.", "No classes are available for this account.")}</p>}
-            </div>}
-          </section>
-
-          <section className="rounded-2xl border border-border bg-bg-base/45 p-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="contest-settings-participant-access" className="text-sm font-semibold text-text-primary">{tr("Реєстрація учасників", "Participant registration")}</label>
-                <select id="contest-settings-participant-access" value={settingsParticipantAccessMode} onChange={(event) => setSettingsParticipantAccessMode(event.target.value as ContestParticipantAccessMode)} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
-                  <option value="SELF_REGISTRATION">{tr("Самостійна реєстрація", "Self-registration")}</option>
-                  <option value="ISSUED_ACCOUNTS">{tr("Тимчасові акаунти від організатора", "Temporary accounts issued by organizer")}</option>
-                </select>
-                <p className="mt-1.5 text-xs leading-5 text-text-secondary">{settingsParticipantAccessMode === "ISSUED_ACCOUNTS" ? tr("Учасники входять лише через акаунти, створені у розділі «Акаунти».", "Only accounts created in the Accounts section can enter.") : tr("Учасники можуть приєднатися самостійно згідно з форматом доступу вище.", "Participants can join themselves according to the access type above.")}</p>
-              </div>
-              <div>
-                <label htmlFor="contest-settings-scoreboard-visibility" className="text-sm font-semibold text-text-primary">{tr("Видимість таблиці", "Scoreboard visibility")}</label>
-                <select id="contest-settings-scoreboard-visibility" value={settingsScoreboardVisibility} onChange={(event) => setSettingsScoreboardVisibility(event.target.value as ContestScoreboardVisibility)} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
-                  <option value="LIVE">{tr("Показувати наживо", "Show live")}</option>
-                  <option value="AFTER_END">{tr("Відкрити після завершення", "Reveal after finish")}</option>
-                  <option value="ORGANIZERS_ONLY">{tr("Лише організаторам", "Organizers only")}</option>
-                </select>
-                <p className="mt-1.5 text-xs leading-5 text-text-secondary">{tr("Приховані результати не повертаються API учасникам до заданого часу.", "Hidden results are not returned to participants before the release time.")}</p>
-              </div>
-            </div>
-          </section>
-          </section> : null}
-
-          {settingsSection === "schedule" ? <section className="contest-settings-section">
-          <div className="contest-settings-section__intro"><h3>{tr("Час і правила підрахунку", "Schedule and scoring")}</h3><p>{tr("Зміни правила, за якими рахуватимуть результати контесту.", "Set when the contest runs and how results are calculated.")}</p></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Старт", "Start")}</label>
-              <input
-                type="datetime-local"
-                value={settingsStartsAt}
-                onChange={(e) => setSettingsStartsAt(e.target.value)}
-                className="w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 font-mono focus:outline-none"
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Фініш", "End")}</label>
-              <input
-                type="datetime-local"
-                value={settingsEndsAt}
-                onChange={(e) => setSettingsEndsAt(e.target.value)}
-                className="w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 font-mono focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <label className="flex items-center gap-2 text-sm font-mono text-text-primary">
-            <input type="checkbox" checked={settingsAllowUpsolve} onChange={(e) => setSettingsAllowUpsolve(e.target.checked)} />
-            {tr("Дозволити дорішування після завершення", "Allow upsolve after finish")}
-          </label>
-
-          <div>
-            <div className="text-sm font-mono text-text-primary mb-1.5">{tr("Модель рейтингу", "Ranking model")}</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {([
-                ["IOI", tr("IOI — сума найкращих балів", "IOI — sum of best scores"), tr("Часткові бали за підзадачі; рейтинг за сумою.", "Partial subtask scores; ranked by total points.")],
-                ["ICPC", tr("ICPC — задачі + штраф", "ICPC — solved + penalty"), tr("Рейтинг за к-стю розв'язаних, потім за штрафним часом.", "Ranked by problems solved, then penalty time.")],
-              ] as Array<["IOI" | "ICPC", string, string]>).map(([mode, title, desc]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setSettingsScoringMode(mode)}
-                  className={`text-left rounded-lg border px-3 py-2 transition-fast ${settingsScoringMode === mode ? "border-primary/60 bg-primary/10" : "border-border bg-bg-code hover:bg-bg-hover"}`}
-                >
-                  <div className={`text-sm font-mono ${settingsScoringMode === mode ? "text-primary" : "text-text-primary"}`}>{title}</div>
-                  <div className="text-[11px] text-text-secondary mt-0.5">{desc}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-          </section> : null}
-
-          </div>
-
-          <div className="contest-settings-footer">
-            <Button variant="ghost" onClick={closeContestSettings} disabled={settingsSaving || settingsIconUploading || settingsBannerUploading}>
-              {tr("Скасувати", "Cancel")}
-            </Button>
-            <Button onClick={saveContestSettings} disabled={settingsSaving || settingsIconUploading || settingsBannerUploading}>
-              {settingsIconUploading ? tr("Завантажую іконку…", "Uploading icon…") : settingsBannerUploading ? tr("Завантажую банер…", "Uploading banner…") : settingsSaving ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       <Modal
         open={deleteContestOpen}
@@ -4092,8 +3883,27 @@ export const ContestPage: React.FC = () => {
           <div className="text-sm text-accent-error">{error}</div>
         </Card>
       ) : !data ? null : (
-        <div className="space-y-4">
-          <Card className="contest-hero-card overflow-hidden border border-primary/20 p-0">
+        <div className="contest-manager-content space-y-4">
+          {data.access.canManage ? (
+            <header className="contest-manager-header">
+              <div className="contest-manager-header__main">
+                <span aria-hidden="true" className="contest-manager-header__icon">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" width={56} height={56} className="size-full object-cover" /> : data.contest.icon || "🏆"}</span>
+                <div className="min-w-0">
+                  <p className="contest-manager-header__eyebrow">{tr("Панель організатора", "Organizer workspace")}</p>
+                  <h1>{data.contest.title}</h1>
+                  <p className="contest-manager-header__meta">{fmtDateTime(data.contest.startsAt, i18n.language)} <span aria-hidden="true">→</span> {fmtDateTime(data.contest.endsAt, i18n.language)}</p>
+                </div>
+              </div>
+              <div className="contest-manager-header__aside">
+                {(() => {
+                  const chip = contestPhaseChip({ started: data.phase.started, finished: data.phase.finished, paused: !!data.access.isPaused, tr });
+                  return <StatusChip glyph={chip.glyph} label={chip.label} tone={chip.tone} />;
+                })()}
+                <span className="contest-manager-header__status">{data.contest.isPublished ? tr("Опубліковано", "Published") : tr("Чернетка", "Draft")}</span>
+                <Link to={`/contest/contests/${contestId}`} className="contest-manager-header__preview">{tr("Переглянути як учасник", "View contest page")} <ArrowLeft aria-hidden="true" className="size-4 rotate-180" /></Link>
+              </div>
+            </header>
+          ) : <Card className="contest-hero-card overflow-hidden border border-primary/20 p-0">
             {data.contest.bannerImageUrl ? (
               <div className="contest-hero-card__image-wrap" aria-hidden="true">
                 <img
@@ -4146,28 +3956,6 @@ export const ContestPage: React.FC = () => {
                 <div className="contest-hero-stat__value contest-hero-stat__value--number">{data.problems.length}</div>
               </div>
             </div>
-
-            {hasToken && data.access.canManage ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button variant="secondary" onClick={() => setSettingsOpen(true)}>
-                  {tr("Налаштування", "Settings")}
-                </Button>
-                <Button variant="secondary" onClick={togglePublished} disabled={publishing}>
-                  {publishing
-                    ? tr("Оновлення…", "Updating…")
-                    : data.contest.isPublished
-                      ? tr("Зняти з публікації", "Unpublish")
-                      : tr("Опублікувати", "Publish")}
-                </Button>
-                <Button variant="secondary" onClick={toggleContestPaused} disabled={pauseSaving}>
-                  {pauseSaving
-                    ? tr("Оновлення…", "Updating…")
-                    : data.access.isPaused
-                      ? tr("Продовжити контест", "Resume contest")
-                      : tr("Поставити на паузу", "Pause contest")}
-                </Button>
-              </div>
-            ) : null}
 
             <div className="contest-hero-schedule">
               <span><span className="contest-hero-schedule__label">{tr("Старт", "Start")}</span>{fmtDateTime(data.contest.startsAt, i18n.language)}</span>
@@ -4224,7 +4012,7 @@ export const ContestPage: React.FC = () => {
               </details>
             ) : null}
             </div>
-          </Card>
+          </Card>}
 
           {contestId ? <ContestSectionNav contestId={contestId} active={tab} canManage={!!data.access.canManage} /> : null}
 
@@ -5864,6 +5652,218 @@ export const ContestPage: React.FC = () => {
                   ) : null}
 
                   {tab === "management" ? <>
+                  <section aria-labelledby="contest-settings-heading" className="contest-settings-workspace">
+                    <div className="contest-settings-workspace__header">
+                      <div>
+                        <span className="contest-settings-workspace__eyebrow">{tr("Керування контестом", "Contest control")}</span>
+                        <h2 id="contest-settings-heading">{tr("Налаштування", "Settings")}</h2>
+                        <p>{tr("Усе, що визначає вигляд, доступ і правила контесту.", "Set the contest identity, access, and rules in one place.")}</p>
+                      </div>
+                    </div>
+        <div className="contest-settings-layout" onChangeCapture={() => setSettingsSaved(false)}>
+          {settingsError ? <div role="alert" className="contest-settings-error text-sm text-accent-error">{settingsError}</div> : null}
+
+          <div className="contest-settings-tabs" role="tablist" aria-label={tr("Розділи налаштувань", "Settings sections")}>
+            {([
+              ["general", tr("Основне", "Basics"), tr("Назва, опис і теми", "Title, description, topics")],
+              ["schedule", tr("Формат", "Format"), tr("Час і підрахунок", "Schedule and scoring")],
+              ["access", tr("Доступ", "Access"), tr("Учасники й рейтинг", "Participants and standings")],
+              ["appearance", tr("Вигляд", "Appearance"), tr("Іконка й обкладинка", "Icon and banner")],
+            ] as const).map(([id, label, detail]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                id={`contest-settings-tab-${id}`}
+                aria-selected={settingsSection === id}
+                aria-controls="contest-settings-panel"
+                onClick={() => setSettingsSection(id)}
+                className={`contest-settings-tab${settingsSection === id ? " is-active" : ""}`}
+              >
+                <span>{label}</span>
+                <small>{detail}</small>
+              </button>
+            ))}
+          </div>
+
+          <div id="contest-settings-panel" role="tabpanel" aria-labelledby={`contest-settings-tab-${settingsSection}`} className="contest-settings-panel">
+          {settingsSection === "general" ? <section className="contest-settings-section">
+            <div className="contest-settings-section__intro"><h3>{tr("Інформація для учасників", "What participants will see")}</h3><p>{tr("Дай контесту зрозумілу назву й короткий опис.", "Give the contest a clear name and a short description.")}</p></div>
+          <Input label={tr("Назва", "Title")} value={settingsTitle} onChange={(e) => setSettingsTitle(e.target.value)} />
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-text-primary">{tr("Опис і правила", "Description and rules")}</label>
+            <textarea
+              value={settingsDescription}
+              onChange={(e) => setSettingsDescription(e.target.value)}
+              rows={4}
+              className="w-full resize-y bg-bg-code border border-border text-text-primary rounded-xl px-4 py-3 leading-6 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              placeholder={tr("Коротко поясни формат, правила та важливі деталі…", "Summarize the format, rules, and any important details…")}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Input label={tr("Теми через кому", "Topics separated by commas")} value={settingsTags} onChange={(e) => setSettingsTags(e.target.value)} placeholder={tr("алгоритми, графи, Python", "algorithms, graphs, Python")} />
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="contest-settings-difficulty" className="text-sm font-semibold text-text-primary">{tr("Складність", "Difficulty")}</label>
+              <select id="contest-settings-difficulty" value={settingsDifficulty} onChange={(e) => setSettingsDifficulty(e.target.value as typeof settingsDifficulty)} className="w-full rounded-xl border border-border bg-bg-code px-4 py-2.5 text-text-primary focus-visible:ring-2 focus-visible:ring-primary">
+                <option value="">{tr("Не вказано", "Not set")}</option>
+                <option value="EASY">{tr("Початковий", "Beginner")}</option>
+                <option value="MEDIUM">{tr("Середній", "Intermediate")}</option>
+                <option value="HARD">{tr("Складний", "Advanced")}</option>
+              </select>
+            </div>
+          </div>
+          </section> : null}
+
+          {settingsSection === "appearance" ? <section className="contest-settings-section">
+            <div className="contest-settings-section__intro"><h3>{tr("Візуальний стиль", "Visual identity")}</h3><p>{tr("Обкладинка та іконка допоможуть відрізнити контест у списку.", "A banner and icon make the contest easier to recognize.")}</p></div>
+            <div className="text-sm font-semibold text-text-primary">{tr("Оформлення", "Branding")}</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {CONTEST_ICONS.map((icon) => <button key={icon} type="button" aria-label={tr(`Обрати іконку ${icon}`, `Choose icon ${icon}`)} aria-pressed={!settingsIconImageUrl && settingsIcon === icon} onClick={() => { setSettingsSaved(false); setSettingsIconImageUrl(null); setSettingsIcon(icon); }} className={`grid size-10 place-items-center rounded-lg border text-xl ${!settingsIconImageUrl && settingsIcon === icon ? "border-primary bg-primary/10 ring-1 ring-primary/40" : "border-border hover:bg-bg-hover"}`}>{icon}</button>)}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {settingsIconImageUrl && <img src={settingsIconImageUrl} alt="" className="size-10 rounded-lg border border-border bg-bg-surface object-cover" />}
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-primary hover:bg-bg-hover focus-within:ring-2 focus-within:ring-primary">
+                <ImagePlus aria-hidden="true" className="size-4" />{settingsIconUploading ? tr("Завантажую іконку…", "Uploading icon…") : settingsIconImageUrl ? tr("Замінити зображення", "Replace image") : tr("Завантажити зображення", "Upload image")}
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="sr-only" disabled={settingsIconUploading || settingsSaving} onChange={(event) => { void uploadContestIcon(event.target.files?.[0]); event.target.value = ""; }} />
+              </label>
+              {settingsIconImageUrl && <Button variant="ghost" onClick={() => setSettingsIconImageUrl(null)} disabled={settingsIconUploading || settingsSaving}>{tr("Прибрати", "Remove")}</Button>}
+              <span className="text-xs text-text-secondary">PNG, JPG, WebP, AVIF · 8 MB</span>
+            </div>
+            <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Зображення замінить emoji в картці та на сторінці контесту. Без зображення використовується обрана emoji-іконка.", "The image replaces the emoji in the contest card and page. Without an image, the selected emoji is used.")}</p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {(Object.entries(CONTEST_BANNER_THEMES) as Array<[ContestBannerTheme, (typeof CONTEST_BANNER_THEMES)[ContestBannerTheme]]>).map(([theme, preset]) => <button key={theme} type="button" aria-pressed={settingsBannerTheme === theme} onClick={() => { setSettingsSaved(false); setSettingsBannerTheme(theme); }} className={`h-12 rounded-lg border px-3 text-left text-xs font-semibold text-white ${settingsBannerTheme === theme ? "ring-2 ring-primary ring-offset-1" : "border-white/20 opacity-80 hover:opacity-100"}`} style={{ background: preset.background }}>{tr(preset.label, theme)}</button>)}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {settingsBannerImageUrl && <img src={settingsBannerImageUrl} alt={tr("Попередній перегляд банера", "Banner preview")} className="h-14 w-28 rounded-lg border border-border object-cover" />}
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-primary hover:bg-bg-hover focus-within:ring-2 focus-within:ring-primary">
+                <ImagePlus aria-hidden="true" className="size-4" />{settingsBannerUploading ? tr("Завантажую…", "Uploading…") : tr("Завантажити банер", "Upload banner")}
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/avif" className="sr-only" disabled={settingsBannerUploading || settingsSaving} onChange={(event) => { void uploadContestBanner(event.target.files?.[0]); event.target.value = ""; }} />
+              </label>
+              {settingsBannerImageUrl && <Button variant="ghost" onClick={() => setSettingsBannerImageUrl(null)} disabled={settingsSaving || settingsBannerUploading}>{tr("Прибрати", "Remove")}</Button>}
+              <span className="text-xs text-text-secondary">PNG, JPG, WebP, AVIF · 8 MB</span>
+            </div>
+          </section> : null}
+
+          {settingsSection === "access" ? <section className="contest-settings-section">
+          <div className="contest-settings-section__intro"><h3>{tr("Хто може брати участь", "Who can participate")}</h3><p>{tr("Визнач, хто побачить контест і як люди отримають доступ.", "Choose who can see the contest and how they get access.")}</p></div>
+          <section className="rounded-2xl border border-border bg-bg-base/45 p-4">
+            <div className="text-sm font-semibold text-text-primary">{tr("Хто має доступ", "Who can access")}</div>
+            <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Зміна доступу одразу оновить видимість контесту для учасників.", "Changing access immediately updates contest visibility for participants.")}</p>
+            <label htmlFor="contest-settings-visibility" className="mt-3 block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Формат доступу", "Access type")}</label>
+            <select id="contest-settings-visibility" name="visibility" value={settingsVisibility} onChange={(e) => { setSettingsVisibility(e.target.value as ContestVisibility); setSettingsError(null); }} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
+              <option value="PUBLIC">{tr("Відкритий — доступний усім", "Public — available to everyone")}</option>
+              <option value="PRIVATE_CODE">{tr("За кодом — приватне запрошення", "Private — invite code required")}</option>
+              <option value="CLASS">{tr("Для класу — тільки учні класу", "Class — only students in a class")}</option>
+            </select>
+            {settingsVisibility === "PRIVATE_CODE" && <div className="mt-3">
+              <label htmlFor="contest-settings-join-code" className="block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Код-запрошення", "Invite code")}</label>
+              <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
+                <input id="contest-settings-join-code" name="joinCode" autoComplete="off" spellCheck={false} maxLength={64} value={settingsJoinCode} onChange={(e) => setSettingsJoinCode(e.target.value)} className="min-w-0 flex-1 bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 font-mono uppercase focus-visible:ring-2 focus-visible:ring-primary" placeholder={data?.contest.visibility === "PRIVATE_CODE" ? tr("Не змінювати поточний код", "Leave blank to keep current code") : tr("Введи або згенеруй код", "Enter or generate a code")} />
+                <Button type="button" variant="secondary" onClick={() => setSettingsJoinCode(createContestInviteCode())}><Sparkles className="mr-2 size-4" />{tr("Згенерувати", "Generate")}</Button>
+              </div>
+              <p className="mt-1.5 text-xs text-text-secondary">{data?.contest.visibility === "PRIVATE_CODE" ? tr("Залиш поле порожнім, щоб зберегти поточний код. Новий код замінить старий.", "Leave blank to keep the current code. A new code replaces it.") : tr("Код має містити від 4 до 64 символів.", "Use 4–64 characters.")}</p>
+            </div>}
+            {settingsVisibility === "CLASS" && <div className="mt-3">
+              <label htmlFor="contest-settings-class" className="block text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Клас", "Class")}</label>
+              <select id="contest-settings-class" name="classId" value={settingsClassId} onChange={(e) => setSettingsClassId(e.target.value)} disabled={settingsClassesLoading} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60">
+                <option value="">{settingsClassesLoading ? tr("Завантажую класи…", "Loading classes…") : tr("Оберіть клас", "Select a class")}</option>
+                {settingsClassId && !settingsClasses.some((item) => item.id === Number(settingsClassId)) && <option value={settingsClassId}>{tr(`Поточний клас #${settingsClassId}`, `Current class #${settingsClassId}`)}</option>}
+                {settingsClasses.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.studentsCount} {tr("учнів", "students")}</option>)}
+              </select>
+              {settingsClassesError && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-accent-error"><p role="alert">{settingsClassesError}</p><button type="button" onClick={() => { setSettingsClassesError(null); setSettingsClassesRetry((current) => current + 1); }} className="font-semibold underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Спробувати ще раз", "Try again")}</button></div>}
+              {!settingsClassesLoading && !settingsClassesError && settingsClasses.length === 0 && <p className="mt-2 text-xs text-text-secondary">{tr("Список класів порожній або недоступний для цього акаунту.", "No classes are available for this account.")}</p>}
+            </div>}
+          </section>
+
+          <section className="rounded-2xl border border-border bg-bg-base/45 p-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="contest-settings-participant-access" className="text-sm font-semibold text-text-primary">{tr("Реєстрація учасників", "Participant registration")}</label>
+                <select id="contest-settings-participant-access" value={settingsParticipantAccessMode} onChange={(event) => setSettingsParticipantAccessMode(event.target.value as ContestParticipantAccessMode)} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
+                  <option value="SELF_REGISTRATION">{tr("Самостійна реєстрація", "Self-registration")}</option>
+                  <option value="ISSUED_ACCOUNTS">{tr("Тимчасові акаунти від організатора", "Temporary accounts issued by organizer")}</option>
+                </select>
+                <p className="mt-1.5 text-xs leading-5 text-text-secondary">{settingsParticipantAccessMode === "ISSUED_ACCOUNTS" ? tr("Учасники входять лише через акаунти, створені у розділі «Акаунти».", "Only accounts created in the Accounts section can enter.") : tr("Учасники можуть приєднатися самостійно згідно з форматом доступу вище.", "Participants can join themselves according to the access type above.")}</p>
+              </div>
+              <div>
+                <label htmlFor="contest-settings-scoreboard-visibility" className="text-sm font-semibold text-text-primary">{tr("Видимість таблиці", "Scoreboard visibility")}</label>
+                <select id="contest-settings-scoreboard-visibility" value={settingsScoreboardVisibility} onChange={(event) => setSettingsScoreboardVisibility(event.target.value as ContestScoreboardVisibility)} className="mt-1.5 w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 focus-visible:ring-2 focus-visible:ring-primary">
+                  <option value="LIVE">{tr("Показувати наживо", "Show live")}</option>
+                  <option value="AFTER_END">{tr("Відкрити після завершення", "Reveal after finish")}</option>
+                  <option value="ORGANIZERS_ONLY">{tr("Лише організаторам", "Organizers only")}</option>
+                </select>
+                <p className="mt-1.5 text-xs leading-5 text-text-secondary">{tr("Приховані результати не повертаються API учасникам до заданого часу.", "Hidden results are not returned to participants before the release time.")}</p>
+              </div>
+            </div>
+          </section>
+          </section> : null}
+
+          {settingsSection === "schedule" ? <section className="contest-settings-section">
+          <div className="contest-settings-section__intro"><h3>{tr("Час і правила підрахунку", "Schedule and scoring")}</h3><p>{tr("Зміни правила, за якими рахуватимуть результати контесту.", "Set when the contest runs and how results are calculated.")}</p></div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Старт", "Start")}</label>
+              <input
+                type="datetime-local"
+                value={settingsStartsAt}
+                onChange={(e) => setSettingsStartsAt(e.target.value)}
+                className="w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 font-mono focus:outline-none"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Фініш", "End")}</label>
+              <input
+                type="datetime-local"
+                value={settingsEndsAt}
+                onChange={(e) => setSettingsEndsAt(e.target.value)}
+                className="w-full bg-bg-code border border-border text-text-primary rounded-lg px-4 py-2.5 font-mono focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm font-mono text-text-primary">
+            <input type="checkbox" checked={settingsAllowUpsolve} onChange={(e) => setSettingsAllowUpsolve(e.target.checked)} />
+            {tr("Дозволити дорішування після завершення", "Allow upsolve after finish")}
+          </label>
+
+          <div>
+            <div className="text-sm font-mono text-text-primary mb-1.5">{tr("Модель рейтингу", "Ranking model")}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {([
+                ["IOI", tr("IOI — сума найкращих балів", "IOI — sum of best scores"), tr("Часткові бали за підзадачі; рейтинг за сумою.", "Partial subtask scores; ranked by total points.")],
+                ["ICPC", tr("ICPC — задачі + штраф", "ICPC — solved + penalty"), tr("Рейтинг за к-стю розв'язаних, потім за штрафним часом.", "Ranked by problems solved, then penalty time.")],
+              ] as Array<["IOI" | "ICPC", string, string]>).map(([mode, title, desc]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setSettingsScoringMode(mode)}
+                  className={`text-left rounded-lg border px-3 py-2 transition-fast ${settingsScoringMode === mode ? "border-primary/60 bg-primary/10" : "border-border bg-bg-code hover:bg-bg-hover"}`}
+                >
+                  <div className={`text-sm font-mono ${settingsScoringMode === mode ? "text-primary" : "text-text-primary"}`}>{title}</div>
+                  <div className="text-[11px] text-text-secondary mt-0.5">{desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+          </section> : null}
+
+          </div>
+
+          <div className="contest-settings-footer">
+            {settingsSaved ? <span role="status" className="contest-settings-saved">{tr("Зміни збережено", "Changes saved")}</span> : null}
+            <Button onClick={saveContestSettings} disabled={settingsSaving || settingsIconUploading || settingsBannerUploading}>
+              {settingsIconUploading ? tr("Завантажую іконку…", "Uploading icon…") : settingsBannerUploading ? tr("Завантажую банер…", "Uploading banner…") : settingsSaving ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
+            </Button>
+          </div>
+        </div>
+                  </section>
+
+                  <div className="contest-manager-section-heading">
+                    <span>{tr("Адміністрування", "Administration")}</span>
+                    <h2>{tr("Організатори та контроль", "Organizers and controls")}</h2>
+                    <p>{tr("Керуй публікацією, доступом організаторів і винятками в результатах.", "Manage publication, organizer access, and result exceptions.")}</p>
+                  </div>
                   <Card className="p-4 sm:p-5">
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <h2 className="text-base font-semibold text-text-primary flex items-center gap-2"><ShieldCheck aria-hidden="true" className="w-4 h-4 text-primary" />{tr("Організатори та стан контесту", "Organizers and contest status")}</h2>
@@ -5874,6 +5874,9 @@ export const ContestPage: React.FC = () => {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <Button variant="secondary" onClick={togglePublished} disabled={publishing}>
+                        {publishing ? tr("Оновлення…", "Updating…") : data.contest.isPublished ? tr("Зняти з публікації", "Unpublish") : tr("Опублікувати", "Publish")}
+                      </Button>
                       <Button variant="secondary" onClick={toggleContestPaused} disabled={pauseSaving}>
                         {data.access.isPaused ? tr("Зняти з паузи", "Resume") : tr("Пауза", "Pause")}
                       </Button>
@@ -6236,21 +6239,19 @@ export const ContestPage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              <Card className="p-3">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-xs text-text-secondary">
-                    {tr("Питання та оголошення зберігаються на сервері в межах цього контесту.", "Questions and announcements are persisted on the server for this contest.")}
+              <div className="contest-manager-section-heading flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <span>{tr("Спілкування", "Communication")}</span>
+                  <h2>{tr("Питання та оголошення", "Questions and announcements")}</h2>
+                  <p>{tr("Відповідай учасникам і публікуй важливі оновлення.", "Answer participants and share important updates.")}</p>
                   </div>
                   <Button variant="secondary" onClick={loadCommunity} disabled={communityLoading || !data.access.canAccessContent}>
                     <RefreshCw className="w-4 h-4 mr-2" />
                     {tr("Оновити", "Refresh")}
                   </Button>
-                </div>
-                {communityError ? <div role="alert" className="text-sm text-accent-error mt-2">{communityError}</div> : null}
-                {!data.access.canAccessContent ? (
-                  <div className="text-sm text-text-secondary mt-2">{tr("Немає доступу до ком'юніті цього контесту.", "You don't have access to this contest community.")}</div>
-                ) : null}
-              </Card>
+              </div>
+              {communityError ? <div role="alert" className="text-sm text-accent-error">{communityError}</div> : null}
+              {!data.access.canAccessContent ? <div className="text-sm text-text-secondary">{tr("Немає доступу до спільноти цього контесту.", "You don't have access to this contest community.")}</div> : null}
 
               <div className="contest-community-grid">
               <Card className="p-4">
