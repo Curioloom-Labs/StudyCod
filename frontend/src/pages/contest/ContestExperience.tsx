@@ -564,55 +564,61 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
             return (
               <article
                 key={item.id}
-                className="group relative flex min-h-[275px] flex-col overflow-hidden rounded-[24px] border border-[#1a2a1e]/10 bg-white p-6 shadow-[0_16px_45px_rgba(28,44,32,.05)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_50px_rgba(28,44,32,.11)] dark:border-white/[.09] dark:bg-[#111b14] dark:shadow-none"
+                className="group relative flex min-h-[350px] flex-col overflow-hidden rounded-[24px] border border-[#1a2a1e]/10 bg-white shadow-[0_16px_45px_rgba(28,44,32,.05)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_50px_rgba(28,44,32,.11)] dark:border-white/[.09] dark:bg-[#111b14] dark:shadow-none"
               >
-                <div className="relative -mx-6 -mt-6 mb-4 flex h-[92px] items-end overflow-hidden px-5 pb-3" style={{ background: item.bannerImageUrl ? `linear-gradient(90deg, rgba(8, 22, 13, .68), rgba(8, 22, 13, .08)), url("${item.bannerImageUrl}") center / cover` : CONTEST_BANNER_THEMES[contestTheme(item.bannerTheme)].background }}>
-                  {item.iconImageUrl ? <img src={item.iconImageUrl} alt="" aria-hidden="true" className="size-9 rounded-lg border border-white/25 object-cover shadow" /> : <span className="text-3xl drop-shadow" aria-hidden="true">{item.icon || "🏆"}</span>}
+                <div className="relative h-[112px] shrink-0 overflow-hidden bg-[#183a28]">
+                  {item.bannerImageUrl ? <img src={item.bannerImageUrl} alt="" aria-hidden="true" className="absolute inset-0 size-full object-cover object-center transition duration-500 group-hover:scale-[1.03]" /> : <div className="absolute inset-0" style={{ background: CONTEST_BANNER_THEMES[contestTheme(item.bannerTheme)].background }} />}
+                  <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-[#08160d]/55 via-[#08160d]/15 to-transparent" />
                 </div>
-                <div className="relative flex items-start justify-between gap-4">
-                  <span
-                    className={`rounded-full px-3 py-1.5 text-xs font-bold ${phaseStyle[state]}`}
-                  >
-                    {item.isPublished ? phaseCopy[state] : "Чернетка"}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-[#718075] dark:text-[#9bad9f]">
+                <div className="flex min-w-0 flex-1 flex-col p-5">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className={`max-w-[45%] truncate rounded-full px-3 py-1.5 text-xs font-bold ${phaseStyle[state]}`}>
+                      {item.isPublished ? phaseCopy[state] : "Чернетка"}
+                    </span>
+                    <span className="min-w-0 truncate rounded-full bg-[#f1f5f1] px-3 py-1.5 text-xs font-semibold text-[#627168] dark:bg-white/[.06] dark:text-[#b5c1b8]">
                       {item.visibility === "PRIVATE_CODE" ? "За кодом" : item.visibility === "CLASS" ? "Для класу" : "Відкритий"}
                     </span>
-                    <button type="button" onClick={() => toggleFavorite(item.id)} aria-label={favoriteIds.includes(item.id) ? `Прибрати ${item.title} зі збережених` : `Зберегти ${item.title}`} aria-pressed={favoriteIds.includes(item.id)} className="grid h-8 w-8 place-items-center rounded-full text-[#748277] transition hover:bg-[#edf3ed] hover:text-[#17834d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#a9b7ad] dark:hover:bg-white/[.08] dark:hover:text-[#72edb0]">
-                      <Bookmark className={`h-4 w-4 ${favoriteIds.includes(item.id) ? "fill-current text-[#16834d] dark:text-[#72edb0]" : ""}`} aria-hidden="true" />
+                    <button type="button" onClick={() => toggleFavorite(item.id)} aria-label={favoriteIds.includes(item.id) ? `Прибрати ${item.title} зі збережених` : `Зберегти ${item.title}`} aria-pressed={favoriteIds.includes(item.id)} className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-[#748277] transition hover:bg-[#edf3ed] hover:text-[#17834d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#a9b7ad] dark:hover:bg-white/[.08] dark:hover:text-[#72edb0]">
+                      <Bookmark className={`size-4 ${favoriteIds.includes(item.id) ? "fill-current text-[#16834d] dark:text-[#72edb0]" : ""}`} aria-hidden="true" />
                     </button>
                   </div>
-                </div>
-                <div className="relative mt-3 flex flex-wrap items-center gap-2">
-                  {item.difficulty && <span className="rounded-full bg-[#edf4ee] px-2.5 py-1 text-[11px] font-bold text-[#3b5944] dark:bg-white/[.07] dark:text-[#b8c8bc]">{{ EASY: "Початковий", MEDIUM: "Середній", HARD: "Складний" }[item.difficulty]}</span>}
-                  {item.participantAccessMode === "ISSUED_ACCOUNTS" && <span className="inline-flex items-center gap-1 rounded-full bg-[#fff2dc] px-2.5 py-1 text-[11px] font-bold text-[#8a5100] dark:bg-[#ffb547]/10 dark:text-[#ffcc83]"><KeyRound aria-hidden="true" className="size-3" />Тимчасові акаунти</span>}
-                  {item.scoreboardVisibility === "AFTER_END" && <span className="rounded-full bg-[#f1f0ff] px-2.5 py-1 text-[11px] font-bold text-[#594d9c] dark:bg-[#9c8cff]/10 dark:text-[#c5baff]">Таблиця після фінішу</span>}
-                  {(item.tags ?? []).slice(0, 3).map((tag) => <span key={tag} className="rounded-full bg-[#f1f5f1] px-2.5 py-1 text-[11px] font-semibold text-[#627168] dark:bg-white/[.05] dark:text-[#aebbb2]">{tag}</span>)}
-                </div>
-                <h2 className="relative mt-2 font-[family-name:var(--font-display)] text-2xl font-bold leading-tight tracking-[-.035em] text-[#162219] dark:text-[#f0f5f1]">
-                  {item.title}
-                </h2>
-                <p className="relative mt-3 line-clamp-2 text-[15px] leading-6 text-[#68786e] dark:text-[#aab8ae]">
-                  {item.description || "Умови й задачі вже чекають на старті."}
-                </p>
-                <div className="relative mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[#19291d]/8 pt-5 dark:border-white/[.08]">
-                  <span className="flex items-center gap-2 text-sm font-medium text-[#64746a] dark:text-[#a6b4aa]">
-                    <Clock3 className="h-4 w-4" />
-                    {state === "ended"
-                      ? "Фінішував"
-                      : date(state === "soon" ? item.startsAt : item.endsAt)}
-                  </span>
-                  <span className="flex items-center gap-1.5 text-xs font-semibold tabular-nums text-[#718075] dark:text-[#a6b4aa]">
-                    <UsersRound className="h-3.5 w-3.5" aria-hidden="true" /> {item.participantsCount}
-                  </span>
-                  <button type="button"
-                    onClick={() => navigate(`/contest/contests/${item.id}`)}
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-[#eff4ef] text-[#183422] transition group-hover:bg-[#153321] group-hover:text-white dark:bg-white/[.07] dark:text-[#e7f0e9] dark:group-hover:bg-[#00d978] dark:group-hover:text-[#062211]"
-                    aria-label={`Відкрити ${item.title}`}
-                  >
-                    <ArrowRight className="h-4 w-4" />
-                  </button>
+
+                  <div className="mt-4 flex min-w-0 items-center gap-3">
+                    <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-[14px] border border-[#1a2a1e]/10 bg-[#edf4ee] text-2xl dark:border-white/10 dark:bg-white/[.07]">
+                      {item.iconImageUrl ? <img src={item.iconImageUrl} alt="" className="size-full object-cover" /> : item.icon || "🏆"}
+                    </span>
+                    <h2 className="line-clamp-2 min-w-0 font-[family-name:var(--font-display)] text-xl font-bold leading-tight tracking-[-.035em] text-[#162219] dark:text-[#f0f5f1]">
+                      {item.title}
+                    </h2>
+                  </div>
+
+                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-[#68786e] dark:text-[#aab8ae]">
+                    {item.description || "Умови й задачі вже чекають на старті."}
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                    {item.difficulty && <span className="rounded-full bg-[#edf4ee] px-2.5 py-1 text-[11px] font-bold text-[#3b5944] dark:bg-white/[.07] dark:text-[#b8c8bc]">{{ EASY: "Початковий", MEDIUM: "Середній", HARD: "Складний" }[item.difficulty]}</span>}
+                    {item.participantAccessMode === "ISSUED_ACCOUNTS" && <span className="inline-flex items-center gap-1 rounded-full bg-[#fff2dc] px-2.5 py-1 text-[11px] font-bold text-[#8a5100] dark:bg-[#ffb547]/10 dark:text-[#ffcc83]"><KeyRound aria-hidden="true" className="size-3" />Тимчасовий доступ</span>}
+                    {item.scoreboardVisibility === "AFTER_END" && <span className="rounded-full bg-[#f1f0ff] px-2.5 py-1 text-[11px] font-bold text-[#594d9c] dark:bg-[#9c8cff]/10 dark:text-[#c5baff]">Таблиця після фінішу</span>}
+                    {(item.tags ?? []).slice(0, 2).map((tag) => <span key={tag} className="max-w-full truncate rounded-full bg-[#f1f5f1] px-2.5 py-1 text-[11px] font-semibold text-[#627168] dark:bg-white/[.05] dark:text-[#aebbb2]">{tag}</span>)}
+                  </div>
+
+                  <div className="mt-auto flex min-w-0 items-center gap-4 border-t border-[#19291d]/8 pt-4 dark:border-white/[.08]">
+                    <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-[#64746a] dark:text-[#a6b4aa]">
+                      <Clock3 aria-hidden="true" className="size-4 shrink-0" />
+                      <span className="truncate">{state === "ended" ? "Фінішував" : date(state === "soon" ? item.startsAt : item.endsAt)}</span>
+                    </span>
+                    <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs font-semibold tabular-nums text-[#718075] dark:text-[#a6b4aa]">
+                      <UsersRound className="size-3.5" aria-hidden="true" /> {item.participantsCount}
+                    </span>
+                    <button type="button"
+                      onClick={() => navigate(`/contest/contests/${item.id}`)}
+                      className="grid size-10 shrink-0 place-items-center rounded-full bg-[#eff4ef] text-[#183422] transition group-hover:bg-[#153321] group-hover:text-white dark:bg-white/[.07] dark:text-[#e7f0e9] dark:group-hover:bg-[#00d978] dark:group-hover:text-[#062211]"
+                      aria-label={`Відкрити ${item.title}`}
+                    >
+                      <ArrowRight className="size-4" />
+                    </button>
+                  </div>
                 </div>
               </article>
             );
