@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Logo } from "../../components/Logo";
-import { register, login, resendVerificationEmail, requestPasswordReset } from "../../lib/api/auth";
+import { register, login, contestLogin, resendVerificationEmail, requestPasswordReset } from "../../lib/api/auth";
 import { registerEducationalOrganization, studentLogin, type EducationalInstitutionType } from "../../lib/api/edu";
 import type { User, CourseLanguage } from "../../types";
 import { applyTheme, getCurrentTheme } from "../../theme";
@@ -18,6 +18,7 @@ interface Props {
   initialMode?: Mode;
   initialUserMode?: UserMode;
   showBackToLanding?: boolean;
+  contestEntryId?: number;
 }
 
 type ApiValidationError = {
@@ -105,7 +106,8 @@ export const AuthPage: React.FC<Props> = ({
   onAuth,
   initialMode,
   initialUserMode,
-  showBackToLanding
+  showBackToLanding,
+  contestEntryId
 }) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -330,8 +332,8 @@ export const AuthPage: React.FC<Props> = ({
                 return;
               }
             }
-          } else if (userMode === "CONTEST") {
-            const user = await login(username.trim(), password, currentTurnstileToken || undefined);
+          } else if (userMode === "CONTEST" && contestEntryId) {
+            const user = await contestLogin(username.trim(), password, contestEntryId, currentTurnstileToken || undefined);
             notifyAuth(user);
           } else {
             const user = await login(username.trim(), password, currentTurnstileToken || undefined);
@@ -452,14 +454,16 @@ export const AuthPage: React.FC<Props> = ({
       : userMode === "EDUCATIONAL"
         ? tr("Поверніться до навчального простору", "Return to your learning space")
         : userMode === "CONTEST"
-          ? tr("Увійдіть до змагання", "Enter the competition")
+          ? tr("Вхід до контесту", "Enter the contest")
           : tr("Раді бачити вас знову", "Welcome back") ;
 
   const experienceSubtitle = showForgotPassword
     ? tr("Вкажіть email — ми надішлемо безпечне посилання для відновлення пароля.", "Enter your email and we’ll send a secure password reset link.")
     : mode === "register"
       ? tr("Один акаунт для курсів, практики, перевірки коду та видимого прогресу.", "One account for courses, practice, code feedback, and visible progress.")
-      : tr("Продовжуйте з того місця, де зупинилися.", "Continue right where you left off.");
+      : userMode === "CONTEST"
+        ? tr("Введіть логін і пароль із листа організатора. Цей доступ діє лише для вашого контесту.", "Use the login and password from the organizer's email. This access is limited to your contest.")
+        : tr("Продовжуйте з того місця, де зупинилися.", "Continue right where you left off.");
 
   return (
     <div className="min-h-[100dvh] bg-[#f7f8f5] font-sans text-[#111814] dark:bg-[#0c110e] dark:text-[#f4f7f4]">
@@ -469,7 +473,14 @@ export const AuthPage: React.FC<Props> = ({
           <div className="absolute -bottom-52 -right-56 -z-10 size-[540px] rounded-full bg-[#ff8c00]/10 blur-[110px]" />
           <button type="button" onClick={() => navigate("/", { replace: true })} className="flex w-fit items-center gap-2.5 text-xl font-bold tracking-[-0.04em]"><span className="grid size-10 place-items-center rounded-[13px] border border-white/10 bg-white/[0.07]"><Logo size={27} /></span>StudyCod</button>
 
-          <motion.div initial={prefersReducedMotion ? undefined : { opacity: 0, y: 24 }} animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: .7, ease: [0.16, 1, .3, 1] }} className="my-auto max-w-[560px] py-16">
+          {contestEntryId ? <div className="my-auto max-w-[560px] py-16">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#00ff88]/20 bg-[#00ff88]/10 px-4 py-2 text-xs font-bold text-[#82efb4]"><span className="size-2 rounded-full bg-[#00ff88]" />{tr("Вхід за запрошенням", "Invitation access")}</span>
+            <h2 className="mt-7 text-balance text-[clamp(42px,4.6vw,68px)] font-bold leading-[1.02] tracking-[-0.055em]">{tr("Ваш контест починається тут.", "Your contest starts here.")}</h2>
+            <p className="mt-6 max-w-[480px] text-[16px] leading-7 text-[#aab5ad]">{tr("Скористайтеся даними з листа організатора. Після входу відкриється лише контест, до якого вас запросили.", "Use the details in the organizer's email. After signing in, you'll see only the contest you were invited to.")}</p>
+            <div className="mt-10 rounded-[24px] border border-white/10 bg-white/[.055] p-6 shadow-[0_32px_70px_rgba(0,0,0,.24)]">
+              <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-[#00ff88]/15 text-[#77f4b7]"><Lock className="size-5" /></span><div><strong className="block text-sm">{tr("Доступ лише до контесту", "Contest-only access")}</strong><span className="mt-1 block text-xs leading-5 text-[#9eaaa2]">{tr("Окрема реєстрація не потрібна — введіть видані логін і пароль.", "No registration needed — enter the issued login and password.")}</span></div></div>
+            </div>
+          </div> : <motion.div initial={prefersReducedMotion ? undefined : { opacity: 0, y: 24 }} animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: .7, ease: [0.16, 1, .3, 1] }} className="my-auto max-w-[560px] py-16">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.055] px-3 py-1.5 text-xs font-semibold text-[#b2bdb6]"><span className="size-1.5 rounded-full bg-[#00ff88]" />{tr("Навчання у власному темпі", "Learning at your own pace")}</span>
             <h2 className="mt-7 text-balance text-[clamp(42px,4.6vw,68px)] font-bold leading-[1.02] tracking-[-0.055em]">{tr("Місце, де знання стають кодом.", "Where knowledge becomes code.")}</h2>
             <p className="mt-6 max-w-[500px] text-[16px] leading-7 text-[#aab5ad]">{tr("Короткий шлях від нової теми до рішення, яке справді написали ви.", "A focused path from a new concept to a solution you genuinely wrote yourself.")}</p>
@@ -479,7 +490,7 @@ export const AuthPage: React.FC<Props> = ({
               <div className="grid grid-cols-[1fr_auto] items-center gap-7 py-6"><div><div className="mb-2 flex justify-between text-xs text-[#aab5ad]"><span>{tr("Завершено уроків", "Lessons completed")}</span><strong className="text-white">8 / 12</strong></div><div className="h-2 rounded-full bg-white/10"><span className="block h-full w-2/3 rounded-full bg-[#00ff88]" /></div></div><strong className="text-3xl tracking-[-.04em]">68%</strong></div>
               <div className="grid grid-cols-3 gap-2.5">{[[CheckCircle2, tr("24 задачі", "24 tasks")],[BarChart3,tr("8.6 середній", "8.6 average")],[GraduationCap,tr("12 днів", "12 days")]].map(([Icon,label]) => { const MetricIcon = Icon as typeof CheckCircle2; return <div key={String(label)} className="rounded-[14px] border border-white/[0.07] bg-black/10 p-3"><MetricIcon className="mb-2 size-4 text-[#62efaa]" /><span className="text-[11px] font-semibold text-[#d4dcd7]">{String(label)}</span></div>; })}</div>
             </div>
-          </motion.div>
+          </motion.div>}
 
           <p className="text-[13px] leading-5 text-[#7f8d84]">{tr("Створено для учнів, викладачів і тих, хто вчиться самостійно.", "Built for students, teachers, and independent learners.")}</p>
         </aside>
@@ -496,11 +507,10 @@ export const AuthPage: React.FC<Props> = ({
             <h1 className="text-balance text-[clamp(34px,4vw,47px)] font-bold leading-[1.06] tracking-[-0.05em]">{experienceHeading}</h1>
             <p className="mt-4 text-[15px] leading-7 text-[#667169] dark:text-[#9faba3]">{experienceSubtitle}</p>
 
-            {!showForgotPassword && <div className="mt-8 grid grid-cols-3 gap-2 rounded-[17px] border border-[#122017]/10 bg-[#edf0eb] p-1.5 dark:border-white/10 dark:bg-[#131a15]">
+            {!showForgotPassword && userMode !== "CONTEST" && <div className="mt-8 grid grid-cols-2 gap-2 rounded-[17px] border border-[#122017]/10 bg-[#edf0eb] p-1.5 dark:border-white/10 dark:bg-[#131a15]">
               {([
                 ["PERSONAL", UserRound, tr("Особисто", "Personal")],
                 ["EDUCATIONAL", School, "EDU"],
-                ["CONTEST", GraduationCap, tr("Контест", "Contest")],
               ] as const).map(([value, Icon, label]) => <button key={value} type="button" onClick={() => { setUserMode(value); setMode("login"); setEduStep(1); setError(null); setSuccess(null); }} className={`flex h-11 items-center justify-center gap-2 rounded-xl text-[12px] font-bold transition ${userMode === value ? "bg-white text-[#111814] shadow-sm dark:bg-[#222b24] dark:text-white" : "text-[#667169] hover:text-[#111814] dark:text-[#859289] dark:hover:text-white"}`}><Icon className="size-4" />{label}</button>)}
             </div>}
 

@@ -938,6 +938,24 @@ const ContestOnlySurfaceGuard: React.FC<{ children: React.ReactNode }> = ({ chil
   return <>{children}</>;
 };
 
+const ContestEntryRoute: React.FC = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const contestId = Number(id);
+  if (!Number.isSafeInteger(contestId) || contestId <= 0) return <Navigate to="/contest/contests" replace />;
+  return <Suspense fallback={<PageLoader />}>
+    <AuthPage
+      initialMode="login"
+      initialUserMode="CONTEST"
+      contestEntryId={contestId}
+      onAuth={() => {
+        navigate(`/contest/contests/${contestId}`, { replace: true });
+        window.location.reload();
+      }}
+    />
+  </Suspense>;
+};
+
 export const App: React.FC = () => {
   const location = useLocation();
   const isContestSurface = /^\/(?:contest|contests)(?:\/|$)/.test(location.pathname);
@@ -1203,6 +1221,7 @@ export const App: React.FC = () => {
                   <EduRoutes />
                 </AnimatedPage>
               </Suspense>} />
+          <Route path="/contest/entry/:id" element={<ContestEntryRoute />} />
           <Route path="/contest/*" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <ContestRoutes />
