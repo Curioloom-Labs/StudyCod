@@ -596,7 +596,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
                     {item.description || "Умови й задачі вже чекають на старті."}
                   </p>
 
-                  <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                  <div className="mt-4 mb-4 flex flex-wrap items-center gap-1.5">
                     {item.difficulty && <span className="rounded-full bg-[#edf4ee] px-2.5 py-1 text-[11px] font-bold text-[#3b5944] dark:bg-white/[.07] dark:text-[#b8c8bc]">{{ EASY: "Початковий", MEDIUM: "Середній", HARD: "Складний" }[item.difficulty]}</span>}
                     {item.participantAccessMode === "ISSUED_ACCOUNTS" && <span className="inline-flex items-center gap-1 rounded-full bg-[#fff2dc] px-2.5 py-1 text-[11px] font-bold text-[#8a5100] dark:bg-[#ffb547]/10 dark:text-[#ffcc83]"><KeyRound aria-hidden="true" className="size-3" />Тимчасовий доступ</span>}
                     {item.scoreboardVisibility === "AFTER_END" && <span className="rounded-full bg-[#f1f0ff] px-2.5 py-1 text-[11px] font-bold text-[#594d9c] dark:bg-[#9c8cff]/10 dark:text-[#c5baff]">Таблиця після фінішу</span>}
