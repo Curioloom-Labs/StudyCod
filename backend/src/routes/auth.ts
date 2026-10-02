@@ -6,6 +6,7 @@ import passport from "passport";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
 import { User } from "../entities/User";
+import { ContestParticipant } from "../entities/ContestParticipant";
 import type { CourseRuntime } from "../entities/CourseVariant";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { emailService } from "../services/emailService";
@@ -678,9 +679,12 @@ authRouter.get("/google", async (req: Request, res: Response, next) => {
 
 authRouter.post("/contest-login", loginLimiter, async (req: AuthRequest, res: Response) => {
   try {
-    const { username, password, turnstileToken } = req.body as { username?: string; password?: string; turnstileToken?: string };
+    const { username, password, contestId, turnstileToken } = req.body as { username?: string; password?: string; contestId?: number; turnstileToken?: string };
     if (!username || !password) {
       return res.status(400).json({ message: "USERNAME_AND_PASSWORD_REQUIRED" });
+    }
+    if (!Number.isSafeInteger(contestId) || Number(contestId) <= 0) {
+      return res.status(400).json({ message: "INVALID_CONTEST_ID" });
     }
 
     if (!(await enforceAuthTurnstile(req, res, turnstileToken))) {
@@ -689,9 +693,15 @@ authRouter.post("/contest-login", loginLimiter, async (req: AuthRequest, res: Re
 
     const user = await userRepo().findOne({ where: { username } });
     const passwordMatch = await bcrypt.compare(password, user?.password ?? DUMMY_BCRYPT_HASH);
-    if (!user || !passwordMatch) {
+    if (!user || !passwordMatch || user.userMode !== "CONTEST") {
       return res.status(401).json({ message: "INVALID_CREDENTIALS" });
     }
+
+    const membership = await AppDataSource.getRepository(ContestParticipant).findOne({
+      where: { contest: { id: Number(contestId) }, user: { id: user.id } },
+      select: { id: true },
+    });
+    if (!membership) return res.status(401).json({ message: "INVALID_CREDENTIALS" });
 
     const token = signUserToken(user);
     setSharedAuthCookie(res, token);

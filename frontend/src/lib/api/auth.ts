@@ -27,10 +27,11 @@ export async function login(username: string, password: string, turnstileToken?:
   return res.data.user as User;
 }
 
-export async function contestLogin(username: string, password: string, turnstileToken?: string): Promise<User> {
+export async function contestLogin(username: string, password: string, contestId: number, turnstileToken?: string): Promise<User> {
   const res = await api.post("/auth/contest-login", {
     username,
     password,
+    contestId,
     ...(turnstileToken ? { turnstileToken } : {})
   });
   return res.data.user as User;

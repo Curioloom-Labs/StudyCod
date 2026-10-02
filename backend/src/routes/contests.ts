@@ -2194,7 +2194,7 @@ contestsRouter.post("/:id/admin/accounts/send-emails", authRequired, async (req:
 
     const includeContestInfo = parsed.data.includeContestInfo !== false;
     const customMessage = String(parsed.data.customMessage ?? "").trim();
-    const contestUrl = `${String(FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "")}/contest/contests/${contestId}`;
+    const contestEntryUrl = `${String(FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "")}/contest/entry/${contestId}`;
 
     const sent: Array<{ email: string }> = [];
     const failed: Array<{ email: string; reason: string }> = [];
@@ -2205,38 +2205,40 @@ contestsRouter.post("/:id/admin/accounts/send-emails", authRequired, async (req:
       const username = String(r.username).trim();
       const password = String(r.password);
 
-      const introHtml = `<p style="margin:0 0 12px 0;">Вітаємо, <b>${escapeHtml(fullName)}</b>!</p>
-<p style="margin:0 0 12px 0;">Для участі у контесті вам створено окремий акаунт StudyCod:</p>
-<ul style="margin:0 0 12px 18px;padding:0;line-height:1.7;">
-  <li><b>Логін:</b> ${escapeHtml(username)}</li>
-  <li><b>Пароль:</b> ${escapeHtml(password)}</li>
-</ul>`;
+      const introHtml = `<p style="margin:0 0 10px 0;">Вітаємо, <b>${escapeHtml(fullName)}</b>!</p>
+<p style="margin:0 0 20px 0;">Організатор надав вам тимчасові дані для участі у контесті «${escapeHtml(contest.title)}». Вони діють лише в просторі цього контесту.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 20px 0;border:1px solid #315140;border-radius:16px;background:#0e2518;">
+  <tr><td style="padding:16px 18px 6px 18px;color:#80e8aa;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;">Ваші дані для входу</td></tr>
+  <tr><td style="padding:6px 18px;color:#dbe7df;"><span style="color:#9eaaa2;">Логін</span><br /><b style="font-size:17px;letter-spacing:0.3px;word-break:break-all;">${escapeHtml(username)}</b></td></tr>
+  <tr><td style="padding:6px 18px 18px 18px;color:#dbe7df;"><span style="color:#9eaaa2;">Пароль</span><br /><b style="font-size:17px;letter-spacing:0.3px;word-break:break-all;">${escapeHtml(password)}</b></td></tr>
+</table>
+<p style="margin:0 0 8px 0;"><a href="${contestEntryUrl}" style="display:inline-block;border-radius:12px;background:#00d978;padding:12px 20px;color:#062211;font-weight:800;text-decoration:none;">Увійти до контесту</a></p>
+<p style="margin:0 0 20px 0;color:#9eaaa2;font-size:12px;line-height:1.6;">Якщо кнопка не відкривається, перейдіть за посиланням:<br /><a href="${contestEntryUrl}" style="color:#80e8aa;word-break:break-all;">${contestEntryUrl}</a></p>`;
 
       const contestHtml = includeContestInfo
         ? `<p style="margin:0 0 8px 0;"><b>Контест:</b> ${escapeHtml(contest.title)}</p>
 <p style="margin:0 0 8px 0;"><b>Початок:</b> ${contest.startsAt ? escapeHtml(new Date(contest.startsAt).toLocaleString("uk-UA")) : "—"}</p>
 <p style="margin:0 0 12px 0;"><b>Завершення:</b> ${contest.endsAt ? escapeHtml(new Date(contest.endsAt).toLocaleString("uk-UA")) : "—"}</p>
-<p style="margin:0 0 12px 0;">Посилання: <a href="${contestUrl}">${contestUrl}</a></p>`
+<p style="margin:0 0 12px 0;color:#9eaaa2;font-size:13px;">Після входу ви одразу потрапите до цього контесту.</p>`
         : "";
 
       const customHtml = customMessage
-        ? `<div style="margin:12px 0 0 0;padding:12px;border:1px solid #1f3552;border-radius:10px;background:#0a1422;">${escapeHtml(customMessage).replace(/\n/g, "<br />")}</div>`
+        ? `<div style="margin:22px 0 0 0;padding:16px 18px;border-left:3px solid #00d978;border-radius:0 14px 14px 0;background:#1c2b21;"><div style="margin:0 0 8px 0;color:#80e8aa;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;">Повідомлення від організатора</div><div style="white-space:pre-wrap;color:#e1ece4;line-height:1.65;">${escapeHtml(customMessage).replace(/\n/g, "<br />")}</div></div>`
         : "";
 
       const html = `${introHtml}${contestHtml}${customHtml}`;
       const text = [
         `Вітаємо, ${fullName}!`,
         "",
-        "Для участі у контесті вам створено окремий акаунт StudyCod:",
+        `Організатор надав вам тимчасові дані для участі у контесті «${contest.title}». Вони діють лише в просторі цього контесту.`,
         `Логін: ${username}`,
         `Пароль: ${password}`,
-        includeContestInfo ? "" : "",
         includeContestInfo ? `Контест: ${contest.title}` : "",
         includeContestInfo ? `Початок: ${contest.startsAt ? new Date(contest.startsAt).toLocaleString("uk-UA") : "—"}` : "",
         includeContestInfo ? `Завершення: ${contest.endsAt ? new Date(contest.endsAt).toLocaleString("uk-UA") : "—"}` : "",
-        includeContestInfo ? `Посилання: ${contestUrl}` : "",
+        `Увійти до контесту: ${contestEntryUrl}`,
         customMessage ? "" : "",
-        customMessage || "",
+        customMessage ? `Повідомлення від організатора:\n${customMessage}` : "",
       ].filter(Boolean).join("\n");
 
       try {
