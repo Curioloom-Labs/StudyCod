@@ -1132,7 +1132,6 @@ router.post("/placement/assessment-submit", authMiddleware, async (req: AuthRequ
 
 router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    if (denyContestProfileAccess(req, res)) return;
     if (req.userType === "STUDENT" && req.studentId) {
       const student = await studentRepo().findOne({
         where: {
@@ -1179,6 +1178,13 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
       return res.status(404).json({
         message: "USER_NOT_FOUND"
       });
+    }
+    // Contest-only accounts need /me to restore their authenticated contest
+    // session after navigation or a page reload. Keep the response to their
+    // own user DTO and omit EDU memberships; all other profile endpoints stay
+    // protected by denyContestProfileAccess.
+    if (user.userMode === "CONTEST") {
+      return res.json(buildUserDto(user, req.learningRuntime));
     }
     const dto = { ...buildUserDto(user, req.learningRuntime), eduContexts: await buildEduContexts(user.id) };
     if (req.studentId) {
