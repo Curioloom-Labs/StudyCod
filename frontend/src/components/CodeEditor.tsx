@@ -8,6 +8,7 @@ import type { JudgeLanguage } from "../lib/judgeLanguages";
 
 let javaStdlibCompletionRegistered = false;
 let studycodMonacoThemesRegistered = false;
+let javascriptIoGlobalsRegistered = false;
 let kotlinLanguageRegistered = false;
 const snippetLanguagesRegistered = new Set<string>();
 const languageServicesRegistered = new Set<string>();
@@ -452,6 +453,9 @@ const registerStudyCodSnippets = (monaco: MonacoApi, language: string) => {
         { label: "main", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "int main() {\n\t$0\n}", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "C++ main function" },
         { label: "fori", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n\t$0\n}", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Indexed for loop" },
       ],
+      javascript: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "const ${1:value} = readline();\nprint(${1:value});$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read one input line and print a value" },
+      ],
     };
     const snippets = snippetsByLanguage[language];
     if (!snippets?.length) return;
@@ -586,6 +590,13 @@ const registerStudyCodLanguageService = (monaco: MonacoApi, language: string) =>
   if (!monaco || languageServicesRegistered.has(language) || ["plaintext", "html", "css", "scheme"].includes(language)) return;
   languageServicesRegistered.add(language);
   try {
+    if (language === "javascript" && !javascriptIoGlobalsRegistered) {
+      javascriptIoGlobalsRegistered = true;
+      monaco.typescript.javascriptDefaults.addExtraLib(
+        "declare function readline(): string;\ndeclare function print(...values: unknown[]): void;\n",
+        "file:///studycod-competitive-io.d.ts"
+      );
+    }
     monaco.languages.registerHoverProvider(language, {
       provideHover: (model, position) => {
         const word = studyCodWordAt(model, position);
