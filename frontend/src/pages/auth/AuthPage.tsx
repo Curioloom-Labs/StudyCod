@@ -19,6 +19,7 @@ interface Props {
   initialUserMode?: UserMode;
   showBackToLanding?: boolean;
   contestEntryId?: number;
+  allowAlternateUserMode?: boolean;
 }
 
 type ApiValidationError = {
@@ -107,7 +108,8 @@ export const AuthPage: React.FC<Props> = ({
   initialMode,
   initialUserMode,
   showBackToLanding,
-  contestEntryId
+  contestEntryId,
+  allowAlternateUserMode = false,
 }) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -332,7 +334,7 @@ export const AuthPage: React.FC<Props> = ({
                 return;
               }
             }
-          } else if (userMode === "CONTEST" && contestEntryId) {
+          } else if (userMode === "CONTEST") {
             const user = await contestLogin(username.trim(), password, contestEntryId, currentTurnstileToken || undefined);
             notifyAuth(user);
           } else {
@@ -506,6 +508,10 @@ export const AuthPage: React.FC<Props> = ({
             {showBackToLanding && <button type="button" onClick={() => navigate("/", { replace: true })} className="mb-9 inline-flex items-center gap-2 text-[13px] font-semibold text-[#667169] transition hover:text-[#111814] dark:text-[#94a198] dark:hover:text-white"><ArrowLeft className="size-4" />{tr("На головну", "Back to home")}</button>}
             <h1 className="text-balance text-[clamp(34px,4vw,47px)] font-bold leading-[1.06] tracking-[-0.05em]">{experienceHeading}</h1>
             <p className="mt-4 text-[15px] leading-7 text-[#667169] dark:text-[#9faba3]">{experienceSubtitle}</p>
+
+            {allowAlternateUserMode && !showForgotPassword && !emailSent && <button type="button" onClick={() => { setUserMode((current) => current === "CONTEST" ? "PERSONAL" : "CONTEST"); setMode("login"); setError(null); setSuccess(null); }} className="mt-4 inline-flex min-h-10 items-center rounded-xl border border-[#122017]/10 px-3 text-xs font-bold text-[#526158] transition hover:border-[#00b963]/35 hover:text-[#007f48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00b963]/50 dark:border-white/10 dark:text-[#b2bdb6] dark:hover:text-[#77f4b7]">
+              {userMode === "CONTEST" ? tr("Увійти звичайним акаунтом", "Use a regular account") : tr("Маю тимчасові дані для контесту", "Use temporary contest credentials")}
+            </button>}
 
             {!showForgotPassword && userMode !== "CONTEST" && <div className="mt-8 grid grid-cols-2 gap-2 rounded-[17px] border border-[#122017]/10 bg-[#edf0eb] p-1.5 dark:border-white/10 dark:bg-[#131a15]">
               {([

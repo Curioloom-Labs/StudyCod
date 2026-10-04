@@ -952,8 +952,9 @@ const ContestEntryRoute: React.FC = () => {
       initialMode="login"
       initialUserMode="CONTEST"
       contestEntryId={contestId}
+      allowAlternateUserMode
       onAuth={() => {
-        navigate(`/contest/contests/${contestId}`, { replace: true });
+        navigate("/contest/contests", { replace: true });
         window.location.reload();
       }}
     />
@@ -1366,7 +1367,8 @@ const ContestRoutes: React.FC = React.memo(() => {
     return <Suspense fallback={<PageLoader />}>
       <AuthPage
         initialMode="login"
-        initialUserMode="PERSONAL"
+        initialUserMode="CONTEST"
+        allowAlternateUserMode
         onAuth={(u) => {
           navigate("/contest/contests", { replace: true });
           window.location.reload();
