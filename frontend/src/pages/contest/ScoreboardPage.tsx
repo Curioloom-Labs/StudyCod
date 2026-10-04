@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Trophy, Search, Snowflake, Crown, Locate, Medal } from "lucide-react";
+import { ArrowLeft, Trophy, Search, Snowflake, Crown, Locate, Medal, Download, FileSpreadsheet } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
@@ -32,6 +32,25 @@ function ioiTone(score: number, max: number): string {
   return "text-text-muted";
 }
 
+function spreadsheetText(value: string): string {
+  // Keep participant-controlled text from being interpreted as a formula by spreadsheet apps.
+  return /^[\t\r ]*[=+\-@]/.test(value) ? `'${value}` : value;
+}
+
+function csvCell(value: string | number): string {
+  const text = spreadsheetText(String(value));
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export const ScoreboardPage: React.FC = () => {
   const navigate = useNavigate();
   const params = useParams<{ id?: string }>();
@@ -44,6 +63,8 @@ export const ScoreboardPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(true);
   const [query, setQuery] = useState("");
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportMenuRef = useRef<HTMLDetailsElement | null>(null);
 
   const timerRef = useRef<number | null>(null);
   const prevRankRef = useRef<Record<number, number>>({});
@@ -144,6 +165,63 @@ export const ScoreboardPage: React.FC = () => {
   };
 
   const problemMax = (problemId: number) => problems.find((p) => p.id === problemId)?.maxScore ?? 0;
+
+  const exportHeaders = [
+    tr("Місце", "Rank"),
+    tr("Учасник", "Participant"),
+    ...problems.map((p) => `${tr("Задача", "Problem")} ${p.label}`),
+    mode === "ICPC" ? tr("Розв'язано", "Solved") : tr("Сума балів", "Total score"),
+    tr("Штраф", "Penalty"),
+  ];
+
+  const exportRows = filteredRows.map((row) => [
+    row.rank,
+    spreadsheetText(row.displayName),
+    ...problems.map((problem) => {
+      const cell = row.problems.find((item) => item.problemId === problem.id);
+      if (!cell) return mode === "ICPC" ? "—" : 0;
+      if (mode !== "ICPC") return cell.pending ? `${cell.score ?? 0} (${tr("очікує", "pending")})` : (cell.score ?? 0);
+      const attempts = cell.attempts ?? 0;
+      if (cell.solved) return `${tr("Розв'язано", "Solved")}${attempts > 1 ? ` (${attempts})` : ""}${cell.pending ? "?" : ""}`;
+      if (cell.pending) return `${tr("Очікує", "Pending")}${attempts ? ` (${attempts})` : ""}`;
+      return attempts ? `−${attempts}` : "—";
+    }),
+    mode === "ICPC" ? (row.solved ?? 0) : row.totalScore,
+    row.penalty ?? 0,
+  ]);
+
+  const closeExportMenu = () => {
+    if (exportMenuRef.current) exportMenuRef.current.open = false;
+  };
+
+  const downloadCsv = () => {
+    const csv = [exportHeaders, ...exportRows].map((row) => row.map(csvCell).join(",")).join("\r\n");
+    downloadBlob(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }), `contest-${contestId}-results.csv`);
+    setExportError(null);
+    closeExportMenu();
+  };
+
+  const downloadXlsx = async () => {
+    try {
+      const XLSX = await import("@e965/xlsx");
+      const worksheet = XLSX.utils.aoa_to_sheet([exportHeaders.map(spreadsheetText), ...exportRows]);
+      worksheet["!cols"] = [
+        { wch: 9 },
+        { wch: 30 },
+        ...problems.map(() => ({ wch: 18 })),
+        { wch: 14 },
+        { wch: 12 },
+      ];
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, tr("Результати", "Results"));
+      const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+      downloadBlob(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `contest-${contestId}-results.xlsx`);
+      setExportError(null);
+      closeExportMenu();
+    } catch {
+      setExportError(tr("Не вдалося створити XLSX-файл. Спробуй експортувати CSV.", "Could not create the XLSX file. Try exporting CSV."));
+    }
+  };
 
   return (
     <div className="w-full bg-bg-base px-3 py-4 sm:px-6 md:py-6">
@@ -282,6 +360,21 @@ export const ScoreboardPage: React.FC = () => {
                     {tr("До мене", "Jump to me")}
                   </Button>
                 ) : null}
+                <details ref={exportMenuRef} className="relative">
+                  <summary className="inline-flex h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-bg-surface px-3 text-sm font-medium text-text-primary transition-fast hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary [&::-webkit-details-marker]:hidden">
+                    <Download className="h-4 w-4" />
+                    {tr("Експорт", "Export")}
+                  </summary>
+                  <div className="absolute right-0 z-30 mt-2 min-w-56 rounded-xl border border-border bg-bg-surface p-2 shadow-xl">
+                    <p className="px-2 py-1 text-xs text-text-muted">{tr(`Учасників: ${filteredRows.length}`, `Participants: ${filteredRows.length}`)}</p>
+                    <button type="button" onClick={downloadCsv} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-text-primary hover:bg-bg-hover">
+                      <Download className="h-4 w-4 text-text-muted" /> CSV
+                    </button>
+                    <button type="button" onClick={() => void downloadXlsx()} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-text-primary hover:bg-bg-hover">
+                      <FileSpreadsheet className="h-4 w-4 text-text-muted" /> Excel (.xlsx)
+                    </button>
+                  </div>
+                </details>
                 {typeof board.disqualifiedCount === "number" && board.disqualifiedCount > 0 ? (
                   <span className="text-[11px] font-mono text-text-secondary">
                     {tr(`Дискваліфіковано: ${board.disqualifiedCount}`, `Disqualified: ${board.disqualifiedCount}`)}
@@ -289,6 +382,7 @@ export const ScoreboardPage: React.FC = () => {
                 ) : null}
               </div>
             ) : null}
+            {exportError ? <p role="alert" className="text-sm text-accent-error">{exportError}</p> : null}
 
             {board && !board.hidden && board.rows.length === 0 && (
               <div className="rounded-2xl border border-border/70 bg-bg-surface/80 px-6 py-12 text-center">
