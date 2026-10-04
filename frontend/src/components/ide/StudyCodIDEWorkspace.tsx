@@ -48,6 +48,7 @@ import type {
 import { IDE_THEORY_COMPLETION_KEY, scopedStorageKey } from "../../lib/storageScope";
 import {
   JUDGE_LANGUAGE_LABELS,
+  JUDGE_FILE_EXTENSIONS,
   compilersForFamily,
 } from "../../lib/judgeLanguages";
 
@@ -665,7 +666,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${String(props.task.title || "solution").replace(/[^a-z0-9а-яёіїєґ_-]+/gi, "-").replace(/^-+|-+$/g, "") || "solution"}.${props.isWebTask ? "html" : props.language === "cpp" ? "cpp" : props.language === "python" ? "py" : props.language === "java" ? "java" : "txt"}`;
+    anchor.download = `${String(props.task.title || "solution").replace(/[^a-z0-9а-яёіїєґ_-]+/gi, "-").replace(/^-+|-+$/g, "") || "solution"}.${props.isWebTask ? "html" : JUDGE_FILE_EXTENSIONS[props.language]}`;
     anchor.rel = "noopener";
     document.body.appendChild(anchor);
     anchor.click();

@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type * as Monaco from "monaco-editor";
 import { getCurrentTheme, type AppTheme } from "../theme";
 import { connectStudyCodLsp } from "../lib/lspClient";
-import type { JudgeLanguage } from "../lib/judgeLanguages";
+import { JUDGE_ENTRY_FILES, JUDGE_MONACO_LANG, type JudgeLanguage } from "../lib/judgeLanguages";
 
 let javaStdlibCompletionRegistered = false;
 let studycodMonacoThemesRegistered = false;
@@ -221,6 +221,13 @@ const IMPORT_COMPLETIONS: Record<string, ImportCompletionSpec[]> = {
     { label: "Map", importText: "import qualified Data.Map as Map" },
     { label: "Set", importText: "import qualified Data.Set as Set" },
   ],
+  d: [
+    { label: "std.stdio", importText: "import std.stdio;" },
+    { label: "std.algorithm", importText: "import std.algorithm;" },
+    { label: "std.array", importText: "import std.array;" },
+    { label: "std.conv", importText: "import std.conv;" },
+    { label: "std.string", importText: "import std.string;" },
+  ],
   lua: [
     { label: "cjson", importText: 'local cjson = require("cjson")' },
     { label: "socket", importText: 'local socket = require("socket")' },
@@ -270,6 +277,8 @@ function importInsertionLine(model: Monaco.editor.ITextModel, language: string):
       // Separate import declarations are valid in Go and avoid corrupting an
       // existing import (...) block.
       ? /^\s*package\b/
+      : normalized === "d"
+        ? /^\s*(?:module|import)\b/
       : normalized === "php"
         ? /^\s*<\?php\b/
         : normalized === "haskell"
@@ -311,7 +320,7 @@ function importEditFor(model: Monaco.editor.ITextModel, language: string, import
 
 function registerImportCompletions(monaco: MonacoApi, language: string): void {
   const sourceLanguage = language.toLowerCase();
-  const normalized = sourceLanguage === "c" || sourceLanguage === "d" ? "cpp" : sourceLanguage === "js" || sourceLanguage === "typescript" ? "javascript" : sourceLanguage;
+  const normalized = sourceLanguage === "js" || sourceLanguage === "typescript" ? "javascript" : sourceLanguage;
   const specs = normalized === "cpp"
     ? [...(IMPORT_COMPLETIONS.cpp || []), ...(IMPORT_COMPLETIONS.c || [])]
     : IMPORT_COMPLETIONS[normalized];
@@ -444,17 +453,66 @@ const registerStudyCodSnippets = (monaco: MonacoApi, language: string) => {
         { label: "main", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "public static void main(String[] args) {\n\t$0\n}", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "StudyCod main method" },
         { label: "fori", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "for (int ${1:i} = 0; ${1:i} < ${2:count}; ${1:i}++) {\n\t$0\n}", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Indexed for loop" },
         { label: "sout", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "System.out.println(${1:value});$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Print a value" },
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "java.util.Scanner ${1:sc} = new java.util.Scanner(System.in);\n${2:String} ${3:value} = ${1:sc}.nextLine();\nSystem.out.println(${3:value});$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
       ],
       python: [
         { label: "main", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "if __name__ == \"__main__\":\n\t$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Python entry point" },
         { label: "fori", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "for ${1:item} in ${2:items}:\n\t$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Python for loop" },
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "${1:value} = input().strip()\nprint(${1:value})$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read a line and print a value" },
       ],
       cpp: [
         { label: "main", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "int main() {\n\t$0\n}", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "C++ main function" },
         { label: "fori", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "for (int ${1:i} = 0; ${1:i} < ${2:n}; ${1:i}++) {\n\t$0\n}", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Indexed for loop" },
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "${1:type} ${2:value};\ncin >> ${2:value};\ncout << ${2:value} << '\\n';$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a value" },
       ],
       javascript: [
         { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "const ${1:value} = readline();\nprint(${1:value});$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read one input line and print a value" },
+      ],
+      c: [
+        { label: "main", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "int main(void) {\n\t$0\n\treturn 0;\n}", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "C entry point" },
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "int ${1:value};\nscanf(\"%d\", &${1:value});\nprintf(\"%d\\n\", ${1:value});$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print an integer" },
+      ],
+      csharp: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "string ${1:value} = Console.ReadLine() ?? string.Empty;\nConsole.WriteLine(${1:value});$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
+      ],
+      kotlin: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "val ${1:value} = readln()\nprintln(${1:value})$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
+      ],
+      go: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "in := bufio.NewReader(os.Stdin)\n${1:value}, _ := in.ReadString('\\n')\nos.Stdout.WriteString(${1:value})$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line (bufio, os)" },
+      ],
+      rust: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "let mut ${1:value} = String::new();\nstd::io::stdin().read_line(&mut ${1:value}).unwrap();\nprintln!(\"{}\", ${1:value}.trim());$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
+      ],
+      pascal: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "readln(${1:value});\nwriteln(${1:value});$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
+      ],
+      d: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "auto ${1:value} = readln().strip();\nwriteln(${1:value});$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line (std.stdio)" },
+      ],
+      dart: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "final ${1:value} = stdin.readLineSync() ?? '';\nstdout.writeln(${1:value});$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line (dart:io)" },
+      ],
+      haskell: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "${1:value} <- getLine\nputStrLn ${1:value}$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
+      ],
+      lisp: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "(define ${1:value} (read-line))\n(display ${1:value})\n(newline)$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
+      ],
+      lua: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "local ${1:value} = io.read()\nprint(${1:value})$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
+      ],
+      perl: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "my ${1:$value} = <STDIN>;\nprint ${1:$value};$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
+      ],
+      php: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "${1:$value} = trim(fgets(STDIN));\necho ${1:$value}, PHP_EOL;$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
+      ],
+      ruby: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "${1:value} = STDIN.gets&.chomp\nputs ${1:value}$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
+      ],
+      swift: [
+        { label: "io", kind: monaco.languages.CompletionItemKind.Snippet, insertText: "if let ${1:value} = readLine() {\n    print(${1:value})\n}$0", insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet, detail: "Read and print a line" },
       ],
     };
     const snippets = snippetsByLanguage[language];
@@ -547,42 +605,18 @@ function maskStudyCodStringsAndComments(text: string): string {
 }
 
 function refreshStudyCodMarkers(monaco: MonacoApi, model: Monaco.editor.ITextModel, language: string) {
-  const source = model.getValue();
-  const masked = maskStudyCodStringsAndComments(source);
   const markers: Monaco.editor.IMarkerData[] = [];
-  const stack: Array<{ char: string; line: number; column: number }> = [];
-  const opening: Record<string, string> = { "(": ")", "[": "]", "{": "}" };
-  const closing = new Set(Object.values(opening));
-  let line = 1;
-  let column = 1;
-  for (let index = 0; index < masked.length; index += 1) {
-    const char = masked[index];
-    if (opening[char]) stack.push({ char, line, column });
-    else if (closing.has(char)) {
-      const expected = opening[stack[stack.length - 1]?.char || ""];
-      if (!stack.length || expected !== char) {
-        markers.push({ severity: monaco.MarkerSeverity.Error, message: `Unexpected '${char}'.`, startLineNumber: line, startColumn: column, endLineNumber: line, endColumn: column + 1 });
-      } else stack.pop();
-    }
-    if (char === "\n") {
-      line += 1;
-      column = 1;
-    } else {
-      column += 1;
-    }
-  }
-  for (const item of stack.slice(-8)) {
-    markers.push({ severity: monaco.MarkerSeverity.Error, message: `Unclosed '${item.char}'.`, startLineNumber: item.line, startColumn: item.column, endLineNumber: item.line, endColumn: item.column + 1 });
-  }
-
   if (language === "python") {
-    const lines = masked.split("\n");
+    const lines = maskStudyCodStringsAndComments(model.getValue()).split("\n");
     lines.forEach((line, index) => {
       if (/^\s*(?:if|elif|else|for|while|def|class|try|except|finally|with)\b/.test(line) && !/:\s*$/.test(line)) {
         markers.push({ severity: monaco.MarkerSeverity.Warning, message: "This Python statement usually needs a trailing ':'.", startLineNumber: index + 1, startColumn: Math.max(1, line.trimEnd().length), endLineNumber: index + 1, endColumn: Math.max(2, line.trimEnd().length + 1) });
       }
     });
   }
+  // Do not run a hand-written, language-agnostic bracket parser over user code:
+  // valid syntax such as Haskell comments, language-specific strings, and macros
+  // was being marked as an error even though the judge accepts it.
   monaco.editor.setModelMarkers(model, "studycod-language-service", markers);
 }
 
@@ -812,6 +846,96 @@ const registerKotlinHighlighting = (monaco: MonacoApi) => {
 };
 let monacoLoadPromise: Promise<MonacoApi> | null = null;
 const monacoLanguageLoadPromises = new Map<string, Promise<unknown>>();
+const customJudgeLanguagesRegistered = new Set<string>();
+
+function registerCustomJudgeLanguage(
+  monaco: MonacoApi,
+  id: string,
+  extension: string,
+  alias: string,
+  languageDefinition: Monaco.languages.IMonarchLanguage,
+  comments: { lineComment: string; blockComment?: [string, string] },
+) {
+  try {
+    const exists = (monaco.languages.getLanguages?.() ?? []).some((entry) => entry.id === id);
+    if (!exists) monaco.languages.register({ id, extensions: [extension], aliases: [alias, id] });
+    monaco.languages.setMonarchTokensProvider(id, languageDefinition);
+    monaco.languages.setLanguageConfiguration(id, {
+      comments,
+      brackets: [["{", "}"], ["[", "]"], ["(", ")"]],
+      autoClosingPairs: [{ open: "{", close: "}" }, { open: "[", close: "]" }, { open: "(", close: ")" }, { open: "\"", close: "\"" }, { open: "'", close: "'" }],
+      surroundingPairs: [{ open: "{", close: "}" }, { open: "[", close: "]" }, { open: "(", close: ")" }, { open: "\"", close: "\"" }, { open: "'", close: "'" }],
+    });
+  } catch {
+    // A language grammar must never prevent Monaco from opening the editor.
+  }
+}
+
+const registerJudgeLanguageModes = (monaco: MonacoApi) => {
+  if (!monaco) return;
+  if (!customJudgeLanguagesRegistered.has("c")) {
+    customJudgeLanguagesRegistered.add("c");
+    registerCustomJudgeLanguage(monaco, "c", ".c", "C", {
+      defaultToken: "",
+      tokenPostfix: ".c",
+      keywords: ["auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else", "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register", "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef", "union", "unsigned", "void", "volatile", "while"],
+      typeKeywords: ["bool", "size_t", "FILE", "int8_t", "int16_t", "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t"],
+      tokenizer: {
+        root: [[/[a-zA-Z_]\w*/, { cases: { "@keywords": "keyword", "@typeKeywords": "type", "@default": "identifier" } }],
+          [/\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[uUlLfF]*/, "number"], [/"([^"\\]|\\.)*$/, "string.invalid"], [/"/, { token: "string.quote", next: "@string" }], [/'([^'\\]|\\.)*$/, "string.invalid"], [/'/, { token: "string.quote", next: "@character" }],
+          [/\/\*/, { token: "comment", next: "@comment" }], [/\/\/.*$/, "comment"], [/#[ \t]*[a-zA-Z_]+/, "keyword.directive"], [/[{}()\[\]]/, "@brackets"], [/[;,.]/, "delimiter"], [/[=<>!~?:&|+\-*\/%^]+/, "operator"]],
+        comment: [[/[^*/]+/, "comment"], [/\*\//, { token: "comment", next: "@pop" }], [/./, "comment"]],
+        string: [[/[^\\"]+/, "string"], [/\\./, "string.escape"], [/"/, { token: "string.quote", next: "@pop" }]],
+        character: [[/[^\\']+/, "string"], [/\\./, "string.escape"], [/'/, { token: "string.quote", next: "@pop" }]],
+      },
+    }, { lineComment: "//", blockComment: ["/*", "*/"] });
+  }
+  if (!customJudgeLanguagesRegistered.has("d")) {
+    customJudgeLanguagesRegistered.add("d");
+    registerCustomJudgeLanguage(monaco, "d", ".d", "D", {
+      defaultToken: "",
+      tokenPostfix: ".d",
+      keywords: ["abstract", "alias", "align", "asm", "assert", "auto", "body", "bool", "break", "byte", "case", "cast", "catch", "class", "const", "continue", "dchar", "debug", "default", "delegate", "delete", "deprecated", "do", "double", "else", "enum", "export", "extern", "false", "final", "finally", "float", "for", "foreach", "foreach_reverse", "function", "goto", "if", "immutable", "import", "in", "inout", "int", "interface", "invariant", "is", "lazy", "long", "mixin", "module", "new", "nothrow", "null", "out", "override", "package", "pragma", "private", "protected", "public", "pure", "real", "ref", "return", "scope", "shared", "short", "static", "string", "struct", "super", "switch", "synchronized", "template", "this", "throw", "true", "try", "typeid", "typeof", "ubyte", "uint", "ulong", "union", "unittest", "ushort", "version", "void", "volatile", "wchar", "while", "with"],
+      tokenizer: {
+        root: [[/[a-zA-Z_]\w*/, { cases: { "@keywords": "keyword", "@default": "identifier" } }], [/\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[uUlLfF]*/, "number"], [/"([^"\\]|\\.)*$/, "string.invalid"], [/"/, { token: "string.quote", next: "@string" }], [/`/, { token: "string.quote", next: "@rawString" }],
+          [/\/\+/, { token: "comment", next: "@nestedComment" }], [/\/\*/, { token: "comment", next: "@comment" }], [/\/\/.*$/, "comment"], [/[{}()\[\]]/, "@brackets"], [/[;,.]/, "delimiter"], [/[=<>!~?:&|+\-*\/%^]+/, "operator"]],
+        comment: [[/[^*]+/, "comment"], [/\*\//, { token: "comment", next: "@pop" }], [/\*/, "comment"]],
+        nestedComment: [[/[^/+]+/, "comment"], [/\/\+/, { token: "comment", next: "@push" }], [/\+\//, { token: "comment", next: "@pop" }], [/[+/]/, "comment"]],
+        string: [[/[^\\"]+/, "string"], [/\\./, "string.escape"], [/"/, { token: "string.quote", next: "@pop" }]],
+        rawString: [[/[^`]+/, "string"], [/`/, { token: "string.quote", next: "@pop" }]],
+      },
+    }, { lineComment: "//", blockComment: ["/*", "*/"] });
+  }
+  if (!customJudgeLanguagesRegistered.has("haskell")) {
+    customJudgeLanguagesRegistered.add("haskell");
+    registerCustomJudgeLanguage(monaco, "haskell", ".hs", "Haskell", {
+      defaultToken: "",
+      tokenPostfix: ".hs",
+      keywords: ["as", "case", "class", "data", "default", "deriving", "do", "else", "family", "forall", "foreign", "hiding", "if", "import", "in", "infix", "infixl", "infixr", "instance", "let", "mdo", "module", "newtype", "of", "qualified", "then", "type", "where"],
+      tokenizer: {
+        root: [[/[A-Z][\w']*/, "type.identifier"], [/[a-z_][\w']*/, { cases: { "@keywords": "keyword", "@default": "identifier" } }], [/\d+(?:\.\d+)?/, "number"], [/'(?:\\.|[^'\\])'/, "string"], [/"([^"\\]|\\.)*$/, "string.invalid"], [/"/, { token: "string.quote", next: "@string" }],
+          [/{-/, { token: "comment", next: "@nestedComment" }], [/--.*$/, "comment"], [/[{}()\[\]]/, "@brackets"], [/[;,]/, "delimiter"], [/[:=<>!~?&|+\-*\/%^\\.]+/, "operator"]],
+        nestedComment: [[/{-/, { token: "comment", next: "@push" }], [/-}/, { token: "comment", next: "@pop" }], [/./, "comment"]],
+        string: [[/[^\\"]+/, "string"], [/\\./, "string.escape"], [/"/, { token: "string.quote", next: "@pop" }]],
+      },
+    }, { lineComment: "--", blockComment: ["{-", "-}"] });
+  }
+  if (!customJudgeLanguagesRegistered.has("lisp")) {
+    customJudgeLanguagesRegistered.add("lisp");
+    registerCustomJudgeLanguage(monaco, "lisp", ".lisp", "Common Lisp", {
+      defaultToken: "",
+      tokenPostfix: ".lisp",
+      keywords: ["block", "catch", "cond", "declare", "defconstant", "defmacro", "defparameter", "defun", "defvar", "do", "dolist", "dotimes", "ecase", "flet", "function", "if", "labels", "lambda", "let", "let*", "loop", "macrolet", "multiple-value-bind", "or", "prog1", "progn", "quote", "return", "return-from", "setq", "tagbody", "the", "throw", "unless", "unwind-protect", "when", "with-open-file"],
+      tokenizer: {
+        root: [[/;.*$/, "comment"], [/#\|/, { token: "comment", next: "@blockComment" }], [/"([^"\\]|\\.)*$/, "string.invalid"], [/"/, { token: "string.quote", next: "@string" }],
+          [/#\\(?:.|name)/, "string"], [/[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/, "number"], [/[()]/, "@brackets"], [/[a-zA-Z*+!_$%&<=>?@^~:\-][\w*+!_$%&<=>?@^~:\-]*/, { cases: { "@keywords": "keyword", "@default": "identifier" } }], [/[`'#,\.]/, "operator"]],
+        blockComment: [[/#\|/, { token: "comment", next: "@push" }], [/\|#/, { token: "comment", next: "@pop" }], [/./, "comment"]],
+        string: [[/[^\\"]+/, "string"], [/\\./, "string.escape"], [/"/, { token: "string.quote", next: "@pop" }]],
+      },
+    }, { lineComment: ";" });
+  }
+};
+
 const monacoLanguageLoaders: Record<string, () => Promise<unknown>> = {
   java: () => import("monaco-editor/esm/vs/basic-languages/java/java.contribution"),
   python: () => import("monaco-editor/esm/vs/basic-languages/python/python.contribution"),
@@ -819,6 +943,15 @@ const monacoLanguageLoaders: Record<string, () => Promise<unknown>> = {
   csharp: () => import("monaco-editor/esm/vs/basic-languages/csharp/csharp.contribution"),
   kotlin: () => import("monaco-editor/esm/vs/basic-languages/kotlin/kotlin.contribution"),
   javascript: () => import("monaco-editor/esm/vs/basic-languages/javascript/javascript.contribution"),
+  go: () => import("monaco-editor/esm/vs/basic-languages/go/go.contribution"),
+  rust: () => import("monaco-editor/esm/vs/basic-languages/rust/rust.contribution"),
+  pascal: () => import("monaco-editor/esm/vs/basic-languages/pascal/pascal.contribution"),
+  dart: () => import("monaco-editor/esm/vs/basic-languages/dart/dart.contribution"),
+  lua: () => import("monaco-editor/esm/vs/basic-languages/lua/lua.contribution"),
+  perl: () => import("monaco-editor/esm/vs/basic-languages/perl/perl.contribution"),
+  php: () => import("monaco-editor/esm/vs/basic-languages/php/php.contribution"),
+  ruby: () => import("monaco-editor/esm/vs/basic-languages/ruby/ruby.contribution"),
+  swift: () => import("monaco-editor/esm/vs/basic-languages/swift/swift.contribution"),
   typescript: () => import("monaco-editor/esm/vs/basic-languages/typescript/typescript.contribution"),
   html: () => import("monaco-editor/esm/vs/basic-languages/html/html.contribution"),
   css: () => import("monaco-editor/esm/vs/basic-languages/css/css.contribution"),
@@ -898,61 +1031,9 @@ interface Props {
 }
 
 const toMonacoLanguage = (language: Props["language"]) => {
-  switch (String(language).toLowerCase()) {
-    case "JAVA":
-    case "java":
-      return "java";
-    case "PYTHON":
-    case "python":
-      return "python";
-    case "CPP":
-    case "cpp":
-      return "cpp";
-    case "c":
-      // Monaco usually highlights C well under the shared C/C++ grammar.
-      return "cpp";
-    case "csharp":
-      return "csharp";
-    case "kotlin":
-      return "kotlin";
-    case "js":
-      return "javascript";
-    case "go":
-      return "go";
-    case "rust":
-      return "rust";
-    case "pascal":
-      return "pascal";
-    case "dart":
-      return "dart";
-    case "lua":
-      return "lua";
-    case "perl":
-      return "perl";
-    case "php":
-      return "php";
-    case "ruby":
-      return "ruby";
-    case "swift":
-      return "swift";
-    case "lisp":
-      // Monaco has no Common Lisp grammar; Scheme is the closest s-expression highlighter.
-      return "scheme";
-    case "d":
-      // No D grammar in Monaco; C++ highlighting is a close approximation.
-      return "cpp";
-    case "haskell":
-      // No Haskell grammar shipped with Monaco.
-      return "plaintext";
-    case "html":
-      return "html";
-    case "css":
-      return "css";
-    case "javascript":
-      return "javascript";
-    default:
-      return "plaintext";
-  }
+  const normalized = String(language).toLowerCase();
+  if (normalized === "html" || normalized === "css" || normalized === "javascript") return normalized;
+  return JUDGE_MONACO_LANG[normalized as JudgeLanguage] ?? "plaintext";
 };
 const createEditorOptions = (readOnly: boolean, fontSize = 14, wordWrap = false) => ({
   fontSize,
@@ -1103,6 +1184,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
 
         // Ensure our customizations exist as soon as Monaco is available.
         ensureStudyCodMonacoThemes(monaco);
+        registerJudgeLanguageModes(monaco);
         registerKotlinHighlighting(monaco);
         if (monacoLang === "java") registerJavaStdlibCompletions(monaco);
         registerImportCompletions(monaco, language);
@@ -1282,6 +1364,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
         // Theme must be defined before the editor instance is created.
         // Otherwise setting an unknown theme name can lead to a blank editor.
         ensureStudyCodMonacoThemes(monaco);
+        registerJudgeLanguageModes(monaco);
 
         // Register completions early as well.
         if (monacoLang === "java") {
@@ -1309,6 +1392,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
 
         // (Safety) ensure theme/completions exist even if editor mounts before beforeMount fires.
         ensureStudyCodMonacoThemes(monaco);
+        registerJudgeLanguageModes(monaco);
         registerKotlinHighlighting(monaco);
         if (monacoLang === "java") registerJavaStdlibCompletions(monaco);
         registerImportCompletions(monaco, language);
@@ -1331,7 +1415,8 @@ export const CodeEditor: React.FC<Props> = React.memo(({
             // Read-only previews do not need a dedicated language-server process.
             // Starting one for every preview (especially JDTLS) made opening pages
             // compete with the active editor and delayed completions.
-            const lspDispose = enableSemanticLsp && !readOnly ? connectStudyCodLsp(monaco, model, monacoLang, filePath || (monacoLang === "python" ? "main.py" : monacoLang === "java" ? "Main.java" : "main.cpp"), readOnly) : () => undefined;
+            const defaultFilePath = (JUDGE_ENTRY_FILES[String(language).toLowerCase() as JudgeLanguage] ?? "main.cpp");
+            const lspDispose = enableSemanticLsp && !readOnly ? connectStudyCodLsp(monaco, model, monacoLang, filePath || defaultFilePath, readOnly) : () => undefined;
             editor.onDidDispose(() => {
               markerSubscription.dispose();
               if (markerTimer !== null) window.clearTimeout(markerTimer);

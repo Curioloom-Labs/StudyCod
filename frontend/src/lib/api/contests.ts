@@ -126,10 +126,11 @@ export type ContestProblemStatement = {
   task: {
     id: number;
     title: string;
-    description: string;
-    template: string;
-    templatesByLanguage: Record<string, string> | null;
-    allowedLanguages: JudgeLanguage[];
+      description: string;
+      template: string;
+      templatesByLanguage: Record<string, string> | null;
+      defaultLanguage?: JudgeLanguage;
+      allowedLanguages: JudgeLanguage[];
     timeLimitMs: number | null;
     memoryLimitMb: number | null;
     outputLimitKb: number | null;

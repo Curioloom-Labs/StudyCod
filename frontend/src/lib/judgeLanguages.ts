@@ -71,22 +71,62 @@ export const JUDGE_ENTRY_FILES: Record<JudgeLanguage, string> = {
   swift: "main.swift",
 };
 
-/** Monaco editor language id for a judge family (best-effort highlighting). */
+export const JUDGE_FILE_EXTENSIONS: Record<JudgeLanguage, string> = {
+  java: "java", python: "py", cpp: "cpp", c: "c", csharp: "cs", kotlin: "kt", js: "js",
+  go: "go", rust: "rs", pascal: "pas", d: "d", dart: "dart", haskell: "hs", lisp: "lisp",
+  lua: "lua", perl: "pl", php: "php", ruby: "rb", swift: "swift",
+};
+
+/** Small, valid starting points used when a task has no template for the selected language. */
+export const JUDGE_STARTER_TEMPLATES: Record<JudgeLanguage, string> = {
+  java: "import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        // TODO: solve the problem\n    }\n}\n",
+  python: "import sys\n\ndata = sys.stdin.read().split()\n# TODO: solve the problem\n",
+  cpp: "#include <bits/stdc++.h>\nusing namespace std;\n\nint main() {\n    ios::sync_with_stdio(false);\n    cin.tie(nullptr);\n    // TODO: solve the problem\n    return 0;\n}\n",
+  c: "#include <stdio.h>\n\nint main(void) {\n    // TODO: solve the problem\n    return 0;\n}\n",
+  csharp: "using System;\n\nclass Program {\n    static void Main() {\n        // TODO: solve the problem\n    }\n}\n",
+  kotlin: "fun main() {\n    // TODO: solve the problem\n}\n",
+  js: "const fs = require('node:fs');\nconst input = fs.readFileSync(0, 'utf8').trim();\n// TODO: solve the problem\n",
+  go: "package main\n\nimport (\n    \"bufio\"\n    \"os\"\n)\n\nfunc main() {\n    in := bufio.NewReader(os.Stdin)\n    _ = in\n    // TODO: solve the problem\n}\n",
+  rust: "use std::io::{self, Read};\n\nfn main() {\n    let mut input = String::new();\n    io::stdin().read_to_string(&mut input).unwrap();\n    // TODO: solve the problem\n}\n",
+  pascal: "program Main;\nbegin\n  { TODO: solve the problem }\nend.\n",
+  d: "import std.stdio;\n\nvoid main() {\n    // TODO: solve the problem\n}\n",
+  dart: "import 'dart:io';\n\nvoid main() {\n  final input = stdin.readLineSync() ?? '';\n  // TODO: solve the problem\n}\n",
+  haskell: "main :: IO ()\nmain = do\n  input <- getContents\n  -- TODO: solve the problem\n  pure ()\n",
+  lisp: ";; TODO: solve the problem\n(let ((line (read-line *standard-input* nil)))\n  (when line (write-line line)))\n",
+  lua: "local input = io.read('*a')\n-- TODO: solve the problem\nio.write(input)\n",
+  perl: "use strict;\nuse warnings;\n\nmy $input = do { local $/; <STDIN> };\n# TODO: solve the problem\n",
+  php: "<?php\n$input = stream_get_contents(STDIN);\n// TODO: solve the problem\n",
+  ruby: "input = STDIN.read\n# TODO: solve the problem\n",
+  swift: "import Foundation\n\nlet input = String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? \"\"\n// TODO: solve the problem\n",
+};
+
+export function templateForJudgeLanguage(
+  language: JudgeLanguage,
+  options: { templatesByLanguage?: Record<string, string> | null; fallback?: string | null; fallbackLanguage?: JudgeLanguage | null },
+): string {
+  const specific = options.templatesByLanguage?.[language];
+  if (typeof specific === "string" && specific.trim()) return specific;
+  const fallback = String(options.fallback ?? "");
+  if (fallback.trim() && options.fallbackLanguage === language) return fallback;
+  return JUDGE_STARTER_TEMPLATES[language];
+}
+
+/** Monaco editor language id for a judge family. */
 export const JUDGE_MONACO_LANG: Record<JudgeLanguage, string> = {
   java: "java",
   python: "python",
   cpp: "cpp",
-  c: "cpp",
+  c: "c",
   csharp: "csharp",
   kotlin: "kotlin",
   js: "javascript",
   go: "go",
   rust: "rust",
   pascal: "pascal",
-  d: "cpp",
+  d: "d",
   dart: "dart",
-  haskell: "plaintext",
-  lisp: "scheme",
+  haskell: "haskell",
+  lisp: "lisp",
   lua: "lua",
   perl: "perl",
   php: "php",
