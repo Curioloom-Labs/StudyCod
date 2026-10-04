@@ -668,6 +668,7 @@ export const ContestDetailPage: React.FC = () => {
   const [myProgress, setMyProgress] = React.useState<ContestMyProgressProblem[]>([]);
   const [myParticipantId, setMyParticipantId] = React.useState<number | null>(null);
   const [clockNow, setClockNow] = React.useState(Date.now());
+  const [clockOffset, setClockOffset] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
   const [joining, setJoining] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -699,12 +700,16 @@ export const ContestDetailPage: React.FC = () => {
         ? null
         : await getContestMyProgress(contestId).catch(() => null);
       setData(details);
+      const serverTimeMs = Date.parse(details.serverTime);
+      setClockOffset(Number.isFinite(serverTimeMs) ? serverTimeMs - Date.now() : 0);
       setStandings(score);
       setMyProgress(progress?.problems ?? []);
       setMyParticipantId(progress?.participantId ?? null);
     } catch (caught) {
       if (isPreview()) {
-        setData(previewDetails(contestId));
+        const preview = previewDetails(contestId);
+        setData(preview);
+        setClockOffset(Date.parse(preview.serverTime) - Date.now());
         setStandings(previewStandings);
         setMyProgress([]);
         setMyParticipantId(null);
@@ -752,7 +757,6 @@ export const ContestDetailPage: React.FC = () => {
   const state = phaseFor(data.contest);
   const joined = data.access.isJoined;
   const access = data.access.canAccessContent;
-  const clockOffset = Date.parse(data.serverTime) - Date.now();
   const startMs = data.contest.startsAt ? Date.parse(data.contest.startsAt) : null;
   const startsIn = startMs == null ? null : startMs - (clockNow + clockOffset);
   const endMs = data.contest.endsAt ? Date.parse(data.contest.endsAt) : null;
