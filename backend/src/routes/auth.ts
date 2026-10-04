@@ -683,7 +683,8 @@ authRouter.post("/contest-login", loginLimiter, async (req: AuthRequest, res: Re
     if (!username || !password) {
       return res.status(400).json({ message: "USERNAME_AND_PASSWORD_REQUIRED" });
     }
-    if (!Number.isSafeInteger(contestId) || Number(contestId) <= 0) {
+    const requestedContestId = contestId == null ? null : Number(contestId);
+    if (requestedContestId != null && (!Number.isSafeInteger(requestedContestId) || requestedContestId <= 0)) {
       return res.status(400).json({ message: "INVALID_CONTEST_ID" });
     }
 
@@ -698,7 +699,10 @@ authRouter.post("/contest-login", loginLimiter, async (req: AuthRequest, res: Re
     }
 
     const membership = await AppDataSource.getRepository(ContestParticipant).findOne({
-      where: { contest: { id: Number(contestId) }, user: { id: user.id } },
+      where: {
+        user: { id: user.id },
+        ...(requestedContestId != null ? { contest: { id: requestedContestId } } : {}),
+      },
       select: { id: true },
     });
     if (!membership) return res.status(401).json({ message: "INVALID_CREDENTIALS" });
