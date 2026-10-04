@@ -7,6 +7,7 @@ import {
   getContestDetails,
   getContestProblemStatement,
   getContestProblemSubmissions,
+  postContestCommunityQuestion,
   recordContestIntegrityEvent,
   runContestProblem,
   type ContestCommunityAnnouncement,
@@ -20,7 +21,6 @@ import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
-import { createSupportChatConversation } from "../../lib/api/support";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { tracePlayground, type TraceResult } from "../../lib/api/playground";
 import { getCachedMeUser } from "../../lib/api/profile";
@@ -170,6 +170,7 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [organizerDialogOpen, setOrganizerDialogOpen] = React.useState(false);
   const [organizerQuestion, setOrganizerQuestion] = React.useState("");
   const [askingOrganizer, setAskingOrganizer] = React.useState(false);
+  const [organizerQuestionSent, setOrganizerQuestionSent] = React.useState(false);
   const liveSyncInFlightRef = React.useRef(false);
   const liveSyncLastAtRef = React.useRef(0);
 
@@ -598,24 +599,18 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   const askOrganizer = async (question: string) => {
     if (!contestId || !problemId || !hasToken || !statement || askingOrganizer || !question.trim()) return;
-    const problemTitle = statement.task.title || "Unknown";
-    const body = [
-      `Contest: #${contestId} (${contestMeta.title || "Unknown"})`,
-      `Problem: #${problemId} (${problemTitle})`,
+    const message = [
+      `Питання щодо задачі ${statement.problem.label}: ${statement.task.title}`,
       "",
-      "Question:",
-      question.trim()
+      question.trim(),
     ].join("\n");
 
     setAskingOrganizer(true);
     try {
-      const res = await createSupportChatConversation({
-        subject: `Contest #${contestId} · Problem #${problemId}`,
-        message: body
-      });
+      await postContestCommunityQuestion(contestId, message);
       setOrganizerDialogOpen(false);
       setOrganizerQuestion("");
-      navigate(`/support?conversationId=${res.conversation.id}`);
+      setOrganizerQuestionSent(true);
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
       setError(msg || "Failed to create support conversation");
@@ -687,6 +682,11 @@ export const ContestProblemSolvePage: React.FC = () => {
         <div role="alert" aria-live="assertive" className="flex items-start gap-3 rounded-xl border border-[#ff6b9d]/30 bg-[#ff6b9d]/10 px-3 py-2.5 text-sm text-[#ffb2c9]">
           <span className="min-w-0 flex-1">{error}</span>
           <button type="button" onClick={() => setError(null)} className="shrink-0 rounded-md p-1 hover:bg-white/[.08]" aria-label="Закрити повідомлення про помилку"><X className="size-4" /></button>
+        </div>
+      ) : null}
+      {organizerQuestionSent ? (
+        <div role="status" aria-live="polite" className="rounded-xl border border-[#00d978]/25 bg-[#00d978]/[.08] px-3 py-2.5 text-sm text-[#9cf2c2]">
+          Питання надіслано організатору. Відповідь з’явиться у вкладці «Ком’юніті».
         </div>
       ) : null}
 
@@ -767,12 +767,12 @@ export const ContestProblemSolvePage: React.FC = () => {
             <Link to={`/contest/contests/${contestId}/scoreboard`} className="grid size-8 place-items-center rounded-lg border border-white/10 text-[#c8d6cc] transition hover:border-[#ffb454]/30 hover:bg-[#ffb454]/10 hover:text-[#ffca7e]" aria-label="Таблиця контесту" title="Таблиця контесту">
               <Trophy className="size-3.5" />
             </Link>
-            {hasToken ? <button type="button" onClick={() => setOrganizerDialogOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 px-2 text-[10px] font-semibold text-[#c8d6cc] transition hover:bg-white/[.06]" title="Поставити питання організатору"><MessageSquareText className="size-3.5" /><span className="hidden xl:inline">Організатор</span></button> : null}
+            {hasToken ? <button type="button" onClick={() => { setOrganizerQuestionSent(false); setOrganizerDialogOpen(true); }} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 px-2 text-[10px] font-semibold text-[#c8d6cc] transition hover:bg-white/[.06]" title="Поставити питання організатору"><MessageSquareText className="size-3.5" /><span className="hidden xl:inline">Організатор</span></button> : null}
           </>
         )}
       />
 
-      <Modal open={organizerDialogOpen} onClose={() => setOrganizerDialogOpen(false)} title="Питання організатору" description="Питання буде надіслано в службу підтримки разом із назвою контесту та задачі." panelClassName="max-w-[620px]">
+      <Modal open={organizerDialogOpen} onClose={() => setOrganizerDialogOpen(false)} title="Питання організатору" description="Питання побачить організатор цього контесту. Відповідь буде у вкладці «Ком’юніті»." panelClassName="max-w-[620px]">
         <form onSubmit={(event) => { event.preventDefault(); void askOrganizer(organizerQuestion); }} className="space-y-4">
           <label className="block text-sm font-semibold text-text-primary" htmlFor="contest-organizer-question">Твоє питання</label>
           <textarea id="contest-organizer-question" value={organizerQuestion} onChange={(event) => setOrganizerQuestion(event.target.value)} rows={5} maxLength={4000} required placeholder="Опиши проблему з умовою, доступом або проведенням контесту…" className="w-full resize-y rounded-xl border border-border bg-bg-base px-3 py-2.5 text-sm leading-6 text-text-primary outline-none transition placeholder:text-text-muted focus:border-primary/50 focus:ring-2 focus:ring-primary/15" />
