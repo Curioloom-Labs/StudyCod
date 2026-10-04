@@ -257,6 +257,12 @@ export const AuthPage: React.FC<Props> = ({
       if (message) return path ? `${path}: ${message}` : message;
     }
     const msg = getErrorMessageFromUnknown(err, "");
+    if (msg === "CONTEST_ACCOUNT_REQUIRES_CONTEST_LOGIN") {
+      return tr(
+        "Цей тимчасовий логін працює лише на сторінці контесту. Відкрийте посилання, яке надіслав організатор.",
+        "This temporary login only works on the contest sign-in page. Open the link sent by the organizer."
+      );
+    }
     if (msg.trim()) return msg;
     return fallback;
   }

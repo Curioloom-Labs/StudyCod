@@ -583,6 +583,11 @@ authRouter.post("/login", loginLimiter, async (req: AuthRequest, res: Response) 
         message: "INVALID_CREDENTIALS"
       });
     }
+    if (user.userMode === "CONTEST") {
+      return res.status(403).json({
+        message: "CONTEST_ACCOUNT_REQUIRES_CONTEST_LOGIN"
+      });
+    }
     if (!user.emailVerified) {
       return res.status(403).json({
         message: "EMAIL_NOT_VERIFIED",
