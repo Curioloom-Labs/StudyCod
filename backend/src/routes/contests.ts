@@ -3089,6 +3089,7 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
         description: task.description,
         template: task.template,
         templatesByLanguage: task.templatesByLanguage ?? null,
+        defaultLanguage: task.lang === "PYTHON" ? "python" : task.lang === "CPP" ? "cpp" : "java",
         allowedLanguages: getAllowedJudgeLanguages(task),
         timeLimitMs: task.timeLimitMs ?? null,
         memoryLimitMb: task.memoryLimitMb ?? null,

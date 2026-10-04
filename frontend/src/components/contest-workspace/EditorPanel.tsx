@@ -4,7 +4,7 @@ import { Button } from "../ui/Button";
 import { CodeEditor } from "../CodeEditor";
 import { Play, Rocket, ScanSearch, Minus, Plus, WrapText, RotateCcw, Copy, Check, Download, X } from "lucide-react";
 import type { ContestProblemStatement, JudgeLanguage } from "../../lib/api/contests";
-import { JUDGE_LANGUAGE_LABELS as FRIENDLY_LANG, enabledJudgeLanguages, compilersForFamily } from "../../lib/judgeLanguages";
+import { JUDGE_FILE_EXTENSIONS, JUDGE_LANGUAGE_LABELS as FRIENDLY_LANG, enabledJudgeLanguages, compilersForFamily, templateForJudgeLanguage } from "../../lib/judgeLanguages";
 
 type EditorPanelProps = {
   statement: ContestProblemStatement;
@@ -33,9 +33,11 @@ function difficultyFromLimits(statement: ContestProblemStatement): "EASY" | "MED
 }
 
 function templateForLanguage(statement: ContestProblemStatement, lang: JudgeLanguage): string {
-  const by = statement.task.templatesByLanguage || null;
-  const t = by && typeof by[lang] === "string" ? String(by[lang] ?? "") : "";
-  return t.trim() ? t : statement.task.template;
+  return templateForJudgeLanguage(lang, {
+    templatesByLanguage: statement.task.templatesByLanguage,
+    fallback: statement.task.template,
+    fallbackLanguage: statement.task.defaultLanguage,
+  });
 }
 
 const FONT_MIN = 11;
@@ -119,7 +121,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${String(statement.task.title || "solution").replace(/[^a-z0-9а-яёіїєґ_-]+/gi, "-").replace(/^-+|-+$/g, "") || "solution"}.${language === "cpp" ? "cpp" : language === "python" ? "py" : language === "java" ? "java" : "txt"}`;
+    anchor.download = `${String(statement.task.title || "solution").replace(/[^a-z0-9а-яёіїєґ_-]+/gi, "-").replace(/^-+|-+$/g, "") || "solution"}.${JUDGE_FILE_EXTENSIONS[language]}`;
     anchor.rel = "noopener";
     document.body.appendChild(anchor);
     anchor.click();

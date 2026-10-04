@@ -30,7 +30,7 @@ import {
   type JudgeLanguage,
   type WebTaskFile,
 } from "../../lib/api/library";
-import { JUDGE_ENTRY_FILES, enabledJudgeLanguages, defaultCompilerForFamily } from "../../lib/judgeLanguages";
+import { JUDGE_ENTRY_FILES, enabledJudgeLanguages, defaultCompilerForFamily, templateForJudgeLanguage } from "../../lib/judgeLanguages";
 import { StudyCodIDEWorkspace } from "../../components/ide/StudyCodIDEWorkspace";
 import { tracePlayground, type TraceResult } from "../../lib/api/playground";
 
@@ -69,12 +69,15 @@ const getAllowedJudgeLanguages = (_task: { allowedLanguages?: JudgeLanguage[] | 
 };
 
 const getTemplateForLanguage = (
-  task: { template: string; templatesByLanguage?: Record<string, string> | null },
+  task: { template: string; templatesByLanguage?: Record<string, string> | null; lang?: "JAVA" | "PYTHON" | "CPP" },
   language: JudgeLanguage
 ) => {
-  const by = task.templatesByLanguage || null;
-  const t = by && typeof by[language] === "string" ? String(by[language] ?? "") : "";
-  return t.trim() ? t : task.template;
+  const fallbackLanguage: JudgeLanguage = task.lang === "PYTHON" ? "python" : task.lang === "CPP" ? "cpp" : "java";
+  return templateForJudgeLanguage(language, {
+    templatesByLanguage: task.templatesByLanguage,
+    fallback: task.template,
+    fallbackLanguage,
+  });
 };
 
 function entryFileForJudgeLanguage(lang: JudgeLanguage): string {

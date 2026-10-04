@@ -38,7 +38,7 @@ import {
   type ContestStandings,
   type JudgeLanguage,
 } from "../../lib/api/contests";
-import { enabledJudgeLanguages } from "../../lib/judgeLanguages";
+import { enabledJudgeLanguages, templateForJudgeLanguage } from "../../lib/judgeLanguages";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
 import { ContestSetupDialog } from "./ContestSetupDialog";
@@ -1000,6 +1000,7 @@ const previewStatement: ContestProblemStatement = {
     template:
       "n = int(input())\nnums = list(map(int, input().split()))\n# your solution\n",
     templatesByLanguage: null,
+    defaultLanguage: "python",
     allowedLanguages: ["python", "java", "cpp"],
     timeLimitMs: 1000,
     memoryLimitMb: 64,
@@ -1056,7 +1057,11 @@ export const ContestProblemPage: React.FC = () => {
       const next = languages.includes("python") ? "python" : languages[0];
       setLanguage(next);
       const templates = data.task.templatesByLanguage;
-      setCode((templates?.[next] || data.task.template || "").trimStart());
+      setCode(templateForJudgeLanguage(next, {
+        templatesByLanguage: templates,
+        fallback: data.task.template,
+        fallbackLanguage: data.task.defaultLanguage,
+      }).trimStart());
       setSubmissions(history?.submissions ?? []);
     } catch (caught) {
       if (isPreview()) {
@@ -1084,13 +1089,11 @@ export const ContestProblemPage: React.FC = () => {
   const switchLanguage = (next: JudgeLanguage) => {
     setLanguage(next);
     if (statement)
-      setCode(
-        (
-          statement.task.templatesByLanguage?.[next] ||
-          statement.task.template ||
-          ""
-        ).trimStart(),
-      );
+      setCode(templateForJudgeLanguage(next, {
+        templatesByLanguage: statement.task.templatesByLanguage,
+        fallback: statement.task.template,
+        fallbackLanguage: statement.task.defaultLanguage,
+      }).trimStart());
   };
   const run = async () => {
     if (!statement) return;
@@ -1207,7 +1210,11 @@ export const ContestProblemPage: React.FC = () => {
     onRun={() => void run()}
     onCheck={() => void check()}
     onSave={() => undefined}
-    onReset={() => setCode(statement.task.templatesByLanguage?.[language] || statement.task.template || "")}
+    onReset={() => setCode(templateForJudgeLanguage(language, {
+      templatesByLanguage: statement.task.templatesByLanguage,
+      fallback: statement.task.template,
+      fallbackLanguage: statement.task.defaultLanguage,
+    }))}
     onBack={() => navigate(`/contest/contests/${contestId}`)}
     disableAiAssistance
     runResult={ideRunResult}

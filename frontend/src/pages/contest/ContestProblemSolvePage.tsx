@@ -15,7 +15,7 @@ import {
   type ContestSubmissionListItem,
   type JudgeLanguage,
 } from "../../lib/api/contests";
-import { JUDGE_ENTRY_FILES, enabledJudgeLanguages, defaultCompilerForFamily } from "../../lib/judgeLanguages";
+import { JUDGE_ENTRY_FILES, enabledJudgeLanguages, defaultCompilerForFamily, templateForJudgeLanguage } from "../../lib/judgeLanguages";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
@@ -75,10 +75,12 @@ function examplesFromStatement(markdown: string): Array<{ testId: number; input:
   return examples;
 }
 
-function templateForLanguage(task: { template: string; templatesByLanguage: Record<string, string> | null }, lang: JudgeLanguage) {
-  const by = task.templatesByLanguage || null;
-  const t = by && typeof by[lang] === "string" ? String(by[lang] ?? "") : "";
-  return t.trim() ? t : task.template;
+function templateForLanguage(task: { template: string; templatesByLanguage: Record<string, string> | null; defaultLanguage?: JudgeLanguage }, lang: JudgeLanguage) {
+  return templateForJudgeLanguage(lang, {
+    templatesByLanguage: task.templatesByLanguage,
+    fallback: task.template,
+    fallbackLanguage: task.defaultLanguage,
+  });
 }
 
 function safeJsonParse<T>(raw: string | null): T | null {
@@ -224,7 +226,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         setJudgeLanguage(nextLang);
 
         const savedCode = localStorage.getItem(`${storageBase}:draft:${nextLang}:code`);
-        const tpl = templateForLanguage({ template: stmt.task.template, templatesByLanguage: stmt.task.templatesByLanguage }, nextLang);
+      const tpl = templateForLanguage({ template: stmt.task.template, templatesByLanguage: stmt.task.templatesByLanguage, defaultLanguage: stmt.task.defaultLanguage }, nextLang);
         setCode(savedCode != null ? savedCode : tpl);
 
         const savedInput = localStorage.getItem(`${storageBase}:runInput`);
@@ -355,7 +357,7 @@ export const ContestProblemSolvePage: React.FC = () => {
   const switchLanguage = (nextLanguage: JudgeLanguage) => {
     if (!statement || nextLanguage === judgeLanguage) return;
     const template = templateForLanguage(
-      { template: statement.task.template, templatesByLanguage: statement.task.templatesByLanguage },
+      { template: statement.task.template, templatesByLanguage: statement.task.templatesByLanguage, defaultLanguage: statement.task.defaultLanguage },
       nextLanguage,
     );
     let nextCode = template;
@@ -721,7 +723,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         onCheck={() => void doSubmit()}
         onSave={saveDraft}
         onReset={() => {
-          setCode(templateForLanguage({ template: statement.task.template, templatesByLanguage: statement.task.templatesByLanguage }, judgeLanguage));
+          setCode(templateForLanguage({ template: statement.task.template, templatesByLanguage: statement.task.templatesByLanguage, defaultLanguage: statement.task.defaultLanguage }, judgeLanguage));
           setRunResult(null);
           setCheckResult(null);
         }}
