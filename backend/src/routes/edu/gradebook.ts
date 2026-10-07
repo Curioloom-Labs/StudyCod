@@ -463,31 +463,6 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
       });
     }
 
-    const deleteExistingBuilder = summaryGradeRepo()
-      .createQueryBuilder()
-      .delete()
-      .from(SummaryGrade)
-      .where("class_id = :classId", {
-        classId
-      })
-      .andWhere("topic_id = :topicId", {
-        topicId: topic.id
-      })
-      .andWhere("assessment_type = :assessmentType", {
-        assessmentType: AssessmentType.INTERMEDIATE
-      })
-      .andWhere("control_work_id IS NULL");
-
-    if (normalizedName === THEMATIC_CANONICAL_NAME) {
-      deleteExistingBuilder.andWhere("LOWER(TRIM(name)) IN (:...legacyNames)", {
-        legacyNames: ["thematic", "тематична"]
-      });
-    } else {
-      deleteExistingBuilder.andWhere("name = :name", {
-        name: normalizedName
-      });
-    }
-
     const existingBeforeBuilder = summaryGradeRepo()
       .createQueryBuilder("sg")
       .leftJoinAndSelect("sg.student", "student")
@@ -504,41 +479,50 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
       existingBeforeBuilder.andWhere("sg.name = :name", { name: normalizedName });
     }
 
-    const existingBefore = await existingBeforeBuilder.getMany();
-    const hadGradesByStudentId = new Set<number>(
-      existingBefore
-        .map(row => row.student?.id)
-        .filter((id): id is number => Number.isFinite(Number(id)))
-    );
+    const existingBefore = await existingBeforeBuilder
+      .orderBy("sg.createdAt", "ASC")
+      .getMany();
+    const existingByStudentId = new Map<number, SummaryGrade>();
+    for (const row of existingBefore) {
+      if (row.student?.id != null) existingByStudentId.set(row.student.id, row);
+    }
 
-    await deleteExistingBuilder.execute();
-
-    const results = [];
+    const results: SummaryGrade[] = [];
     const pendingNotifications: Array<{ student: Student; grade: number; event: "created" | "updated" }> = [];
+    const saveGradeForStudent = async (student: Student, grade: number) => {
+      let sg = existingByStudentId.get(student.id);
+      const event = sg ? "updated" : "created";
+      if (!sg) {
+        sg = summaryGradeRepo().create({
+          class: cls,
+          student,
+          name: normalizedName,
+          grade,
+          topic,
+          assessmentType: AssessmentType.INTERMEDIATE,
+          controlWork: null
+        });
+      } else {
+        sg.class = cls;
+        sg.student = student;
+        sg.name = normalizedName;
+        sg.grade = grade;
+        sg.topic = topic;
+        sg.assessmentType = AssessmentType.INTERMEDIATE;
+        sg.controlWork = null;
+      }
+
+      validateAssessmentType(AssessmentType.INTERMEDIATE, null, "grade");
+      await summaryGradeRepo().save(sg);
+      results.push(sg);
+      pendingNotifications.push({ student, grade: sg.grade, event });
+    };
 
     if (studentGrades && Array.isArray(studentGrades) && studentGrades.length > 0) {
       for (const item of studentGrades) {
         const student = cls.students.find(s => s.id === item.studentId);
         if (!student) continue;
-
-        const sg = summaryGradeRepo().create({
-          class: cls,
-          student,
-          name: normalizedName,
-          grade: clampGradeToInt(item.grade),
-          topic,
-          assessmentType: AssessmentType.INTERMEDIATE,
-          controlWork: null
-        });
-
-        validateAssessmentType(AssessmentType.INTERMEDIATE, null, "grade");
-        await summaryGradeRepo().save(sg);
-        results.push(sg);
-        pendingNotifications.push({
-          student,
-          grade: sg.grade,
-          event: hadGradesByStudentId.has(student.id) ? "updated" : "created"
-        });
+        await saveGradeForStudent(student, clampGradeToInt(item.grade));
       }
     } else {
       // Effective formula: per-topic override > class default > built-in smart default.
@@ -608,25 +592,13 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
           thematicFormula
         );
 
-        const sg = summaryGradeRepo().create({
-          class: cls,
-          student,
-          name: normalizedName,
-          grade,
-          topic,
-          assessmentType: AssessmentType.INTERMEDIATE,
-          controlWork: null
-        });
-        validateAssessmentType(AssessmentType.INTERMEDIATE, null, "grade");
-        await summaryGradeRepo().save(sg);
-        results.push(sg);
-        pendingNotifications.push({
-          student,
-          grade: sg.grade,
-          event: hadGradesByStudentId.has(student.id) ? "updated" : "created"
-        });
+        await saveGradeForStudent(student, grade);
       }
     }
+
+    const retainedIds = new Set(results.map(row => row.id));
+    const obsoleteRows = existingBefore.filter(row => !retainedIds.has(row.id));
+    if (obsoleteRows.length > 0) await summaryGradeRepo().remove(obsoleteRows);
 
     res.status(201).json({
       count: results.length,
