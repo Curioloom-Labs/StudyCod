@@ -337,9 +337,9 @@ const AppContent: React.FC = React.memo(() => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [page, setPage] = useState<Page>("home");
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(() => getCachedMeUser());
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !getCachedMeUser());
   const [maintenance, setMaintenance] = useState<MaintenancePayload | null>(() => {
     try {
       const raw = sessionStorage.getItem("studycod.maintenance");
@@ -358,6 +358,7 @@ const AppContent: React.FC = React.memo(() => {
     }
   });
   const [maintenanceChecked, setMaintenanceChecked] = useState<boolean>(() => {
+    if (getCachedMeUser()) return true;
     try {
       return sessionStorage.getItem("studycod.maintenance") != null;
     } catch {
@@ -378,7 +379,7 @@ const AppContent: React.FC = React.memo(() => {
     }
   });
   const [showAdminLogin, setShowAdminLogin] = useState<boolean>(false);
-  const [bootResumeHandled, setBootResumeHandled] = useState<boolean>(false);
+  const [bootResumeHandled, setBootResumeHandled] = useState<boolean>(() => Boolean(getCachedMeUser()));
   const requestedAppPage = useMemo(() => getRequestedAppPage(searchParams), [searchParams]);
   const isDevPreview = import.meta.env.DEV && searchParams.get("preview") === "true";
   const previewPersona = searchParams.get("persona");
@@ -905,11 +906,16 @@ const ContestOnlySurfaceGuard: React.FC<{ children: React.ReactNode }> = ({ chil
   const location = useLocation();
   const isContestPath = /^\/(?:contest|contests)(?:\/|$)/.test(location.pathname);
   const isDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
+  const cachedUser = getCachedMeUser();
   const [result, setResult] = React.useState<{ path: string; decision: "checking" | "allowed" | "contest-only" }>(() => ({
     path: "",
     decision: "checking",
   }));
-  const decision = result.path === location.pathname ? result.decision : "checking";
+  const decision = isDevPreview || isContestPath
+    ? "allowed"
+    : cachedUser
+      ? cachedUser.userMode === "CONTEST" ? "contest-only" : "allowed"
+      : result.path === location.pathname ? result.decision : "checking";
 
   React.useEffect(() => {
     const path = location.pathname;
@@ -1317,12 +1323,23 @@ const LegacyContestRouteRedirect: React.FC = () => {
   return <Navigate to={{ pathname: destination, search: location.search, hash: location.hash }} replace />;
 };
 
+const ContestRouteFallback: React.FC = () => (
+  <div role="status" className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+    <span className="sr-only">Завантаження контестів…</span>
+    <div className="mb-4 h-3 w-36 animate-pulse rounded-full bg-[#e8eeea] dark:bg-white/[.06]" />
+    <div className="mb-10 h-10 w-80 max-w-full animate-pulse rounded-xl bg-[#e8eeea] dark:bg-white/[.06]" />
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {[1, 2, 3].map((key) => <div key={key} className="h-[270px] animate-pulse rounded-[24px] bg-[#e8eeea] dark:bg-white/[.05]" />)}
+    </div>
+  </div>
+);
+
 const ContestRoutes: React.FC = React.memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
-  const [user, setUser] = useState<User | null>(null);
-  const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<User | null>(() => getCachedMeUser());
+  const [ready, setReady] = useState(() => Boolean(getCachedMeUser()));
   const isDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
 
   useEffect(() => {
@@ -1383,7 +1400,7 @@ const ContestRoutes: React.FC = React.memo(() => {
     window.location.reload();
   }}>
       <div className="min-w-0">
-        <Suspense fallback={<PageLoader />}>
+        <Suspense fallback={<ContestRouteFallback />}>
           <AnimatePresence mode="wait">
             <Routes location={location} key={location.pathname}>
               <Route index element={<Navigate to="contests" replace />} />
