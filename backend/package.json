@@ -85,6 +85,7 @@
   },
   "overrides": {
     "deepmerge-ts": "8.0.1",
-    "ip-address": "10.7.2"
+    "ip-address": "10.7.2",
+    "proxy-addr": "2.0.8"
   }
 }
