@@ -20,7 +20,7 @@ export const pageVariants: Variants = {
     opacity: 1,
     transform: "translate3d(0, 0, 0)",
     transition: {
-      duration: 0.22,
+      duration: 0.18,
       ease: easeOutExpo
     }
   },
@@ -28,7 +28,7 @@ export const pageVariants: Variants = {
     opacity: 0,
     transform: "translate3d(-12px, 0, 0)",
     transition: {
-      duration: 0.16,
+      duration: 0.11,
       ease: easeOutQuint
     }
   }

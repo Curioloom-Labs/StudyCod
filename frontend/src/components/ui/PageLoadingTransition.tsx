@@ -6,8 +6,8 @@ import { BrandedPageLoader } from "./BrandedPageLoader";
 type RegisterLoader = (id: symbol, active: boolean) => void;
 
 const PageLoadingContext = createContext<RegisterLoader | null>(null);
-const LOADER_SHOW_DELAY_MS = 240;
-const LOADER_MIN_VISIBLE_MS = 180;
+const LOADER_SHOW_DELAY_MS = 320;
+const LOADER_MIN_VISIBLE_MS = 120;
 
 export const PageLoadingProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [activeLoaders, setActiveLoaders] = useState<Set<symbol>>(() => new Set());
@@ -26,8 +26,8 @@ export const PageLoadingProvider: React.FC<React.PropsWithChildren> = ({ childre
   }, []);
 
   const isLoading = activeLoaders.size > 0;
-  const enterDuration = reduceMotion ? 0.12 : 0.16;
-  const exitDuration = reduceMotion ? 0.12 : 0.14;
+  const enterDuration = reduceMotion ? 0.1 : 0.14;
+  const exitDuration = reduceMotion ? 0.1 : 0.12;
 
   useEffect(() => {
     if (isLoading) {
@@ -56,7 +56,7 @@ export const PageLoadingProvider: React.FC<React.PropsWithChildren> = ({ childre
         {showLoader && (
           <motion.div
             key="page-loading-overlay"
-            className="fixed inset-0 z-[10000]"
+            className="pointer-events-none fixed inset-0 z-[10000]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, transition: { duration: enterDuration, ease: easeOutExpo } }}
             exit={{ opacity: 0, transition: { duration: exitDuration, ease: easeOutExpo } }}

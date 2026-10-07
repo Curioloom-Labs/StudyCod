@@ -37,6 +37,7 @@ type ShellProps = {
   onLibrary: () => void;
   onCourses: () => void;
   onPlayground: () => void;
+  onContests?: () => void;
   onToggleTheme: () => void;
   onToggleLanguage: () => void;
   onSupport?: () => void;
@@ -55,6 +56,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   onLibrary,
   onCourses,
   onPlayground,
+  onContests,
   onToggleTheme,
   onToggleLanguage,
   onSupport,
@@ -109,7 +111,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   const routeIsActive = (path: string) => window.location.pathname === path || window.location.pathname.startsWith(`${path}/`);
   const nav: NavItem[] = [
     { id: "home", label: uk ? "Навчання" : "Learning", Icon: Home },
-    { id: "contests", label: uk ? "Контести" : "Contests", Icon: Trophy, onClick: () => navigate("/contest/contests") },
+    { id: "contests", label: uk ? "Контести" : "Contests", Icon: Trophy, onClick: onContests ?? (() => navigate("/contest/contests")) },
     { id: "library", label: uk ? "Бібліотека" : "Library", Icon: Library, onClick: onLibrary },
     { id: "playground", label: uk ? "Пісочниця" : "Playground", Icon: PlaySquare, onClick: onPlayground },
     ...(user.role === "SYSTEM_ADMIN"
@@ -186,7 +188,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                         aria-hidden="true"
                         layoutId="primary-navigation-active-pill"
                         className="absolute inset-0 -z-10 rounded-lg bg-white shadow-sm dark:bg-[#edf3ef]"
-                        transition={{ layout: { duration: 0.18, ease: easeInOut } }}
+                        transition={{ layout: { duration: 0.14, ease: easeInOut } }}
                       />
                     ))}
                     <item.Icon className="relative z-10 h-4 w-4" />
@@ -318,7 +320,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
         <div className="grid grid-cols-4 gap-1">
           {[
             { id: "home" as const, label: nav.find((item) => item.id === "home")?.label ?? "Home", Icon: Home, onClick: () => onNavigate("home") },
-            { id: "contests" as const, label: nav.find((item) => item.id === "contests")?.label ?? "Contests", Icon: Trophy, onClick: () => navigate("/contest/contests") },
+            { id: "contests" as const, label: nav.find((item) => item.id === "contests")?.label ?? "Contests", Icon: Trophy, onClick: onContests ?? (() => navigate("/contest/contests")) },
             { id: "library" as const, label: nav.find((item) => item.id === "library")?.label ?? "Library", Icon: Library, onClick: onLibrary },
             { id: "playground" as const, label: nav.find((item) => item.id === "playground")?.label ?? "Playground", Icon: PlaySquare, onClick: onPlayground },
           ].map(({ id, label, Icon, onClick }) => (

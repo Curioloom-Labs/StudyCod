@@ -311,6 +311,11 @@ function getRequestedAppPage(searchParams: URLSearchParams): Page | null {
   return asPage(String(searchParams.get("app") ?? ""));
 }
 
+// Resume a saved page only on the document's first root load. Returning to
+// Learning through client navigation must always honor the clicked destination.
+const initialRootEntry = typeof window !== "undefined" && window.location.pathname === "/";
+let initialRootResumeConsumed = false;
+
 function getSafeNextAfterAuth(searchParams: URLSearchParams): string | null {
   const raw = String(searchParams.get("next") ?? "").trim();
   if (!raw) return null;
@@ -390,8 +395,13 @@ const AppContent: React.FC = React.memo(() => {
   const previewPersona = searchParams.get("persona");
   const resolvedPage = useMemo(() => {
     if (!user) return page;
+    // The personal workspace navigation is URL driven. Reading the destination
+    // directly prevents a stale admin page from rendering under the Home tab.
+    if (user.userMode !== "EDUCATIONAL" && location.pathname === "/") {
+      return resolvePageForUser(requestedAppPage ?? "home", user);
+    }
     return resolvePageForUser(page, user);
-  }, [page, user?.id, user?.role, user?.userMode, user?.studentId]);
+  }, [page, requestedAppPage, location.pathname, user?.id, user?.role, user?.userMode, user?.studentId]);
   useEffect(() => {
     const cleanupOldStorage = () => {
       const keys = Object.keys(localStorage);
@@ -425,13 +435,14 @@ const AppContent: React.FC = React.memo(() => {
       if (!requested) return;
       const next = asPage(requested);
       if (next && isPageAvailableForUser(next, user)) {
-        startTransition(() => setPage(next));
+        if (user.userMode === "EDUCATIONAL") startTransition(() => setPage(next));
+        else navigate(next === "home" ? "/" : `/?app=${next}`, { replace: true });
       }
       sessionStorage.removeItem("studycod.openPage");
     } catch {
       // ignore
     }
-  }, [user?.id]);
+  }, [user?.id, navigate]);
 
   useEffect(() => {
     // If an already authenticated session lands on an auth URL, consume the
@@ -472,6 +483,7 @@ const AppContent: React.FC = React.memo(() => {
     }
     if (!requestedAppPage) return;
     if (!isPageAvailableForUser(requestedAppPage, user)) return;
+    if (user.userMode !== "EDUCATIONAL") return;
     if (requestedAppPage === page) return;
     startTransition(() => setPage(requestedAppPage));
   }, [user?.id, location.pathname, requestedAppPage]);
@@ -479,6 +491,7 @@ const AppContent: React.FC = React.memo(() => {
   useEffect(() => {
     if (!user) return;
     if (location.pathname !== "/") return;
+    if (user.userMode !== "EDUCATIONAL") return;
 
     const currentRequested = getRequestedAppPage(searchParams);
     // A top-level navigation can intentionally remove `app` while React is
@@ -602,6 +615,7 @@ const AppContent: React.FC = React.memo(() => {
   useEffect(() => {
     let cancelled = false;
     if (isDevPreview) {
+      initialRootResumeConsumed = true;
       setUser(previewPersona === "admin" ? { ...DEV_PREVIEW_USER, role: "SYSTEM_ADMIN", username: "admin-preview", firstName: "Admin" } : DEV_PREVIEW_USER);
       setBootResumeHandled(true);
       setLoading(false);
@@ -611,6 +625,8 @@ const AppContent: React.FC = React.memo(() => {
       try {
         const u = await getCurrentUserWithRetry(6);
         if (cancelled) return;
+        const mayResumeInitialRoot = initialRootEntry && !initialRootResumeConsumed;
+        initialRootResumeConsumed = true;
 
         setUser(u);
         if (u.userMode === "CONTEST") {
@@ -620,9 +636,7 @@ const AppContent: React.FC = React.memo(() => {
         }
         const fromAuth = sessionStorage.getItem("fromAuth");
         if (fromAuth && u.role === "SYSTEM_ADMIN") {
-          startTransition(() => {
-            setPage("admin");
-          });
+          navigate("/?app=admin", { replace: true });
           sessionStorage.removeItem("fromAuth");
         } else if (fromAuth && (!u.userMode || u.userMode === "PERSONAL")) {
           // Post-auth routing must be presentation-agnostic.
@@ -633,7 +647,7 @@ const AppContent: React.FC = React.memo(() => {
             if (resume.extras?.openTaskId) {
               sessionStorage.setItem("openTaskId", resume.extras.openTaskId);
             }
-            startTransition(() => setPage(resume.page));
+            navigate(resume.page === "home" ? "/" : `/?app=${resume.page}`, { replace: true });
           }
           sessionStorage.removeItem("fromAuth");
         } else if (fromAuth && u.userMode === "EDUCATIONAL" && u.studentId) {
@@ -663,9 +677,9 @@ const AppContent: React.FC = React.memo(() => {
             const requestedPage = sessionStorage.getItem("studycod.openPage");
 
             const isRootEntry = path === "/";
-            const hasExplicitIntent = Boolean(authIntent || nextAfterAuth || requestedPage);
+            const hasExplicitIntent = Boolean(authIntent || nextAfterAuth || requestedPage || sp.has("app"));
 
-            if (isRootEntry && !hasExplicitIntent) {
+            if (isRootEntry && !hasExplicitIntent && mayResumeInitialRoot) {
               const state = loadResumeState(u.id);
               if (isResumableSession(u, state)) {
                 const resolved = resolveResumeRoute(u, state);
@@ -675,7 +689,8 @@ const AppContent: React.FC = React.memo(() => {
                   if (resolved.extras?.openTaskId) {
                     sessionStorage.setItem("openTaskId", resolved.extras.openTaskId);
                   }
-                  startTransition(() => setPage(resolved.page));
+                  if (u.userMode === "EDUCATIONAL") startTransition(() => setPage(resolved.page));
+                  else navigate(resolved.page === "home" ? "/" : `/?app=${resolved.page}`, { replace: true });
                 }
               }
             }
@@ -686,6 +701,7 @@ const AppContent: React.FC = React.memo(() => {
         setBootResumeHandled(true);
       } catch (error: unknown) {
         if (cancelled) return;
+        initialRootResumeConsumed = true;
 
         const extracted = extractMaintenanceData(error);
         const isMaintenance = extracted.status === 503 && extracted.data?.maintenance === true;
@@ -743,12 +759,13 @@ const AppContent: React.FC = React.memo(() => {
   const handleSetPage = useCallback((newPage: Page) => {
       if (user?.userMode !== "EDUCATIONAL") {
         if (newPage === "home") {
-          startTransition(() => setPage("home"));
           navigate("/");
           return;
         }
       if (newPage === "tasks") { navigate("/lab/practice?workspace=personal"); return; }
       if (newPage === "grades") { navigate("/learning/catalog"); return; }
+      navigate(`/?app=${newPage}`);
+      return;
     }
     startTransition(() => {
       setPage(newPage);
@@ -938,9 +955,18 @@ const PersonalWorkspaceFrame: React.FC<React.PropsWithChildren<{ routeLocation: 
   const courseTab = /\/path\/?$/.test(path) ? "path"
     : /\/practice(?:\/|$)/.test(path) ? "practice"
     : /\/progress\/?$/.test(path) ? "progress" : "overview";
-  const requestedPage = getRequestedAppPage(new URLSearchParams(routeLocation.search));
-  const preview = import.meta.env.DEV && new URLSearchParams(routeLocation.search).get("preview") === "true";
-  const withPreview = (target: string) => preview ? `${target}${target.includes("?") ? "&" : "?"}preview=true` : target;
+  const routeSearch = new URLSearchParams(routeLocation.search);
+  const requestedPage = getRequestedAppPage(routeSearch);
+  const preview = import.meta.env.DEV && routeSearch.get("preview") === "true";
+  const previewPersona = routeSearch.get("persona");
+  const withPreview = (target: string) => {
+    if (!preview) return target;
+    const [pathname, query] = target.split("?");
+    const params = new URLSearchParams(query);
+    params.set("preview", "true");
+    if (previewPersona) params.set("persona", previewPersona);
+    return `${pathname}?${params}`;
+  };
   const page: Page = path === "/" && requestedPage ? resolvePageForUser(requestedPage, user)
     : area === "lab" ? "tasks" : "home";
   const go = (target: Page) => {
@@ -974,6 +1000,7 @@ const PersonalWorkspaceFrame: React.FC<React.PropsWithChildren<{ routeLocation: 
         onLibrary={() => navigate(withPreview("/lab/library"))}
         onCourses={() => navigate(withPreview("/learning/catalog"))}
         onPlayground={() => navigate(withPreview("/lab/playground"))}
+        onContests={() => navigate(withPreview("/contest/contests"))}
         onToggleTheme={toggleTheme}
         onToggleLanguage={() => void i18n.changeLanguage(i18n.language.startsWith("en") ? "uk" : "en")}
         onSupport={() => navigate("/support")}
