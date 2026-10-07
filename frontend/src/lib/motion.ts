@@ -1,10 +1,11 @@
 import type { Variants, Transition } from "framer-motion";
 export const easeOutExpo: Transition["ease"] = [0.16, 1, 0.3, 1];
 export const easeOutQuint: Transition["ease"] = [0.22, 1, 0.36, 1];
+export const easeInOut: Transition["ease"] = [0.77, 0, 0.175, 1];
 export const pageTransition: Transition = {
   type: "spring",
   bounce: 0,
-  duration: 0.38
+  duration: 0.24
 };
 export const reducedMotionTransition: Transition = {
   duration: 0.18,

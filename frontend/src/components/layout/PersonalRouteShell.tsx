@@ -5,7 +5,7 @@ import { getCachedMeUser, getMe } from "../../lib/api/profile";
 import { api } from "../../lib/api/client";
 import type { User } from "../../types";
 import { getCurrentTheme, applyTheme, type AppTheme } from "../../theme";
-import { BrandedPageLoader } from "../ui/BrandedPageLoader";
+import { PageLoader } from "../ui/PageLoadingTransition";
 import { PersonalLearningProvider } from "../learning/PersonalLearningProvider";
 import { PremiumWorkspaceShell } from "./PremiumWorkspaceShell";
 
@@ -33,7 +33,7 @@ export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "l
       });
     return () => { active = false; };
   }, []);
-  if (loading && !user) return <BrandedPageLoader />;
+  if (loading && !user) return <PageLoader />;
   if (!user || loadError && !user) {
     return <main id="main-content" className="flex min-h-[70vh] items-center justify-center px-6 py-12">
       <section role="alert" className="w-full max-w-md rounded-3xl border border-border bg-bg-surface p-7 text-center shadow-sm">

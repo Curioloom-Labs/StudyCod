@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import {
   BookOpen,
   ChevronDown,
@@ -22,6 +23,7 @@ import type { AppTheme } from "../../theme";
 import { usePersonalLearning } from "../learning/PersonalLearningProvider";
 import { SelectMenu } from "../ui/SelectMenu";
 import { DialogA11yObserver } from "../ui/DialogA11yObserver";
+import { easeInOut } from "../../lib/motion";
 
 type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "student" | "admin";
 type NavId = Page | "library" | "playground" | "contests";
@@ -64,6 +66,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
 }) => {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
+  const reduceMotion = useReducedMotion();
   const uk = !i18n.language?.toLowerCase().startsWith("en");
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef<HTMLDivElement | null>(null);
@@ -159,25 +162,40 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
             <span className="hidden font-[family-name:var(--font-display)] text-lg font-bold tracking-[-.04em] xl:inline">StudyCod</span>
           </button>
 
-          <nav className="mx-auto hidden w-fit max-w-[calc(100%-2rem)] flex-none items-center justify-center gap-1 overflow-x-auto rounded-xl bg-[#edf1ed] p-1 whitespace-nowrap dark:bg-white/[.055] lg:flex" aria-label={uk ? "Основна навігація" : "Primary navigation"}>
-            {nav.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => item.onClick ? item.onClick() : onNavigate(item.id as Page)}
-                aria-current={active(item.id) ? "page" : undefined}
-                data-motion-press
-                className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${
-                  active(item.id)
-                    ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]"
-                    : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"
-                }`}
-              >
-                <item.Icon className="h-4 w-4" />
-                {item.label}
-              </button>
-            ))}
-          </nav>
+          <LayoutGroup id="primary-navigation">
+            <nav className="mx-auto hidden w-fit max-w-[calc(100%-2rem)] flex-none items-center justify-center gap-1 overflow-x-auto rounded-xl bg-[#edf1ed] p-1 whitespace-nowrap dark:bg-white/[.055] lg:flex" aria-label={uk ? "Основна навігація" : "Primary navigation"}>
+              {nav.map((item) => {
+                const isActive = active(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => item.onClick ? item.onClick() : onNavigate(item.id as Page)}
+                    aria-current={isActive ? "page" : undefined}
+                    data-motion-press
+                    className={`relative isolate inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${
+                      isActive
+                        ? "text-[#152219] dark:text-[#0b120e]"
+                        : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"
+                    }`}
+                  >
+                    {isActive && (reduceMotion ? (
+                      <span aria-hidden="true" className="absolute inset-0 -z-10 rounded-lg bg-white shadow-sm dark:bg-[#edf3ef]" />
+                    ) : (
+                      <motion.span
+                        aria-hidden="true"
+                        layoutId="primary-navigation-active-pill"
+                        className="absolute inset-0 -z-10 rounded-lg bg-white shadow-sm dark:bg-[#edf3ef]"
+                        transition={{ layout: { duration: 0.18, ease: easeInOut } }}
+                      />
+                    ))}
+                    <item.Icon className="relative z-10 h-4 w-4" />
+                    <span className="relative z-10">{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </LayoutGroup>
 
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <button

@@ -5,7 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
 import { TasksPage } from "../core/TasksPage";
-import { BrandedPageLoader } from "../../components/ui/BrandedPageLoader";
+import { PageLoader } from "../../components/ui/PageLoadingTransition";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
 import type { JudgeLanguage } from "../../lib/judgeLanguages";
 import {
@@ -307,7 +307,7 @@ export const CoursePracticePage: React.FC = () => {
     return () => { cancelled = true; };
   }, [courseId, courseItemId, locale]);
 
-  if (!user || courseLookupState === "pending") return <BrandedPageLoader />;
+  if (!user || courseLookupState === "pending") return <PageLoader />;
   if (courseLookupState !== "loaded" || !courseItem || (courseItem.kind !== "CODE_TASK" && !isProjectItem(courseItem))) {
     const itemKindMessage = courseLookupState === "failed"
       ? tr("Не вдалося перевірити елемент курсу.", "Could not verify this course item.")

@@ -4,7 +4,7 @@ import { getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
 import { TasksPage } from "./TasksPage";
 import { LibraryTaskSolvePage } from "../library/LibraryTaskSolvePage";
-import { BrandedPageLoader } from "../../components/ui/BrandedPageLoader";
+import { PageLoader } from "../../components/ui/PageLoadingTransition";
 
 /**
  * Keep the legacy route useful without making it the Lab landing page.
@@ -28,5 +28,5 @@ export const LabPracticePage: React.FC = () => {
   if (taskKey && !personalWorkspace) return <LibraryTaskSolvePage />;
   if (!personalWorkspace) return <Navigate to="/lab/library" replace />;
 
-  return user ? <TasksPage user={user} /> : <BrandedPageLoader />;
+  return user ? <TasksPage user={user} /> : <PageLoader />;
 };

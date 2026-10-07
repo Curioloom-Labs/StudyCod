@@ -13,7 +13,7 @@ import { PersonalRouteShell } from "./components/layout/PersonalRouteShell";
 import { getLearningMe } from "./lib/api/learningCatalog";
 import { PremiumModuleShell } from "./components/layout/PremiumModuleShell";
 import { StandaloneShell } from "./components/layout/StandaloneShell";
-import { BrandedPageLoader } from "./components/ui/BrandedPageLoader";
+import { PageLoader, PageLoadingProvider } from "./components/ui/PageLoadingTransition";
 import type { MaintenancePayload } from "./pages/system/MaintenancePage";
 import { isResumableSession, loadResumeState, resolveResumeRoute } from "./lib/resumeState";
 import { applyTheme, getCurrentTheme, type AppTheme } from "./theme";
@@ -137,9 +137,6 @@ const SolveReplayPage = React.lazy(() => import("./pages/core/SolveReplayPage").
 const BlogPage = React.lazy(() => import("./pages/system/BlogPage").then(mod => ({ default: mod.BlogPage })));
 const BlogPostPage = React.lazy(() => import("./pages/system/BlogPage").then(mod => ({ default: mod.BlogPostPage })));
 const BlogAdminPage = React.lazy(() => import("./pages/system/BlogAdminPage").then(mod => ({ default: mod.BlogAdminPage })));
-const PageLoader: React.FC = () => {
-  return <BrandedPageLoader />;
-};
 const PublicPageWithFooter: React.FC<{ children: React.ReactNode }> = ({ children }) => <div className="mobile-app-shell flex min-h-[100dvh] flex-col"><div className="mobile-app-viewport flex-1 pb-[env(safe-area-inset-bottom)]">{children}</div><PlatformFooter /></div>;
 type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "student" | "admin";
 
@@ -992,7 +989,8 @@ export const App: React.FC = () => {
     if (ctx === "school") subdomainNavigate("/edu", { replace: true });
     else if (ctx === "contest") subdomainNavigate("/contest", { replace: true });
   }, [location.pathname, subdomainNavigate]);
-  return <TheoryModalProvider>
+  return <PageLoadingProvider>
+    <TheoryModalProvider>
         <ToastViewport />
         {!isContestSurface && <GlobalQuickSearch />}
         <NetworkStatus />
@@ -1236,7 +1234,8 @@ export const App: React.FC = () => {
           </Routes>
           </ContestOnlySurfaceGuard>
         </AnimatePresence>
-    </TheoryModalProvider>;
+    </TheoryModalProvider>
+  </PageLoadingProvider>;
 };
 
 const SupportDeskGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {

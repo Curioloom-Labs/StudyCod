@@ -25,7 +25,7 @@ import { clearGetMeCache } from "../../lib/api/profile";
 import { clearControlExamSession } from "../../lib/controlExamSession";
 import { applyTheme, getCurrentTheme, type AppTheme } from "../../theme";
 import { Logo } from "../Logo";
-import { BrandedPageLoader } from "../ui/BrandedPageLoader";
+import { PageLoader } from "../ui/PageLoadingTransition";
 import { PlatformFooter } from "./PlatformFooter";
 import { DialogA11yObserver } from "../ui/DialogA11yObserver";
 
@@ -125,7 +125,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
     return next;
   });
 
-  if (loading) return <BrandedPageLoader />;
+  if (loading) return <PageLoader />;
   if (!shellUser) return <>{children}</>;
 
   const education = shellUser.userMode === "EDUCATIONAL";
