@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useLayoutEffect, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { easeOutExpo } from "../../lib/motion";
 import { BrandedPageLoader } from "./BrandedPageLoader";
@@ -6,9 +6,11 @@ import { BrandedPageLoader } from "./BrandedPageLoader";
 type RegisterLoader = (id: symbol, active: boolean) => void;
 
 const PageLoadingContext = createContext<RegisterLoader | null>(null);
+const LOADER_SHOW_DELAY_MS = 180;
 
 export const PageLoadingProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [activeLoaders, setActiveLoaders] = useState<Set<symbol>>(() => new Set());
+  const [showLoader, setShowLoader] = useState(false);
   const reduceMotion = useReducedMotion();
 
   const registerLoader = useCallback<RegisterLoader>((id, active) => {
@@ -25,11 +27,21 @@ export const PageLoadingProvider: React.FC<React.PropsWithChildren> = ({ childre
   const enterDuration = reduceMotion ? 0.12 : 0.16;
   const exitDuration = reduceMotion ? 0.12 : 0.14;
 
+  useEffect(() => {
+    if (!isLoading) {
+      setShowLoader(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setShowLoader(true), LOADER_SHOW_DELAY_MS);
+    return () => window.clearTimeout(timeout);
+  }, [isLoading]);
+
   return (
     <PageLoadingContext.Provider value={registerLoader}>
       {children}
       <AnimatePresence initial={false}>
-        {isLoading && (
+        {showLoader && (
           <motion.div
             key="page-loading-overlay"
             className="fixed inset-0 z-[10000]"
