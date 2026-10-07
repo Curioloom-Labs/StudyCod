@@ -14,43 +14,40 @@ export const reducedMotionTransition: Transition = {
 export const pageVariants: Variants = {
   initial: {
     opacity: 0,
-    y: 8,
-    scale: 1
+    transform: "translate3d(16px, 0, 0)"
   },
   animate: {
     opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: pageTransition
+    transform: "translate3d(0, 0, 0)",
+    transition: {
+      duration: 0.22,
+      ease: easeOutExpo
+    }
   },
   exit: {
     opacity: 0,
-    y: -4,
-    scale: 1,
+    transform: "translate3d(-12px, 0, 0)",
     transition: {
-      duration: 0.18,
+      duration: 0.16,
       ease: easeOutQuint
     }
   }
 };
 export const reducedPageVariants: Variants = {
   initial: {
-    opacity: 0,
-    y: 0,
-    scale: 1
+    opacity: 0
   },
   animate: {
     opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: reducedMotionTransition
+    transition: {
+      duration: 0.15,
+      ease: "linear"
+    }
   },
   exit: {
     opacity: 0,
-    y: 0,
-    scale: 1,
     transition: {
-      duration: 0.14,
+      duration: 0.12,
       ease: "linear"
     }
   }

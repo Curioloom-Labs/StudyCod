@@ -859,7 +859,11 @@ const AppContent: React.FC = React.memo(() => {
       onSupportDesk={() => navigate("/support/desk")}
       onLogout={handleLogout}
     >
-      {content}
+      <AnimatePresence mode="wait" initial={false}>
+        <AnimatedPage key={resolvedPage} className="w-full">
+          {content}
+        </AnimatedPage>
+      </AnimatePresence>
     </PremiumWorkspaceShell></PersonalLearningProvider>;
   }
 
@@ -971,6 +975,7 @@ export const App: React.FC = () => {
   const topLevelRouteKey = useMemo(() => {
     const path = location.pathname || "/";
     if (/^\/edu(?:\/|$)/.test(path)) return "/edu";
+    if (/^\/contest\/entry(?:\/|$)/.test(path)) return "/contest/entry";
     if (/^\/contest(?:\/|$)/.test(path)) return "/contest";
     return path;
   }, [location.pathname]);
@@ -1001,8 +1006,8 @@ export const App: React.FC = () => {
         {!isContestSurface && <GlobalQuickSearch />}
         <NetworkStatus />
         {!isContestSurface && <MascotCompanion />}
-        <AnimatePresence mode="sync">
-          <ContestOnlySurfaceGuard>
+        <ContestOnlySurfaceGuard>
+          <AnimatePresence mode="wait" initial={false}>
           <Routes location={location} key={topLevelRouteKey}>
           {(import.meta.env.DEV || import.meta.env.VITE_BROWSER_CONTRACT === "1") ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
@@ -1230,16 +1235,16 @@ export const App: React.FC = () => {
                   <EduRoutes />
                 </AnimatedPage>
               </Suspense>} />
-          <Route path="/contest/entry/:id" element={<ContestEntryRoute />} />
+          <Route path="/contest/entry/:id" element={<AnimatedPage><ContestEntryRoute /></AnimatedPage>} />
           <Route path="/contest/*" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <ContestRoutes />
                 </AnimatedPage>
               </Suspense>} />
-            <Route path="*" element={<AppContent />} />
+            <Route path="*" element={<AnimatedPage><AppContent /></AnimatedPage>} />
           </Routes>
-          </ContestOnlySurfaceGuard>
-        </AnimatePresence>
+          </AnimatePresence>
+        </ContestOnlySurfaceGuard>
     </TheoryModalProvider>
   </PageLoadingProvider>;
 };
@@ -1401,7 +1406,7 @@ const ContestRoutes: React.FC = React.memo(() => {
   }}>
       <div className="min-w-0">
         <Suspense fallback={<ContestRouteFallback />}>
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" initial={false}>
             <Routes location={location} key={location.pathname}>
               <Route index element={<Navigate to="contests" replace />} />
               <Route path="contests" element={<AnimatedPage><ContestsPage canCreate={user.userMode !== "CONTEST"} canJoinPrivateByCode={user.userMode !== "CONTEST"} favoriteScope={String(user.id)} /></AnimatedPage>} />
@@ -1660,7 +1665,7 @@ const EduRoutes: React.FC = React.memo(() => {
   const studentOnly = (element: React.ReactElement) => user.studentId ? element : <Navigate to="/edu" replace />;
   const eduMain = <main id="main-content" className={`flex-1 min-h-0 flex flex-col ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait" initial={false}>
           <Routes location={location} key={location.pathname}>
             {}
             <Route index element={user.studentId ? <Navigate to="/edu/lessons" replace /> : <AnimatedPage>
