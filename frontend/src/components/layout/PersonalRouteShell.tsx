@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { getCachedMeUser, getMe } from "../../lib/api/profile";
@@ -8,8 +8,10 @@ import { getCurrentTheme, applyTheme, type AppTheme } from "../../theme";
 import { PageLoader } from "../ui/PageLoadingTransition";
 import { PersonalLearningProvider } from "../learning/PersonalLearningProvider";
 import { PremiumWorkspaceShell } from "./PremiumWorkspaceShell";
+import { PersonalWorkspaceContext } from "./PersonalWorkspaceContext";
 
 export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "learning" | "lab"; courseTab?: "overview" | "path" | "practice" | "progress" }> = ({ children, area = "learning", courseTab = "overview" }) => {
+  const sharedWorkspace = useContext(PersonalWorkspaceContext);
   const [user, setUser] = React.useState<User | null>(() => getCachedMeUser());
   const [loading, setLoading] = React.useState(() => !getCachedMeUser());
   const [loadError, setLoadError] = React.useState(false);
@@ -17,11 +19,13 @@ export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "l
   const navigate = useNavigate();
   const { i18n } = useTranslation();
   React.useEffect(() => {
+    if (sharedWorkspace?.active) return;
     let active = true;
     void getMe({ suppressAuthRedirect: true })
       .then((nextUser) => {
         if (!active) return;
         setUser(nextUser);
+        sharedWorkspace?.setUser(nextUser);
         setLoadError(false);
       })
       .catch(() => {
@@ -32,7 +36,8 @@ export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "l
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, []);
+  }, [sharedWorkspace?.active, sharedWorkspace?.setUser]);
+  if (sharedWorkspace?.active) return <>{children}</>;
   if (loading && !user) return <PageLoader />;
   if (!user || loadError && !user) {
     return <main id="main-content" className="flex min-h-[70vh] items-center justify-center px-6 py-12">

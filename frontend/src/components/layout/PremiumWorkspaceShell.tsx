@@ -329,7 +329,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
           ))}
         </div>
       </nav>
-      <main className="mobile-app-viewport min-w-0 flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
+      <main className="mobile-app-viewport relative min-w-0 flex-1 overflow-x-clip pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
       <PlatformFooter />
     </div>
   );

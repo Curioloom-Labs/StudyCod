@@ -1,15 +1,16 @@
-import React, { useEffect, useState, Suspense, useCallback, useMemo, useRef, startTransition } from "react";
-import { Routes, Route, useLocation, useNavigate, useSearchParams, useParams, Navigate } from "react-router-dom";
+import React, { useEffect, useState, Suspense, useCallback, useMemo, useRef, useContext, startTransition } from "react";
+import { Routes, Route, useLocation, useNavigate, useSearchParams, useParams, Navigate, type Location } from "react-router-dom";
 import { enforceSubdomain, getHostContext } from "./lib/subdomain";
 import { AnimatePresence } from "framer-motion";
 import { clearGetMeCache, getCachedMeUser, getMe } from "./lib/api/profile";
 import type { User } from "./types";
 import { useTranslation } from "react-i18next";
-import { AnimatedPage } from "./components/layout/AnimatedPage";
+import { AnimatedPage, PageMotionScope } from "./components/layout/AnimatedPage";
 import { PlatformFooter } from "./components/layout/PlatformFooter";
 import { PremiumWorkspaceShell } from "./components/layout/PremiumWorkspaceShell";
 import { PersonalLearningProvider } from "./components/learning/PersonalLearningProvider";
 import { PersonalRouteShell } from "./components/layout/PersonalRouteShell";
+import { PersonalWorkspaceContext } from "./components/layout/PersonalWorkspaceContext";
 import { getLearningMe } from "./lib/api/learningCatalog";
 import { PremiumModuleShell } from "./components/layout/PremiumModuleShell";
 import { StandaloneShell } from "./components/layout/StandaloneShell";
@@ -329,6 +330,7 @@ function getSafeNextAfterAuth(searchParams: URLSearchParams): string | null {
 }
 
 const AppContent: React.FC = React.memo(() => {
+  const sharedWorkspace = useContext(PersonalWorkspaceContext);
   const {
     t,
     i18n
@@ -380,6 +382,9 @@ const AppContent: React.FC = React.memo(() => {
   });
   const [showAdminLogin, setShowAdminLogin] = useState<boolean>(false);
   const [bootResumeHandled, setBootResumeHandled] = useState<boolean>(() => Boolean(getCachedMeUser()));
+  useEffect(() => {
+    if (user || !loading && bootResumeHandled) sharedWorkspace?.setUser(user);
+  }, [sharedWorkspace?.setUser, user, loading, bootResumeHandled]);
   const requestedAppPage = useMemo(() => getRequestedAppPage(searchParams), [searchParams]);
   const isDevPreview = import.meta.env.DEV && searchParams.get("preview") === "true";
   const previewPersona = searchParams.get("persona");
@@ -845,6 +850,11 @@ const AppContent: React.FC = React.memo(() => {
   // The personal product no longer sits inside any legacy terminal/momentum
   // shell. It owns a single, calm SaaS workspace chrome across every core page.
   if (user.userMode !== "EDUCATIONAL") {
+    if (sharedWorkspace?.active) return <PageMotionScope.Provider value={false}>
+      <AnimatePresence mode="sync" initial={false}>
+        <AnimatedPage key={resolvedPage} className="w-full">{content}</AnimatedPage>
+      </AnimatePresence>
+    </PageMotionScope.Provider>;
     return <PersonalLearningProvider><PremiumWorkspaceShell
       user={user}
       page={resolvedPage}
@@ -859,11 +869,13 @@ const AppContent: React.FC = React.memo(() => {
       onSupportDesk={() => navigate("/support/desk")}
       onLogout={handleLogout}
     >
-      <AnimatePresence mode="wait" initial={false}>
-        <AnimatedPage key={resolvedPage} className="w-full">
-          {content}
-        </AnimatedPage>
-      </AnimatePresence>
+      <PageMotionScope.Provider value={false}>
+        <AnimatePresence mode="sync" initial={false}>
+          <AnimatedPage key={resolvedPage} className="w-full">
+            {content}
+          </AnimatedPage>
+        </AnimatePresence>
+      </PageMotionScope.Provider>
     </PremiumWorkspaceShell></PersonalLearningProvider>;
   }
 
@@ -905,6 +917,74 @@ const AppContent: React.FC = React.memo(() => {
 });
 AppContent.displayName = "AppContent";
 AppContent.displayName = "AppContent";
+
+const isPersonalWorkspacePath = (path: string) => path === "/" || /^\/(?:lab|learning|library|playground)(?:\/|$)/.test(path);
+
+const PersonalWorkspaceFrame: React.FC<React.PropsWithChildren<{ routeLocation: Location }>> = ({ children, routeLocation }) => {
+  const navigate = useNavigate();
+  const { i18n } = useTranslation();
+  const [user, setUser] = useState<User | null>(() => getCachedMeUser());
+  const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
+  const path = routeLocation.pathname;
+  const isPersonalPath = isPersonalWorkspacePath(path);
+  const active = Boolean(isPersonalPath && user && user.userMode !== "EDUCATIONAL" && user.userMode !== "CONTEST");
+  const context = useMemo(() => ({ active, setUser }), [active]);
+
+  if (!active || !user) {
+    return <PersonalWorkspaceContext.Provider value={context}>{children}</PersonalWorkspaceContext.Provider>;
+  }
+
+  const area = /^\/(?:lab|library|playground)(?:\/|$)/.test(path) ? "lab" : "learning";
+  const courseTab = /\/path\/?$/.test(path) ? "path"
+    : /\/practice(?:\/|$)/.test(path) ? "practice"
+    : /\/progress\/?$/.test(path) ? "progress" : "overview";
+  const requestedPage = getRequestedAppPage(new URLSearchParams(routeLocation.search));
+  const preview = import.meta.env.DEV && new URLSearchParams(routeLocation.search).get("preview") === "true";
+  const withPreview = (target: string) => preview ? `${target}${target.includes("?") ? "&" : "?"}preview=true` : target;
+  const page: Page = path === "/" && requestedPage ? resolvePageForUser(requestedPage, user)
+    : area === "lab" ? "tasks" : "home";
+  const go = (target: Page) => {
+    if (target === "home") navigate(withPreview("/"));
+    else if (target === "tasks") navigate(withPreview("/lab/practice?workspace=personal"));
+    else if (target === "grades") navigate(withPreview("/learning/catalog"));
+    else navigate(withPreview(`/?app=${target}`));
+  };
+  const toggleTheme = () => setTheme((current) => {
+    const next: AppTheme = current === "dark" ? "light" : "dark";
+    applyTheme(next);
+    return next;
+  });
+  const logout = () => {
+    setUser(null);
+    clearGetMeCache({ clearSnapshot: true });
+    clearControlExamSession();
+    void api.post("/auth/logout", undefined, { headers: { "X-Skip-Auth-Redirect": "1" } }).catch(() => undefined);
+    navigate("/");
+  };
+
+  return <PersonalWorkspaceContext.Provider value={context}>
+    <PersonalLearningProvider>
+      <PremiumWorkspaceShell
+        user={user}
+        page={page}
+        theme={theme}
+        area={area}
+        courseTab={courseTab}
+        onNavigate={go}
+        onLibrary={() => navigate(withPreview("/lab/library"))}
+        onCourses={() => navigate(withPreview("/learning/catalog"))}
+        onPlayground={() => navigate(withPreview("/lab/playground"))}
+        onToggleTheme={toggleTheme}
+        onToggleLanguage={() => void i18n.changeLanguage(i18n.language.startsWith("en") ? "uk" : "en")}
+        onSupport={() => navigate("/support")}
+        onSupportDesk={() => navigate("/support/desk")}
+        onLogout={logout}
+      >
+        {children}
+      </PremiumWorkspaceShell>
+    </PersonalLearningProvider>
+  </PersonalWorkspaceContext.Provider>;
+};
 
 const ContestOnlySurfaceGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
@@ -979,6 +1059,7 @@ export const App: React.FC = () => {
     if (/^\/contest(?:\/|$)/.test(path)) return "/contest";
     return path;
   }, [location.pathname]);
+  const productRouteKey = isPersonalWorkspacePath(location.pathname) ? "/personal" : topLevelRouteKey;
   const subdomainNavigate = useNavigate();
   const didSubdomainLand = useRef(false);
   useEffect(() => {
@@ -1006,9 +1087,14 @@ export const App: React.FC = () => {
         {!isContestSurface && <GlobalQuickSearch />}
         <NetworkStatus />
         {!isContestSurface && <MascotCompanion />}
-        <ContestOnlySurfaceGuard>
-          <AnimatePresence mode="wait" initial={false}>
-          <Routes location={location} key={topLevelRouteKey}>
+        <AnimatePresence mode="sync" initial={false}>
+        <AnimatedPage key={productRouteKey} className="w-full">
+        <PersonalWorkspaceFrame routeLocation={location}><ContestOnlySurfaceGuard>
+          <PageMotionScope.Provider value={false}>
+          <AnimatePresence mode="sync" initial={false}>
+          <AnimatedPage key={topLevelRouteKey} className="w-full">
+          <PageMotionScope.Provider value={true}>
+          <Routes location={location}>
           {(import.meta.env.DEV || import.meta.env.VITE_BROWSER_CONTRACT === "1") ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
                   <DevEditorPage />
@@ -1243,8 +1329,13 @@ export const App: React.FC = () => {
               </Suspense>} />
             <Route path="*" element={<AnimatedPage><AppContent /></AnimatedPage>} />
           </Routes>
+          </PageMotionScope.Provider>
+          </AnimatedPage>
           </AnimatePresence>
-        </ContestOnlySurfaceGuard>
+          </PageMotionScope.Provider>
+        </ContestOnlySurfaceGuard></PersonalWorkspaceFrame>
+        </AnimatedPage>
+        </AnimatePresence>
     </TheoryModalProvider>
   </PageLoadingProvider>;
 };
@@ -1415,10 +1506,13 @@ const ContestRoutes: React.FC = React.memo(() => {
     navigate("/contest", { replace: true });
     window.location.reload();
   }}>
-      <div className="min-w-0">
+      <div className="relative min-w-0 overflow-x-clip">
         <Suspense fallback={<ContestRouteFallback />}>
-          <AnimatePresence mode="wait" initial={false}>
-            <Routes location={location} key={location.pathname}>
+          <PageMotionScope.Provider value={false}>
+          <AnimatePresence mode="sync" initial={false}>
+            <AnimatedPage key={location.pathname} className="w-full">
+            <PageMotionScope.Provider value={true}>
+            <Routes location={location}>
               <Route index element={<Navigate to="contests" replace />} />
               <Route path="contests" element={<AnimatedPage><ContestsPage canCreate={user.userMode !== "CONTEST"} canJoinPrivateByCode={user.userMode !== "CONTEST"} favoriteScope={String(user.id)} /></AnimatedPage>} />
               <Route path="contests/:id/scoreboard" element={<AnimatedPage><ContestScoreboardPage /></AnimatedPage>} />
@@ -1427,7 +1521,10 @@ const ContestRoutes: React.FC = React.memo(() => {
               <Route path="contests/:id/problems/:problemId" element={<AnimatedPage><ContestProblemSolvePage /></AnimatedPage>} />
               <Route path="*" element={<Navigate to="contests" replace />} />
             </Routes>
+            </PageMotionScope.Provider>
+            </AnimatedPage>
           </AnimatePresence>
+          </PageMotionScope.Provider>
         </Suspense>
       </div>
     </PremiumModuleShell>;
@@ -1674,10 +1771,13 @@ const EduRoutes: React.FC = React.memo(() => {
   const teacherOnly = (element: React.ReactElement) => user.studentId ? <Navigate to="/edu/lessons" replace /> : element;
   const orgAdminOnly = (element: React.ReactElement) => isOrgAdmin ? element : <Navigate to="/edu" replace />;
   const studentOnly = (element: React.ReactElement) => user.studentId ? element : <Navigate to="/edu" replace />;
-  const eduMain = <main id="main-content" className={`flex-1 min-h-0 flex flex-col ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
+  const eduMain = <main id="main-content" className={`relative flex-1 min-h-0 flex flex-col ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
-        <AnimatePresence mode="wait" initial={false}>
-          <Routes location={location} key={location.pathname}>
+        <PageMotionScope.Provider value={false}>
+        <AnimatePresence mode="sync" initial={false}>
+          <AnimatedPage key={location.pathname} className="w-full">
+          <PageMotionScope.Provider value={true}>
+          <Routes location={location}>
             {}
             <Route index element={user.studentId ? <Navigate to="/edu/lessons" replace /> : <AnimatedPage>
                     <TeacherDashboardPage />
@@ -1720,7 +1820,10 @@ const EduRoutes: React.FC = React.memo(() => {
             {}
             <Route path="*" element={<Navigate to={user.studentId ? "/edu/lessons" : "/edu"} replace />} />
           </Routes>
+          </PageMotionScope.Provider>
+          </AnimatedPage>
         </AnimatePresence>
+        </PageMotionScope.Provider>
       </Suspense>
     </main>;
 
