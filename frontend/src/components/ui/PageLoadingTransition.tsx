@@ -6,12 +6,14 @@ import { BrandedPageLoader } from "./BrandedPageLoader";
 type RegisterLoader = (id: symbol, active: boolean) => void;
 
 const PageLoadingContext = createContext<RegisterLoader | null>(null);
-const LOADER_SHOW_DELAY_MS = 180;
+const LOADER_SHOW_DELAY_MS = 240;
+const LOADER_MIN_VISIBLE_MS = 180;
 
 export const PageLoadingProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [activeLoaders, setActiveLoaders] = useState<Set<symbol>>(() => new Set());
   const [showLoader, setShowLoader] = useState(false);
   const reduceMotion = useReducedMotion();
+  const loaderShownAt = useRef<number | null>(null);
 
   const registerLoader = useCallback<RegisterLoader>((id, active) => {
     setActiveLoaders((current) => {
@@ -28,14 +30,24 @@ export const PageLoadingProvider: React.FC<React.PropsWithChildren> = ({ childre
   const exitDuration = reduceMotion ? 0.12 : 0.14;
 
   useEffect(() => {
-    if (!isLoading) {
-      setShowLoader(false);
-      return;
+    if (isLoading) {
+      if (showLoader) return;
+      const timeout = window.setTimeout(() => {
+        loaderShownAt.current = Date.now();
+        setShowLoader(true);
+      }, LOADER_SHOW_DELAY_MS);
+      return () => window.clearTimeout(timeout);
     }
 
-    const timeout = window.setTimeout(() => setShowLoader(true), LOADER_SHOW_DELAY_MS);
+    if (!showLoader) return;
+    const elapsed = loaderShownAt.current === null ? LOADER_MIN_VISIBLE_MS : Date.now() - loaderShownAt.current;
+    const remainingVisibleTime = Math.max(0, LOADER_MIN_VISIBLE_MS - elapsed);
+    const timeout = window.setTimeout(() => {
+      loaderShownAt.current = null;
+      setShowLoader(false);
+    }, remainingVisibleTime);
     return () => window.clearTimeout(timeout);
-  }, [isLoading]);
+  }, [isLoading, showLoader]);
 
   return (
     <PageLoadingContext.Provider value={registerLoader}>

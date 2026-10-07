@@ -1328,16 +1328,27 @@ const LegacyContestRouteRedirect: React.FC = () => {
   return <Navigate to={{ pathname: destination, search: location.search, hash: location.hash }} replace />;
 };
 
-const ContestRouteFallback: React.FC = () => (
-  <div role="status" className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
-    <span className="sr-only">Завантаження контестів…</span>
-    <div className="mb-4 h-3 w-36 animate-pulse rounded-full bg-[#e8eeea] dark:bg-white/[.06]" />
-    <div className="mb-10 h-10 w-80 max-w-full animate-pulse rounded-xl bg-[#e8eeea] dark:bg-white/[.06]" />
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {[1, 2, 3].map((key) => <div key={key} className="h-[270px] animate-pulse rounded-[24px] bg-[#e8eeea] dark:bg-white/[.05]" />)}
+const ContestRouteFallback: React.FC = () => {
+  const [visible, setVisible] = React.useState(false);
+
+  React.useEffect(() => {
+    const timeout = window.setTimeout(() => setVisible(true), 240);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <div role="status" className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+      <span className="sr-only">Завантаження контестів…</span>
+      <div className="mb-4 h-3 w-36 animate-pulse rounded-full bg-[#e8eeea] dark:bg-white/[.06]" />
+      <div className="mb-10 h-10 w-80 max-w-full animate-pulse rounded-xl bg-[#e8eeea] dark:bg-white/[.06]" />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {[1, 2, 3].map((key) => <div key={key} className="h-[270px] animate-pulse rounded-[24px] bg-[#e8eeea] dark:bg-white/[.05]" />)}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const ContestRoutes: React.FC = React.memo(() => {
   const navigate = useNavigate();
