@@ -1,6 +1,7 @@
 (function () {
   try {
-    var canonicalHref = window.location.origin + window.location.pathname;
+    var canonicalPath = window.location.pathname.replace(/\/+$/, "") || "/";
+    var canonicalHref = "https://studycod.space" + canonicalPath;
 
     var canonical = document.querySelector('link[rel="canonical"]');
     if (!canonical) {
