@@ -31,7 +31,7 @@ type NavItem = { id: NavId; label: string; Icon: React.ElementType<{ className?:
 
 type ShellProps = {
   user: User;
-  page: Page;
+  page: Page | "contests";
   theme: AppTheme;
   onNavigate: (page: Page) => void;
   onLibrary: () => void;
@@ -44,7 +44,7 @@ type ShellProps = {
   onSupportDesk?: () => void;
   onLogout: () => void;
   children: React.ReactNode;
-  area?: "learning" | "lab";
+  area?: "learning" | "lab" | "contest";
   courseTab?: "overview" | "path" | "practice" | "progress";
 };
 

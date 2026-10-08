@@ -311,6 +311,18 @@ function getRequestedAppPage(searchParams: URLSearchParams): Page | null {
   return asPage(String(searchParams.get("app") ?? ""));
 }
 
+function withDevPreview(target: string, currentSearch: string): string {
+  if (!import.meta.env.DEV) return target;
+  const currentParams = new URLSearchParams(currentSearch);
+  if (currentParams.get("preview") !== "true") return target;
+  const [pathname, query] = target.split("?");
+  const params = new URLSearchParams(query);
+  params.set("preview", "true");
+  const persona = currentParams.get("persona");
+  if (persona) params.set("persona", persona);
+  return `${pathname}?${params}`;
+}
+
 // Resume a saved page only on the document's first root load. Returning to
 // Learning through client navigation must always honor the clicked destination.
 const initialRootEntry = typeof window !== "undefined" && window.location.pathname === "/";
@@ -902,7 +914,7 @@ const AppContent: React.FC = React.memo(() => {
       user={user}
       theme={theme}
       currentPath={location.pathname}
-      onNavigate={navigate}
+      onNavigate={(path) => navigate(withDevPreview(path, location.search))}
       onToggleTheme={toggleTheme}
       onLogout={handleLogout}
     >
@@ -957,16 +969,7 @@ const PersonalWorkspaceFrame: React.FC<React.PropsWithChildren<{ routeLocation: 
     : /\/progress\/?$/.test(path) ? "progress" : "overview";
   const routeSearch = new URLSearchParams(routeLocation.search);
   const requestedPage = getRequestedAppPage(routeSearch);
-  const preview = import.meta.env.DEV && routeSearch.get("preview") === "true";
-  const previewPersona = routeSearch.get("persona");
-  const withPreview = (target: string) => {
-    if (!preview) return target;
-    const [pathname, query] = target.split("?");
-    const params = new URLSearchParams(query);
-    params.set("preview", "true");
-    if (previewPersona) params.set("persona", previewPersona);
-    return `${pathname}?${params}`;
-  };
+  const withPreview = (target: string) => withDevPreview(target, routeLocation.search);
   const page: Page = path === "/" && requestedPage ? resolvePageForUser(requestedPage, user)
     : area === "lab" ? "tasks" : "home";
   const go = (target: Page) => {
@@ -1471,6 +1474,7 @@ const ContestRouteFallback: React.FC = () => {
 const ContestRoutes: React.FC = React.memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { i18n } = useTranslation();
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [user, setUser] = useState<User | null>(() => getCachedMeUser());
   const [ready, setReady] = useState(() => Boolean(getCachedMeUser()));
@@ -1478,7 +1482,21 @@ const ContestRoutes: React.FC = React.memo(() => {
 
   useEffect(() => {
     if (isDevPreview) {
-      setUser({
+      const persona = new URLSearchParams(location.search).get("persona");
+      if (persona === "personal") setUser(DEV_PREVIEW_USER);
+      else if (persona === "admin") setUser({ ...DEV_PREVIEW_USER, role: "SYSTEM_ADMIN", username: "admin-preview", firstName: "Admin" });
+      else if (persona === "teacher" || persona === "student") setUser({
+        id: persona === "student" ? -202 : -201,
+        username: `${persona}-preview`,
+        firstName: persona === "student" ? "Софія" : "Ірина",
+        activeRuntime: "PYTHON",
+        difus: 74,
+        avatarUrl: null,
+        userMode: "EDUCATIONAL",
+        role: persona === "student" ? "USER" : "TEACHER",
+        ...(persona === "student" ? { studentId: -202, classId: -31, className: "10-Б" } : {}),
+      });
+      else setUser({
         id: -301,
         username: "contest-preview",
         firstName: "Марко",
@@ -1527,13 +1545,14 @@ const ContestRoutes: React.FC = React.memo(() => {
       </Suspense>;
   }
 
-  return <PremiumModuleShell product="CONTEST" user={user} theme={theme} currentPath={location.pathname} onNavigate={navigate} onToggleTheme={toggleTheme} onLogout={() => {
+  const goTo = (target: string) => navigate(withDevPreview(target, location.search));
+  const logout = () => {
     void api.post("/auth/logout", undefined, { headers: { "X-Skip-Auth-Redirect": "1" } }).catch(() => undefined);
     clearControlExamSession();
     navigate("/contest", { replace: true });
     window.location.reload();
-  }}>
-      <div className="relative min-w-0 overflow-x-clip">
+  };
+  const content = <div id="main-content" className="relative min-w-0 overflow-x-clip">
         <Suspense fallback={<ContestRouteFallback />}>
           <PageMotionScope.Provider value={false}>
           <AnimatePresence mode="sync" initial={false}>
@@ -1553,8 +1572,47 @@ const ContestRoutes: React.FC = React.memo(() => {
           </AnimatePresence>
           </PageMotionScope.Provider>
         </Suspense>
-      </div>
-    </PremiumModuleShell>;
+      </div>;
+
+  if (user.userMode === "EDUCATIONAL") {
+    return <PremiumModuleShell product="EDU" user={user} theme={theme} currentPath={location.pathname} onNavigate={goTo} onToggleTheme={toggleTheme} onLogout={logout} onEduContextChange={async (studentId) => {
+      setActiveEduStudentId(studentId);
+      try {
+        const nextUser = await getMe({ force: true, suppressAuthRedirect: true });
+        setUser(nextUser);
+        goTo(studentId == null ? "/edu" : "/edu/lessons");
+      } catch {
+        // The current contest stays usable if refreshing the EDU context fails.
+      }
+    }}>{content}</PremiumModuleShell>;
+  }
+
+  if (user.userMode !== "CONTEST") {
+    const goToPage = (target: Page) => {
+      if (target === "home") goTo("/");
+      else if (target === "tasks") goTo("/lab/practice?workspace=personal");
+      else if (target === "grades") goTo("/learning/catalog");
+      else goTo(`/?app=${target}`);
+    };
+    return <PersonalLearningProvider><PremiumWorkspaceShell
+      user={user}
+      page="contests"
+      area="contest"
+      theme={theme}
+      onNavigate={goToPage}
+      onLibrary={() => goTo("/lab/library")}
+      onCourses={() => goTo("/learning/catalog")}
+      onPlayground={() => goTo("/lab/playground")}
+      onContests={() => goTo("/contest/contests")}
+      onToggleTheme={toggleTheme}
+      onToggleLanguage={() => void i18n.changeLanguage(i18n.language.startsWith("en") ? "uk" : "en")}
+      onSupport={() => goTo("/support")}
+      onSupportDesk={() => goTo("/support/desk")}
+      onLogout={logout}
+    >{content}</PremiumWorkspaceShell></PersonalLearningProvider>;
+  }
+
+  return <PremiumModuleShell product="CONTEST" user={user} theme={theme} currentPath={location.pathname} onNavigate={goTo} onToggleTheme={toggleTheme} onLogout={logout}>{content}</PremiumModuleShell>;
 });
 ContestRoutes.displayName = "ContestRoutes";
 
@@ -1775,7 +1833,7 @@ const EduRoutes: React.FC = React.memo(() => {
       user={user}
       theme={theme}
       currentPath={location.pathname}
-      onNavigate={navigate}
+      onNavigate={(path) => navigate(withDevPreview(path, location.search))}
       onToggleTheme={toggleTheme}
       onLogout={handleLogout}
     >
@@ -1860,7 +1918,7 @@ const EduRoutes: React.FC = React.memo(() => {
       theme={theme}
       currentPath={location.pathname}
       navigationHidden={isControlExamActive}
-      onNavigate={navigate}
+      onNavigate={(path) => navigate(withDevPreview(path, location.search))}
       onToggleTheme={toggleTheme}
       onEduContextChange={handleEduContextChange}
       onLogout={handleLogout}
