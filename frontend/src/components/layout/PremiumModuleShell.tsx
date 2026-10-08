@@ -208,29 +208,29 @@ export const PremiumModuleShell: React.FC<Props> = ({
   }, [accountOpen]);
 
   return (
-    <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
+    <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary">
       <a className="skip-link" href="#main-content">{uk ? "Перейти до основного вмісту" : "Skip to main content"}</a>
       <DialogA11yObserver rootRef={shellRef} />
-      <header data-material="premium-header" className="sticky top-0 z-50 border-b border-[#152219]/10 bg-[#f7f8f5]/85 backdrop-blur-xl dark:border-white/10 dark:bg-[#0b120e]/85">
+      <header data-material="premium-header" className="sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl">
         <div className="mx-auto flex h-[72px] w-full max-w-[1480px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-10">
           <button
             type="button"
             onClick={() => !navigationHidden && onNavigate(productHome)}
             className="flex items-center gap-2.5"
           >
-            <span className="grid size-9 place-items-center rounded-xl bg-[#153321]">
+            <span className="grid size-9 place-items-center rounded-xl bg-primary-strong text-primary-foreground">
               <Logo size={19} />
             </span>
             <span className="font-[family-name:var(--font-display)] text-lg font-bold tracking-[-.04em]">
               StudyCod{" "}
-              <span className="text-[#14804a] dark:text-[#72edb0]">
+              <span className="text-primary-strong dark:text-primary-soft">
                 {product}
               </span>
             </span>
           </button>
 
           {!navigationHidden && (
-            <nav aria-label={uk ? "Навігація модуля" : "Module navigation"} className="hidden items-center gap-1 rounded-xl bg-[#edf1ed] p-1 dark:bg-white/[.055] md:flex">
+            <nav aria-label={uk ? "Навігація модуля" : "Module navigation"} className="hidden items-center gap-1 rounded-xl bg-bg-hover p-1 md:flex">
               {nav.map(({ label, path, Icon }) => (
                 <button
                   type="button"
@@ -238,7 +238,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                   onClick={() => onNavigate(path)}
                   aria-current={isActive(path) ? "page" : undefined}
                   data-motion-press
-                  className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition motion-safe:active:scale-[.97] ${isActive(path) ? "bg-white text-[#152219] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"}`}
+                  className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition motion-safe:active:scale-[.97] ${isActive(path) ? "bg-bg-surface text-text-primary shadow-sm" : "text-text-muted hover:text-text-primary dark:text-text-secondary dark:hover:text-text-primary"}`}
                 >
                   <Icon className="size-4" />
                   {label}
@@ -252,7 +252,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
               type="button"
               onClick={onToggleTheme}
               data-motion-press
-              className="grid size-9 place-items-center rounded-xl text-[#637166] transition motion-safe:active:scale-[.97] hover:bg-[#e9eeea] dark:text-[#a6b5aa] dark:hover:bg-white/[.07]"
+              className="grid size-9 place-items-center rounded-xl text-text-muted transition motion-safe:active:scale-[.97] hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.07]"
               aria-label={theme === "dark" ? (uk ? "Перемкнути на світлу тему" : "Switch to light theme") : (uk ? "Перемкнути на темну тему" : "Switch to dark theme")}
             >
               {theme === "dark" ? (
@@ -274,13 +274,13 @@ export const PremiumModuleShell: React.FC<Props> = ({
                     }
                   }}
                   data-motion-press
-                  className="flex h-10 max-w-[320px] items-center gap-2 rounded-xl bg-[#e7f6ec] px-2 text-sm font-semibold text-[#147b47] transition motion-safe:active:scale-[.97] dark:bg-[#00ff88]/10 dark:text-[#62ecaa]"
+                  className="flex h-10 max-w-[320px] items-center gap-2 rounded-xl bg-primary/10 px-2 text-sm font-semibold text-primary-strong transition motion-safe:active:scale-[.97] dark:bg-primary/10 dark:text-primary-soft"
                   aria-haspopup="menu"
                   aria-expanded={accountOpen}
                   aria-label={uk ? `Відкрити меню акаунта ${displayName}` : `Open account menu for ${displayName}`}
                   title={`${displayName} · @${user.username}`}
                 >
-                  <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#17251c] text-xs text-[#72edb0]">
+                  <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary-strong text-xs text-primary-foreground">
                     {user.username.slice(0, 1).toUpperCase()}
                   </span>
                   <span className="hidden min-w-0 max-w-[220px] truncate sm:block lg:max-w-[260px]">
@@ -295,7 +295,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                     ref={accountMenuRef}
                     data-material="account-menu"
                     data-motion-surface
-                    className="material-popover absolute right-0 top-[calc(100%+8px)] z-50 w-72 rounded-xl border border-[#152219]/10 bg-white p-1 opacity-100 shadow-xl transition dark:border-white/10 dark:bg-[#172018] max-sm:fixed max-sm:inset-x-3 max-sm:bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] max-sm:top-auto max-sm:w-auto max-sm:rounded-3xl max-sm:p-3"
+                    className="material-popover absolute right-0 top-[calc(100%+8px)] z-50 w-72 rounded-xl border border-border/70 bg-bg-surface p-1 opacity-100 shadow-[var(--ui-modal-shadow)] transition max-sm:fixed max-sm:inset-x-3 max-sm:bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] max-sm:top-auto max-sm:w-auto max-sm:rounded-3xl max-sm:p-3"
                     role="menu"
                     aria-label={uk ? "Меню акаунта" : "Account menu"}
                     onKeyDown={(event) => {
@@ -315,10 +315,10 @@ export const PremiumModuleShell: React.FC<Props> = ({
                     }}
                   >
                     <div className="px-3 py-2">
-                      <div className="break-words text-sm font-semibold text-[#142017] dark:text-[#edf3ef]">
+                      <div className="break-words text-sm font-semibold text-text-primary dark:text-text-primary">
                         {displayName}
                       </div>
-                      <div className="mt-0.5 break-all text-xs text-[#6b7a70] dark:text-[#a4b2a7]">
+                      <div className="mt-0.5 break-all text-xs text-[#6b7a70] dark:text-text-secondary">
                         @{user.username}
                       </div>
                     </div>
@@ -326,8 +326,8 @@ export const PremiumModuleShell: React.FC<Props> = ({
                     onEduContextChange &&
                     (user.eduContexts?.students?.length ||
                       user.eduContexts?.organizations?.length) ? (
-                      <div className="border-y border-[#152219]/10 px-2 py-2 dark:border-white/10">
-                        <div className="px-1 pb-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#718075] dark:text-[#a4b2a7]">
+                      <div className="border-y border-border/10 px-2 py-2 dark:border-white/10">
+                        <div className="px-1 pb-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#718075] dark:text-text-secondary">
                           {uk ? "Контекст EDU" : "EDU context"}
                         </div>
                         {user.eduContexts?.organizations?.some((org) =>
@@ -341,7 +341,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                               setAccountOpen(false);
                               void onEduContextChange(null);
                             }}
-                            className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold ${!user.studentId ? "bg-[#e7f6ec] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "text-[#314037] hover:bg-[#f2f5f2] dark:text-[#dce8de] dark:hover:bg-white/[.06]"}`}
+                            className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold ${!user.studentId ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "text-text-secondary hover:bg-bg-hover dark:hover:bg-bg-hover"}`}
                             role="menuitem"
                           >
                             <GraduationCap className="size-4" />
@@ -356,7 +356,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                               setAccountOpen(false);
                               void onEduContextChange(student.studentId);
                             }}
-                            className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold ${user.studentId === student.studentId ? "bg-[#e7f6ec] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "text-[#314037] hover:bg-[#f2f5f2] dark:text-[#dce8de] dark:hover:bg-white/[.06]"}`}
+                            className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold ${user.studentId === student.studentId ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "text-text-secondary hover:bg-bg-hover dark:hover:bg-bg-hover"}`}
                             role="menuitem"
                           >
                             <BookOpen className="size-4" />
@@ -373,7 +373,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                           setAccountOpen(false);
                           onNavigate(product === "EDU" ? "/edu/profile" : "/profile");
                         }}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[#314037] hover:bg-[#f2f5f2] dark:text-[#dce8de] dark:hover:bg-white/[.06]"
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-text-secondary hover:bg-bg-hover dark:hover:bg-bg-hover"
                         role="menuitem"
                       >
                         <UserRound className="size-4" />
@@ -401,7 +401,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
       {!navigationHidden && (
         <nav
           data-material="premium-mobile-nav"
-          className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 md:hidden"
+          className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/70 bg-bg-base/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden"
           aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}
         >
           <div className="flex gap-1 overflow-x-auto">
@@ -412,7 +412,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                 onClick={() => onNavigate(path)}
                 aria-current={isActive(path) ? "page" : undefined}
                 data-motion-press
-                className={`flex min-h-12 min-w-[4.25rem] flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition motion-safe:active:scale-[.97] ${isActive(path) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}
+                className={`flex min-h-12 min-w-[4.25rem] flex-1 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition motion-safe:active:scale-[.97] ${isActive(path) ? "bg-primary-strong text-primary-foreground dark:bg-primary/12 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white"}`}
               >
                 <Icon className="size-4" />
                 <span className="max-w-full truncate leading-none">

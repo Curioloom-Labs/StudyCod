@@ -657,10 +657,10 @@ export const ContestProblemSolvePage: React.FC = () => {
   return (
     <div className="min-h-full space-y-2 bg-[#0b120e] p-2 text-[#edf3ef] pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:space-y-3 sm:p-4">
       {showAnnouncement ? (
-        <aside className="flex items-start gap-3 rounded-2xl border border-[#00d978]/20 bg-[#0d1b13] px-4 py-3 sm:items-center" aria-live="polite">
-          <Radio className="mt-0.5 size-4 shrink-0 text-[#72edb0] sm:mt-0" />
+        <aside className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-[#0d1b13] px-4 py-3 sm:items-center" aria-live="polite">
+          <Radio className="mt-0.5 size-4 shrink-0 text-primary-soft sm:mt-0" />
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-bold uppercase tracking-[.14em] text-[#72edb0]">Оголошення організатора</div>
+            <div className="text-[10px] font-bold uppercase tracking-[.14em] text-primary-soft">Оголошення організатора</div>
             <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-[#dce8df]">{latestAnnouncement.text}</p>
           </div>
           <button type="button" onClick={() => setDismissedAnnouncementId(latestAnnouncement.id)} className="grid size-8 shrink-0 place-items-center rounded-lg text-[#82968a] transition hover:bg-white/[.06] hover:text-white" aria-label="Закрити оголошення">
@@ -687,7 +687,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         </div>
       ) : null}
       {organizerQuestionSent ? (
-        <div role="status" aria-live="polite" className="rounded-xl border border-[#00d978]/25 bg-[#00d978]/[.08] px-3 py-2.5 text-sm text-[#9cf2c2]">
+        <div role="status" aria-live="polite" className="rounded-xl border border-primary/25 bg-primary/[.08] px-3 py-2.5 text-sm text-[#9cf2c2]">
           Питання надіслано організатору. Відповідь з’явиться у вкладці «Ком’юніті».
         </div>
       ) : null}
@@ -741,7 +741,7 @@ export const ContestProblemSolvePage: React.FC = () => {
               {submissions.slice(0, 4).map((submission) => (
                 <div key={submission.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-black/15 px-2.5 py-2 text-[11px]">
                   <div className="min-w-0">
-                    <span className={`font-bold ${String(submission.verdict ?? "").toUpperCase() === "AC" ? "text-[#72edb0]" : "text-[#ffca7e]"}`}>{submission.verdict || "В черзі"}</span>
+                    <span className={`font-bold ${String(submission.verdict ?? "").toUpperCase() === "AC" ? "text-primary-soft" : "text-[#ffca7e]"}`}>{submission.verdict || "В черзі"}</span>
                     <span className="ml-2 text-[#82968a]">{submission.createdAt ? new Date(submission.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Щойно"}</span>
                   </div>
                   <span className="shrink-0 tabular-nums text-[#c8d6cc]">{submission.score ?? 0}/{submission.maxScore ?? 0}</span>
@@ -760,7 +760,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         toolbar={(
           <>
             <span className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-[#a7b5aa]" title={wsStatus === "connected" ? "Live updates connected" : "Live updates reconnect automatically"}>
-              <span className={`size-1.5 rounded-full ${wsStatus === "connected" ? "bg-[#00d978]" : wsStatus === "connecting" ? "animate-pulse bg-[#ffb454]" : "bg-[#82968a]"}`} />
+              <span className={`size-1.5 rounded-full ${wsStatus === "connected" ? "bg-primary" : wsStatus === "connecting" ? "animate-pulse bg-[#ffb454]" : "bg-[#82968a]"}`} />
               {wsStatus === "connected" ? "LIVE" : wsStatus === "connecting" ? "SYNC" : "OFFLINE"}
             </span>
             {contestMeta.endsAt ? <span className="hidden h-8 items-center rounded-lg border border-white/10 px-2 text-[10px] font-semibold text-[#a7b5aa] xl:inline-flex" title="Час завершення контесту">До {new Date(contestMeta.endsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span> : null}

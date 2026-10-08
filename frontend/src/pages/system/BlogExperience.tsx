@@ -32,7 +32,7 @@ const CATEGORY_LABEL: Record<BlogCategory, [string, string]> = {
 };
 
 const CATEGORY_CLASS: Record<BlogCategory, string> = {
-  NEWS: "bg-[#00ff88]/12 text-[#00884a] dark:text-[#65ecad]",
+  NEWS: "bg-primary/12 text-primary-strong dark:text-[#65ecad]",
   ANNOUNCEMENT: "bg-[#ffd93d]/20 text-[#806500] dark:text-[#ffe16a]",
   FEATURE: "bg-[#ff8c00]/12 text-[#a85900] dark:text-[#ffad4a]",
   FIX: "bg-[#ff6b9d]/12 text-[#c43b6d] dark:text-[#ff8fb6]",
@@ -240,14 +240,14 @@ const CoverVisual: React.FC<{
         ? "#ff6b9d"
         : post.category === "ANNOUNCEMENT"
           ? "#ffd93d"
-          : "#00ff88";
+          : "var(--primary)";
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#101713]">
       <div
         className="absolute -right-16 -top-20 size-56 rounded-full blur-[70px]"
         style={{ backgroundColor: color + "26" }}
       />
-      <div className="absolute -bottom-20 left-1/4 size-52 rounded-full bg-[#00ff88]/10 blur-[70px]" />
+      <div className="absolute -bottom-20 left-1/4 size-52 rounded-full bg-primary/10 blur-[70px]" />
       <div
         className={
           "absolute inset-x-6 bottom-6 grid gap-2 " +
@@ -308,7 +308,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
   const showError = Boolean(error && !sourcePosts.length);
 
   return (
-    <div className="min-h-[100dvh] bg-[#f7f8f5] font-sans text-[#111814] dark:bg-[#0b100d] dark:text-[#edf3ef]">
+    <div className="min-h-[100dvh] bg-bg-base font-sans text-text-primary dark:bg-bg-base dark:text-text-primary">
       <PublicProductNav active="blog" />
       <main>
         <section className="mx-auto w-[min(1240px,calc(100%_-_48px))] pt-8 max-md:w-[calc(100%_-_28px)]">
@@ -317,7 +317,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
             animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
             className="relative overflow-hidden rounded-[32px] bg-[#101713] px-[clamp(24px,6vw,76px)] py-[clamp(52px,7vw,82px)] text-white"
           >
-            <div className="absolute -right-24 -top-40 size-[420px] rounded-full bg-[#00ff88]/10 blur-[100px]" />
+            <div className="absolute -right-24 -top-40 size-[420px] rounded-full bg-primary/10 blur-[100px]" />
             <div className="relative flex flex-wrap items-end justify-between gap-8">
               <div className="max-w-[750px]">
                 <span className="text-[10px] font-extrabold uppercase tracking-[.16em] text-[#65ecad]">
@@ -354,7 +354,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
         <section className="mx-auto w-[min(1120px,calc(100%_-_48px))] py-16 max-md:w-[calc(100%_-_28px)]">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#00884a] dark:text-[#65ecad]">
+              <span className="text-[10px] font-extrabold uppercase tracking-[.14em] text-primary-strong dark:text-[#65ecad]">
                 {tr("Журнал продукту", "Product journal")}
               </span>
               <h2 className="mt-2 text-[32px] font-bold tracking-[-.045em]">
@@ -362,7 +362,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
               </h2>
             </div>
             {!tagParam && (
-              <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-[#122017]/10 bg-white p-1 dark:border-white/10 dark:bg-[#151c17]">
+              <div className="flex max-w-full gap-1 overflow-x-auto rounded-2xl border border-border/10 bg-white p-1 dark:border-white/10 dark:bg-bg-surface">
                 {(["ALL", ...BLOG_CATEGORIES] as const).map((value) => (
                   <button type="button"
                     key={value}
@@ -370,7 +370,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                     className={
                       "whitespace-nowrap rounded-xl px-3.5 py-2.5 text-[10px] font-bold transition " +
                       (category === value
-                        ? "bg-[#111814] text-white dark:bg-[#edf3ef] dark:text-[#111814]"
+                        ? "bg-[#111814] text-white dark:bg-[#edf3ef] dark:text-text-primary"
                         : "text-[#718078] dark:text-[#96a299]")
                     }
                   >
@@ -385,8 +385,8 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
 
           {loading && !sourcePosts.length ? (
             <div className="mt-8 grid gap-4 md:grid-cols-2">
-              <div className="h-[420px] animate-pulse rounded-[26px] bg-[#e9ede8] dark:bg-[#151c17]" />
-              <div className="h-[420px] animate-pulse rounded-[26px] bg-[#e9ede8] dark:bg-[#151c17]" />
+              <div className="h-[420px] animate-pulse rounded-[26px] bg-[#e9ede8] dark:bg-bg-surface" />
+              <div className="h-[420px] animate-pulse rounded-[26px] bg-[#e9ede8] dark:bg-bg-surface" />
             </div>
           ) : showError ? (
             <div className="mt-8 rounded-[24px] border border-[#ff6b9d]/20 bg-[#ff6b9d]/5 p-8 text-center text-[14px] text-[#b83b67]">
@@ -396,7 +396,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
             <>
           <button type="button"
             onClick={() => go("/blog/" + featured.slug)}
-                className="group mt-8 grid w-full overflow-hidden rounded-[27px] border border-[#122017]/10 bg-white text-left shadow-[0_20px_65px_rgba(18,32,23,.055)] transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-[#151c17] md:grid-cols-[1.1fr_.9fr]"
+                className="group mt-8 grid w-full overflow-hidden rounded-[27px] border border-border/10 bg-white text-left shadow-[0_20px_65px_rgba(18,32,23,.055)] transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-bg-surface md:grid-cols-[1.1fr_.9fr]"
               >
                 <div className="min-h-[320px]">
                   <CoverVisual post={featured} />
@@ -405,7 +405,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                   <div className="flex items-center gap-3">
                     <CategoryPill category={featured.category} tr={tr} />
                     {featured.pinned && (
-                      <Pin className="size-3.5 text-[#00a85c]" />
+                      <Pin className="size-3.5 text-primary-strong" />
                     )}
                     <span className="ml-auto text-[10px] text-[#7c8980]">
                       {formatDate(featured.publishedAt, locale)}
@@ -414,7 +414,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                   <h3 className="mt-7 text-[clamp(25px,3vw,36px)] font-bold leading-[1.08] tracking-[-.045em]">
                     {featured.title}
                   </h3>
-                  <p className="mt-5 text-[14px] leading-6 text-[#667169] dark:text-[#a5b0a8]">
+                  <p className="mt-5 text-[14px] leading-6 text-text-muted dark:text-[#a5b0a8]">
                     {featured.excerpt}
                   </p>
                   <div className="mt-auto flex items-center gap-5 pt-8 text-[10px] text-[#7a867e]">
@@ -426,7 +426,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                       <MessageSquare className="size-3.5" />
                       {featured.commentCount}
                     </span>
-                    <span className="ml-auto flex items-center gap-1 text-[11px] font-bold text-[#00884a] transition group-hover:gap-2 dark:text-[#65ecad]">
+                    <span className="ml-auto flex items-center gap-1 text-[11px] font-bold text-primary-strong transition group-hover:gap-2 dark:text-[#65ecad]">
                       {tr("Читати", "Read")}
                       <ArrowRight className="size-3.5" />
                     </span>
@@ -438,7 +438,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                   <button type="button"
                     key={post.slug}
                 onClick={() => go("/blog/" + post.slug)}
-                    className="group overflow-hidden rounded-[24px] border border-[#122017]/10 bg-white text-left transition hover:-translate-y-0.5 hover:border-[#00b963]/25 dark:border-white/10 dark:bg-[#151c17]"
+                    className="group overflow-hidden rounded-[24px] border border-border/10 bg-white text-left transition hover:-translate-y-0.5 hover:border-primary/25 dark:border-white/10 dark:bg-bg-surface"
                   >
                     <div className="h-44">
                       <CoverVisual post={post} compact />
@@ -453,7 +453,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                       <h3 className="mt-5 text-[20px] font-bold leading-[1.2] tracking-[-.035em]">
                         {post.title}
                       </h3>
-                      <p className="mt-3 line-clamp-2 text-[13px] leading-5 text-[#6c796f] dark:text-[#9da9a1]">
+                      <p className="mt-3 line-clamp-2 text-[13px] leading-5 text-[#6c796f] dark:text-text-secondary">
                         {post.excerpt}
                       </p>
                       <div className="mt-6 flex items-center gap-4 text-[9px] text-[#7c8980]">
@@ -463,7 +463,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                         <span>
                           {post.reactionCount} {tr("реакцій", "reactions")}
                         </span>
-                        <ArrowRight className="ml-auto size-4 transition group-hover:translate-x-1 group-hover:text-[#00a85c]" />
+                        <ArrowRight className="ml-auto size-4 transition group-hover:translate-x-1 group-hover:text-primary-strong" />
                       </div>
                     </div>
                   </button>
@@ -471,7 +471,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
               </div>
             </>
           ) : (
-            <div className="mt-8 rounded-[24px] border border-[#122017]/10 bg-white p-12 text-center text-[14px] text-[#718078] dark:border-white/10 dark:bg-[#151c17]">
+            <div className="mt-8 rounded-[24px] border border-border/10 bg-white p-12 text-center text-[14px] text-[#718078] dark:border-white/10 dark:bg-bg-surface">
               {tr(
                 "У цій категорії поки немає матеріалів.",
                 "No stories in this category yet.",
@@ -509,14 +509,14 @@ export const BlogPostExperience: React.FC<PostProps> = ({
     post || (import.meta.env.DEV && slug ? previewDetail(slug) : null);
   if (loading && !resolved)
     return (
-      <div className="min-h-[100dvh] bg-[#f7f8f5] dark:bg-[#0b100d]">
+      <div className="min-h-[100dvh] bg-bg-base dark:bg-bg-base">
         <PublicProductNav active="blog" />
-        <div className="mx-auto mt-12 h-[620px] w-[min(900px,calc(100%_-_32px))] animate-pulse rounded-[28px] bg-[#e8ece7] dark:bg-[#151c17]" />
+        <div className="mx-auto mt-12 h-[620px] w-[min(900px,calc(100%_-_32px))] animate-pulse rounded-[28px] bg-[#e8ece7] dark:bg-bg-surface" />
       </div>
     );
   if (!resolved)
     return (
-      <div className="min-h-[100dvh] bg-[#f7f8f5] dark:bg-[#0b100d]">
+      <div className="min-h-[100dvh] bg-bg-base dark:bg-bg-base">
         <PublicProductNav active="blog" />
         <div className="mx-auto mt-16 w-[min(720px,calc(100%_-_32px))] rounded-[24px] border border-[#ff6b9d]/20 p-10 text-center text-[#c23e6c]">
           {error || tr("Матеріал не знайдено", "Story not found")}
@@ -525,12 +525,12 @@ export const BlogPostExperience: React.FC<PostProps> = ({
     );
 
   return (
-    <div className="min-h-[100dvh] bg-[#f7f8f5] font-sans text-[#111814] dark:bg-[#0b100d] dark:text-[#edf3ef]">
+    <div className="min-h-[100dvh] bg-bg-base font-sans text-text-primary dark:bg-bg-base dark:text-text-primary">
       <PublicProductNav active="blog" />
       <main id="main-content" className="mx-auto w-[min(1080px,calc(100%_-_32px))] py-10">
         <button type="button"
         onClick={() => go("/blog")}
-          className="inline-flex h-11 items-center gap-2 rounded-[14px] border border-[#122017]/10 bg-white px-4 text-[11px] font-bold text-[#667169] dark:border-white/10 dark:bg-[#151c17] dark:text-[#a5b0a8]"
+          className="inline-flex h-11 items-center gap-2 rounded-[14px] border border-border/10 bg-white px-4 text-[11px] font-bold text-text-muted dark:border-white/10 dark:bg-bg-surface dark:text-[#a5b0a8]"
         >
           <ArrowLeft className="size-4" />
           {tr("До журналу", "Back to journal")}
@@ -538,7 +538,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
         <motion.article
           initial={reduceMotion ? undefined : { opacity: 0, y: 18 }}
           animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          className="mt-7 overflow-hidden rounded-[30px] border border-[#122017]/10 bg-white shadow-[0_26px_80px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111713]"
+          className="mt-7 overflow-hidden rounded-[30px] border border-border/10 bg-white shadow-[0_26px_80px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111713]"
         >
           <div className="h-[clamp(260px,42vw,480px)]">
             <CoverVisual post={resolved} />
@@ -559,7 +559,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
               {resolved.title}
             </h1>
             {resolved.excerpt && (
-              <p className="mt-6 text-[17px] leading-8 text-[#667169] dark:text-[#a8b3ab]">
+              <p className="mt-6 text-[17px] leading-8 text-text-muted dark:text-[#a8b3ab]">
                 {resolved.excerpt}
               </p>
             )}
@@ -580,10 +580,10 @@ export const BlogPostExperience: React.FC<PostProps> = ({
               ))}
             </div>
           </header>
-          <div className="border-t border-[#122017]/10 dark:border-white/10">
+          <div className="border-t border-border/10 dark:border-white/10">
             <div className="mx-auto max-w-[820px] px-6 py-12 sm:px-10">
               <MarkdownView content={resolved.content} variant="handbook" />
-              <div className="mt-12 border-t border-[#122017]/10 pt-6 dark:border-white/10">
+              <div className="mt-12 border-t border-border/10 pt-6 dark:border-white/10">
                 <ReactionBar
                   targetType="POST"
                   targetId={resolved.id}
@@ -600,7 +600,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
                       <button type="button"
                         key={item.slug}
                             onClick={() => go("/blog/" + item.slug)}
-                        className="rounded-[18px] border border-[#122017]/10 bg-[#f7f9f6] p-4 text-left transition hover:border-[#00b963]/25 dark:border-white/10 dark:bg-white/[.035]"
+                        className="rounded-[18px] border border-border/10 bg-[#f7f9f6] p-4 text-left transition hover:border-primary/25 dark:border-white/10 dark:bg-white/[.035]"
                       >
                         <CategoryPill category={item.category} tr={tr} />
                         <strong className="mt-4 block text-[13px] leading-5">

@@ -108,7 +108,7 @@ export const IadPage: React.FC = () => {
   }, [details, metrics.current, nextGrade]);
 
   return (
-    <div className="min-h-[100dvh] bg-[#f6f8f5] px-4 py-7 text-[#17231b] dark:bg-[#09100c] dark:text-[#edf4ef] sm:px-6 lg:px-10">
+    <div className="min-h-[100dvh] bg-[#f6f8f5] px-4 py-7 text-text-primary dark:bg-bg-base dark:text-[#edf4ef] sm:px-6 lg:px-10">
       <main className="mx-auto max-w-6xl pb-10">
         <ProfileSectionNav active="iad" className="mb-6" />
 
@@ -125,8 +125,8 @@ export const IadPage: React.FC = () => {
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/[.08] p-5">
               <div className="text-sm text-[#b7caba]">{tr("Поточне значення", "Current value")}</div>
-              <div className="mt-2 text-6xl font-semibold tracking-[-.07em] text-[#7bedb4]">{loading ? "…" : metrics.current.toFixed(3)}</div>
-              <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-[#00d978]" style={{ width: `${metrics.progress}%` }} /></div>
+              <div className="mt-2 text-6xl font-semibold tracking-[-.07em] text-primary-soft">{loading ? "…" : metrics.current.toFixed(3)}</div>
+              <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-primary" style={{ width: `${metrics.progress}%` }} /></div>
               <div className="mt-3 text-sm text-[#b7caba]">{details?.lang ?? tr("мова не визначена", "language unknown")}</div>
             </div>
           </div>
@@ -146,10 +146,10 @@ export const IadPage: React.FC = () => {
             </section>
 
             <section className="mt-6 grid gap-5 lg:grid-cols-[.82fr_1.18fr]">
-              <article className="rounded-[28px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15]">
+              <article className="rounded-[28px] border border-border/10 bg-white p-6 dark:border-white/10 dark:bg-bg-surface">
                 <div className="text-xs font-semibold uppercase tracking-[.14em] text-[#d97706]">{tr("Прогноз", "What-if")}</div>
                 <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{tr("Наступна оцінка", "Next grade")}</h2>
-                <label htmlFor="iad-next-grade" className="sr-only">{tr("Наступна оцінка", "Next grade")}</label><input id="iad-next-grade" name="nextGrade" type="range" min={0} max={100} value={nextGrade} onChange={(event) => setNextGrade(Number(event.target.value))} className="mt-6 w-full accent-[#00c96d]" />
+                <label htmlFor="iad-next-grade" className="sr-only">{tr("Наступна оцінка", "Next grade")}</label><input id="iad-next-grade" name="nextGrade" type="range" min={0} max={100} value={nextGrade} onChange={(event) => setNextGrade(Number(event.target.value))} className="mt-6 w-full accent-primary" />
                 <div className="mt-5 grid grid-cols-3 gap-3">
                   <Small label={tr("оцінка", "grade")} value={simulation?.grade ?? nextGrade} />
                   <Small label={tr("зміна", "delta")} value={simulation ? signed(simulation.delta) : "—"} />
@@ -157,13 +157,13 @@ export const IadPage: React.FC = () => {
                 </div>
               </article>
 
-              <article className="rounded-[28px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15]">
+              <article className="rounded-[28px] border border-border/10 bg-white p-6 dark:border-white/10 dark:bg-bg-surface">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-[.14em] text-[#147b47] dark:text-[#71edaf]">{tr("Останні зміни", "Recent changes")}</div>
+                    <div className="text-xs font-semibold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Останні зміни", "Recent changes")}</div>
                     <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{tr("Звідки складається індекс", "What shapes the index")}</h2>
                   </div>
-                  {metrics.net >= 0 ? <TrendingUp className="size-5 text-[#147b47] dark:text-[#71edaf]" /> : <TrendingDown className="size-5 text-[#d34e72]" />}
+                  {metrics.net >= 0 ? <TrendingUp className="size-5 text-primary-strong dark:text-primary-soft" /> : <TrendingDown className="size-5 text-[#d34e72]" />}
                 </div>
                 <div className="mt-5 space-y-2">
                   {metrics.events.length === 0 ? <div className="rounded-2xl bg-[#f5f8f5] p-4 text-sm text-[#718075] dark:bg-white/[.04] dark:text-[#a3b1a6]">{tr("Подій ще немає.", "No events yet.")}</div> : metrics.events.slice(0, 8).map((event) => {
@@ -173,19 +173,19 @@ export const IadPage: React.FC = () => {
                         <div className="truncate font-semibold">{event.taskTitle || `#${event.taskId}`}</div>
                         <div className="mt-1 text-xs text-[#77857b] dark:text-[#9dac9f]">{reason(event, tr)} · {new Date(event.createdAt).toLocaleDateString(locale)}</div>
                       </div>
-                      <strong className={delta >= 0 ? "text-[#147b47] dark:text-[#71edaf]" : "text-[#d34e72]"}>{signed(delta)}</strong>
+                      <strong className={delta >= 0 ? "text-primary-strong dark:text-primary-soft" : "text-[#d34e72]"}>{signed(delta)}</strong>
                     </div>;
                   })}
                 </div>
               </article>
             </section>
 
-            <section className="mt-6 rounded-[28px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15]">
-              <div className="text-xs font-semibold uppercase tracking-[.14em] text-[#147b47] dark:text-[#71edaf]">{tr("Правила", "Rules")}</div>
+            <section className="mt-6 rounded-[28px] border border-border/10 bg-white p-6 dark:border-white/10 dark:bg-bg-surface">
+              <div className="text-xs font-semibold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Правила", "Rules")}</div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {details.rules.map((rule) => <div key={`${rule.minGrade}-${rule.maxGrade}`} className="rounded-2xl bg-[#f5f8f5] p-4 text-sm dark:bg-white/[.04]">
                   <div className="font-semibold">{rule.minGrade}-{rule.maxGrade}</div>
-                  <div className={rule.delta >= 0 ? "mt-2 text-[#147b47] dark:text-[#71edaf]" : "mt-2 text-[#d34e72]"}>{signed(rule.delta)}</div>
+                  <div className={rule.delta >= 0 ? "mt-2 text-primary-strong dark:text-primary-soft" : "mt-2 text-[#d34e72]"}>{signed(rule.delta)}</div>
                 </div>)}
               </div>
             </section>
@@ -197,9 +197,9 @@ export const IadPage: React.FC = () => {
 };
 
 const Metric: React.FC<{ label: string; value: React.ReactNode; tone: "green" | "red" | "neutral" }> = ({ label, value, tone }) => (
-  <div className="flex h-full min-h-[126px] flex-col justify-between rounded-2xl border border-[#152219]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121b15]">
+  <div className="flex h-full min-h-[126px] flex-col justify-between rounded-2xl border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface">
     <div className="text-sm text-[#6d7c71] dark:text-[#a2b1a6]">{label}</div>
-    <div className={`mt-3 text-3xl font-semibold tracking-[-.05em] ${tone === "green" ? "text-[#147b47] dark:text-[#71edaf]" : tone === "red" ? "text-[#d34e72]" : ""}`}>{value}</div>
+    <div className={`mt-3 text-3xl font-semibold tracking-[-.05em] ${tone === "green" ? "text-primary-strong dark:text-primary-soft" : tone === "red" ? "text-[#d34e72]" : ""}`}>{value}</div>
   </div>
 );
 

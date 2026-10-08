@@ -27,7 +27,7 @@ export const CollabDemoPage: React.FC = () => {
       };
     };
 
-    awA.setLocalStateField("user", { name: "Teacher", color: "#00b35f" });
+    awA.setLocalStateField("user", { name: "Teacher", color: "#3e7450" });
     awB.setLocalStateField("user", { name: "Student", color: "#3b82f6" });
     new LiveKitYjsProvider(docA, awA, makeTransport());
     new LiveKitYjsProvider(docB, awB, makeTransport());

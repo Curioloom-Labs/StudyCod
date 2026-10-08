@@ -45,7 +45,7 @@
 .failure-recovery-step.is-complete .failure-recovery-step-dot {
   border-color: rgba(0, 217, 120, 0.35);
   background: rgba(0, 217, 120, 0.16);
-  color: #72edb0;
+  color: var(--primary-soft);
 }
 
 .failure-recovery-step.is-current .failure-recovery-step-dot {

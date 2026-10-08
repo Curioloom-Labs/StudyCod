@@ -54,7 +54,7 @@ const roleTone = (role: string) =>
     ? "bg-[#fff0d7] text-[#a45d00] dark:bg-[#ff8c00]/14 dark:text-[#ffbb6a]"
     : role === "ASSISTANT"
       ? "bg-[#fff0f5] text-[#bf4168] dark:bg-[#ff6b9d]/12 dark:text-[#ff9abd]"
-      : "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]";
+      : "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft";
 const badge = (name: string) =>
   name
     .split(/\s+/)
@@ -64,7 +64,7 @@ const badge = (name: string) =>
     .join("")
     .toUpperCase() || "SC";
 const fieldClass =
-  "mt-2 w-full rounded-xl border border-[#19291d]/12 bg-white px-4 py-3 outline-none ring-[#00ff88]/25 focus:ring-4 dark:border-white/10 dark:bg-[#0d1510]";
+  "mt-2 w-full rounded-xl border border-border/12 bg-white px-4 py-3 outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-base";
 
 export const OrgWorkspacePage: React.FC = () => {
   const navigate = useNavigate();
@@ -275,7 +275,7 @@ export const OrgWorkspacePage: React.FC = () => {
   if (loading)
     return (
       <div className="mx-auto max-w-[1280px] px-4 py-10 sm:px-6 lg:px-10">
-        <div className="h-[600px] animate-pulse rounded-[30px] bg-[#e8eeea] dark:bg-white/[.05]" />
+        <div className="h-[600px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" />
       </div>
     );
 
@@ -284,7 +284,7 @@ export const OrgWorkspacePage: React.FC = () => {
       <div className="mx-auto max-w-[1280px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
         <header className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[.15em] text-[#16834d] dark:text-[#72edb0]">
+            <p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
               EDU / керування навчальним закладом
             </p>
             {editingName ? (
@@ -292,13 +292,13 @@ export const OrgWorkspacePage: React.FC = () => {
                 <input
                   value={nameDraft}
                   onChange={(event) => setNameDraft(event.target.value)}
-                  className="rounded-xl border border-[#19291d]/12 bg-white px-4 py-2 text-2xl font-bold tracking-[-.04em] outline-none ring-[#00ff88]/25 focus:ring-4 dark:border-white/10 dark:bg-[#111b14] dark:text-white"
+                  className="rounded-xl border border-border/12 bg-white px-4 py-2 text-2xl font-bold tracking-[-.04em] outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-surface dark:text-white"
                 />
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void updateName()}
-                  className="rounded-xl bg-[#00d978] px-4 py-2 text-sm font-bold text-[#062211]"
+                  className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-[#062211]"
                 >
                   Зберегти
                 </button>
@@ -333,7 +333,7 @@ export const OrgWorkspacePage: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowCreateAccount(true)}
-            className="rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(20,67,40,.18)] transition hover:-translate-y-0.5 dark:bg-[#00d978] dark:text-[#062211]"
+            className="rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(20,67,40,.18)] transition hover:-translate-y-0.5 dark:bg-primary dark:text-[#062211]"
           >
             <UserRound className="mr-2 inline h-4 w-4" />
             Створити обліковий запис викладача
@@ -348,7 +348,7 @@ export const OrgWorkspacePage: React.FC = () => {
           </div>
         )}
         {orgs.length === 0 ? (
-          <section className="rounded-[28px] border border-dashed border-[#19291d]/16 px-7 py-20 text-center dark:border-white/10">
+          <section className="rounded-[28px] border border-dashed border-border/16 px-7 py-20 text-center dark:border-white/10">
             <Building2 className="mx-auto h-9 w-9 text-[#ff9b2e]" />
             <h2 className="mt-4 text-2xl font-bold">
               Ще немає навчального простору
@@ -359,7 +359,7 @@ export const OrgWorkspacePage: React.FC = () => {
             </p>
             <button type="button"
               onClick={() => navigate("/edu/courses")}
-              className="mt-6 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]"
+              className="mt-6 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-primary dark:text-[#062211]"
             >
               До курсів
             </button>
@@ -384,7 +384,7 @@ export const OrgWorkspacePage: React.FC = () => {
                   icon: <UsersRound className="h-5 w-5" />,
                   label: "Учасники",
                   value: members.length,
-                  tone: "text-[#16834d] dark:text-[#72edb0]",
+                  tone: "text-primary-strong dark:text-primary-soft",
                 },
                 {
                   icon: <Building2 className="h-5 w-5" />,
@@ -401,7 +401,7 @@ export const OrgWorkspacePage: React.FC = () => {
               ].map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-2xl border border-[#19291d]/10 bg-white p-5 dark:border-white/[.09] dark:bg-[#111b14]"
+                  className="rounded-2xl border border-border/10 bg-white p-5 dark:border-white/[.09] dark:bg-bg-surface"
                 >
                   <span className={item.tone}>{item.icon}</span>
                   <p className="mt-6 text-3xl font-bold tracking-[-.045em]">
@@ -414,7 +414,7 @@ export const OrgWorkspacePage: React.FC = () => {
               ))}
             </div>
             <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
-              <section className="rounded-[28px] border border-[#19291d]/10 bg-white p-5 dark:border-white/[.09] dark:bg-[#111b14] sm:p-6">
+              <section className="rounded-[28px] border border-border/10 bg-white p-5 dark:border-white/[.09] dark:bg-bg-surface sm:p-6">
                 <div className="mb-5 flex items-center justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[.14em] text-[#ff8c00]">
@@ -424,7 +424,7 @@ export const OrgWorkspacePage: React.FC = () => {
                       Викладачі організації
                     </h2>
                   </div>
-                  <span className="rounded-full bg-[#edf4ee] px-3 py-1.5 text-xs font-bold text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+                  <span className="rounded-full bg-[#edf4ee] px-3 py-1.5 text-xs font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
                     {members.length}
                   </span>
                 </div>
@@ -461,12 +461,12 @@ export const OrgWorkspacePage: React.FC = () => {
                           )
                         }
                         aria-label={`Відкрити дії для ${member.username || member.userId}`}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-[#718075] hover:bg-[#eaf0eb] dark:hover:bg-white/[.08]"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-[#718075] hover:bg-bg-hover dark:hover:bg-white/[.08]"
                       >
                         <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
                       </button>
                       {openActions === member.userId && (
-                        <div className="absolute right-2 top-12 z-20 w-48 rounded-xl border border-[#19291d]/10 bg-white p-1 shadow-xl dark:border-white/10 dark:bg-[#19251c]">
+                        <div className="absolute right-2 top-12 z-20 w-48 rounded-xl border border-border/10 bg-white p-1 shadow-xl dark:border-white/10 dark:bg-[#19251c]">
                           <div>
                             {roles.map((item) => (
                               <button
@@ -478,7 +478,7 @@ export const OrgWorkspacePage: React.FC = () => {
                               >
                                 <span>{roleName(item)}</span>
                                 {member.role === item && (
-                                  <Check className="h-3.5 w-3.5 text-[#16834d] dark:text-[#72edb0]" />
+                                  <Check className="h-3.5 w-3.5 text-primary-strong dark:text-primary-soft" />
                                 )}
                               </button>
                             ))}
@@ -520,7 +520,7 @@ export const OrgWorkspacePage: React.FC = () => {
                     </p>
                   </div>
                 </section>
-                <section className="rounded-[28px] border border-[#19291d]/10 bg-[#fafbf9] p-5 dark:border-white/[.09] dark:bg-[#101a13]">
+                <section className="rounded-[28px] border border-border/10 bg-[#fafbf9] p-5 dark:border-white/[.09] dark:bg-[#101a13]">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-bold uppercase tracking-[.14em] text-[#ff8c00]">
                       Класи
@@ -528,7 +528,7 @@ export const OrgWorkspacePage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setShowCreateClass(true)}
-                      className="rounded-lg bg-[#153321] px-3 py-2 text-xs font-bold text-white dark:bg-[#00d978] dark:text-[#062211]"
+                      className="rounded-lg bg-[#153321] px-3 py-2 text-xs font-bold text-white dark:bg-primary dark:text-[#062211]"
                     >
                       Створити клас
                     </button>
@@ -541,14 +541,14 @@ export const OrgWorkspacePage: React.FC = () => {
                         key={group.id}
                         className="flex w-full items-center gap-3 rounded-xl bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 dark:bg-white/[.05] dark:shadow-none"
                       >
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#edf4ee] text-[10px] font-extrabold text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#edf4ee] text-[10px] font-extrabold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
                           К
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-bold">
                             {group.name}
                           </span>
-                          <span className="block text-xs text-[#75847a] dark:text-[#a4b2a7]">
+                          <span className="block text-xs text-[#75847a] dark:text-text-secondary">
                             {(group.teacherNames?.length
                               ? group.teacherNames.join(", ")
                               : group.teacherName) || "Без призначених викладачів"}
@@ -577,11 +577,11 @@ export const OrgWorkspacePage: React.FC = () => {
             aria-modal="true"
             aria-label="Створення акаунта"
             tabIndex={-1}
-            className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]"
+            className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-bg-surface p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]"
           >
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d]">
+                <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">
                   Керування навчальним закладом
                 </p>
                 <h2 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">
@@ -680,7 +680,7 @@ export const OrgWorkspacePage: React.FC = () => {
                 !accountDraft.username.trim() ||
                 accountDraft.password.length < 8
               }
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3.5 text-sm font-bold text-[#062211] disabled:opacity-60"
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-[#062211] disabled:opacity-60"
             >
               <KeyRound className="h-4 w-4" />
               Створити й показати дані
@@ -696,11 +696,11 @@ export const OrgWorkspacePage: React.FC = () => {
             aria-modal="true"
             aria-label="Створення класу"
             tabIndex={-1}
-            className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]"
+            className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-bg-surface p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]"
           >
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d]">
+                <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">
                   Керування навчальним закладом
                 </p>
                 <h2 className="mt-2 text-2xl font-bold">Створити клас</h2>
@@ -753,7 +753,7 @@ export const OrgWorkspacePage: React.FC = () => {
             </div>
             <button type="submit"
               disabled={busy || !classDraft.name.trim()}
-              className="mt-6 w-full rounded-xl bg-[#00d978] px-4 py-3.5 text-sm font-bold text-[#062211] disabled:opacity-60"
+              className="mt-6 w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-[#062211] disabled:opacity-60"
             >
               Створити клас
             </button>
@@ -768,11 +768,11 @@ export const OrgWorkspacePage: React.FC = () => {
             aria-modal="true"
             aria-label="Створення класу"
             tabIndex={-1}
-            className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]"
+            className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-bg-surface p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]"
           >
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d]">
+                <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">
                   Керування навчальним закладом
                 </p>
                 <h2 className="mt-2 text-2xl font-bold">Створити клас</h2>
@@ -826,7 +826,7 @@ export const OrgWorkspacePage: React.FC = () => {
             <button
               type="submit"
               disabled={busy || !classDraft.name.trim()}
-              className="mt-6 w-full rounded-xl bg-[#00d978] px-4 py-3.5 text-sm font-bold text-[#062211] disabled:opacity-60"
+              className="mt-6 w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-[#062211] disabled:opacity-60"
             >
               Створити клас
             </button>
@@ -835,8 +835,8 @@ export const OrgWorkspacePage: React.FC = () => {
       )}
       {createdCredentials && (
         <div data-material="org-dialog-scrim" className="fixed inset-0 z-[90] grid place-items-center bg-[#071009]/55 px-4 backdrop-blur-sm" role="presentation">
-          <section role="dialog" aria-modal="true" aria-label="Обліковий запис створено" tabIndex={-1} className="w-full max-w-[460px] rounded-[26px] border border-white/60 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]">
-            <p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d]">
+          <section role="dialog" aria-modal="true" aria-label="Обліковий запис створено" tabIndex={-1} className="w-full max-w-[460px] rounded-[26px] border border-white/60 bg-bg-surface p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]">
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">
               Обліковий запис створено
             </p>
             <h2 className="mt-2 text-2xl font-bold">Дані для викладача</h2>
@@ -866,7 +866,7 @@ export const OrgWorkspacePage: React.FC = () => {
             <button
               type="button"
               onClick={() => setCreatedCredentials(null)}
-              className="mt-6 w-full rounded-xl bg-[#153321] px-4 py-3.5 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]"
+              className="mt-6 w-full rounded-xl bg-[#153321] px-4 py-3.5 text-sm font-bold text-white dark:bg-primary dark:text-[#062211]"
             >
               Готово
             </button>

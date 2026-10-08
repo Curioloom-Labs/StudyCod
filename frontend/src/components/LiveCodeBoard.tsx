@@ -143,7 +143,7 @@ export const LiveCodeBoard: React.FC<{ isTeacher: boolean }> = ({ isTeacher }) =
   return (
     <div className="flex h-full flex-col bg-bg-base">
       {/* Teacher pointer highlight for the student mirror (Monaco decoration class). */}
-      <style>{`.lk-teacher-line{background:rgba(0,255,136,0.14);box-shadow:inset 3px 0 0 0 var(--primary,#00ff88);}`}</style>
+      <style>{`.lk-teacher-line{background:color-mix(in srgb,var(--primary,#8fbd99) 14%,transparent);box-shadow:inset 3px 0 0 0 var(--primary,#8fbd99);}`}</style>
       <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
         <span className="text-[11px] font-mono text-primary">
           📝 {tr("Дошка коду", "Code board")}

@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "./styles/design-tokens.css";
 import "./public.css";
-import "@fontsource-variable/geist";
 import { initTheme } from "./theme";
 import { getMe } from "./lib/api/profile";
 import { PublicErrorPage } from "./pages/public/PublicStatusPage";
@@ -34,7 +34,13 @@ const AppShell = React.lazy(async () => {
 
 function shouldCheckCookieSession() {
   const path = window.location.pathname;
-  return (path === "/" || path === "/landing") && !new URLSearchParams(window.location.search).has("auth");
+  const searchParams = new URLSearchParams(window.location.search);
+  const localWorkspacePreview = import.meta.env.DEV
+    && searchParams.get("preview") === "true"
+    && searchParams.has("app");
+  return (path === "/" || path === "/landing")
+    && !searchParams.has("auth")
+    && !localWorkspacePreview;
 }
 
 function isStandaloneLandingPath() {

@@ -159,7 +159,7 @@ export const PracticeCanvasPage: React.FC = () => {
   if (loading)
     return (
       <div className={workspace}>
-        <div className="h-[760px] animate-pulse rounded-[32px] bg-[#e8eeea] dark:bg-white/[.05]" />
+        <div className="h-[760px] animate-pulse rounded-[32px] bg-bg-hover dark:bg-white/[.05]" />
       </div>
     );
   if (!task)
@@ -257,14 +257,14 @@ export const PracticeCanvasPage: React.FC = () => {
                 `/edu/lessons/${task.lesson.id}`,
             )
           }
-          className="inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-[#16834d] dark:text-[#aab7ad] dark:hover:text-[#72edb0]"
+          className="inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"
         >
           <ArrowLeft className="h-4 w-4" />
           До уроку
         </button>
         <div className="flex items-center gap-2">
           <span
-            className={`rounded-full px-3 py-1.5 text-xs font-bold ${grade?.isCompleted ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-[#fff1dc] text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]"}`}
+            className={`rounded-full px-3 py-1.5 text-xs font-bold ${grade?.isCompleted ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-[#fff1dc] text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]"}`}
           >
             {status}
           </span>
@@ -278,8 +278,8 @@ export const PracticeCanvasPage: React.FC = () => {
           {error}
         </div>
       )}
-      <main className="grid overflow-hidden rounded-[32px] border border-[#19291d]/10 bg-white shadow-[0_18px_55px_rgba(20,43,26,.08)] dark:border-white/[.09] dark:bg-[#111b14] xl:grid-cols-[minmax(360px,.82fr)_minmax(500px,1.18fr)]">
-        <section className="border-b border-[#19291d]/10 dark:border-white/[.08] xl:border-b-0 xl:border-r">
+      <main className="grid overflow-hidden rounded-[32px] border border-border/10 bg-white shadow-[0_18px_55px_rgba(20,43,26,.08)] dark:border-white/[.09] dark:bg-bg-surface xl:grid-cols-[minmax(360px,.82fr)_minmax(500px,1.18fr)]">
+        <section className="border-b border-border/10 dark:border-white/[.08] xl:border-b-0 xl:border-r">
           <div className="p-6 sm:p-8">
             <p className="text-xs font-bold uppercase tracking-[.15em] text-[#e17800]">
               Практика · {task.lesson.title}
@@ -293,7 +293,7 @@ export const PracticeCanvasPage: React.FC = () => {
           </div>
           <button type="button"
             onClick={() => setDetailsOpen(!detailsOpen)}
-            className="flex w-full items-center justify-between border-y border-[#19291d]/10 px-6 py-4 text-sm font-bold dark:border-white/[.08] sm:px-8"
+            className="flex w-full items-center justify-between border-y border-border/10 px-6 py-4 text-sm font-bold dark:border-white/[.08] sm:px-8"
           >
             <span>Що перевіряється</span>
             <ChevronDown
@@ -303,7 +303,7 @@ export const PracticeCanvasPage: React.FC = () => {
           {detailsOpen && (
             <div className="space-y-3 p-6 sm:p-8">
               <div className="flex gap-3 rounded-2xl bg-[#f3f7f3] p-4 dark:bg-white/[.045]">
-                <Code2 className="mt-0.5 h-5 w-5 shrink-0 text-[#16834d] dark:text-[#72edb0]" />
+                <Code2 className="mt-0.5 h-5 w-5 shrink-0 text-primary-strong dark:text-primary-soft" />
                 <p className="text-sm leading-6 text-[#607066] dark:text-[#bfcbc2]">
                   Коректність на прихованих та відкритих тестах. Пишіть рішення,
                   яке працює для будь-якого валідного вводу.
@@ -334,10 +334,10 @@ export const PracticeCanvasPage: React.FC = () => {
             </div>
           </div>
         </section>
-        <section className="min-w-0 bg-[#f7faf7] p-4 dark:bg-[#0d1510] sm:p-5">
+        <section className="min-w-0 bg-[#f7faf7] p-4 dark:bg-bg-base sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 dark:bg-[#152018]">
             <div className="flex items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-xl bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
                 <Code2 className="h-4 w-4" />
               </span>
               <span className="text-sm font-bold">Розв'язок</span>
@@ -354,14 +354,14 @@ export const PracticeCanvasPage: React.FC = () => {
               <button type="button"
                 onClick={() => void submit()}
                 disabled={busy !== null || task.isClosed}
-                className="rounded-xl bg-[#153321] px-3 py-2 text-xs font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"
+                className="rounded-xl bg-[#153321] px-3 py-2 text-xs font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"
               >
                 <Send className="mr-1 inline h-3.5 w-3.5" />
                 {busy === "submit" ? "Надсилання…" : "Перевірити"}
               </button>
             </div>
           </div>
-          <div className="mt-3 overflow-hidden rounded-[22px] border border-[#19291d]/10 bg-[#fdfefd] dark:border-white/[.08] dark:bg-[#101a13]">
+          <div className="mt-3 overflow-hidden rounded-[22px] border border-border/10 bg-[#fdfefd] dark:border-white/[.08] dark:bg-[#101a13]">
             <React.Suspense
               fallback={
                 <div className="h-[430px] animate-pulse bg-[#eef4ef] dark:bg-white/[.04]" />
@@ -398,7 +398,7 @@ export const PracticeCanvasPage: React.FC = () => {
               />
             </label>
             <section
-              className={`rounded-2xl p-4 ${consoleTone === "ok" ? "bg-[#e9f7ee] dark:bg-[#00ff88]/10" : consoleTone === "bad" ? "bg-[#fff0f5] dark:bg-[#ff6b9d]/10" : "bg-white dark:bg-[#152018]"}`}
+              className={`rounded-2xl p-4 ${consoleTone === "ok" ? "bg-[#e9f7ee] dark:bg-primary/10" : consoleTone === "bad" ? "bg-[#fff0f5] dark:bg-[#ff6b9d]/10" : "bg-white dark:bg-[#152018]"}`}
             >
               <div className="flex items-center gap-2">
                 <span

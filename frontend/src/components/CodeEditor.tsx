@@ -32,18 +32,18 @@ export const ensureStudyCodMonacoThemes = (monaco: MonacoApi) => {
       inherit: true,
       rules: [],
       colors: {
-        "editor.background": "#0f0f15",
-        "editor.foreground": "#e8e8f0",
-        "editorLineNumber.foreground": "#6a6a7f",
-        "editorLineNumber.activeForeground": "#e8e8f0",
-        "editorCursor.foreground": "#00ff88",
-        "editor.selectionBackground": "#00ff8833",
-        "editor.inactiveSelectionBackground": "#00ff881f",
-        "editor.lineHighlightBackground": "#111118",
-        "editorIndentGuide.background": "#2a2a3a",
-        "editorIndentGuide.activeBackground": "#3a3a4d",
-        "editorBracketMatch.background": "#00ff881a",
-        "editorBracketMatch.border": "#00ff8866"
+        "editor.background": "#111612",
+        "editor.foreground": "#e8eee7",
+        "editorLineNumber.foreground": "#758278",
+        "editorLineNumber.activeForeground": "#e8eee7",
+        "editorCursor.foreground": "#a2cdaa",
+        "editor.selectionBackground": "#8fbd9933",
+        "editor.inactiveSelectionBackground": "#8fbd991f",
+        "editor.lineHighlightBackground": "#171e19",
+        "editorIndentGuide.background": "#2d3830",
+        "editorIndentGuide.activeBackground": "#435247",
+        "editorBracketMatch.background": "#8fbd991a",
+        "editorBracketMatch.border": "#8fbd9966"
       }
     });
 
@@ -52,18 +52,18 @@ export const ensureStudyCodMonacoThemes = (monaco: MonacoApi) => {
       inherit: true,
       rules: [],
       colors: {
-        "editor.background": "#f1f4f9",
-        "editor.foreground": "#0b1220",
-        "editorLineNumber.foreground": "#6b778c",
-        "editorLineNumber.activeForeground": "#0b1220",
-        "editorCursor.foreground": "#00b35f",
-        "editor.selectionBackground": "#00b35f33",
-        "editor.inactiveSelectionBackground": "#00b35f1f",
-        "editor.lineHighlightBackground": "#eef2f7",
-        "editorIndentGuide.background": "#d6deea",
-        "editorIndentGuide.activeBackground": "#b7c3d6",
-        "editorBracketMatch.background": "#00b35f1a",
-        "editorBracketMatch.border": "#00b35f66"
+        "editor.background": "#e9ece6",
+        "editor.foreground": "#1b2720",
+        "editorLineNumber.foreground": "#748178",
+        "editorLineNumber.activeForeground": "#1b2720",
+        "editorCursor.foreground": "#346f4b",
+        "editor.selectionBackground": "#346f4b33",
+        "editor.inactiveSelectionBackground": "#346f4b1f",
+        "editor.lineHighlightBackground": "#f1f3ed",
+        "editorIndentGuide.background": "#d8ded7",
+        "editorIndentGuide.activeBackground": "#b9c5b9",
+        "editorBracketMatch.background": "#346f4b1a",
+        "editorBracketMatch.border": "#346f4b66"
       }
     });
   } catch {

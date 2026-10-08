@@ -2221,16 +2221,16 @@ export const TasksPage: React.FC<Props> = ({
       {courseMode ? <>
         <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]">{tr("До маршруту", "Back to path")}</button>
         {uiState === "error" ? (
-          <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] disabled:opacity-50">{tr("Повторити", "Retry")}<ArrowRight className="size-3.5" /></button>
+          <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-[#062211] disabled:opacity-50">{tr("Повторити", "Retry")}<ArrowRight className="size-3.5" /></button>
         ) : !active ? (
-          <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-50"><Sparkles className="size-3.5" />{tr("Згенерувати завдання", "Generate task")}<ArrowRight className="size-3.5" /></button>
+          <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-50"><Sparkles className="size-3.5" />{tr("Згенерувати завдання", "Generate task")}<ArrowRight className="size-3.5" /></button>
         ) : nextCoursePracticeItemId ? (
-          <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: nextCoursePracticeItemId })} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d]"><Sparkles className="size-3.5" />{tr("Згенерувати наступну", "Generate next")}<ArrowRight className="size-3.5" /></button>
+          <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: nextCoursePracticeItemId })} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d]"><Sparkles className="size-3.5" />{tr("Згенерувати наступну", "Generate next")}<ArrowRight className="size-3.5" /></button>
         ) : null}
       </> : <>
         <button type="button" onClick={() => navigate("/lab/library")} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]"><BookOpen className="size-3.5" />{tr("Бібліотека", "Library")}</button>
         <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}><History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})</button>
-        <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40"><Plus className="size-3.5" />{tr("Нове", "New")}</button>
+        <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-[#062211] shadow-[0_8px_18px_-10px_rgba(0,217,120,.8)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-40"><Plus className="size-3.5" />{tr("Нове", "New")}</button>
       </>}
     </>
   ), [courseMode, requestedCourseIdFromUrl, uiState, active?.id, loading, effectiveCourseItemId, nextCoursePracticeItemId, navigate, sidebarStats.completed, sidebarStats.total, canGenerateFromToolbar]);
@@ -2377,7 +2377,7 @@ export const TasksPage: React.FC<Props> = ({
           emptyStateMessage={consoleOutput || null}
           languageOptions={ideLanguageOptions}
           toolbar={ideToolbar}
-          emptyStateAction={courseMode && !active ? <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-4 py-2.5 text-sm font-black text-[#062211] shadow-[0_10px_24px_-14px_rgba(0,217,120,.85)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-50"><Sparkles className="size-4" />{tr("Згенерувати завдання", "Generate task")}</button> : null}
+          emptyStateAction={courseMode && !active ? <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-black text-[#062211] shadow-[0_10px_24px_-14px_rgba(0,217,120,.85)] transition hover:bg-[#25e88d] disabled:cursor-not-allowed disabled:opacity-50"><Sparkles className="size-4" />{tr("Згенерувати завдання", "Generate task")}</button> : null}
           language={ideLanguage}
           onLanguageChange={noop}
           compiler={runtime}
@@ -2410,9 +2410,9 @@ export const TasksPage: React.FC<Props> = ({
         <Modal open={taskHistoryOpen} onClose={() => setTaskHistoryOpen(false)} title={tr("Історія завдань", "Task history")} description={tr("Відкрий попереднє завдання або створи нове.", "Open a previous task or create a new one.")} panelClassName="max-w-[720px]">
           <div className="max-h-[60vh] space-y-2 overflow-y-auto">
             {taskHistoryItems.length ? taskHistoryItems.map((item) => (
-              <button key={`${item.openTask.id}-${item.batchKey ?? "task"}`} type="button" onClick={() => { openSidebarTask(item.openTask); setTaskHistoryOpen(false); }} className="flex w-full items-center justify-between gap-3 rounded-xl border border-[#152219]/10 p-3 text-left transition hover:bg-[#eef4ef] dark:border-white/10 dark:hover:bg-white/[.06]">
+              <button key={`${item.openTask.id}-${item.batchKey ?? "task"}`} type="button" onClick={() => { openSidebarTask(item.openTask); setTaskHistoryOpen(false); }} className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/10 p-3 text-left transition hover:bg-[#eef4ef] dark:border-white/10 dark:hover:bg-white/[.06]">
                 <span className="min-w-0"><span className="block truncate text-sm font-semibold">{item.renderTitle}</span><span className="mt-1 block text-xs text-[#718075]">{item.sectionTitle}</span></span>
-                <span className={`shrink-0 text-xs font-semibold ${item.openTask.status === "GRADED" ? "text-[#00a75a]" : "text-[#d78000]"}`}>{item.openTask.status === "GRADED" ? tr("Завершено", "Done") : tr("В роботі", "Open")}</span>
+                <span className={`shrink-0 text-xs font-semibold ${item.openTask.status === "GRADED" ? "text-primary-strong" : "text-[#d78000]"}`}>{item.openTask.status === "GRADED" ? tr("Завершено", "Done") : tr("В роботі", "Open")}</span>
               </button>
             )) : <p role="status" className="py-6 text-center text-sm text-[#718075]">{tr("Історія поки порожня.", "No tasks yet.")}</p>}
           </div>
@@ -2440,15 +2440,15 @@ export const TasksPage: React.FC<Props> = ({
   const selectedRouteIndex = Math.max(0, routeTiles.findIndex(({ item }) => isSidebarItemActive(item)));
 
   return (
-    <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-6 lg:px-10 lg:py-9">
+    <div className="min-h-full bg-bg-base px-4 py-6 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-10 lg:py-9">
       <TaskGenerationOverlay open={loading} phase={generationPhase} progress={generationProgress} />
 
-      <div className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-[1500px] flex-col overflow-hidden rounded-[28px] border border-[#152219]/10 bg-white shadow-[0_18px_45px_-38px_rgba(18,39,24,.48)] dark:border-white/10 dark:bg-[#121b15]">
+      <div className="mx-auto flex min-h-[calc(100dvh-7rem)] max-w-[1500px] flex-col overflow-hidden rounded-[28px] border border-border/10 bg-white shadow-[0_18px_45px_-38px_rgba(18,39,24,.48)] dark:border-white/10 dark:bg-bg-surface">
         <header className="flex min-h-16 flex-wrap items-center gap-3 border-b border-[#15231a]/10 px-4 py-3 dark:border-white/[.08] sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[11px] font-bold text-[#718077] dark:text-[#93a199]">
-                {courseContext ? <button type="button" onClick={() => navigate(`/learning/course/${courseContext.courseId}/path`)} className="truncate text-[#16834d] transition hover:underline dark:text-[#72edb0]">{tr("Курс", "Course")}: {courseContext.courseTitle}</button> : <span>{tr("Особиста практика", "Personal practice")}</span>}
+                {courseContext ? <button type="button" onClick={() => navigate(`/learning/course/${courseContext.courseId}/path`)} className="truncate text-primary-strong transition hover:underline dark:text-primary-soft">{tr("Курс", "Course")}: {courseContext.courseTitle}</button> : <span>{tr("Особиста практика", "Personal practice")}</span>}
                 <ChevronRight className="size-3" />
                 <span className="truncate">{courseContext?.itemTitle ?? active?.topicTitle ?? tr("Новий маршрут", "New route")}</span>
               </div>
@@ -2472,7 +2472,7 @@ export const TasksPage: React.FC<Props> = ({
             <button type="button" onClick={handleRun} disabled={!canQuickRun || isPersonalControlQuizTask} className="flex h-9 items-center gap-2 rounded-xl border border-[#15231a]/12 bg-white px-3 text-xs font-black shadow-sm transition hover:bg-[#f4f7f3] disabled:opacity-40 dark:border-white/10 dark:bg-white/[.05] dark:hover:bg-white/[.08]">
               <Play className="size-4" />{tr("Запустити", "Run")}
             </button>
-            <button type="button" onClick={handleSubmit} disabled={!canQuickCheck} className="flex h-9 items-center gap-2 rounded-xl bg-[#00e980] px-4 text-xs font-black text-[#062213] transition hover:bg-[#00ff88] disabled:opacity-40">
+            <button type="button" onClick={handleSubmit} disabled={!canQuickCheck} className="flex h-9 items-center gap-2 rounded-xl bg-[#00e980] px-4 text-xs font-black text-[#062213] transition hover:bg-primary disabled:opacity-40">
               <CheckCircle2 className="size-4" />{submitting ? tr("Перевіряємо", "Checking") : tr("Здати", "Submit")}
             </button>
           </div>
@@ -2486,7 +2486,7 @@ export const TasksPage: React.FC<Props> = ({
                 <p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f] dark:text-[#8e9a92]">{tr("Маршрут", "Route")}</p>
                 <p className="mt-1 text-sm font-black">{sidebarStats.completed}/{sidebarStats.total} {tr("завершено", "complete")}</p>
               </div>
-              <span className="text-xs font-black text-[#16834d] dark:text-[#6fe5a9]">{sidebarStats.progress}%</span>
+              <span className="text-xs font-black text-primary-strong dark:text-[#6fe5a9]">{sidebarStats.progress}%</span>
             </div>
             <div className="mx-4 h-1 overflow-hidden rounded-full bg-[#dfe5de] dark:bg-white/10"><div className="h-full rounded-full bg-[#00df79]" style={{ width: `${sidebarStats.progress}%` }} /></div>
 
@@ -2497,10 +2497,10 @@ export const TasksPage: React.FC<Props> = ({
                 return (
                   <React.Fragment key={item.id}>
                     {(index === 0 || routeTiles[index - 1].blockTitle !== blockTitle) && (
-                      <div className="px-2 pb-1 pt-3 text-[10px] font-black uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]">{blockTitle}</div>
+                      <div className="px-2 pb-1 pt-3 text-[10px] font-black uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{blockTitle}</div>
                     )}
                     <button type="button" onClick={() => openSidebarTask(item.openTask)} className={`flex min-w-[230px] items-start gap-3 rounded-[14px] px-3 py-3 text-left transition lg:min-w-0 lg:w-full ${selected ? "bg-white shadow-[0_6px_20px_rgba(26,43,31,.07)] ring-1 ring-[#17251b]/[.06] dark:bg-white/[.07] dark:ring-white/10" : "hover:bg-white/70 dark:hover:bg-white/[.04]"}`}>
-                      <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-black ${done ? "bg-[#dff8e9] text-[#147447] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : selected ? "bg-[#17251b] text-white dark:bg-[#00ff88] dark:text-[#062211]" : "border border-[#cbd4cc] text-[#7c8980] dark:border-white/15"}`}>{done ? "✓" : index + 1}</span>
+                      <span className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-black ${done ? "bg-[#dff8e9] text-[#147447] dark:bg-primary/10 dark:text-primary-soft" : selected ? "bg-[#17251b] text-white dark:bg-primary dark:text-[#062211]" : "border border-[#cbd4cc] text-[#7c8980] dark:border-white/15"}`}>{done ? "✓" : index + 1}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-xs font-black">{item.renderTitle}</span>
                         <span className="mt-1 block truncate text-[10px] font-semibold text-[#7a887f] dark:text-[#8e9a92]">{sectionTitle}</span>
@@ -2528,7 +2528,7 @@ export const TasksPage: React.FC<Props> = ({
               <div className="border-b border-[#15231a]/10 px-5 py-5 dark:border-white/[.08] sm:px-7">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="max-w-3xl">
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.15em] text-[#16834d] dark:text-[#72edb0]">
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
                       <span>{String(selectedRouteIndex + 1).padStart(2, "0")}</span><span>·</span><span>{activeTaskModeLabel}</span><span>·</span><span>{activeTaskStatusMeta?.label}</span>
                     </div>
                     <h2 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-black tracking-[-.045em] sm:text-3xl">{active?.title}</h2>
@@ -2545,33 +2545,33 @@ export const TasksPage: React.FC<Props> = ({
 
               {theoryPanelOpen && hasTheoryForActive ? (
                 <div className="grid min-h-0 flex-1 overflow-hidden bg-[#f8faf6] dark:bg-[#101612] lg:grid-cols-[210px_minmax(0,1fr)]">
-                  <nav className="flex gap-2 overflow-x-auto border-b border-[#152219]/10 p-4 dark:border-white/10 lg:block lg:space-y-1 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-5">
+                  <nav className="flex gap-2 overflow-x-auto border-b border-border/10 p-4 dark:border-white/10 lg:block lg:space-y-1 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-5">
                     <p className="mb-3 hidden text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f] lg:block">{tr("Зміст", "Contents")}</p>
                     {theoryChapters.map((chapter, index) => (
-                      <button type="button" key={`${index}-${chapter.title}`} onClick={() => setActiveTheoryChapter(index)} className={`flex min-w-[190px] items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-bold transition lg:min-w-0 lg:w-full ${index === activeTheoryChapter ? "bg-white text-[#17251b] shadow-sm dark:bg-white/[.08] dark:text-white" : "text-[#6f7d73] hover:bg-white/60 dark:text-[#98a69c] dark:hover:bg-white/[.04]"}`}>
-                        <span className={`grid size-6 shrink-0 place-items-center rounded-lg text-[10px] font-black ${index === activeTheoryChapter ? "bg-[#e3f8eb] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-[#e9ede8] dark:bg-white/[.06]"}`}>{String(index + 1).padStart(2, "0")}</span>
+                      <button type="button" key={`${index}-${chapter.title}`} onClick={() => setActiveTheoryChapter(index)} className={`flex min-w-[190px] items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs font-bold transition lg:min-w-0 lg:w-full ${index === activeTheoryChapter ? "bg-white text-[#17251b] shadow-sm dark:bg-white/[.08] dark:text-white" : "text-text-muted hover:bg-white/60 dark:text-[#98a69c] dark:hover:bg-white/[.04]"}`}>
+                        <span className={`grid size-6 shrink-0 place-items-center rounded-lg text-[10px] font-black ${index === activeTheoryChapter ? "bg-[#e3f8eb] text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-[#e9ede8] dark:bg-white/[.06]"}`}>{String(index + 1).padStart(2, "0")}</span>
                         <span className="truncate">{chapter.title}</span>
                       </button>
                     ))}
                   </nav>
                   <div className="min-h-0 overflow-y-auto px-5 py-8 sm:px-10 sm:py-12">
                   <article className="mx-auto max-w-[760px]">
-                    <div className="flex items-center gap-3 text-[11px] font-black uppercase tracking-[.16em] text-[#16834d] dark:text-[#72edb0]">
+                    <div className="flex items-center gap-3 text-[11px] font-black uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">
                       <span className="h-px w-8 bg-current" />
                       {tr(`Частина ${activeTheoryChapter + 1} з ${theoryChapters.length}`, `Part ${activeTheoryChapter + 1} of ${theoryChapters.length}`)}
                     </div>
                     <h3 className="mt-6 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.055em] sm:text-5xl">
                       {visibleTheoryChapter?.title}
                     </h3>
-                    <p className="mt-5 max-w-2xl text-base leading-7 text-[#68776d] dark:text-[#aebbb1]">
+                    <p className="mt-5 max-w-2xl text-base leading-7 text-text-muted dark:text-[#aebbb1]">
                       {tr("Коротке пояснення підводить до рішення, але залишає реалізацію тобі.", "A short explanation guides you toward the solution while leaving the implementation to you.")}
                     </p>
-                    <div className="mt-10 border-l-2 border-[#00d978] pl-5 text-[15px] leading-8 text-[#26342b] dark:text-[#d4dfd7] sm:pl-8">
+                    <div className="mt-10 border-l-2 border-primary pl-5 text-[15px] leading-8 text-[#26342b] dark:text-[#d4dfd7] sm:pl-8">
                       <MarkdownView content={visibleTheoryChapter?.markdown || getTheoryMarkdown(active)} />
                     </div>
                     <div className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-[#15231a]/10 pt-6 dark:border-white/10">
-                      <button type="button" onClick={() => setActiveTheoryChapter((value) => Math.max(0, value - 1))} disabled={activeTheoryChapter === 0} className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-black text-[#68776d] disabled:opacity-30 dark:text-[#aebbb1]"><ChevronLeft className="size-4" />{tr("Назад", "Previous")}</button>
-                      {activeTheoryChapter < theoryChapters.length - 1 ? <button type="button" onClick={() => setActiveTheoryChapter((value) => Math.min(theoryChapters.length - 1, value + 1))} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#17251b] px-5 text-sm font-black text-white dark:bg-[#edf3ef] dark:text-[#0b120e]">{tr("Наступна частина", "Next part")}<ChevronRight className="size-4" /></button> : <button type="button" onClick={() => { setTheoryAcknowledged(true); setTheoryPanelOpen(false); }} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#00e980] px-5 text-sm font-black text-[#062213] transition hover:bg-[#00ff88]">{tr("До практики", "Start practice")}<ChevronRight className="size-4" /></button>}
+                      <button type="button" onClick={() => setActiveTheoryChapter((value) => Math.max(0, value - 1))} disabled={activeTheoryChapter === 0} className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-black text-text-muted disabled:opacity-30 dark:text-[#aebbb1]"><ChevronLeft className="size-4" />{tr("Назад", "Previous")}</button>
+                      {activeTheoryChapter < theoryChapters.length - 1 ? <button type="button" onClick={() => setActiveTheoryChapter((value) => Math.min(theoryChapters.length - 1, value + 1))} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#17251b] px-5 text-sm font-black text-white dark:bg-[#edf3ef] dark:text-[#0b120e]">{tr("Наступна частина", "Next part")}<ChevronRight className="size-4" /></button> : <button type="button" onClick={() => { setTheoryAcknowledged(true); setTheoryPanelOpen(false); }} className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#00e980] px-5 text-sm font-black text-[#062213] transition hover:bg-primary">{tr("До практики", "Start practice")}<ChevronRight className="size-4" /></button>}
                     </div>
                   </article>
                   </div>
@@ -2581,7 +2581,7 @@ export const TasksPage: React.FC<Props> = ({
                   <div className="mx-auto max-w-3xl">
                     <h3 className="text-xl font-black">{tr("Теоретичний тест", "Theory quiz")}</h3>
                     <p className="mt-2 text-sm text-[#718077]">{answeredQuizCount}/{personalQuiz?.questions.length ?? 0} {tr("відповідей", "answered")}</p>
-                    <div className="mt-6 space-y-4">{personalQuiz?.questions.map((q) => <article key={q.index} className="rounded-2xl border border-[#15231a]/10 p-5 dark:border-white/10"><p className="font-black">{q.index + 1}. {q.question}</p><div className="mt-4 grid gap-2">{Object.entries(q.options).map(([label, value]) => <button type="button" key={label} onClick={() => setQuizAnswers((old) => ({ ...old, [q.index]: label }))} className={`rounded-xl border px-4 py-3 text-left text-sm ${quizAnswers[q.index] === label ? "border-[#00d978] bg-[#e9f9ef] dark:bg-[#00ff88]/10" : "border-[#15231a]/10 dark:border-white/10"}`}><b className="mr-2">{label}</b>{value}</button>)}</div></article>)}</div>
+                    <div className="mt-6 space-y-4">{personalQuiz?.questions.map((q) => <article key={q.index} className="rounded-2xl border border-[#15231a]/10 p-5 dark:border-white/10"><p className="font-black">{q.index + 1}. {q.question}</p><div className="mt-4 grid gap-2">{Object.entries(q.options).map(([label, value]) => <button type="button" key={label} onClick={() => setQuizAnswers((old) => ({ ...old, [q.index]: label }))} className={`rounded-xl border px-4 py-3 text-left text-sm ${quizAnswers[q.index] === label ? "border-primary bg-[#e9f9ef] dark:bg-primary/10" : "border-[#15231a]/10 dark:border-white/10"}`}><b className="mr-2">{label}</b>{value}</button>)}</div></article>)}</div>
                   </div>
                 </div>
               ) : (
@@ -2593,16 +2593,16 @@ export const TasksPage: React.FC<Props> = ({
 
             {!theoryPanelOpen || !hasTheoryForActive ? <aside className="flex min-h-0 flex-col border-t border-[#15231a]/10 bg-[#f6f8f4] dark:border-white/[.08] dark:bg-[#0c120e] xl:border-l xl:border-t-0">
               <div className="border-b border-[#15231a]/10 p-5 dark:border-white/[.08]">
-                <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f]">{tr("Вхідні дані", "Input")}</p><button type="button" onClick={() => setStdin(firstExampleInput)} className="text-[10px] font-black text-[#16834d] dark:text-[#72edb0]">{tr("Взяти з прикладу", "Use example")}</button></div>
-                <textarea value={stdin} onChange={(event) => setStdin(event.target.value)} spellCheck={false} className="mt-3 min-h-24 w-full resize-y rounded-xl border border-[#15231a]/10 bg-white p-3 font-mono text-xs outline-none focus:border-[#00d978] dark:border-white/10 dark:bg-white/[.04]" />
+                <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f]">{tr("Вхідні дані", "Input")}</p><button type="button" onClick={() => setStdin(firstExampleInput)} className="text-[10px] font-black text-primary-strong dark:text-primary-soft">{tr("Взяти з прикладу", "Use example")}</button></div>
+                <textarea value={stdin} onChange={(event) => setStdin(event.target.value)} spellCheck={false} className="mt-3 min-h-24 w-full resize-y rounded-xl border border-[#15231a]/10 bg-white p-3 font-mono text-xs outline-none focus:border-primary dark:border-white/10 dark:bg-white/[.04]" />
               </div>
 
               <div className="min-h-[220px] flex-1 p-5">
                 <div className="flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#7a887f]">{tr("Результат", "Result")}</p><span className={`rounded-full px-2 py-1 text-[10px] font-black ${consoleStateMeta.toneClass}`}>{consoleStateMeta.label}</span></div>
-                {aiResult && <div className="mt-4 flex items-end gap-2"><span className="text-5xl font-black tracking-[-.08em] text-[#16834d] dark:text-[#72edb0]">{aiResult.total}</span><span className="pb-2 text-xs font-bold text-[#718077]">/ {isPreviewMode ? 12 : 100}</span></div>}
+                {aiResult && <div className="mt-4 flex items-end gap-2"><span className="text-5xl font-black tracking-[-.08em] text-primary-strong dark:text-primary-soft">{aiResult.total}</span><span className="pb-2 text-xs font-bold text-[#718077]">/ {isPreviewMode ? 12 : 100}</span></div>}
                 {aiResult?.aiFeedback && <p className="mt-3 text-sm leading-6 text-[#4f5f55] dark:text-[#b8c4bb]">{aiResult.aiFeedback}</p>}
                 <pre className="mt-4 max-h-52 overflow-auto whitespace-pre-wrap rounded-xl bg-[#111713] p-4 font-mono text-xs leading-6 text-[#cfe0d3]">{consoleOutput || tr("Результат запуску з’явиться тут.", "Run output will appear here.")}</pre>
-                {courseContext && aiResult && <button type="button" onClick={() => navigate(`/learning/course/${courseContext.courseId}/path`)} className="mt-4 inline-flex w-full items-center justify-center rounded-xl border border-[#16834d]/25 bg-[#e8f7ed] px-4 py-3 text-xs font-black text-[#147447] transition hover:bg-[#d9f2e3] dark:border-[#72edb0]/25 dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{tr("Повернутися до курсу", "Back to course")}</button>}
+                {courseContext && aiResult && <button type="button" onClick={() => navigate(`/learning/course/${courseContext.courseId}/path`)} className="mt-4 inline-flex w-full items-center justify-center rounded-xl border border-primary-strong/25 bg-[#e8f7ed] px-4 py-3 text-xs font-black text-[#147447] transition hover:bg-[#d9f2e3] dark:border-primary-soft/25 dark:bg-primary/10 dark:text-primary-soft">{tr("Повернутися до курсу", "Back to course")}</button>}
               </div>
 
               <div className="border-t border-[#15231a]/10 p-5 dark:border-white/[.08]">
@@ -2615,14 +2615,14 @@ export const TasksPage: React.FC<Props> = ({
       </div>
 
       {isCompactViewport && active ? (
-        <div className="fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] z-30 grid grid-cols-4 gap-1.5 rounded-2xl border border-[#132018]/10 bg-white/95 p-1.5 shadow-[0_18px_48px_rgba(18,39,24,.18)] backdrop-blur dark:border-white/10 dark:bg-[#121b15]/95 lg:hidden">
+        <div className="fixed inset-x-3 bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] z-30 grid grid-cols-4 gap-1.5 rounded-2xl border border-[#132018]/10 bg-white/95 p-1.5 shadow-[0_18px_48px_rgba(18,39,24,.18)] backdrop-blur dark:border-white/10 dark:bg-bg-surface/95 lg:hidden">
           <button type="button" onClick={() => setStatementModalOpen(true)} className="min-h-11 rounded-xl px-2 text-[11px] font-black text-[#536359] hover:bg-[#eef3ed] dark:text-[#b7c5ba] dark:hover:bg-white/[.06]">
             {tr("Умова", "Brief")}
           </button>
           <button type="button" onClick={() => focusWorkspaceArea("mission")} className="min-h-11 rounded-xl px-2 text-[11px] font-black text-[#536359] hover:bg-[#eef3ed] dark:text-[#b7c5ba] dark:hover:bg-white/[.06]">
             {tr("Код", "Code")}
           </button>
-          <button type="button" onClick={runFromRail} disabled={!canQuickRun} className="min-h-11 rounded-xl bg-[#edf5ee] px-2 text-[11px] font-black text-[#17653e] disabled:opacity-40 dark:bg-white/[.07] dark:text-[#72edb0]">
+          <button type="button" onClick={runFromRail} disabled={!canQuickRun} className="min-h-11 rounded-xl bg-[#edf5ee] px-2 text-[11px] font-black text-[#17653e] disabled:opacity-40 dark:bg-white/[.07] dark:text-primary-soft">
             {tr("Запуск", "Run")}
           </button>
           <button type="button" onClick={checkFromRail} disabled={!canQuickCheck} className="min-h-11 rounded-xl bg-[#00e980] px-2 text-[11px] font-black text-[#062213] disabled:opacity-40">

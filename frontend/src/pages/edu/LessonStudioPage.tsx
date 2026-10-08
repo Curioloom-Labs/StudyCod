@@ -116,7 +116,7 @@ const Overlay: React.FC<{
   const titleId = React.useId();
   const panelRef = useDialogA11y({ open: true, onClose });
   return <div data-dialog-a11y="direct" data-material="lesson-dialog-scrim" className="fixed inset-0 z-[80] overflow-y-auto bg-[#07100a]/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={panelRef as React.RefObject<HTMLElement>} data-dialog-a11y="direct" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-material="lesson-dialog" className="mx-auto mt-8 max-w-xl rounded-[30px] bg-[#fbfdfb] p-6 shadow-2xl dark:bg-[#101a13] sm:p-8">
+    <section ref={panelRef as React.RefObject<HTMLElement>} data-dialog-a11y="direct" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-material="lesson-dialog" className="mx-auto mt-8 max-w-xl rounded-[30px] bg-bg-surface p-6 shadow-2xl dark:bg-[#101a13] sm:p-8">
       <button type="button"
         onClick={onClose}
         className="float-right grid h-10 w-10 place-items-center rounded-full bg-[#edf2ed] text-xl dark:bg-white/[.07]"
@@ -157,7 +157,7 @@ const markdownBlocks = (source?: string) =>
         >
           {block.split("\n").map((item) => (
             <li key={item} className="flex gap-2">
-              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#00c96e]" />
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
               {item.replace(/^-\s*/, "")}
             </li>
           ))}
@@ -288,8 +288,8 @@ const LessonTeacherStudio: React.FC = () => {
   if (loading)
     return (
       <div className={shell}>
-        <div className="h-12 w-64 animate-pulse rounded-xl bg-[#e8eeea] dark:bg-white/[.06]" />
-        <div className="mt-8 h-[650px] animate-pulse rounded-[34px] bg-[#e8eeea] dark:bg-white/[.05]" />
+        <div className="h-12 w-64 animate-pulse rounded-xl bg-bg-hover dark:bg-white/[.06]" />
+        <div className="mt-8 h-[650px] animate-pulse rounded-[34px] bg-bg-hover dark:bg-white/[.05]" />
       </div>
     );
   if (!lesson)
@@ -305,7 +305,7 @@ const LessonTeacherStudio: React.FC = () => {
           const back = (location.state as { from?: string } | null)?.from;
           navigate(back || "/edu/lessons");
         }}
-        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-[#16834d] dark:text-[#aab7ad] dark:hover:text-[#72edb0]"
+        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"
       >
         <ArrowLeft className="h-4 w-4" />
         До навчального плану
@@ -328,14 +328,14 @@ const LessonTeacherStudio: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             <button type="button"
               onClick={() => void begin()}
-              className="rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#062211]"
+              className="rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-primary dark:text-[#062211]"
             >
               <Play className="mr-2 inline h-4 w-4" />
               Почати
             </button>
             <button type="button"
               onClick={() => setModal("task")}
-              className="rounded-xl border border-[#19291d]/12 px-4 py-3 text-sm font-bold text-[#32443a] dark:border-white/10 dark:text-white"
+              className="rounded-xl border border-border/12 px-4 py-3 text-sm font-bold text-[#32443a] dark:border-white/10 dark:text-white"
             >
               <Plus className="mr-2 inline h-4 w-4" />
               Практика
@@ -379,13 +379,13 @@ const LessonTeacherStudio: React.FC = () => {
         </div>
       )}
       <main className="mt-8 grid gap-7 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <article className="rounded-[30px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14] sm:p-9">
+        <article className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-9">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+            <span className="grid h-10 w-10 place-items-center rounded-2xl bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
               <BookOpen className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.13em] text-[#16834d] dark:text-[#72edb0]">
+              <p className="text-xs font-bold uppercase tracking-[.13em] text-primary-strong dark:text-primary-soft">
                 Пояснення
               </p>
               <h2 className="mt-1 text-2xl font-bold tracking-[-.04em]">
@@ -409,7 +409,7 @@ const LessonTeacherStudio: React.FC = () => {
         </article>
         <aside className="space-y-5">
           <section className="rounded-[30px] bg-[#163321] p-6 text-white shadow-[0_16px_45px_rgba(13,51,27,.16)] dark:bg-[#1b2b20]">
-            <p className="text-xs font-bold uppercase tracking-[.14em] text-[#7bedb4]">
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-soft">
               Наступний крок
             </p>
             <h2 className="mt-3 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">
@@ -427,13 +427,13 @@ const LessonTeacherStudio: React.FC = () => {
                 })
               }
               disabled={!tasks.length}
-              className="mt-5 w-full rounded-xl bg-[#00d978] px-4 py-3 text-sm font-bold text-[#062211] disabled:opacity-40"
+              className="mt-5 w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-[#062211] disabled:opacity-40"
             >
               Відкрити перше завдання{" "}
               <ArrowRight className="ml-1 inline h-4 w-4" />
             </button>
           </section>
-          <section className="rounded-[30px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14]">
+          <section className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">
@@ -450,14 +450,14 @@ const LessonTeacherStudio: React.FC = () => {
                     .getElementById("lesson-quiz")
                     ?.scrollIntoView({ behavior: "smooth" })
                 }
-                className="mt-4 text-sm font-bold text-[#16834d] dark:text-[#72edb0]"
+                className="mt-4 text-sm font-bold text-primary-strong dark:text-primary-soft"
               >
                 {quiz.length} запитань →
               </button>
             ) : (
               <button type="button"
                 onClick={() => setModal("quiz")}
-                className="mt-4 text-sm font-bold text-[#16834d] dark:text-[#72edb0]"
+                className="mt-4 text-sm font-bold text-primary-strong dark:text-primary-soft"
               >
                 Створити квіз →
               </button>
@@ -477,7 +477,7 @@ const LessonTeacherStudio: React.FC = () => {
           </div>
           <button type="button"
             onClick={() => setModal("task")}
-            className="text-sm font-bold text-[#16834d] dark:text-[#72edb0]"
+            className="text-sm font-bold text-primary-strong dark:text-primary-soft"
           >
             + Додати
           </button>
@@ -491,14 +491,14 @@ const LessonTeacherStudio: React.FC = () => {
                   state: { from: location.pathname },
                 })
               }
-              className="group rounded-[24px] border border-[#19291d]/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/[.09] dark:bg-[#111b14]"
+              className="group rounded-[24px] border border-border/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/[.09] dark:bg-bg-surface"
             >
               <div className="flex gap-4">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[#fff1dc] text-sm font-extrabold text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]">
                   {String(index + 1).padStart(2, "0")}
                 </span>
                 <div>
-                  <h3 className="font-bold group-hover:text-[#16834d] dark:group-hover:text-[#72edb0]">
+                  <h3 className="font-bold group-hover:text-primary-strong dark:group-hover:text-primary-soft">
                     {entry.title}
                   </h3>
                   <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">
@@ -511,7 +511,7 @@ const LessonTeacherStudio: React.FC = () => {
           {!tasks.length && (
             <button type="button"
               onClick={() => setModal("task")}
-              className="rounded-[24px] border border-dashed border-[#19291d]/15 px-5 py-12 text-center text-sm font-bold text-[#708077] dark:border-white/10 dark:text-[#a6b4a9]"
+              className="rounded-[24px] border border-dashed border-border/15 px-5 py-12 text-center text-sm font-bold text-[#708077] dark:border-white/10 dark:text-[#a6b4a9]"
             >
               Додайте першу практику
             </button>
@@ -521,7 +521,7 @@ const LessonTeacherStudio: React.FC = () => {
       {quiz.length > 0 && (
         <section
           id="lesson-quiz"
-          className="mt-8 rounded-[30px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14] sm:p-9"
+          className="mt-8 rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-9"
         >
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -533,7 +533,7 @@ const LessonTeacherStudio: React.FC = () => {
               </h2>
             </div>
             {quizState === "done" && (
-              <span className="inline-flex items-center gap-2 rounded-full bg-[#e7f6ec] px-3 py-2 text-xs font-bold text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+              <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-2 text-xs font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
                 <CheckCircle2 className="h-4 w-4" />
                 Відповіді надіслано
               </span>
@@ -553,7 +553,7 @@ const LessonTeacherStudio: React.FC = () => {
                     ([key, value]) => (
                       <label
                         key={key}
-                        className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${answers[index] === key ? "bg-[#dff6e7] text-[#134c2d] dark:bg-[#00ff88]/12 dark:text-[#a4f4c8]" : "bg-white text-[#415147] dark:bg-[#111b14] dark:text-[#dbe6de]"}`}
+                        className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${answers[index] === key ? "bg-[#dff6e7] text-[#134c2d] dark:bg-primary/12 dark:text-[#a4f4c8]" : "bg-white text-[#415147] dark:bg-bg-surface dark:text-[#dbe6de]"}`}
                       >
                         <input
                           type="radio"
@@ -575,7 +575,7 @@ const LessonTeacherStudio: React.FC = () => {
           <button type="button"
             disabled={busy || quizState === "done"}
             onClick={() => void submit()}
-            className="mt-6 rounded-xl bg-[#153321] px-5 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"
+            className="mt-6 rounded-xl bg-[#153321] px-5 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"
           >
             {busy ? "Перевіряємо…" : "Надіслати відповіді"}
           </button>
@@ -594,7 +594,7 @@ const LessonTeacherStudio: React.FC = () => {
                 setTask({ ...task, title: event.target.value })
               }
               placeholder="Назва завдання"
-              className="w-full rounded-xl border border-[#19291d]/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]"
+              className="w-full rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]"
             />
             <textarea
               value={task.description}
@@ -603,7 +603,7 @@ const LessonTeacherStudio: React.FC = () => {
               }
               placeholder="Умова"
               rows={5}
-              className="w-full resize-none rounded-xl border border-[#19291d]/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]"
+              className="w-full resize-none rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]"
             />
             <textarea
               value={task.template}
@@ -612,7 +612,7 @@ const LessonTeacherStudio: React.FC = () => {
               }
               placeholder="Стартовий код (за потреби)"
               rows={4}
-              className="w-full resize-none rounded-xl border border-[#19291d]/10 bg-white px-4 py-3 font-mono text-sm dark:border-white/10 dark:bg-[#0d1710]"
+              className="w-full resize-none rounded-xl border border-border/10 bg-white px-4 py-3 font-mono text-sm dark:border-white/10 dark:bg-[#0d1710]"
             />
             <textarea
               value={task.projectSpecJson || ""}
@@ -622,12 +622,12 @@ const LessonTeacherStudio: React.FC = () => {
               placeholder={'Mini-project JSON (optional): {"version":1,"kind":"MINI_PROJECT",...}'}
               rows={7}
               spellCheck={false}
-              className="w-full resize-none rounded-xl border border-[#16834d]/25 bg-[#f3f8f3] px-4 py-3 font-mono text-xs dark:border-[#00d978]/25 dark:bg-[#0d1710]"
+              className="w-full resize-none rounded-xl border border-primary-strong/25 bg-[#f3f8f3] px-4 py-3 font-mono text-xs dark:border-primary/25 dark:bg-[#0d1710]"
             />
             <button type="button"
               disabled={busy || !task.title.trim()}
               onClick={() => void create()}
-              className="w-full rounded-xl bg-[#153321] px-4 py-3 font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"
+              className="w-full rounded-xl bg-[#153321] px-4 py-3 font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"
             >
               {busy ? "Створюємо…" : "Додати практику"}
             </button>
@@ -650,7 +650,7 @@ const LessonTeacherStudio: React.FC = () => {
           <button type="button"
             disabled={busy}
             onClick={() => void createQuiz()}
-            className="mt-5 w-full rounded-xl bg-[#153321] px-4 py-3 font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"
+            className="mt-5 w-full rounded-xl bg-[#153321] px-4 py-3 font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"
           >
             {busy ? "Готуємо…" : "Згенерувати квіз"}
           </button>
@@ -713,8 +713,8 @@ const StudentLessonWorkspace: React.FC = () => {
   if (loading)
     return (
       <div className={shell}>
-        <div className="h-12 w-64 animate-pulse rounded-xl bg-[#e8eeea] dark:bg-white/[.06]" />
-        <div className="mt-8 h-[560px] animate-pulse rounded-[34px] bg-[#e8eeea] dark:bg-white/[.05]" />
+        <div className="h-12 w-64 animate-pulse rounded-xl bg-bg-hover dark:bg-white/[.06]" />
+        <div className="mt-8 h-[560px] animate-pulse rounded-[34px] bg-bg-hover dark:bg-white/[.05]" />
       </div>
     );
   if (!lesson)
@@ -760,7 +760,7 @@ const StudentLessonWorkspace: React.FC = () => {
         onClick={() =>
           navigate(`/edu/lessons${preview() ? "?preview=true" : ""}`)
         }
-        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] hover:text-[#16834d] dark:text-[#aab7ad] dark:hover:text-[#72edb0]"
+        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"
       >
         <ArrowLeft className="size-4" />
         До моїх уроків
@@ -792,7 +792,7 @@ const StudentLessonWorkspace: React.FC = () => {
                 setStartBusy(false);
               }
             })()}
-            className="mt-7 rounded-xl bg-[#00ff88] px-5 py-3 text-sm font-bold text-[#062211]"
+            className="mt-7 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-[#062211]"
           >
             {startBusy ? "Запускаємо…" : started ? "Урок розпочато" : "Почати урок"}
           </button>
@@ -804,13 +804,13 @@ const StudentLessonWorkspace: React.FC = () => {
         </div>
       )}
       <main className="mt-7 grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <article className="rounded-[30px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14] sm:p-9">
+        <article className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-9">
           <div className="flex items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-2xl bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+            <span className="grid size-10 place-items-center rounded-2xl bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
               <BookOpen className="size-5" />
             </span>
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.13em] text-[#16834d] dark:text-[#72edb0]">
+              <p className="text-xs font-bold uppercase tracking-[.13em] text-primary-strong dark:text-primary-soft">
                 Матеріал
               </p>
               <h2 className="mt-1 text-2xl font-bold">Спершу зрозумій ідею</h2>
@@ -848,13 +848,13 @@ const StudentLessonWorkspace: React.FC = () => {
         </aside>
       </main>
       {isControl && quizRequired && (
-        <section className="mt-8 rounded-[30px] border border-[#e17800]/30 bg-white p-6 dark:border-[#ffb760]/30 dark:bg-[#111b14] sm:p-9">
+        <section className="mt-8 rounded-[30px] border border-[#e17800]/30 bg-white p-6 dark:border-[#ffb760]/30 dark:bg-bg-surface sm:p-9">
           <p className="text-xs font-bold uppercase tracking-[.14em] text-[#bd6800] dark:text-[#ffb760]">Теоретична частина</p>
           <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">Пройдіть короткий квіз перед практикою</h2>
           {!quiz.length ? (
             <p className="mt-4 rounded-2xl bg-[#fff8e5] p-4 text-sm text-[#8b5c18] dark:bg-[#ff8c00]/[.08] dark:text-[#ffca7e]">Квіз ще не налаштовано. Зверніться до викладача.</p>
           ) : quizSubmitted ? (
-            <p className="mt-4 rounded-2xl bg-[#e7f6ec] p-4 text-sm font-bold text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#a4f4c8]">Квіз завершено. Практичні задачі відкриті.</p>
+            <p className="mt-4 rounded-2xl bg-primary/10 p-4 text-sm font-bold text-primary-strong dark:bg-primary/10 dark:text-[#a4f4c8]">Квіз завершено. Практичні задачі відкриті.</p>
           ) : (
             <>
               <div className="mt-7 space-y-5">
@@ -863,7 +863,7 @@ const StudentLessonWorkspace: React.FC = () => {
                     <legend className="text-base font-bold leading-7">{index + 1}. {question.question}</legend>
                     <div className="mt-4 grid gap-2">
                       {Object.entries(question.options || {}).map(([key, value]) => (
-                        <label key={key} className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${quizAnswers[index] === key ? "bg-[#dff6e7] text-[#134c2d] dark:bg-[#00ff88]/12 dark:text-[#a4f4c8]" : "bg-white text-[#415147] dark:bg-[#111b14] dark:text-[#dbe6de]"}`}>
+                        <label key={key} className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${quizAnswers[index] === key ? "bg-[#dff6e7] text-[#134c2d] dark:bg-primary/12 dark:text-[#a4f4c8]" : "bg-white text-[#415147] dark:bg-bg-surface dark:text-[#dbe6de]"}`}>
                           <input type="radio" name={`student-quiz-${index}`} checked={quizAnswers[index] === key} onChange={() => setQuizAnswers((current) => { const next = { ...current, [index]: key }; localStorage.setItem(`studycod.edu.lesson.${id}.quiz`, JSON.stringify(next)); return next; })} />
                           <span className="font-bold">{key}</span><span>{value}</span>
                         </label>
@@ -872,7 +872,7 @@ const StudentLessonWorkspace: React.FC = () => {
                   </fieldset>
                 ))}
               </div>
-              <button type="button" disabled={quizBusy || Object.keys(quizAnswers).length < quiz.length} onClick={() => void submitStudentQuiz()} className="mt-6 rounded-xl bg-[#153321] px-5 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]">{quizBusy ? "Перевіряємо…" : "Надіслати квіз"}</button>
+              <button type="button" disabled={quizBusy || Object.keys(quizAnswers).length < quiz.length} onClick={() => void submitStudentQuiz()} className="mt-6 rounded-xl bg-[#153321] px-5 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]">{quizBusy ? "Перевіряємо…" : "Надіслати квіз"}</button>
             </>
           )}
         </section>
@@ -895,25 +895,25 @@ const StudentLessonWorkspace: React.FC = () => {
                   `/edu/tasks/${task.id}${preview() ? "?preview=true" : ""}`,
                 )
               }
-              className="group rounded-[24px] border border-[#19291d]/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[.09] dark:bg-[#111b14]"
+              className="group rounded-[24px] border border-border/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[.09] dark:bg-bg-surface"
             >
               <span className="grid size-10 place-items-center rounded-2xl bg-[#fff1dc] text-sm font-extrabold text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              <h3 className="mt-5 font-bold group-hover:text-[#16834d] dark:group-hover:text-[#72edb0]">
+              <h3 className="mt-5 font-bold group-hover:text-primary-strong dark:group-hover:text-primary-soft">
                 {task.title}
               </h3>
               <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">
                 {task.description}
               </p>
-              <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-[#16834d] dark:text-[#72edb0]">
+              <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-primary-strong dark:text-primary-soft">
                 Відкрити <ArrowRight className="size-4" />
               </span>
             </button>
           ))}
           {!quizGatePassed && <p className="rounded-2xl border border-dashed border-[#e17800]/35 bg-[#fff8e5] px-5 py-4 text-sm text-[#8b5c18] dark:border-[#ffb760]/35 dark:bg-[#ff8c00]/[.08] dark:text-[#ffca7e]">Спочатку завершіть квіз — після цього відкриється практична частина.</p>}
           {!tasks.length && (
-            <div className="rounded-[24px] border border-dashed border-[#19291d]/15 p-8 text-sm text-[#718075] dark:border-white/10 dark:text-[#a6b4a9]">
+            <div className="rounded-[24px] border border-dashed border-border/15 p-8 text-sm text-[#718075] dark:border-white/10 dark:text-[#a6b4a9]">
               Викладач ще не додав задачі до уроку.
             </div>
           )}

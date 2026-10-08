@@ -21,13 +21,16 @@ module.exports = {
         border: {
           DEFAULT: "var(--border)",
         },
-        // Primary (Neon Green)
+        // Primary: restrained evergreen action color with theme-aware contrast.
         primary: {
           DEFAULT: "var(--primary)",
           hover: "var(--primary-hover)",
           muted: "var(--primary-muted)",
+          strong: "var(--primary-strong)",
+          soft: "var(--primary-soft)",
+          foreground: "var(--primary-foreground)",
         },
-        // Secondary (Neon Blue)
+        // Secondary: quiet slate blue for supporting information.
         secondary: {
           DEFAULT: "var(--secondary)",
           hover: "var(--secondary-hover)",

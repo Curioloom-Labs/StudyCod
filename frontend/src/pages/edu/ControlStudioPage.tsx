@@ -174,7 +174,7 @@ export const ControlStudioPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div className={root}><div className="h-[600px] animate-pulse rounded-[34px] bg-[#e8eeea] dark:bg-white/[.05]" /></div>;
+  if (loading) return <div className={root}><div className="h-[600px] animate-pulse rounded-[34px] bg-bg-hover dark:bg-white/[.05]" /></div>;
   if (!control) return <div className={root}>{error || "Контрольну не знайдено."}</div>;
 
   const tasks = control.tasks || [];
@@ -183,7 +183,7 @@ export const ControlStudioPage: React.FC = () => {
 
   return (
     <div className={root}>
-      <button type="button" onClick={() => navigate(control.topic?.id ? `/edu/topics/${control.topic.id}` : "/edu")} className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-[#16834d] dark:text-[#aab7ad] dark:hover:text-[#72edb0]"><ArrowLeft className="h-4 w-4" />До теми</button>
+      <button type="button" onClick={() => navigate(control.topic?.id ? `/edu/topics/${control.topic.id}` : "/edu")} className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"><ArrowLeft className="h-4 w-4" />До теми</button>
 
       <header className="rounded-[34px] bg-[#fff3e1] p-6 dark:bg-[#302513] sm:p-10">
         <p className="text-xs font-bold uppercase tracking-[.16em] text-[#b76a00] dark:text-[#ffca7e]">Контрольна точка · {control.topic?.title || "EDU"}</p>
@@ -203,7 +203,7 @@ export const ControlStudioPage: React.FC = () => {
 
       <main className="mt-8 grid gap-6 xl:grid-cols-[1fr_390px]">
         <section className="space-y-6">
-          <section className="rounded-[30px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14] sm:p-8">
+          <section className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-8">
             <div className="flex items-center gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[#fff1dc] text-[#c97600] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]"><FileCheck2 className="h-5 w-5" /></span>
               <div><p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">Склад роботи</p><h2 className="mt-1 text-2xl font-bold tracking-[-.04em]">Що побачить учень</h2></div>
@@ -222,18 +222,18 @@ export const ControlStudioPage: React.FC = () => {
               {showCreateTask && (
                 <div className="rounded-2xl border border-[#e17800]/20 bg-[#fffaf2] p-5 dark:border-[#ffca7e]/20 dark:bg-[#241d11]">
                   <p className="text-sm font-bold">Нова задача контрольної</p>
-                  <label className="mt-4 block text-sm font-bold">Назва<input aria-label="Назва практичної задачі" value={newTask.title} onChange={(event) => setNewTask({ ...newTask, title: event.target.value })} className="mt-2 w-full rounded-xl border border-[#19291d]/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
-                  <label className="mt-4 block text-sm font-bold">Умова<textarea aria-label="Умова практичної задачі" value={newTask.description} onChange={(event) => setNewTask({ ...newTask, description: event.target.value })} rows={4} className="mt-2 w-full resize-y rounded-xl border border-[#19291d]/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
-                  <label className="mt-4 block text-sm font-bold">Стартовий код<textarea aria-label="Стартовий код практичної задачі" value={newTask.template} onChange={(event) => setNewTask({ ...newTask, template: event.target.value })} rows={5} spellCheck={false} className="mt-2 w-full resize-y rounded-xl border border-[#19291d]/10 bg-white px-3 py-3 font-mono text-xs leading-6 outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
-                  <button type="button" disabled={busy} onClick={() => void createTask()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]">{busy ? "Додаємо…" : "Додати до контрольної"}</button>
+                  <label className="mt-4 block text-sm font-bold">Назва<input aria-label="Назва практичної задачі" value={newTask.title} onChange={(event) => setNewTask({ ...newTask, title: event.target.value })} className="mt-2 w-full rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
+                  <label className="mt-4 block text-sm font-bold">Умова<textarea aria-label="Умова практичної задачі" value={newTask.description} onChange={(event) => setNewTask({ ...newTask, description: event.target.value })} rows={4} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
+                  <label className="mt-4 block text-sm font-bold">Стартовий код<textarea aria-label="Стартовий код практичної задачі" value={newTask.template} onChange={(event) => setNewTask({ ...newTask, template: event.target.value })} rows={5} spellCheck={false} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 font-mono text-xs leading-6 outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
+                  <button type="button" disabled={busy} onClick={() => void createTask()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]">{busy ? "Додаємо…" : "Додати до контрольної"}</button>
                 </div>
               )}
               {tasks.map((task, index) => <div key={task.id} className="flex items-start gap-4 rounded-2xl bg-[#f4f7f4] p-4 dark:bg-white/[.045]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-xs font-extrabold text-[#a55e00] shadow-sm dark:bg-[#18251c] dark:text-[#ffca7e]">{String(index + 1).padStart(2, "0")}</span><div><p className="font-bold">{task.title}</p><p className="mt-1 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">{task.description || "Практична частина контрольної."}</p></div></div>)}
-              {!tasks.length && <p className="rounded-2xl border border-dashed border-[#19291d]/15 px-5 py-8 text-center text-sm text-[#708077] dark:border-white/10 dark:text-[#a6b4a9]">Практичних задач ще немає.</p>}
+              {!tasks.length && <p className="rounded-2xl border border-dashed border-border/15 px-5 py-8 text-center text-sm text-[#708077] dark:border-white/10 dark:text-[#a6b4a9]">Практичних задач ще немає.</p>}
             </div>
           </section>
 
-          <section className="rounded-[30px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14] sm:p-8">
+          <section className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">Самоперевірка</p>
@@ -243,25 +243,25 @@ export const ControlStudioPage: React.FC = () => {
               <Sparkles className="h-5 w-5 text-[#e17800]" />
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
-              <button type="button" disabled={busy} onClick={() => void generateQuiz()} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"><Wand2 className="h-4 w-4" />{busy ? "Готуємо…" : hasQuiz ? "Перегенерувати" : "Згенерувати"}</button>
-              <button type="button" onClick={normalizeQuiz} className="rounded-xl border border-[#19291d]/10 px-4 py-3 text-sm font-bold dark:border-white/10">Форматувати JSON</button>
+              <button type="button" disabled={busy} onClick={() => void generateQuiz()} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"><Wand2 className="h-4 w-4" />{busy ? "Готуємо…" : hasQuiz ? "Перегенерувати" : "Згенерувати"}</button>
+              <button type="button" onClick={normalizeQuiz} className="rounded-xl border border-border/10 px-4 py-3 text-sm font-bold dark:border-white/10">Форматувати JSON</button>
             </div>
-            <textarea value={quizText} onChange={(event) => setQuizText(event.target.value)} rows={16} spellCheck={false} className="mt-5 w-full resize-y rounded-2xl border border-[#19291d]/10 bg-[#fbfdfb] p-4 font-mono text-xs leading-6 outline-none ring-[#00ff88]/25 focus:ring-4 dark:border-white/10 dark:bg-[#0d1710]" placeholder={'[{"question":"...","options":{"A":"...","B":"..."},"correct":"A"}]'} />
+            <textarea value={quizText} onChange={(event) => setQuizText(event.target.value)} rows={16} spellCheck={false} className="mt-5 w-full resize-y rounded-2xl border border-border/10 bg-bg-surface p-4 font-mono text-xs leading-6 outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-[#0d1710]" placeholder={'[{"question":"...","options":{"A":"...","B":"..."},"correct":"A"}]'} />
             {hasQuiz && <div className="mt-4 grid gap-2 md:grid-cols-2">{quiz.slice(0, 4).map((item, index) => <div key={`${item.question}-${index}`} className="rounded-2xl bg-[#f4f7f4] p-3 text-sm dark:bg-white/[.045]"><b>{index + 1}. {item.question || "Без питання"}</b><div className="mt-1 text-xs text-[#708077] dark:text-[#a6b4a9]">Правильна: {item.correct || "—"}</div></div>)}</div>}
           </section>
         </section>
 
-        <aside className="rounded-[30px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14]">
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]">Налаштування</p>
+        <aside className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface">
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">Налаштування</p>
           <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">Рамка оцінювання</h2>
-          <label className="mt-6 block text-sm font-bold">Назва<input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-[#19291d]/10 bg-[#fbfdfb] px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-[#0d1710]" /></label>
-          <label className="mt-4 block text-sm font-bold">Час, хв<input value={minutes} onChange={(event) => setMinutes(event.target.value)} type="number" min="1" className="mt-2 w-full rounded-xl border border-[#19291d]/10 bg-[#fbfdfb] px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-[#0d1710]" /></label>
+          <label className="mt-6 block text-sm font-bold">Назва<input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-[#0d1710]" /></label>
+          <label className="mt-4 block text-sm font-bold">Час, хв<input value={minutes} onChange={(event) => setMinutes(event.target.value)} type="number" min="1" className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-[#0d1710]" /></label>
           <div className="mt-6 rounded-2xl bg-[#f3f7f3] p-4 dark:bg-white/[.045]">
-            <div className="flex items-center gap-2"><Calculator className="h-4 w-4 text-[#16834d] dark:text-[#72edb0]" /><p className="text-sm font-bold">Формула результату</p></div>
-            <textarea value={formula} onChange={(event) => setFormula(event.target.value)} rows={3} className="mt-3 w-full resize-none rounded-xl border border-[#19291d]/10 bg-white px-3 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#0d1710]" />
+            <div className="flex items-center gap-2"><Calculator className="h-4 w-4 text-primary-strong dark:text-primary-soft" /><p className="text-sm font-bold">Формула результату</p></div>
+            <textarea value={formula} onChange={(event) => setFormula(event.target.value)} rows={3} className="mt-3 w-full resize-none rounded-xl border border-border/10 bg-white px-3 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#0d1710]" />
             <p className="mt-2 text-xs leading-5 text-[#708077] dark:text-[#a6b4a9]">Наприклад: <code>0.35 * test + 0.65 * avg(practice)</code></p>
           </div>
-          <button type="button" disabled={busy} onClick={() => void save()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"><Save className="h-4 w-4" />{busy ? "Зберігаємо…" : "Зберегти"}</button>
+          <button type="button" disabled={busy} onClick={() => void save()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"><Save className="h-4 w-4" />{busy ? "Зберігаємо…" : "Зберегти"}</button>
         </aside>
       </main>
     </div>
@@ -269,9 +269,9 @@ export const ControlStudioPage: React.FC = () => {
 };
 
 const StatusCard: React.FC<{ active: boolean; title: string; text: string; warm?: boolean }> = ({ active, title, text, warm = false }) => (
-  <div className={`rounded-2xl p-5 ${active ? warm ? "bg-[#fff4e4] dark:bg-[#ff8c00]/10" : "bg-[#eaf7ee] dark:bg-[#00ff88]/10" : "bg-[#f3f5f3] dark:bg-white/[.045]"}`}>
+  <div className={`rounded-2xl p-5 ${active ? warm ? "bg-[#fff4e4] dark:bg-[#ff8c00]/10" : "bg-[#eaf7ee] dark:bg-primary/10" : "bg-[#f3f5f3] dark:bg-white/[.045]"}`}>
     <div className="flex items-center gap-2">
-      {warm ? <Clock3 className="h-4 w-4 text-[#c97600]" /> : <FileCheck2 className="h-4 w-4 text-[#16834d] dark:text-[#72edb0]" />}
+      {warm ? <Clock3 className="h-4 w-4 text-[#c97600]" /> : <FileCheck2 className="h-4 w-4 text-primary-strong dark:text-primary-soft" />}
       <p className="text-sm font-bold">{title}</p>
     </div>
     <p className="mt-2 text-sm text-[#64756a] dark:text-[#bdc9c0]">{text}</p>

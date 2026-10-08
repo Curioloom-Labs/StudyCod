@@ -831,8 +831,9 @@ const AppContent: React.FC = React.memo(() => {
     }
 
     const nextAfterAuth = getSafeNextAfterAuth(searchParams);
+    const audienceIntent = searchParams.get("audience");
     return <PublicPageWithFooter><Suspense fallback={<PageLoader />}>
-      <AuthPage initialMode={authIntent === "register" ? "register" : "login"} showBackToLanding={location.pathname === "/"} onAuth={(u: User) => {
+      <AuthPage initialMode={authIntent === "register" ? "register" : "login"} initialUserMode={audienceIntent === "teacher" ? "EDUCATIONAL" : undefined} showBackToLanding={location.pathname === "/"} onAuth={(u: User) => {
         setUser(u);
         setBootResumeHandled(true);
         sessionStorage.setItem("fromAuth", "true");
@@ -1462,10 +1463,10 @@ const ContestRouteFallback: React.FC = () => {
   return (
     <div role="status" className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
       <span className="sr-only">Завантаження контестів…</span>
-      <div className="mb-4 h-3 w-36 animate-pulse rounded-full bg-[#e8eeea] dark:bg-white/[.06]" />
-      <div className="mb-10 h-10 w-80 max-w-full animate-pulse rounded-xl bg-[#e8eeea] dark:bg-white/[.06]" />
+      <div className="mb-4 h-3 w-36 animate-pulse rounded-full bg-bg-hover dark:bg-white/[.06]" />
+      <div className="mb-10 h-10 w-80 max-w-full animate-pulse rounded-xl bg-bg-hover dark:bg-white/[.06]" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {[1, 2, 3].map((key) => <div key={key} className="h-[270px] animate-pulse rounded-[24px] bg-[#e8eeea] dark:bg-white/[.05]" />)}
+        {[1, 2, 3].map((key) => <div key={key} className="h-[270px] animate-pulse rounded-[24px] bg-bg-hover dark:bg-white/[.05]" />)}
       </div>
     </div>
   );

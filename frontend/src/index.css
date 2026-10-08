@@ -7,129 +7,6 @@
 /* Theme variants follow StudyCod's persisted data-theme attribute. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-@font-face {
-  font-family: "Fixel Text";
-  src: url("/fonts/fixel/FixelText-Regular.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Fixel Text";
-  src: url("/fonts/fixel/FixelText-Medium.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Fixel Text";
-  src: url("/fonts/fixel/FixelText-SemiBold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Fixel Text";
-  src: url("/fonts/fixel/FixelText-Bold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Fixel Display";
-  src: url("/fonts/fixel/FixelDisplay-Bold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Fixel Display";
-  src: url("/fonts/fixel/FixelDisplay-ExtraBold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-}
-
-/* Landing dark surfaces need deterministic overrides because several light
-   editorial gradients are composed as arbitrary Tailwind values. */
-:root[data-theme="dark"] #studycod-landing #platform article.row-span-2 {
-  background: linear-gradient(145deg, rgba(0, 255, 136, 0.055), #151c17 43%) !important;
-}
-
-:root[data-theme="dark"] #studycod-landing #platform article.row-span-2 > div,
-:root[data-theme="dark"] #studycod-landing #roles article > div:last-child {
-  background: #101713 !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.24) !important;
-}
-
-:root[data-theme="dark"] #studycod-landing #roles article {
-  background: linear-gradient(160deg, #171f19, #121814) !important;
-}
-
-:root[data-theme="dark"] #studycod-landing #platform article p,
-:root[data-theme="dark"] #studycod-landing #roles article p,
-:root[data-theme="dark"] #studycod-landing #roles article li {
-  color: #a7b2aa !important;
-}
-
-:root[data-theme="dark"] #studycod-landing footer .bg-white {
-  background-color: #182019 !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Complete landing neutral-token remap for dark mode. Exact class-token
-   selectors avoid touching translucent white details used inside dark art. */
-:root[data-theme="dark"] #studycod-landing [class~="bg-white"] {
-  background-color: #151c17 !important;
-}
-
-:root[data-theme="dark"] #studycod-landing [class~="bg-white/85"] {
-  background-color: rgba(21, 28, 23, 0.88) !important;
-}
-
-:root[data-theme="dark"] #studycod-landing [class~="bg-[#f7f8f5]"],
-:root[data-theme="dark"] #studycod-landing [class~="bg-[#f7f8f5]/85"] {
-  background-color: #0f1511 !important;
-}
-
-:root[data-theme="dark"] #studycod-landing [class~="bg-[#f4f6f2]"] {
-  background-color: #111713 !important;
-}
-
-:root[data-theme="dark"] #studycod-landing [class~="bg-[#edf0eb]"] {
-  background-color: #202821 !important;
-}
-
-:root[data-theme="dark"] #studycod-landing [class~="text-[#111814]"] {
-  color: #edf3ef !important;
-}
-
-:root[data-theme="dark"] #studycod-landing [class~="text-[#667169]"] {
-  color: #a4afa7 !important;
-}
-
-:root[data-theme="dark"] #studycod-landing [class~="text-[#007f48]"],
-:root[data-theme="dark"] #studycod-landing [class~="text-[#00834a]"] {
-  color: #62ecaa !important;
-}
-
-:root[data-theme="dark"] #studycod-landing [class~="border-[#122017]/10"],
-:root[data-theme="dark"] #studycod-landing [class~="border-[#132319]/15"],
-:root[data-theme="dark"] #studycod-landing [class~="border-[#122017]/[0.07]"] {
-  border-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-:root[data-theme="dark"] #studycod-landing [class~="before:bg-[#122017]/10"]::before,
-:root[data-theme="dark"] #studycod-landing [class~="after:bg-[#122017]/10"]::after {
-  background-color: rgba(255, 255, 255, 0.1) !important;
-}
-
 /* `transition-fast` is used across the codebase as a first-class utility;
    define it for real so hover/focus states actually ease. */
 @utility transition-fast {
@@ -138,191 +15,7 @@
   transition-timing-function: var(--ease-out);
 }
 
-/* =========================
-   Design Tokens – StudyCod product
-   ========================= */
-:root {
-  color-scheme: dark;
-  /* StudyCod brand system: green = build/progress, orange = signal/next step. */
-  --brand-green: #00ff88;
-  --brand-green-deep: #007f48;
-  --brand-orange: #ffb454;
-  --brand-forest: #101713;
-  --brand-mint: #68efb0;
-  /* Backgrounds */
-  --bg-base: oklch(12% 0.012 155);
-  --bg-surface: oklch(16% 0.014 155);
-  --bg-hover: oklch(21% 0.016 155);
-  --bg-code: oklch(13.8% 0.012 155);
-
-  /* Text */
-  --text-primary: oklch(93% 0.01 168);
-  --text-secondary: oklch(76% 0.015 168);
-  --text-muted: oklch(62% 0.014 168);
-
-  /* Borders */
-  --border: oklch(30% 0.025 155);
-
-  /* Primary */
-  --primary: oklch(72% 0.17 156);
-  --primary-hover: oklch(72% 0.17 156);
-  --primary-muted: oklch(64% 0.145 156);
-
-  /* Secondary */
-  --secondary: oklch(0.97 0 0);
-  --secondary-hover: oklch(66% 0.14 248);
-
-  /* Accents */
-  --accent-error: oklch(72% 0.18 15);
-  --accent-success: oklch(78% 0.19 156);
-  --accent-warn: oklch(80% 0.16 84);
-  --accent-warning: var(--accent-warn);
-  --accent-logic-warning: oklch(74% 0.17 58);
-  --accent-logic-warn: var(--accent-logic-warning);
-  --accent-info: var(--secondary);
-
-  /* Surface color tints */
-  --surface-primary: color-mix(in oklch, var(--primary) 12%, var(--bg-surface));
-  --surface-secondary: color-mix(in oklch, var(--secondary) 12%, var(--bg-surface));
-  --surface-success: color-mix(in oklch, var(--accent-success) 12%, var(--bg-surface));
-  --surface-warning: color-mix(in oklch, var(--accent-warn) 14%, var(--bg-surface));
-  --surface-error: color-mix(in oklch, var(--accent-error) 12%, var(--bg-surface));
-
-  /* Motion */
-  --motion-fast: 100ms;
-  --motion-base: 150ms;
-  --motion-slow: 300ms;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
-
-  /* Typography */
-  --font-sans: "Fixel Text", "Segoe UI", "Noto Sans", Arial, sans-serif;
-  --font-display: "Fixel Display", "Fixel Text", "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Code", "Fira Code",
-    Consolas, Monaco, "Courier New", monospace;
-  --font-xs: 0.75rem;
-  --font-sm: 0.875rem;
-  --font-base: 1rem;
-  --font-lg: 1.25rem;
-  --font-xl: 1.5625rem;
-  --font-2xl: 1.9375rem;
-  --font-weight-regular: 400;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  --font-weight-bold: 700;
-  --line-tight: 1.2;
-  --line-heading: 1.28;
-  --line-body: 1.68;
-  --line-ui: 1.45;
-
-  /* Semantic type tokens */
-  --text-caption-size: var(--font-xs);
-  --text-caption-weight: var(--font-weight-medium);
-  --text-body-size: var(--font-base);
-  --text-body-weight: var(--font-weight-regular);
-  --text-body-line-height: var(--line-body);
-  --text-ui-size: var(--font-sm);
-  --text-ui-weight: var(--font-weight-medium);
-  --text-heading-size: var(--font-xl);
-  --text-heading-weight: var(--font-weight-semibold);
-  --text-heading-line-height: var(--line-heading);
-
-  /* Spacing (4pt scale) */
-  --space-2xs: 4px;
-  --space-xs: 8px;
-  --space-sm: 12px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 32px;
-  --space-2xl: 48px;
-  --space-3xl: 64px;
-
-  /* Shared UI primitive shape tokens — consumed by Card/Button/Input/Badge/
-     StatusChip/Modal so a mode can restyle every surface at once. Base values
-     provide one consistent product surface across every module. */
-  --ui-card-radius: 1.25rem;
-  --ui-card-shadow: 0 18px 42px -34px rgba(0, 0, 0, 0.62);
-  --ui-button-radius: 0.75rem;
-  --ui-control-radius: 0.75rem;
-  --ui-badge-radius: 999px;
-  --ui-modal-radius: 1.25rem;
-  --ui-modal-shadow: 0 30px 70px -26px rgba(0, 0, 0, 0.7);
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary-foreground: oklch(18% 0.035 156);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --input: oklch(30% 0.025 155);
-  --ring: oklch(72% 0.17 156);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-/* =========================
-   Light Theme (White)
-   ========================= */
-:root[data-theme="light"] {
-  color-scheme: light;
-
-  /* Backgrounds */
-  --bg-base: oklch(97.5% 0.008 168);
-  --bg-surface: oklch(99% 0.005 168);
-  --bg-hover: oklch(94.5% 0.012 168);
-  --bg-code: oklch(95.5% 0.01 168);
-
-  /* Text */
-  --text-primary: oklch(23% 0.02 168);
-  --text-secondary: oklch(38% 0.02 168);
-  --text-muted: oklch(52% 0.018 168);
-
-  /* Borders */
-  --border: oklch(87% 0.012 168);
-
-  /* Primary (keep StudyCod green, tuned for light bg) */
-  --primary: oklch(65% 0.16 156);
-  --primary-hover: oklch(59% 0.145 156);
-  --primary-muted: oklch(51% 0.12 156);
-
-  /* Secondary */
-  --secondary: oklch(58% 0.16 252);
-  --secondary-hover: oklch(52% 0.145 252);
-
-  /* Accents */
-  --accent-error: oklch(58% 0.2 24);
-  --accent-success: oklch(62% 0.16 156);
-  --accent-warn: oklch(68% 0.15 82);
-  --accent-warning: var(--accent-warn);
-  --accent-logic-warning: oklch(64% 0.16 54);
-  --accent-logic-warn: var(--accent-logic-warning);
-  --accent-info: var(--secondary);
-
-  /* Surface color tints */
-  --surface-primary: color-mix(in oklch, var(--primary) 10%, var(--bg-surface));
-  --surface-secondary: color-mix(in oklch, var(--secondary) 10%, var(--bg-surface));
-  --surface-success: color-mix(in oklch, var(--accent-success) 10%, var(--bg-surface));
-  --surface-warning: color-mix(in oklch, var(--accent-warn) 12%, var(--bg-surface));
-  --surface-error: color-mix(in oklch, var(--accent-error) 10%, var(--bg-surface));
-}
+/* Shared palette, typography, motion, and shape tokens live in styles/design-tokens.css. */
 
 /* =========================
    Motion helpers
@@ -337,9 +30,9 @@
 }
 
 @keyframes studycodSolvePulse {
-  0% { box-shadow: 0 0 0 0 rgba(0, 179, 95, 0.35); }
-  60% { box-shadow: 0 0 0 16px rgba(0, 179, 95, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(0, 179, 95, 0); }
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 35%, transparent); }
+  60% { box-shadow: 0 0 0 16px color-mix(in srgb, var(--primary) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent); }
 }
 
 .studycod-solve-pulse {
@@ -367,12 +60,12 @@
 .studycod-confetti {
   background-image:
     radial-gradient(circle at 8% 15%, rgba(123, 201, 255, 0.9) 0 3px, transparent 3px),
-    radial-gradient(circle at 22% 10%, rgba(0, 179, 95, 0.9) 0 3px, transparent 3px),
+    radial-gradient(circle at 22% 10%, var(--primary) 0 3px, transparent 3px),
     radial-gradient(circle at 35% 12%, rgba(174, 158, 255, 0.9) 0 3px, transparent 3px),
     radial-gradient(circle at 48% 18%, rgba(255, 182, 106, 0.9) 0 3px, transparent 3px),
     radial-gradient(circle at 62% 12%, rgba(127, 226, 194, 0.9) 0 3px, transparent 3px),
     radial-gradient(circle at 74% 16%, rgba(123, 201, 255, 0.9) 0 3px, transparent 3px),
-    radial-gradient(circle at 86% 11%, rgba(0, 179, 95, 0.9) 0 3px, transparent 3px);
+    radial-gradient(circle at 86% 11%, var(--primary) 0 3px, transparent 3px);
   animation: studycodConfetti 1.55s var(--ease-out) forwards;
 }
 
@@ -667,20 +360,20 @@
 /* Premium handbook typography. MarkdownView is shared with code-heavy theory
    screens, so the readable editorial treatment is opt-in for Documentation. */
 .docs-handbook-prose {
-  --tw-prose-body: #334139;
-  --tw-prose-headings: #111814;
-  --tw-prose-lead: #59675f;
-  --tw-prose-links: #007f48;
-  --tw-prose-bold: #111814;
-  --tw-prose-counters: #667169;
-  --tw-prose-bullets: #00a85c;
-  --tw-prose-hr: rgba(18, 32, 23, 0.12);
-  --tw-prose-quotes: #26342c;
-  --tw-prose-quote-borders: #00b963;
-  --tw-prose-captions: #667169;
-  --tw-prose-code: #152019;
-  --tw-prose-pre-code: #e8f0ea;
-  --tw-prose-pre-bg: #101713;
+  --tw-prose-body: var(--text-secondary);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-lead: var(--text-secondary);
+  --tw-prose-links: var(--primary-strong);
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-counters: var(--text-muted);
+  --tw-prose-bullets: var(--primary-strong);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--text-primary);
+  --tw-prose-quote-borders: var(--primary);
+  --tw-prose-captions: var(--text-muted);
+  --tw-prose-code: var(--text-primary);
+  --tw-prose-pre-code: var(--text-primary);
+  --tw-prose-pre-bg: var(--bg-code);
   font-size: 1rem;
   line-height: 1.8;
 }
@@ -727,90 +420,6 @@
   font-size: 0.9rem;
 }
 
-[data-theme="dark"] .docs-handbook-prose {
-  --tw-prose-body: #b7c2bb;
-  --tw-prose-headings: #edf3ef;
-  --tw-prose-lead: #a6b1aa;
-  --tw-prose-links: #62ecaa;
-  --tw-prose-bold: #f0f5f2;
-  --tw-prose-counters: #9da9a1;
-  --tw-prose-bullets: #00ff88;
-  --tw-prose-hr: rgba(255, 255, 255, 0.1);
-  --tw-prose-quotes: #d9e2dc;
-  --tw-prose-quote-borders: #00d976;
-  --tw-prose-captions: #9da9a1;
-  --tw-prose-code: #edf3ef;
-  --tw-prose-pre-code: #e8f0ea;
-  --tw-prose-pre-bg: #090e0b;
-}
-
-[data-theme="dark"] .docs-handbook-prose :where(figure) {
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.28);
-}
-
-/* Mobile is a first-class surface: keep controls reachable, prevent iOS zoom,
-   and make horizontal tool strips feel intentional rather than accidental. */
-@media (max-width: 767.98px) {
-  .mobile-app-shell {
-    min-width: 0;
-  }
-
-  .mobile-app-viewport {
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .mobile-app-shell :where(button, a, [role="button"]) {
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  /* iOS Safari zooms controls below 16px, which makes forms jump while typing. */
-  .mobile-app-shell :where(input:not(.inputarea), select, textarea:not(.inputarea)) {
-    font-size: 16px;
-  }
-
-  .mobile-app-shell :where(.overflow-x-auto) {
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .mobile-app-shell :where(.overflow-x-auto)::-webkit-scrollbar {
-    display: none;
-  }
-
-}
-
-.modal-scroll-container {
-  overscroll-behavior: contain;
-}
-
-/* Keep keyboard navigation fast and visible without stealing focus from the
-   page after pointer interactions. */
-.skip-link {
-  position: fixed;
-  left: 1rem;
-  top: 1rem;
-  z-index: 100;
-  transform: translateY(-160%);
-  border-radius: 0.75rem;
-  background: var(--primary);
-  color: var(--primary-foreground);
-  padding: 0.75rem 1rem;
-  font-weight: 700;
-  transition: transform 150ms var(--ease-out);
-}
-
-.skip-link:focus-visible {
-  transform: translateY(0);
-}
-
-:where(h1, h2, h3, h4, h5, h6)[id] {
-  scroll-margin-top: 5rem;
-  text-wrap: balance;
-}
-
 /* Preserve a visible keyboard ring even on legacy controls that still use
    Tailwind's outline-none utility. */
 .outline-none:focus-visible,
@@ -823,13 +432,13 @@
    of terminal panes. The interactive code itself keeps its editor font; the
    surrounding navigation, hierarchy and feedback use the product voice. */
 .deep-workspace {
-  --workspace-canvas: #f2f5f1;
-  --workspace-surface: #ffffff;
-  --workspace-subtle: #f6f8f5;
-  --workspace-line: rgba(20, 38, 25, 0.1);
-  --workspace-ink: #16231a;
-  --workspace-muted: #66746a;
-  --workspace-accent: #007f48;
+  --workspace-canvas: var(--bg-base);
+  --workspace-surface: var(--bg-surface);
+  --workspace-subtle: var(--bg-hover);
+  --workspace-line: var(--border);
+  --workspace-ink: var(--text-primary);
+  --workspace-muted: var(--text-muted);
+  --workspace-accent: var(--primary);
   color: var(--workspace-ink);
 }
 
@@ -863,7 +472,7 @@
 .deep-workspace .bg-bg-code\/70,
 .deep-workspace .bg-bg-code\/85,
 .deep-workspace .bg-bg-code\/90 {
-  background-color: #142019 !important;
+  background-color: var(--bg-code) !important;
 }
 
 .deep-workspace .border-border,
@@ -874,24 +483,22 @@
 }
 
 .deep-workspace .text-text-primary { color: var(--workspace-ink) !important; }
-.deep-workspace .text-text-secondary { color: #536258 !important; }
+.deep-workspace .text-text-secondary { color: var(--text-secondary) !important; }
 .deep-workspace .text-text-muted { color: var(--workspace-muted) !important; }
 .deep-workspace .text-primary { color: var(--workspace-accent) !important; }
 .deep-workspace .bg-primary\/10,
-.deep-workspace .bg-primary\/15 { background-color: rgba(0, 127, 72, 0.09) !important; }
+.deep-workspace .bg-primary\/15 { background-color: color-mix(in srgb, var(--primary) 10%, transparent) !important; }
 .deep-workspace .border-primary\/40,
 .deep-workspace .border-primary\/50,
 .deep-workspace .border-primary\/60,
-.deep-workspace .border-primary\/70 { border-color: rgba(0, 127, 72, 0.36) !important; }
+.deep-workspace .border-primary\/70 { border-color: color-mix(in srgb, var(--primary) 42%, transparent) !important; }
 
 .deep-workspace button:not(.monaco-editor *):not([role="tab"]) {
   font-family: var(--font-sans) !important;
 }
 
 .deep-workspace--tasks > div > aside,
-.deep-workspace--library > div > aside {
-  background: color-mix(in srgb, var(--workspace-subtle) 94%, white) !important;
-}
+.deep-workspace--library > div > aside { background: var(--workspace-subtle) !important; }
 
 .deep-workspace--tasks .font-mono:not(.monaco-editor *, pre *, code *),
 .deep-workspace--library .font-mono:not(.monaco-editor *, pre *, code *) {
@@ -912,16 +519,6 @@
   --lk-accent: var(--workspace-accent);
 }
 
-[data-theme="dark"] .deep-workspace {
-  --workspace-canvas: #08100b;
-  --workspace-surface: #101a13;
-  --workspace-subtle: #162219;
-  --workspace-line: rgba(231, 244, 235, 0.1);
-  --workspace-ink: #edf5ef;
-  --workspace-muted: #9eada2;
-  --workspace-accent: #5deca5;
-}
-
 [data-theme="dark"] .deep-workspace > div:first-child {
   box-shadow: 0 28px 76px -46px rgba(0, 0, 0, 0.74) !important;
 }
@@ -930,7 +527,7 @@
 [data-theme="dark"] .deep-workspace .bg-bg-code\/70,
 [data-theme="dark"] .deep-workspace .bg-bg-code\/85,
 [data-theme="dark"] .deep-workspace .bg-bg-code\/90 {
-  background-color: #090f0b !important;
+  background-color: var(--bg-code) !important;
 }
 
 [data-theme="dark"] .deep-workspace--tasks > div > aside,
@@ -940,7 +537,7 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: "Fixel Text", "Segoe UI", "Noto Sans", Arial, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -966,6 +563,8 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-soft: var(--primary-soft);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -981,38 +580,15 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 .contest-accounts-focus > :not(#contest-account-generation) {
   display: none;

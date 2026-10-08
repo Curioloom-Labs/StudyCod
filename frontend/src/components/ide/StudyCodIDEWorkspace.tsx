@@ -742,7 +742,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 <div className="font-semibold text-white">
                   {tr("Покрокове виконання", "Step execution")}
                 </div>
-                <span className="text-[#72edb0]">
+                <span className="text-primary-soft">
                   {tr("Крок", "Step")} {traceStep + 1}/
                   {props.trace.steps.length}
                 </span>
@@ -759,13 +759,13 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   Math.max(0, props.trace.steps.length - 1),
                 )}
                 onChange={(event) => setTraceStep(Number(event.target.value))}
-                className="w-full accent-[#00d978]"
+                className="w-full accent-primary"
               />
-              <div className="mt-3 rounded-lg border border-[#00d978]/20 bg-[#00d978]/[.06] p-3">
+              <div className="mt-3 rounded-lg border border-primary/20 bg-primary/[.06] p-3">
                 <div className="text-[10px] uppercase tracking-[.12em] text-[#82968a]">
                   {tr("Поточний рядок", "Current line")}
                 </div>
-                <div className="mt-1 font-mono text-[#72edb0]">
+                <div className="mt-1 font-mono text-primary-soft">
                   Line {step.line} · {step.event || "line"}
                 </div>
               </div>
@@ -776,7 +776,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             <div className="space-y-3">
               <div className="rounded-xl border border-white/10 bg-white/[.03] p-3">
                 <div className="mb-2 flex items-center gap-2 font-semibold text-white">
-                  <Gauge className="size-4 text-[#72edb0]" />
+                  <Gauge className="size-4 text-primary-soft" />
                   Variables
                 </div>
                 <pre className="max-h-44 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-[#c8d6cc]">
@@ -803,7 +803,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-auto p-4 text-xs text-[#b9c9bd] md:grid-cols-3">
           <div className="rounded-xl border border-white/10 bg-white/[.03] p-3">
             <div className="mb-2 flex items-center gap-2 font-semibold text-white">
-              <Gauge className="size-4 text-[#72edb0]" />
+              <Gauge className="size-4 text-primary-soft" />
               Variables
             </div>
             <p>
@@ -822,7 +822,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 type="button"
                 onClick={props.onTrace}
                 disabled={props.tracing}
-                className="mt-3 rounded-lg bg-[#00d978] px-3 py-2 text-[11px] font-bold text-[#062211] disabled:opacity-50"
+                className="mt-3 rounded-lg bg-primary px-3 py-2 text-[11px] font-bold text-[#062211] disabled:opacity-50"
               >
                 {props.tracing ? tr("Трасуємо…", "Tracing…") : "Trace"}
               </button>
@@ -858,7 +858,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 {tr("Локальна історія", "Local history")}
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 text-[#72edb0]">
+                <div className="flex items-center gap-1 text-primary-soft">
                   <Check className="size-4" />
                   Autosave
                 </div>
@@ -891,7 +891,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                     <button
                       type="button"
                       onClick={() => props.onCodeChange(entry.code)}
-                      className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[10px] font-semibold text-[#72edb0] hover:bg-white/[.07]"
+                      className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[10px] font-semibold text-primary-soft hover:bg-white/[.07]"
                     >
                       {tr("Відновити", "Restore")}
                     </button>
@@ -967,9 +967,9 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           aria-live="polite"
           aria-busy="true"
         >
-          <div className="w-full max-w-xl rounded-2xl border border-[#00d978]/30 bg-[linear-gradient(145deg,rgba(0,217,120,.11),rgba(255,255,255,.025))] p-5 shadow-[0_18px_42px_-30px_rgba(0,217,120,.8)]">
+          <div className="w-full max-w-xl rounded-2xl border border-primary/30 bg-[linear-gradient(145deg,rgba(0,217,120,.11),rgba(255,255,255,.025))] p-5 shadow-[0_18px_42px_-30px_rgba(0,217,120,.8)]">
             <div className="flex items-start gap-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#00d978]/15 text-[#72edb0]">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary-soft">
                 <Loader2 className="size-5 animate-spin" />
               </span>
               <div className="min-w-0">
@@ -977,7 +977,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   <h3 className="text-sm font-bold text-white">
                     {tr("Система тестує твоє рішення", "The system is testing your solution")}
                   </h3>
-                  <span className="rounded-full bg-[#00d978]/10 px-2 py-0.5 text-[10px] font-bold text-[#72edb0]">
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary-soft">
                     judge
                   </span>
                 </div>
@@ -990,12 +990,12 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               </div>
             </div>
             <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[.09]">
-              <div className="h-full w-2/5 animate-pulse rounded-full bg-[#00d978]" />
+              <div className="h-full w-2/5 animate-pulse rounded-full bg-primary" />
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-[10px] font-semibold text-[#82968a]">
               {[tr("Компіляція", "Compile"), tr("Публічні кейси", "Public cases"), tr("Приховані кейси", "Hidden cases")].map((label) => (
                 <div key={label} className="flex items-center gap-1.5 rounded-lg bg-black/15 px-2.5 py-2">
-                  <span className="size-1.5 animate-pulse rounded-full bg-[#72edb0]" />
+                  <span className="size-1.5 animate-pulse rounded-full bg-primary-soft" />
                   {label}
                 </div>
               ))}
@@ -1009,7 +1009,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {props.checkResult ? (
             <span
-              className={`rounded-full px-2.5 py-1 font-bold ${verdictIsAccepted(props.checkResult.verdict) ? "bg-[#00ff88]/10 text-[#72edb0]" : "bg-[#ff6b9d]/10 text-[#ff9aba]"}`}
+              className={`rounded-full px-2.5 py-1 font-bold ${verdictIsAccepted(props.checkResult.verdict) ? "bg-primary/10 text-primary-soft" : "bg-[#ff6b9d]/10 text-[#ff9aba]"}`}
             >
               {props.checkResult.verdict || "—"}
             </span>
@@ -1066,7 +1066,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 <button
                   type="button"
                   onClick={() => setExpandedTestId((current) => current === test.testId ? null : test.testId)}
-                  className={`w-full rounded-lg border p-2 text-center transition hover:brightness-125 ${test.testId === firstFailedPublicTestId ? "ring-2 ring-[#ff9aba]/70 ring-offset-1 ring-offset-[#0b120e]" : ""} ${test.skipped ? "border-[#f0c674]/30 bg-[#f0c674]/10 text-[#f0c674]" : test.passed ? "border-[#00d978]/30 bg-[#00d978]/10 text-[#72edb0]" : "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]"}`}
+                  className={`w-full rounded-lg border p-2 text-center transition hover:brightness-125 ${test.testId === firstFailedPublicTestId ? "ring-2 ring-[#ff9aba]/70 ring-offset-1 ring-offset-[#0b120e]" : ""} ${test.skipped ? "border-[#f0c674]/30 bg-[#f0c674]/10 text-[#f0c674]" : test.passed ? "border-primary/30 bg-primary/10 text-primary-soft" : "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]"}`}
                   aria-label={`${tr("Тест", "Test")} #${test.testId}${test.testId === firstFailedPublicTestId ? ` · ${tr("перший невдалий", "first failed")}` : ""}`}
                 >
                   <span className="block font-bold">
@@ -1104,7 +1104,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 </div>
                 <div className="grid gap-2 md:grid-cols-3">
                   <div><div className="mb-1 text-[10px] text-[#82968a]">Input</div><pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[11px] text-[#c8d6cc]">{expandedPublicTest.input || "—"}</pre></div>
-                  <div><div className="mb-1 text-[10px] text-[#82968a]">Expected output</div><pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[11px] text-[#72edb0]">{expandedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === expandedPublicTest.testId)?.expectedOutput || "—"}</pre></div>
+                  <div><div className="mb-1 text-[10px] text-[#82968a]">Expected output</div><pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[11px] text-primary-soft">{expandedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === expandedPublicTest.testId)?.expectedOutput || "—"}</pre></div>
                   <div><div className="mb-1 text-[10px] text-[#82968a]">Actual output</div><pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[11px] text-[#ffb2c9]">{expandedPublicTest.actualOutput || "—"}</pre></div>
                 </div>
               </div>
@@ -1113,7 +1113,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         ) : (
           <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[#294333] bg-[#0c1510] px-5 py-8 text-center">
             <div className="max-w-sm">
-              <span className="mx-auto grid size-10 place-items-center rounded-xl border border-[#00d978]/20 bg-[#00d978]/10 text-[#72edb0]">
+              <span className="mx-auto grid size-10 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary-soft">
                 <TestTube2 className="size-4" />
               </span>
               <p className="mt-3 text-sm font-semibold text-[#dce8df]">
@@ -1138,8 +1138,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               <div>
-                <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-[#72edb0]">Expected output</div>
-                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-[#72edb0]">{showWhitespace ? visualizeWhitespace(firstFailedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === firstFailedPublicTest.testId)?.expectedOutput || "") || "—" : firstFailedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === firstFailedPublicTest.testId)?.expectedOutput || "—"}</pre>
+                <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-primary-soft">Expected output</div>
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-primary-soft">{showWhitespace ? visualizeWhitespace(firstFailedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === firstFailedPublicTest.testId)?.expectedOutput || "") || "—" : firstFailedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === firstFailedPublicTest.testId)?.expectedOutput || "—"}</pre>
               </div>
               <div>
                 <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-[#ff9aba]">Actual output</div>
@@ -1148,7 +1148,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <div>
                 <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-[#82968a]">Input</div>
                 <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-[#c8d6cc]">{firstFailedPublicTest.input || "—"}</pre>
-                <button type="button" onClick={() => props.onStdinChange(firstFailedPublicTest.input || "")} disabled={!firstFailedPublicTest.input || props.isWebTask} className="mt-2 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-[#72edb0] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40">
+                <button type="button" onClick={() => props.onStdinChange(firstFailedPublicTest.input || "")} disabled={!firstFailedPublicTest.input || props.isWebTask} className="mt-2 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-primary-soft hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40">
                   {tr("Використати як stdin", "Use as stdin")}
                 </button>
               </div>
@@ -1162,26 +1162,26 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
 
   if (mode === "theory") {
     return (
-      <div className="min-h-[760px] rounded-[28px] border border-[#152219]/10 bg-white shadow-[0_22px_55px_-44px_rgba(17,43,25,.55)] dark:border-white/10 dark:bg-[#121b15]">
-        <div className="flex items-center justify-between border-b border-[#152219]/10 px-5 py-4 dark:border-white/10">
+      <div className="min-h-[760px] rounded-[28px] border border-border/10 bg-white shadow-[0_22px_55px_-44px_rgba(17,43,25,.55)] dark:border-white/10 dark:bg-bg-surface">
+        <div className="flex items-center justify-between border-b border-border/10 px-5 py-4 dark:border-white/10">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[.16em] text-[#e87d00]">
               {tr("Теорія перед практикою", "Theory before practice")}
             </div>
-            <h1 className="mt-1 text-2xl font-bold text-[#142017] dark:text-[#edf3ef]">
+            <h1 className="mt-1 text-2xl font-bold text-text-primary dark:text-text-primary">
               {props.task.title}
             </h1>
           </div>
-          <span className="rounded-full bg-[#00d978]/10 px-3 py-1 text-xs font-semibold text-[#147b47] dark:text-[#72edb0]">
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary-strong dark:text-primary-soft">
             1 / 2
           </span>
         </div>
         <div className="mx-auto max-w-4xl px-5 py-8 md:px-12 md:py-12">
-          <div className="mb-8 flex items-center gap-3 text-sm text-[#617066] dark:text-[#a7b5aa]">
-            <span className="grid size-8 place-items-center rounded-full bg-[#00d978] font-bold text-[#062211]">
+          <div className="mb-8 flex items-center gap-3 text-sm text-text-muted dark:text-[#a7b5aa]">
+            <span className="grid size-8 place-items-center rounded-full bg-primary font-bold text-[#062211]">
               1
             </span>
-            <span className="h-px flex-1 bg-[#00d978]/30" />
+            <span className="h-px flex-1 bg-primary/30" />
             <span className="grid size-8 place-items-center rounded-full border border-[#617066]/30">
               2
             </span>
@@ -1192,7 +1192,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <MarkdownView content={props.theory} />
             </article>
           ) : (
-            <div className="rounded-2xl bg-[#00d978]/10 p-5 text-sm text-[#526157] dark:text-[#c1cdc4]">
+            <div className="rounded-2xl bg-primary/10 p-5 text-sm text-text-secondary dark:text-text-secondary">
               {tr(
                 "Для цієї задачі немає окремого теоретичного блоку. Переходь до практики.",
                 "This task has no separate theory block. Continue to practice.",
@@ -1209,7 +1209,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             <button
               type="button"
               onClick={markTheoryComplete}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#00d978] px-5 text-sm font-bold text-[#062211] transition hover:bg-[#25e88d]"
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-[#062211] transition hover:bg-[#25e88d]"
             >
               <Code2 className="size-4" />
               {tr("Перейти до практики", "Go to practice")}
@@ -1236,14 +1236,14 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           <button
             type="button"
             onClick={props.onBack}
-            className="grid size-9 shrink-0 place-items-center rounded-xl border border-[#294333] bg-[#0d1710] text-[#a7b5aa] transition hover:border-[#00d978]/50 hover:bg-[#00d978]/10 hover:text-white"
+            className="grid size-9 shrink-0 place-items-center rounded-xl border border-[#294333] bg-[#0d1710] text-[#a7b5aa] transition hover:border-primary/50 hover:bg-primary/10 hover:text-white"
             title={tr("Назад", "Back")}
           >
             <ChevronRight className="size-4 rotate-180" />
           </button>
         ) : null}
         <div className="mr-auto flex min-w-0 items-center gap-2.5">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-[#00d978]/25 bg-[#00d978]/10 text-[#72edb0]">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-primary-soft">
             <FolderCode className="size-4" />
           </span>
           <div className="min-w-0">
@@ -1252,14 +1252,14 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             </div>
             <div className="mt-1 flex items-center gap-2 truncate text-[10px] font-semibold uppercase tracking-[.13em] text-[#82968a]">
               <span>{props.task.section || tr("Практична задача", "Practice task")}</span>
-              <span className="size-1 rounded-full bg-[#00d978]/70" />
-              <span className="text-[#72edb0]">{languageLabel(props.language)}</span>
+              <span className="size-1 rounded-full bg-primary/70" />
+              <span className="text-primary-soft">{languageLabel(props.language)}</span>
             </div>
           </div>
         </div>
         {props.toolbar ? <div className="flex items-center gap-1.5 rounded-xl border border-white/[.07] bg-black/10 p-1">{props.toolbar}</div> : null}
         {props.saveStatus ? (
-          <span className={`hidden items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold sm:inline-flex ${props.saveStatus === "error" ? "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]" : props.saveStatus === "saving" ? "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca7e]" : props.saveStatus === "dirty" ? "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca7e]" : "border-[#00d978]/25 bg-[#00d978]/10 text-[#72edb0]"}`} role="status" aria-live="polite">
+          <span className={`hidden items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold sm:inline-flex ${props.saveStatus === "error" ? "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]" : props.saveStatus === "saving" ? "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca7e]" : props.saveStatus === "dirty" ? "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca7e]" : "border-primary/25 bg-primary/10 text-primary-soft"}`} role="status" aria-live="polite">
             {props.saveStatus === "saving" ? tr("Збереження…", "Saving…") : props.saveStatus === "dirty" ? tr("Є зміни", "Unsaved") : props.saveStatus === "error" ? tr("Помилка збереження", "Save failed") : props.lastSavedAt ? `${tr("Збережено", "Saved")} ${formatIdeTimestamp(props.lastSavedAt, i18n.language || "uk")}` : tr("Збережено", "Saved")}
           </span>
         ) : null}
@@ -1334,7 +1334,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           onClick={checkWithTab}
           disabled={props.readOnly || props.running || props.checking}
           title={props.submitMode ? tr("Надіслати на перевірку (Ctrl+Shift+Enter)", "Submit for judging (Ctrl+Shift+Enter)") : tr("Перевірити (Ctrl+Shift+Enter)", "Test (Ctrl+Shift+Enter)")}
-          className="hidden h-9 items-center gap-1.5 rounded-lg bg-[#00d978] px-3 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:opacity-50 sm:inline-flex"
+          className="hidden h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:opacity-50 sm:inline-flex"
         >
           {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : props.submitMode ? <Rocket className="size-3.5" /> : <TestTube2 className="size-3.5" />}
           {props.checking ? (props.submitMode ? tr("Надсилаємо…", "Submitting…") : tr("Тестуємо…", "Testing…")) : props.submitMode ? tr("Надіслати", "Submit") : tr("Test", "Test")}
@@ -1357,7 +1357,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           aria-controls="mobile-ide-context"
           className="flex min-h-11 w-full items-center gap-2 px-3 text-left"
         >
-          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#00d978]/10 text-[#72edb0]"><FileText className="size-3.5" /></span>
+          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary-soft"><FileText className="size-3.5" /></span>
           <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[#dce8df]">
             {props.disableAiAssistance ? tr("Умова задачі", "Task statement") : tr("Умова задачі та підказки", "Task context and hints")}
           </span>
@@ -1381,7 +1381,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                         aria-expanded={open}
                         className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-[11px] font-semibold text-[#c8d6cc]"
                       >
-                        <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-[#00d978]/10 text-[#72edb0]">{index + 1}</span>
+                        <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary-soft">{index + 1}</span>
                         <span className="flex-1">{tr(`Підказка ${index + 1}`, `Hint ${index + 1}`)}</span>
                         <ChevronDown className={`size-3.5 text-[#82968a] transition-transform ${open ? "rotate-180" : ""}`} />
                       </button>
@@ -1423,7 +1423,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   key={file.path}
                   type="button"
                   onClick={() => setActiveFile(file.path)}
-                  className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2.5 text-left text-xs transition ${activeFile === file.path ? "border-[#00d978]/25 bg-[#00d978]/10 font-semibold text-[#72edb0]" : "border-transparent text-[#a7b5aa] hover:border-[#294333] hover:bg-white/[.04] hover:text-white"}`}
+                  className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2.5 text-left text-xs transition ${activeFile === file.path ? "border-primary/25 bg-primary/10 font-semibold text-primary-soft" : "border-transparent text-[#a7b5aa] hover:border-[#294333] hover:bg-white/[.04] hover:text-white"}`}
                 >
                   <FileCode2 className="size-3.5" />
                   {file.path}
@@ -1438,7 +1438,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                     }
                     setFileAddRequestToken((value) => value + 1);
                   }}
-                  className="mt-3 flex w-full items-center gap-2 rounded-xl border border-dashed border-[#294333] px-2.5 py-2.5 text-xs text-[#82968a] transition hover:border-[#72edb0]/50 hover:bg-[#00d978]/[.04] hover:text-[#72edb0]"
+                  className="mt-3 flex w-full items-center gap-2 rounded-xl border border-dashed border-[#294333] px-2.5 py-2.5 text-xs text-[#82968a] transition hover:border-primary-soft/50 hover:bg-primary/[.04] hover:text-primary-soft"
                 >
                   {props.useFiles ? <Plus className="size-3.5" /> : <Braces className="size-3.5" />}
                   {tr("Додати файл", "Add file")}
@@ -1469,7 +1469,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             aria-valuemin={170}
             aria-valuemax={520}
             aria-valuenow={Math.round(layout.left)}
-            className="hidden w-1 shrink-0 cursor-col-resize touch-none bg-transparent hover:bg-[#00d978]/40 focus-visible:bg-[#00d978]/60 focus-visible:outline-none lg:block"
+            className="hidden w-1 shrink-0 cursor-col-resize touch-none bg-transparent hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none lg:block"
           />
         ) : null}
 
@@ -1495,12 +1495,12 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   ? tr("WEB без stdin", "WEB has no stdin")
                   : tr("Власний input для Run", "Custom input for Run")
               }
-              className="col-span-2 row-start-2 min-h-28 max-h-48 min-w-0 w-full resize-y overflow-auto rounded-xl border border-[#294333] bg-[#101b13] px-3 py-2.5 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] transition focus:border-[#00d978]/60 focus:bg-[#122117] disabled:opacity-50 sm:min-h-16"
+              className="col-span-2 row-start-2 min-h-28 max-h-48 min-w-0 w-full resize-y overflow-auto rounded-xl border border-[#294333] bg-[#101b13] px-3 py-2.5 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] transition focus:border-primary/60 focus:bg-[#122117] disabled:opacity-50 sm:min-h-16"
             />
             {stdinHistory.length ? (
               <div className="col-span-2 row-start-4 flex min-w-0 items-center gap-2">
                 <label htmlFor="ide-stdin-history" className="shrink-0 text-[10px] font-semibold text-[#82968a]">{tr("Останні вводи", "Recent input")}</label>
-                <select id="ide-stdin-history" name="stdinHistory" value="" onChange={(event) => { if (event.target.value) props.onStdinChange(event.target.value); }} className="min-w-0 flex-1 rounded-lg border border-[#294333] bg-[#101b13] px-2 py-1.5 text-[10px] text-[#c8d6cc] outline-none focus:border-[#00d978]/60">
+                <select id="ide-stdin-history" name="stdinHistory" value="" onChange={(event) => { if (event.target.value) props.onStdinChange(event.target.value); }} className="min-w-0 flex-1 rounded-lg border border-[#294333] bg-[#101b13] px-2 py-1.5 text-[10px] text-[#c8d6cc] outline-none focus:border-primary/60">
                   <option value="">{tr("Обрати з історії…", "Choose from history…")}</option>
                   {stdinHistory.map((value, index) => <option key={`${index}-${value}`} value={value}>{`${index + 1}. ${value.replace(/\s+/g, " ").slice(0, 64)}`}</option>)}
                 </select>
@@ -1519,7 +1519,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                     type="button"
                     onClick={() => props.onStdinChange(example.input)}
                     disabled={props.isWebTask || isEmptyTask}
-                    className="rounded-md border border-[#294333] px-2 py-1 text-[10px] font-semibold text-[#72edb0] hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40"
+                    className="rounded-md border border-[#294333] px-2 py-1 text-[10px] font-semibold text-primary-soft hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40"
                     aria-label={tr(`Вставити відкритий приклад ${index + 1}`, `Use public example ${index + 1}`)}
                   >
                     #{index + 1}
@@ -1530,7 +1530,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <button
                 type="button"
                 onClick={props.onUseExampleInput}
-                className="col-start-2 row-start-1 shrink-0 text-[10px] font-semibold text-[#72edb0] hover:text-white"
+                className="col-start-2 row-start-1 shrink-0 text-[10px] font-semibold text-primary-soft hover:text-white"
               >
                 {tr("Приклад", "Example")}
               </button>
@@ -1548,7 +1548,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           </div>
           <div className="flex min-h-11 items-center gap-2 overflow-x-auto border-b border-[#203428] bg-[#111a14] px-3">
             <div className="flex items-center gap-2 rounded-lg border border-[#294333] bg-[#0d1610] px-2.5 py-1.5 text-[10px] text-[#c8d6cc]">
-              <FileCode2 className="size-3.5 text-[#72edb0]" />
+              <FileCode2 className="size-3.5 text-primary-soft" />
               <span>{activeFile}</span>
               <span className="text-[#557061]">·</span>
               <span className="text-[#82968a]">{tr("Редактор", "Editor")}</span>
@@ -1575,7 +1575,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <button
                 type="button"
                 onClick={() => setWordWrap((value) => !value)}
-                className={`grid size-7 place-items-center rounded-lg text-xs transition ${wordWrap ? "bg-[#00d978]/10 text-[#72edb0]" : "text-[#82968a] hover:bg-white/[.07] hover:text-white"}`}
+                className={`grid size-7 place-items-center rounded-lg text-xs transition ${wordWrap ? "bg-primary/10 text-primary-soft" : "text-[#82968a] hover:bg-white/[.07] hover:text-white"}`}
                 aria-pressed={wordWrap}
                 aria-label={tr("Перенесення рядків", "Word wrap")}
                 title="Word wrap"
@@ -1603,7 +1603,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               {isEmptyTask ? (
                 <div className="flex h-full min-h-[220px] items-center justify-center bg-[#0b110d] px-6 py-12 text-center">
                   <div className="max-w-sm">
-                    <div className="mx-auto grid size-12 place-items-center rounded-2xl border border-[#00d978]/20 bg-[#00d978]/10 text-[#72edb0]">
+                    <div className="mx-auto grid size-12 place-items-center rounded-2xl border border-primary/20 bg-primary/10 text-primary-soft">
                       <FolderCode className="size-5" />
                     </div>
                     <h2 className="mt-4 text-base font-bold text-[#edf5ee]">
@@ -1672,7 +1672,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             aria-valuemin={170}
             aria-valuemax={520}
             aria-valuenow={Math.round(layout.right)}
-            className="hidden w-1 shrink-0 cursor-col-resize touch-none bg-transparent hover:bg-[#00d978]/40 focus-visible:bg-[#00d978]/60 focus-visible:outline-none lg:block"
+            className="hidden w-1 shrink-0 cursor-col-resize touch-none bg-transparent hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none lg:block"
           />
         ) : null}
         {showRight ? (
@@ -1684,7 +1684,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <button
                 type="button"
                 onClick={() => setAssistantTab("task")}
-                className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "task" ? "border-[#00d978]/25 bg-[#00d978]/10 text-[#edf5ee]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
+                className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "task" ? "border-primary/25 bg-primary/10 text-[#edf5ee]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
               >
                 <FileText className="size-3.5" />
                 {tr("Завдання", "Task")}
@@ -1694,7 +1694,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   <button
                     type="button"
                     onClick={() => setAssistantTab("hints")}
-                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "hints" ? "border-[#00d978]/25 bg-[#00d978]/10 text-[#72edb0]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
+                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "hints" ? "border-primary/25 bg-primary/10 text-primary-soft" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
                   >
                     <Lightbulb className="size-3.5" />
                     {tr("Підказки", "Hints")}
@@ -1724,8 +1724,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 <div className="space-y-3.5">
                   <div className="rounded-2xl border border-[#294333] bg-[#111d15] p-4">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-[#72edb0]">
-                        <span className="grid size-7 place-items-center rounded-lg bg-[#00d978]/10"><FileText className="size-3.5" /></span>
+                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-primary-soft">
+                        <span className="grid size-7 place-items-center rounded-lg bg-primary/10"><FileText className="size-3.5" /></span>
                         {tr("Умова", "Brief")}
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -1747,10 +1747,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                     </h2>
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#294333] bg-[#0d1710] px-2 py-1.5 text-[10px] font-semibold text-[#a7b5aa]">
-                        <Code2 className="size-3 text-[#72edb0]" /> {languageLabel(props.language)}
+                        <Code2 className="size-3 text-primary-soft" /> {languageLabel(props.language)}
                       </span>
                       <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#294333] bg-[#0d1710] px-2 py-1.5 text-[10px] font-semibold text-[#a7b5aa]">
-                        <TestTube2 className="size-3 text-[#72edb0]" /> {tr("Практика", "Practice")}
+                        <TestTube2 className="size-3 text-primary-soft" /> {tr("Практика", "Practice")}
                       </span>
                       {props.task.tags?.slice(0, 2).map((tag) => (
                         <span key={tag} className="rounded-lg border border-[#294333] bg-[#0d1710] px-2 py-1.5 text-[10px] text-[#82968a]">{tag}</span>
@@ -1785,7 +1785,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                           </p>
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {props.task.projectSpec.skills.map((skill) => (
-                              <span key={skill} className="rounded-lg bg-[#00d978]/10 px-2 py-1 text-[10px] font-semibold text-[#72edb0]">
+                              <span key={skill} className="rounded-lg bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary-soft">
                                 {skill}
                               </span>
                             ))}
@@ -1839,7 +1839,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   ) : null}
                   <div className="rounded-2xl border border-[#203428] bg-[#0c1510] p-4">
                     <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.15em] text-[#82968a]">
-                      <span className="h-px w-5 bg-[#00d978]/60" />
+                      <span className="h-px w-5 bg-primary/60" />
                       {tr("Що потрібно зробити", "What to build")}
                     </div>
                     <MarkdownView content={taskBody} variant="task" />
@@ -1847,7 +1847,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   {props.theory ? (
                     <details className="group rounded-2xl border border-[#294333] bg-[#111b14] p-3.5">
                       <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-[#c8d6cc] marker:hidden">
-                        <span className="grid size-7 place-items-center rounded-lg bg-[#00d978]/10 text-[#72edb0]"><BookOpen className="size-3.5" /></span>
+                        <span className="grid size-7 place-items-center rounded-lg bg-primary/10 text-primary-soft"><BookOpen className="size-3.5" /></span>
                         <span className="flex-1">{tr("Відкрити теорію", "Open theory")}</span>
                         <ChevronDown className="size-4 text-[#82968a] transition-transform group-open:rotate-180" />
                       </summary>
@@ -1859,18 +1859,18 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   <div className="rounded-2xl border border-[#203428] bg-[#111b14] p-3.5 text-xs text-[#a7b5aa]">
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <div className="font-semibold text-[#edf5ee]">{tr("Стан задачі", "Task status")}</div>
-                      <span className={`rounded-md px-2 py-1 text-[10px] font-bold ${allTestsPassed ? "bg-[#00d978]/10 text-[#72edb0]" : "bg-white/[.06] text-[#82968a]"}`}>
+                      <span className={`rounded-md px-2 py-1 text-[10px] font-bold ${allTestsPassed ? "bg-primary/10 text-primary-soft" : "bg-white/[.06] text-[#82968a]"}`}>
                         {allTestsPassed ? tr("Готово", "Ready") : tr("У роботі", "In progress")}
                       </span>
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2.5">
-                        <span className="grid size-5 place-items-center rounded-full bg-[#00d978]/10"><CheckCircle2 className="size-3 text-[#72edb0]" /></span>
+                        <span className="grid size-5 place-items-center rounded-full bg-primary/10"><CheckCircle2 className="size-3 text-primary-soft" /></span>
                         <span>{tr("Теорія переглянута", "Theory reviewed")}</span>
                       </div>
                       <div className="flex items-center gap-2.5">
                         {draftCodeRef.current.trim() ? (
-                          <span className="grid size-5 place-items-center rounded-full bg-[#00d978]/10"><CheckCircle2 className="size-3 text-[#72edb0]" /></span>
+                          <span className="grid size-5 place-items-center rounded-full bg-primary/10"><CheckCircle2 className="size-3 text-primary-soft" /></span>
                         ) : (
                           <span className="size-5 rounded-full border border-[#294333]" />
                         )}
@@ -1878,7 +1878,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                       </div>
                       <div className="flex items-center gap-2.5">
                         {allTestsPassed ? (
-                          <span className="grid size-5 place-items-center rounded-full bg-[#00d978]/10"><CheckCircle2 className="size-3 text-[#72edb0]" /></span>
+                          <span className="grid size-5 place-items-center rounded-full bg-primary/10"><CheckCircle2 className="size-3 text-primary-soft" /></span>
                         ) : (
                           <span className="size-5 rounded-full border border-[#294333]" />
                         )}
@@ -1919,7 +1919,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                         {props.hints.map((_, index) => (
                           <span
                             key={`hint-progress-${index}`}
-                            className={`h-1.5 flex-1 rounded-full transition-colors ${openHintIndex !== null && index <= openHintIndex ? "bg-[#00d978]" : "bg-white/[.12]"}`}
+                            className={`h-1.5 flex-1 rounded-full transition-colors ${openHintIndex !== null && index <= openHintIndex ? "bg-primary" : "bg-white/[.12]"}`}
                           />
                         ))}
                       </div>
@@ -1932,7 +1932,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                     return (
                       <div
                         key={`${index}-${hint}`}
-                        className={`overflow-hidden rounded-2xl border transition ${isOpen ? "border-[#00d978]/35 bg-[#102017] shadow-[0_12px_28px_-22px_rgba(0,217,120,.8)]" : "border-white/[.09] bg-white/[.025] hover:border-white/[.16]"}`}
+                        className={`overflow-hidden rounded-2xl border transition ${isOpen ? "border-primary/35 bg-[#102017] shadow-[0_12px_28px_-22px_rgba(0,217,120,.8)]" : "border-white/[.09] bg-white/[.025] hover:border-white/[.16]"}`}
                       >
                         <button
                           type="button"
@@ -1941,11 +1941,11 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                           aria-expanded={isOpen}
                           aria-controls={`ide-hint-${index}`}
                         >
-                          <span className={`grid size-8 shrink-0 place-items-center rounded-xl text-xs font-extrabold ${isOpen ? "bg-[#00d978] text-[#062211]" : "bg-white/[.08] text-[#a7b5aa]"}`}>
+                          <span className={`grid size-8 shrink-0 place-items-center rounded-xl text-xs font-extrabold ${isOpen ? "bg-primary text-[#062211]" : "bg-white/[.08] text-[#a7b5aa]"}`}>
                             {index + 1}
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className={`block text-[11px] font-bold ${isOpen ? "text-[#72edb0]" : "text-[#c8d6cc]"}`}>
+                            <span className={`block text-[11px] font-bold ${isOpen ? "text-primary-soft" : "text-[#c8d6cc]"}`}>
                               {tr(`Підказка ${index + 1}`, `Hint ${index + 1}`)}
                             </span>
                             <span className="mt-0.5 block text-[10px] text-[#82968a]">
@@ -1956,7 +1956,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                                   : tr("Трохи більше деталей", "More detail")}
                             </span>
                           </span>
-                          <ChevronDown className={`size-4 shrink-0 text-[#82968a] transition-transform ${isOpen ? "rotate-180 text-[#72edb0]" : ""}`} />
+                          <ChevronDown className={`size-4 shrink-0 text-[#82968a] transition-transform ${isOpen ? "rotate-180 text-primary-soft" : ""}`} />
                         </button>
                         {isOpen ? (
                           <div id={`ide-hint-${index}`} className="border-t border-white/[.08] px-3.5 pb-3.5 pt-3">
@@ -1981,7 +1981,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                           {tr("Підказки тимчасово недоступні — повтори перевірку.", "Hints are temporarily unavailable — try checking again.")}
                         </p>
                       ) : null}
-                      <span className="mx-auto grid size-11 place-items-center rounded-2xl bg-[#00d978]/10 text-[#72edb0]">
+                      <span className="mx-auto grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary-soft">
                         <Sparkles className="size-5" />
                       </span>
                       <p className="mt-3 text-sm font-bold text-[#c8d6cc]">
@@ -1999,8 +1999,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               ) : null}
               {assistantTab === "mentor" ? (
                 <div className="space-y-3">
-                  <div className="rounded-xl border border-[#00d978]/20 bg-[#00d978]/[.06] p-3 text-xs text-[#b9c9bd]">
-                    <Sparkles className="mr-2 inline size-4 text-[#72edb0]" />
+                  <div className="rounded-xl border border-primary/20 bg-primary/[.06] p-3 text-xs text-[#b9c9bd]">
+                    <Sparkles className="mr-2 inline size-4 text-primary-soft" />
                     {tr(
                       "Ментор ставить навідні питання й не показує готове рішення одразу.",
                       "The mentor asks guiding questions instead of revealing the full solution immediately.",
@@ -2058,7 +2058,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           aria-valuemin={150}
           aria-valuemax={620}
           aria-valuenow={Math.round(layout.bottom)}
-          className="h-1 shrink-0 cursor-row-resize touch-none bg-transparent hover:bg-[#00d978]/40 focus-visible:bg-[#00d978]/60 focus-visible:outline-none"
+          className="h-1 shrink-0 cursor-row-resize touch-none bg-transparent hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none"
         />
       ) : null}
       {showBottom ? (
@@ -2146,7 +2146,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         <button type="button" onClick={runWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[.08] px-3 text-xs font-semibold text-white disabled:opacity-50">
           <Play className="size-3.5" />{props.running ? "…" : tr("Запустити", "Run")}
         </button>
-        <button type="button" onClick={checkWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-[#00d978] px-3 text-xs font-bold text-[#062211] disabled:opacity-50">
+        <button type="button" onClick={checkWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-bold text-[#062211] disabled:opacity-50">
           {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : props.submitMode ? <Rocket className="size-3.5" /> : <TestTube2 className="size-3.5" />}{props.checking ? (props.submitMode ? tr("Надсилаємо…", "Submitting…") : tr("Тестуємо…", "Testing…")) : props.submitMode ? tr("Надіслати", "Submit") : tr("Перевірити", "Test")}
         </button>
       </div>
@@ -2158,14 +2158,14 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <button type="button" onClick={() => setDiffOpen(false)} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]" aria-label={tr("Закрити порівняння", "Close comparison")}>{tr("Закрити", "Close")}</button>
             </div>
             <div className="min-h-0 overflow-auto p-3 font-mono text-[11px] leading-5">
-              {comparisonLines.slice(0, 500).map((row, index) => <div key={index} className={row.kind === "removed" ? "bg-[#ff6b9d]/10 text-[#ff9aba]" : row.kind === "added" ? "bg-[#00d978]/10 text-[#72edb0]" : "text-[#82968a]"}><span className="mr-2 inline-block w-4 select-none text-right opacity-70">{row.kind === "removed" ? "−" : row.kind === "added" ? "+" : " "}</span><span className="mr-3 inline-block w-8 select-none text-right opacity-50">{row.number}</span>{row.line || " "}</div>)}
+              {comparisonLines.slice(0, 500).map((row, index) => <div key={index} className={row.kind === "removed" ? "bg-[#ff6b9d]/10 text-[#ff9aba]" : row.kind === "added" ? "bg-primary/10 text-primary-soft" : "text-[#82968a]"}><span className="mr-2 inline-block w-4 select-none text-right opacity-70">{row.kind === "removed" ? "−" : row.kind === "added" ? "+" : " "}</span><span className="mr-3 inline-block w-8 select-none text-right opacity-50">{row.number}</span>{row.line || " "}</div>)}
               {!comparisonLines.length ? <div className="px-3 py-8 text-center text-[#82968a]">{tr("Немає знімка для порівняння.", "No snapshot is available for comparison.")}</div> : null}
             </div>
           </div>
         </div>
       ) : null}
       {notice ? (
-        <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-[#00d978]/30 bg-[#132018] px-4 py-2 text-xs font-semibold text-[#72edb0] shadow-2xl">
+        <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-primary/30 bg-[#132018] px-4 py-2 text-xs font-semibold text-primary-soft shadow-2xl">
           {notice}
         </div>
       ) : null}
@@ -2174,7 +2174,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         <span>{props.language}</span>
         <span>UTF-8</span>
         <span>Spaces: 2</span>
-        <span className="ml-auto flex items-center gap-1 text-[#72edb0]">
+        <span className="ml-auto flex items-center gap-1 text-primary-soft">
           {props.checking ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
           {props.checking
             ? tr("Система тестує", "Testing")
@@ -2199,7 +2199,7 @@ const BottomTabButton: React.FC<{
   <button
     type="button"
     onClick={onClick}
-    className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-semibold transition ${active ? "border-[#00d978]/25 bg-[#00d978]/10 text-[#72edb0]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
+    className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-semibold transition ${active ? "border-primary/25 bg-primary/10 text-primary-soft" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
   >
     {icon}
     {label}

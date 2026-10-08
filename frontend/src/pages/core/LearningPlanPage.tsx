@@ -35,10 +35,10 @@ export const LearningPlanPage: React.FC = () => {
   const progress = items.length ? Math.round((completed / items.length) * 100) : 0;
 
   return (
-    <div className="min-h-full bg-[#f5f7f4] px-4 py-7 text-[#17231b] dark:bg-[#09100c] dark:text-[#edf4ef] sm:px-6 lg:px-10 lg:py-10">
+    <div className="min-h-full bg-bg-base px-4 py-7 text-text-primary dark:bg-bg-base dark:text-[#edf4ef] sm:px-6 lg:px-10 lg:py-10">
       <main className="mx-auto max-w-7xl space-y-6">
-        <section className="relative overflow-hidden rounded-[32px] border border-[#152219]/10 bg-[#17311f] p-7 text-white shadow-[0_28px_62px_-42px_rgba(0,0,0,.9)] dark:border-white/10 sm:p-9">
-          <div className="absolute -right-20 -top-24 size-80 rounded-full bg-[#00ff88]/12 blur-3xl" />
+        <section className="relative overflow-hidden rounded-[32px] border border-border/10 bg-[#17311f] p-7 text-white shadow-[0_28px_62px_-42px_rgba(0,0,0,.9)] dark:border-white/10 sm:p-9">
+          <div className="absolute -right-20 -top-24 size-80 rounded-full bg-primary/12 blur-3xl" />
           <div className="absolute -bottom-24 left-1/4 size-72 rounded-full bg-[#ff8c00]/10 blur-3xl" />
           <div className="relative grid gap-8 lg:grid-cols-[1.15fr_.85fr] lg:items-end">
             <div>
@@ -73,7 +73,7 @@ export const LearningPlanPage: React.FC = () => {
                 <div className="h-full rounded-full bg-[#00e47b] transition-[width]" style={{ width: `${progress}%` }} />
               </div>
               <div className="mt-5 flex gap-3">
-                <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#00ff88]/12 text-[#83efb6]">
+                <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary/12 text-[#83efb6]">
                   <Sparkles className="size-5" />
                 </span>
                 <div>
@@ -94,28 +94,28 @@ export const LearningPlanPage: React.FC = () => {
           </div>
         ) : (
           <div className="grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
-            <section className="rounded-[28px] border border-[#152219]/10 bg-white p-5 dark:border-white/10 dark:bg-[#121b15] sm:p-6">
-              <div className="text-xs font-semibold uppercase tracking-[.16em] text-[#147b47] dark:text-[#71edaf]">Послідовність</div>
+            <section className="rounded-[28px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface sm:p-6">
+              <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">Послідовність</div>
               <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Твій маршрут</h2>
               <div className="mt-5 space-y-3">
                 {items.length ? (
                   items.map((item) => (
-                    <article key={item.id} className={`flex gap-4 rounded-3xl border p-4 transition ${item.status === "mastered" ? "border-[#00c96d]/20 bg-[#eff9f1] dark:bg-[#00ff88]/[.06]" : item.isNext ? "border-[#00c96d]/35 bg-[#f9fcf9] dark:border-[#00ff88]/25 dark:bg-white/[.035]" : "border-[#152219]/8 bg-[#f5f8f5] dark:border-white/[.08] dark:bg-white/[.04]"}`}>
-                      <span className={`grid size-10 shrink-0 place-items-center rounded-2xl text-sm font-semibold ${item.status === "mastered" ? "bg-[#00c96d] text-[#062112]" : "bg-[#e2f5e8] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#71edaf]"}`}>
+                    <article key={item.id} className={`flex gap-4 rounded-3xl border p-4 transition ${item.status === "mastered" ? "border-primary/20 bg-[#eff9f1] dark:bg-primary/[.06]" : item.isNext ? "border-primary/35 bg-[#f9fcf9] dark:border-primary/25 dark:bg-white/[.035]" : "border-border/8 bg-[#f5f8f5] dark:border-white/[.08] dark:bg-white/[.04]"}`}>
+                      <span className={`grid size-10 shrink-0 place-items-center rounded-2xl text-sm font-semibold ${item.status === "mastered" ? "bg-primary text-primary-foreground" : "bg-[#e2f5e8] text-primary-strong dark:bg-primary/10 dark:text-primary-soft"}`}>
                         {item.status === "mastered" ? <Check className="size-4" /> : String(item.order).padStart(2, "0")}
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <h3 className="font-semibold">{item.title}</h3>
-                          {item.isNext ? <span className="rounded-full bg-[#00c96d] px-2.5 py-1 text-[11px] font-semibold text-[#062112]">далі</span> : null}
+                          {item.isNext ? <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground">далі</span> : null}
                         </div>
                         <p className="mt-1 text-sm text-[#718075] dark:text-[#a2b1a6]">{statusText(item)}</p>
                       </div>
                     </article>
                   ))
                 ) : (
-                  <div className="rounded-[24px] border border-dashed border-[#152219]/15 bg-[#f8faf7] p-8 text-center dark:border-white/10 dark:bg-white/[.03]">
-                    <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#e8f7ed] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#71edaf]">
+                  <div className="rounded-[24px] border border-dashed border-border/15 bg-bg-surface p-8 text-center dark:border-white/10 dark:bg-white/[.03]">
+                    <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#e8f7ed] text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
                       <Compass className="size-6" />
                     </div>
                     <h3 className="mt-5 text-xl font-semibold">Маршрут ще не зібраний</h3>
@@ -144,8 +144,8 @@ export const LearningPlanPage: React.FC = () => {
                 </button>
               </section>
 
-              <section className="rounded-[28px] border border-[#152219]/10 bg-white p-6 dark:border-white/10 dark:bg-[#121b15]">
-                <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#147b47] dark:text-[#71edaf]">
+              <section className="rounded-[28px] border border-border/10 bg-white p-6 dark:border-white/10 dark:bg-bg-surface">
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary-strong dark:text-primary-soft">
                   <Target className="size-4" />
                   Темп
                 </span>

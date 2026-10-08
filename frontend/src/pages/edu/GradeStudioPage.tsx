@@ -81,7 +81,7 @@ export const GradeStudioPage: React.FC = () => {
   if (loading)
     return (
       <div className={root}>
-        <div className="h-[620px] animate-pulse rounded-[32px] bg-[#e8eeea] dark:bg-white/[.05]" />
+        <div className="h-[620px] animate-pulse rounded-[32px] bg-bg-hover dark:bg-white/[.05]" />
       </div>
     );
   if (!data)
@@ -89,7 +89,7 @@ export const GradeStudioPage: React.FC = () => {
   const initial = `${data.student.firstName?.[0] || ""}${data.student.lastName?.[0] || ""}`;
   const tone =
     score >= 85
-      ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]"
+      ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"
       : score >= 60
         ? "bg-[#fff1dc] text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]"
         : "bg-[#fff0f5] text-[#bd4067] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]";
@@ -97,18 +97,18 @@ export const GradeStudioPage: React.FC = () => {
     <div className={root}>
       <button type="button"
         onClick={() => navigate(-1)}
-        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] hover:text-[#16834d] dark:text-[#aab7ad] dark:hover:text-[#72edb0]"
+        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"
       >
         <ArrowLeft className="h-4 w-4" />
         Назад
       </button>
-      <header className="flex flex-col justify-between gap-6 rounded-[32px] bg-[#f1f6f2] p-6 dark:bg-[#152119] sm:p-9 lg:flex-row lg:items-end">
+      <header className="flex flex-col justify-between gap-6 rounded-[32px] bg-bg-surface p-6 dark:bg-[#152119] sm:p-9 lg:flex-row lg:items-end">
         <div className="flex items-center gap-4">
-          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white text-lg font-extrabold text-[#16834d] shadow-sm dark:bg-white/[.08] dark:text-[#72edb0]">
+          <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white text-lg font-extrabold text-primary-strong shadow-sm dark:bg-white/[.08] dark:text-primary-soft">
             {initial}
           </span>
           <div>
-            <p className="text-xs font-bold uppercase tracking-[.15em] text-[#16834d] dark:text-[#72edb0]">
+            <p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
               Результат учня
             </p>
             <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em] sm:text-4xl">
@@ -132,8 +132,8 @@ export const GradeStudioPage: React.FC = () => {
         </div>
       )}
       <main className="mt-8 grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
-        <section className="overflow-hidden rounded-[30px] border border-[#19291d]/10 bg-white dark:border-white/[.09] dark:bg-[#111b14]">
-          <div className="flex items-center gap-3 border-b border-[#19291d]/10 px-6 py-5 dark:border-white/[.08]">
+        <section className="overflow-hidden rounded-[30px] border border-border/10 bg-white dark:border-white/[.09] dark:bg-bg-surface">
+          <div className="flex items-center gap-3 border-b border-border/10 px-6 py-5 dark:border-white/[.08]">
             <Code2 className="h-5 w-5 text-[#e17800]" />
             <div>
               <p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">
@@ -142,11 +142,11 @@ export const GradeStudioPage: React.FC = () => {
               <h2 className="mt-1 text-xl font-bold">Розв'язок</h2>
             </div>
           </div>
-          <pre className="max-h-[520px] overflow-auto bg-[#fbfdfb] p-6 font-mono text-sm leading-7 text-[#304238] dark:bg-[#0d1710] dark:text-[#d4dfd7]">
+          <pre className="max-h-[520px] overflow-auto bg-bg-surface p-6 font-mono text-sm leading-7 text-[#304238] dark:bg-[#0d1710] dark:text-[#d4dfd7]">
             {data.code || "Учень не надіслав код."}
           </pre>
         </section>
-        <aside className="rounded-[30px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14]">
+        <aside className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface">
           <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">
             Фідбек
           </p>
@@ -165,7 +165,7 @@ export const GradeStudioPage: React.FC = () => {
               type="number"
               min="0"
               max="100"
-              className="mt-2 w-full rounded-xl border border-[#19291d]/10 bg-[#fbfdfb] px-3 py-3 text-lg font-bold dark:border-white/10 dark:bg-[#0d1710]"
+              className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-lg font-bold dark:border-white/10 dark:bg-[#0d1710]"
             />
           </label>
           <label className="mt-5 block text-sm font-bold">
@@ -175,11 +175,11 @@ export const GradeStudioPage: React.FC = () => {
               onChange={(event) => setFeedback(event.target.value)}
               rows={7}
               placeholder="Що вже вийшло і що варто покращити…"
-              className="mt-2 w-full resize-none rounded-xl border border-[#19291d]/10 bg-[#fbfdfb] px-3 py-3 text-sm font-normal leading-6 dark:border-white/10 dark:bg-[#0d1710]"
+              className="mt-2 w-full resize-none rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal leading-6 dark:border-white/10 dark:bg-[#0d1710]"
             />
           </label>
           <div className="mt-4 rounded-2xl bg-[#f3f7f3] p-4 dark:bg-white/[.045]">
-            <CheckCircle2 className="h-5 w-5 text-[#16834d] dark:text-[#72edb0]" />
+            <CheckCircle2 className="h-5 w-5 text-primary-strong dark:text-primary-soft" />
             <p className="mt-2 text-sm leading-6 text-[#65766b] dark:text-[#bdc9c0]">
               Збереження оновить і оцінку, і коментар у поточній роботі учня.
             </p>
@@ -187,7 +187,7 @@ export const GradeStudioPage: React.FC = () => {
           <button type="button"
             disabled={busy}
             onClick={() => void save()}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-[#00d978] dark:text-[#062211]"
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"
           >
             <Save className="h-4 w-4" />
             {busy ? "Зберігаємо…" : "Зберегти результат"}

@@ -49,7 +49,7 @@ import {
 } from "../../lib/gradingSystems";
 
 const root =
-  "min-h-[100dvh] bg-[#f4f7f3] px-4 py-6 text-[#142017] dark:bg-[#08100b] dark:text-[#edf5ef] sm:px-6 lg:px-10 lg:py-10";
+  "min-h-[100dvh] bg-[#f4f7f3] px-4 py-6 text-text-primary dark:bg-[#08100b] dark:text-[#edf5ef] sm:px-6 lg:px-10 lg:py-10";
 const initials = (student: Student) =>
   `${student.firstName?.[0] || ""}${student.lastName?.[0] || ""}`.toUpperCase() ||
   "У";
@@ -598,7 +598,7 @@ export const ClassManagementPage: React.FC = () => {
         <header className="rounded-[28px] border border-[#1d3b29] bg-[linear-gradient(135deg,#13241a_0%,#0f1d15_100%)] p-5 text-white shadow-[0_24px_70px_rgba(7,24,13,.16)] sm:p-7">
           <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
             <div>
-              <p className="text-xs font-black uppercase tracking-[.18em] text-[#7bedb4]">
+              <p className="text-xs font-black uppercase tracking-[.18em] text-primary-soft">
                 Керування класом
               </p>
               <h1 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.06em] sm:text-5xl">
@@ -631,7 +631,7 @@ export const ClassManagementPage: React.FC = () => {
             aria-controls="class-panel-students"
             type="button"
             onClick={() => setActiveTab("students")}
-            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d978]/60 ${activeTab === "students" ? "bg-[#e8f8ee] text-[#16834d] shadow-sm dark:bg-[#10271a] dark:text-[#7bedb4]" : "text-[#6b7a70] hover:bg-[#f3f8f3] hover:text-[#142018] dark:text-[#aebbb2] dark:hover:bg-white/[.06] dark:hover:text-white"}`}
+            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${activeTab === "students" ? "bg-[#e8f8ee] text-primary-strong shadow-sm dark:bg-[#10271a] dark:text-primary-soft" : "text-[#6b7a70] hover:bg-[#f3f8f3] hover:text-[#142018] dark:text-[#aebbb2] dark:hover:bg-white/[.06] dark:hover:text-white"}`}
           >
             <UsersRound aria-hidden="true" className="size-4" />
             <span>Учні</span>
@@ -666,7 +666,7 @@ export const ClassManagementPage: React.FC = () => {
           <section id="class-panel-students" role="tabpanel" aria-labelledby="class-tab-students" className="rounded-[28px] border border-[#142018]/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111a14] sm:p-7">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-[.15em] text-[#16834d] dark:text-[#7bedb4]">
+                <p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
                   Склад класу
                 </p>
                 <h2 className="mt-2 text-2xl font-black tracking-[-.05em] sm:text-3xl">
@@ -698,7 +698,7 @@ export const ClassManagementPage: React.FC = () => {
                   className="rounded-[24px] border border-[#142018]/10 bg-[#f7faf6] p-4 dark:border-white/10 dark:bg-white/[.045]"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="grid size-11 place-items-center rounded-2xl bg-[#13241a] text-sm font-black text-[#7bedb4]">
+                    <span className="grid size-11 place-items-center rounded-2xl bg-[#13241a] text-sm font-black text-primary-soft">
                       {initials(student)}
                     </span>
                     <div className="min-w-0">
@@ -720,7 +720,7 @@ export const ClassManagementPage: React.FC = () => {
                         setParentLink("");
                         setParentLinkCopied(false);
                       }}
-                      className="font-bold text-[#16834d] dark:text-[#7bedb4]"
+                      className="font-bold text-primary-strong dark:text-primary-soft"
                     >
                       Запросити батьків
                     </button>
@@ -728,9 +728,9 @@ export const ClassManagementPage: React.FC = () => {
                 </article>
               ))}
               {!students.length && (
-                <div className="col-span-full rounded-[24px] border border-dashed border-[#142018]/15 bg-[#fbfdfb] p-7 text-center dark:border-white/10 dark:bg-white/[.02] sm:p-10">
+                <div className="col-span-full rounded-[24px] border border-dashed border-[#142018]/15 bg-bg-surface p-7 text-center dark:border-white/10 dark:bg-white/[.02] sm:p-10">
                   <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-                    <span className="grid size-12 place-items-center rounded-2xl bg-[#e8f8ee] text-[#16834d] dark:bg-[#10271a] dark:text-[#7bedb4]">
+                    <span className="grid size-12 place-items-center rounded-2xl bg-[#e8f8ee] text-primary-strong dark:bg-[#10271a] dark:text-primary-soft">
                       <UsersRound aria-hidden="true" className="size-6" />
                     </span>
                     <h3 className="mt-4 text-balance text-xl font-black">У класі ще немає учнів</h3>
@@ -900,7 +900,7 @@ export const ClassManagementPage: React.FC = () => {
         {activeTab === "settings" && (
           <section id="class-panel-settings" role="tabpanel" aria-labelledby="class-tab-settings" className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-[32px] border border-[#142018]/10 bg-white p-6 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111a14]">
-              <p className="text-xs font-black uppercase tracking-[.15em] text-[#16834d] dark:text-[#7bedb4]">
+              <p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
                 Викладачі класу
               </p>
               <h2 className="mt-2 text-2xl font-black">Призначення викладачів</h2>
@@ -926,7 +926,7 @@ export const ClassManagementPage: React.FC = () => {
                               : [...current, member.userId],
                           )
                         }
-                        className="size-4 accent-[#00c96d]"
+                        className="size-4 accent-primary"
                       />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-bold">
@@ -984,7 +984,7 @@ export const ClassManagementPage: React.FC = () => {
               </Button>
             </div>
             <div className="rounded-[32px] border border-[#142018]/10 bg-white p-6 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111a14]">
-              <p className="text-xs font-black uppercase tracking-[.15em] text-[#16834d] dark:text-[#7bedb4]">
+              <p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
                 Самостійне приєднання
               </p>
               <h2 className="mt-2 text-2xl font-black">Код класу</h2>
@@ -994,7 +994,7 @@ export const ClassManagementPage: React.FC = () => {
               </p>
               <div className="mt-6 flex items-center justify-between gap-3 rounded-2xl bg-[#f7faf6] p-4 dark:bg-white/[.05]">
                 <ClassJoinCodeButton classId={id} />
-                <BookOpen className="size-5 text-[#16834d] dark:text-[#7bedb4]" />
+                <BookOpen className="size-5 text-primary-strong dark:text-primary-soft" />
               </div>
             </div>
           </section>

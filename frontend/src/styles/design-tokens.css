@@ -1,0 +1,254 @@
+@font-face {
+  font-family: "Fixel Text";
+  src: url("/fonts/fixel/FixelText-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fixel Text";
+  src: url("/fonts/fixel/FixelText-Medium.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fixel Text";
+  src: url("/fonts/fixel/FixelText-SemiBold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fixel Text";
+  src: url("/fonts/fixel/FixelText-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fixel Display";
+  src: url("/fonts/fixel/FixelDisplay-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Fixel Display";
+  src: url("/fonts/fixel/FixelDisplay-ExtraBold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Brand: quiet evergreen action with a warm, paper-like workspace. */
+  --brand-green: #8fbd99;
+  --brand-green-deep: #3e7450;
+  --brand-orange: #d8a367;
+  --brand-forest: #141a15;
+  --brand-mint: #bad8bd;
+
+  --bg-base: #141a15;
+  --bg-surface: #1b231d;
+  --bg-hover: #252e27;
+  --bg-code: #111612;
+
+  --text-primary: #eff3ec;
+  --text-secondary: #c5cec3;
+  --text-muted: #a0aca1;
+  --border: #38433b;
+
+  --primary: #8fbd99;
+  --primary-hover: #a2cdaa;
+  --primary-muted: #7ea987;
+  --primary-strong: #a5c7a9;
+  --primary-soft: #bad8bd;
+  --primary-foreground: #172119;
+
+  --secondary: #a8b7c2;
+  --secondary-hover: #bdc9d1;
+  --accent-error: #e59c9c;
+  --accent-success: #8fbd99;
+  --accent-warn: #d3ac78;
+  --accent-warning: var(--accent-warn);
+  --accent-logic-warning: #c99570;
+  --accent-logic-warn: var(--accent-logic-warning);
+  --accent-info: var(--secondary);
+
+  --surface-primary: color-mix(in srgb, var(--primary) 11%, var(--bg-surface));
+  --surface-secondary: color-mix(in srgb, var(--secondary) 10%, var(--bg-surface));
+  --surface-success: color-mix(in srgb, var(--accent-success) 11%, var(--bg-surface));
+  --surface-warning: color-mix(in srgb, var(--accent-warn) 12%, var(--bg-surface));
+  --surface-error: color-mix(in srgb, var(--accent-error) 11%, var(--bg-surface));
+
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 260ms;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  --font-sans: "Fixel Text", "Segoe UI", "Noto Sans", Arial, sans-serif;
+  --font-display: "Fixel Display", "Fixel Text", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "Cascadia Code", "Fira Code", Consolas, Monaco, "Courier New", monospace;
+  --font-xs: 0.75rem;
+  --font-sm: 0.875rem;
+  --font-base: 1rem;
+  --font-lg: 1.125rem;
+  --font-xl: 1.375rem;
+  --font-2xl: 1.75rem;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --line-tight: 1.2;
+  --line-heading: 1.18;
+  --line-body: 1.58;
+  --line-ui: 1.45;
+
+  --text-caption-size: var(--font-xs);
+  --text-caption-weight: var(--font-weight-medium);
+  --text-body-size: var(--font-base);
+  --text-body-weight: var(--font-weight-regular);
+  --text-body-line-height: var(--line-body);
+  --text-ui-size: var(--font-sm);
+  --text-ui-weight: var(--font-weight-medium);
+  --text-heading-size: var(--font-xl);
+  --text-heading-weight: var(--font-weight-semibold);
+  --text-heading-line-height: var(--line-heading);
+
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  --ui-card-radius: 1rem;
+  --ui-card-shadow: 0 16px 42px -36px rgba(0, 0, 0, 0.46);
+  --ui-button-radius: 0.75rem;
+  --ui-control-radius: 0.7rem;
+  --ui-badge-radius: 999px;
+  --ui-modal-radius: 1.25rem;
+  --ui-modal-shadow: 0 28px 72px -38px rgba(0, 0, 0, 0.64);
+
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-primary);
+  --popover: #202921;
+  --popover-foreground: var(--text-primary);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--bg-hover);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--bg-hover);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--accent-error);
+  --input: var(--border);
+  --ring: var(--primary);
+  --chart-1: #8fbd99;
+  --chart-2: #a8b7c2;
+  --chart-3: #d3ac78;
+  --chart-4: #c99570;
+  --chart-5: #819188;
+  --radius: 0.75rem;
+  --sidebar: #18201a;
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--bg-hover);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --brand-green: #356f4b;
+  --brand-green-deep: #285c3e;
+  --brand-orange: #a96e36;
+  --brand-forest: #203326;
+  --brand-mint: #d7e8d7;
+
+  --bg-base: #f4f3ed;
+  --bg-surface: #fbfaf6;
+  --bg-hover: #ecece4;
+  --bg-code: #e9ece6;
+
+  --text-primary: #1b2720;
+  --text-secondary: #405047;
+  --text-muted: #617067;
+  --border: #d8ded7;
+
+  --primary: #346f4b;
+  --primary-hover: #285c3e;
+  --primary-muted: #4c795b;
+  --primary-strong: #2d6443;
+  --primary-soft: #34724d;
+  --primary-foreground: #fffdf8;
+
+  --secondary: #536c83;
+  --secondary-hover: #405c75;
+  --accent-error: #b4494d;
+  --accent-success: #346f4b;
+  --accent-warn: #936527;
+  --accent-warning: var(--accent-warn);
+  --accent-logic-warning: #925d38;
+  --accent-logic-warn: var(--accent-logic-warning);
+  --accent-info: var(--secondary);
+
+  --surface-primary: color-mix(in srgb, var(--primary) 8%, var(--bg-surface));
+  --surface-secondary: color-mix(in srgb, var(--secondary) 8%, var(--bg-surface));
+  --surface-success: color-mix(in srgb, var(--accent-success) 8%, var(--bg-surface));
+  --surface-warning: color-mix(in srgb, var(--accent-warn) 9%, var(--bg-surface));
+  --surface-error: color-mix(in srgb, var(--accent-error) 8%, var(--bg-surface));
+
+  --ui-card-shadow: 0 16px 42px -36px rgba(35, 48, 37, 0.4);
+  --ui-modal-shadow: 0 28px 72px -38px rgba(30, 42, 32, 0.48);
+
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-primary);
+  --popover: #fffefa;
+  --popover-foreground: var(--text-primary);
+  --secondary-foreground: #fffefa;
+  --muted: var(--bg-hover);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--bg-hover);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--accent-error);
+  --input: var(--border);
+  --ring: var(--primary);
+  --chart-1: #346f4b;
+  --chart-2: #536c83;
+  --chart-3: #936527;
+  --chart-4: #925d38;
+  --chart-5: #819188;
+  --sidebar: #efeee8;
+  --sidebar-foreground: var(--text-primary);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--bg-hover);
+  --sidebar-accent-foreground: var(--text-primary);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 1ms;
+    --motion-base: 1ms;
+    --motion-slow: 1ms;
+  }
+}

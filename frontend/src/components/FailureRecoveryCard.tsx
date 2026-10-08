@@ -153,7 +153,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
     <div className="failure-recovery-card mt-4 rounded-2xl">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#72edb0]">
+          <div className="flex items-center gap-2 text-sm font-semibold text-primary-soft">
             <Sparkles className="size-4" />
             {languageCopy(isEnglish, "Знайдемо наступний крок", "Let’s find the next step")}
           </div>
@@ -206,9 +206,9 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
         </details>
       )}
 
-      <div className="mt-4 rounded-xl border border-[#00d978]/20 bg-[#00d978]/[.06] p-4">
+      <div className="mt-4 rounded-xl border border-primary/20 bg-primary/[.06] p-4">
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[10px] font-bold uppercase tracking-[.12em] text-[#72edb0]">{languageCopy(isEnglish, `Підказка ${hintLevel + 1} з ${hints.length}`, `Hint ${hintLevel + 1} of ${hints.length}`)}</div>
+          <div className="text-[10px] font-bold uppercase tracking-[.12em] text-primary-soft">{languageCopy(isEnglish, `Підказка ${hintLevel + 1} з ${hints.length}`, `Hint ${hintLevel + 1} of ${hints.length}`)}</div>
           <span className="rounded-full bg-white/[.07] px-2 py-1 text-[10px] font-semibold text-[#a7b9ac]">{hintStageLabel(hintLevel, isEnglish)}</span>
         </div>
         <p className="mt-2 text-sm leading-6 text-[#e1eee4]">{hints[hintLevel]}</p>
@@ -229,7 +229,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
               hintLevel: nextLevel + 1,
             }).catch(() => undefined);
           }
-        }} disabled={hintLevel >= hints.length - 1} className="inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-3.5 py-2.5 text-xs font-bold text-[#062211] disabled:cursor-not-allowed disabled:opacity-45">
+        }} disabled={hintLevel >= hints.length - 1} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2.5 text-xs font-bold text-[#062211] disabled:cursor-not-allowed disabled:opacity-45">
           {languageCopy(isEnglish, "Показати ще одну підказку", "Show another hint")} <ArrowRight className="size-3.5" />
         </button>
         <button type="button" onClick={() => {

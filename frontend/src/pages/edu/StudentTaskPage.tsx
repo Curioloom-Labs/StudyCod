@@ -1570,12 +1570,12 @@ export const StudentTaskPage: React.FC = () => {
       taskMode: (task.taskMode === "WEB" ? "WEB" : "CODE") as "CODE" | "WEB",
       projectSpec: task.projectSpec ?? null,
     };
-    return <div className="min-h-full bg-[#f7f8f5] px-3 py-4 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-5 lg:px-8">
+    return <div className="min-h-full bg-bg-base px-3 py-4 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-5 lg:px-8">
       <div className="mx-auto max-w-[1800px]">
         <nav aria-label={tr("Навігація задачі", "Task navigation")} className="mb-3 flex min-w-0 items-center gap-2 overflow-hidden text-xs font-semibold text-[#718075] dark:text-[#9eada1]">
-          <button type="button" onClick={handleBack} className="max-w-[45%] truncate rounded-lg px-2 py-1 text-left hover:bg-white/60 hover:text-[#147b47] dark:hover:bg-white/[.06] dark:hover:text-[#72edb0]">{task.lesson.title}</button>
+          <button type="button" onClick={handleBack} className="max-w-[45%] truncate rounded-lg px-2 py-1 text-left hover:bg-white/60 hover:text-primary-strong dark:hover:bg-white/[.06] dark:hover:text-primary-soft">{task.lesson.title}</button>
           <span aria-hidden="true">/</span>
-          <span className="min-w-0 truncate text-[#1b2820] dark:text-[#edf5ef]">{task.title}</span>
+          <span className="min-w-0 truncate text-text-primary dark:text-[#edf5ef]">{task.title}</span>
         </nav>
         <StudyCodIDEWorkspace
           task={ideTask}

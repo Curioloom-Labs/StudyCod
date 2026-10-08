@@ -146,10 +146,10 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   const isAdmin = user.role === "SYSTEM_ADMIN";
 
   return (
-    <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-[#f7f8f5] text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef]">
+    <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary">
       <a className="skip-link" href="#main-content">{uk ? "Перейти до основного вмісту" : "Skip to main content"}</a>
       <DialogA11yObserver rootRef={shellRef} />
-      <header data-material="premium-header" className="sticky top-0 z-50 bg-[#f7f8f5]/82 backdrop-blur-xl dark:bg-[#0b120e]/82">
+      <header data-material="premium-header" className="sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl">
         <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-10">
           <button
             type="button"
@@ -158,14 +158,14 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
             aria-label={isAdmin ? (uk ? "На головну адмінки StudyCod" : "Go to StudyCod admin home") : (uk ? "На головну сторінку StudyCod" : "Go to StudyCod home")}
             title={isAdmin ? (uk ? "Головна адмінки" : "Admin home") : (uk ? "На головну" : "Home")}
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#153321]">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-strong text-primary-foreground">
               <Logo size={19} />
             </span>
             <span className="hidden font-[family-name:var(--font-display)] text-lg font-bold tracking-[-.04em] xl:inline">StudyCod</span>
           </button>
 
           <LayoutGroup id="primary-navigation">
-            <nav className="mx-auto hidden w-fit max-w-[calc(100%-2rem)] flex-none items-center justify-center gap-1 overflow-x-auto rounded-xl bg-[#edf1ed] p-1 whitespace-nowrap dark:bg-white/[.055] lg:flex" aria-label={uk ? "Основна навігація" : "Primary navigation"}>
+            <nav className="mx-auto hidden w-fit max-w-[calc(100%-2rem)] flex-none items-center justify-center gap-1 overflow-x-auto rounded-xl bg-bg-hover p-1 whitespace-nowrap lg:flex" aria-label={uk ? "Основна навігація" : "Primary navigation"}>
               {nav.map((item) => {
                 const isActive = active(item.id);
                 return (
@@ -177,17 +177,17 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                     data-motion-press
                     className={`relative isolate inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${
                       isActive
-                        ? "text-[#152219] dark:text-[#0b120e]"
-                        : "text-[#657368] hover:text-[#142017] dark:text-[#a4b2a7] dark:hover:text-[#edf3ef]"
+                        ? "text-text-primary"
+                        : "text-text-muted hover:text-text-primary dark:text-text-secondary dark:hover:text-text-primary"
                     }`}
                   >
                     {isActive && (reduceMotion ? (
-                      <span aria-hidden="true" className="absolute inset-0 -z-10 rounded-lg bg-white shadow-sm dark:bg-[#edf3ef]" />
+                      <span aria-hidden="true" className="absolute inset-0 -z-10 rounded-lg bg-bg-surface shadow-sm" />
                     ) : (
                       <motion.span
                         aria-hidden="true"
                         layoutId="primary-navigation-active-pill"
-                        className="absolute inset-0 -z-10 rounded-lg bg-white shadow-sm dark:bg-[#edf3ef]"
+                        className="absolute inset-0 -z-10 rounded-lg bg-bg-surface shadow-sm"
                         transition={{ layout: { duration: 0.14, ease: easeInOut } }}
                       />
                     ))}
@@ -204,7 +204,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               type="button"
               onClick={onToggleTheme}
               data-motion-press
-              className="flex h-9 items-center gap-2 rounded-xl px-2.5 text-xs font-semibold text-[#637166] transition motion-safe:active:scale-[.97] hover:bg-[#e9eeea] dark:text-[#a6b5aa] dark:hover:bg-white/[.07]"
+              className="flex h-9 items-center gap-2 rounded-xl px-2.5 text-xs font-semibold text-text-muted transition motion-safe:active:scale-[.97] hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.07]"
               aria-label={theme === "dark"
                 ? (uk ? "Перемкнути на світлу тему" : "Switch to light theme")
                 : (uk ? "Перемкнути на темну тему" : "Switch to dark theme")}
@@ -217,7 +217,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               type="button"
               onClick={onToggleLanguage}
               data-motion-press
-              className="hidden h-9 rounded-xl px-2.5 text-xs font-semibold text-[#637166] transition motion-safe:active:scale-[.97] hover:bg-[#e9eeea] dark:text-[#a6b5aa] dark:hover:bg-white/[.07] sm:block"
+              className="hidden h-9 rounded-xl px-2.5 text-xs font-semibold text-text-muted transition motion-safe:active:scale-[.97] hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.07] sm:block"
               aria-label={uk ? "Перемкнути на англійську" : "Switch to Ukrainian"}
               title={uk ? "English" : "Українська"}
             >
@@ -242,11 +242,11 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                 title={uk ? "Меню акаунта" : "Account menu"}
                 className={`flex h-10 items-center gap-2 rounded-xl px-1.5 pr-2.5 transition motion-safe:active:scale-[.97] ${
                   active("profile") || accountOpen
-                    ? "bg-[#e7f6ec] text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#62ecaa]"
-                    : "hover:bg-[#e9eeea] dark:hover:bg-white/[.07]"
+                    ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"
+                    : "hover:bg-bg-hover dark:hover:bg-white/[.07]"
                 }`}
               >
-                <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg bg-[#18261d] text-xs font-bold text-[#70edaf] dark:bg-[#edf3ef] dark:text-[#0b120e]">
+                <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-lg bg-primary-strong text-xs font-bold text-primary-foreground dark:bg-primary/12 dark:text-primary-soft">
                   {user.avatarUrl ? <img src={user.avatarUrl} alt="" width={28} height={28} loading="lazy" className="h-full w-full object-cover" /> : initial}
                 </span>
                 <span className="hidden max-w-[190px] truncate text-sm font-semibold sm:block">{displayName}</span>
@@ -254,7 +254,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               </button>
 
               {accountOpen ? (
-                <div ref={accountMenuRef} data-material="account-menu" data-motion-surface className="material-popover absolute right-0 top-[calc(100%+10px)] z-50 w-72 overflow-hidden rounded-2xl border border-[#152219]/10 bg-white p-2 shadow-[0_24px_70px_-38px_rgba(15,35,21,.55)] dark:border-white/10 dark:bg-[#121b15] max-sm:fixed max-sm:inset-x-3 max-sm:bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] max-sm:top-auto max-sm:w-auto max-sm:rounded-3xl max-sm:p-3" role="menu" aria-label={uk ? "Меню акаунта" : "Account menu"} onKeyDown={(event) => {
+                <div ref={accountMenuRef} data-material="account-menu" data-motion-surface className="material-popover absolute right-0 top-[calc(100%+10px)] z-50 w-72 overflow-hidden rounded-2xl border border-border/70 bg-bg-surface p-2 shadow-[var(--ui-modal-shadow)] max-sm:fixed max-sm:inset-x-3 max-sm:bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] max-sm:top-auto max-sm:w-auto max-sm:rounded-3xl max-sm:p-3" role="menu" aria-label={uk ? "Меню акаунта" : "Account menu"} onKeyDown={(event) => {
                   const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[role='menuitem']"));
                   const currentIndex = items.indexOf(document.activeElement as HTMLElement);
                   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -270,18 +270,18 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                   }
                 }}>
                   <div className="px-3 py-3">
-                    <div className="truncate text-sm font-semibold text-[#17231b] dark:text-white">{user.username}</div>
-                    <div className="mt-1 truncate text-xs uppercase tracking-[.08em] text-[#718075] dark:text-[#a4b3a8]">{modeLabel}</div>
+                    <div className="truncate text-sm font-semibold text-text-primary">{user.username}</div>
+                    <div className="mt-1 truncate text-xs uppercase tracking-[.08em] text-[#718075] dark:text-text-secondary">{modeLabel}</div>
                   </div>
-                  <button type="button" onClick={goProfile} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#314037] transition hover:bg-[#f1f5f1] dark:text-[#dce8de] dark:hover:bg-white/[.06]" role="menuitem">
+                  <button type="button" onClick={goProfile} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-text-secondary transition hover:bg-bg-hover dark:hover:bg-bg-hover" role="menuitem">
                     <CircleUserRound className="h-4 w-4" />
                     {uk ? "Профіль" : "Profile"}
                   </button>
-                   <button type="button" onClick={goSupport} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#5d6b62] transition hover:bg-[#f1f5f1] dark:text-[#aab7ae] dark:hover:bg-white/[.06]" role="menuitem">
+                   <button type="button" onClick={goSupport} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-text-secondary transition hover:bg-bg-hover dark:hover:bg-bg-hover" role="menuitem">
                      <HelpCircle className="h-4 w-4" />
                      {uk ? "Підтримка" : "Support"}
                    </button>
-                   {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#5d6b62] transition hover:bg-[#f1f5f1] dark:text-[#aab7ae] dark:hover:bg-white/[.06]" role="menuitem">
+                   {hasSupportDesk ? <button type="button" onClick={goSupportDesk} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-text-secondary transition hover:bg-bg-hover dark:hover:bg-bg-hover" role="menuitem">
                      <HelpCircle className="h-4 w-4" />
                      Support desk
                    </button> : null}
@@ -297,7 +297,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
 
       </header>
       {area === "learning" && page !== "admin" && learning.currentCourse ? (
-        <div data-material="premium-course-nav" className="sticky top-[72px] z-40 border-b border-[#152219]/8 bg-[#f7f8f5]/92 backdrop-blur-xl dark:border-white/[.07] dark:bg-[#0b120e]/92">
+        <div data-material="premium-course-nav" className="sticky top-[72px] z-40 border-b border-border/70 bg-bg-base/92 backdrop-blur-xl">
           <div className="mx-auto flex max-w-[1440px] items-center gap-3 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10">
             <SelectMenu
               value={String(learning.me?.currentEnrollmentId ?? "")}
@@ -308,15 +308,15 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               onChange={(value) => { if (value === "catalog") onCourses(); else void learning.selectCourse(Number(value)); }}
               ariaLabel={uk ? "Поточний курс" : "Current course"}
               menuMinWidth={240}
-              className="shrink-0 border-[#00c875]/35 bg-[#e8f6ed] text-[#153321] dark:bg-[#00ff88]/10 dark:text-[#bfffd9]"
+              className="shrink-0 border-primary/35 bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"
             />
             <div className="hidden h-5 w-px bg-[#152219]/12 dark:bg-white/10 sm:block" />
-            {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Теми" : "Topics", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: nextPractice ? `/learning/course/${learning.currentCourse.id}/practice/${nextPractice.id}` : `/learning/course/${learning.currentCourse.id}/path` }].map((tab) => <button key={tab.id} type="button" aria-current={courseTab === tab.id ? "page" : undefined} onClick={() => navigate(tab.path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-[#183524] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#617168] hover:bg-[#eaf0eb] dark:text-[#aab7ae] dark:hover:bg-white/[.06]"}`}>{tab.label}</button>)}
-            <div className="ml-auto hidden items-center gap-2 text-xs font-semibold text-[#657368] sm:flex dark:text-[#a5b3a9]"><span>{Math.round(learning.currentCourse.enrollment.completionPercent)}%</span><span className="h-1.5 w-24 overflow-hidden rounded-full bg-[#dce6df] dark:bg-white/10"><span className="block h-full rounded-full bg-[#00d782]" style={{ width: `${Math.min(100, Math.max(0, learning.currentCourse.enrollment.completionPercent))}%` }} /></span></div>
+            {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Теми" : "Topics", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: nextPractice ? `/learning/course/${learning.currentCourse.id}/practice/${nextPractice.id}` : `/learning/course/${learning.currentCourse.id}/path` }].map((tab) => <button key={tab.id} type="button" aria-current={courseTab === tab.id ? "page" : undefined} onClick={() => navigate(tab.path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-primary-strong text-primary-foreground dark:bg-primary/12 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.06]"}`}>{tab.label}</button>)}
+            <div className="ml-auto hidden items-center gap-2 text-xs font-semibold text-text-muted sm:flex"><span>{Math.round(learning.currentCourse.enrollment.completionPercent)}%</span><span className="h-1.5 w-24 overflow-hidden rounded-full bg-bg-hover"><span className="block h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, learning.currentCourse.enrollment.completionPercent))}%` }} /></span></div>
           </div>
         </div>
       ) : null}
-      <nav data-material="premium-mobile-nav" className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#152219]/10 bg-[#f7f8f5]/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl dark:border-white/[.08] dark:bg-[#0b120e]/95 lg:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
+      <nav data-material="premium-mobile-nav" className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/70 bg-bg-base/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl lg:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
         <div className="grid grid-cols-4 gap-1">
           {[
             { id: "home" as const, label: nav.find((item) => item.id === "home")?.label ?? "Home", Icon: Home, onClick: () => onNavigate("home") },
@@ -324,7 +324,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
             { id: "library" as const, label: nav.find((item) => item.id === "library")?.label ?? "Library", Icon: Library, onClick: onLibrary },
             { id: "playground" as const, label: nav.find((item) => item.id === "playground")?.label ?? "Playground", Icon: PlaySquare, onClick: onPlayground },
           ].map(({ id, label, Icon, onClick }) => (
-            <button key={id} type="button" onClick={onClick} aria-current={active(id) ? "page" : undefined} data-motion-press className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition motion-safe:active:scale-[.97] ${active(id) ? "bg-[#183524] text-white dark:bg-[#00ff88]/12 dark:text-[#72edb0]" : "text-[#637267] hover:bg-[#e9efea] hover:text-[#17231b] dark:text-[#aab7ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>
+            <button key={id} type="button" onClick={onClick} aria-current={active(id) ? "page" : undefined} data-motion-press className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition motion-safe:active:scale-[.97] ${active(id) ? "bg-primary-strong text-primary-foreground dark:bg-primary/12 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white"}`}>
               <Icon className="size-4" />
               <span className="max-w-full truncate leading-none">{label}</span>
             </button>

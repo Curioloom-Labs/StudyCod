@@ -186,7 +186,7 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({
         aria-label={ariaLabel}
         data-material="select-menu"
         data-motion-surface
-        className="material-popover fixed z-[120] max-h-[min(20rem,calc(100vh-1rem))] overflow-y-auto rounded-2xl border border-[#152219]/12 bg-white p-1.5 text-[#17231b] shadow-[0_24px_70px_-28px_rgba(15,35,21,.32)] dark:border-white/15 dark:bg-[#101a14] dark:text-[#eaf5ed]"
+        className="material-popover fixed z-[120] max-h-[min(20rem,calc(100vh-1rem))] overflow-y-auto rounded-2xl border border-border/12 bg-white p-1.5 text-text-primary shadow-[0_24px_70px_-28px_rgba(15,35,21,.32)] dark:border-white/15 dark:bg-[#101a14] dark:text-[#eaf5ed]"
         style={{
           top: position.placement === "top" ? undefined : position.top,
           bottom: position.placement === "top" ? `${Math.max(12, window.innerHeight - position.top)}px` : undefined,
@@ -213,10 +213,10 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({
               onChange(option.value);
               closeMenu();
             }}
-            className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${isActive ? "bg-[#f1f5f1] text-[#17231b] dark:bg-white/[.08] dark:text-white" : ""} ${isSelected ? "bg-[#e7f6ec] text-[#147b47] dark:bg-[#00d978]/15 dark:text-[#72edb0]" : "text-[#314037] hover:bg-[#f1f5f1] hover:text-[#17231b] dark:text-[#c5d4c9] dark:hover:bg-white/[.07] dark:hover:text-white"} disabled:cursor-not-allowed disabled:opacity-40`}
+            className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${isActive ? "bg-[#f1f5f1] text-text-primary dark:bg-white/[.08] dark:text-white" : ""} ${isSelected ? "bg-primary/10 text-primary-strong dark:bg-primary/15 dark:text-primary-soft" : "text-text-secondary hover:bg-[#f1f5f1] hover:text-text-primary dark:text-[#c5d4c9] dark:hover:bg-white/[.07] dark:hover:text-white"} disabled:cursor-not-allowed disabled:opacity-40`}
           >
             <span className="min-w-0 truncate">{option.label}</span>
-            {isSelected ? <Check className="size-4 shrink-0 text-[#00d978]" /> : null}
+            {isSelected ? <Check className="size-4 shrink-0 text-primary-strong" /> : null}
           </button>;
         })}
       </div>,
@@ -234,10 +234,10 @@ export const SelectMenu: React.FC<SelectMenuProps> = ({
       disabled={disabled}
       onClick={() => { if (!disabled) (open ? closeMenu() : openMenu()); }}
       onKeyDown={handleTriggerKeyDown}
-      className={`inline-flex h-10 min-w-0 items-center justify-between gap-2 rounded-xl border border-[#152219]/15 bg-[#f7faf7] px-3 text-left text-sm font-semibold text-[#17231b] outline-none transition hover:border-[#00d978]/55 hover:bg-[#edf7ef] focus-visible:ring-2 focus-visible:ring-[#00d978]/35 disabled:cursor-not-allowed disabled:opacity-55 motion-safe:active:scale-[.97] ${className}`}
+      className={`inline-flex h-10 min-w-0 items-center justify-between gap-2 rounded-xl border border-border/15 bg-[#f7faf7] px-3 text-left text-sm font-semibold text-text-primary outline-none transition hover:border-primary/55 hover:bg-[#edf7ef] focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-55 motion-safe:active:scale-[.97] ${className}`}
     >
       <span className="min-w-0 truncate">{selected?.label ?? placeholder}</span>
-      <ChevronDown className={`size-4 shrink-0 text-[#82968a] transition-transform ${open ? "rotate-180 text-[#72edb0]" : ""}`} />
+      <ChevronDown className={`size-4 shrink-0 text-[#82968a] transition-transform ${open ? "rotate-180 text-primary-soft" : ""}`} />
     </button>
     {menu}
   </>;

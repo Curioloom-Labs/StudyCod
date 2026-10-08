@@ -69,7 +69,7 @@ const phaseFor = (item: { startsAt: string | null; endsAt: string | null }) => {
 };
 const phaseCopy = { live: "Триває", soon: "Незабаром", ended: "Завершено" };
 const phaseStyle = {
-  live: "bg-[#ddf8e9] text-[#147345] dark:bg-[#00ff88]/12 dark:text-[#72edb0]",
+  live: "bg-[#ddf8e9] text-[#147345] dark:bg-primary/12 dark:text-primary-soft",
   soon: "bg-[#fff0d7] text-[#a75c00] dark:bg-[#ff8c00]/12 dark:text-[#ffb760]",
   ended: "bg-[#e9eeeb] text-[#5d6d62] dark:bg-white/[.07] dark:text-[#a9b6ad]",
 };
@@ -288,7 +288,7 @@ function Notice({
     tone === "error"
       ? "border-[#ff6b9d]/30 bg-[#ff6b9d]/[.08] text-[#be3863] dark:text-[#ff9abd]"
       : tone === "success"
-        ? "border-[#00ff88]/25 bg-[#00ff88]/[.08] text-[#147345] dark:text-[#72edb0]"
+        ? "border-primary/25 bg-primary/[.08] text-[#147345] dark:text-primary-soft"
         : "border-[#17251c]/10 bg-[#f0f4f0] text-[#617167] dark:border-white/[.08] dark:bg-white/[.045] dark:text-[#afbbb2]";
   return (
     <div
@@ -314,10 +314,10 @@ function Shell({
     <div className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
       <div className="mb-9 flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
-          <p className="mb-3 text-xs font-bold uppercase tracking-[.16em] text-[#16834d] dark:text-[#72edb0]">
+          <p className="mb-3 text-xs font-bold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">
             {eyebrow}
           </p>
-          <h1 className="font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] text-[#142017] dark:text-[#f1f5f1] sm:text-5xl">
+          <h1 className="font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] text-text-primary dark:text-[#f1f5f1] sm:text-5xl">
             {title}
           </h1>
         </div>
@@ -459,14 +459,14 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
         <div className="flex flex-wrap gap-2">
           {canJoinPrivateByCode && <button type="button"
             onClick={() => setJoinOpen(true)}
-            className="rounded-xl border border-[#1a2a1e]/12 px-4 py-2.5 text-sm font-bold text-[#243329] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:text-[#dce7df] dark:hover:bg-white/[.06]"
+            className="rounded-xl border border-[#1a2a1e]/12 px-4 py-2.5 text-sm font-bold text-[#243329] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:text-[#dce7df] dark:hover:bg-white/[.06]"
           >
             <LockKeyhole className="mr-2 inline h-4 w-4" aria-hidden="true" />
             Ввести код
           </button>}
           {canCreate && <button type="button"
             onClick={() => setCreateOpen(true)}
-            className="rounded-xl bg-[#153321] px-4 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(20,67,40,.2)] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:bg-[#00d978] dark:text-[#062211]"
+            className="rounded-xl bg-[#153321] px-4 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(20,67,40,.2)] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-primary dark:text-[#062211]"
           >
             <Plus className="mr-2 inline h-4 w-4" aria-hidden="true" />
             Новий контест
@@ -498,7 +498,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Назва або опис…"
-            className="w-full rounded-xl border border-[#1a2a1e]/10 bg-white py-2.5 pl-9 pr-3 text-sm text-[#1e2d22] outline-none transition placeholder:text-[#94a097] focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#111b14] dark:text-[#edf3ef]"
+            className="w-full rounded-xl border border-[#1a2a1e]/10 bg-white py-2.5 pl-9 pr-3 text-sm text-[#1e2d22] outline-none transition placeholder:text-[#94a097] focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-text-primary"
           />
         </label>
         <label className="sr-only" htmlFor="contest-sort">Сортування контестів</label>
@@ -507,14 +507,14 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
           name="contest-sort"
           value={sort}
           onChange={(event) => { setSort(event.target.value as NonNullable<ContestListQuery["sort"]>); setPage(1); }}
-          className="rounded-xl border border-[#1a2a1e]/10 bg-white px-3 py-2.5 text-sm font-semibold text-[#344338] outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#111b14] dark:text-[#dce7df]"
+          className="rounded-xl border border-[#1a2a1e]/10 bg-white px-3 py-2.5 text-sm font-semibold text-[#344338] outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-[#dce7df]"
         >
           <option value="newest">Найновіші</option>
           <option value="soonest">Найближчий старт</option>
           <option value="title">За назвою</option>
         </select>
         <label className="sr-only" htmlFor="contest-difficulty">Рівень складності</label>
-        <select id="contest-difficulty" name="contest-difficulty" value={difficulty} onChange={(event) => { setDifficulty(event.target.value as typeof difficulty); setPage(1); }} className="rounded-xl border border-[#1a2a1e]/10 bg-white px-3 py-2.5 text-sm font-semibold text-[#344338] outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#111b14] dark:text-[#dce7df]">
+        <select id="contest-difficulty" name="contest-difficulty" value={difficulty} onChange={(event) => { setDifficulty(event.target.value as typeof difficulty); setPage(1); }} className="rounded-xl border border-[#1a2a1e]/10 bg-white px-3 py-2.5 text-sm font-semibold text-[#344338] outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-[#dce7df]">
           <option value="all">Будь-який рівень</option>
           <option value="EASY">Початковий</option>
           <option value="MEDIUM">Середній</option>
@@ -544,7 +544,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
           {[1, 2, 3].map((key) => (
             <div
               key={key}
-              className="h-[270px] animate-pulse rounded-[24px] bg-[#e8eeea] dark:bg-white/[.05]"
+              className="h-[270px] animate-pulse rounded-[24px] bg-bg-hover dark:bg-white/[.05]"
             />
           ))}
         </div>
@@ -564,7 +564,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
             return (
               <article
                 key={item.id}
-                className="group relative flex min-h-[350px] flex-col overflow-hidden rounded-[24px] border border-[#1a2a1e]/10 bg-white shadow-[0_16px_45px_rgba(28,44,32,.05)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_50px_rgba(28,44,32,.11)] dark:border-white/[.09] dark:bg-[#111b14] dark:shadow-none"
+                className="group relative flex min-h-[350px] flex-col overflow-hidden rounded-[24px] border border-[#1a2a1e]/10 bg-white shadow-[0_16px_45px_rgba(28,44,32,.05)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_50px_rgba(28,44,32,.11)] dark:border-white/[.09] dark:bg-bg-surface dark:shadow-none"
               >
                 <div className="relative h-[112px] shrink-0 overflow-hidden bg-[#183a28]">
                   {item.bannerImageUrl ? <img src={item.bannerImageUrl} alt="" aria-hidden="true" className="absolute inset-0 size-full object-cover object-center transition duration-500 group-hover:scale-[1.03]" /> : <div className="absolute inset-0" style={{ background: CONTEST_BANNER_THEMES[contestTheme(item.bannerTheme)].background }} />}
@@ -578,8 +578,8 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
                     <span className="min-w-0 truncate rounded-full bg-[#f1f5f1] px-3 py-1.5 text-xs font-semibold text-[#627168] dark:bg-white/[.06] dark:text-[#b5c1b8]">
                       {item.visibility === "PRIVATE_CODE" ? "За кодом" : item.visibility === "CLASS" ? "Для класу" : item.visibility === "TEMPORARY_ACCOUNTS" ? "Тимчасовий доступ" : "Відкритий"}
                     </span>
-                    <button type="button" onClick={() => toggleFavorite(item.id)} aria-label={favoriteIds.includes(item.id) ? `Прибрати ${item.title} зі збережених` : `Зберегти ${item.title}`} aria-pressed={favoriteIds.includes(item.id)} className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-[#748277] transition hover:bg-[#edf3ed] hover:text-[#17834d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#a9b7ad] dark:hover:bg-white/[.08] dark:hover:text-[#72edb0]">
-                      <Bookmark className={`size-4 ${favoriteIds.includes(item.id) ? "fill-current text-[#16834d] dark:text-[#72edb0]" : ""}`} aria-hidden="true" />
+                    <button type="button" onClick={() => toggleFavorite(item.id)} aria-label={favoriteIds.includes(item.id) ? `Прибрати ${item.title} зі збережених` : `Зберегти ${item.title}`} aria-pressed={favoriteIds.includes(item.id)} className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-[#748277] transition hover:bg-[#edf3ed] hover:text-[#17834d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-[#a9b7ad] dark:hover:bg-white/[.08] dark:hover:text-primary-soft">
+                      <Bookmark className={`size-4 ${favoriteIds.includes(item.id) ? "fill-current text-primary-strong dark:text-primary-soft" : ""}`} aria-hidden="true" />
                     </button>
                   </div>
 
@@ -603,7 +603,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
                     {(item.tags ?? []).slice(0, 2).map((tag) => <span key={tag} className="max-w-full truncate rounded-full bg-[#f1f5f1] px-2.5 py-1 text-[11px] font-semibold text-[#627168] dark:bg-white/[.05] dark:text-[#aebbb2]">{tag}</span>)}
                   </div>
 
-                  <div className="mt-auto flex min-w-0 items-center gap-4 border-t border-[#19291d]/8 pt-4 dark:border-white/[.08]">
+                  <div className="mt-auto flex min-w-0 items-center gap-4 border-t border-border/8 pt-4 dark:border-white/[.08]">
                     <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-[#64746a] dark:text-[#a6b4aa]">
                       <Clock3 aria-hidden="true" className="size-4 shrink-0" />
                       <span className="truncate">{state === "ended" ? "Фінішував" : date(state === "soon" ? item.startsAt : item.endsAt)}</span>
@@ -613,7 +613,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
                     </span>
                     <button type="button"
                       onClick={() => navigate(`/contest/contests/${item.id}`)}
-                      className="grid size-10 shrink-0 place-items-center rounded-full bg-[#eff4ef] text-[#183422] transition group-hover:bg-[#153321] group-hover:text-white dark:bg-white/[.07] dark:text-[#e7f0e9] dark:group-hover:bg-[#00d978] dark:group-hover:text-[#062211]"
+                      className="grid size-10 shrink-0 place-items-center rounded-full bg-[#eff4ef] text-[#183422] transition group-hover:bg-[#153321] group-hover:text-white dark:bg-white/[.07] dark:text-[#e7f0e9] dark:group-hover:bg-primary dark:group-hover:text-[#062211]"
                       aria-label={`Відкрити ${item.title}`}
                     >
                       <ArrowRight className="size-4" />
@@ -633,16 +633,16 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
       )}
       {joinOpen && (
         <div data-material="contest-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/50 px-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setJoinOpen(false); }}>
-          <form onSubmit={submitCode} role="dialog" aria-modal="true" aria-labelledby="contest-join-title" className="w-full max-w-[440px] rounded-[26px] border border-white/55 bg-[#fbfcfa] p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]">
+          <form onSubmit={submitCode} role="dialog" aria-modal="true" aria-labelledby="contest-join-title" className="w-full max-w-[440px] rounded-[26px] border border-white/55 bg-bg-surface p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]">
             <div className="mb-6 flex items-start justify-between gap-4">
-              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-[#16834d]">Доступ</p><h2 id="contest-join-title" className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">Приєднатися до контесту</h2></div>
-              <button type="button" onClick={() => { setJoinOpen(false); setError(null); }} aria-label="Закрити вікно" className="grid size-9 shrink-0 place-items-center rounded-xl text-[#68786e] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:hover:bg-white/[.06]"><span aria-hidden="true" className="text-xl">×</span></button>
+              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">Доступ</p><h2 id="contest-join-title" className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">Приєднатися до контесту</h2></div>
+              <button type="button" onClick={() => { setJoinOpen(false); setError(null); }} aria-label="Закрити вікно" className="grid size-9 shrink-0 place-items-center rounded-xl text-[#68786e] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:bg-white/[.06]"><span aria-hidden="true" className="text-xl">×</span></button>
             </div>
             <label htmlFor="contest-access-code" className="block text-sm font-bold">Код доступу
-              <input id="contest-access-code" name="code" autoComplete="off" spellCheck={false} value={code} onChange={(event) => setCode(event.target.value)} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 font-mono text-base uppercase tracking-wider outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:bg-[#0d1510]" placeholder="Наприклад, CLASS-24…" />
+              <input id="contest-access-code" name="code" autoComplete="off" spellCheck={false} value={code} onChange={(event) => setCode(event.target.value)} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 font-mono text-base uppercase tracking-wider outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-base" placeholder="Наприклад, CLASS-24…" />
             </label>
             {error && <p role="alert" aria-live="polite" className="mt-3 rounded-xl bg-[#fff1ef] px-3 py-2 text-sm font-semibold text-[#a93232] dark:bg-[#451d1a] dark:text-[#ffb0a6]">{error}</p>}
-            <button type="submit" disabled={joinBusy || !code.trim()} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 text-sm font-bold text-[#072514] transition hover:bg-[#00ff88] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] disabled:cursor-wait disabled:opacity-60">
+            <button type="submit" disabled={joinBusy || !code.trim()} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-[#072514] transition hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-wait disabled:opacity-60">
               {joinBusy ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <LockKeyhole aria-hidden="true" className="size-4" />}{joinBusy ? "Приєднання…" : "Приєднатися"}
             </button>
           </form>
@@ -739,7 +739,7 @@ export const ContestDetailPage: React.FC = () => {
   if (loading)
     return (
       <Shell eyebrow="Contest" title="Відкриваємо контест">
-        <div className="h-[480px] animate-pulse rounded-[30px] bg-[#e8eeea] dark:bg-white/[.05]" />
+        <div className="h-[480px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" />
       </Shell>
     );
   if (!data)
@@ -748,7 +748,7 @@ export const ContestDetailPage: React.FC = () => {
         <Notice tone="error">{error || "Такого контесту не знайдено."}</Notice>
         <button type="button"
           onClick={() => navigate("/contest/contests")}
-          className="mt-5 font-bold text-[#16834d]"
+          className="mt-5 font-bold text-primary-strong"
         >
           До списку контестів
         </button>
@@ -777,16 +777,16 @@ export const ContestDetailPage: React.FC = () => {
       }
       title={data.contest.title}
       aside={<div className="flex flex-wrap gap-2">
-        {(access || canManage) && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/scoreboard`)} className="inline-flex items-center gap-2 rounded-xl border border-[#1a2a1e]/10 px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
+        {(access || canManage) && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/scoreboard`)} className="inline-flex items-center gap-2 rounded-xl border border-[#1a2a1e]/10 px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
           <Trophy className="h-4 w-4" aria-hidden="true" /> Таблиця
         </button>}
-        {canManage && data.contest.participantAccessMode === "ISSUED_ACCOUNTS" && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=accounts`)} className="inline-flex items-center gap-2 rounded-xl border border-[#1a2a1e]/10 px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:border-white/10 dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
+        {canManage && data.contest.participantAccessMode === "ISSUED_ACCOUNTS" && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=accounts`)} className="inline-flex items-center gap-2 rounded-xl border border-[#1a2a1e]/10 px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
           <KeyRound className="h-4 w-4" aria-hidden="true" /> Акаунти
         </button>}
-        {canManage && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=management`)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-3 py-2 text-sm font-bold text-white hover:bg-[#214a31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:bg-[#00d978] dark:text-[#062211]">
+        {canManage && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=management`)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-3 py-2 text-sm font-bold text-white hover:bg-[#214a31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-primary dark:text-[#062211]">
           <FileCode2 className="h-4 w-4" aria-hidden="true" /> Налаштувати
         </button>}
-        <button type="button" onClick={() => navigate("/contest/contests")} className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
+        <button type="button" onClick={() => navigate("/contest/contests")} className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Усі контести
         </button>
       </div>}
@@ -831,7 +831,7 @@ export const ContestDetailPage: React.FC = () => {
               <button type="button"
                 disabled={joining}
                 onClick={() => void join()}
-                className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-5 py-3 text-sm font-bold text-[#062211] transition hover:bg-[#00ff88] disabled:opacity-60"
+                className="mt-7 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-[#062211] transition hover:bg-primary disabled:opacity-60"
               >
                 {joining ? (
                   <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -848,12 +848,12 @@ export const ContestDetailPage: React.FC = () => {
             ) : canManage ? (
               <div className="mt-7 flex items-center gap-2 text-sm font-bold text-[#aef0c9]"><Check className="h-4 w-4" />Ти організатор цього контесту</div>
             ) : (
-              <button type="button" disabled={joining} onClick={() => void join()} className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-5 py-3 text-sm font-bold text-[#062211] transition hover:bg-[#00ff88] disabled:opacity-60">
+              <button type="button" disabled={joining} onClick={() => void join()} className="mt-7 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-[#062211] transition hover:bg-primary disabled:opacity-60">
                 {joining ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UsersRound className="h-4 w-4" />}
                 Зареєструватися
               </button>
             )}
-            {data.contest.startsAt && <button type="button" onClick={() => downloadContestCalendar(data.contest)} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-bold text-[#d6e8dc] transition hover:bg-white/[.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d978]">
+            {data.contest.startsAt && <button type="button" onClick={() => downloadContestCalendar(data.contest)} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-bold text-[#d6e8dc] transition hover:bg-white/[.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
               <CalendarDays className="h-4 w-4" aria-hidden="true" /> Додати в календар
             </button>}
             {officialStanding && <p className="mt-4 text-sm font-semibold text-[#a9cbb5]">Твоє місце: <span className="font-extrabold text-white">#{officialStanding.rank}</span> · {officialStanding.totalScore} балів</p>}
@@ -882,17 +882,17 @@ export const ContestDetailPage: React.FC = () => {
           </div>
         </div>
       </section>
-      {shouldSetUpAccounts && <section className="mt-5 flex flex-col gap-4 rounded-2xl border border-[#00c875]/25 bg-[#eaf8ef] p-4 dark:bg-[#00d978]/[.07] sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      {shouldSetUpAccounts && <section className="mt-5 flex flex-col gap-4 rounded-2xl border border-primary/25 bg-[#eaf8ef] p-4 dark:bg-primary/[.07] sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div className="flex items-start gap-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#d8f2e2] text-[#16834d] dark:bg-[#00d978]/15 dark:text-[#72edb0]"><KeyRound className="size-5" aria-hidden="true" /></span>
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#d8f2e2] text-primary-strong dark:bg-primary/15 dark:text-primary-soft"><KeyRound className="size-5" aria-hidden="true" /></span>
           <div><p className="font-bold text-[#183422] dark:text-[#e5eee7]">Чернетку контесту створено</p><p className="mt-1 text-sm leading-6 text-[#52675a] dark:text-[#aebdb2]">Додай список учасників, щоб згенерувати для них окремі акаунти. До цього розділу можна повернутися будь-коли.</p></div>
         </div>
-        <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=accounts`)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-2.5 text-sm font-bold text-[#062211] transition hover:bg-[#00ff88] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#16834d]">
+        <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=accounts`)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-[#062211] transition hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-strong">
           <UsersRound className="size-4" aria-hidden="true" /> Додати учасників
         </button>
       </section>}
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.32fr_.68fr]">
-        <section className="rounded-[28px] border border-[#19291d]/10 bg-white p-5 shadow-[0_18px_50px_-44px_rgba(16,41,24,.65)] dark:border-white/[.09] dark:bg-[#111b14] sm:p-6">
+        <section className="rounded-[28px] border border-border/10 bg-white p-5 shadow-[0_18px_50px_-44px_rgba(16,41,24,.65)] dark:border-white/[.09] dark:bg-bg-surface sm:p-6">
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.14em] text-[#ff8c00]">
@@ -902,7 +902,7 @@ export const ContestDetailPage: React.FC = () => {
                 Твій маршрут
               </h2>
             </div>
-            <span className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#f0f5f0] px-3 py-2 text-sm font-bold tabular-nums text-[#526257] dark:bg-white/[.06] dark:text-[#c2d0c6]"><FileCode2 className="h-4 w-4 text-[#16834d] dark:text-[#72edb0]" aria-hidden="true" />{data.problems.length}</span>
+            <span className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#f0f5f0] px-3 py-2 text-sm font-bold tabular-nums text-[#526257] dark:bg-white/[.06] dark:text-[#c2d0c6]"><FileCode2 className="h-4 w-4 text-primary-strong dark:text-primary-soft" aria-hidden="true" />{data.problems.length}</span>
           </div>
           <div className="space-y-2.5">
             {data.problems.map((problem) => {
@@ -919,27 +919,27 @@ export const ContestDetailPage: React.FC = () => {
                     `/contest/contests/${contestId}/problems/${problem.id}`,
                   )
                 }
-                className="group flex w-full items-center gap-3 rounded-2xl border border-[#17271c]/[.08] bg-[#f8faf8] px-3 py-3.5 text-left transition duration-200 hover:-translate-y-px hover:border-[#16834d]/25 hover:bg-[#f1f7f2] hover:shadow-[0_12px_26px_-22px_rgba(15,64,34,.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] disabled:cursor-not-allowed disabled:opacity-55 dark:border-white/[.08] dark:bg-white/[.025] dark:hover:border-[#00d978]/25 dark:hover:bg-white/[.05]"
+                className="group flex w-full items-center gap-3 rounded-2xl border border-[#17271c]/[.08] bg-[#f8faf8] px-3 py-3.5 text-left transition duration-200 hover:-translate-y-px hover:border-primary-strong/25 hover:bg-[#f1f7f2] hover:shadow-[0_12px_26px_-22px_rgba(15,64,34,.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-55 dark:border-white/[.08] dark:bg-white/[.025] dark:hover:border-primary/25 dark:hover:bg-white/[.05]"
               >
-                <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#16834d]/10 bg-[#e8f5ec] font-[family-name:var(--font-display)] text-base font-black text-[#147b47] shadow-sm dark:border-[#00d978]/15 dark:bg-[#00d978]/10 dark:text-[#72edb0]">
+                <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-primary-strong/10 bg-[#e8f5ec] font-[family-name:var(--font-display)] text-base font-black text-primary-strong shadow-sm dark:border-primary/15 dark:bg-primary/10 dark:text-primary-soft">
                   {problem.label}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block break-words font-bold leading-5 text-[#1a271e] dark:text-[#edf3ef]">
+                  <span className="block break-words font-bold leading-5 text-[#1a271e] dark:text-text-primary">
                     {problem.title}
                   </span>
                   <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-[#637368] dark:text-[#aab8ae]">
-                    {progress ? <><span className="tabular-nums">Найкращий результат: <strong className="font-bold text-[#263b2d] dark:text-[#e4eee7]">{score}{progress.maxScore != null ? ` / ${progress.maxScore}` : ""}</strong></span>{maxScore > 0 && <span aria-hidden="true" className="h-1.5 w-16 overflow-hidden rounded-full bg-[#dfe8e1] dark:bg-white/10"><span className="block h-full rounded-full bg-[#00b963]" style={{ width: `${scorePercent}%` }} /></span>}</> : <span>До {problem.points ?? 100} балів</span>}
+                    {progress ? <><span className="tabular-nums">Найкращий результат: <strong className="font-bold text-[#263b2d] dark:text-[#e4eee7]">{score}{progress.maxScore != null ? ` / ${progress.maxScore}` : ""}</strong></span>{maxScore > 0 && <span aria-hidden="true" className="h-1.5 w-16 overflow-hidden rounded-full bg-[#dfe8e1] dark:bg-white/10"><span className="block h-full rounded-full bg-primary" style={{ width: `${scorePercent}%` }} /></span>}</> : <span>До {problem.points ?? 100} балів</span>}
                   </span>
                 </span>
-                {hasCompletedContest && data.contest.allowUpsolve ? <span className="shrink-0 rounded-lg border border-[#ffb454]/20 bg-[#fff4df] px-2.5 py-1.5 text-xs font-bold text-[#895000] dark:bg-[#ffb454]/10 dark:text-[#ffca7e]">Дорішати</span> : solved ? <span className="hidden shrink-0 items-center gap-1.5 rounded-lg bg-[#e7f7ed] px-2.5 py-1.5 text-xs font-bold text-[#147b47] sm:inline-flex dark:bg-[#00d978]/10 dark:text-[#72edb0]"><Check className="size-3.5" aria-hidden="true" />Готово</span> : <span className="hidden shrink-0 rounded-lg bg-[#edf1ed] px-2.5 py-1.5 text-xs font-bold text-[#657368] sm:inline-flex dark:bg-white/[.06] dark:text-[#aab8ae]">Відкрити</span>}
-                <ChevronRight className="size-5 shrink-0 text-[#9aa79e] transition-transform group-hover:translate-x-0.5 group-hover:text-[#16834d] dark:group-hover:text-[#72edb0]" aria-hidden="true" />
+                {hasCompletedContest && data.contest.allowUpsolve ? <span className="shrink-0 rounded-lg border border-[#ffb454]/20 bg-[#fff4df] px-2.5 py-1.5 text-xs font-bold text-[#895000] dark:bg-[#ffb454]/10 dark:text-[#ffca7e]">Дорішати</span> : solved ? <span className="hidden shrink-0 items-center gap-1.5 rounded-lg bg-[#e7f7ed] px-2.5 py-1.5 text-xs font-bold text-primary-strong sm:inline-flex dark:bg-primary/10 dark:text-primary-soft"><Check className="size-3.5" aria-hidden="true" />Готово</span> : <span className="hidden shrink-0 rounded-lg bg-[#edf1ed] px-2.5 py-1.5 text-xs font-bold text-text-muted sm:inline-flex dark:bg-white/[.06] dark:text-[#aab8ae]">Відкрити</span>}
+                <ChevronRight className="size-5 shrink-0 text-[#9aa79e] transition-transform group-hover:translate-x-0.5 group-hover:text-primary-strong dark:group-hover:text-primary-soft" aria-hidden="true" />
               </button>;
             })}
             {data.problems.length === 0 && <p className="rounded-xl border border-dashed border-[#17271c]/15 px-4 py-6 text-center text-sm text-[#708075] dark:border-white/10 dark:text-[#a5b3a8]">Задачі ще не додано.</p>}
           </div>
         </section>
-        <section className="rounded-[28px] border border-[#19291d]/10 bg-[#fafbf9] p-5 dark:border-white/[.09] dark:bg-[#101913] sm:p-6">
+        <section className="rounded-[28px] border border-border/10 bg-[#fafbf9] p-5 dark:border-white/[.09] dark:bg-[#101913] sm:p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.14em] text-[#ff8c00]">
@@ -970,7 +970,7 @@ export const ContestDetailPage: React.FC = () => {
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[#24352a] dark:text-[#e5eee7]">
                     {row.displayName}
                   </span>
-                  <span className="text-sm font-extrabold tabular-nums text-[#16834d] dark:text-[#72edb0]">
+                  <span className="text-sm font-extrabold tabular-nums text-primary-strong dark:text-primary-soft">
                     {row.totalScore}
                   </span>
                 </div>
@@ -981,7 +981,7 @@ export const ContestDetailPage: React.FC = () => {
               Рейтинг з'явиться після перших посилань.
             </p>
           )}
-          {(access || canManage) && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/scoreboard`)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#edf4ee] px-4 py-2.5 text-sm font-bold text-[#183422] transition hover:bg-[#e2eee4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c875] dark:bg-white/[.07] dark:text-[#e7f0e9] dark:hover:bg-white/[.1]">
+          {(access || canManage) && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/scoreboard`)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#edf4ee] px-4 py-2.5 text-sm font-bold text-[#183422] transition hover:bg-[#e2eee4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-white/[.07] dark:text-[#e7f0e9] dark:hover:bg-white/[.1]">
             Повна таблиця <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </button>}
         </section>
@@ -1177,7 +1177,7 @@ export const ContestProblemPage: React.FC = () => {
   if (loading)
     return (
       <Shell eyebrow="Задача" title="Готуємо умову">
-        <div className="h-[560px] animate-pulse rounded-[30px] bg-[#e8eeea] dark:bg-white/[.05]" />
+        <div className="h-[560px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" />
       </Shell>
     );
   if (!statement)
@@ -1237,9 +1237,9 @@ export const ContestProblemPage: React.FC = () => {
         </span>
       </div>
       <div className="grid gap-5 xl:grid-cols-[minmax(360px,.76fr)_minmax(480px,1.24fr)]">
-        <section className="rounded-[26px] border border-[#19291d]/10 bg-white p-6 dark:border-white/[.09] dark:bg-[#111b14] xl:min-h-[calc(100dvh-145px)]">
+        <section className="rounded-[26px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface xl:min-h-[calc(100dvh-145px)]">
           <div className="flex items-start gap-4">
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#e8f7ed] font-[family-name:var(--font-display)] text-lg font-bold text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#e8f7ed] font-[family-name:var(--font-display)] text-lg font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
               {statement.problem.label}
             </span>
             <div>
@@ -1254,7 +1254,7 @@ export const ContestProblemPage: React.FC = () => {
           <div className="mt-7 whitespace-pre-wrap text-[15px] leading-7 text-[#44554a] dark:text-[#c2cec5]">
             {statement.task.description}
           </div>
-          <div className="mt-9 border-t border-[#19291d]/10 pt-5 dark:border-white/[.08]">
+          <div className="mt-9 border-t border-border/10 pt-5 dark:border-white/[.08]">
             <div className="mb-3 flex items-center gap-2">
               <Clock3 className="h-4 w-4 text-[#708075]" />
               <h2 className="font-bold">Останні посилання</h2>
@@ -1274,7 +1274,7 @@ export const ContestProblemPage: React.FC = () => {
                     <span
                       className={
                         submission.verdict === "AC"
-                          ? "font-extrabold text-[#16834d] dark:text-[#72edb0]"
+                          ? "font-extrabold text-primary-strong dark:text-primary-soft"
                           : "font-extrabold text-[#c65072] dark:text-[#ff9abd]"
                       }
                     >
@@ -1285,16 +1285,16 @@ export const ContestProblemPage: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <p className="text-sm leading-6 text-[#718075] dark:text-[#a4b2a7]">
+              <p className="text-sm leading-6 text-[#718075] dark:text-text-secondary">
                 Тут з'явиться історія після першого запуску на перевірку.
               </p>
             )}
           </div>
         </section>
-        <section className="overflow-hidden rounded-[26px] border border-[#19291d]/10 bg-[#17211a] shadow-[0_18px_45px_rgba(13,27,18,.14)] dark:border-white/[.1]">
+        <section className="overflow-hidden rounded-[26px] border border-border/10 bg-[#17211a] shadow-[0_18px_45px_rgba(13,27,18,.14)] dark:border-white/[.1]">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#1d2a20] px-4 py-3">
             <div className="flex items-center gap-2 text-sm font-bold text-[#edf5ef]">
-              <Code2 className="h-4 w-4 text-[#72edb0]" />
+              <Code2 className="h-4 w-4 text-primary-soft" />
               Рішення
             </div>
             <select
@@ -1324,7 +1324,7 @@ export const ContestProblemPage: React.FC = () => {
               <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                className="mt-2 h-20 w-full resize-none rounded-xl border border-white/10 bg-[#111a13] p-3 font-mono text-sm text-[#e8f0e9] outline-none focus:border-[#00ff88]/40"
+                className="mt-2 h-20 w-full resize-none rounded-xl border border-white/10 bg-[#111a13] p-3 font-mono text-sm text-[#e8f0e9] outline-none focus:border-primary/40"
                 placeholder="Необов'язково: дані для Run"
               />
             </label>
@@ -1344,7 +1344,7 @@ export const ContestProblemPage: React.FC = () => {
               <button type="button"
                 disabled={checking}
                 onClick={() => void check()}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-4 py-2.5 text-sm font-bold text-[#062211] hover:bg-[#00ff88] disabled:opacity-55"
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-[#062211] hover:bg-primary disabled:opacity-55"
               >
                 {checking ? (
                   <LoaderCircle className="h-4 w-4 animate-spin" />
@@ -1356,7 +1356,7 @@ export const ContestProblemPage: React.FC = () => {
             </div>
             {result && (
               <div
-                className={`mt-3 rounded-xl border px-3 py-3 font-mono text-sm ${result.good ? "border-[#00ff88]/25 bg-[#00ff88]/[.09] text-[#9effc9]" : "border-[#ff6b9d]/25 bg-[#ff6b9d]/[.08] text-[#ffb1c8]"}`}
+                className={`mt-3 rounded-xl border px-3 py-3 font-mono text-sm ${result.good ? "border-primary/25 bg-primary/[.09] text-[#9effc9]" : "border-[#ff6b9d]/25 bg-[#ff6b9d]/[.08] text-[#ffb1c8]"}`}
               >
                 <span className="mr-2 font-sans text-xs font-bold uppercase tracking-[.12em]">
                   {result.kind === "run" ? "Run" : "Judge"}

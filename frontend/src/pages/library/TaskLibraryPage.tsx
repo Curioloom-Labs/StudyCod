@@ -56,7 +56,7 @@ const RecentTasksBanner: React.FC<{ onOpen: (task: LibraryTaskListItem) => void 
     }
   });
   if (!tasks.length) return null;
-  return <section className="mx-auto max-w-7xl px-4 pt-5 text-[#142017] dark:text-[#edf3ef] sm:px-6 lg:px-10"><div className="rounded-[24px] border border-[#152219]/10 bg-white p-4 dark:border-white/10 dark:bg-[#121b15] sm:p-5"><div className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-[#147b47] dark:text-[#62ecaa]" aria-hidden="true" /><div><div className="text-xs font-semibold uppercase tracking-[.15em] text-[#147b47] dark:text-[#62ecaa]">{en ? "Pick up where you left off" : "Продовжити з останнього"}</div><p className="mt-1 text-xs text-[#718075] dark:text-[#9dac9f]">{en ? "Your latest practice tasks are kept on this device." : "Останні практичні задачі зберігаються на цьому пристрої."}</p></div></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{tasks.map((task) => <button key={task.id} type="button" onClick={() => onOpen(task)} className="rounded-xl border border-[#152219]/10 bg-[#f8faf7] p-3 text-left transition hover:-translate-y-0.5 hover:border-[#00c96d]/45 dark:border-white/10 dark:bg-white/[.035]"><span className="block truncate text-sm font-semibold">{task.title}</span><span className="mt-1 block truncate text-xs text-[#718075] dark:text-[#9dac9f]">{task.section || (task.taskMode === "WEB" ? (en ? "Web task" : "Веб-задача") : (en ? "Code task" : "Кодова задача"))}</span></button>)}</div></div></section>;
+  return <section className="mx-auto max-w-7xl px-4 pt-5 text-text-primary dark:text-text-primary sm:px-6 lg:px-10"><div className="rounded-[24px] border border-border/10 bg-white p-4 dark:border-white/10 dark:bg-bg-surface sm:p-5"><div className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-primary-strong dark:text-primary-soft" aria-hidden="true" /><div><div className="text-xs font-semibold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">{en ? "Pick up where you left off" : "Продовжити з останнього"}</div><p className="mt-1 text-xs text-[#718075] dark:text-[#9dac9f]">{en ? "Your latest practice tasks are kept on this device." : "Останні практичні задачі зберігаються на цьому пристрої."}</p></div></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{tasks.map((task) => <button key={task.id} type="button" onClick={() => onOpen(task)} className="rounded-xl border border-border/10 bg-bg-surface p-3 text-left transition hover:-translate-y-0.5 hover:border-primary/45 dark:border-white/10 dark:bg-white/[.035]"><span className="block truncate text-sm font-semibold">{task.title}</span><span className="mt-1 block truncate text-xs text-[#718075] dark:text-[#9dac9f]">{task.section || (task.taskMode === "WEB" ? (en ? "Web task" : "Веб-задача") : (en ? "Code task" : "Кодова задача"))}</span></button>)}</div></div></section>;
 };
 
 type TaskDetails = {
@@ -1638,7 +1638,7 @@ export const TaskLibraryPage: React.FC = () => {
   // the specialised workspace below, where its dense controls are necessary.
   if (!canManage && view === "approved") {
     return <>
-      <div className="mx-auto flex max-w-7xl justify-end px-4 pt-4 text-[#142017] dark:text-[#edf3ef] sm:px-6 lg:px-10"><button type="button" onClick={() => void copyCurrentLibraryLink()} className="inline-flex items-center gap-1.5 rounded-lg border border-[#152219]/10 bg-white px-3 py-2 text-xs font-semibold text-[#617066] transition hover:border-[#00c96d]/40 hover:text-[#147b47] dark:border-white/10 dark:bg-[#121b15] dark:text-[#a7b5aa] dark:hover:text-[#72edb0]" aria-label={tr("Скопіювати посилання на бібліотеку", "Copy library link")} title={tr("Скопіювати посилання з фільтрами", "Copy link with filters")}><Share2 className="size-3.5" />{linkCopied ? tr("Скопійовано", "Copied") : tr("Поділитися", "Share")}</button></div>
+      <div className="mx-auto flex max-w-7xl justify-end px-4 pt-4 text-text-primary dark:text-text-primary sm:px-6 lg:px-10"><button type="button" onClick={() => void copyCurrentLibraryLink()} className="inline-flex items-center gap-1.5 rounded-lg border border-border/10 bg-white px-3 py-2 text-xs font-semibold text-text-muted transition hover:border-primary/40 hover:text-primary-strong dark:border-white/10 dark:bg-bg-surface dark:text-[#a7b5aa] dark:hover:text-primary-soft" aria-label={tr("Скопіювати посилання на бібліотеку", "Copy library link")} title={tr("Скопіювати посилання з фільтрами", "Copy link with filters")}><Share2 className="size-3.5" />{linkCopied ? tr("Скопійовано", "Copied") : tr("Поділитися", "Share")}</button></div>
       <RecentTasksBanner onOpen={rememberAndOpenTask} />
       <PremiumLibrary
         tasks={learnerTasks}
@@ -1654,13 +1654,13 @@ export const TaskLibraryPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#152018] dark:bg-[#0b120e] dark:text-[#eef4ef] sm:px-6 lg:px-10 lg:py-9">
+    <div className="min-h-full bg-bg-base px-4 py-6 text-[#152018] dark:bg-bg-base dark:text-[#eef4ef] sm:px-6 lg:px-10 lg:py-9">
       <div className="mx-auto max-w-7xl space-y-6">
         <motion.section
           variants={staggerContainer}
           initial="initial"
           animate="animate"
-          className="overflow-hidden rounded-[32px] border border-[#142018]/10 bg-white shadow-[0_24px_70px_-48px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-[#121b15]"
+          className="overflow-hidden rounded-[32px] border border-[#142018]/10 bg-white shadow-[0_24px_70px_-48px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-bg-surface"
         >
           <div className="relative p-5 sm:p-7 lg:p-8">
             <div className="pointer-events-none absolute right-0 top-0 h-full w-2/3 bg-[radial-gradient(circle_at_top_right,rgba(0,255,136,.14),transparent_58%)]" />
@@ -1674,7 +1674,7 @@ export const TaskLibraryPage: React.FC = () => {
                   <ArrowLeft className="h-4 w-4" />
                   {tr("Назад", "Back")}
                 </button>
-                <div className="inline-flex items-center gap-2 rounded-full bg-[#eaf5ee] px-3 py-1 text-sm font-semibold text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#73efb0]">
+                <div className="inline-flex items-center gap-2 rounded-full bg-[#eaf5ee] px-3 py-1 text-sm font-semibold text-primary-strong dark:bg-primary/10 dark:text-[#73efb0]">
                   <Library className="h-4 w-4" />
                   {tr("Бібліотека StudyCod", "StudyCod library")}
                 </div>
@@ -1699,7 +1699,7 @@ export const TaskLibraryPage: React.FC = () => {
               <motion.div variants={fadeUpItem} className="grid min-w-[280px] grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
                 {[
                   [tr("Показано", "Shown"), visibleTasks.length, "text-[#121b15] dark:text-white"],
-                  [tr("Виконано", "Solved"), solvedCount, "text-[#00a75a] dark:text-[#72edb0]"],
+                  [tr("Виконано", "Solved"), solvedCount, "text-primary-strong dark:text-primary-soft"],
                   [tr("Обрані", "Favorites"), favoritesCount, "text-[#d97706] dark:text-[#ffb85e]"],
                   [tr("Всього", "Total"), typeof total === "number" && view === "approved" ? total : tasks.length, "text-[#121b15] dark:text-white"],
                 ].map(([label, value, tone]) => (
@@ -1715,7 +1715,7 @@ export const TaskLibraryPage: React.FC = () => {
           </div>
         </motion.section>
 
-        <section className="rounded-[28px] border border-[#142018]/10 bg-white p-4 shadow-[0_18px_55px_-45px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-[#121b15] sm:p-5">
+        <section className="rounded-[28px] border border-[#142018]/10 bg-white p-4 shadow-[0_18px_55px_-45px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-bg-surface sm:p-5">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="inline-flex w-fit rounded-2xl bg-[#edf2ed] p-1 dark:bg-white/[.05]">
               <button
@@ -1746,7 +1746,7 @@ export const TaskLibraryPage: React.FC = () => {
                   aria-label={tr("Пошук задач", "Search tasks")}
                   value={qDraft}
                   onChange={(e) => setQDraft(e.target.value)}
-                  className="h-12 w-full rounded-2xl border border-[#142018]/10 bg-[#f7f9f6] pl-12 pr-12 text-sm font-medium text-[#152018] outline-none transition placeholder:font-normal placeholder:text-[#98a39b] focus:border-[#00c96d] focus:ring-4 focus:ring-[#00ff88]/10 dark:border-white/10 dark:bg-white/[.035] dark:text-white"
+                  className="h-12 w-full rounded-2xl border border-[#142018]/10 bg-[#f7f9f6] pl-12 pr-12 text-sm font-medium text-[#152018] outline-none transition placeholder:font-normal placeholder:text-[#98a39b] focus:border-primary focus:ring-4 focus:ring-primary/10 dark:border-white/10 dark:bg-white/[.035] dark:text-white"
                   placeholder={tr("Пошук за назвою, тегом, кодом або темою", "Search by title, tag, code, or topic")}
                 />
                 {qDraft.trim() ? (
@@ -1826,7 +1826,7 @@ export const TaskLibraryPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setOnlySolved((value) => !value)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${onlySolved ? "bg-[#e8f8ed] text-[#147b47] ring-1 ring-[#00c96d]/25 dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-[#f3f6f3] text-[#637267] dark:bg-white/[.045] dark:text-[#a8b5aa]"}`}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${onlySolved ? "bg-[#e8f8ed] text-primary-strong ring-1 ring-primary/25 dark:bg-primary/10 dark:text-primary-soft" : "bg-[#f3f6f3] text-[#637267] dark:bg-white/[.045] dark:text-[#a8b5aa]"}`}
               >
                 {tr("Лише виконані", "Solved only")}
               </button>
@@ -1950,15 +1950,15 @@ export const TaskLibraryPage: React.FC = () => {
                 ))}
               </div>
             ) : visibleTasks.length === 0 ? (
-              <div className="rounded-[28px] border border-dashed border-[#142018]/15 bg-white px-5 py-16 text-center dark:border-white/10 dark:bg-[#121b15]">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e8f8ed] dark:bg-[#00ff88]/10">
-                  <Search className="h-6 w-6 text-[#147b47] dark:text-[#72edb0]" />
+              <div className="rounded-[28px] border border-dashed border-[#142018]/15 bg-white px-5 py-16 text-center dark:border-white/10 dark:bg-bg-surface">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e8f8ed] dark:bg-primary/10">
+                  <Search className="h-6 w-6 text-primary-strong dark:text-primary-soft" />
                 </div>
                 <div className="text-base font-semibold text-[#142018] dark:text-white">{tr("Нічого не знайдено", "No results")}</div>
                 <div className="mt-2 text-sm text-[#6a786d] dark:text-[#9fac9f]">
                   {tr("Змініть пошук, фільтри або відкрийте інший розділ.", "Adjust search, filters, or open another section.")}
                 </div>
-                <button type="button" onClick={resetFilters} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-[#00c96d]/30 bg-[#e8f8ed] px-3.5 py-2 text-sm font-semibold text-[#147b47] transition hover:border-[#00c96d]/55 hover:bg-[#dff5e7] dark:bg-[#00ff88]/10 dark:text-[#72edb0] dark:hover:bg-[#00ff88]/15">
+                <button type="button" onClick={resetFilters} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-[#e8f8ed] px-3.5 py-2 text-sm font-semibold text-primary-strong transition hover:border-primary/55 hover:bg-[#dff5e7] dark:bg-primary/10 dark:text-primary-soft dark:hover:bg-primary/15">
                   <RotateCcwIcon />
                   {tr("Скинути фільтри", "Reset filters")}
                 </button>
@@ -1981,7 +1981,7 @@ export const TaskLibraryPage: React.FC = () => {
                     <motion.article
                       key={task.id}
                       variants={fadeUpItem}
-                      className={`group flex min-h-[230px] flex-col rounded-[28px] border bg-white p-5 text-left shadow-[0_20px_55px_-44px_rgba(18,42,26,.55)] transition dark:bg-[#121b15] ${isSelected ? "border-[#00c96d]/55 ring-4 ring-[#00ff88]/10 dark:border-[#00ff88]/35" : "border-[#142018]/10 hover:-translate-y-1 hover:border-[#00c96d]/30 dark:border-[#294333] dark:hover:border-[#00ff88]/25"}`}
+                      className={`group flex min-h-[230px] flex-col rounded-[28px] border bg-white p-5 text-left shadow-[0_20px_55px_-44px_rgba(18,42,26,.55)] transition dark:bg-bg-surface ${isSelected ? "border-primary/55 ring-4 ring-primary/10 dark:border-primary/35" : "border-[#142018]/10 hover:-translate-y-1 hover:border-primary/30 dark:border-[#294333] dark:hover:border-primary/25"}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -2006,7 +2006,7 @@ export const TaskLibraryPage: React.FC = () => {
                             ) : null}
                           </div>
                           <h3 className="mt-4 line-clamp-2 text-lg font-semibold tracking-[-0.03em] text-[#142018] dark:text-white">
-                            <button type="button" onClick={() => selectTask(task)} className="text-left hover:text-[#147b47] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c96d]/50 dark:hover:text-[#72edb0]">
+                            <button type="button" onClick={() => selectTask(task)} className="text-left hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:hover:text-primary-soft">
                               {task.title}
                             </button>
                           </h3>
@@ -2016,7 +2016,7 @@ export const TaskLibraryPage: React.FC = () => {
                             href={buildSolvePath(task)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="rounded-xl p-2 text-[#7c8a80] transition hover:bg-[#f1f5f1] hover:text-[#147b47] dark:hover:bg-white/[.07] dark:hover:text-[#72edb0]"
+                            className="rounded-xl p-2 text-[#7c8a80] transition hover:bg-[#f1f5f1] hover:text-primary-strong dark:hover:bg-white/[.07] dark:hover:text-primary-soft"
                             aria-label={tr("Відкрити задачу в новій вкладці", "Open task in a new tab")}
                             title={tr("Відкрити в новій вкладці", "Open in a new tab")}
                           >
@@ -2052,7 +2052,7 @@ export const TaskLibraryPage: React.FC = () => {
                         {(task.problemCode || task.slug) ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.problemCode || task.slug}</span> : null}
                         {task.section ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.section}</span> : null}
                         <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{formatShortDate(task.updatedAt, i18n.language || "uk")}</span>
-                        {lastCheckedAt ? <span className="rounded-full bg-[#e8f8ed] px-2.5 py-1 text-[#147b47] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{tr("Перевірено", "Checked")}: {formatShortDateTime(lastCheckedAt, i18n.language || "uk")}</span> : null}
+                        {lastCheckedAt ? <span className="rounded-full bg-[#e8f8ed] px-2.5 py-1 text-primary-strong dark:bg-primary/10 dark:text-primary-soft">{tr("Перевірено", "Checked")}: {formatShortDateTime(lastCheckedAt, i18n.language || "uk")}</span> : null}
                         {task.projectSpec ? <span className="rounded-full bg-[#fff4df] px-2.5 py-1 text-[#a65600] dark:bg-[#ffb454]/10 dark:text-[#ffca7e]">{task.projectSpec.estimatedMinutes} {tr("хв проєкту", "min project")}</span> : null}
                       </div>
 
@@ -2075,7 +2075,7 @@ export const TaskLibraryPage: React.FC = () => {
                               <span>{testsPassed}/{testsTotal}</span>
                             </div>
                             <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#e7eee7] dark:bg-white/[.07]">
-                              <div className="h-full rounded-full bg-[#00c96d]" style={{ width: `${Math.round(progress * 100)}%` }} />
+                              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round(progress * 100)}%` }} />
                             </div>
                           </div>
                         ) : task.attempt?.submissionsCount ? (
@@ -2112,7 +2112,7 @@ export const TaskLibraryPage: React.FC = () => {
                             ) : null}
                           </div>
                         ) : (
-                          <button type="button" onClick={() => selectTask(task)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#00c96d]/30 px-3 py-2 text-xs font-semibold text-[#147b47] transition hover:border-[#00c96d]/55 hover:bg-[#e8f8ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00c96d]/50 dark:text-[#72edb0] dark:hover:bg-[#00ff88]/10">
+                          <button type="button" onClick={() => selectTask(task)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-primary/30 px-3 py-2 text-xs font-semibold text-primary-strong transition hover:border-primary/55 hover:bg-[#e8f8ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-primary-soft dark:hover:bg-primary/10">
                             <Play className="h-3 w-3" />
                             {tr("Переглянути", "Preview")}
                           </button>
@@ -2126,11 +2126,11 @@ export const TaskLibraryPage: React.FC = () => {
           </section>
 
           <aside ref={previewSectionRef} className="lg:col-span-4">
-            <div className="sticky top-6 rounded-[28px] border border-[#142018]/10 bg-white p-5 shadow-[0_22px_60px_-45px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-[#121b15]">
+            <div className="sticky top-6 rounded-[28px] border border-[#142018]/10 bg-white p-5 shadow-[0_22px_60px_-45px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-bg-surface">
               {!selectedId ? (
                 <div className="rounded-[24px] bg-[#f6f8f5] px-5 py-12 text-center dark:bg-white/[.035]">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8f8ed] dark:bg-[#00ff88]/10">
-                    <Play className="h-6 w-6 text-[#147b47] dark:text-[#72edb0]" />
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8f8ed] dark:bg-primary/10">
+                    <Play className="h-6 w-6 text-primary-strong dark:text-primary-soft" />
                   </div>
                   <div className="text-base font-semibold text-[#142018] dark:text-white">{tr("Оберіть задачу", "Pick a task")}</div>
                   <div className="mt-2 text-sm leading-6 text-[#6a786d] dark:text-[#9fac9f]">
@@ -2225,7 +2225,7 @@ export const TaskLibraryPage: React.FC = () => {
                           {details.tests.slice(0, 12).map((test) => {
                             const hiddenForCatalog = test.isHidden && view === "approved";
                             return (
-                              <div key={test.id} className="rounded-2xl border border-[#142018]/10 bg-[#f8faf7] p-3 dark:border-white/10 dark:bg-white/[.035]">
+                              <div key={test.id} className="rounded-2xl border border-[#142018]/10 bg-bg-surface p-3 dark:border-white/10 dark:bg-white/[.035]">
                                 <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-[#748177] dark:text-[#9fac9f]">
                                   {test.isHidden ? <Badge color="warn">{tr("прихований", "hidden")}</Badge> : <Badge color="info">{tr("публічний", "public")}</Badge>}
                                   <span>{tr("бали", "points")}: {test.points}</span>
@@ -2233,13 +2233,13 @@ export const TaskLibraryPage: React.FC = () => {
                                 <div className="grid gap-2">
                                   <div>
                                     <div className="mb-1 text-xs font-semibold text-[#4f5f54] dark:text-[#c1cbc4]">{tr("Ввід", "Input")}</div>
-                                    <pre className="overflow-auto rounded-xl bg-white p-3 text-xs text-[#26352b] ring-1 ring-[#142018]/10 dark:bg-[#0b120e] dark:text-[#dce7df] dark:ring-white/10">
+                                    <pre className="overflow-auto rounded-xl bg-white p-3 text-xs text-[#26352b] ring-1 ring-[#142018]/10 dark:bg-bg-base dark:text-[#dce7df] dark:ring-white/10">
                                       {hiddenForCatalog ? tr("(приховано)", "(hidden)") : test.input || ""}
                                     </pre>
                                   </div>
                                   <div>
                                     <div className="mb-1 text-xs font-semibold text-[#4f5f54] dark:text-[#c1cbc4]">{tr("Очікувано", "Expected")}</div>
-                                    <pre className="overflow-auto rounded-xl bg-white p-3 text-xs text-[#26352b] ring-1 ring-[#142018]/10 dark:bg-[#0b120e] dark:text-[#dce7df] dark:ring-white/10">
+                                    <pre className="overflow-auto rounded-xl bg-white p-3 text-xs text-[#26352b] ring-1 ring-[#142018]/10 dark:bg-bg-base dark:text-[#dce7df] dark:ring-white/10">
                                       {hiddenForCatalog ? tr("(приховано)", "(hidden)") : test.expectedOutput || ""}
                                     </pre>
                                   </div>

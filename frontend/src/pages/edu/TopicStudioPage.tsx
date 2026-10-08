@@ -178,14 +178,14 @@ const Modal: React.FC<{ title: string; caption?: string; children: React.ReactNo
   const titleId = React.useId();
   const panelRef = useDialogA11y({ open: true, onClose });
   return <div data-dialog-a11y="direct" data-material="topic-dialog-scrim" className="fixed inset-0 z-[90] overflow-y-auto bg-[#07100a]/50 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={panelRef as React.RefObject<HTMLElement>} data-dialog-a11y="direct" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-material="topic-dialog" className={`mx-auto my-8 w-full rounded-[32px] bg-[#fbfdfb] p-5 shadow-[0_28px_90px_rgba(10,31,17,.28)] dark:bg-[#101a13] sm:p-7 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>
+    <section ref={panelRef as React.RefObject<HTMLElement>} data-dialog-a11y="direct" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-material="topic-dialog" className={`mx-auto my-8 w-full rounded-[32px] bg-bg-surface p-5 shadow-[0_28px_90px_rgba(10,31,17,.28)] dark:bg-[#101a13] sm:p-7 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[.16em] text-[#e17800]">Topic studio</p>
           <h2 id={titleId} className="mt-2 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.06em]">{title}</h2>
           {caption && <p className="mt-2 max-w-2xl text-sm leading-6 text-[#718075] dark:text-[#a6b4a9]">{caption}</p>}
         </div>
-        <button type="button" onClick={onClose} aria-label="Закрити вікно" className="grid size-10 shrink-0 place-items-center rounded-full bg-[#eef3ef] text-[#536258] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/30 dark:bg-white/[.07] dark:text-[#dbe6de]">
+        <button type="button" onClick={onClose} aria-label="Закрити вікно" className="grid size-10 shrink-0 place-items-center rounded-full bg-bg-hover text-[#536258] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 dark:bg-white/[.07] dark:text-[#dbe6de]">
           <X className="size-4" aria-hidden="true" />
         </button>
       </div>
@@ -722,8 +722,8 @@ export const TopicStudioPage: React.FC = () => {
     return (
       <div className={root}>
         <div className="mx-auto max-w-[1480px]">
-          <div className="h-12 w-48 animate-pulse rounded-2xl bg-[#e8eeea] dark:bg-white/[.06]" />
-          <div className="mt-6 h-[520px] animate-pulse rounded-[36px] bg-[#e8eeea] dark:bg-white/[.05]" />
+          <div className="h-12 w-48 animate-pulse rounded-2xl bg-bg-hover dark:bg-white/[.06]" />
+          <div className="mt-6 h-[520px] animate-pulse rounded-[36px] bg-bg-hover dark:bg-white/[.05]" />
         </div>
       </div>
     );
@@ -738,20 +738,20 @@ export const TopicStudioPage: React.FC = () => {
   return (
     <div className={root}>
       <div className="mx-auto max-w-[1480px] space-y-6">
-        <header className="overflow-hidden rounded-[36px] border border-[#122017]/10 bg-[#101812] text-white shadow-[0_28px_90px_rgba(7,24,13,.20)] dark:border-white/10">
+        <header className="overflow-hidden rounded-[36px] border border-border/10 bg-[#101812] text-white shadow-[0_28px_90px_rgba(7,24,13,.20)] dark:border-white/10">
           <div className="grid lg:grid-cols-[1.25fr_.75fr]">
             <div className="p-6 sm:p-9 lg:p-11">
               <button type="button" onClick={() => navigate(backPath)} className="inline-flex items-center gap-2 text-sm font-bold text-[#c8d8cc] transition hover:text-white">
                 <ArrowLeft className="size-4" />
                 До класу
               </button>
-              <p className="mt-10 text-xs font-black uppercase tracking-[.18em] text-[#7bedb4]">{topic.language} · конструктор теми</p>
+              <p className="mt-10 text-xs font-black uppercase tracking-[.18em] text-primary-soft">{topic.language} · конструктор теми</p>
               <h1 className="mt-4 max-w-4xl font-[family-name:var(--font-display)] text-4xl font-black tracking-[-.07em] sm:text-6xl">{topic.title}</h1>
               <p className="mt-5 max-w-2xl text-base leading-7 text-[#c6d4c9]">
                 {topic.description || "Зберіть тему як маршрут: коротка теорія, практика з тестами, контрольна з окремими правилами оцінювання."}
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <button type="button" onClick={openTaskBuilder} className="inline-flex items-center gap-2 rounded-2xl bg-[#00d978] px-5 py-3 text-sm font-black text-[#061e10]">
+                <button type="button" onClick={openTaskBuilder} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-black text-[#061e10]">
                   <Plus className="size-4" />
                   Практика + теорія
                 </button>
@@ -772,7 +772,7 @@ export const TopicStudioPage: React.FC = () => {
                   return (
                     <div key={item.label} className="rounded-[24px] border border-white/10 bg-white/[.055] p-5">
                       <div className="flex items-center justify-between">
-                        <span className="grid size-11 place-items-center rounded-2xl bg-[#00d978]/15 text-[#7bedb4]"><Icon className="size-5" /></span>
+                        <span className="grid size-11 place-items-center rounded-2xl bg-primary/15 text-primary-soft"><Icon className="size-5" /></span>
                         <strong className="text-4xl font-black tracking-[-.07em]">{item.value}</strong>
                       </div>
                       <p className="mt-4 text-sm font-bold text-[#c6d4c9]">{item.label}</p>
@@ -790,19 +790,19 @@ export const TopicStudioPage: React.FC = () => {
           <section className="rounded-[32px] border border-[#142018]/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111a14] sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-black uppercase tracking-[.15em] text-[#16834d] dark:text-[#7bedb4]">Практичний маршрут</p>
+                <p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">Практичний маршрут</p>
                 <h2 className="mt-2 text-2xl font-black tracking-[-.05em]">Завдання теми</h2>
               </div>
-              <button type="button" onClick={openTaskBuilder} className="rounded-xl bg-[#111a14] px-4 py-2.5 text-sm font-bold text-white dark:bg-[#00d978] dark:text-[#061e10]">
+              <button type="button" onClick={openTaskBuilder} className="rounded-xl bg-[#111a14] px-4 py-2.5 text-sm font-bold text-white dark:bg-primary dark:text-[#061e10]">
                 Додати
               </button>
             </div>
 
             <div className="mt-5 grid gap-3">
               {tasks.map((task, index) => (
-                <article key={task.id} className="group rounded-[26px] border border-[#142018]/10 bg-[#f7faf6] p-4 transition hover:border-[#00d978]/40 hover:bg-white dark:border-white/10 dark:bg-white/[.045] dark:hover:bg-white/[.07] sm:p-5">
+                <article key={task.id} className="group rounded-[26px] border border-[#142018]/10 bg-[#f7faf6] p-4 transition hover:border-primary/40 hover:bg-white dark:border-white/10 dark:bg-white/[.045] dark:hover:bg-white/[.07] sm:p-5">
                   <div className="grid gap-4 sm:grid-cols-[54px_1fr]">
-                    <span className="grid size-12 place-items-center rounded-2xl bg-white text-sm font-black text-[#16834d] shadow-sm dark:bg-[#0b130e] dark:text-[#7bedb4]">
+                    <span className="grid size-12 place-items-center rounded-2xl bg-white text-sm font-black text-primary-strong shadow-sm dark:bg-[#0b130e] dark:text-primary-soft">
                       {String(index + 1).padStart(2, "0")}
                     </span>
                     <div className="min-w-0">
@@ -813,23 +813,23 @@ export const TopicStudioPage: React.FC = () => {
                             {task.description ? <MarkdownView content={task.description} /> : "Умова ще готується."}
                           </div>
                         </div>
-                        <span className={`rounded-full px-3 py-1.5 text-xs font-black ${task.isAssigned ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-[#edf2ed] text-[#718075] dark:bg-white/[.06] dark:text-[#a6b4a9]"}`}>
+                        <span className={`rounded-full px-3 py-1.5 text-xs font-black ${task.isAssigned ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-[#edf2ed] text-[#718075] dark:bg-white/[.06] dark:text-[#a6b4a9]"}`}>
                           {task.isAssigned ? "доступ відкритий" : "чернетка · доступ закритий"}
                         </span>
                       </div>
                       <div className="mt-5 flex flex-wrap items-end gap-2">
                         <label htmlFor={`topic-task-deadline-${task.id}`} className="block min-w-[220px] flex-1">
                           <span className="mb-1 block text-[11px] font-black uppercase tracking-[.1em] text-[#718075] dark:text-[#a6b4a9]">Дедлайн доступу</span>
-                          <input id={`topic-task-deadline-${task.id}`} name={`taskDeadline-${task.id}`} type="datetime-local" value={deadlineDrafts[task.id] ?? toDateTimeLocalValue(task.deadline)} onChange={(event) => setDeadlineDrafts((old) => ({ ...old, [task.id]: event.target.value }))} disabled={assignmentBusyId === task.id} className="w-full rounded-xl border border-[#142018]/10 bg-white px-3 py-2 text-xs font-bold text-[#32443a] outline-none transition focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0b130e] dark:text-[#d8e3db]" />
+                          <input id={`topic-task-deadline-${task.id}`} name={`taskDeadline-${task.id}`} type="datetime-local" value={deadlineDrafts[task.id] ?? toDateTimeLocalValue(task.deadline)} onChange={(event) => setDeadlineDrafts((old) => ({ ...old, [task.id]: event.target.value }))} disabled={assignmentBusyId === task.id} className="w-full rounded-xl border border-[#142018]/10 bg-white px-3 py-2 text-xs font-bold text-[#32443a] outline-none transition focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-[#0b130e] dark:text-[#d8e3db]" />
                         </label>
-                        <button type="button" disabled={assignmentBusyId === task.id} onClick={() => openTaskEditor(task)} aria-label={`Редагувати задачу ${task.title}`} className="inline-flex items-center gap-1.5 rounded-xl border border-[#142018]/12 bg-white px-3 py-2 text-xs font-black text-[#32443a] shadow-sm transition hover:border-[#00d978]/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 disabled:opacity-45 dark:border-white/10 dark:bg-[#0b130e] dark:text-[#d8e3db]">
+                        <button type="button" disabled={assignmentBusyId === task.id} onClick={() => openTaskEditor(task)} aria-label={`Редагувати задачу ${task.title}`} className="inline-flex items-center gap-1.5 rounded-xl border border-[#142018]/12 bg-white px-3 py-2 text-xs font-black text-[#32443a] shadow-sm transition hover:border-primary/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:opacity-45 dark:border-white/10 dark:bg-[#0b130e] dark:text-[#d8e3db]">
                           <Pencil className="size-3.5" aria-hidden="true" />
                           Редагувати
                         </button>
-                        <button type="button" disabled={assignmentBusyId === task.id} onClick={() => void toggleTask(task)} aria-pressed={!!task.isAssigned} className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black shadow-sm transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 disabled:opacity-45 ${task.isAssigned ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-white text-[#32443a] dark:bg-[#0b130e] dark:text-[#d8e3db]"}`}>
+                        <button type="button" disabled={assignmentBusyId === task.id} onClick={() => void toggleTask(task)} aria-pressed={!!task.isAssigned} className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black shadow-sm transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:opacity-45 ${task.isAssigned ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-white text-[#32443a] dark:bg-[#0b130e] dark:text-[#d8e3db]"}`}>
                            {task.isAssigned ? "Закрити доступ" : "Відкрити учням"}
                         </button>
-                        {task.isAssigned && <button type="button" disabled={assignmentBusyId === task.id} onClick={() => void saveTaskDeadline(task)} className="rounded-xl border border-[#16834d]/25 bg-white px-3 py-2 text-xs font-black text-[#16834d] transition hover:border-[#00d978]/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 disabled:opacity-45 dark:bg-[#0b130e] dark:text-[#72edb0]">
+                        {task.isAssigned && <button type="button" disabled={assignmentBusyId === task.id} onClick={() => void saveTaskDeadline(task)} className="rounded-xl border border-primary-strong/25 bg-white px-3 py-2 text-xs font-black text-primary-strong transition hover:border-primary/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:opacity-45 dark:bg-[#0b130e] dark:text-primary-soft">
                           Зберегти дедлайн
                         </button>}
                       </div>
@@ -849,7 +849,7 @@ export const TopicStudioPage: React.FC = () => {
               ))}
               {!tasks.length && (
                 <div className="rounded-[26px] border border-dashed border-[#142018]/15 px-6 py-16 text-center dark:border-white/10">
-                  <TerminalSquare className="mx-auto size-9 text-[#16834d] dark:text-[#7bedb4]" />
+                  <TerminalSquare className="mx-auto size-9 text-primary-strong dark:text-primary-soft" />
                   <h3 className="mt-4 text-xl font-black">Додайте першу практику</h3>
                   <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#6b7a70] dark:text-[#aebbb2]">
                     Після створення одразу відкриється вікно тестів, щоб завдання не лишалось порожньою карткою.
@@ -876,7 +876,7 @@ export const TopicStudioPage: React.FC = () => {
                         <p className="text-sm font-black">{control.title || "Контрольна робота"}</p>
                         <p className="mt-1 text-xs text-[#718075] dark:text-[#a6b4a9]">{control.timeLimitMinutes ? `${control.timeLimitMinutes} хв` : "Без обмеження часу"}</p>
                       </div>
-                      <button type="button" disabled={assignmentBusyId === control.id} onClick={() => void toggleControl(control)} aria-pressed={!!control.isAssigned} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition disabled:cursor-wait disabled:opacity-60 ${control.isAssigned ? "bg-[#e7f6ec] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]" : "bg-white text-[#718075] dark:bg-white/[.06] dark:text-[#a6b4a9]"}`}>
+                      <button type="button" disabled={assignmentBusyId === control.id} onClick={() => void toggleControl(control)} aria-pressed={!!control.isAssigned} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition disabled:cursor-wait disabled:opacity-60 ${control.isAssigned ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-white text-[#718075] dark:bg-white/[.06] dark:text-[#a6b4a9]"}`}>
                         {assignmentBusyId === control.id ? "зберігаю…" : control.isAssigned ? "активна" : "чернетка"}
                       </button>
                     </div>
@@ -894,7 +894,7 @@ export const TopicStudioPage: React.FC = () => {
             </section>
 
             <section className="rounded-[32px] bg-[#e9f8ef] p-6 dark:bg-[#12301e]">
-              <p className="text-xs font-black uppercase tracking-[.14em] text-[#16834d] dark:text-[#72edb0]">Правило теми</p>
+              <p className="text-xs font-black uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">Правило теми</p>
               <p className="mt-3 text-sm leading-6 text-[#627269] dark:text-[#c1d2c5]">
                 Тема спершу збирається в чернетку. Відкривайте учням лише ті практики й контрольні, які вже мають теорію, тести або зрозумілу схему оцінювання.
               </p>
@@ -907,22 +907,22 @@ export const TopicStudioPage: React.FC = () => {
             <div className="grid gap-5 lg:grid-cols-[1fr_.85fr]">
               <section className="space-y-4 rounded-[26px] border border-[#142018]/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
                 <div className="flex items-center gap-3">
-                  <TerminalSquare className="size-5 text-[#16834d] dark:text-[#7bedb4]" />
+                  <TerminalSquare className="size-5 text-primary-strong dark:text-primary-soft" />
                   <h3 className="font-black">Практичне завдання</h3>
                 </div>
-                <input id="topic-task-title" name="taskTitle" aria-label="Назва завдання" value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} placeholder="Назва завдання" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
+                <input id="topic-task-title" name="taskTitle" aria-label="Назва завдання" value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} placeholder="Назва завдання" className="w-full rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-primary/15 dark:border-white/10 dark:bg-[#0d1710]" />
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => void generateCondition()} disabled={!!aiBusy || !taskForm.title.trim()} className="inline-flex items-center gap-2 rounded-xl bg-[#fff3df] px-3 py-2 text-xs font-black text-[#9b5300] disabled:opacity-45 dark:bg-[#ff8c00]/12 dark:text-[#ffbc6a]">
                     <Sparkles className="size-3.5" />
                     {aiBusy === "condition" ? "Генерую…" : "Згенерувати умову"}
                   </button>
-                  <button type="button" onClick={() => void generateTemplate()} disabled={!!aiBusy || !taskForm.title.trim()} className="inline-flex items-center gap-2 rounded-xl bg-[#e9f8ef] px-3 py-2 text-xs font-black text-[#147b47] disabled:opacity-45 dark:bg-[#00ff88]/10 dark:text-[#72edb0]">
+                  <button type="button" onClick={() => void generateTemplate()} disabled={!!aiBusy || !taskForm.title.trim()} className="inline-flex items-center gap-2 rounded-xl bg-[#e9f8ef] px-3 py-2 text-xs font-black text-primary-strong disabled:opacity-45 dark:bg-primary/10 dark:text-primary-soft">
                     <Sparkles className="size-3.5" />
                     {aiBusy === "template" ? "Генерую…" : "Стартовий код"}
                   </button>
                 </div>
-                <textarea id="topic-task-description" name="taskDescription" aria-label="Умова завдання" value={taskForm.description} onChange={(event) => setTaskForm({ ...taskForm, description: event.target.value })} placeholder="Умова, контекст, обмеження" rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
-                <textarea id="topic-task-template" name="taskTemplate" aria-label="Стартовий код" value={taskForm.template} onChange={(event) => setTaskForm({ ...taskForm, template: event.target.value })} placeholder="Стартовий код (необовʼязково)" rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-sm text-[#dbe8df] outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10" />
+                <textarea id="topic-task-description" name="taskDescription" aria-label="Умова завдання" value={taskForm.description} onChange={(event) => setTaskForm({ ...taskForm, description: event.target.value })} placeholder="Умова, контекст, обмеження" rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-primary/15 dark:border-white/10 dark:bg-[#0d1710]" />
+                <textarea id="topic-task-template" name="taskTemplate" aria-label="Стартовий код" value={taskForm.template} onChange={(event) => setTaskForm({ ...taskForm, template: event.target.value })} placeholder="Стартовий код (необовʼязково)" rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-sm text-[#dbe8df] outline-none focus:ring-4 focus:ring-primary/15 dark:border-white/10" />
               </section>
               <section className="space-y-4 rounded-[26px] border border-[#142018]/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
                 <div className="flex items-center gap-3">
@@ -937,7 +937,7 @@ export const TopicStudioPage: React.FC = () => {
                   <Sparkles className="size-3.5" />
                   {aiBusy === "theory" ? "Генерую…" : "Згенерувати теорію"}
                 </button>
-                <textarea id="topic-task-theory" name="taskTheory" aria-label="Теорія завдання" value={taskForm.theory} onChange={(event) => setTaskForm({ ...taskForm, theory: event.target.value })} placeholder="Коротке пояснення перед практикою: поняття, приклад, пастки" rows={9} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10 dark:bg-[#0d1710]" />
+                <textarea id="topic-task-theory" name="taskTheory" aria-label="Теорія завдання" value={taskForm.theory} onChange={(event) => setTaskForm({ ...taskForm, theory: event.target.value })} placeholder="Коротке пояснення перед практикою: поняття, приклад, пастки" rows={9} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-primary/15 dark:border-white/10 dark:bg-[#0d1710]" />
                 <div>
                   <label className="mb-2 block text-xs font-black uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">Мініпроєкт · projectSpec JSON (необовʼязково)</label>
                   <textarea
@@ -948,11 +948,11 @@ export const TopicStudioPage: React.FC = () => {
                     onChange={(event) => setTaskForm({ ...taskForm, projectSpecJson: event.target.value })}
                     placeholder={'{"version":1,"kind":"MINI_PROJECT","estimatedMinutes":45,"skills":["цикли"],"milestones":[{"id":"step-1","title":"Перший етап","description":"Що має зробити учень.","required":true}]}' }
                     rows={7}
-                    className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-xs text-[#dbe8df] outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10"
+                    className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-xs text-[#dbe8df] outline-none focus:ring-4 focus:ring-primary/15 dark:border-white/10"
                   />
                   <p className="mt-2 text-xs leading-5 text-[#718075] dark:text-[#a6b4a9]">Для мініпроєкту додайте тести нижче. Учень побачить етапи в IDE, а submit перевірятиметься judgeʼом.</p>
                 </div>
-                <button type="button" disabled={busy || !taskForm.title.trim()} onClick={() => void createTask()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
+                <button type="button" disabled={busy || !taskForm.title.trim()} onClick={() => void createTask()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
                   <ArrowRight className="size-4" />
                   {editingTaskId ? "Зберегти зміни" : "Створити й додати тести"}
                 </button>
@@ -997,14 +997,14 @@ export const TopicStudioPage: React.FC = () => {
               </section>
               <section className="space-y-4 rounded-[26px] border border-[#142018]/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
                 <div className="flex items-center gap-3">
-                  <ListChecks className="size-5 text-[#16834d] dark:text-[#7bedb4]" />
+                  <ListChecks className="size-5 text-primary-strong dark:text-primary-soft" />
                   <h3 className="font-black">Оцінювання</h3>
                 </div>
-                <textarea id="topic-control-formula" name="gradingFormula" aria-label="Формула оцінювання" value={controlForm.formula} onChange={(event) => setControlForm({ ...controlForm, formula: event.target.value })} rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-sm text-[#dbe8df] outline-none focus:ring-4 focus:ring-[#00d978]/15 dark:border-white/10" />
+                <textarea id="topic-control-formula" name="gradingFormula" aria-label="Формула оцінювання" value={controlForm.formula} onChange={(event) => setControlForm({ ...controlForm, formula: event.target.value })} rows={6} className="w-full resize-none rounded-xl border border-[#142018]/10 bg-[#0d1510] px-4 py-3 font-mono text-sm text-[#dbe8df] outline-none focus:ring-4 focus:ring-primary/15 dark:border-white/10" />
                 <div className="rounded-2xl bg-[#e9f8ef] p-4 text-sm leading-6 text-[#506057] dark:bg-[#12301e] dark:text-[#c1d2c5]">
                   Після створення відкриється control studio — там можна згенерувати квіз, додати практичні задачі та перевірити формулу.
                 </div>
-                <button type="button" disabled={busy || !controlForm.title.trim() || (!controlForm.hasTheory && !controlForm.hasPractice)} onClick={() => void createControl()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
+                <button type="button" disabled={busy || !controlForm.title.trim() || (!controlForm.hasTheory && !controlForm.hasPractice)} onClick={() => void createControl()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-black text-[#061e10] disabled:opacity-45">
                   <Settings className="size-4" />
                   Створити й налаштувати
                 </button>
@@ -1019,7 +1019,7 @@ export const TopicStudioPage: React.FC = () => {
               <section className="space-y-3 rounded-[26px] border border-[#142018]/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="font-black">Набір тестів</h3>
-                  <span className="rounded-full bg-[#e8f6ed] px-3 py-1 text-xs font-black text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]">{tests.length}</span>
+                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-black text-primary-strong dark:bg-primary/10 dark:text-primary-soft">{tests.length}</span>
                 </div>
                 {testNotice && <p role="status" aria-live="polite" className="rounded-2xl bg-[#e9f8ef] px-4 py-3 text-xs leading-5 text-[#287048] dark:bg-[#12301e] dark:text-[#b9e7c8]">{testNotice}</p>}
                 {tests.map((test, index) => (
@@ -1046,9 +1046,9 @@ export const TopicStudioPage: React.FC = () => {
                   <div className="mt-3 flex flex-wrap items-end gap-2">
                     <label htmlFor="topic-test-generation-count" className="block">
                       <span className="mb-1 block text-[11px] font-black uppercase tracking-[.1em] text-[#718075] dark:text-[#a6b4a9]">Кількість</span>
-                      <input id="topic-test-generation-count" name="testGenerationCount" value={testGenerationCount} onChange={(event) => setTestGenerationCount(event.target.value)} type="number" min="1" max="50" className="w-24 rounded-xl border border-[#142018]/10 bg-white px-3 py-2 text-sm outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0d1710]" />
+                      <input id="topic-test-generation-count" name="testGenerationCount" value={testGenerationCount} onChange={(event) => setTestGenerationCount(event.target.value)} type="number" min="1" max="50" className="w-24 rounded-xl border border-[#142018]/10 bg-white px-3 py-2 text-sm outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-[#0d1710]" />
                     </label>
-                    <button type="button" disabled={busy} onClick={() => void generateTests()} className="inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-3 py-2.5 text-xs font-black text-[#061e10] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/25 disabled:opacity-45">
+                    <button type="button" disabled={busy} onClick={() => void generateTests()} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-black text-[#061e10] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:opacity-45">
                       <Sparkles className="size-3.5" aria-hidden="true" />
                       {busy ? "Генерую…" : "Згенерувати"}
                     </button>
@@ -1063,24 +1063,24 @@ export const TopicStudioPage: React.FC = () => {
                 </div>
                 <div className="rounded-2xl border border-[#142018]/10 bg-[#f7faf6] p-4 dark:border-white/10 dark:bg-white/[.04]">
                   <div className="flex items-start gap-3">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#e9f8ef] text-[#16834d] dark:bg-[#00ff88]/10 dark:text-[#72edb0]"><Upload className="size-4" aria-hidden="true" /></span>
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#e9f8ef] text-primary-strong dark:bg-primary/10 dark:text-primary-soft"><Upload className="size-4" aria-hidden="true" /></span>
                     <div>
                       <h3 className="font-black">Імпорт .in / .out</h3>
                       <p className="mt-1 text-xs leading-5 text-[#718075] dark:text-[#a6b4a9]">Файли з однаковою назвою обʼєднаються в один тест.</p>
                     </div>
                   </div>
                   <label htmlFor="topic-test-files" className="mt-3 block text-xs font-black text-[#32443a] dark:text-[#d8e3db]">Файли тестів</label>
-                  <input key={importInputKey} id="topic-test-files" name="testFiles" type="file" multiple accept=".in,.out,text/plain" onChange={(event) => setImportFiles(Array.from(event.target.files || []))} className="mt-1 block w-full rounded-xl border border-dashed border-[#142018]/20 bg-white px-3 py-2 text-xs text-[#536258] outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-[#e9f8ef] file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-[#16834d] focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/15 dark:bg-[#0d1710] dark:text-[#c7d5ca]" />
+                  <input key={importInputKey} id="topic-test-files" name="testFiles" type="file" multiple accept=".in,.out,text/plain" onChange={(event) => setImportFiles(Array.from(event.target.files || []))} className="mt-1 block w-full rounded-xl border border-dashed border-[#142018]/20 bg-white px-3 py-2 text-xs text-[#536258] outline-none file:mr-3 file:rounded-lg file:border-0 file:bg-[#e9f8ef] file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-primary-strong focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/15 dark:bg-[#0d1710] dark:text-[#c7d5ca]" />
                   <div className="mt-3 flex flex-wrap items-end gap-3">
                     <label htmlFor="topic-import-points" className="block">
                       <span className="mb-1 block text-[11px] font-black uppercase tracking-[.1em] text-[#718075] dark:text-[#a6b4a9]">Бали</span>
-                      <input id="topic-import-points" name="importPoints" value={importPoints} onChange={(event) => setImportPoints(event.target.value)} type="number" min="1" max="100" className="w-20 rounded-xl border border-[#142018]/10 bg-white px-3 py-2 text-sm outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0d1710]" />
+                      <input id="topic-import-points" name="importPoints" value={importPoints} onChange={(event) => setImportPoints(event.target.value)} type="number" min="1" max="100" className="w-20 rounded-xl border border-[#142018]/10 bg-white px-3 py-2 text-sm outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-[#0d1710]" />
                     </label>
                     <label className="flex items-center gap-2 pb-2 text-xs font-bold text-[#627269] dark:text-[#aab7ad]">
                       <input name="importIsHidden" type="checkbox" checked={importIsHidden} onChange={(event) => setImportIsHidden(event.target.checked)} />
                       Приховані
                     </label>
-                    <button type="button" disabled={busy || importFiles.length === 0} onClick={() => void importTestFiles()} className="inline-flex items-center gap-2 rounded-xl border border-[#16834d]/25 bg-white px-3 py-2.5 text-xs font-black text-[#16834d] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 disabled:opacity-45 dark:bg-[#0b130e] dark:text-[#72edb0]">
+                    <button type="button" disabled={busy || importFiles.length === 0} onClick={() => void importTestFiles()} className="inline-flex items-center gap-2 rounded-xl border border-primary-strong/25 bg-white px-3 py-2.5 text-xs font-black text-primary-strong transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:opacity-45 dark:bg-[#0b130e] dark:text-primary-soft">
                       <Upload className="size-3.5" aria-hidden="true" />
                       Імпортувати{importFiles.length ? ` (${importFiles.length})` : ""}
                     </button>
@@ -1088,16 +1088,16 @@ export const TopicStudioPage: React.FC = () => {
                 </div>
                 <div className="border-t border-[#142018]/10 pt-3 dark:border-white/10">
                   <h3 className="font-black">Додати тест вручну</h3>
-                  <textarea id="topic-test-input" name="testInput" aria-label="Вхідні дані тесту" value={testForm.input} onChange={(event) => setTestForm({ ...testForm, input: event.target.value })} placeholder="Вхідні дані" rows={4} spellCheck={false} className="mt-3 w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0d1710]" />
-                  <textarea id="topic-test-output" name="expectedOutput" aria-label="Очікуваний результат тесту" value={testForm.expectedOutput} onChange={(event) => setTestForm({ ...testForm, expectedOutput: event.target.value })} placeholder="Очікуваний результат" rows={4} spellCheck={false} className="mt-3 w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0d1710]" />
+                  <textarea id="topic-test-input" name="testInput" aria-label="Вхідні дані тесту" value={testForm.input} onChange={(event) => setTestForm({ ...testForm, input: event.target.value })} placeholder="Вхідні дані" rows={4} spellCheck={false} className="mt-3 w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-[#0d1710]" />
+                  <textarea id="topic-test-output" name="expectedOutput" aria-label="Очікуваний результат тесту" value={testForm.expectedOutput} onChange={(event) => setTestForm({ ...testForm, expectedOutput: event.target.value })} placeholder="Очікуваний результат" rows={4} spellCheck={false} className="mt-3 w-full resize-none rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 font-mono text-xs outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-[#0d1710]" />
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <label htmlFor="topic-test-points" className="sr-only">Бали за тест</label>
-                    <input id="topic-test-points" name="testPoints" aria-label="Бали за тест" value={testForm.points} onChange={(event) => setTestForm({ ...testForm, points: event.target.value })} type="number" min="1" className="w-24 rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 text-sm outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/20 dark:border-white/10 dark:bg-[#0d1710]" />
+                    <input id="topic-test-points" name="testPoints" aria-label="Бали за тест" value={testForm.points} onChange={(event) => setTestForm({ ...testForm, points: event.target.value })} type="number" min="1" className="w-24 rounded-xl border border-[#142018]/10 bg-[#f8fbf8] px-3 py-2 text-sm outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-[#0d1710]" />
                     <label className="flex items-center gap-2 text-sm font-bold text-[#627269] dark:text-[#aab7ad]">
                       <input name="testIsHidden" type="checkbox" checked={testForm.isHidden} onChange={(event) => setTestForm({ ...testForm, isHidden: event.target.checked })} />
                       Прихований
                     </label>
-                    <button type="button" disabled={busy || !testForm.expectedOutput.trim()} onClick={() => void addTest()} className="rounded-xl bg-[#00d978] px-4 py-3 text-sm font-black text-[#061e10] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#00d978]/25 disabled:opacity-45">
+                    <button type="button" disabled={busy || !testForm.expectedOutput.trim()} onClick={() => void addTest()} className="rounded-xl bg-primary px-4 py-3 text-sm font-black text-[#061e10] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:opacity-45">
                       Додати до набору
                     </button>
                   </div>

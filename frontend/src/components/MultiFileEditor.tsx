@@ -187,7 +187,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
                   }
                   title={isEntry ? `${f.path} (entry)` : f.path}
                 >
-                  <FileCode2 className={`size-3.5 ${isActive ? "text-[#72edb0]" : "text-[#718078]"}`} />
+                  <FileCode2 className={`size-3.5 ${isActive ? "text-primary-soft" : "text-[#718078]"}`} />
                   {f.path}
                   {hasUnsavedChanges && isActive ? <span className="size-1.5 rounded-full bg-[#f0c674]" title={tr("Є незбережені зміни", "Unsaved changes")} aria-label={tr("Є незбережені зміни", "Unsaved changes")} /> : null}
                 </button>

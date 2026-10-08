@@ -93,10 +93,10 @@ const LearningSuccessCard: React.FC<{
 }> = ({ topic, testsPassed, testsTotal, nextTask, onNextTask }) => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
-  return <div className="mt-4 rounded-2xl border border-[#00d978]/25 bg-[#00d978]/[.07] p-4 text-[#e7f7eb]">
-    <div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-[#72edb0]" /><div><div className="text-sm font-bold text-[#72edb0]">{tr("Рішення перевірено", "Solution verified")}</div><p className="mt-1 text-xs leading-5 text-[#b9cfbe]">{tr("Рішення пройшло всі доступні перевірки. Це результат цієї задачі, а не навчальна навичка.", "The solution passed all available checks. This is a result for this task, not a learning skill.")} {testsPassed}/{testsTotal}</p></div></div>
+  return <div className="mt-4 rounded-2xl border border-primary/25 bg-primary/[.07] p-4 text-[#e7f7eb]">
+    <div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary-soft" /><div><div className="text-sm font-bold text-primary-soft">{tr("Рішення перевірено", "Solution verified")}</div><p className="mt-1 text-xs leading-5 text-[#b9cfbe]">{tr("Рішення пройшло всі доступні перевірки. Це результат цієї задачі, а не навчальна навичка.", "The solution passed all available checks. This is a result for this task, not a learning skill.")} {testsPassed}/{testsTotal}</p></div></div>
     <div className="mt-4 grid gap-2 sm:grid-cols-2"><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Задача", "Task")}</span><strong className="mt-1 block text-sm">{topic}</strong></div><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Статус", "Status")}</span><strong className="mt-1 block text-sm">{tr("Завершено", "Completed")}</strong></div></div>
-    {nextTask ? <button type="button" onClick={onNextTask} className="mt-4 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[.05] p-3 text-left transition hover:bg-white/[.09]"><span><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Наступна рекомендована задача", "Next recommended task")}</span><strong className="mt-1 block text-sm">{nextTask.title}</strong></span><ArrowLeft className="size-4 rotate-180 text-[#72edb0]" /></button> : <p className="mt-4 text-xs text-[#9fb5a5]">{tr("Відкрий бібліотеку, щоб обрати наступну задачу з цієї теми.", "Open the library to choose the next task from this topic.")}</p>}
+    {nextTask ? <button type="button" onClick={onNextTask} className="mt-4 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[.05] p-3 text-left transition hover:bg-white/[.09]"><span><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Наступна рекомендована задача", "Next recommended task")}</span><strong className="mt-1 block text-sm">{nextTask.title}</strong></span><ArrowLeft className="size-4 rotate-180 text-primary-soft" /></button> : <p className="mt-4 text-xs text-[#9fb5a5]">{tr("Відкрий бібліотеку, щоб обрати наступну задачу з цієї теми.", "Open the library to choose the next task from this topic.")}</p>}
   </div>;
 };
 
@@ -1091,12 +1091,12 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   if (!loading && !task && loadError) {
     return (
-      <div className="min-h-full bg-[#f7f8f5] p-6 dark:bg-[#0b120e]">
+      <div className="min-h-full bg-bg-base p-6 dark:bg-bg-base">
         <div className="mx-auto flex min-h-[520px] max-w-xl items-center justify-center">
-          <Card className="w-full border-[#ff6b9d]/25 bg-white p-6 text-center dark:border-[#ff6b9d]/20 dark:bg-[#121b15]">
-            <div className="text-base font-bold text-[#142017] dark:text-white">{tr("Не вдалося завантажити задачу", "Could not load the task")}</div>
+          <Card className="w-full border-[#ff6b9d]/25 bg-white p-6 text-center dark:border-[#ff6b9d]/20 dark:bg-bg-surface">
+            <div className="text-base font-bold text-text-primary dark:text-white">{tr("Не вдалося завантажити задачу", "Could not load the task")}</div>
             <p className="mt-2 break-words text-sm leading-6 text-[#6a786d] dark:text-[#a7b5aa]">{loadError}</p>
-            <button type="button" onClick={() => setLoadAttempt((value) => value + 1)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#00d978] px-4 py-2.5 text-sm font-bold text-[#062211] transition hover:bg-[#25e88d]">
+            <button type="button" onClick={() => setLoadAttempt((value) => value + 1)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-[#062211] transition hover:bg-[#25e88d]">
               {tr("Повторити", "Retry")}
             </button>
           </Card>
@@ -1106,7 +1106,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
   }
 
   if (loading || !task) {
-    return <div className="min-h-full bg-[#f7f8f5] p-6 dark:bg-[#0b120e]"><div className="mx-auto h-[720px] max-w-[1500px] animate-pulse rounded-[28px] bg-[#e8ede8] dark:bg-white/[.04]" /></div>;
+    return <div className="min-h-full bg-bg-base p-6 dark:bg-bg-base"><div className="mx-auto h-[720px] max-w-[1500px] animate-pulse rounded-[28px] bg-[#e8ede8] dark:bg-white/[.04]" /></div>;
   }
 
   const ideResultCards = checkResult && String(checkResult.verdict ?? "").toUpperCase() === "AC" ? (
@@ -1160,11 +1160,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-full bg-[#f7f8f5] px-4 py-6 text-[#142017] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:px-6 lg:px-10 lg:py-9">
+    <div className="min-h-full bg-bg-base px-4 py-6 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-10 lg:py-9">
       <div className="mx-auto max-w-[1680px]">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <button type="button" onClick={goBackToLibrary} className="inline-flex items-center gap-2 text-sm font-semibold text-[#617066] transition hover:text-[#147b47] dark:text-[#a7b5aa] dark:hover:text-[#72edb0]"><ArrowLeft className="size-4" />{tr("До бібліотеки", "Back to library")}</button>
-          <div className="flex items-center gap-2"><div className="hidden items-center gap-2 text-xs text-[#718075] sm:flex"><span>{task.difficulty === "HARD" ? tr("Складна", "Hard") : task.difficulty === "MEDIUM" ? tr("Середня", "Medium") : tr("Легка", "Easy")}</span><span>·</span><span>{task.tags?.slice(0, 3).join(" · ")}</span></div><button type="button" onClick={reportTaskIssue} className="inline-flex items-center gap-1.5 rounded-lg border border-[#152219]/10 bg-white px-2.5 py-2 text-xs font-semibold text-[#617066] transition hover:border-[#00c96d]/40 hover:text-[#147b47] dark:border-white/10 dark:bg-white/[.04] dark:text-[#a7b5aa] dark:hover:text-[#72edb0]" aria-label={tr("Повідомити про проблему із задачею", "Report a task issue")} title={tr("Повідомити про проблему", "Report an issue")}><CircleHelp className="size-3.5" />{tr("Проблема", "Report issue")}</button></div>
+          <button type="button" onClick={goBackToLibrary} className="inline-flex items-center gap-2 text-sm font-semibold text-text-muted transition hover:text-primary-strong dark:text-[#a7b5aa] dark:hover:text-primary-soft"><ArrowLeft className="size-4" />{tr("До бібліотеки", "Back to library")}</button>
+          <div className="flex items-center gap-2"><div className="hidden items-center gap-2 text-xs text-[#718075] sm:flex"><span>{task.difficulty === "HARD" ? tr("Складна", "Hard") : task.difficulty === "MEDIUM" ? tr("Середня", "Medium") : tr("Легка", "Easy")}</span><span>·</span><span>{task.tags?.slice(0, 3).join(" · ")}</span></div><button type="button" onClick={reportTaskIssue} className="inline-flex items-center gap-1.5 rounded-lg border border-border/10 bg-white px-2.5 py-2 text-xs font-semibold text-text-muted transition hover:border-primary/40 hover:text-primary-strong dark:border-white/10 dark:bg-white/[.04] dark:text-[#a7b5aa] dark:hover:text-primary-soft" aria-label={tr("Повідомити про проблему із задачею", "Report a task issue")} title={tr("Повідомити про проблему", "Report an issue")}><CircleHelp className="size-3.5" />{tr("Проблема", "Report issue")}</button></div>
         </div>
         <StudyCodIDEWorkspace
           task={task}

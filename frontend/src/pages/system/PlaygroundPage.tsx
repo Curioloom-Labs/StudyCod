@@ -236,7 +236,7 @@ export const PlaygroundPage: React.FC = () => {
     <div className="min-h-[100dvh] bg-[#f3f5ef] px-3 py-4 text-[#101812] dark:bg-[#07100a] dark:text-[#ecf5ee] sm:px-5 lg:px-8">
       <div className="mx-auto flex max-w-[1900px] flex-col gap-5">
         <section className="relative overflow-visible rounded-[34px] border border-[#132019]/10 bg-[#101812] px-5 py-5 text-white shadow-[0_28px_90px_rgba(8,24,14,.18)] dark:border-white/10 sm:px-7">
-          <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[#00d978]/15 blur-3xl" />
+          <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/15 blur-3xl" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <button type="button" onClick={() => navigate(-1)} className="mb-3 inline-flex items-center gap-2 text-sm text-text-secondary transition hover:text-text-primary">
