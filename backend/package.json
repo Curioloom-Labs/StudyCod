@@ -46,7 +46,7 @@
     "express-session": "^1.19.0",
     "express-validator": "^7.3.1",
     "geoip-lite": "^1.4.10",
-    "handlebars": "^4.7.9",
+    "handlebars": "^4.7.10",
     "helmet": "^8.1.0",
     "iconv-lite": "^0.7.2",
     "imapflow": "^1.0.190",
