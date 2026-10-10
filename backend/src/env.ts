@@ -444,9 +444,9 @@ const EnvSchema = z.object({
 
     __maxConcurrentExecutions: (() => {
       const raw = (env.MAX_CONCURRENT_EXECUTIONS ?? "").trim();
-      if (!raw) return 12;
+      if (!raw) return 1;
       const n = Number.parseInt(raw, 10);
-      return Number.isFinite(n) && n > 0 ? n : 12;
+      return Number.isFinite(n) && n > 0 ? n : 1;
     })(),
     // 0/unset => fall back to per-instance cap (handled in the queue).
     __maxGlobalConcurrentExecutions: (() => {

@@ -83,7 +83,11 @@ export const ScoreboardPage: React.FC = () => {
       })
       .catch(() => {});
 
+    let lastFetchAt = 0;
+    let fetchInFlight = false;
     const tick = async () => {
+      if (fetchInFlight || Date.now() - lastFetchAt < 5000) return;
+      fetchInFlight = true; lastFetchAt = Date.now();
       try {
         const b = await getContestScoreboard(contestId);
         if (cancelled) return;
@@ -95,7 +99,7 @@ export const ScoreboardPage: React.FC = () => {
         setError(null);
       } catch {
         if (!cancelled) setError(tr("Не вдалося оновити таблицю.", "Failed to refresh."));
-      }
+      } finally { fetchInFlight = false; }
     };
     void tick();
 
@@ -114,7 +118,7 @@ export const ScoreboardPage: React.FC = () => {
       }
     }
 
-    if (live) timerRef.current = window.setInterval(tick, es ? 20000 : 7000);
+    if (live) timerRef.current = window.setInterval(tick, es ? 20000 : 5000 + Math.random() * 1000);
     return () => {
       cancelled = true;
       if (timerRef.current) window.clearInterval(timerRef.current);

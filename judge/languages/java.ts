@@ -15,7 +15,7 @@ export const javaLanguage: LanguageAdapter = {
   getCompilePlan() {
     return {
       display: "javac Main.java",
-      argv: ["/usr/bin/javac", "-J-Xms64m", "-J-Xmx128m", "-encoding", "UTF-8", "Main.java"]
+      argv: ["/usr/bin/javac", "-J-Xms32m", "-J-Xmx128m", "-J-XX:+UseSerialGC", "-J-XX:-UsePerfData", "-J-XX:TieredStopAtLevel=1", "-encoding", "UTF-8", "Main.java"]
     };
   },
   getRunPlan() {

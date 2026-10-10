@@ -2,7 +2,9 @@ import { spawn } from "child_process";
 import { createReadStream } from "fs";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { allowInsecureSandboxFallback, isProductionEnvironment, readJudgeSandboxPath } from "../config";
+import { randomUUID } from "crypto";
+import type { Readable } from "stream";
+import { allowInsecureSandboxFallback, isProductionEnvironment, readJudgeSandboxPath, readEnv } from "../config";
 export interface ExecOptions {
   nsjailPath: string;
   nsjailConfigPath: string;
@@ -39,11 +41,16 @@ export interface ExecResult {
   outputLimitExceeded: boolean;
   timeMs: number;
   memoryKb: number | null;
+  cpuTimeMs: number | null;
+  oomKilled: boolean;
+  sandboxLog: string;
 }
 export class NsJailExecutor {
   async exec(opts: ExecOptions): Promise<ExecResult> {
     const start = process.hrtime.bigint();
-    const timeLimitSec = Math.max(1, Math.ceil(opts.timeLimitMs / 1000));
+    // nsjail uses integer epoch seconds; give it headroom so our monotonic timer
+    // owns the exact deadline and a second boundary cannot kill a valid program early.
+    const timeLimitSec = Math.max(1, Math.ceil(opts.timeLimitMs / 1000) + 1);
     const cpuLimitSec = Math.max(1, Math.ceil((opts.timeLimitMs + 50) / 1000));
     const rlimitAs = (() => {
       const override = opts.addressSpaceLimitBytes;
@@ -84,7 +91,8 @@ export class NsJailExecutor {
       }
       nsArgs.push("--mode", "o", "--chroot", opts.chroot, "--cwd", opts.cwd, "--disable_clone_newnet");
     }
-    nsArgs.push("--time_limit", String(timeLimitSec), "--rlimit_cpu", String(cpuLimitSec), "--rlimit_as", String(rlimitAs), "--rlimit_fsize", String(rlimitFsize));
+    // nsjail parses these two CLI limits in MiB; cgroup memory limits are bytes.
+    nsArgs.push("--time_limit", String(timeLimitSec), "--rlimit_cpu", String(cpuLimitSec), "--rlimit_as", opts.addressSpaceLimitBytes === Infinity ? "inf" : String(Math.ceil(rlimitAs / 1048576)), "--rlimit_fsize", String(Math.ceil(rlimitFsize / 1048576)));
     nsArgs.push("--bindmount", `${opts.hostWorkDir}:/work`);
 
     // PATH/HOME inside the jail. nsjail starts with a clean environment, so compilers that
@@ -111,6 +119,11 @@ export class NsJailExecutor {
       "--env",
       "PYTHONIOENCODING=UTF-8"
     );
+    // Keep INFO termination records without the per-mount DEBUG transcript.
+    // Niceness 19 starves the only judge whenever ordinary services wake up.
+    const niceLevel = Number(readEnv("NSJAIL_NICE_LEVEL") || 5);
+    nsArgs.push("--nice_level", String(Number.isInteger(niceLevel) && niceLevel >= 0 && niceLevel <= 19 ? niceLevel : 5), "--log_fd", "3");
+    if (readEnv("NSJAIL_VERBOSE") === "1") nsArgs.push("--verbose");
     nsArgs.push("--", ...opts.argv);
     if (opts.extraNsJailArgs?.length) {
       const idx = nsArgs.indexOf("--");
@@ -120,18 +133,45 @@ export class NsJailExecutor {
     let outputLimitExceeded = false;
     let killed = false;
     let spawnErrorMessage: string | null = null;
-    const child = spawn(opts.nsjailPath, nsArgs, {
-      stdio: ["pipe", "pipe", "pipe"],
-      windowsHide: true
+    const cgroup = process.platform === "linux" && isProductionEnvironment()
+      ? path.join("/sys/fs/cgroup/studycod-executions", `exec-${process.pid}-${randomUUID()}`) : null;
+    if (cgroup) {
+      await fs.mkdir(cgroup);
+      try {
+        await fs.writeFile(path.join(cgroup, "memory.max"), String(opts.memoryLimitBytes));
+        await fs.writeFile(path.join(cgroup, "memory.swap.max"), "0");
+        await fs.writeFile(path.join(cgroup, "pids.max"), "512");
+        await fs.writeFile(path.join(cgroup, "memory.oom.group"), "1");
+      } catch (error) {
+        await fs.rmdir(cgroup).catch(() => undefined);
+        throw new Error(`JUDGE_CGROUP_SETUP_FAILED: ${String(error)}`);
+      }
+    }
+    // Enter the cgroup before exec/fork: moving a running compiler later races its children.
+    const prepared = process.hrtime.bigint();
+    const child = spawn(cgroup ? "/bin/sh" : opts.nsjailPath, cgroup
+      ? ["-c", 'printf "%s" "$$" > "$1/cgroup.procs" || { echo JUDGE_CGROUP_ENTER_FAILED >&2; exit 125; }; shift; exec "$@"', "judge", cgroup, opts.nsjailPath, ...nsArgs]
+      : nsArgs, {
+      stdio: ["pipe", "pipe", "pipe", "pipe"],
+      windowsHide: true,
+      detached: process.platform !== "win32",
     });
     const stdoutChunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
+    const sandboxLogChunks: Buffer[] = [];
+    let sandboxLogBytes = 0;
+    (child.stdio[3] as Readable | null)?.on("data", (data: Buffer) => {
+      const room = 1024 * 1024 - sandboxLogBytes;
+      if (room > 0) { const part = data.subarray(0, room); sandboxLogChunks.push(part); sandboxLogBytes += part.length; }
+    });
     let totalOut = 0;
     const killChild = () => {
       if (killed) return;
       killed = true;
+      if (cgroup) void fs.writeFile(path.join(cgroup, "cgroup.kill"), "1").catch(() => undefined);
       try {
-        child.kill("SIGKILL");
+        if (process.platform !== "win32" && child.pid) process.kill(-child.pid, "SIGKILL");
+        else child.kill("SIGKILL");
       } catch {}
     };
     const timeoutHandle = setTimeout(() => {
@@ -235,27 +275,45 @@ export class NsJailExecutor {
       // Include a short, actionable message.
       stderr = `SPAWN_ERROR: ${spawnErrorMessage}`;
     }
-    const memoryKb = await readCgroupPeakKb();
+    let memoryKb: number | null = null;
+    let cpuTimeMs: number | null = null;
+    let oomKilled = false;
+    if (cgroup) {
+      try {
+        memoryKb = Math.ceil(Number((await fs.readFile(path.join(cgroup, "memory.peak"), "utf8")).trim()) / 1024);
+        const cpu = await fs.readFile(path.join(cgroup, "cpu.stat"), "utf8");
+        cpuTimeMs = Number(cpu.match(/^usage_usec\s+(\d+)/m)?.[1] ?? 0) / 1000;
+        const events = await fs.readFile(path.join(cgroup, "memory.events"), "utf8");
+        oomKilled = Number(events.match(/^oom_kill\s+(\d+)/m)?.[1] ?? 0) > 0;
+      } finally {
+        await fs.writeFile(path.join(cgroup, "cgroup.kill"), "1").catch(() => undefined);
+        await fs.rmdir(cgroup).catch(() => undefined);
+      }
+    }
+    const sandboxLog = Buffer.concat(sandboxLogChunks).toString("utf8");
+    if (readEnv("JUDGE_PROFILE_PHASES") === "1") {
+      console.error("[judge-profile]", JSON.stringify({ stage: opts.sandboxId, argv: opts.argv[0],
+        setupMs: Number(prepared - start) / 1e6, processMs: Number(end - prepared) / 1e6,
+        cleanupMs: Number(process.hrtime.bigint() - end) / 1e6, cpuTimeMs }));
+    }
+    const sandboxSignal = sandboxLog.match(/terminated with signal:\s+(SIG[A-Z0-9]+)/)?.[1];
+    if (/run time >= time limit|terminated with signal: SIGXCPU/.test(sandboxLog)) timedOut = true;
+    if (spawnErrorMessage || (!sandboxLog && exitCode === 125 && stderr.startsWith("JUDGE_CGROUP_ENTER_FAILED")) ||
+      /(?:Couldn't|Could not|Failed to) (?:mount|initialize)|execve\(.*(?:No such file|Permission denied)/i.test(sandboxLog)) {
+      throw new Error(`JUDGE_INFRASTRUCTURE_ERROR: ${sandboxLog}\n${stderr}`);
+    }
     return {
       exitCode,
-      signal,
+      signal: sandboxSignal ? sandboxSignal as NodeJS.Signals : signal,
       stdout,
       stderr,
       timedOut,
       outputLimitExceeded,
       timeMs,
-      memoryKb
+      memoryKb,
+      cpuTimeMs,
+      oomKilled,
+      sandboxLog,
     };
   }
-}
-async function readCgroupPeakKb(): Promise<number | null> {
-  const candidates: string[] = [path.posix.join("/sys/fs/cgroup", "studycod", "memory.peak"), path.posix.join("/sys/fs/cgroup", "studycod", "memory.current"), path.posix.join("/sys/fs/cgroup/memory", "studycod", "memory.max_usage_in_bytes"), path.posix.join("/sys/fs/cgroup/memory", "studycod", "memory.usage_in_bytes")];
-  for (const file of candidates) {
-    try {
-      const raw = await fs.readFile(file, "utf8");
-      const v = Number(String(raw).trim());
-      if (Number.isFinite(v) && v > 0) return Math.floor(v / 1024);
-    } catch {}
-  }
-  return null;
 }

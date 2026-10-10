@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import type { ParamsFlatDictionary } from "express-serve-static-core";
 import type { ParsedQs } from "qs";
-import jwt from 'jsonwebtoken';
-import { JWT_SECRET } from '../config';
+import { verifyAuthJwt } from '../utils/verifyAuthJwt';
 import { AppDataSource } from '../data-source';
 import { User } from '../entities/User';
 import { UserMode, UserRole } from '../entities/User';
@@ -175,7 +174,10 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
     });
   }
 
-  const activeEnrollment = await AppDataSource.getRepository(UserCourseEnrollment).findOne({
+  // Issued contest accounts have no personal course. Keep explicit enrollment
+  // selections and every personal/educational lookup unchanged.
+  const activeEnrollment = user.userMode === "CONTEST" && !user.currentCourseEnrollmentId ? null
+    : await AppDataSource.getRepository(UserCourseEnrollment).findOne({
     where: user.currentCourseEnrollmentId
       ? { id: user.currentCourseEnrollmentId, user: { id: userId } }
       : { user: { id: userId }, status: "IN_PROGRESS" },
@@ -213,7 +215,7 @@ export const authMiddleware = async (req: AuthRequest, res: Response, next: Next
     });
   }
   try {
-    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as JwtPayload;
+    const payload = verifyAuthJwt(req, token) as JwtPayload;
     
     // Check if JWT has been revoked
     if (payload.jti && await isJtiRevoked(payload.jti)) {
@@ -264,7 +266,7 @@ export const authOptional = async (req: AuthRequest, _res: Response, next: NextF
     return next();
   }
   try {
-    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as JwtPayload;
+    const payload = verifyAuthJwt(req, token) as JwtPayload;
     
     // Check if JWT has been revoked
     if (payload.jti && await isJtiRevoked(payload.jti)) {

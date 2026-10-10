@@ -27,22 +27,23 @@ export const dLanguage: LanguageAdapter = {
   }
 };
 
-// Dart — run via the JIT VM (no separate compile step). Caches under /work.
+// Compile the portable kernel once, then use the same JIT VM for every test.
 export const dartLanguage: LanguageAdapter = {
   id: "dart",
   entryFile: "main.dart",
   defaultLimits: { ...LIMIT_PRESETS.scripting },
-  compileTimeLimitMs: COMPILE_BUDGET.interpreted,
+  compileTimeLimitMs: COMPILE_BUDGET.slow,
   writeSource: singleFileWriter("main.dart"),
   getCompilePlan() {
-    return null;
+    return { display: "dart compile kernel main.dart -o app.dill",
+      argv: ["/usr/bin/env", "HOME=/work", "PUB_CACHE=/work/.pubcache", "CI=true", "/usr/bin/dart", "compile", "kernel", "main.dart", "-o", "app.dill"] };
   },
   getRunPlan() {
     return {
-      display: "dart main.dart",
+      display: "dart app.dill",
       // Analytics are disabled via env (DART_* / CI) rather than a CLI flag, since the flag
       // name has changed across Dart versions and unknown flags abort the VM.
-      argv: ["/usr/bin/env", "HOME=/work", "PUB_CACHE=/work/.pubcache", "CI=true", "/usr/bin/dart", "main.dart"]
+      argv: ["/usr/bin/env", "HOME=/work", "PUB_CACHE=/work/.pubcache", "CI=true", "/usr/bin/dart", "app.dill"]
     };
   }
 };

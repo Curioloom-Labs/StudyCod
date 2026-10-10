@@ -111,6 +111,8 @@ function clampInt(n: number, min: number, max: number): number {
 }
 
 function getClientKey(req: AuthRequest): string {
+  if (req.studentId) return `student:${req.studentId}`;
+  if (req.userId) return `user:${req.userId}`;
   const pid = req.principalId;
   if (typeof pid === "number" && Number.isFinite(pid) && pid > 0) return `user:${pid}`;
 

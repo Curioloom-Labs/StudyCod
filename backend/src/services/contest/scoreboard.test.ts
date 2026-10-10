@@ -4,6 +4,14 @@ import { computeScoreboard, type ScoreboardSubmission } from "./scoreboard";
 
 const start = 1_000_000_000_000;
 const min = (m: number) => start + m * 60_000;
+test("queued submissions and infrastructure failures do not count as wrong attempts", () => {
+  const board = computeScoreboard([
+    { participantId: 1, problemId: 1, verdict: null, createdAtMs: min(1) },
+    { participantId: 1, problemId: 1, verdict: "AC", createdAtMs: min(2) },
+  ], { startMs: start });
+  assert.equal(board.rows[0].penalty, 2);
+  assert.equal(board.rows[0].problems[1].tries, 1);
+});
 
 test("ranks by solved desc then penalty asc", () => {
   const subs: ScoreboardSubmission[] = [

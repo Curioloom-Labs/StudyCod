@@ -153,6 +153,13 @@ export async function materializeTests(
     const inOk = inHash ? await fileExists(cachePathForHash(inHash)) : false;
     const outOk = outHash ? await fileExists(cachePathForHash(outHash)) : false;
     if (inOk && outOk) {
+      const now = new Date();
+      try {
+        await Promise.all([fs.utimes(cachePathForHash(inHash!), now, now), fs.utimes(cachePathForHash(outHash!), now, now)]);
+      } catch {
+        needContent.push(row.id);
+        continue;
+      }
       refs.set(key, { inputPath: cachePathForHash(inHash!), outputPath: cachePathForHash(outHash!) });
     } else {
       pending.set(key, { inHash: inOk ? inHash : undefined, outHash: outOk ? outHash : undefined });
@@ -218,6 +225,22 @@ export async function sweepTestCache(ttlMs?: number): Promise<{ removed: number;
   }
 
   await walk(dir);
+  const pinnedPaths = new Set<string>();
+  if (AppDataSource.isInitialized) {
+    try {
+      const jobs = await AppDataSource.query("SELECT payload FROM contest_execution_jobs WHERE state IN ('queued','running')") as Array<{ payload: string }>;
+      for (const job of jobs) {
+        const payload = JSON.parse(job.payload) as { request?: { tests?: WorkerTest[] } };
+        for (const test of payload.request?.tests ?? []) {
+          if (test.input_path) pinnedPaths.add(path.resolve(test.input_path));
+          if (test.output_path) pinnedPaths.add(path.resolve(test.output_path));
+        }
+      }
+    } catch {
+      // Never collect test versions when durable job references cannot be read.
+      return { removed: 0, scanned };
+    }
+  }
   let referencedHashes: Set<string> | null = null;
   if (files.length > 0) {
     try {
@@ -250,9 +273,12 @@ export async function sweepTestCache(ttlMs?: number): Promise<{ removed: number;
   }
 
   for (const file of files) {
+    if (pinnedPaths.has(path.resolve(file.full))) continue;
     try {
       const isOrphan = referencedHashes !== null && !referencedHashes.has(file.name);
-      if (isOrphan || file.last < cutoff) {
+      if (file.last < cutoff && (isOrphan || referencedHashes !== null)) {
+        const current = await fs.stat(file.full);
+        if (Math.max(current.atimeMs, current.mtimeMs) >= cutoff) continue;
         await fs.rm(file.full, { force: true });
         removed++;
       }
@@ -286,11 +312,12 @@ export async function loadTestContentByIds(
 async function persistTestHashes(updates: TestHashUpdate[]): Promise<void> {
   if (updates.length === 0) return;
   try {
-    const repo = AppDataSource.getRepository(TestData);
     // Group by (inputHash,outputHash) is unnecessary — ids are unique; update per row.
     await Promise.all(
       updates.map(u =>
-        repo.update({ id: Number(u.id) }, { inputSha256: u.inputHash, outputSha256: u.outputHash })
+        AppDataSource.query(`UPDATE test_data SET input_sha256=?,output_sha256=?
+          WHERE id=? AND SHA2(COALESCE(input,''),256)=? AND SHA2(COALESCE(expected_output,''),256)=?`,
+          [u.inputHash,u.outputHash,Number(u.id),u.inputHash,u.outputHash])
       )
     );
   } catch (e: unknown) {

@@ -1,3 +1,4 @@
+import { estimateJudgeExecutionTimeoutMs } from "./executionTimeout";
 import { JudgeClient } from "./JudgeClient";
 import type { JudgeRequest, JudgeResponse } from "./types";
 import { HttpError } from "../../utils/httpError";
@@ -96,9 +97,10 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
         : dynamicTimeoutMs;
 
     const controller = new AbortController();
-    const timeoutHandle = setTimeout(() => {
+    let timeoutHandle: NodeJS.Timeout | undefined;
+    const startExecutionDeadline = () => { timeoutHandle = setTimeout(() => {
       controller.abort(new Error(`JUDGE_TIMEOUT: backend hard timeout ${timeoutMs}ms`));
-    }, timeoutMs);
+    }, timeoutMs); };
 
     let detachExternalAbort = () => undefined;
     if (options.signal) {
@@ -119,7 +121,7 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
 
     const scheduleLocal = () =>
       executionScheduler.schedule(
-        () => client.judge(req, { signal: controller.signal }),
+        () => { startExecutionDeadline(); return client.judge(req, { signal: controller.signal }); },
         {
           signal: controller.signal,
           label: enqueueLabel,
@@ -129,6 +131,7 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
     let res: JudgeResponse;
     try {
       if (distributedJudgeQueue.isEnabled()) {
+        startExecutionDeadline();
         try {
           res = await distributedJudgeQueue.execute(req, {
             signal: controller.signal,
@@ -137,6 +140,7 @@ export async function judgeWithSemaphore(req: JudgeRequest, options: JudgeWithSe
           });
         } catch (distributedError: unknown) {
           if (isDistributedQueueUnavailableError(distributedError)) {
+            clearTimeout(timeoutHandle);
             logger.warn("[judge] distributed queue unavailable, fallback to local scheduler", {
               submissionId: req.submission_id,
               language: req.language,
@@ -318,31 +322,8 @@ export async function replayJudgeDeadLetterQueue(limit = 20): Promise<JudgeDeadL
   }
 }
 
-// Per-language compile-phase headroom (ms) added to the backend hard timeout.
-const COMPILE_HEADROOM_MS: Partial<Record<JudgeRequest["language"], number>> = {
-  python: 1_000, js: 1_000, dart: 1_000, lisp: 1_000, lua: 1_000, perl: 1_000, php: 1_000, ruby: 1_000,
-  cpp: 4_000, c: 4_000, pascal: 4_000, d: 4_000,
-  java: 8_000, go: 12_000,
-  rust: 20_000, swift: 20_000, haskell: 20_000,
-  kotlin: 35_000, csharp: 40_000
-};
-
 function estimateBackendHardTimeoutMs(req: JudgeRequest): number {
-  const tests = Math.max(1, req.tests?.length ?? 0);
-  const perTestMs = Math.max(1, req.limits?.time_limit_ms ?? 1000);
-
-  // Backend timeout should exceed expected worker timeout to avoid premature aborts,
-  // especially for compile-heavy languages and larger test suites.
-  const baseMs = tests * (perTestMs + 120);
-  const compileHeadroomMs = COMPILE_HEADROOM_MS[req.language] ?? 5_000;
-
-  // Small fixed margin for scheduler/process overhead.
-  const estimatedMs = baseMs + compileHeadroomMs + 3_000;
-
-  const capRaw = Number.parseInt(String(env.JUDGE_BACKEND_TIMEOUT_CAP_MS ?? ""), 10);
-  const capMs = Number.isFinite(capRaw) && capRaw > 0 ? capRaw : 120_000;
-
-  return Math.min(capMs, Math.max(15_000, estimatedMs));
+  return estimateJudgeExecutionTimeoutMs(req, env.JUDGE_BACKEND_TIMEOUT_CAP_MS);
 }
 
 function productionJudgeDetails(value: unknown): { kind?: unknown; exitCode?: unknown } | undefined {

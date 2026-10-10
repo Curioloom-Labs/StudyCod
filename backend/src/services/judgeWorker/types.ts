@@ -41,6 +41,8 @@ export interface JudgeFile {
 }
 export interface JudgeRequest {
   submission_id: string;
+  /** Server assigned participant scope for the private compilation cache. */
+  cache_owner?: string;
   language: JudgeLanguage;
   /**
    * Optional compiler/version selector (e.g. "pypy3", "java21", "cpp20").
@@ -72,6 +74,7 @@ export interface JudgeRequest {
   stop_on_group_failure?: boolean;
 }
 export interface JudgeCompileResult {
+  diagnostics?: { cpu_time_ms: number | null; wall_time_ms: number; peak_memory_kb: number | null; exit_code: number | null; signal: string | null; reason: string; stdout: string; stderr: string };
   ok: boolean;
   verdict: JudgeVerdict;
   message: string;
@@ -82,6 +85,9 @@ export interface JudgeCompileResult {
   memory_kb: number | null;
 }
 export interface JudgeTestResult {
+  cpu_time_ms?: number | null;
+  exit_code?: number | null;
+  termination_reason?: string;
   test_id: number | string;
   verdict: JudgeVerdict;
   time_ms: number;

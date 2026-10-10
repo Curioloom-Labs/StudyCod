@@ -37,6 +37,15 @@ export class ContestSubmission {
   @Column({ type: "mediumtext", name: "submitted_code" })
   submittedCode!: string;
 
+  @Column({ type: "varchar", length: 32, nullable: true })
+  compiler?: string | null;
+
+  @Column({ type: "char", length: 64, nullable: true, name: "snapshot_hash" })
+  snapshotHash?: string | null;
+
+  @Column({ type: "varchar", length: 16, default: "completed", name: "execution_status" })
+  executionStatus!: string;
+
   @Column({ type: "varchar", length: 16, nullable: true })
   verdict?: string | null;
 

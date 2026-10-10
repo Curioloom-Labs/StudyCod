@@ -9,8 +9,7 @@ function readInt(name: string, fallback: number): number {
 }
 
 // Defaults chosen for stability on a single node. Tune via env.
-// Requested range: 8–16.
-const DEFAULT_MAX_CONCURRENT = 12;
+const DEFAULT_MAX_CONCURRENT = 1;
 const DEFAULT_MAX_QUEUE = 50;
 const DEFAULT_LOG_INTERVAL_MS = 10_000;
 

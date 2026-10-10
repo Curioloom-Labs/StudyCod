@@ -38,8 +38,8 @@ import { requestContextMiddleware } from "./middleware/requestContext";
 import { placementGate } from "./middleware/placementGate";
 import { authMiddleware } from "./middleware/authMiddleware";
 import { forbidContestModeUsers } from "./middleware/contestModeGuard";
-import { PORT, CORS_ORIGIN, CORS_ORIGINS, SESSION_SECRET, IS_PRODUCTION, TRUST_PROXY, JWT_SECRET } from "./config";
-import jwt from "jsonwebtoken";
+import { PORT, CORS_ORIGIN, CORS_ORIGINS, SESSION_SECRET, IS_PRODUCTION, TRUST_PROXY } from "./config";
+import { verifyAuthJwt } from "./utils/verifyAuthJwt";
 import { logger } from "./utils/logger";
 import { HttpError } from "./utils/httpError";
 import { spawn } from "child_process";
@@ -54,6 +54,7 @@ import { getOpenRouterRuntimeDiagnostics } from "./services/llm/OpenRouterProvid
 import { env } from "./env";
 import { setRetryAfterForOverload } from "./middleware/overloadRetryAfter";
 import { startCertificateQueueWorker } from "./services/certificates/CertificateQueueWorker";
+import { startContestQueueWorker, stopContestQueueWorker } from "./services/contest/executionQueue";
 import {
   LEGACY_MIGRATION_HISTORY_BASELINE,
   getLegacyMigrationHistoryRowByName,
@@ -63,6 +64,7 @@ import {
 import { createRedisRateLimitStore } from "./middleware/routeRateLimit";
 import { getRedisClientForStore, getRedisKeyPrefix, getSharedRedisClient, isRedisEnabled } from "./services/redis/sharedRedis";
 import { shutdownRedis } from "./services/redis/sharedRedis";
+import { AUTH_COOKIE_NAME } from "./utils/authCookie";
 import { seedTopicsIfNeeded } from "./utils/seedTopics";
 import { seedLearningCatalogContent } from "./utils/seedLearningCatalog";
 import { checkReadiness, renderPrometheusMetrics } from "./observability/health";
@@ -103,6 +105,7 @@ const SHUTDOWN_DRAIN_TIMEOUT_MS = (() => {
 async function gracefulShutdown(reason: string, exitCode: number): Promise<void> {
   if (shutdownInProgress) return;
   shutdownInProgress = true;
+  await stopContestQueueWorker();
   logger.info("[shutdown] starting graceful shutdown", { reason, exitCode, drainTimeoutMs: SHUTDOWN_DRAIN_TIMEOUT_MS });
 
   // 1) Stop accepting new HTTP connections and drain existing ones.
@@ -258,14 +261,18 @@ function isDisconnectError(err: unknown): boolean {
 function resolveGlobalRateLimitKey(req: express.Request): string {
   const ip = req.ip ?? "unknown";
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Bearer ")) {
+  const cookie = String(req.headers.cookie ?? "").split(";").map(value => value.trim())
+    .find(value => value.startsWith(`${AUTH_COOKIE_NAME}=`));
+  let token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  if (!token && cookie) { try { token = decodeURIComponent(cookie.slice(AUTH_COOKIE_NAME.length + 1)); } catch {} }
+  if (token) {
     try {
-      const payload = jwt.verify(authHeader.slice("Bearer ".length), JWT_SECRET, { algorithms: ["HS256"] }) as {
+      const payload = verifyAuthJwt(req, token) as {
         userId?: number;
         studentId?: number;
       };
-      const principalId = payload?.studentId ?? payload?.userId;
-      if (principalId) return `${ip}:p${principalId}`;
+      if (payload?.studentId) return `student:${payload.studentId}`;
+      if (payload?.userId) return `user:${payload.userId}`;
     } catch {
       // Invalid/expired token → treat as anonymous for bucketing.
     }
@@ -785,11 +792,16 @@ app.get(["/health/judge", "/api/health/judge"], async (_req, res) => {
         NSJAIL_CHROOT_CPP: env.__nsjailChrootCpp || "",
         NSJAIL_CHROOT_PYTHON: env.__nsjailChrootPython || ""
       };
-      const child = spawn(nodeBin, [workerEntry, "--health"], {
-        stdio: ["ignore", "pipe", "pipe"],
+      const privileged = String(env.JUDGE_RUN_AS_ROOT ?? "").trim() === "1" && process.platform !== "win32";
+      const child = spawn(privileged ? "sudo" : nodeBin, privileged
+        ? ["-n", String(env.JUDGE_ROOT_WORKER || "/usr/local/sbin/studycod-judge-worker")]
+        : [workerEntry, "--health"], {
+        stdio: ["pipe", "pipe", "pipe"],
         env: childEnv,
         windowsHide: true
       });
+      child.stdin?.on("error", () => undefined);
+      child.stdin?.end(JSON.stringify({ operation: "health" }));
       const stdoutChunks: Buffer[] = [];
       const stderrChunks: Buffer[] = [];
       let outSize = 0;
@@ -1222,11 +1234,12 @@ async function bootstrap(): Promise<void> {
     }
 
     startCertificateQueueWorker();
+    startContestQueueWorker();
 
     // Remove test payloads left behind by already-solved generated personal
     // tasks. Grades keep the result/snapshot, so this is safe and idempotent.
     void cleanupCompletedPersonalTaskTests()
-      .then(() => sweepTestCache(0))
+      .then(() => sweepTestCache())
       .catch(error => {
         logger.warn("[startup] completed personal-task/cache cleanup failed", { error });
       });

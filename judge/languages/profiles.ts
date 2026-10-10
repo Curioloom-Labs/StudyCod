@@ -38,7 +38,7 @@ function javaProfile(id: string, label: string, homeEnv: string, defaultHome: st
     label,
     compile: () => ({
       display: `${home()}/bin/javac Main.java`,
-      argv: [`${home()}/bin/javac`, "-J-Xms64m", "-J-Xmx128m", "-encoding", "UTF-8", "Main.java"]
+      argv: [`${home()}/bin/javac`, "-J-Xms32m", "-J-Xmx128m", "-J-XX:+UseSerialGC", "-J-XX:-UsePerfData", "-J-XX:TieredStopAtLevel=1", "-encoding", "UTF-8", "Main.java"]
     }),
     run: () => ({
       display: `${home()}/bin/java Main`,

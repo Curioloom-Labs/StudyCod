@@ -30,6 +30,8 @@ export const authRouter = Router();
 const DUMMY_BCRYPT_HASH = "$2a$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
 
 const loginLimiter = createRouteLimiter({
+  namespace: "login-account",
+  keyGenerator: req => `account:${String(req.body?.username ?? req.body?.email ?? "unknown").trim().toLowerCase().slice(0,255)}`,
   windowMs: 15 * 60 * 1000,
   limit: 10,
   message: "TOO_MANY_LOGIN_ATTEMPTS",

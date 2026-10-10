@@ -104,3 +104,6 @@ skills-lock.json
 tmp-harden-findings-full.json
 tmp-harden-findings.json
 Paddle/
+
+# Private load-test credentials
+**/*.private.json

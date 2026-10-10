@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { submitContestJob, type JobUpdate } from "./contestJobs";
 
 export type ContestVisibility = "PUBLIC" | "PRIVATE_CODE" | "CLASS" | "TEMPORARY_ACCOUNTS";
 export type ContestScoreboardVisibility = "LIVE" | "AFTER_END" | "ORGANIZERS_ONLY";
@@ -429,15 +430,14 @@ export async function checkContestProblem(params: {
   code?: string;
   files?: CodeFile[];
   turnstileToken?: string;
-}): Promise<ContestCheckResult> {
-  const res = await api.post(`/contests/${params.contestId}/problems/${params.problemId}/check`, {
+}, onStatus?: JobUpdate): Promise<ContestCheckResult> {
+  return submitContestJob<ContestCheckResult>(params.contestId, params.problemId, "check", {
     language: params.language,
     compiler: params.compiler,
     code: params.code,
     files: params.files,
     turnstileToken: params.turnstileToken,
-  });
-  return res.data;
+  }, onStatus);
 }
 
 export async function runContestProblem(params: {
@@ -448,15 +448,14 @@ export async function runContestProblem(params: {
   input?: string;
   code?: string;
   files?: CodeFile[];
-}): Promise<ContestRunResult> {
-  const res = await api.post(`/contests/${params.contestId}/problems/${params.problemId}/run`, {
+}, onStatus?: JobUpdate): Promise<ContestRunResult> {
+  return submitContestJob<ContestRunResult>(params.contestId, params.problemId, "run", {
     language: params.language,
     compiler: params.compiler,
     input: params.input,
     code: params.code,
     files: params.files,
-  });
-  return res.data;
+  }, onStatus);
 }
 
 export async function getContestScoreboard(contestId: number): Promise<ContestStandings> {

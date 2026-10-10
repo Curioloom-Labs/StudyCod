@@ -70,10 +70,36 @@ install_judge_root_helper() {
     exit 2
   }
   local root_judge_dir=/usr/local/lib/studycod-judge
+  # Generate trusted compiler class data before installing the new cache fingerprint.
+  # Warmup acquires the same host gate; invoke it before acquiring our own lock.
+  if [[ -f "$root_judge_dir/sandbox/nsjail.cfg" && -f "$ROOT/ops/warm-judge-toolchains.py" ]]; then
+    python3 "$ROOT/ops/warm-judge-toolchains.py"
+  fi
+  if [[ -f "$root_judge_dir/sandbox/nsjail.cfg" && -f "$ROOT/ops/warm-csharp-compiler.py" ]]; then
+    python3 "$ROOT/ops/warm-csharp-compiler.py"
+  fi
+  exec 8>/run/lock/studycod-judge.lock
+  flock 8
   install -d -o root -g root -m 0755 "$root_judge_dir"
   rm -rf "$root_judge_dir/dist" "$root_judge_dir/sandbox"
   cp -a "$ROOT/judge/dist" "$root_judge_dir/dist"
   cp -a "$ROOT/judge/sandbox" "$root_judge_dir/sandbox"
+  install -o root -g root -m 0644 "$ROOT/ops/judge-supervisor.py" "$root_judge_dir/judge-supervisor.py"
+  install -o root -g root -m 0644 "$ROOT/ops/judge-cache-maintenance.py" "$root_judge_dir/judge-cache-maintenance.py"
+  install -o root -g root -m 0644 "$ROOT/ops/studycod-judge-cache.service" /etc/systemd/system/studycod-judge-cache.service
+  install -o root -g root -m 0644 "$ROOT/ops/studycod-judge-cache.timer" /etc/systemd/system/studycod-judge-cache.timer
+  systemctl daemon-reload
+  systemctl enable --now studycod-judge-cache.timer
+  # Invalidate artifact cache when either the judge or installed rootfs packages change.
+  { find "$root_judge_dir/dist" -type f -exec sha256sum {} +;
+    chroot /sandbox/rootfs dpkg-query -W 2>/dev/null || true;
+    for tool in /sandbox/rootfs/usr/local/bin/node-contest /sandbox/rootfs/usr/local/lib/studycod/kotlin-compiler.jsa /sandbox/rootfs/opt/kotlinc/kotlinc/lib/kotlin-compiler.jar /sandbox/rootfs/usr/lib/sbcl/sbcl.core; do
+      [[ ! -f "$tool" ]] || sha256sum "$tool";
+    done;
+    if [[ -d /sandbox/rootfs/usr/local/lib/studycod/csharp-build ]]; then
+      find /sandbox/rootfs/usr/local/lib/studycod/csharp-build -type f -exec sha256sum {} +;
+    fi;
+  } | sha256sum > "$root_judge_dir/toolchain-version"
   chown -R root:root "$root_judge_dir"
   find "$root_judge_dir" -type d -exec chmod 0755 {} +
   find "$root_judge_dir" -type f -exec chmod 0644 {} +
@@ -84,6 +110,7 @@ install_judge_root_helper() {
     "$ROOT/ops/studycod-judge.sudoers" \
     /etc/sudoers.d/studycod-judge
   visudo -cf /etc/sudoers >/dev/null
+  flock -u 8
 }
 
 npm_install() {
@@ -119,10 +146,31 @@ restore_frontend() {
 recover_on_error() {
   local code=$?
   if [[ "$code" -ne 0 && -n "$BACKUP_ROOT" ]]; then
+    if ! node "$ROOT/ops/assert-queue-drained.mjs"; then
+      log "Accepted jobs preserved. Automatic rollback deferred; keep the compatible backend/worker artifacts."
+      exit "$code"
+    fi
+    if ! pm2 stop studycod-backend >/dev/null 2>&1; then
+      log "Cannot stop admission safely; automatic rollback deferred."
+      exit "$code"
+    fi
+    if ! node "$ROOT/ops/assert-queue-drained.mjs"; then
+      pm2 restart studycod-backend --update-env >/dev/null 2>&1 || true
+      log "New accepted work preserved; compatible backend resumed, rollback deferred."
+      exit "$code"
+    fi
     log "Deploy failed; restoring previous artifacts from $BACKUP_ROOT"
     restore_dir "$ROOT/backend/dist" "$BACKUP_ROOT/backend-dist"
     restore_dir "$ROOT/judge/dist" "$BACKUP_ROOT/judge-dist"
     restore_dir "$ROOT/lsp-service/dist" "$BACKUP_ROOT/lsp-dist"
+    if [[ "${EUID}" -eq 0 ]]; then
+      exec 8>/run/lock/studycod-judge.lock
+      flock 8
+      restore_dir /usr/local/lib/studycod-judge "$BACKUP_ROOT/privileged-judge"
+      [[ ! -f "$BACKUP_ROOT/privileged-wrapper" ]] || cp -a "$BACKUP_ROOT/privileged-wrapper" /usr/local/sbin/studycod-judge-worker
+      [[ -f /usr/local/lib/studycod-judge/judge-cache-maintenance.py ]] || systemctl disable --now studycod-judge-cache.timer
+      flock -u 8
+    fi
     restore_frontend
     pm2 restart studycod-backend --update-env >/dev/null 2>&1 || true
     pm2 restart studycod-lsp --update-env >/dev/null 2>&1 || true
@@ -204,6 +252,10 @@ main() {
   backup_dir "$ROOT/backend/dist" backend-dist
   backup_dir "$ROOT/judge/dist" judge-dist
   backup_dir "$ROOT/lsp-service/dist" lsp-dist
+  if [[ "${EUID}" -eq 0 ]]; then
+    backup_dir /usr/local/lib/studycod-judge privileged-judge
+    backup_dir /usr/local/sbin/studycod-judge-worker privileged-wrapper
+  fi
   if [[ -L "$FRONTEND_LIVE" || -d "$FRONTEND_LIVE" ]]; then
     backup_dir "$(readlink -f "$FRONTEND_LIVE")" frontend-dist
   elif [[ -d "$ROOT/frontend/dist" ]]; then

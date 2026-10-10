@@ -68,6 +68,8 @@ export type RouteLimiterOptions = {
   limit: number;
   /** Response message. Defaults to RATE_LIMIT. */
   message?: string;
+  keyGenerator?: (req: Request) => string;
+  namespace?: string;
 };
 
 /**
@@ -85,7 +87,7 @@ export function createRouteLimiter(opts: RouteLimiterOptions): RateLimitRequestH
   }
 
   const windowSeconds = Math.max(1, Math.round(opts.windowMs / 1000));
-  const store = createRedisRateLimitStore("route");
+  const store = createRedisRateLimitStore(opts.namespace ?? "route");
 
   return rateLimit({
     windowMs: opts.windowMs,
@@ -94,7 +96,7 @@ export function createRouteLimiter(opts: RouteLimiterOptions): RateLimitRequestH
     passOnStoreError: true,
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: req => keyByPrincipalOrIp(req as unknown as AuthRequest),
+    keyGenerator: opts.keyGenerator ?? (req => keyByPrincipalOrIp(req as unknown as AuthRequest)),
     handler: jsonRateLimitHandler(opts.message || "RATE_LIMIT", windowSeconds)
   });
 }

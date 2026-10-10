@@ -56,6 +56,7 @@ export function computeScoreboard(
   const sorted = [...submissions].sort((a, b) => a.createdAtMs - b.createdAtMs);
   const byParticipant = new Map<number, Map<number, ScoreboardSubmission[]>>();
   for (const s of sorted) {
+    if (s.verdict === null) continue;
     if (!byParticipant.has(s.participantId)) byParticipant.set(s.participantId, new Map());
     const byProblem = byParticipant.get(s.participantId)!;
     if (!byProblem.has(s.problemId)) byProblem.set(s.problemId, []);

@@ -2,9 +2,10 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { NsJailExecutor } from "./executor";
+import { compilationCacheKey, restoreCompilation, storeCompilation } from "./compilationCache";
 import { Compiler, mapRuntimeToVerdict } from "./compiler";
 import { validateAndResolveLimits } from "./limits";
-import { CheckerSpec, GroupScore, JudgeRequest, JudgeResponse, TestRunResult, Verdict } from "./result";
+import { CheckerSpec, CompileResult, GroupScore, JudgeRequest, JudgeResponse, TestRunResult, Verdict } from "./result";
 import { cleanPythonRuntimeError, filterNsJailStderr } from "./stderr";
 import { buildUserFacingStderr } from "./userFacingErrors";
 import { checkExact } from "../checkers/exact";
@@ -13,10 +14,13 @@ import { checkWhitespace } from "../checkers/whitespace";
 import { checkFloat } from "../checkers/float";
 import { getLanguage, isLanguageId } from "../languages/registry";
 import { resolveProfile } from "../languages/profiles";
+import { kotlinCompileArgv } from "../languages/kotlin";
+import { csharpMsBuildPlan } from "../languages/csharp";
 import { buildGdbDriver } from "./gdbTracer";
 import type { LanguageId } from "../languages/types";
 import {
   disabledJudgeLanguagesRaw,
+  isProductionEnvironment,
   readCompileMemoryFloorBytes,
   readJudgeGoCacheDir,
   readJudgeTestCacheDir,
@@ -318,7 +322,7 @@ function buildCompilePlanForFiles(language: LanguageId, files: JudgeFile[]): { a
     if (javaFiles.length === 0) return null;
     return {
       display: `javac ${javaFiles.join(" ")}`,
-      argv: ["/usr/bin/javac", "-J-Xms64m", "-J-Xmx128m", "-encoding", "UTF-8", ...javaFiles]
+      argv: ["/usr/bin/javac", "-J-Xms32m", "-J-Xmx128m", "-J-XX:+UseSerialGC", "-J-XX:-UsePerfData", "-J-XX:TieredStopAtLevel=1", "-encoding", "UTF-8", ...javaFiles]
     };
   }
   if (language === "kotlin") {
@@ -326,7 +330,7 @@ function buildCompilePlanForFiles(language: LanguageId, files: JudgeFile[]): { a
     if (ktFiles.length === 0) return null;
     return {
       display: displayCommand(["kotlinc", ...ktFiles, "-include-runtime", "-d", "app.jar"]),
-      argv: ["/usr/bin/kotlinc", ...ktFiles, "-include-runtime", "-d", "app.jar"]
+      argv: kotlinCompileArgv(ktFiles)
     };
   }
   if (language === "cpp") {
@@ -446,7 +450,7 @@ export class Runner {
     const checker = normalizeChecker(req.checker);
     const chroot = this.resolveChroot(req.language);
     await this.assertChrootAvailable(req.language, chroot);
-    const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "studycod-judge-"));
+    const workDir = await fs.mkdtemp(path.join(os.tmpdir(), `studycod-judge-${process.pid}-`));
     try {
       await prepareSandboxWritableDir(workDir);
     } catch (error) {
@@ -484,6 +488,8 @@ export class Runner {
       // Multi-file submissions still prefer the per-files compile plan when available.
       const profileCompilePlan = profile.compile ? profile.compile() : adapter.getCompilePlan();
       let compilePlan = wantsFiles ? (buildCompilePlanForFiles(req.language, reqFiles) ?? profileCompilePlan) : profileCompilePlan;
+      // Keep SDK project handling for multi-file C# (including resources and generated inputs).
+      if (wantsFiles && req.language === "csharp" && !profile.compile) compilePlan = csharpMsBuildPlan();
 
       // Execution-visualizer trace mode (Tier-B): for gdb-traceable native families, compile
       // with debug info + no optimisation and run the program under gdb instead of normally.
@@ -516,6 +522,8 @@ export class Runner {
             "512"
           ]
         : [];
+      // A submitted executable must never read or modify another compilation's Go cache.
+      const runtimeExtraNsJailArgs = extraNsJailArgsList.length ? [...extraNsJailArgsList] : undefined;
       // Go: bind-mount a persistent, writable GOCACHE so builds are warm (~0.5s) instead of
       // recompiling the stdlib cold (~18s) every submission. Best-effort; if the host dir
       // can't be created we simply don't mount it (build falls back to cold under /gocache
@@ -525,7 +533,9 @@ export class Runner {
         if (goCacheHost) extraNsJailArgsList.push("--bindmount", `${goCacheHost}:/gocache`);
       }
       const extraNsJailArgs = extraNsJailArgsList.length > 0 ? extraNsJailArgsList : undefined;
-      const addressSpaceLimitBytes = req.language === "csharp" ? 4 * 1024 * 1024 * 1024 : undefined;
+      // Virtual arenas of managed runtimes are larger than resident RAM, which cgroups limit.
+      const addressSpaceLimitBytes = (process.platform === "linux" && isProductionEnvironment()) || ["csharp", "java", "kotlin", "js", "go", "dart", "swift", "lisp"].includes(req.language)
+        ? Infinity : undefined;
       // Compilers (go, rust, swift, javac, ghc...) routinely need far more RAM than the
       // program's runtime limit. Give the COMPILE step a generous memory floor so a task
       // with a small run-time memory limit doesn't fail to build. Configurable.
@@ -533,37 +543,44 @@ export class Runner {
         return readCompileMemoryFloorBytes();
       })();
       const compileMemoryBytes = Math.max(limits.memoryLimitBytes, compileMemFloorBytes);
-      const compileAddressSpaceBytes = addressSpaceLimitBytes ?? compileMemoryBytes + 256 * 1024 * 1024;
+      const compileAddressSpaceBytes = Infinity;
+      let successfulCompile: CompileResult | undefined;
       if (compilePlan) {
-        const compileTimeLimitMs = resolveCompileTimeLimitMs(req.language, limits.timeLimitMs);
-        const compileRes = await this.compiler.compile({
-          language: req.language,
-          nsjailPath: this.cfg.nsjailPath,
-          nsjailConfigPath: this.cfg.nsjailConfigPath,
-          useConfig: this.cfg.useConfig,
-          chroot,
-          cwd: this.cfg.cwd,
-          hostWorkDir: workDir,
-          extraNsJailArgs,
-          addressSpaceLimitBytes: compileAddressSpaceBytes,
-          argv: compilePlan.argv,
-          display: compilePlan.display,
-          timeLimitMs: compileTimeLimitMs,
-          memoryLimitBytes: compileMemoryBytes,
-          outputLimitBytes: Math.max(64 * 1024, limits.outputLimitBytes)
-        });
-        if (!compileRes.ok) {
-          return {
-            submission_id: req.submission_id,
-            verdict: "CE",
-            time_ms: compileRes.time_ms,
-            memory_kb: compileRes.memory_kb,
-            compile: compileRes,
-            score: 0,
-            max_score: scoringPlan.maxScore,
-            group_scores: scoringPlan.groupScoresTemplate,
-            tests: []
-          };
+        const cacheKey = await compilationCacheKey(req, compilePlan.argv, chroot);
+        const cacheHit = await restoreCompilation(cacheKey, workDir);
+        if (!cacheHit) {
+          const compileTimeLimitMs = resolveCompileTimeLimitMs(req.language, limits.timeLimitMs);
+          const compileRes = await this.compiler.compile({
+            language: req.language,
+            nsjailPath: this.cfg.nsjailPath,
+            nsjailConfigPath: this.cfg.nsjailConfigPath,
+            useConfig: this.cfg.useConfig,
+            chroot,
+            cwd: this.cfg.cwd,
+            hostWorkDir: workDir,
+            extraNsJailArgs,
+            addressSpaceLimitBytes: compileAddressSpaceBytes,
+            argv: compilePlan.argv,
+            display: compilePlan.display,
+            timeLimitMs: compileTimeLimitMs,
+            memoryLimitBytes: compileMemoryBytes,
+            outputLimitBytes: Math.max(64 * 1024, limits.outputLimitBytes)
+          });
+          if (!compileRes.ok) {
+            return {
+              submission_id: req.submission_id,
+              verdict: "CE",
+              time_ms: compileRes.time_ms,
+              memory_kb: compileRes.memory_kb,
+              compile: compileRes,
+              score: 0,
+              max_score: scoringPlan.maxScore,
+              group_scores: scoringPlan.groupScoresTemplate,
+              tests: []
+            };
+          }
+          await storeCompilation(cacheKey, workDir);
+          successfulCompile = compileRes;
         }
       }
       const tests: TestRunResult[] = [];
@@ -619,7 +636,7 @@ export class Runner {
           addressSpaceLimitBytes,
           outputLimitBytes: limits.outputLimitBytes,
           fileSizeLimitBytes: req.language === "csharp" ? 256 * 1024 * 1024 : 32 * 1024 * 1024,
-          extraNsJailArgs,
+          extraNsJailArgs: runtimeExtraNsJailArgs,
           argv: runPlan.argv,
           sandboxId: `t${i + 1}`
         });
@@ -633,7 +650,8 @@ export class Runner {
           outputLimitExceeded: r.outputLimitExceeded,
           exitCode: r.exitCode,
           signal: r.signal,
-          stderr: r.stderr
+          stderr: r.stderr,
+          oomKilled: r.oomKilled,
         });
 
         if (req.rerun_failed_once && (runtimeVerdict === "RE" || runtimeVerdict === "TLE" || runtimeVerdict === "MLE")) {
@@ -652,7 +670,7 @@ export class Runner {
               addressSpaceLimitBytes,
               outputLimitBytes: limits.outputLimitBytes,
               fileSizeLimitBytes: req.language === "csharp" ? 256 * 1024 * 1024 : 32 * 1024 * 1024,
-              extraNsJailArgs,
+              extraNsJailArgs: runtimeExtraNsJailArgs,
               argv: runPlan.argv,
               sandboxId: `t${i + 1}r`
             });
@@ -661,10 +679,11 @@ export class Runner {
               outputLimitExceeded: rr.outputLimitExceeded,
               exitCode: rr.exitCode,
               signal: rr.signal,
-              stderr: rr.stderr
+              stderr: rr.stderr,
+              oomKilled: rr.oomKilled,
             });
             runtimeVerdict = worsen(runtimeVerdict, rerunVerdict);
-          } catch {}
+          } catch (error) { throw error; }
         }
 
         const baseStderrForUser = req.language === "python" ? cleanPythonRuntimeError(r.stderr) || filterNsJailStderr(r.stderr) : filterNsJailStderr(r.stderr);
@@ -676,6 +695,9 @@ export class Runner {
         }
         const allowDetails = !!req.debug || !test.hidden;
         const base: TestRunResult = {
+          cpu_time_ms: r.cpuTimeMs,
+          exit_code: r.exitCode,
+          termination_reason: r.oomKilled ? "oom" : r.timedOut ? "timeout" : r.outputLimitExceeded ? "output_limit" : r.signal ?? "exit",
           test_id: test.id,
           verdict: runtimeVerdict,
           time_ms: timeMs,
@@ -753,7 +775,7 @@ export class Runner {
         }
         score = Object.values(groupAgg).reduce((sum, agg) => sum + (agg.score || 0), 0);
       }
-      return finalize(
+      return { ...finalize(
         req.submission_id,
         finalVerdict,
         totalTime,
@@ -766,7 +788,7 @@ export class Runner {
         groupFailed,
         failedGroupIndex,
         stopOnGroupFailure
-      );
+      ), compile: successfulCompile };
     } finally {
       await safeRm(workDir);
     }

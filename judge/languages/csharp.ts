@@ -1,6 +1,7 @@
 import * as path from "path";
 import { writeFile } from "fs/promises";
 import { COMPILE_BUDGET, LanguageAdapter } from "./types";
+import { readEnv } from "../config";
 
 function dotnetArgs(args: string[]): string[] {
   // Use /usr/bin/env to inject env vars even if the sandbox strips the parent environment.
@@ -19,6 +20,9 @@ function dotnetArgs(args: string[]): string[] {
     "DOTNET_CLI_TELEMETRY_OPTOUT=1",
     // 0-9, higher = more conservative memory usage.
     "DOTNET_GCConserveMemory=9",
+    // .NET's W^X doublemapper truncates an anonymous memfd to 2 TiB, which
+    // conflicts with RLIMIT_FSIZE. The sandbox keeps its file/RAM limits.
+    "DOTNET_EnableWriteXorExecute=0",
     "/usr/share/dotnet/dotnet",
     ...args
   ];
@@ -36,6 +40,15 @@ function csprojXml(): string {
 </Project>`;
 }
 
+export function csharpMsBuildPlan() {
+  return {
+    display: "dotnet build -c Release",
+    argv: dotnetArgs(["build", "-c", "Release", "-p:GenerateDocumentationFile=false",
+      "-p:UseSharedCompilation=false", "-p:RunAnalyzersDuringBuild=false", "--", "/m:1",
+      "/nodeReuse:false", "/p:BuildInParallel=false", "-v:q"])
+  };
+}
+
 export const csharpLanguage: LanguageAdapter = {
   id: "csharp",
   entryFile: "Program.cs",
@@ -47,29 +60,11 @@ export const csharpLanguage: LanguageAdapter = {
     await writeFile(path.join(workDir, "Program.cs"), source, { encoding: "utf8" });
   },
   getCompilePlan() {
-    return {
-      display: "dotnet build -c Release",
-      argv: dotnetArgs([
-        "build",
-        "-c",
-        "Release",
-        "-p:GenerateDocumentationFile=false",
-        "-p:UseSharedCompilation=false",
-        "--",
-        "/m:1",
-        "/nodeReuse:false",
-        "/p:BuildInParallel=false",
-        // MSBuild verbosity must be a single token (-v:q); "-v q" makes MSBuild error
-        // "Specify the verbosity level".
-        "-v:q"
-      ])
-    };
+    const wrapper = readEnv("JUDGE_CSHARP_COMPILER_WRAPPER");
+    if (wrapper) return { display: "C# compiler (.NET SDK Release options)", argv: ["/bin/sh", wrapper] };
+    return csharpMsBuildPlan();
   },
   getRunPlan() {
-    // Run the produced DLL. dotnet default output: bin/Release/net8.0/App.dll
-    return {
-      display: "dotnet bin/Release/net8.0/App.dll",
-      argv: dotnetArgs(["bin/Release/net8.0/App.dll"])
-    };
+    return { display: "dotnet bin/Release/net8.0/App.dll", argv: dotnetArgs(["bin/Release/net8.0/App.dll"]) };
   }
 };

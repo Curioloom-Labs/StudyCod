@@ -1,5 +1,5 @@
-import { Router, Response } from "express";
-import { Brackets } from "typeorm";
+import { Router, Response, type NextFunction } from "express";
+import { Brackets, In, type EntityManager } from "typeorm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { z } from "zod";
@@ -15,9 +15,12 @@ import { Student } from "../entities/Student";
 import { Class } from "../entities/Class";
 import { LibraryTask } from "../entities/LibraryTask";
 import { TestData } from "../entities/TestData";
-import { judgeWithSemaphore } from "../services/judgeWorker";
+import { cachedStandings, invalidateStandings } from "../services/contest/standingsCache";
+import { findContestJobByKey, enqueueContestJob, getContestJob, jobReceipt, registerContestJobProcessor, requestHash, waitContestJob, type ContestJobPayload } from "../services/contest/executionQueue";
+import { sharedContestRead } from "../services/contest/sharedRead";
+import { readUserContestParticipant, userContestParticipantId, userOwnsContestParticipant } from "../services/contest/participantReads";
 import { normalizeJudgeMemoryMb } from "../services/judgeWorker/limits";
-import { buildJudgeTests, loadTestContentByIds } from "../services/judgeWorker/testCache";
+import { buildJudgeTests } from "../services/judgeWorker/testCache";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, normalizeSafeCodeFilePath } from "../utils/multiFileSubmission";
 import { logger } from "../utils/logger";
@@ -34,6 +37,15 @@ import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { askTutor } from "../services/edu/aiTutor";
 
 const contestsRouter = Router();
+contestsRouter.use((req, res, next) => {
+  if (!["GET", "HEAD", "OPTIONS"].includes(req.method)) res.on("finish", () => {
+    if (res.statusCode < 400) {
+      const contestId = Number(req.path.split("/")[1]);
+      invalidateStandings(Number.isFinite(contestId) && contestId > 0 ? contestId : undefined);
+    }
+  });
+  next();
+});
 const contestTutorLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 8, message: "RATE_LIMIT" });
 
 type UnknownRecord = Record<string, unknown>;
@@ -62,6 +74,19 @@ const studentRepo = () => AppDataSource.getRepository(Student);
 const classRepo = () => AppDataSource.getRepository(Class);
 const libraryRepo = () => AppDataSource.getRepository(LibraryTask);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
+
+/** Share only an in-flight read; each request still checks its own access. */
+async function readContestAccessRecord(id: number): Promise<Contest | null> {
+  const value = await sharedContestRead(`access-record:${id}`, () => contestRepo().createQueryBuilder("contest")
+    .leftJoin("contest.createdBy", "creator")
+    .leftJoin("contest.class", "contestClass")
+    .addSelect(["creator.id", "creator.username", "contestClass.id"])
+    .where("contest.id = :id", { id }).getOne());
+  return value ? Object.assign(new Contest(), value, {
+    createdBy: value.createdBy ? { ...value.createdBy } : value.createdBy,
+    class: value.class ? { ...value.class } : value.class,
+  }) : null;
+}
 
 const ALL_JUDGE_LANGS = ALL_JUDGE_LANGUAGES;
 
@@ -261,10 +286,10 @@ async function getOrCreateParticipant(params: { contestId: number; req: AuthRequ
   const principalType = params.req.userId ? ("USER" as const) : (params.req.studentId ? ("STUDENT" as const) : null);
   if (!principalId || !principalType) throw new HttpError(401, "UNAUTHORIZED", { expose: true });
 
-  const existing = await participantRepo().findOne({
+  const existing = principalType === "USER" ? await readUserContestParticipant(params.contestId, principalId) : await participantRepo().findOne({
     where: {
       contest: { id: params.contestId },
-      ...(principalType === "USER" ? { user: { id: principalId } } : { student: { id: principalId } }),
+      student: { id: principalId },
     },
   });
   if (existing) return existing;
@@ -308,10 +333,10 @@ async function getOrCreateParticipant(params: { contestId: number; req: AuthRequ
     // arbiter; return the row created by the winner instead of surfacing 500.
     const code = String(readProperty(error, "code") ?? "").toUpperCase();
     if (code === "ER_DUP_ENTRY" || errorMessage(error).toLowerCase().includes("duplicate")) {
-      const winner = await participantRepo().findOne({
+      const winner = principalType === "USER" ? await readUserContestParticipant(params.contestId, principalId) : await participantRepo().findOne({
         where: {
           contest: { id: params.contestId },
-          ...(principalType === "USER" ? { user: { id: principalId } } : { student: { id: principalId } }),
+          student: { id: principalId },
         },
       });
       if (winner) return winner;
@@ -370,20 +395,12 @@ async function canAccessContest(params: { contest: Contest; req: AuthRequest }):
 
   if (contest.visibility === "TEMPORARY_ACCOUNTS") {
     if (!isContestOnlyUser(req) || !req.userId) return false;
-    const participant = await participantRepo().findOne({
-      where: { contest: { id: contest.id }, user: { id: req.userId } },
-      select: { id: true },
-    });
-    return Boolean(participant);
+    return (await userContestParticipantId(contest.id, req.userId)) !== null;
   }
 
   if (isContestOnlyUser(req)) {
     if (!req.userId) return false;
-    const issuedParticipant = await participantRepo().findOne({
-      where: { contest: { id: contest.id }, user: { id: req.userId } },
-      select: { id: true },
-    });
-    return Boolean(issuedParticipant);
+    return (await userContestParticipantId(contest.id, req.userId)) !== null;
   }
 
   if (contest.participantAccessMode === "ISSUED_ACCOUNTS") {
@@ -623,8 +640,10 @@ async function canManageContest(params: { contest: Contest; req: AuthRequest }):
   if (req.userRole === "SYSTEM_ADMIN" && req.userId) return true;
   if (req.userId && contest.createdBy?.id === req.userId) return true;
   if (req.userId) {
-    const row = await contestRepo().findOne({ where: { id: contest.id }, relations: ["createdBy"] });
-    if (row?.createdBy?.id === req.userId) return true;
+    if (!contest.createdBy?.id) {
+      const row = await contestRepo().findOne({ where: { id: contest.id }, relations: ["createdBy"] });
+      if (row?.createdBy?.id === req.userId) return true;
+    }
     const organizer = await isContestOrganizer(contest.id, req.userId);
     if (organizer) return true;
   }
@@ -1179,7 +1198,9 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
     const query = contestRepo()
       .createQueryBuilder("contest")
       .leftJoinAndSelect("contest.createdBy", "createdBy")
-      .leftJoinAndSelect("contest.class", "contestClass");
+      .leftJoinAndSelect("contest.class", "contestClass")
+      .select("contest")
+      .addSelect(["createdBy.id", "createdBy.username", "contestClass.id"]);
 
     if (isContestOnlyUser(req)) {
       // Scope both the returned page and its total before pagination.
@@ -1269,10 +1290,9 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
       query.orderBy("contest.createdAt", "DESC");
     }
 
-    const [contests, total] = await query
-      .skip((page - 1) * pageSize)
-      .take(pageSize)
-      .getManyAndCount();
+    query.skip((page - 1) * pageSize).take(pageSize);
+    const [contests, total] = await sharedContestRead(
+      JSON.stringify(["list", query.getQueryAndParameters(), page, pageSize]), () => query.getManyAndCount());
     const visible: Contest[] = [];
     for (const contest of contests) {
       if (await canViewContestMeta({ contest, req })) visible.push(contest);
@@ -1280,7 +1300,7 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
     const participantCountByContest = new Map<number, number>();
     if (visible.length > 0) {
       await ensureContestAdminTables();
-      const counts = await participantRepo().createQueryBuilder("participant")
+      const countQuery = participantRepo().createQueryBuilder("participant")
         .innerJoin("participant.contest", "participantContest")
         .leftJoin("participant.user", "participantUser")
         .innerJoin("participantContest.createdBy", "contestCreator")
@@ -1298,8 +1318,9 @@ contestsRouter.get("/", authOptional, async (req: AuthRequest, res: Response) =>
             )
           )
         )`)
-        .groupBy("participantContest.id")
-        .getRawMany<{ contestId: string | number; participantCount: string | number }>();
+        .groupBy("participantContest.id");
+      const counts = await sharedContestRead(JSON.stringify(["list-counts", countQuery.getQueryAndParameters()]),
+        () => countQuery.getRawMany<{ contestId: string | number; participantCount: string | number }>());
       for (const row of counts) participantCountByContest.set(Number(row.contestId), Number(row.participantCount) || 0);
     }
 
@@ -1618,6 +1639,14 @@ contestsRouter.delete("/:id", authRequired, async (req: AuthRequest, res: Respon
     await ensureContestCommunityTables();
 
     await AppDataSource.transaction(async (manager) => {
+      // Share admission's lock so a contest cannot disappear between acceptance
+      // and its durable insert, or erase work already accepted by the judge.
+      await manager.query("SELECT id FROM contest_execution_admission WHERE id=1 FOR UPDATE");
+      const [pending] = await manager.query(
+        "SELECT COUNT(*) count FROM contest_execution_jobs WHERE contest_id=? AND state IN ('queued','running')",
+        [contestId],
+      );
+      if (Number(pending.count)) throw new HttpError(409, "CONTEST_HAS_PENDING_JOBS", { expose: true });
       const current = await manager.getRepository(Contest).findOne({
         where: { id: contestId },
         relations: ["createdBy"],
@@ -3061,7 +3090,7 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
       return res.status(400).json({ message: "INVALID_ID" });
     }
 
-    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+    const contest = await readContestAccessRecord(contestId);
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -3071,10 +3100,15 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
     const isBeforeStart = contest.startsAt ? Date.now() < new Date(contest.startsAt).getTime() : false;
     if (isBeforeStart && !isPrivileged) return res.status(403).json({ message: "CONTEST_NOT_STARTED" });
 
-    const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } }, relations: ["libraryTask"] });
+    const problem = await sharedContestRead(`statement:${contestId}:${problemId}`, () => problemRepo().findOne({
+      where: { id: problemId, contest: { id: contestId } }, relations: ["libraryTask"],
+      select: { id: true, order: true, label: true, libraryTask: { id: true, title: true,
+        description: true, template: true, templatesByLanguage: true, lang: true,
+        timeLimitMs: true, memoryLimitMb: true, outputLimitKb: true, checkerSpec: true } },
+    }));
     if (!problem) return res.status(404).json({ message: "PROBLEM_NOT_FOUND" });
 
-    const task = await libraryRepo().findOne({ where: { id: problem.libraryTask.id } });
+    const task = problem.libraryTask;
     if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
 
     return res.json({
@@ -3172,11 +3206,233 @@ contestsRouter.post("/:id/problems/:problemId/tutor", authRequired, contestTutor
   }
 });
 
+
+function formatContestRun(workerRes: WorkerJudgeResponse): Record<string, unknown> {
+      if (workerRes.verdict === "CE" && workerRes.compile) {
+        const combined = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
+        const fallbackHint = "Compilation error. If the message is empty, the compiler/toolchain is likely missing in the sandbox rootfs.";
+        return {
+          stdout: "",
+          stderr: (combined || fallbackHint).slice(0, 40_000),
+          exitCode: 1,
+          success: false,
+          verdict: "CE",
+          timeMs: null,
+          memoryKb: null,
+        };
+      }
+
+      const t0 = workerRes.tests?.[0];
+      const stdout = t0?.actual ?? "";
+      const stderr = t0?.stderr ?? "";
+      const success = workerRes.verdict === "AC" || workerRes.verdict === "WA";
+      const timeMs = Number.isFinite(Number(t0?.time_ms)) ? Number(t0?.time_ms) : null;
+      const memoryKb = Number.isFinite(Number(t0?.memory_kb)) ? Number(t0?.memory_kb) : null;
+      return {
+        stdout: String(stdout ?? ""),
+        stderr: String(stderr ?? ""),
+        exitCode: success ? 0 : 1,
+        success,
+        verdict: workerRes.verdict ?? null,
+        timeMs,
+        memoryKb,
+      };
+}
+
+type ContestCheckContext = {
+  contestId: number; problemId: number; participantId: number; maxScore: number;
+  problemPoints: number | null; submissionPhase: "CONTEST" | "UPSOLVE";
+  tests: Array<{ id: number; points: number | null; isHidden: boolean; subtask: string | null; expectedOutput: string }>;
+};
+async function finalizeContestCheck(context: ContestCheckContext, workerRes: WorkerJudgeResponse,
+  manager: EntityManager, submissionId: number): Promise<Record<string, unknown>> {
+  const { contestId, problemId, participantId, maxScore, problemPoints, submissionPhase, tests } = context;
+      let totalPassed = 0;
+      let totalScore = 0;
+      let compileError: string | null = null;
+      let compileErrorKind: string | null = null;
+      const groupScores = Array.isArray(workerRes.group_scores)
+        ? workerRes.group_scores.map((gs) => ({
+            group: String(gs.group ?? ""),
+            score: Number.isFinite(Number(gs.score)) ? Number(gs.score) : 0,
+            max_score: Number.isFinite(Number(gs.max_score)) ? Number(gs.max_score) : 0,
+          }))
+        : null;
+
+      const truncateForClient = (value: unknown, max = 4_000): string => {
+        const s = String(value ?? "");
+        return s.length > max ? `${s.slice(0, max)}\n… (truncated)` : s;
+      };
+
+      type PerTestResult = {
+        index: number;
+        group: string;
+        hidden: boolean;
+        verdict: string | null;
+        timeMs: number | null;
+        memoryKb: number | null;
+      };
+      const perTest: PerTestResult[] = [];
+      let firstFailure:
+        | {
+            index: number;
+            verdict: string | null;
+            hidden: boolean;
+            group: string;
+            input?: string;
+            expected?: string;
+            actual?: string;
+            stderr?: string;
+          }
+        | null = null;
+      let maxTimeMs = 0;
+      let maxMemoryKb = 0;
+
+      if (workerRes.verdict === "CE" && workerRes.compile) {
+        compileErrorKind = workerRes.compile.error_kind ?? null;
+        const combined = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
+        compileError = combined ? combined.slice(0, 40_000) : "Compilation error";
+      } else {
+        const byId = new Map<string, (typeof workerRes.tests)[number]>();
+        for (const r of workerRes.tests) byId.set(String(r.test_id), r);
+        for (let i = 0; i < tests.length; i++) {
+          const t = tests[i];
+          const r = byId.get(String(t.id));
+          const verdict = r?.verdict ?? null;
+          const passed = verdict === "AC";
+          const hidden = t.isHidden === true;
+          const subtask = String(t.subtask ?? "").trim();
+          const group = subtask || (hidden ? "hidden" : "public");
+          const timeMs = Number.isFinite(Number(r?.time_ms)) ? Number(r?.time_ms) : null;
+          const memoryKb = Number.isFinite(Number(r?.memory_kb)) ? Number(r?.memory_kb) : null;
+          if (timeMs != null && timeMs > maxTimeMs) maxTimeMs = timeMs;
+          if (memoryKb != null && memoryKb > maxMemoryKb) maxMemoryKb = memoryKb;
+
+          perTest.push({ index: i + 1, group, hidden, verdict, timeMs, memoryKb });
+
+          if (passed) {
+            totalPassed++;
+            totalScore += t.points || 1;
+          } else if (!firstFailure) {
+            // Only expose input/expected/actual for NON-hidden (sample/public) tests.
+            firstFailure = hidden
+              ? { index: i + 1, verdict, hidden: true, group }
+              : {
+                  index: i + 1,
+                  verdict,
+                  hidden: false,
+                  group,
+                  // Input sample comes from the judge (debug) since the route no longer
+                  // loads the full `input` column; expected output is still in metadata.
+                  input: truncateForClient(r?.input ?? ""),
+                  expected: truncateForClient(t.expectedOutput ?? ""),
+                  actual: truncateForClient(r?.actual ?? ""),
+                  stderr: truncateForClient(r?.stderr ?? "", 2_000),
+                };
+          }
+        }
+      }
+
+      const scoringScore = typeof workerRes.score === "number" ? workerRes.score : totalScore;
+      const scoringMaxScore = typeof workerRes.max_score === "number" ? workerRes.max_score : maxScore;
+      const weighted = scaleScoreToProblemPoints(scoringScore, scoringMaxScore, problemPoints);
+      const annulled = await isProblemAnnulledForParticipant(contestId, problemId, participantId);
+      const finalScore = annulled ? 0 : weighted.score;
+
+      await manager.update(ContestSubmission, submissionId, {
+        verdict: workerRes.verdict ?? null, score: finalScore, maxScore: weighted.maxScore,
+        testsPassed: totalPassed, testsTotal: tests.length, compileErrorKind,
+        groupScores: groupScores ? JSON.stringify(groupScores) : null,
+      });
+
+      return {
+        submissionId,
+        phase: submissionPhase,
+        verdict: workerRes.verdict ?? null,
+        testsPassed: totalPassed,
+        testsTotal: tests.length,
+        score: finalScore,
+        maxScore: weighted.maxScore,
+        compileError,
+        compileErrorKind,
+        annulled,
+        maxTimeMs: maxTimeMs > 0 ? maxTimeMs : null,
+        maxMemoryKb: maxMemoryKb > 0 ? maxMemoryKb : null,
+        tests: perTest,
+        firstFailure,
+      };
+}
+registerContestJobProcessor(async (job, payload: ContestJobPayload, result, manager) => {
+  if (job.kind === "run") return formatContestRun(result);
+  if (!job.submission_id) throw new Error("MISSING_ACCEPTED_SUBMISSION");
+  return finalizeContestCheck(payload.context as unknown as ContestCheckContext, result, manager, job.submission_id);
+});
+
+contestsRouter.get("/:id/jobs/:jobId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const job = await getContestJob(String(req.params.jobId));
+    if (!job || job.contest_id !== Number(req.params.id)) return res.status(404).json({ message: "JOB_NOT_FOUND" });
+    const participant = req.userId ? await userOwnsContestParticipant(job.participant_id, job.contest_id, req.userId) : await participantRepo().findOne({ where: {
+      id: job.participant_id,
+      student: { id: req.studentId ?? -1 },
+    } });
+    if (!participant) return res.status(404).json({ message: "JOB_NOT_FOUND" });
+    const contest = await readContestAccessRecord(job.contest_id);
+    if (!contest || !(contest.isPublished !== false && isContestOnlyUser(req) && req.userId
+      ? true : await canAccessContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    res.set("Cache-Control", "no-store");
+    return res.json({ ...jobReceipt(job),
+      ...(job.state === "completed" ? { result: JSON.parse(job.result!) } : {}),
+      ...(job.state === "system_error" ? { message: "CONTEST_EXECUTION_FAILED" } : {}),
+    });
+  } catch (error) {
+    logger.error("[contests] job status failed", { error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+function contestRequestFingerprint(req: AuthRequest, kind: "check" | "run"): string {
+  const body = req.body as Record<string, unknown>;
+  return requestHash({ problemId: Number(req.params.problemId), code: body.code, files: body.files,
+    language: body.language, compiler: body.compiler, ...(kind === "run" ? { input: body.input } : {}) });
+}
+async function contestSubmissionRateLimit(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const key = req.get("Idempotency-Key");
+    const kind = req.path.endsWith("/run") ? "run" : "check";
+    if (key && key.length <= 128) {
+      const participantId = req.userId ? await userContestParticipantId(Number(req.params.id), req.userId)
+        : (await participantRepo().findOne({ where: { contest: { id: Number(req.params.id) },
+          student: { id: req.studentId ?? -1 } } }))?.id;
+      if (participantId && await findContestJobByKey(participantId, kind, key)) {
+        // The handler still checks access and fingerprints. Replaying an accepted request consumes no new quota.
+        next(); return;
+      }
+    }
+    await submissionRateLimitMiddleware(req, res, next);
+  } catch (error) { next(error); }
+}
+async function respondToContestRetry(req: AuthRequest, res: Response, contestId: number, kind: "check" | "run"): Promise<boolean> {
+  const key = req.get("Idempotency-Key");
+  if (!key || !req.body || typeof req.body !== "object") return false;
+  const participantId = req.userId ? await userContestParticipantId(contestId, req.userId)
+    : (await participantRepo().findOne({ where: { contest: { id: contestId },
+      student: { id: req.studentId ?? -1 } } }))?.id;
+  if (!participantId) return false;
+  const job = await findContestJobByKey(participantId, kind, key);
+  if (!job) return false;
+  if (job.request_hash !== contestRequestFingerprint(req, kind)) throw new HttpError(409, "IDEMPOTENCY_CONFLICT");
+  if (String(req.get("Prefer") ?? "").includes("respond-async")) {
+    res.set("Preference-Applied", "respond-async"); res.status(202).json(jobReceipt(job));
+  } else res.json(await waitContestJob(job.job_id));
+  return true;
+}
+
 // Run code inside contest on custom input (no submission saved, no scoreboard effect)
 contestsRouter.post(
   "/:id/problems/:problemId/run",
   authRequired,
-  submissionRateLimitMiddleware,
+  contestSubmissionRateLimit,
   async (req: AuthRequest, res: Response) => {
     try {
       const contestId = Number(req.params.id);
@@ -3185,11 +3441,13 @@ contestsRouter.post(
         return res.status(400).json({ message: "INVALID_ID" });
       }
 
-      const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+      const contest = await readContestAccessRecord(contestId);
       if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
       const allowed = await canAccessContest({ contest, req });
       if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+      if (await respondToContestRetry(req, res, contestId, "run")) return;
 
       const timeState = getContestTimeState(contest);
       const isPrivileged = req.userRole === "SYSTEM_ADMIN" || Boolean(req.userId && (await canManageContest({ contest, req })));
@@ -3296,43 +3554,17 @@ contestsRouter.post(
         run_all: true,
       };
 
-      let workerRes: WorkerJudgeResponse;
-      try {
-        workerRes = await judgeWithSemaphore(workerReq);
-      } catch (e: unknown) {
-        if (e instanceof HttpError) throw e;
-        throw new HttpError(503, "Judge unavailable", { code: "JUDGE_UNAVAILABLE", expose: true, cause: e });
+      const participant = await getOrCreateParticipant({ contestId, req });
+      const job = await enqueueContestJob({ contestId, problemId, participantId: participant.id, kind: "run",
+        contestWindow: { endsAt: contest.endsAt, allowUpsolve: contest.allowUpsolve },
+        key: req.get("Idempotency-Key") || crypto.randomUUID(),
+        fingerprint: contestRequestFingerprint(req, "run"),
+        payload: { request: workerReq, context: {} } });
+      if (String(req.get("Prefer") ?? "").includes("respond-async")) {
+        res.set("Preference-Applied", "respond-async");
+        return res.status(202).json(jobReceipt(job));
       }
-
-      if (workerRes.verdict === "CE" && workerRes.compile) {
-        const combined = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
-        const fallbackHint = "Compilation error. If the message is empty, the compiler/toolchain is likely missing in the sandbox rootfs.";
-        return res.json({
-          stdout: "",
-          stderr: (combined || fallbackHint).slice(0, 40_000),
-          exitCode: 1,
-          success: false,
-          verdict: "CE",
-          timeMs: null,
-          memoryKb: null,
-        });
-      }
-
-      const t0 = workerRes.tests?.[0];
-      const stdout = t0?.actual ?? "";
-      const stderr = t0?.stderr ?? "";
-      const success = workerRes.verdict === "AC" || workerRes.verdict === "WA";
-      const timeMs = Number.isFinite(Number(t0?.time_ms)) ? Number(t0?.time_ms) : null;
-      const memoryKb = Number.isFinite(Number(t0?.memory_kb)) ? Number(t0?.memory_kb) : null;
-      return res.json({
-        stdout: String(stdout ?? ""),
-        stderr: String(stderr ?? ""),
-        exitCode: success ? 0 : 1,
-        success,
-        verdict: workerRes.verdict ?? null,
-        timeMs,
-        memoryKb,
-      });
+      return res.json(await waitContestJob(job.job_id));
     } catch (error: unknown) {
       if (error instanceof HttpError) {
         return res.status(error.statusCode).json({ message: error.message, ...(error.details ? { details: error.details } : {}) });
@@ -3347,7 +3579,7 @@ contestsRouter.post(
 contestsRouter.post(
   "/:id/problems/:problemId/check",
   authRequired,
-  submissionRateLimitMiddleware,
+  contestSubmissionRateLimit,
   async (req: AuthRequest, res: Response) => {
     try {
       const contestId = Number(req.params.id);
@@ -3356,11 +3588,13 @@ contestsRouter.post(
         return res.status(400).json({ message: "INVALID_ID" });
       }
 
-      const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+      const contest = await readContestAccessRecord(contestId);
       if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
 
       const allowed = await canAccessContest({ contest, req });
       if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+      if (await respondToContestRetry(req, res, contestId, "check")) return;
 
       const timeState = getContestTimeState(contest);
       if (!timeState.started) {
@@ -3421,24 +3655,30 @@ contestsRouter.post(
       const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } }, relations: ["libraryTask"] });
       if (!problem) return res.status(404).json({ message: "PROBLEM_NOT_FOUND" });
       const taskId = problem.libraryTask.id;
-      const task = await libraryRepo().findOne({ where: { id: taskId }, relations: ["author"] });
-      if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
-
-      // Metadata-only: exclude the big `input` column (read lazily for cache misses only).
-      const tests = await testDataRepo().find({
-        where: { libraryTask: { id: task.id } },
-        order: { id: "ASC" },
-        select: {
-          id: true,
-          isHidden: true,
-          kind: true,
-          points: true,
-          subtask: true,
-          expectedOutput: true,
-          inputSha256: true,
-          outputSha256: true
-        }
-      });
+      // Metadata, limits and cache-miss content belong to one immutable DB snapshot.
+      const snapshot = await sharedContestRead(`judge-snapshot:${taskId}`, () => AppDataSource.transaction("REPEATABLE READ", async manager => {
+        const task = await manager.getRepository(LibraryTask).findOne({ where: { id: taskId } });
+        if (!task) return null;
+        const tests = await manager.getRepository(TestData).find({
+          where: { libraryTask: { id: task.id } }, order: { id: "ASC" },
+          select: { id: true, isHidden: true, kind: true, points: true, subtask: true,
+            expectedOutput: true, inputSha256: true, outputSha256: true }
+        });
+        const subtasks = tests.some(t => String(t.subtask ?? "").trim().length > 0);
+        const { tests: workerTests } = await buildJudgeTests(tests, {
+          meta: t => ({ hidden: t.isHidden === true, weight: t.points || 1,
+            group: subtasks ? (String(t.subtask ?? "").trim() || `unassigned_${t.id}`) : t.isHidden ? "hidden" : "public" }),
+          hashes: t => ({ inputHash: t.inputSha256, outputHash: t.outputSha256 }),
+          loadContent: async ids => {
+            const rows = await manager.getRepository(TestData).find({ where: { id: In(ids.map(Number)) },
+              select: { id: true, input: true, expectedOutput: true } });
+            return new Map(rows.map(t => [String(t.id), { input: t.input || "", output: t.expectedOutput || "" }]));
+          }
+        });
+        return { task, tests, workerTests };
+      }));
+      if (!snapshot) return res.status(404).json({ message: "TASK_NOT_FOUND" });
+      const { task, tests, workerTests } = snapshot;
       if (!tests.length) return res.status(400).json({ message: "NO_TESTS_DEFINED_FOR_THIS_TASK" });
 
       const requested = normalizeJudgeLanguage(validated.data.language);
@@ -3482,16 +3722,6 @@ contestsRouter.post(
       const persistedSubmitted = isMultiFile ? encodeMultiFileSubmissionV1({ entry: entryFile, files: effectiveFiles }) : sourceText;
 
       const principalTag = req.userType === "STUDENT" ? `student_${req.studentId}` : `user_${req.userId}`;
-      const { tests: workerTests } = await buildJudgeTests(tests, {
-        meta: (t) => {
-          const subtaskRaw = t.subtask ?? "";
-          const subtaskGroup = String(subtaskRaw ?? "").trim();
-          const group = hasSubtasks ? (subtaskGroup ? subtaskGroup : `unassigned_${t.id}`) : t.isHidden === true ? "hidden" : "public";
-          return { hidden: t.isHidden === true, group, weight: t.points || 1 };
-        },
-        hashes: (t) => ({ inputHash: t.inputSha256, outputHash: t.outputSha256 }),
-        loadContent: loadTestContentByIds
-      });
       const submitCompiler = normCompilerId(validated.data.compiler);
       const workerReq: WorkerJudgeRequest = {
         submission_id: `contest_${contestId}_${problemId}_${principalTag}_${Date.now()}`,
@@ -3509,148 +3739,26 @@ contestsRouter.post(
         // detail to the solver. Hidden-test payloads are filtered out below and
         // never leave the server.
         debug: true,
-        rerun_failed_once: true,
+        rerun_failed_once: false,
         run_all: true,
       };
 
-      let workerRes: WorkerJudgeResponse;
-      try {
-        workerRes = await judgeWithSemaphore(workerReq);
-      } catch (e: unknown) {
-        if (e instanceof HttpError) throw e;
-        throw new HttpError(503, "Judge unavailable", { code: "JUDGE_UNAVAILABLE", expose: true, cause: e });
+      const job = await enqueueContestJob({ contestId, problemId, participantId: participant.id, kind: "check",
+        contestWindow: { endsAt: contest.endsAt, allowUpsolve: contest.allowUpsolve },
+        key: req.get("Idempotency-Key") || crypto.randomUUID(),
+        fingerprint: contestRequestFingerprint(req, "check"),
+        payload: { request: workerReq, context: {
+          taskId: task.id, taskVersion: task.updatedAt.toISOString(), contestId, problemId, participantId: participant.id, maxScore, problemPoints: problem.points ?? null,
+          submissionPhase, tests: tests.map(t => ({ id: t.id, points: t.points, isHidden: t.isHidden,
+            subtask: t.subtask, expectedOutput: t.isHidden ? "" : String(t.expectedOutput ?? "").slice(0, 4000) })) } },
+        submission: { contest: { id: contestId } as Contest, problem: { id: problemId } as ContestProblem,
+          participant: { id: participant.id } as ContestParticipant, language: judgeLang,
+          submittedCode: persistedSubmitted, phase: submissionPhase, maxScore: problem.points ?? maxScore } });
+      if (String(req.get("Prefer") ?? "").includes("respond-async")) {
+        res.set("Preference-Applied", "respond-async");
+        return res.status(202).json(jobReceipt(job));
       }
-
-      let totalPassed = 0;
-      let totalScore = 0;
-      let compileError: string | null = null;
-      let compileErrorKind: string | null = null;
-      const groupScores = Array.isArray(workerRes.group_scores)
-        ? workerRes.group_scores.map((gs) => ({
-            group: String(gs.group ?? ""),
-            score: Number.isFinite(Number(gs.score)) ? Number(gs.score) : 0,
-            max_score: Number.isFinite(Number(gs.max_score)) ? Number(gs.max_score) : 0,
-          }))
-        : null;
-
-      const truncateForClient = (value: unknown, max = 4_000): string => {
-        const s = String(value ?? "");
-        return s.length > max ? `${s.slice(0, max)}\n… (truncated)` : s;
-      };
-
-      type PerTestResult = {
-        index: number;
-        group: string;
-        hidden: boolean;
-        verdict: string | null;
-        timeMs: number | null;
-        memoryKb: number | null;
-      };
-      const perTest: PerTestResult[] = [];
-      let firstFailure:
-        | {
-            index: number;
-            verdict: string | null;
-            hidden: boolean;
-            group: string;
-            input?: string;
-            expected?: string;
-            actual?: string;
-            stderr?: string;
-          }
-        | null = null;
-      let maxTimeMs = 0;
-      let maxMemoryKb = 0;
-
-      if (workerRes.verdict === "CE" && workerRes.compile) {
-        compileErrorKind = workerRes.compile.error_kind ?? null;
-        const combined = [workerRes.compile.stderr, workerRes.compile.stdout].filter(Boolean).join("\n").trim();
-        compileError = combined ? combined.slice(0, 40_000) : "Compilation error";
-      } else {
-        const byId = new Map<string, (typeof workerRes.tests)[number]>();
-        for (const r of workerRes.tests) byId.set(String(r.test_id), r);
-        for (let i = 0; i < tests.length; i++) {
-          const t = tests[i];
-          const r = byId.get(String(t.id));
-          const verdict = r?.verdict ?? null;
-          const passed = verdict === "AC";
-          const hidden = t.isHidden === true;
-          const subtask = String(t.subtask ?? "").trim();
-          const group = subtask || (hidden ? "hidden" : "public");
-          const timeMs = Number.isFinite(Number(r?.time_ms)) ? Number(r?.time_ms) : null;
-          const memoryKb = Number.isFinite(Number(r?.memory_kb)) ? Number(r?.memory_kb) : null;
-          if (timeMs != null && timeMs > maxTimeMs) maxTimeMs = timeMs;
-          if (memoryKb != null && memoryKb > maxMemoryKb) maxMemoryKb = memoryKb;
-
-          perTest.push({ index: i + 1, group, hidden, verdict, timeMs, memoryKb });
-
-          if (passed) {
-            totalPassed++;
-            totalScore += t.points || 1;
-          } else if (!firstFailure) {
-            // Only expose input/expected/actual for NON-hidden (sample/public) tests.
-            firstFailure = hidden
-              ? { index: i + 1, verdict, hidden: true, group }
-              : {
-                  index: i + 1,
-                  verdict,
-                  hidden: false,
-                  group,
-                  // Input sample comes from the judge (debug) since the route no longer
-                  // loads the full `input` column; expected output is still in metadata.
-                  input: truncateForClient(r?.input ?? ""),
-                  expected: truncateForClient(t.expectedOutput ?? ""),
-                  actual: truncateForClient(r?.actual ?? ""),
-                  stderr: truncateForClient(r?.stderr ?? "", 2_000),
-                };
-          }
-        }
-      }
-
-      const scoringScore = typeof workerRes.score === "number" ? workerRes.score : totalScore;
-      const scoringMaxScore = typeof workerRes.max_score === "number" ? workerRes.max_score : maxScore;
-      const weighted = scaleScoreToProblemPoints(scoringScore, scoringMaxScore, problem.points ?? null);
-      const annulled = await isProblemAnnulledForParticipant(contestId, problemId, participant.id);
-      const finalScore = annulled ? 0 : weighted.score;
-
-      const newSubmission: ContestSubmission = submissionRepo().create();
-      Object.assign(newSubmission, {
-        contest: { id: contestId },
-        problem: { id: problemId },
-        participant: { id: participant.id },
-        language: judgeLang,
-        submittedCode: persistedSubmitted,
-        verdict: workerRes.verdict ?? null,
-        score: finalScore,
-        maxScore: weighted.maxScore,
-        testsPassed: totalPassed,
-        testsTotal: tests.length,
-        compileErrorKind,
-        groupScores: groupScores ? JSON.stringify(groupScores) : null,
-        phase: submissionPhase,
-      });
-      const saved = await submissionRepo().save(newSubmission);
-
-      // Notify live SSE subscribers that the board may have changed. No scores
-      // are included, so this is freeze-safe — clients refetch /standings.
-      publishContestEvent(contestId, { kind: "scoreboard", at: Date.now() });
-
-      return res.json({
-        submissionId: saved.id,
-        phase: submissionPhase,
-        verdict: workerRes.verdict ?? null,
-        testsPassed: totalPassed,
-        testsTotal: tests.length,
-        score: finalScore,
-        maxScore: weighted.maxScore,
-        compileError,
-        compileErrorKind,
-        annulled,
-        maxTimeMs: maxTimeMs > 0 ? maxTimeMs : null,
-        maxMemoryKb: maxMemoryKb > 0 ? maxMemoryKb : null,
-        tests: perTest,
-        firstFailure,
-      });
+      return res.json(await waitContestJob(job.job_id));
     } catch (error: unknown) {
       if (error instanceof HttpError) {
         return res.status(error.statusCode).json({ message: error.message, ...(error.details ? { details: error.details } : {}) });
@@ -3692,7 +3800,7 @@ contestsRouter.get("/:id/problems/:problemId/submissions", authRequired, async (
         SELECT id,
                created_at as createdAt,
                phase,
-               language,
+               language, compiler, execution_status as executionStatus,
                verdict,
                score,
                max_score as maxScore,
@@ -3716,7 +3824,7 @@ contestsRouter.get("/:id/problems/:problemId/submissions", authRequired, async (
         id: Number(r.id),
         createdAt: readProperty(r, "createdAt") ? new Date(String(readProperty(r, "createdAt"))).toISOString() : null,
         phase: readProperty(r, "phase") === "UPSOLVE" ? "UPSOLVE" : "CONTEST",
-        language: String(r.language ?? ""),
+        language: String(r.language ?? ""), compiler: r.compiler ?? null, executionStatus: r.executionStatus,
         verdict: r.verdict != null ? String(r.verdict) : null,
         score: r.score != null ? Number(r.score) : null,
         maxScore: r.maxScore != null ? Number(r.maxScore) : null,
@@ -4002,7 +4110,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+    const contest = await readContestAccessRecord(contestId);
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
@@ -4027,11 +4135,17 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       });
     }
 
+    const now = Date.now();
+    const end = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
+    const view = isManager ? "organizer" : end != null && now >= end - 3600000 && now <= end ? "frozen" : "public";
+    res.set("Cache-Control", "no-store");
+    const board = await cachedStandings(contestId, `${view}:${contest.updatedAt?.getTime() ?? 0}:${end != null && now > end ? "finished" : "active"}`, async () => {
     const scoringMode: "IOI" | "ICPC" = contest.scoringMode;
 
     const problems = await problemRepo().find({
       where: { contest: { id: contestId } },
       relations: ["libraryTask"],
+      select: { id: true, order: true, label: true, points: true, libraryTask: { id: true } },
       order: { order: "ASC" },
     });
 
@@ -4049,6 +4163,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
     const participants = await participantRepo().find({
       where: { contest: { id: contestId } },
       relations: ["user"],
+      select: { id: true, displayName: true, isDisqualified: true, principalType: true, user: { id: true } },
       order: { joinedAt: "ASC" },
     });
     const organizerParticipantIds = new Set(
@@ -4104,7 +4219,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
     }));
 
     if (activeParticipants.length === 0) {
-      return res.json({
+      return {
         contestId,
         scoringMode,
         problems: baseProblems,
@@ -4113,7 +4228,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
         freeze: { enabled: freezeAtMs != null, freezeAtMs, frozen: viewerFrozen, isManagerView: isManager },
         disqualifiedCount: contestParticipants.length,
         generatedAtMs: nowMs,
-      });
+      };
     }
 
     // Fetch all contest-phase submissions once; derive both IOI best scores and
@@ -4127,7 +4242,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
              COALESCE(score, 0) as score,
              created_at as createdAt
       FROM contest_submissions
-      WHERE contest_id = ? AND phase = 'CONTEST'
+      WHERE contest_id = ? AND phase = 'CONTEST' AND verdict IS NOT NULL AND execution_status = 'completed'
       ORDER BY created_at ASC, id ASC
       `,
       [contestId]
@@ -4240,7 +4355,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       })
       .map((r, idx) => ({ rank: idx + 1, ...r }));
 
-    return res.json({
+    return {
       contestId,
       scoringMode,
       problems: baseProblems,
@@ -4249,7 +4364,9 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       freeze: { enabled: freezeAtMs != null, freezeAtMs, frozen: viewerFrozen, isManagerView: isManager },
       disqualifiedCount: contestParticipants.length - activeParticipants.length,
       generatedAtMs: nowMs,
+    };
     });
+    return res.json(board);
   } catch (error: unknown) {
     logger.error("[contests] GET /:id/standings error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -4271,10 +4388,15 @@ contestsRouter.get("/:id/events", sseAuthShim, authOptional, async (req: AuthReq
     const contestId = Number(req.params.id);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+    const contest = await readContestAccessRecord(contestId);
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const eventParticipant = (req.userId || req.studentId) ? await participantRepo().findOne({ where: {
+      contest: { id: contestId },
+      ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }),
+    } }) : null;
 
     res.set({
       "Content-Type": "text/event-stream",
@@ -4288,6 +4410,7 @@ contestsRouter.get("/:id/events", sseAuthShim, authOptional, async (req: AuthReq
     res.write(`event: ready\ndata: ${JSON.stringify({ at: Date.now() })}\n\n`);
 
     const send = (event: ContestEvent) => {
+      if (event.kind === "job" && event.participantId !== eventParticipant?.id) return;
       try {
         res.write(`event: ${event.kind}\ndata: ${JSON.stringify(event)}\n\n`);
       } catch {

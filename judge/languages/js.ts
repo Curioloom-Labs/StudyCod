@@ -1,6 +1,7 @@
 import * as path from "path";
 import { writeFile } from "fs/promises";
 import { COMPILE_BUDGET, LanguageAdapter } from "./types";
+import { readToolPath } from "../config";
 
 export const jsLanguage: LanguageAdapter = {
   id: "js",
@@ -12,11 +13,16 @@ export const jsLanguage: LanguageAdapter = {
     // Many competitive-programming environments provide these two helpers. Keep
     // them available for JavaScript solutions while leaving Node's normal APIs intact.
     await writeFile(path.join(workDir, "studycod-io.cjs"), `
-const input = require("node:fs").readFileSync(0, "utf8").replace(/\\r\\n/g, "\\n");
-const lines = input.split("\\n");
-if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+let lines = null;
 let lineIndex = 0;
-globalThis.readline = () => lineIndex < lines.length ? lines[lineIndex++] : "";
+globalThis.readline = () => {
+  if (lines === null) {
+    const input = require("fs").readFileSync(0, "utf8").replace(/\\r\\n/g, "\\n");
+    lines = input.split("\\n");
+    if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+  }
+  return lineIndex < lines.length ? lines[lineIndex++] : "";
+};
 globalThis.print = (...values) => console.log(...values);
 `, { encoding: "utf8" });
   },
@@ -24,14 +30,14 @@ globalThis.print = (...values) => console.log(...values);
     // Node is interpreted; a syntax pre-check surfaces obvious errors as CE early.
     return {
       display: "node --check main.js",
-      argv: ["/usr/bin/node", "--check", "main.js"]
+      argv: [readToolPath("JUDGE_BIN_NODE", "/usr/bin/node"), "--check", "main.js"]
     };
   },
   getRunPlan() {
     return {
       display: "node main.js (with readline/print helpers)",
       // Keep heap modest so a runaway allocation hits MLE rather than thrashing the host.
-      argv: ["/usr/bin/node", "--max-old-space-size=256", "--require", "./studycod-io.cjs", "main.js"]
+      argv: [readToolPath("JUDGE_BIN_NODE", "/usr/bin/node"), "--max-old-space-size=256", "--require", "./studycod-io.cjs", "main.js"]
     };
   }
 };

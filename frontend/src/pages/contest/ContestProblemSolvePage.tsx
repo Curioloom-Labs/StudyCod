@@ -1,4 +1,6 @@
 import React from "react";
+import { hasPendingContestJob, resumeContestJob, type ContestJobStatus } from "../../lib/api/contestJobs";
+import type { ContestCheckResult, ContestRunResult } from "../../lib/api/contests";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { MessageSquareText, Radio, Trophy, X } from "lucide-react";
 import {
@@ -153,6 +155,7 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [code, setCode] = React.useState("");
   const [runInput, setRunInput] = React.useState("");
   const [running, setRunning] = React.useState(false);
+  const [jobStatus, setJobStatus] = React.useState<ContestJobStatus | null>(null);
   const [checking, setChecking] = React.useState(false);
   const [runResult, setRunResult] = React.useState<StudyCodIdeRunResult | null>(null);
   const [checkResult, setCheckResult] = React.useState<StudyCodIdeCheckResult | null>(null);
@@ -202,7 +205,7 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   const syncLiveData = React.useCallback(async (force = false) => {
     const now = Date.now();
-    if (!force && now - liveSyncLastAtRef.current < 1500) return;
+    if (!force && now - liveSyncLastAtRef.current < 5000) return;
     if (liveSyncInFlightRef.current) return;
     liveSyncInFlightRef.current = true;
     liveSyncLastAtRef.current = now;
@@ -408,6 +411,9 @@ export const ContestProblemSolvePage: React.FC = () => {
     es.onopen = () => {
       if (!closed) setWsStatus("connected");
     };
+    es.addEventListener("job", (event: MessageEvent) => {
+      try { window.dispatchEvent(new CustomEvent("studycod:contest-job", { detail: JSON.parse(event.data) })); } catch { /* malformed event */ }
+    });
     es.addEventListener("scoreboard", () => {
       if (!closed) syncLiveData(false);
     });
@@ -447,7 +453,7 @@ export const ContestProblemSolvePage: React.FC = () => {
   React.useEffect(() => {
     const id = window.setInterval(() => {
       syncLiveData(false);
-    }, wsStatus === "connected" ? 20000 : 9000);
+    }, wsStatus === "connected" ? 20000 : 5000 + Math.random() * 1000);
     return () => window.clearInterval(id);
   }, [wsStatus, syncLiveData]);
 
@@ -495,6 +501,48 @@ export const ContestProblemSolvePage: React.FC = () => {
     };
   }, [contestId, hasToken]);
 
+  const applyCheckResult = React.useCallback((res: ContestCheckResult) => {
+      const firstPublicFailure = res.firstFailure && !res.firstFailure.hidden ? res.firstFailure : null;
+      setCheckResult({
+        verdict: res.verdict,
+        testsPassed: res.testsPassed,
+        testsTotal: res.testsTotal,
+        score: res.score,
+        maxScore: res.maxScore,
+        compileError: res.compileError,
+        groupScores: res.groupScores,
+        publicTestResults: firstPublicFailure ? [{
+          testId: firstPublicFailure.index,
+          input: firstPublicFailure.input,
+          expectedOutput: firstPublicFailure.expected,
+          actualOutput: firstPublicFailure.actual,
+          passed: false,
+          verdict: firstPublicFailure.verdict,
+          stderr: firstPublicFailure.stderr,
+        }] : [],
+      });
+  }, []);
+  React.useEffect(() => {
+    if (!contestId || !problemId || !hasToken) return;
+    let cancelled = false;
+    const restore = async (kind: "check" | "run") => {
+      if (!hasPendingContestJob(contestId, problemId, kind)) return;
+      if (kind === "check") setChecking(true); else setRunning(true);
+      try {
+        const result = await resumeContestJob<ContestCheckResult | ContestRunResult>(contestId, problemId, kind,
+          status => { if (!cancelled) setJobStatus(status); });
+        if (!cancelled && result) {
+          if (kind === "check") applyCheckResult(result as ContestCheckResult);
+          else setRunResult(result as ContestRunResult);
+          void syncLiveData(true);
+        }
+      } catch (error) { if (!cancelled) setError(getErrorMessage(error)); }
+      finally { if (!cancelled) { if (kind === "check") setChecking(false); else setRunning(false); } }
+    };
+    void restore("check"); void restore("run");
+    return () => { cancelled = true; };
+  }, [contestId, problemId, hasToken, applyCheckResult, syncLiveData]);
+
   const doRun = async () => {
     if (!contestId || !problemId || !statement) return;
     if (running || checking) return;
@@ -513,7 +561,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         compiler: judgeCompiler,
         input: runInput,
         code,
-      });
+      }, setJobStatus);
       setRunResult(res);
       setError(null);
     } catch (e: unknown) {
@@ -557,26 +605,8 @@ export const ContestProblemSolvePage: React.FC = () => {
         compiler: judgeCompiler,
         code,
         turnstileToken: tokenForSubmit,
-      });
-      const firstPublicFailure = res.firstFailure && !res.firstFailure.hidden ? res.firstFailure : null;
-      setCheckResult({
-        verdict: res.verdict,
-        testsPassed: res.testsPassed,
-        testsTotal: res.testsTotal,
-        score: res.score,
-        maxScore: res.maxScore,
-        compileError: res.compileError,
-        groupScores: res.groupScores,
-        publicTestResults: firstPublicFailure ? [{
-          testId: firstPublicFailure.index,
-          input: firstPublicFailure.input,
-          expectedOutput: firstPublicFailure.expected,
-          actualOutput: firstPublicFailure.actual,
-          passed: false,
-          verdict: firstPublicFailure.verdict,
-          stderr: firstPublicFailure.stderr,
-        }] : [],
-      });
+      }, setJobStatus);
+      applyCheckResult(res);
       setError(null);
       setLatestVerdict(normalizeVerdict(res.verdict));
       setLatestVerdictAt(Date.now());
@@ -692,7 +722,11 @@ export const ContestProblemSolvePage: React.FC = () => {
         </div>
       ) : null}
 
+      {jobStatus && <div role="status" className="px-4 py-2 text-sm text-emerald-200">
+        {jobStatus === "queued" ? "У черзі" : jobStatus === "running" ? "Перевіряється" : jobStatus === "completed" ? "Готово" : "Помилка судді — відправку збережено"}
+      </div>}
       <StudyCodIDEWorkspace
+        enableSemanticLsp={false}
         task={{
           id: `contest-${contestId}-${problemId}`,
           title: statement.task.title,

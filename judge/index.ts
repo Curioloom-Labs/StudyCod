@@ -272,7 +272,9 @@ async function main() {
   ) as Record<LanguageId, string>;
   const cwd = readNsjailCwd();
 
-  if (hasArg("--health")) {
+  const input = hasArg("--health") ? null : await readStdinLimited(maxInputBytes);
+  const parsed = input === null ? { operation: "health" } : parseJSON(input);
+  if (parsed && typeof parsed === "object" && Reflect.get(parsed, "operation") === "health") {
     const health = buildHealthPayload({
       nsjailPath,
       nsjailConfigPath,
@@ -292,8 +294,7 @@ async function main() {
     process.exit(health.status === "ok" ? 0 : 1);
   }
 
-  const input = await readStdinLimited(maxInputBytes);
-  const req = parseJSON(input) as JudgeRequest;
+  const req = parsed as JudgeRequest;
 
   const runner = new Runner({
     nsjailPath,

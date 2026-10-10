@@ -41,7 +41,12 @@ export class Compiler {
       argv: params.argv,
       sandboxId: "compile"
     });
+    const diagnostics = { cpu_time_ms: r.cpuTimeMs, wall_time_ms: r.timeMs, peak_memory_kb: r.memoryKb,
+      exit_code: r.exitCode, signal: r.signal, reason: r.oomKilled ? "oom" : r.timedOut ? "timeout" : r.outputLimitExceeded ? "output_limit" : "exit",
+      stdout: r.stdout, stderr: r.stderr, sandbox_log: r.sandboxLog };
+    if (r.exitCode !== 0 || r.timedOut) process.stderr.write(`[judge-compile] ${JSON.stringify({ language: params.language, command: params.argv, ...diagnostics })}\n`);
     const baseStderrForUser = filterNsJailStderr(r.stderr);
+    if (r.oomKilled) throw new Error(`JUDGE_COMPILER_OOM: cpu=${r.cpuTimeMs}ms wall=${r.timeMs}ms peak=${r.memoryKb}KB\n${r.stderr}`);
     const explained = buildUserFacingStderr(params.language, baseStderrForUser);
     const stderrForUser = (explained.stderr || "").trim();
     const rawStderr = String(r.stderr ?? "").trim();
@@ -55,11 +60,12 @@ export class Compiler {
     if (r.timedOut) {
       return {
         ok: false,
+        diagnostics,
         verdict: "CE",
         message: "Compilation timed out",
         error_kind: explained.kind,
-        stdout: truncate(r.stdout, 4096),
-        stderr: truncate(stderrWithCmd, 8192),
+        stdout: r.stdout,
+        stderr: stderrWithCmd,
         time_ms: Math.round(r.timeMs),
         memory_kb: r.memoryKb
       };
@@ -67,11 +73,12 @@ export class Compiler {
     if (r.outputLimitExceeded) {
       return {
         ok: false,
+        diagnostics,
         verdict: "CE",
         message: "Compilation output limit exceeded",
         error_kind: explained.kind,
-        stdout: truncate(r.stdout, 4096),
-        stderr: truncate(stderrWithCmd, 8192),
+        stdout: r.stdout,
+        stderr: stderrWithCmd,
         time_ms: Math.round(r.timeMs),
         memory_kb: r.memoryKb
       };
@@ -79,17 +86,19 @@ export class Compiler {
     if (r.exitCode !== 0) {
       return {
         ok: false,
+        diagnostics,
         verdict: "CE",
         message: "Compilation error",
         error_kind: explained.kind,
-        stdout: truncate(r.stdout, 4096),
-        stderr: truncate(stderrWithCmd, 8192),
+        stdout: r.stdout,
+        stderr: stderrWithCmd,
         time_ms: Math.round(r.timeMs),
         memory_kb: r.memoryKb
       };
     }
     return {
       ok: true,
+      diagnostics,
       verdict: "AC",
       message: "Compilation OK",
       error_kind: undefined,
@@ -101,12 +110,14 @@ export class Compiler {
   }
 }
 export function mapRuntimeToVerdict(opts: {
+  oomKilled?: boolean;
   timedOut: boolean;
   outputLimitExceeded: boolean;
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   stderr: string;
 }): Verdict {
+  if (opts.oomKilled) return "MLE";
   if (opts.timedOut) return "TLE";
   if (opts.outputLimitExceeded) return "RE";
   if (opts.exitCode === 0) return "AC";

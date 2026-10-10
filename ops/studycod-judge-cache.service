@@ -1,0 +1,6 @@
+[Unit]
+Description=Remove expired StudyCod compilation artifacts
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/studycod-judge/judge-cache-maintenance.py

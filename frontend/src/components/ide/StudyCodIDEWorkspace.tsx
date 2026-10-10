@@ -114,6 +114,7 @@ export type StudyCodIdeTrace = {
 };
 
 type Props = {
+  enableSemanticLsp?: boolean;
   task: StudyCodIdeTask;
   theory: string | null;
   language: JudgeLanguage;
@@ -285,6 +286,7 @@ function removeRepeatedTaskTitle(description: string, title: string): string {
 }
 
 type PracticeCodeEditorProps = {
+  enableSemanticLsp?: boolean;
   taskId: number | string;
   value: string;
   language: JudgeLanguage;
@@ -299,7 +301,7 @@ type PracticeCodeEditorProps = {
 // Keep Monaco's draft isolated from the large IDE workspace. The workspace
 // contains task markdown, test panels and mentor UI; re-rendering all of that
 // for every keystroke makes the editor feel frozen on slower devices.
-const PracticeCodeEditor = React.memo<PracticeCodeEditorProps>(({ taskId, value, language, readOnly, fontSize, wordWrap, isWebTask, focusLine = null, onChange }) => {
+const PracticeCodeEditor = React.memo<PracticeCodeEditorProps>(({ taskId, value, language, readOnly, fontSize, wordWrap, isWebTask, focusLine = null, onChange, enableSemanticLsp }) => {
   const [draft, setDraft] = React.useState(value);
 
   React.useEffect(() => {
@@ -312,6 +314,7 @@ const PracticeCodeEditor = React.memo<PracticeCodeEditorProps>(({ taskId, value,
   }, [onChange]);
 
   return <CodeEditor
+    enableSemanticLsp={enableSemanticLsp}
     height="100%"
     language={isWebTask ? "html" : language}
     value={draft}
@@ -1622,6 +1625,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 </div>
               ) : props.useFiles ? (
                 <MultiFileEditor
+                  enableSemanticLsp={props.enableSemanticLsp}
                   language={props.isWebTask ? "html" : props.language}
                   entryFile={props.entryFile}
                   files={props.files}
@@ -1638,6 +1642,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 />
               ) : (
                 <PracticeCodeEditor
+                  enableSemanticLsp={props.enableSemanticLsp}
                   taskId={props.task.id}
                   language={props.language}
                   value={props.code}
