@@ -13,17 +13,17 @@ This document describes the shared visual and interaction rules for the public s
 
 | Token | Dark theme | Light theme | Use |
 |---|---|---|---|
-| `--bg-base` | `#0d1510` | `#ffffff` | Page background |
-| `--bg-surface` | `#17221a` | `#ffffff` | Cards, menus, dialogs |
-| `--bg-hover` | `#233127` | `#f3f6f3` | Hover and selected surfaces |
-| `--bg-code` | `#0a110c` | `#f1f4f1` | Code and inset controls |
+| `--bg-base` | `#0c130e` | `#f4f4ef` | Page background |
+| `--bg-surface` | `#151f18` | `#fffefa` | Cards, menus, dialogs |
+| `--bg-hover` | `#202c23` | `#edf0e9` | Hover and selected surfaces |
+| `--bg-code` | `#0a110c` | `#ecefe9` | Code and inset controls |
 | `--text-primary` | `#f2f7f2` | `#1b2720` | Headings and main content |
 | `--text-secondary` | `#d0dbd1` | `#405047` | Supporting content |
 | `--text-muted` | `#aab9ad` | `#617067` | Secondary labels |
 | `--primary` | `#8fbd99` | `#346f4b` | Main actions and progress |
 | `--accent-warn` | `#d3ac78` | `#936527` | Caution and attention |
 | `--accent-error` | `#e59c9c` | `#b4494d` | Errors and destructive state |
-| `--border` | `#35463a` | `#d8ded7` | Structural boundaries |
+| `--border` | `#34443a` | `#d5dbd2` | Structural boundaries |
 
 Prefer `bg-bg-base`, `bg-bg-surface`, `text-text-secondary`, `border-border`, `text-primary`, and the semantic accent tokens over literal color values. Keep literal colors for code syntax or a specific existing brand illustration; migrate other legacy values when editing that component. Do not add new `!important` color overrides.
 
@@ -87,4 +87,4 @@ The boards below are direction-setting examples. They were generated for this au
 
 ## Audit and acceptance
 
-The current audit register and implementation status are in [design/DESIGN_AUDIT.md](design/DESIGN_AUDIT.md). Closed scenarios that could only be inspected in code are marked there; verify their role-specific paths in preview before release. Use [motion-audits/studycod-frontend-2026-10-10.html](motion-audits/studycod-frontend-2026-10-10.html) for the motion audit and interactive motion examples.
+The current audit register and implementation status are in [design/DESIGN_AUDIT.md](design/DESIGN_AUDIT.md). Closed scenarios that could only be inspected in code are marked there; verify their role-specific paths in preview after release. Use [motion-audits/studycod-frontend-2026-10-10.html](motion-audits/studycod-frontend-2026-10-10.html) for the motion audit and interactive motion examples.

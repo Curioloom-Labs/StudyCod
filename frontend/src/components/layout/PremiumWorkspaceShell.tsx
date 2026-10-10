@@ -1,7 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { LayoutGroup, motion, useReducedMotion } from "framer-motion";
 import {
   BookOpen,
   ChevronDown,
@@ -23,7 +22,6 @@ import type { AppTheme } from "../../theme";
 import { usePersonalLearning } from "../learning/PersonalLearningProvider";
 import { SelectMenu } from "../ui/SelectMenu";
 import { DialogA11yObserver } from "../ui/DialogA11yObserver";
-import { easeInOut } from "../../lib/motion";
 
 type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "student" | "admin";
 type NavId = Page | "library" | "playground" | "contests";
@@ -68,7 +66,6 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
 }) => {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
-  const reduceMotion = useReducedMotion();
   const uk = !i18n.language?.toLowerCase().startsWith("en");
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef<HTMLDivElement | null>(null);
@@ -163,41 +160,6 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
             </span>
             <span className="hidden font-[family-name:var(--font-display)] text-lg font-bold tracking-[-.04em] xl:inline">StudyCod</span>
           </button>
-
-          <LayoutGroup id="primary-navigation">
-            <nav className="mx-auto hidden w-fit max-w-[calc(100%-2rem)] flex-none items-center justify-center gap-1 overflow-x-auto rounded-xl bg-bg-hover p-1 whitespace-nowrap lg:flex" aria-label={uk ? "Основна навігація" : "Primary navigation"}>
-              {nav.map((item) => {
-                const isActive = active(item.id);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => item.onClick ? item.onClick() : onNavigate(item.id as Page)}
-                    aria-current={isActive ? "page" : undefined}
-                    data-motion-press
-                    className={`relative isolate inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${
-                      isActive
-                        ? "text-text-primary"
-                        : "text-text-muted hover:text-text-primary dark:text-text-secondary dark:hover:text-text-primary"
-                    }`}
-                  >
-                    {isActive && (reduceMotion ? (
-                      <span aria-hidden="true" className="absolute inset-0 -z-10 rounded-lg bg-bg-surface shadow-sm" />
-                    ) : (
-                      <motion.span
-                        aria-hidden="true"
-                        layoutId="primary-navigation-active-pill"
-                        className="absolute inset-0 -z-10 rounded-lg bg-bg-surface shadow-sm"
-                        transition={{ layout: { duration: 0.14, ease: easeInOut } }}
-                      />
-                    ))}
-                    <item.Icon className="relative z-10 h-4 w-4" />
-                    <span className="relative z-10">{item.label}</span>
-                  </button>
-                );
-              })}
-            </nav>
-          </LayoutGroup>
 
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <button
@@ -296,6 +258,24 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
         </div>
 
       </header>
+      <aside data-material="workspace-rail" className="fixed bottom-0 left-0 top-[72px] z-40 hidden w-[68px] flex-col border-r border-border/70 bg-bg-surface/90 py-4 backdrop-blur-xl lg:flex xl:w-[236px]" aria-label={uk ? "Розділи StudyCod" : "StudyCod sections"}>
+        <div className="workspace-rail-heading hidden px-6 pb-3 pt-1 text-[10px] font-bold uppercase tracking-[.16em] text-text-muted xl:block">{uk ? "Навчання" : "Workspace"}</div>
+        <nav className="flex flex-col gap-1 overflow-y-auto px-2 xl:px-3" aria-label={uk ? "Основна навігація" : "Primary navigation"}>
+          {nav.map((item) => {
+            const isActive = active(item.id);
+            return <button key={item.id} type="button" onClick={() => item.onClick ? item.onClick() : onNavigate(item.id as Page)} aria-current={isActive ? "page" : undefined} title={item.label} className={`group relative flex h-12 items-center justify-center gap-3 rounded-xl px-2 text-sm font-semibold transition xl:justify-start xl:px-3 ${isActive ? "bg-primary/12 text-primary-strong dark:bg-primary/14 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:text-text-primary"}`}>
+              {isActive ? <span aria-hidden="true" className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-primary" /> : null}
+              <item.Icon className="size-[18px] shrink-0" />
+              <span className="hidden truncate xl:inline">{item.label}</span>
+            </button>;
+          })}
+        </nav>
+        <div className="mt-auto hidden px-6 pb-2 text-xs leading-5 text-text-muted xl:block">
+          <span className="block font-semibold text-text-secondary">StudyCod</span>
+          <span>{uk ? "Навчайся через практику" : "Learn by building"}</span>
+        </div>
+      </aside>
+      <div className="min-w-0 flex-1 lg:ml-[68px] xl:ml-[236px]">
       {area === "learning" && page !== "admin" && learning.currentCourse ? (
         <div data-material="premium-course-nav" className="sticky top-[72px] z-40 border-b border-border/70 bg-bg-base/92 backdrop-blur-xl">
           <div className="mx-auto flex max-w-[1440px] items-center gap-3 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10">
@@ -333,6 +313,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
       </nav>
       <div id="main-content" tabIndex={-1} className="mobile-app-viewport relative min-w-0 flex-1 overflow-x-clip pb-[calc(4.75rem+env(safe-area-inset-bottom))] outline-none lg:pb-0">{children}</div>
       <PlatformFooter />
+      </div>
     </div>
   );
 };

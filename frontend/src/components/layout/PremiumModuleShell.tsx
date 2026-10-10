@@ -229,24 +229,6 @@ export const PremiumModuleShell: React.FC<Props> = ({
             </span>
           </button>
 
-          {!navigationHidden && (
-            <nav aria-label={uk ? "Навігація модуля" : "Module navigation"} className="hidden items-center gap-1 rounded-xl bg-bg-hover p-1 md:flex">
-              {nav.map(({ label, path, Icon }) => (
-                <button
-                  type="button"
-                  key={path}
-                  onClick={() => onNavigate(path)}
-                  aria-current={isActive(path) ? "page" : undefined}
-                  data-motion-press
-                  className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold transition motion-safe:active:scale-[.97] ${isActive(path) ? "bg-bg-surface text-text-primary shadow-sm" : "text-text-muted hover:text-text-primary dark:text-text-secondary dark:hover:text-text-primary"}`}
-                >
-                  <Icon className="size-4" />
-                  {label}
-                </button>
-              ))}
-            </nav>
-          )}
-
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -398,10 +380,27 @@ export const PremiumModuleShell: React.FC<Props> = ({
           </div>
         </div>
       </header>
+      {!navigationHidden && <aside data-material="workspace-rail" className="fixed bottom-0 left-0 top-[72px] z-40 hidden w-[68px] flex-col border-r border-border/70 bg-bg-surface/90 py-4 backdrop-blur-xl lg:flex xl:w-[236px]" aria-label={uk ? "Розділи StudyCod" : "StudyCod sections"}>
+        <div className="workspace-rail-heading hidden px-6 pb-3 pt-1 text-[10px] font-bold uppercase tracking-[.16em] text-text-muted xl:block">{uk ? "Розділи" : "Workspace"}</div>
+        <nav className="flex flex-col gap-1 overflow-y-auto px-2 xl:px-3" aria-label={uk ? "Навігація модуля" : "Module navigation"}>
+          {nav.map(({ label, path, Icon }) => <button key={path} type="button" onClick={() => onNavigate(path)} aria-current={isActive(path) ? "page" : undefined} title={label} className={`group relative flex h-12 items-center justify-center gap-3 rounded-xl px-2 text-sm font-semibold transition xl:justify-start xl:px-3 ${isActive(path) ? "bg-primary/12 text-primary-strong dark:bg-primary/14 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:text-text-primary"}`}>
+            {isActive(path) ? <span aria-hidden="true" className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-primary" /> : null}
+            <Icon className="size-[18px] shrink-0" />
+            <span className="hidden truncate xl:inline">{label}</span>
+          </button>)}
+        </nav>
+        <div className="mt-auto hidden px-6 pb-2 text-xs leading-5 text-text-muted xl:block"><span className="block font-semibold text-text-secondary">StudyCod {product}</span><span>{uk ? "Навчайся через практику" : "Learn by building"}</span></div>
+      </aside>}
+      <div className={`min-w-0 flex-1 ${navigationHidden ? "" : "lg:ml-[68px] xl:ml-[236px]"}`}>
+      <div data-material="workspace-canvas" className="mobile-app-viewport min-h-[calc(100dvh-72px)] pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">
+        {children}
+      </div>
+      {!navigationHidden && !isContestOnly && <PlatformFooter />}
+      </div>
       {!navigationHidden && (
         <nav
           data-material="premium-mobile-nav"
-          className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/70 bg-bg-base/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden"
+          className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/70 bg-bg-base/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl lg:hidden"
           aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}
         >
           <div className="flex gap-1 overflow-x-auto">
@@ -423,10 +422,6 @@ export const PremiumModuleShell: React.FC<Props> = ({
           </div>
         </nav>
       )}
-      <div className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0">
-        {children}
-      </div>
-      {!navigationHidden && !isContestOnly && <PlatformFooter />}
     </div>
   );
 };
