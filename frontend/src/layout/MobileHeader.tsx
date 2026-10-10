@@ -9,7 +9,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
 }) => <div className="md:hidden bg-bg-surface text-text-primary p-4 flex justify-between items-center sticky top-0 z-30 shadow-md border-b border-border">
     <div className="flex items-center space-x-2">
       <div className="border border-border bg-bg-code p-1.5 rounded">
-        <Logo size={20} />
+        <Logo size={20} className="text-text-primary" />
       </div>
       <span className="font-bold text-lg font-mono">StudyCod</span>
     </div>

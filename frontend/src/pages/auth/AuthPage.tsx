@@ -479,7 +479,7 @@ export const AuthPage: React.FC<Props> = ({
         <aside className="relative isolate flex min-h-[100dvh] flex-col overflow-hidden bg-[#101713] px-[clamp(32px,5vw,76px)] py-10 text-white max-[980px]:hidden">
           <div className="absolute -left-48 -top-52 -z-10 size-[520px] rounded-full bg-primary/10 blur-[100px]" />
           <div className="absolute -bottom-52 -right-56 -z-10 size-[540px] rounded-full bg-[#ff8c00]/10 blur-[110px]" />
-          <button type="button" onClick={() => navigate("/", { replace: true })} className="flex w-fit items-center gap-2.5 text-xl font-bold tracking-[-0.04em]"><span className="grid size-10 place-items-center rounded-[13px] border border-white/10 bg-white/[0.07]"><Logo size={27} /></span>StudyCod</button>
+          <button type="button" onClick={() => navigate("/", { replace: true })} className="flex w-fit items-center gap-2.5 text-xl font-bold tracking-[-0.04em]"><span className="grid size-10 place-items-center rounded-[13px] border border-white/10 bg-white/[0.07] text-white"><Logo size={27} /></span>StudyCod</button>
 
           {contestEntryId ? <div className="my-auto max-w-[560px] py-16">
             <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-bold text-[#82efb4]"><span className="size-2 rounded-full bg-primary" />{tr("Вхід за запрошенням", "Invitation access")}</span>
@@ -504,7 +504,7 @@ export const AuthPage: React.FC<Props> = ({
         </aside>
 
         <main className="relative flex min-h-[100dvh] items-center justify-center px-6 py-10 max-sm:px-4">
-          <div className="absolute left-6 top-5 flex items-center gap-2 min-[981px]:hidden"><span className="grid size-9 place-items-center rounded-xl border border-border/10 bg-white dark:border-white/10 dark:bg-bg-surface"><Logo size={24} /></span><strong className="text-lg tracking-[-.04em]">StudyCod</strong></div>
+          <div className="absolute left-6 top-5 flex items-center gap-2 min-[981px]:hidden"><span className="grid size-9 place-items-center rounded-xl border border-border/10 bg-white text-primary-strong dark:border-white/10 dark:bg-bg-surface"><Logo size={24} /></span><strong className="text-lg tracking-[-.04em]">StudyCod</strong></div>
           <div className="absolute right-6 top-5 flex items-center gap-2 max-sm:right-4">
             <button type="button" onClick={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")} aria-label={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")} className="grid size-10 place-items-center rounded-xl border border-border/10 bg-white text-text-muted transition hover:border-primary/30 dark:border-white/10 dark:bg-bg-surface dark:text-[#a7b2aa]" title={i18n.language === "uk" ? t("switchToEnglish") : t("switchToUkrainian")}><Globe className="size-4" aria-hidden="true" /></button>
             <button type="button" onClick={() => { const next = theme === "dark" ? "light" : "dark"; applyTheme(next); setTheme(next); }} aria-label={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")} className="grid size-10 place-items-center rounded-xl border border-border/10 bg-white text-text-muted transition hover:border-primary/30 dark:border-white/10 dark:bg-bg-surface dark:text-[#a7b2aa]" title={theme === "dark" ? t("switchToLightTheme") : t("switchToDarkTheme")}>{theme === "dark" ? <Sun className="size-4" aria-hidden="true" /> : <Moon className="size-4" aria-hidden="true" />}</button>
