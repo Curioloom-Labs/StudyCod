@@ -78,11 +78,11 @@
   color-scheme: dark;
 
   /* Brand: rich evergreen surfaces with a lively, high-contrast mint action. */
-  --brand-green: #9af0a7;
-  --brand-green-deep: #4b9a5b;
+  --brand-green: #86d394;
+  --brand-green-deep: #488455;
   --brand-orange: #f0b96b;
   --brand-forest: #142119;
-  --brand-mint: #d2f6d7;
+  --brand-mint: #c8e8ce;
 
   --bg-base: #142119;
   --bg-surface: #263b2c;
@@ -94,11 +94,11 @@
   --text-muted: #bed3c2;
   --border: #55785f;
 
-  --primary: #9af0a7;
-  --primary-hover: #b8f7c0;
-  --primary-muted: #7bd68b;
-  --primary-strong: #b0f5b8;
-  --primary-soft: #d5f9d9;
+  --primary: #86d394;
+  --primary-hover: #9be0a5;
+  --primary-muted: #70b97e;
+  --primary-strong: #92d69d;
+  --primary-soft: #b8e8c0;
   --primary-foreground: #13301b;
 
   --secondary: #b6c9e8;
@@ -111,9 +111,9 @@
   --accent-logic-warn: var(--accent-logic-warning);
   --accent-info: var(--secondary);
 
-  --surface-primary: color-mix(in srgb, var(--primary) 17%, var(--bg-surface));
+  --surface-primary: color-mix(in srgb, var(--primary) 12%, var(--bg-surface));
   --surface-secondary: color-mix(in srgb, var(--secondary) 14%, var(--bg-surface));
-  --surface-success: color-mix(in srgb, var(--accent-success) 17%, var(--bg-surface));
+  --surface-success: color-mix(in srgb, var(--accent-success) 12%, var(--bg-surface));
   --surface-warning: color-mix(in srgb, var(--accent-warn) 16%, var(--bg-surface));
   --surface-error: color-mix(in srgb, var(--accent-error) 15%, var(--bg-surface));
 

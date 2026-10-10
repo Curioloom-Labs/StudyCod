@@ -409,8 +409,8 @@ export const PremiumModuleShell: React.FC<Props> = ({
           </div>
         </div>
       </header>
-      <div className="min-w-0 flex-1">
-      <div data-material="workspace-canvas" className="mobile-app-viewport min-h-[calc(100dvh-56px)] sm:min-h-[calc(100dvh-64px)]">
+      <div className="min-w-0 flex-1 flex flex-col">
+      <div data-material="workspace-canvas" className="mobile-app-viewport min-w-0 flex-1">
         {children}
       </div>
       {!navigationHidden && !isContestOnly && <PlatformFooter />}

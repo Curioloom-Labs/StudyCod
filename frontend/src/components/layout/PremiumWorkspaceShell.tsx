@@ -273,7 +273,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
         </div>
 
       </header>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 flex flex-col">
       {showCourseNavigation && learning.currentCourse ? (
         <div data-material="premium-course-nav" className="sticky top-14 z-40 border-b border-border/70 bg-bg-base/92 backdrop-blur-xl sm:top-16">
           <div className="mx-auto flex max-w-[1440px] items-center gap-3 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10">

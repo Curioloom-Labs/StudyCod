@@ -28,8 +28,8 @@ export const PlatformFooter: React.FC<PlatformFooterProps> = ({ className = "", 
         </nav>
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border/70 pt-3 text-xs">
-        <span className="inline-flex items-center gap-1.5"><ShieldCheck className="size-3.5 text-primary-strong" />{t("footerCopyright", { year })}</span>
-        <a href="https://github.com/Curioloom-Labs" target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center gap-1.5 transition-colors hover:text-primary-strong motion-reduce:transition-none"><HeartHandshake className="size-3.5 text-accent-error" />Curioloom Labs<ArrowUpRight className="size-3" /></a>
+        <span className="inline-flex items-center gap-1.5"><ShieldCheck className="size-3.5 text-text-muted" />{t("footerCopyright", { year })}</span>
+        <a href="https://github.com/Curioloom-Labs" target="_blank" rel="noreferrer" className="inline-flex min-h-9 items-center gap-1.5 transition-colors hover:text-primary-strong motion-reduce:transition-none"><HeartHandshake className="size-3.5 text-text-muted" />Curioloom Labs<ArrowUpRight className="size-3" /></a>
       </div>
     </div>
   </footer>;
