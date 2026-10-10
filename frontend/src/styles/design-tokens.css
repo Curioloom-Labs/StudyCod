@@ -77,34 +77,34 @@
 :root {
   color-scheme: dark;
 
-  /* Brand: evergreen action over a deep, high-contrast workspace. */
-  --brand-green: #8fbd99;
-  --brand-green-deep: #3e7450;
+  /* Brand: clear evergreen actions with distinct, readable dark surfaces. */
+  --brand-green: #9bd8a8;
+  --brand-green-deep: #4b885d;
   --brand-orange: #d8a367;
-  --brand-forest: #0c130e;
-  --brand-mint: #c5dfc8;
+  --brand-forest: #101812;
+  --brand-mint: #d1f0d5;
 
-  --bg-base: #0c130e;
-  --bg-surface: #151f18;
-  --bg-hover: #202c23;
-  --bg-code: #0a110c;
+  --bg-base: #101812;
+  --bg-surface: #1a261e;
+  --bg-hover: #29392e;
+  --bg-code: #0d160f;
 
-  --text-primary: #f2f7f2;
-  --text-secondary: #d0dbd1;
-  --text-muted: #aab9ad;
-  --border: #34443a;
+  --text-primary: #f4faf4;
+  --text-secondary: #dce8dd;
+  --text-muted: #b6c7b9;
+  --border: #435849;
 
-  --primary: #8fbd99;
-  --primary-hover: #a2cdaa;
-  --primary-muted: #7ea987;
-  --primary-strong: #a5c7a9;
-  --primary-soft: #bad8bd;
-  --primary-foreground: #172119;
+  --primary: #9bd8a8;
+  --primary-hover: #b0e8ba;
+  --primary-muted: #8dc49a;
+  --primary-strong: #b0e2b8;
+  --primary-soft: #c9f0cf;
+  --primary-foreground: #142319;
 
   --secondary: #a8b7c2;
   --secondary-hover: #bdc9d1;
   --accent-error: #e59c9c;
-  --accent-success: #8fbd99;
+  --accent-success: #9bd8a8;
   --accent-warn: #d3ac78;
   --accent-warning: var(--accent-warn);
   --accent-logic-warning: #c99570;
@@ -183,13 +183,13 @@
   --destructive: var(--accent-error);
   --input: var(--border);
   --ring: var(--primary);
-  --chart-1: #8fbd99;
+  --chart-1: #9bd8a8;
   --chart-2: #a8b7c2;
   --chart-3: #d3ac78;
   --chart-4: #c99570;
-  --chart-5: #819188;
+  --chart-5: #a0b2a4;
   --radius: 0.75rem;
-  --sidebar: #18201a;
+  --sidebar: #1b271f;
   --sidebar-foreground: var(--text-primary);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
