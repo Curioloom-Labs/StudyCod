@@ -593,3 +593,153 @@
 .contest-accounts-focus > :not(#contest-account-generation) {
   display: none;
 }
+
+/* The IDE is a full application surface and must follow the selected app
+   theme. Its original dark palette is intentionally kept for dark mode. */
+[data-theme="light"] .studycod-ide-workspace {
+  color-scheme: light;
+  color: var(--text-primary) !important;
+  background-color: #f5f7f5 !important;
+  border-color: var(--border) !important;
+  box-shadow: 0 20px 64px -48px rgba(30, 54, 36, 0.24) !important;
+}
+
+[data-theme="light"] .contest-problem-solve {
+  color-scheme: light;
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0b110d]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0b120e]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#08100b]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#09100b]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0c1510]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0d1510]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0d1610]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0d1710]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0d1b13]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0f1812]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#101a13]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#101b13]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#102017]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#111a14]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#111b14]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#111b14]/95"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#111d15]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#111f15]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#122117]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#132018]"] {
+  background-color: var(--bg-surface) !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0b110d]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0b120e]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0c1510]"] {
+  background-color: #f5f7f5 !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0d1610]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0d1710]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0d1b13]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#0f1812]"] {
+  background-color: #f3f6f3 !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="bg-[#19190f]"] {
+  background-color: #fbf7ee !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="bg-black/10"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-black/15"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-black/20"] {
+  background-color: #f1f4f1 !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="bg-white/[.025]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-white/[.03]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-white/[.04]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-white/[.05]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-white/[.06]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-white/[.07]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-white/[.08]"],
+[data-theme="light"] .studycod-ide-workspace [class~="bg-white/[.09]"] {
+  background-color: #f5f7f5 !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="hover:bg-white/[.04]"]:hover,
+[data-theme="light"] .studycod-ide-workspace [class~="hover:bg-white/[.06]"]:hover,
+[data-theme="light"] .studycod-ide-workspace [class~="hover:bg-white/[.07]"]:hover,
+[data-theme="light"] .studycod-ide-workspace [class~="hover:bg-white/[.08]"]:hover,
+[data-theme="light"] .studycod-ide-workspace [class~="hover:bg-white/[.09]"]:hover {
+  background-color: var(--bg-hover) !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="hover:bg-[#25e88d]"]:hover {
+  background-color: var(--primary-hover) !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="border-[#203428]"],
+[data-theme="light"] .studycod-ide-workspace [class~="border-[#294333]"],
+[data-theme="light"] .studycod-ide-workspace [class*="border-white/"] {
+  border-color: var(--border) !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#557061]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#5f7767]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#6f8877]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#718075]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#82968a]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#8fa196]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#8fa696]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#a7b5aa]"] {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#b9c9bd]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#c8d6cc]"] {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#d4e1d7]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#d6e3d9]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#dce7df]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#dce8df]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#e8f1ea]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#edf3ef]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#edf5ee]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#f0f7f1]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-white"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#062211]"] {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="hover:text-white"]:hover {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#9cf2c2]"] { color: #21643e !important; }
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#9bc5ff]"] { color: #315f90 !important; }
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#ff9aba]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#ffb2c9]"] { color: #96364e !important; }
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#f0c674]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#ffca7e]"],
+[data-theme="light"] .studycod-ide-workspace [class~="text-[#ffd5a6]"] { color: #80540f !important; }
+
+[data-theme="light"] .studycod-ide-workspace .task-markdown {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace .task-markdown :is(p, li) {
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace .task-markdown :is(h1, h2, h3, h4, strong, b) {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .studycod-ide-workspace .task-markdown pre {
+  background-color: var(--bg-code) !important;
+  border-color: var(--border) !important;
+}
+
+[data-theme="light"] .contest-problem-solve [class~="text-[#ffb2c9]"] { color: #96364e !important; }

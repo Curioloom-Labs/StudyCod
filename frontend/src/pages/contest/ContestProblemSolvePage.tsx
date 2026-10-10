@@ -685,23 +685,23 @@ export const ContestProblemSolvePage: React.FC = () => {
   const showAnnouncement = latestAnnouncement && latestAnnouncement.id !== dismissedAnnouncementId;
 
   return (
-    <div className="min-h-full space-y-2 bg-[#0b120e] p-2 text-[#edf3ef] pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:space-y-3 sm:p-4">
+    <div className="contest-problem-solve min-h-full space-y-2 bg-bg-base p-2 text-text-primary pb-[calc(0.5rem+env(safe-area-inset-bottom))] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:space-y-3 sm:p-4">
       {showAnnouncement ? (
-        <aside className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-[#0d1b13] px-4 py-3 sm:items-center" aria-live="polite">
-          <Radio className="mt-0.5 size-4 shrink-0 text-primary-soft sm:mt-0" />
+        <aside className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 sm:items-center dark:bg-[#0d1b13]" aria-live="polite">
+          <Radio className="mt-0.5 size-4 shrink-0 text-primary-strong dark:text-primary-soft sm:mt-0" />
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-bold uppercase tracking-[.14em] text-primary-soft">Оголошення організатора</div>
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-[#dce8df]">{latestAnnouncement.text}</p>
+            <div className="text-[10px] font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">Оголошення організатора</div>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-text-primary dark:text-[#dce8df]">{latestAnnouncement.text}</p>
           </div>
-          <button type="button" onClick={() => setDismissedAnnouncementId(latestAnnouncement.id)} className="grid size-8 shrink-0 place-items-center rounded-lg text-[#82968a] transition hover:bg-white/[.06] hover:text-white" aria-label="Закрити оголошення">
+          <button type="button" onClick={() => setDismissedAnnouncementId(latestAnnouncement.id)} className="grid size-8 shrink-0 place-items-center rounded-lg text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-[#82968a] dark:hover:bg-white/[.06] dark:hover:text-white" aria-label="Закрити оголошення">
             <X className="size-4" />
           </button>
         </aside>
       ) : null}
 
       {turnstileEnabled ? (
-        <Card className="flex flex-wrap items-center gap-3 border-white/10 bg-[#0d1510] p-3">
-            <div className="min-w-0 flex-1 text-xs text-[#a7b5aa]">
+        <Card className="flex flex-wrap items-center gap-3 border-border/80 p-3 dark:border-white/10 dark:bg-[#0d1510]">
+            <div className="min-w-0 flex-1 text-xs text-text-muted dark:text-[#a7b5aa]">
               {turnstileLoadFailed
                 ? "Human verification widget is unavailable in browser. Submit still works if server does not require verification."
                 : "Human verification is required before submission."}
@@ -717,12 +717,12 @@ export const ContestProblemSolvePage: React.FC = () => {
         </div>
       ) : null}
       {organizerQuestionSent ? (
-        <div role="status" aria-live="polite" className="rounded-xl border border-primary/25 bg-primary/[.08] px-3 py-2.5 text-sm text-[#9cf2c2]">
+        <div role="status" aria-live="polite" className="rounded-xl border border-primary/25 bg-primary/[.08] px-3 py-2.5 text-sm text-primary-strong dark:text-[#9cf2c2]">
           Питання надіслано організатору. Відповідь з’явиться у вкладці «Ком’юніті».
         </div>
       ) : null}
 
-      {jobStatus && <div role="status" className="px-4 py-2 text-sm text-emerald-200">
+      {jobStatus && <div role="status" className="px-4 py-2 text-sm text-primary-strong dark:text-emerald-200">
         {jobStatus === "queued" ? "У черзі" : jobStatus === "running" ? "Перевіряється" : jobStatus === "completed" ? "Готово" : "Помилка судді — відправку збережено"}
       </div>}
       <StudyCodIDEWorkspace

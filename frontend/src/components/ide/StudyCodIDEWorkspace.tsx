@@ -1233,7 +1233,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const miniProjectTimerExpired = activeMiniProjectRemainingSeconds === 0;
 
   return (
-    <div className="relative flex h-[calc(100dvh-1rem)] min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-[#203428] bg-[#0b110d] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_24px_70px_-56px_rgba(0,217,120,.35)] sm:h-[min(1100px,calc(100dvh-2rem))] sm:min-h-[640px] sm:rounded-[30px] lg:min-h-[780px]">
+    <div className="studycod-ide-workspace relative flex h-[calc(100dvh-1rem)] min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-[#203428] bg-[#0b110d] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_24px_70px_-56px_rgba(0,217,120,.35)] sm:h-[min(1100px,calc(100dvh-2rem))] sm:min-h-[640px] sm:rounded-[30px] lg:min-h-[780px]">
       <header className="flex min-h-[72px] flex-wrap items-center gap-2 border-b border-[#203428] bg-[#111b14] px-4 py-3 sm:px-5">
         {props.onBack ? (
           <button
