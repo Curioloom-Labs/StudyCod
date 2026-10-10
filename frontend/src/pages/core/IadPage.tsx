@@ -108,7 +108,7 @@ export const IadPage: React.FC = () => {
   }, [details, metrics.current, nextGrade]);
 
   return (
-    <div className="min-h-[100dvh] bg-[#f6f8f5] px-4 py-7 text-text-primary dark:bg-bg-base dark:text-[#edf4ef] sm:px-6 lg:px-10">
+    <div className="min-h-[100dvh] bg-bg-base px-4 py-7 text-text-primary sm:px-6 lg:px-10">
       <main className="mx-auto max-w-6xl pb-10">
         <ProfileSectionNav active="iad" className="mb-6" />
 

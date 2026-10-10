@@ -46,7 +46,7 @@ export const ProfileCertificatesPage: React.FC = () => {
   React.useEffect(() => { void refresh(); }, [refresh]);
 
   return (
-    <div className="min-h-[100dvh] bg-bg-base text-text-primary dark:bg-[#101a13] dark:text-[#edf4ef]">
+    <div className="min-h-[100dvh] bg-bg-base text-text-primary">
       <main className="mx-auto flex min-h-[100dvh] max-w-6xl flex-col px-4 py-7 sm:px-6 lg:px-10 lg:py-10">
         <ProfileSectionNav
           active="certificates"

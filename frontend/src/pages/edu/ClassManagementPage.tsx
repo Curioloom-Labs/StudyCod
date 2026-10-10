@@ -49,7 +49,7 @@ import {
 } from "../../lib/gradingSystems";
 
 const root =
-  "min-h-[100dvh] bg-[#f4f7f3] px-4 py-6 text-text-primary dark:bg-[#08100b] dark:text-[#edf5ef] sm:px-6 lg:px-10 lg:py-10";
+  "min-h-[100dvh] bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-10 lg:py-10";
 const initials = (student: Student) =>
   `${student.firstName?.[0] || ""}${student.lastName?.[0] || ""}`.toUpperCase() ||
   "У";

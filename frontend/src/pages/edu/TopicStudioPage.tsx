@@ -74,7 +74,7 @@ type Topic = {
 };
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
-const root = "min-h-[100dvh] bg-[#f3f5f0] px-4 py-6 text-[#101812] dark:bg-[#08100b] dark:text-[#ecf5ee] sm:px-6 lg:px-10 lg:py-10";
+const root = "min-h-[100dvh] bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-10 lg:py-10";
 const defaultControlFormula = "0.35 * test + 0.65 * avg(practice)";
 const defaultAssignmentDeadline = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 const toDateTimeLocalValue = (value?: string | null) => {

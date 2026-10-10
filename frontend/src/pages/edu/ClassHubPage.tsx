@@ -28,7 +28,7 @@ import {
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 const isPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
-const root = "min-h-[100dvh] bg-[#f4f7f3] px-4 py-6 text-text-primary dark:bg-[#08100b] dark:text-[#edf5ef] sm:px-6 lg:px-10 lg:py-10";
+const root = "min-h-[100dvh] bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-10 lg:py-10";
 const languageName = (language?: string) => language || "—";
 
 const sampleLessons: Lesson[] = [
