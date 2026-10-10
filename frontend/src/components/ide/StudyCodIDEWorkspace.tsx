@@ -39,6 +39,9 @@ import { ErrorExplainButton } from "../ErrorExplainButton";
 import { MarkdownView } from "../MarkdownView";
 import { WebPreviewPane } from "../WebPreviewPane";
 import { SelectMenu } from "../ui/SelectMenu";
+import { Button } from "../ui/Button";
+import { Modal } from "../ui/Modal";
+import { getIdeSaveStatusLabel, reconcileMobilePaneAfterResult } from "./editorFeedback";
 import type {
   CodeFile,
   JudgeLanguage,
@@ -55,6 +58,7 @@ import {
 type IdeMode = "theory" | "practice" | "debug";
 type AssistantTab = "task" | "hints" | "mentor";
 type BottomTab = "terminal" | "tests" | "debugger" | "console" | "history";
+type MobilePaneTab = "condition" | "code" | "result";
 
 export type StudyCodIdeTask = {
   id: number | string;
@@ -142,6 +146,7 @@ type Props = {
   onReset: () => void;
   onTheoryComplete?: () => void;
   toolbar?: React.ReactNode;
+  toolbarStatus?: React.ReactNode;
   languageOptions?: JudgeLanguage[];
   disableAiAssistance?: boolean;
   submitMode?: boolean;
@@ -374,7 +379,17 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const [wordWrap, setWordWrap] = React.useState(false);
   const [focusMode, setFocusMode] = React.useState(false);
   const [mobileContextOpen, setMobileContextOpen] = React.useState(true);
+  const [mobilePane, setMobilePaneState] = React.useState<MobilePaneTab>("condition");
+  const [mobileResultUnread, setMobileResultUnread] = React.useState(false);
+  const mobilePaneRef = React.useRef<MobilePaneTab>("condition");
+  const pendingMobileResultRef = React.useRef<{ result: StudyCodIdeRunResult | null; recovery: Props["actionRecovery"]; observedBusy: boolean } | null>(null);
+  const setMobilePane = React.useCallback((next: MobilePaneTab) => {
+    mobilePaneRef.current = next;
+    setMobilePaneState(next);
+    if (next === "result") setMobileResultUnread(false);
+  }, []);
   const [notice, setNotice] = React.useState<string | null>(null);
+  const [resetConfirmOpen, setResetConfirmOpen] = React.useState(false);
   const [diffOpen, setDiffOpen] = React.useState(false);
   const [copiedLabel, setCopiedLabel] = React.useState<string | null>(null);
   const [stdinHistory, setStdinHistory] = React.useState<string[]>(() => {
@@ -455,6 +470,27 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   React.useEffect(() => {
     if (props.disableAiAssistance) setAssistantTab("task");
   }, [props.disableAiAssistance]);
+  React.useEffect(() => {
+    setMobilePane("condition");
+    setMobileContextOpen(true);
+    setMobileResultUnread(false);
+    pendingMobileResultRef.current = null;
+  }, [props.task.id, setMobilePane]);
+  React.useEffect(() => {
+    const pending = pendingMobileResultRef.current;
+    if (!pending) return;
+    const busy = props.running || props.checking;
+    if (busy) {
+      pending.observedBusy = true;
+      return;
+    }
+    const resultChanged = props.runResult !== pending.result || props.actionRecovery !== pending.recovery;
+    if (!pending.observedBusy && !resultChanged) return;
+    pendingMobileResultRef.current = null;
+    const nextView = reconcileMobilePaneAfterResult(mobilePaneRef.current);
+    if (nextView.pane !== mobilePaneRef.current) setMobilePane(nextView.pane);
+    setMobileResultUnread(nextView.unread);
+  }, [props.actionRecovery, props.checking, props.runResult, props.running, setMobilePane]);
   React.useEffect(() => {
     try {
       localStorage.setItem(scopedStorageKey(ACTIVE_FILE_KEY, props.task.id), activeFile);
@@ -657,12 +693,32 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     if (props.readOnly || props.running || props.checking) return;
     rememberStdinHistory();
     setBottomTab("terminal");
+    pendingMobileResultRef.current = { result: props.runResult, recovery: props.actionRecovery, observedBusy: false };
     props.onRun();
   };
   const checkWithTab = () => {
     if (props.readOnly || props.running || props.checking) return;
     setBottomTab("tests");
+    pendingMobileResultRef.current = { result: props.runResult, recovery: props.actionRecovery, observedBusy: false };
     props.onCheck();
+  };
+  const mobileTabs = [
+    { id: "condition" as const, label: tr("Умова", "Task"), Icon: FileText },
+    { id: "code" as const, label: tr("Код", "Code"), Icon: Code2 },
+    { id: "result" as const, label: tr("Результат", "Result"), Icon: SquareTerminal },
+  ];
+  const handleMobileTabKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    const index = mobileTabs.findIndex((tab) => tab.id === mobilePane);
+    const nextIndex = event.key === "ArrowRight" ? (index + 1) % mobileTabs.length
+      : event.key === "ArrowLeft" ? (index - 1 + mobileTabs.length) % mobileTabs.length
+        : event.key === "Home" ? 0
+          : event.key === "End" ? mobileTabs.length - 1
+            : -1;
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    const next = mobileTabs[nextIndex];
+    setMobilePane(next.id);
+    document.getElementById(`mobile-ide-tab-${next.id}`)?.focus();
   };
   const downloadCurrentCode = () => {
     const blob = new Blob([draftCodeRef.current || ""], { type: "text/plain;charset=utf-8" });
@@ -993,12 +1049,12 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               </div>
             </div>
             <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[.09]">
-              <div className="h-full w-2/5 animate-pulse rounded-full bg-primary" />
+              <div className="h-full w-2/5 rounded-full bg-primary/70" />
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-[10px] font-semibold text-[#82968a]">
               {[tr("Компіляція", "Compile"), tr("Публічні кейси", "Public cases"), tr("Приховані кейси", "Hidden cases")].map((label) => (
                 <div key={label} className="flex items-center gap-1.5 rounded-lg bg-black/15 px-2.5 py-2">
-                  <span className="size-1.5 animate-pulse rounded-full bg-primary-soft" />
+                  <span className="size-1.5 rounded-full bg-primary-soft" />
                   {label}
                 </div>
               ))}
@@ -1231,15 +1287,26 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       ? miniProjectRemainingSeconds
       : null;
   const miniProjectTimerExpired = activeMiniProjectRemainingSeconds === 0;
+  const saveStatusLabel = getIdeSaveStatusLabel(
+    props.saveStatus,
+    props.lastSavedAt,
+    {
+      saved: tr("Збережено", "Saved"),
+      dirty: tr("Є зміни", "Unsaved"),
+      saving: tr("Збереження…", "Saving…"),
+      error: tr("Помилка збереження", "Save failed"),
+    },
+    (timestamp) => formatIdeTimestamp(timestamp, i18n.language || "uk"),
+  );
 
   return (
-    <div className="studycod-ide-workspace relative flex h-[calc(100dvh-1rem)] min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-[#203428] bg-[#0b110d] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_24px_70px_-56px_rgba(0,217,120,.35)] sm:h-[min(1100px,calc(100dvh-2rem))] sm:min-h-[640px] sm:rounded-[30px] lg:min-h-[780px]">
-      <header className="flex min-h-[72px] flex-wrap items-center gap-2 border-b border-[#203428] bg-[#111b14] px-4 py-3 sm:px-5">
+    <div className="studycod-ide-workspace relative flex h-[calc(100dvh-9rem-env(safe-area-inset-bottom))] min-h-0 flex-col overflow-hidden rounded-[24px] border border-[#203428] bg-[#0b110d] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_24px_70px_-56px_rgba(0,217,120,.35)] sm:rounded-[30px] lg:h-[min(1100px,calc(100dvh-9rem))] lg:min-h-[560px]">
+      <header className="flex min-h-[72px] items-center gap-2 border-b border-[#203428] bg-[#111b14] px-3 py-2 sm:px-5 lg:gap-2.5">
         {props.onBack ? (
           <button
             type="button"
             onClick={props.onBack}
-            className="grid size-9 shrink-0 place-items-center rounded-xl border border-[#294333] bg-[#0d1710] text-[#a7b5aa] transition hover:border-primary/50 hover:bg-primary/10 hover:text-white"
+            className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#294333] bg-[#0d1710] text-[#a7b5aa] transition hover:border-primary/50 hover:bg-primary/10 hover:text-white lg:size-9"
             title={tr("Назад", "Back")}
           >
             <ChevronRight className="size-4 rotate-180" />
@@ -1260,20 +1327,21 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             </div>
           </div>
         </div>
-        {props.toolbar ? <div className="flex items-center gap-1.5 rounded-xl border border-white/[.07] bg-black/10 p-1">{props.toolbar}</div> : null}
+        {props.toolbarStatus ? <div className="hidden min-w-0 items-center gap-1 rounded-xl border border-white/[.07] bg-black/10 p-1 xl:flex">{props.toolbarStatus}</div> : null}
         {props.saveStatus ? (
-          <span className={`hidden items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold sm:inline-flex ${props.saveStatus === "error" ? "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]" : props.saveStatus === "saving" ? "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca7e]" : props.saveStatus === "dirty" ? "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca7e]" : "border-primary/25 bg-primary/10 text-primary-soft"}`} role="status" aria-live="polite">
-            {props.saveStatus === "saving" ? tr("Збереження…", "Saving…") : props.saveStatus === "dirty" ? tr("Є зміни", "Unsaved") : props.saveStatus === "error" ? tr("Помилка збереження", "Save failed") : props.lastSavedAt ? `${tr("Збережено", "Saved")} ${formatIdeTimestamp(props.lastSavedAt, i18n.language || "uk")}` : tr("Збережено", "Saved")}
+          <span className={`hidden items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold lg:inline-flex ${props.saveStatus === "error" ? "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]" : props.saveStatus === "saving" || props.saveStatus === "dirty" ? "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca7e]" : "border-primary/25 bg-primary/10 text-primary-soft"}`} role={props.saveStatus === "error" ? "alert" : "status"} aria-live={props.saveStatus === "error" ? "assertive" : "polite"}>
+            {saveStatusLabel}
           </span>
         ) : null}
+        {saveStatusLabel ? <span className={`max-w-[92px] truncate text-[10px] font-semibold lg:hidden ${props.saveStatus === "error" ? "text-[#ff9aba]" : props.saveStatus === "saving" || props.saveStatus === "dirty" ? "text-[#ffca7e]" : "text-primary-soft"}`} title={saveStatusLabel} role={props.saveStatus === "error" ? "alert" : "status"} aria-live={props.saveStatus === "error" ? "assertive" : "polite"}>{saveStatusLabel}</span> : null}
         {props.attemptsUsed != null ? (
-          <span className="hidden rounded-lg border border-white/10 bg-white/[.04] px-2.5 py-1.5 text-[10px] font-semibold text-[#a7b5aa] md:inline-flex" title={tr("Використані спроби", "Attempts used")}>
+          <span className="hidden rounded-lg border border-white/10 bg-white/[.04] px-2.5 py-1.5 text-[10px] font-semibold text-[#a7b5aa] lg:inline-flex" title={tr("Використані спроби", "Attempts used")}>
             {tr("Спроби", "Attempts")}: {props.attemptsUsed}{props.maxAttempts && props.maxAttempts > 0 ? `/${props.maxAttempts}` : ""}
           </span>
         ) : null}
         {activeMiniProjectRemainingSeconds !== null ? (
           <div
-            className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold tabular-nums ${miniProjectTimerExpired ? "border-[#ff6b9d]/45 bg-[#ff6b9d]/10 text-[#ff9aba]" : activeMiniProjectRemainingSeconds <= 300 ? "border-[#ffb454]/45 bg-[#ffb454]/10 text-[#ffca7e]" : "border-white/10 bg-white/[.04] text-[#c8d6cc]"}`}
+            className={`hidden h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold tabular-nums lg:inline-flex ${miniProjectTimerExpired ? "border-[#ff6b9d]/45 bg-[#ff6b9d]/10 text-[#ff9aba]" : activeMiniProjectRemainingSeconds <= 300 ? "border-[#ffb454]/45 bg-[#ffb454]/10 text-[#ffca7e]" : "border-white/10 bg-white/[.04] text-[#c8d6cc]"}`}
             title={tr("Залишок часу мініпроєкту", "Mini-project time remaining")}
             aria-live="polite"
           >
@@ -1283,51 +1351,41 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               : formatMiniProjectCountdown(activeMiniProjectRemainingSeconds)}
           </div>
         ) : null}
-        {!props.isWebTask && languageOptions.length > 1 && !props.disableLanguageChange && (
-          <SelectMenu
-            value={props.language}
-            options={languageOptions.map((language) => ({ value: language, label: languageLabel(language as JudgeLanguage) }))}
-            disabled={props.disableLanguageChange}
-            onChange={(value) => props.onLanguageChange(value as JudgeLanguage)}
-            ariaLabel={tr("Мова виконання", "Execution language")}
-            menuMinWidth={180}
-            className="!h-9 max-w-24 rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white sm:max-w-32"
-          />
-        )}
-        {!props.isWebTask && compilersForFamily(props.language).length > 1 && (
-          <SelectMenu
-            value={props.compiler}
-            options={compilersForFamily(props.language).map((compiler) => ({ value: compiler.id, label: compiler.label }))}
-            onChange={props.onCompilerChange}
-            ariaLabel={tr("Версія компілятора", "Compiler version")}
-            menuMinWidth={220}
-            className="hidden !h-9 max-w-40 rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white md:inline-flex"
-          />
-        )}
-        <button
-          type="button"
-          onClick={props.onSave}
-          disabled={props.readOnly}
-          className="hidden h-9 items-center gap-1.5 rounded-lg border border-white/10 px-3 text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:opacity-40 sm:inline-flex"
-        >
-          <Save className="size-3.5" />
-          {tr("Зберегти", "Save")}
-        </button>
-        <button
-          type="button"
-          onClick={downloadCurrentCode}
-          className="grid size-9 place-items-center rounded-lg border border-white/10 text-[#c8d6cc] hover:bg-white/[.06]"
-          aria-label={tr("Завантажити код", "Download code")}
-          title={tr("Завантажити код", "Download code")}
-        >
-          <Download className="size-3.5" />
-        </button>
+        <details className="relative z-30 hidden shrink-0 lg:block">
+          <summary className="flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-white/10 px-3 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            {tr("Ще", "More")}
+            <ChevronDown className="size-3.5" aria-hidden="true" />
+          </summary>
+          <div className="absolute right-0 top-full z-50 mt-2 grid w-64 gap-2 rounded-2xl border border-[#294333] bg-[#101a13] p-3 shadow-xl" role="group" aria-label={tr("Додаткові дії редактора", "Additional editor controls")}>
+            {!props.isWebTask && languageOptions.length > 1 && !props.disableLanguageChange ? <SelectMenu
+              value={props.language}
+              options={languageOptions.map((language) => ({ value: language, label: languageLabel(language as JudgeLanguage) }))}
+              disabled={props.disableLanguageChange}
+              onChange={(value) => props.onLanguageChange(value as JudgeLanguage)}
+              ariaLabel={tr("Мова виконання", "Execution language")}
+              menuMinWidth={180}
+              className="!h-10 w-full rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white"
+            /> : null}
+            {!props.isWebTask && compilersForFamily(props.language).length > 1 ? <SelectMenu
+              value={props.compiler}
+              options={compilersForFamily(props.language).map((compiler) => ({ value: compiler.id, label: compiler.label }))}
+              onChange={props.onCompilerChange}
+              ariaLabel={tr("Версія компілятора", "Compiler version")}
+              menuMinWidth={220}
+              className="!h-10 w-full rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white"
+            /> : null}
+            <button type="button" onClick={props.onSave} disabled={props.readOnly} className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:opacity-40"><Save className="size-3.5" />{tr("Зберегти", "Save")}</button>
+            <button type="button" onClick={downloadCurrentCode} className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]"><Download className="size-3.5" />{tr("Завантажити код", "Download code")}</button>
+            <button type="button" onClick={() => setFocusMode((current) => !current)} className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]"><Maximize2 className="size-3.5" />{focusMode ? tr("Вийти з режиму фокусу", "Exit focus mode") : tr("Режим фокусу", "Focus mode")}</button>
+            {props.toolbar ? <div className="grid gap-2 border-t border-white/10 pt-2">{props.toolbar}</div> : null}
+          </div>
+        </details>
         <button
           type="button"
           onClick={runWithTab}
           disabled={props.readOnly || props.running || props.checking}
           title={tr("Запустити (Ctrl+Enter)", "Run (Ctrl+Enter)")}
-          className="hidden h-9 items-center gap-1.5 rounded-lg bg-white/[.08] px-3 text-xs font-semibold text-white hover:bg-white/[.14] disabled:opacity-50 sm:inline-flex"
+          className="hidden h-9 items-center gap-1.5 rounded-lg bg-white/[.08] px-3 text-xs font-semibold text-white hover:bg-white/[.14] disabled:opacity-50 lg:inline-flex"
         >
           <Play className="size-3.5" />
           {props.running ? "…" : tr("Run", "Run")}
@@ -1337,22 +1395,67 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           onClick={checkWithTab}
           disabled={props.readOnly || props.running || props.checking}
           title={props.submitMode ? tr("Надіслати на перевірку (Ctrl+Shift+Enter)", "Submit for judging (Ctrl+Shift+Enter)") : tr("Перевірити (Ctrl+Shift+Enter)", "Test (Ctrl+Shift+Enter)")}
-          className="hidden h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:opacity-50 sm:inline-flex"
+          className="hidden h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:opacity-50 lg:inline-flex"
         >
           {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : props.submitMode ? <Rocket className="size-3.5" /> : <TestTube2 className="size-3.5" />}
           {props.checking ? (props.submitMode ? tr("Надсилаємо…", "Submitting…") : tr("Тестуємо…", "Testing…")) : props.submitMode ? tr("Надіслати", "Submit") : tr("Test", "Test")}
         </button>
-        <button
-          type="button"
-          onClick={() => setFocusMode((current) => !current)}
-          className="grid size-9 place-items-center rounded-lg border border-white/10 text-[#a7b5aa] hover:bg-white/[.06]"
-          title={tr("Режим фокусу", "Focus mode")}
-        >
-          <Maximize2 className="size-3.5" />
-        </button>
       </header>
 
-      <section className="shrink-0 border-b border-[#203428] bg-[#0f1812] lg:hidden">
+      <div className="flex shrink-0 items-stretch border-b border-[#203428] bg-[#0e1711] lg:hidden">
+      <div className="flex min-w-0 flex-1" role="tablist" aria-label={tr("Частини редактора", "Editor sections")} onKeyDown={(event) => {
+        handleMobileTabKeyDown(event);
+      }}>
+        {mobileTabs.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            id={`mobile-ide-tab-${id}`}
+            type="button"
+            role="tab"
+            aria-selected={mobilePane === id}
+            aria-controls={`mobile-ide-panel-${id}`}
+            tabIndex={mobilePane === id ? 0 : -1}
+            onClick={() => setMobilePane(id)}
+            className={`flex min-h-11 flex-1 items-center justify-center gap-2 border-b-2 px-2 text-xs font-semibold transition-colors ${mobilePane === id ? "border-primary text-primary-soft" : "border-transparent text-[#82968a] hover:text-[#dce8df]"}`}
+          >
+            <Icon className="size-4" aria-hidden="true" />
+            <span>{label}</span>
+            {id === "result" && mobileResultUnread ? <span className="size-1.5 rounded-full bg-primary" aria-label={tr("Є новий результат", "New result")} /> : null}
+          </button>
+        ))}
+      </div>
+      <details className="relative z-30 shrink-0 border-l border-[#203428] px-1.5">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center px-2 text-[11px] font-semibold text-[#b9c9bd] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+          {tr("Ще", "More")}
+        </summary>
+        <div className="absolute right-1 top-full z-50 grid max-h-[min(70dvh,30rem)] w-[min(18rem,calc(100vw-1rem))] gap-3 overflow-auto rounded-2xl border border-[#294333] bg-[#101a13] p-3 shadow-xl" role="group" aria-label={tr("Додаткові дії редактора", "Additional editor controls")}>
+          {!props.isWebTask && languageOptions.length > 1 && !props.disableLanguageChange ? <SelectMenu
+            value={props.language}
+            options={languageOptions.map((language) => ({ value: language, label: languageLabel(language as JudgeLanguage) }))}
+            disabled={props.disableLanguageChange}
+            onChange={(value) => props.onLanguageChange(value as JudgeLanguage)}
+            ariaLabel={tr("Мова виконання", "Execution language")}
+            menuMinWidth={180}
+            className="!h-11 w-full rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white"
+          /> : null}
+          {!props.isWebTask && compilersForFamily(props.language).length > 1 ? <SelectMenu
+            value={props.compiler}
+            options={compilersForFamily(props.language).map((compiler) => ({ value: compiler.id, label: compiler.label }))}
+            onChange={props.onCompilerChange}
+            ariaLabel={tr("Версія компілятора", "Compiler version")}
+            menuMinWidth={220}
+            className="!h-11 w-full rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white"
+          /> : null}
+          <button type="button" onClick={props.onSave} disabled={props.readOnly} className="min-h-11 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:opacity-40">{tr("Зберегти", "Save")}</button>
+          <button type="button" onClick={downloadCurrentCode} className="min-h-11 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]">{tr("Завантажити код", "Download code")}</button>
+          <button type="button" onClick={() => setFocusMode((current) => !current)} className="min-h-11 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]">{focusMode ? tr("Вийти з режиму фокусу", "Exit focus mode") : tr("Режим фокусу", "Focus mode")}</button>
+          {props.toolbarStatus ? <div className="flex flex-wrap items-center gap-1 border-t border-white/10 pt-2" role="status" aria-label={tr("Статус редактора", "Editor status")}>{props.toolbarStatus}</div> : null}
+          {props.toolbar ? <div className="flex flex-wrap gap-2 border-t border-white/10 pt-2 [&>button]:min-h-11 [&>button]:px-3 [&>a]:min-h-11 [&>a]:min-w-11">{props.toolbar}</div> : null}
+        </div>
+      </details>
+      </div>
+
+      <section id="mobile-ide-panel-condition" role="tabpanel" aria-labelledby="mobile-ide-tab-condition" tabIndex={0} className={`flex min-h-0 shrink-0 flex-col border-b border-[#203428] bg-[#0f1812] lg:hidden ${mobilePane === "condition" ? "flex-1" : "hidden"}`}>
         <button
           type="button"
           onClick={() => setMobileContextOpen((open) => !open)}
@@ -1367,7 +1470,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           <ChevronDown className={`size-4 shrink-0 text-[#82968a] transition-transform ${mobileContextOpen ? "rotate-180" : ""}`} />
         </button>
         {mobileContextOpen ? (
-          <div id="mobile-ide-context" className="max-h-64 overflow-y-auto border-t border-[#203428] px-3 py-3">
+          <div id="mobile-ide-context" className="max-h-[min(16rem,calc(100dvh-15rem))] flex-1 overflow-y-auto border-t border-[#203428] px-3 py-3">
             <div className="rounded-xl border border-[#203428] bg-[#111b14] p-3">
               <MarkdownView content={taskBody} variant="task" />
             </div>
@@ -1398,7 +1501,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         ) : null}
       </section>
 
-      <div className="flex h-full min-h-0 flex-1">
+      <div id="mobile-ide-panel-code" role="tabpanel" aria-labelledby="mobile-ide-tab-code" tabIndex={0} className={`flex h-full min-h-0 flex-1 ${mobilePane === "code" ? "" : "max-lg:hidden"}`}>
         {showLeft ? (
           <aside
             style={{ width: layout.left }}
@@ -1476,7 +1579,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           />
         ) : null}
 
-        <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+        <section aria-label={tr("Редактор коду", "Code editor")} className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
           <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-x-2 gap-y-2 border-b border-[#203428] bg-[#0d1610] px-3 py-2.5">
             <div className="col-start-1 row-start-1 flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-[.15em] text-[#82968a]">
@@ -1498,7 +1601,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   ? tr("WEB без stdin", "WEB has no stdin")
                   : tr("Власний input для Run", "Custom input for Run")
               }
-              className="col-span-2 row-start-2 min-h-28 max-h-48 min-w-0 w-full resize-y overflow-auto rounded-xl border border-[#294333] bg-[#101b13] px-3 py-2.5 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] transition focus:border-primary/60 focus:bg-[#122117] disabled:opacity-50 sm:min-h-16"
+              className="col-span-2 row-start-2 min-h-28 max-h-48 min-w-0 w-full resize-y overflow-auto rounded-xl border border-[#294333] bg-[#101b13] px-3 py-2.5 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] transition focus:border-primary/60 focus:bg-[#122117] disabled:opacity-50 max-lg:min-h-16 max-lg:max-h-28 lg:min-h-16"
             />
             {stdinHistory.length ? (
               <div className="col-span-2 row-start-4 flex min-w-0 items-center gap-2">
@@ -1560,7 +1663,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <button
                 type="button"
                 onClick={() => setFontSize((size) => Math.max(11, size - 1))}
-                className="grid size-7 place-items-center rounded-lg text-xs text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
+                className="grid size-7 max-lg:size-11 place-items-center rounded-lg text-xs text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
                 aria-label={tr("Зменшити розмір шрифту", "Decrease font size")}
                 title={tr("Зменшити розмір шрифту", "Decrease font size")}
               >
@@ -1569,7 +1672,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <button
                 type="button"
                 onClick={() => setFontSize((size) => Math.min(22, size + 1))}
-                className="grid size-7 place-items-center rounded-lg text-xs text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
+                className="grid size-7 max-lg:size-11 place-items-center rounded-lg text-xs text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
                 aria-label={tr("Збільшити розмір шрифту", "Increase font size")}
                 title={tr("Збільшити розмір шрифту", "Increase font size")}
               >
@@ -1578,7 +1681,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <button
                 type="button"
                 onClick={() => setWordWrap((value) => !value)}
-                className={`grid size-7 place-items-center rounded-lg text-xs transition ${wordWrap ? "bg-primary/10 text-primary-soft" : "text-[#82968a] hover:bg-white/[.07] hover:text-white"}`}
+                className={`grid size-7 max-lg:size-11 place-items-center rounded-lg text-xs transition ${wordWrap ? "bg-primary/10 text-primary-soft" : "text-[#82968a] hover:bg-white/[.07] hover:text-white"}`}
                 aria-pressed={wordWrap}
                 aria-label={tr("Перенесення рядків", "Word wrap")}
                 title="Word wrap"
@@ -1587,11 +1690,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  if (typeof window !== "undefined" && !window.confirm(tr("Скинути код до шаблону? Незбережені зміни буде втрачено.", "Reset code to the starter template? Unsaved changes will be lost."))) return;
-                  props.onReset();
-                }}
-                className="grid size-7 place-items-center rounded-lg text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
+                onClick={() => setResetConfirmOpen(true)}
+                className="grid size-7 max-lg:size-11 place-items-center rounded-lg text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
                 aria-label={tr("Скинути шаблон", "Reset template")}
                 title={tr("Скинути шаблон", "Reset template")}
               >
@@ -1600,7 +1700,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             </div>
           </div>
           <div
-            className={`h-full min-h-[220px] flex-1 overflow-hidden lg:min-h-[360px] ${props.isWebTask ? "grid lg:grid-cols-2" : ""}`}
+            className={`h-full min-h-[220px] flex-1 overflow-hidden max-lg:min-h-0 lg:min-h-0 ${props.isWebTask ? "grid lg:grid-cols-2" : ""}`}
           >
             <div className="h-full min-h-0 min-w-0 overflow-hidden">
               {isEmptyTask ? (
@@ -1664,7 +1764,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               </div>
             ) : null}
           </div>
-        </main>
+        </section>
 
         {showRight ? (
           <div
@@ -2063,13 +2163,17 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           aria-valuemin={150}
           aria-valuemax={620}
           aria-valuenow={Math.round(layout.bottom)}
-          className="h-1 shrink-0 cursor-row-resize touch-none bg-transparent hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none"
+          className="hidden h-1 shrink-0 cursor-row-resize touch-none bg-transparent hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none lg:block"
         />
       ) : null}
       {showBottom ? (
         <section
+          id="mobile-ide-panel-result"
+          role="tabpanel"
+          aria-labelledby="mobile-ide-tab-result"
+          tabIndex={0}
           style={{ "--ide-bottom-height": `${layout.bottom}px` } as React.CSSProperties}
-          className="h-[var(--ide-bottom-height)] max-lg:h-60 shrink-0 border-t border-[#203428] bg-[#0f1812]"
+          className={`h-[var(--ide-bottom-height)] shrink-0 border-t border-[#203428] bg-[#0f1812] max-lg:min-h-0 ${mobilePane === "result" ? "max-lg:h-auto max-lg:flex-1" : "max-lg:hidden"} lg:h-[var(--ide-bottom-height)]`}
         >
           <div className="flex h-11 items-center gap-1 overflow-x-auto border-b border-[#203428] bg-[#111b14] px-2">
             <BottomTabButton
@@ -2142,16 +2246,17 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         <button
           type="button"
           onClick={() => updateLayout({ bottomCollapsed: false })}
-          className="flex h-9 shrink-0 items-center justify-center border-t border-[#203428] text-[#82968a] hover:text-white"
+          className={`flex min-h-11 shrink-0 items-center justify-center border-t border-[#203428] text-[#82968a] hover:text-white lg:h-9 ${mobilePane === "result" ? "" : "max-lg:hidden"}`}
+          aria-label={tr("Показати результати", "Show results")}
         >
           <ChevronDown className="size-4 rotate-180" />
         </button>
       )}
-      <div className="absolute inset-x-0 bottom-0 z-40 flex gap-2 border-t border-[#203428] bg-[#111b14]/95 p-2 shadow-[0_-16px_30px_-24px_rgba(0,0,0,.9)] backdrop-blur sm:hidden">
-        <button type="button" onClick={runWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[.08] px-3 text-xs font-semibold text-white disabled:opacity-50">
+      <div className="z-40 flex shrink-0 gap-2 border-t border-[#203428] bg-[#111b14] p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] lg:hidden">
+        <button type="button" onClick={runWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[.08] px-3 text-xs font-semibold text-white disabled:opacity-50">
           <Play className="size-3.5" />{props.running ? "…" : tr("Запустити", "Run")}
         </button>
-        <button type="button" onClick={checkWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-bold text-[#062211] disabled:opacity-50">
+        <button type="button" onClick={checkWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-bold text-[#062211] disabled:opacity-50">
           {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : props.submitMode ? <Rocket className="size-3.5" /> : <TestTube2 className="size-3.5" />}{props.checking ? (props.submitMode ? tr("Надсилаємо…", "Submitting…") : tr("Тестуємо…", "Testing…")) : props.submitMode ? tr("Надіслати", "Submit") : tr("Перевірити", "Test")}
         </button>
       </div>
@@ -2174,6 +2279,23 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           {notice}
         </div>
       ) : null}
+      <Modal
+        open={resetConfirmOpen}
+        onClose={() => setResetConfirmOpen(false)}
+        title={tr("Скинути код до шаблону?", "Reset code to the starter template?")}
+        description={tr("Поточні незбережені зміни буде втрачено.", "Your current unsaved changes will be lost.")}
+        showCloseButton={false}
+        panelClassName="max-w-md"
+      >
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="ghost" size="touch" onClick={() => setResetConfirmOpen(false)}>
+            {tr("Скасувати", "Cancel")}
+          </Button>
+          <Button type="button" variant="destructive" size="touch" onClick={() => { setResetConfirmOpen(false); props.onReset(); }}>
+            {tr("Скинути код", "Reset code")}
+          </Button>
+        </div>
+      </Modal>
       <footer className="hidden h-8 items-center gap-4 border-t border-[#203428] bg-[#09100b] px-3 text-[10px] text-[#718075] sm:flex">
         <span>Ln {lineCount}, Col 1</span>
         <span>{props.language}</span>

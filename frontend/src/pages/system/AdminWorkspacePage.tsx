@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
   approveAdminLibraryTask,
@@ -85,6 +86,20 @@ type BroadcastDraft = { subject: string; title: string; content: string; deliver
 type CertificateDraft = { name: string; type: "studycod" | "custom"; htmlTemplate: string; cssTemplate: string; isActive: boolean; fields: CertificateTemplate["fields"] };
 
 export const AdminWorkspacePage: React.FC = () => {
+  const { i18n } = useTranslation();
+  const inEnglish = i18n.language.toLowerCase().startsWith("en");
+  const tabLabel = (id: Tab, fallback: string) => ({
+    overview: inEnglish ? "Overview" : "Огляд",
+    people: inEnglish ? "People" : "Люди",
+    classes: inEnglish ? "Classes" : "Класи",
+    materials: inEnglish ? "Materials" : "Матеріали",
+    library: inEnglish ? "Library" : "Бібліотека",
+    judge: inEnglish ? "Judging" : "Перевірка рішень",
+    maintenance: inEnglish ? "Platform settings" : "Налаштування платформи",
+    broadcast: inEnglish ? "Announcements" : "Розсилки",
+    mailbox: inEnglish ? "Mail" : "Пошта",
+    certificates: inEnglish ? "Certificates" : "Сертифікати",
+  } satisfies Record<Tab, string>)[id] ?? fallback;
   const [tab, setTab] = useState<Tab>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -343,11 +358,11 @@ export const AdminWorkspacePage: React.FC = () => {
   const hasMoreUsers = usersTotal === null ? false : users.length < usersTotal;
 
   return <div className="min-h-full bg-bg-base px-4 py-7 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-10 lg:py-10"><div className="mx-auto max-w-[1480px]">
-    <section className="relative overflow-hidden rounded-[28px] bg-[#20232a] px-6 py-7 text-white shadow-[0_24px_58px_-36px_rgba(0,0,0,.8)] sm:px-8 sm:py-9"><div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[#ffd93d]/10 blur-3xl" /><div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-end"><div><Label tone="text-[#ffd93d]"><span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" />System administration</span></Label><h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.055em] sm:text-5xl">Повна адмінка без старого shell.</h1><p className="mt-4 max-w-2xl text-base leading-7 text-[#c3c9d0]">Користувачі, класи, матеріали, модерація, підтримка, пошта й сертифікати — в одному новому premium workspace.</p></div></div></section>
-    <nav className="mt-5 flex gap-1.5 overflow-x-auto rounded-2xl border border-border/10 bg-white p-2 dark:border-white/10 dark:bg-bg-surface">{tabs.map(({ id, label, Icon }) => <button type="button" key={id} onClick={() => setTab(id)} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${tab === id ? "bg-[#17251c] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#6a796f] hover:bg-[#f1f5f1] dark:text-[#a6b5aa] dark:hover:bg-white/[.06]"}`}><Icon className="h-4 w-4" />{label}</button>)}</nav>
+    <section aria-labelledby="admin-workspace-title" className="relative overflow-hidden rounded-[28px] border border-border bg-bg-surface px-6 py-7 text-text-primary shadow-sm dark:border-border dark:bg-bg-surface sm:px-8 sm:py-9"><div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary/8 blur-3xl" /><div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-end"><div><Label><span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" />{inEnglish ? "PLATFORM ADMINISTRATION" : "КЕРУВАННЯ ПЛАТФОРМОЮ"}</span></Label><h1 id="admin-workspace-title" className="mt-4 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.055em] sm:text-5xl">{inEnglish ? "Manage the StudyCod platform." : "Керуй платформою StudyCod."}</h1><p className="mt-4 max-w-2xl text-base leading-7 text-text-secondary">{inEnglish ? "Manage accounts, classrooms, learning content, solution reviews and platform operations from one workspace." : "Керуй обліковими записами, класами, навчальними матеріалами, перевіркою рішень і роботою платформи."}</p></div></div></section>
+    <nav aria-label={inEnglish ? "Administrative sections" : "Розділи адміністрування"} className="mt-5 flex gap-1.5 overflow-x-auto rounded-2xl border border-border/10 bg-white p-2 dark:border-white/10 dark:bg-bg-surface">{tabs.map(({ id, label, Icon }) => <button type="button" key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined} className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${tab === id ? "bg-[#17251c] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#6a796f] hover:bg-[#f1f5f1] dark:text-[#a6b5aa] dark:hover:bg-white/[.06]"}`}><Icon className="h-4 w-4" />{tabLabel(id, label)}</button>)}</nav>
     {error && <div role="alert" className="mt-5 flex items-center justify-between gap-4 rounded-2xl border border-[#ff6b9d]/30 bg-[#fff1f5] p-4 text-sm text-[#be315c] dark:bg-[#ff6b9d]/10 dark:text-[#ffabc4]"><span>{error}</span><button type="button" onClick={() => setError(null)} aria-label="Dismiss error"><X className="h-4 w-4" /></button></div>}
     {loading ? <div className="mt-5 grid gap-4 md:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-40 animate-pulse rounded-[24px] bg-[#e6ece7] dark:bg-white/[.045]" />)}</div> : <div className="mt-5">
-      {tab === "overview" && <Overview stats={stats} judge={judge} maintenance={maintenance} mailOk={mailOk} certificates={certificates} go={setTab} />}
+      {tab === "overview" && <Overview stats={stats} judge={judge} maintenance={maintenance} mailOk={mailOk} certificates={certificates} go={setTab} inEnglish={inEnglish} />}
       {tab === "people" && <PeoplePanel users={users} usersTotal={usersTotal} hasMoreUsers={hasMoreUsers} usersLoadingMore={usersLoadingMore} usersPage={usersPage} classes={classes} usersByRole={usersByRole} onMore={() => loadPeople(usersPage + 1, true).catch((c) => reportError(c, "Не вдалося завантажити користувачів."))} onSelect={selectUser} onCreate={() => setShowCreateUser(true)} />}
       {tab === "classes" && <ClassesPanel classes={classes} users={users} draft={classDraft} setDraft={setClassDraft} onSave={saveClass} onDelete={removeClass} />}
       {tab === "materials" && <MaterialsPanel language={materialsLanguage} setLanguage={setMaterialsLanguage} topics={topics} selectedTopicId={selectedTopicId} draft={materialDraft} setDraft={setMaterialDraft} selectTopic={selectTopic} newTopic={newTopic} saveTopic={saveTopic} removeTopic={removeTopic} syncMaterials={syncMaterials} />}
@@ -365,7 +380,33 @@ export const AdminWorkspacePage: React.FC = () => {
   </div></div>;
 };
 
-const Overview: React.FC<{ stats: AdminStats | null; judge: AdminJudgeLoad | null; maintenance: MaintenanceState | null; mailOk: boolean | null; certificates: CertificateListItem[]; go: (tab: Tab) => void }> = ({ stats, judge, maintenance, mailOk, certificates, go }) => <><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Metric value={stats?.users.total ?? "—"} label="користувачів" /><Metric value={stats?.users.teachers ?? "—"} label="викладачів" tone="text-primary-strong dark:text-primary-soft" /><Metric value={stats?.classes.total ?? "—"} label="активних класів" /><Metric value={judge?.queued ?? "—"} label="у черзі judge" tone="text-[#d97706]" /></div><div className="mt-5 grid gap-5 lg:grid-cols-[1.15fr_.85fr]"><Surface><Label>Стан системи</Label><div className="mt-5 grid gap-3 sm:grid-cols-2"><Status label="Judge queue" value={judge ? `${judge.active} active · ${judge.queued} queued` : "Немає даних"} healthy={(judge?.queued ?? 0) < 20} /><Status label="Maintenance" value={maintenance?.enabled ? "Увімкнено" : "Платформа відкрита"} healthy={!maintenance?.enabled} /><Status label="Admin mailbox" value={mailOk === null ? "Немає даних" : mailOk ? "Підключено" : "Потребує уваги"} healthy={mailOk === true} /><Status label="Certificates" value={`${certificates.filter((item) => item.isActive).length} активних шаблонів`} healthy /></div></Surface><Surface className="bg-[#fff8ec] dark:border-[#ff8c00]/20 dark:bg-[#ff8c00]/[.07]"><Label tone="text-[#d97706]">Швидкі дії</Label><div className="mt-5 space-y-2"><Quick label="Модерація бібліотеки" onClick={() => go("library")} /><Quick label="Редактор матеріалів" onClick={() => go("materials")} /><Quick label="Сертифікати" onClick={() => go("certificates")} /></div></Surface></div></>;
+const Overview: React.FC<{ stats: AdminStats | null; judge: AdminJudgeLoad | null; maintenance: MaintenanceState | null; mailOk: boolean | null; certificates: CertificateListItem[]; go: (tab: Tab) => void; inEnglish: boolean }> = ({ stats, judge, maintenance, mailOk, certificates, go, inEnglish }) => <>
+  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <Metric value={stats?.users.total ?? "—"} label={inEnglish ? "users" : "користувачів"} />
+    <Metric value={stats?.users.teachers ?? "—"} label={inEnglish ? "teachers" : "викладачів"} tone="text-primary-strong dark:text-primary-soft" />
+    <Metric value={stats?.classes.total ?? "—"} label={inEnglish ? "active classes" : "активних класів"} />
+    <Metric value={judge?.queued ?? "—"} label={inEnglish ? "in review queue" : "у черзі перевірки"} tone="text-[#d97706]" />
+  </div>
+  <div className="mt-5 grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
+    <Surface>
+      <Label>{inEnglish ? "System status" : "Стан системи"}</Label>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <Status label={inEnglish ? "Review queue" : "Черга перевірок"} value={judge ? `${judge.active} ${inEnglish ? "active" : "активних"} · ${judge.queued} ${inEnglish ? "queued" : "у черзі"}` : inEnglish ? "No data" : "Немає даних"} healthy={(judge?.queued ?? 0) < 20} />
+        <Status label={inEnglish ? "Platform availability" : "Доступність платформи"} value={maintenance?.enabled ? inEnglish ? "Maintenance is enabled" : "Технічне обслуговування ввімкнено" : inEnglish ? "Available" : "Доступна"} healthy={!maintenance?.enabled} />
+        <Status label={inEnglish ? "Administrator email" : "Пошта адміністратора"} value={mailOk === null ? inEnglish ? "No data" : "Немає даних" : mailOk ? inEnglish ? "Connected" : "Підключено" : inEnglish ? "Needs attention" : "Потребує уваги"} healthy={mailOk === true} />
+        <Status label={inEnglish ? "Certificates" : "Сертифікати"} value={`${certificates.filter((item) => item.isActive).length} ${inEnglish ? "active templates" : "активних шаблонів"}`} healthy />
+      </div>
+    </Surface>
+    <Surface className="bg-[#fff8ec] dark:border-[#ff8c00]/20 dark:bg-[#ff8c00]/[.07]">
+      <Label tone="text-[#d97706]">{inEnglish ? "Quick actions" : "Швидкі дії"}</Label>
+      <div className="mt-5 space-y-2">
+        <Quick label={inEnglish ? "Review task submissions" : "Модерація бібліотеки"} onClick={() => go("library")} />
+        <Quick label={inEnglish ? "Edit learning materials" : "Редактор матеріалів"} onClick={() => go("materials")} />
+        <Quick label={inEnglish ? "Manage certificates" : "Сертифікати"} onClick={() => go("certificates")} />
+      </div>
+    </Surface>
+  </div>
+</>;
 
 const PeoplePanel: React.FC<{ users: AdminUser[]; usersTotal: number | null; hasMoreUsers: boolean; usersLoadingMore: boolean; usersPage: number; classes: AdminClass[]; usersByRole: { teachers: number; admins: number }; onMore: () => void; onSelect: (user: AdminUser) => void; onCreate: () => void }> = ({ users, usersTotal, hasMoreUsers, usersLoadingMore, classes, usersByRole, onMore, onSelect, onCreate }) => <div className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]"><Surface><div className="flex items-start justify-between gap-4"><div><Label>Облікові записи</Label><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Люди на платформі</h2><p className="mt-2 text-sm text-[#708075] dark:text-text-secondary">Адміністратор створює акаунти, передає логін і пароль та окремо призначає викладача до класів.</p></div><PrimaryButton onClick={onCreate} className="inline-flex items-center gap-2"><UserRoundPlus className="h-4 w-4" />Створити акаунт</PrimaryButton></div><div className="mt-5 max-h-[680px] overflow-auto divide-y divide-[#152219]/8 pr-1 dark:divide-white/8">{users.map((user) => <button type="button" key={user.id} onClick={() => onSelect(user)} className="flex w-full items-center justify-between gap-3 py-3 text-left transition hover:bg-[#f5f8f5] dark:hover:bg-white/[.04]"><div className="flex min-w-0 items-center gap-3 px-2"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">{user.username.slice(0, 1).toUpperCase()}</span><div className="min-w-0"><div className="truncate font-semibold">{user.firstName || user.username} {user.lastName || ""}</div><div className="truncate text-sm text-[#708075] dark:text-text-secondary">{user.email || user.username}</div></div></div><div className="flex shrink-0 flex-wrap justify-end gap-2 px-2"><Pill>{user.role}</Pill><Pill green>{user.userMode}</Pill></div></button>)}</div>{hasMoreUsers && <PrimaryButton muted disabled={usersLoadingMore} onClick={onMore} className="mt-5 w-full">{usersLoadingMore ? "Завантажуємо…" : "Показати ще"}</PrimaryButton>}</Surface><Surface><Label>Навчальна структура</Label><div className="mt-5 grid grid-cols-2 gap-3"><Metric value={usersByRole.teachers} label="викладачів у завантажених" /><Metric value={usersByRole.admins} label="адміністраторів" /></div><div className="mt-5 space-y-2">{classes.map((item) => <div key={item.id} className="flex items-center justify-between rounded-xl bg-[#f5f8f5] px-3 py-3 text-sm dark:bg-white/[.04]"><span className="font-semibold">{item.name}</span><span className="text-text-muted dark:text-text-secondary">{item.teacherName}</span></div>)}</div></Surface></div>;
 

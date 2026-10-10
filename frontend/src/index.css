@@ -318,13 +318,17 @@
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
 
   [data-motion-surface] {
     animation: none !important;
-    transition: opacity 180ms linear !important;
+    transition: none !important;
     transform: none !important;
+    filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
 
   [data-motion-press]:active {
@@ -581,6 +585,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .studycod-confetti {
+    display: none;
+  }
+
   *,
   *::before,
   *::after {
@@ -743,3 +751,16 @@
 }
 
 [data-theme="light"] .contest-problem-solve [class~="text-[#ffb2c9]"] { color: #96364e !important; }
+
+@media (pointer: coarse) {
+  [data-slot="button"] { min-height: 44px; }
+  [data-slot="button"][data-size="icon"],
+  [data-slot="button"][data-size="icon-xs"],
+  [data-slot="button"][data-size="icon-sm"],
+  [data-slot="button"][data-size="icon-lg"],
+  [data-slot="button"][data-size="touch-icon"] {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+  }
+}

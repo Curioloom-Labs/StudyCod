@@ -88,7 +88,7 @@ export const PricingPage: React.FC = () => {
     <div className="min-h-[100dvh] bg-bg-base font-sans text-text-primary [&_h1]:font-sans [&_h2]:font-sans [&_h3]:font-sans dark:bg-bg-base dark:text-text-primary">
       <PublicProductNav active="pricing" />
 
-      <main id="main-content">
+      <main id="main-content" tabIndex={-1}>
         <section className="relative mx-auto w-[min(1200px,calc(100%_-_40px))] pb-16 pt-24 text-center max-md:pt-16">
           <div className="pointer-events-none absolute left-1/2 top-5 size-[540px] -translate-x-1/2 rounded-full bg-primary/[.055] blur-[90px]" />
           <motion.div initial={reduceMotion ? undefined : { opacity: 0, y: 20 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: .7, ease: [0.16, 1, .3, 1] }} className="relative mx-auto max-w-[820px]">

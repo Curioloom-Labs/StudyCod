@@ -527,7 +527,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
   return (
     <div className="min-h-[100dvh] bg-bg-base font-sans text-text-primary dark:bg-bg-base dark:text-text-primary">
       <PublicProductNav active="blog" />
-      <main id="main-content" className="mx-auto w-[min(1080px,calc(100%_-_32px))] py-10">
+      <main id="main-content" tabIndex={-1} className="mx-auto w-[min(1080px,calc(100%_-_32px))] py-10">
         <button type="button"
         onClick={() => go("/blog")}
           className="inline-flex h-11 items-center gap-2 rounded-[14px] border border-border/10 bg-white px-4 text-[11px] font-bold text-text-muted dark:border-white/10 dark:bg-bg-surface dark:text-[#a5b0a8]"

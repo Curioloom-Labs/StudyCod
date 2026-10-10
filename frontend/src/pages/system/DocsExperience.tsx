@@ -83,7 +83,7 @@ export const DocsExperience: React.FC<Props> = ({
 
     return <div className="min-h-[100dvh] bg-bg-base font-sans text-text-primary dark:bg-bg-base dark:text-text-primary">
       <PublicProductNav active="docs" />
-      <main id="main-content" className="mx-auto w-[min(1180px,calc(100%_-_32px))] py-8 sm:py-12">
+      <main id="main-content" tabIndex={-1} className="mx-auto w-[min(1180px,calc(100%_-_32px))] py-8 sm:py-12">
         <button type="button" onClick={onBack} className="group inline-flex h-11 items-center gap-2 rounded-[14px] border border-border/10 bg-white px-4 text-[12px] font-bold text-text-muted transition hover:-translate-y-0.5 dark:border-white/10 dark:bg-bg-surface dark:text-text-secondary">
           <ArrowLeft className="size-4 transition group-hover:-translate-x-0.5" />
           {tr("До всіх інструкцій", "Back to all guides")}

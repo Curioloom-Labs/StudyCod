@@ -207,7 +207,7 @@ const DashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
 
 const PracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
   <div className={`${card} overflow-hidden bg-bg-surface dark:bg-[#101814]`}>
-    <div className="grid min-h-[520px] grid-cols-[320px_minmax(0,1fr)_360px] max-lg:grid-cols-1">
+    <div className="grid min-h-[500px] grid-cols-[minmax(0,.84fr)_minmax(0,1.2fr)_minmax(0,.86fr)] max-lg:grid-cols-1">
       <aside className="border-r border-border/10 bg-white/86 p-6 dark:border-white/10 dark:bg-white/[.04]">
         <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[.14em] text-primary-strong">
           <FlaskConical className="size-3.5" />
@@ -221,10 +221,10 @@ const PracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
         </div>
         <button type="button" className="mt-4 w-full rounded-2xl bg-[#173321] px-4 py-3 text-xs font-bold text-white dark:bg-primary dark:text-[#062211]"><Play className="mr-1.5 inline size-3.5" />Run</button>
       </aside>
-      <main id="main-content" className="min-w-0 overflow-hidden bg-[#101713]">
+      <section aria-label={tr("Приклад коду", "Code example")} className="min-w-0 overflow-hidden bg-[#101713]">
         <div className="flex items-center gap-2 border-b border-white/10 px-4 py-3"><span className="size-2.5 rounded-full bg-[#ff6b9d]" /><span className="size-2.5 rounded-full bg-[#ffd93d]" /><span className="size-2.5 rounded-full bg-primary" /><span className="ml-2 text-[10px] text-[#aab7ad]">main.py</span></div>
         <pre className="m-0 min-h-[470px] max-w-full overflow-x-auto whitespace-pre-wrap break-words p-8 font-mono text-[clamp(11px,1vw,13px)] leading-8 text-[#dbe7df] max-md:min-h-[320px] max-md:p-6"><span className={codeColors.keyword}>n</span> = int(input()){"\n"}total = 0{"\n"}<span className={codeColors.keyword}>for</span> i <span className={codeColors.keyword}>in</span> range(1, n + 1):{"\n"}    total += i{"\n"}print(total)</pre>
-      </main>
+      </section>
       <aside className="border-l border-border/10 bg-white/86 p-6 dark:border-white/10 dark:bg-white/[.04]">
         <div className="text-[10px] font-bold uppercase tracking-[.14em] text-text-muted">Output</div>
         <div className="mt-3 rounded-2xl bg-[#101713] p-4 font-mono text-sm text-[#dbe7df]">15</div>
@@ -296,36 +296,32 @@ export const PublicLandingPage: React.FC = () => {
   const tr: Translate = (uk, en) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const goToAuth = (mode: "login" | "register", audience?: "teacher") => navigate(`/?auth=${mode}${audience ? `&audience=${audience}` : ""}`);
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
-  const reveal = reduceMotion ? {} : { initial: { opacity: 0, y: 24 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, amount: 0.14 }, transition: { duration: 0.65, ease: easing } };
+  const reveal = reduceMotion ? {} : { initial: { opacity: 0, y: 12 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, amount: 0.14 }, transition: { duration: 0.24, ease: easing } };
 
   return (
     <div id="studycod-landing" className="min-h-[100dvh] overflow-hidden bg-bg-base font-sans text-text-primary selection:bg-primary/20">
       <PublicProductNav active="home" homeMode />
 
-      <main>
-        <section className="relative mx-auto w-[min(1240px,calc(100%_-_48px))] pb-20 pt-[158px] text-center max-md:w-[calc(100%_-_28px)] max-md:pb-14 max-md:pt-[116px]">
-          <div className="pointer-events-none absolute left-1/2 top-20 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,color-mix(in_srgb,var(--primary)_9%,transparent),transparent_68%)] blur-2xl" />
-          <motion.div className="relative z-10 mx-auto max-w-[900px]" initial={reduceMotion ? undefined : { opacity: 0, y: 24 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.75, ease: easing }}>
-            <div className="mx-auto mb-6 flex w-fit items-center gap-2.5 rounded-full border border-border/70 bg-bg-surface/85 py-1 pl-1 pr-3.5 text-xs font-semibold text-text-muted shadow-sm"><span className="grid size-7 place-items-center rounded-full bg-primary text-primary-foreground"><Sparkles className="size-3.5" /></span>{tr("Навчання, яке переходить у навичку", "Learning that becomes a skill")}</div>
-            <div className="mb-5 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[.14em] text-primary-strong"><span className="h-px w-8 bg-primary/40" />StudyCod — learn by building<span className="h-px w-8 bg-primary/40" /></div>
-            <h1 className="m-0 text-balance text-[clamp(46px,6.2vw,82px)] font-bold leading-[0.99] tracking-[-0.055em] max-md:text-[clamp(40px,12.4vw,59px)]">{tr("Перетворюй кожну помилку в коді на навичку.", "Turn every coding mistake into a skill.")}</h1>
-            <p className="mx-auto mt-7 max-w-[730px] text-balance text-lg leading-8 text-text-muted max-md:mt-5 max-md:text-base max-md:leading-7">{tr("Пиши код, зрозумій, чому він не працює, виправ його з підказками та збирай докази власних навичок.", "Write code, understand why it fails, fix it with guided hints, and build evidence of what you can do.")}</p>
-            <div className="mx-auto mt-9 grid max-w-[660px] gap-3 sm:grid-cols-2">
-              <button type="button" onClick={() => goToAuth("register")} className="group flex min-h-[88px] items-center gap-4 rounded-2xl border border-border/70 bg-bg-surface px-5 py-4 text-left transition-fast hover:border-primary/40 hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 motion-safe:active:scale-[.99]">
-                <span className={iconTile}><GraduationCap className="size-5" /></span>
-                <span className="min-w-0 flex-1"><span className="block text-xs font-medium text-text-muted">{tr("Для учня", "For learners")}</span><span className="mt-1 block font-semibold">{tr("Почати практику", "Start practicing")}</span><span className="mt-0.5 block text-xs text-text-secondary">{tr("Код, тести й підказки", "Code, tests, and hints")}</span></span>
-                <ArrowRight className="size-4 shrink-0 text-primary-strong transition-transform group-hover:translate-x-0.5" />
+      <main id="main-content" tabIndex={-1} className="scroll-mt-24 outline-none">
+        <section className="relative mx-auto grid w-[min(1240px,calc(100%_-_48px))] grid-cols-1 items-center gap-8 pb-12 pt-[112px] lg:grid-cols-[.88fr_1.12fr] lg:gap-12 lg:pb-16 lg:pt-[132px] max-md:w-[calc(100%_-_28px)] max-md:pt-[100px]">
+          <div aria-hidden="true" className="pointer-events-none absolute left-0 top-20 h-[420px] w-[720px] rounded-full bg-[radial-gradient(circle,color-mix(in_srgb,var(--primary)_9%,transparent),transparent_68%)] blur-2xl" />
+          <motion.div className="relative z-10 max-w-[600px]" initial={reduceMotion ? undefined : { opacity: 0, y: 16 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: easing }}>
+            <div className="mb-5 flex w-fit items-center gap-2.5 rounded-full border border-border/70 bg-bg-surface/85 py-1 pl-1 pr-3.5 text-xs font-semibold text-text-muted shadow-sm"><span className="grid size-7 place-items-center rounded-full bg-primary text-primary-foreground"><Sparkles className="size-3.5" /></span>{tr("Навчання, яке переходить у навичку", "Learning that becomes a skill")}</div>
+            <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.14em] text-primary-strong">StudyCod — learn by building</div>
+            <h1 className="m-0 max-w-[620px] text-balance text-[clamp(42px,5.2vw,68px)] font-bold leading-[1.02] tracking-[-0.055em] max-md:text-[clamp(40px,12.4vw,54px)]">{tr("Перетворюй помилки в коді на навички.", "Turn coding mistakes into skills.")}</h1>
+            <p className="mt-5 max-w-[540px] text-balance text-base leading-7 text-text-muted sm:text-lg sm:leading-8">{tr("Напиши код, перевір його й побач, що виправити далі.", "Write code, test it, and see what to improve next.")}</p>
+            <div className="mt-7 flex flex-wrap items-center gap-3">
+              <button type="button" onClick={() => goToAuth("register")} className="group inline-flex min-h-12 items-center gap-2.5 rounded-xl bg-primary px-5 font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 motion-safe:active:translate-y-px">
+                <GraduationCap className="size-5" aria-hidden="true" />{tr("Почати практику", "Start practicing")}<ArrowRight className="size-4" aria-hidden="true" />
               </button>
-              <button type="button" onClick={() => goToAuth("register", "teacher")} className="group flex min-h-[88px] items-center gap-4 rounded-2xl border border-border/70 bg-bg-surface px-5 py-4 text-left transition-fast hover:border-primary/40 hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 motion-safe:active:scale-[.99]">
-                <span className={iconTile}><Users className="size-5" /></span>
-                <span className="min-w-0 flex-1"><span className="block text-xs font-medium text-text-muted">{tr("Для викладача", "For teachers")}</span><span className="mt-1 block font-semibold">{tr("Організувати клас", "Set up a class")}</span><span className="mt-0.5 block text-xs text-text-secondary">{tr("Завдання й прогрес наживо", "Assignments and live progress")}</span></span>
-                <ArrowRight className="size-4 shrink-0 text-primary-strong transition-transform group-hover:translate-x-0.5" />
+              <button type="button" onClick={() => goToAuth("register", "teacher")} className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-border/70 px-4 font-semibold text-text-secondary transition-colors hover:border-primary/40 hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">
+                <Users className="size-4" aria-hidden="true" />{tr("Для викладача", "For teachers")}
               </button>
             </div>
-            <button type="button" onClick={() => scrollTo("loop")} className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">{tr("Подивитися, як працює навчальний цикл", "See how the learning loop works")}<ArrowRight className="size-4" /></button>
-            <div className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2.5 text-[13px] text-text-muted max-md:text-xs">{[tr("Безкоштовний старт", "Free to start"), tr("Задачі з автоперевіркою", "Auto-checked tasks"), tr("Для класу й самонавчання", "For class and self-study")].map((item) => <span key={item} className="flex items-center gap-1.5"><CheckCircle2 className="size-4 text-primary-strong" />{item}</span>)}</div>
+            <button type="button" onClick={() => scrollTo("loop")} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">{tr("Подивитися навчальний цикл", "See the learning loop")}<ArrowRight className="size-4" /></button>
+            <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs text-text-muted">{[tr("Безкоштовний старт", "Free to start"), tr("Автоперевірка", "Auto-checked tasks"), tr("Самостійно й у класі", "Self-study and classroom")].map((item) => <span key={item} className="flex items-center gap-1.5"><CheckCircle2 className="size-4 text-primary-strong" />{item}</span>)}</div>
           </motion.div>
-          <motion.div className="relative z-20 mx-auto mt-20 max-w-[1120px] max-md:mt-12" initial={reduceMotion ? undefined : { opacity: 0, y: 36, scale: 0.985 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.85, delay: 0.12, ease: easing }}><FailureLoopPreview tr={tr} /></motion.div>
+          <motion.div className="relative z-20 min-w-0" initial={reduceMotion ? undefined : { opacity: 0, y: 16 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: easing }}><FailureLoopPreview tr={tr} /></motion.div>
         </section>
 
          <section id="loop" className="mx-auto flex w-[min(1120px,calc(100%_-_48px))] items-center justify-center gap-12 border-y border-border/10 py-9 text-text-muted max-md:w-[calc(100%_-_28px)] max-md:flex-col max-md:gap-4">

@@ -59,7 +59,7 @@ export const StateIndicator: React.FC<Props> = ({
     aria-live={state === "error" ? "assertive" : "polite"}
     aria-atomic="true"
     aria-busy={state === "evaluating"}
-    className={`inline-flex items-center gap-2 px-3 py-1.5 border text-xs font-mono ${color} ${bg} ${border} ${className || ""} ${state === "evaluating" ? "animate-pulse" : ""}`}>
+    className={`inline-flex items-center gap-2 px-3 py-1.5 border text-xs font-mono ${color} ${bg} ${border} ${className || ""}`}>
       <Icon aria-hidden="true" className={`w-3 h-3 ${state === "evaluating" ? "animate-spin" : ""}`} />
       <span>{displayMessage}</span>
     </div>;

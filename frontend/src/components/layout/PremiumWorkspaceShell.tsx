@@ -204,7 +204,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               type="button"
               onClick={onToggleTheme}
               data-motion-press
-              className="flex h-9 items-center gap-2 rounded-xl px-2.5 text-xs font-semibold text-text-muted transition motion-safe:active:scale-[.97] hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.07]"
+              className="flex h-9 max-lg:min-h-11 max-lg:min-w-11 items-center justify-center gap-2 rounded-xl px-2.5 text-xs font-semibold text-text-muted transition motion-safe:active:scale-[.97] hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.07]"
               aria-label={theme === "dark"
                 ? (uk ? "Перемкнути на світлу тему" : "Switch to light theme")
                 : (uk ? "Перемкнути на темну тему" : "Switch to dark theme")}
@@ -240,7 +240,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                 aria-expanded={accountOpen}
                 aria-label={uk ? `Відкрити меню акаунта ${displayName}` : `Open account menu for ${displayName}`}
                 title={uk ? "Меню акаунта" : "Account menu"}
-                className={`flex h-10 items-center gap-2 rounded-xl px-1.5 pr-2.5 transition motion-safe:active:scale-[.97] ${
+                className={`flex h-10 max-lg:min-h-11 max-lg:min-w-11 items-center gap-2 rounded-xl px-1.5 pr-2.5 transition motion-safe:active:scale-[.97] ${
                   active("profile") || accountOpen
                     ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"
                     : "hover:bg-bg-hover dark:hover:bg-white/[.07]"
@@ -331,7 +331,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
           ))}
         </div>
       </nav>
-      <main className="mobile-app-viewport relative min-w-0 flex-1 overflow-x-clip pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
+      <div id="main-content" tabIndex={-1} className="mobile-app-viewport relative min-w-0 flex-1 overflow-x-clip pb-[calc(4.75rem+env(safe-area-inset-bottom))] outline-none lg:pb-0">{children}</div>
       <PlatformFooter />
     </div>
   );

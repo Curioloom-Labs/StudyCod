@@ -265,13 +265,6 @@ export const ScoreboardPage: React.FC = () => {
             {live && !board?.hidden && (
               <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-accent-error">
                 <span className="relative inline-flex h-2 w-2">
-                  {!prefersReducedMotion ? (
-                    <motion.span
-                      className="absolute inset-0 rounded-full bg-accent-error"
-                      animate={{ scale: [1, 2.4], opacity: [0.6, 0] }}
-                      transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
-                    />
-                  ) : null}
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-error" />
                 </span>
                 LIVE

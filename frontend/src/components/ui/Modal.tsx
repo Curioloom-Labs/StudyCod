@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "./Button";
 import { lockBodyScroll } from "../../lib/bodyScrollLock";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { overlayVariants, modalVariants, reducedMotionTransition } from "../../lib/motion";
+import { overlayVariants, modalVariants } from "../../lib/motion";
 interface Props {
   open?: boolean;
   isOpen?: boolean;
@@ -109,8 +109,8 @@ export const Modal: React.FC<Props> = ({
   }, [resolvedOpen]);
 
   const content = <AnimatePresence>
-      {resolvedOpen && <motion.div data-material="modal-scrim" data-motion-surface className={"fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-bg-base/80 p-2 sm:p-4" + (overlayClassName ? ` ${overlayClassName}` : "")} onClick={isClosable ? () => onCloseRef.current() : undefined} variants={overlayVariants} initial={shouldReduceMotion ? { opacity: 0, backdropFilter: "blur(0px)" } : "initial"} animate="animate" exit={shouldReduceMotion ? { opacity: 0, backdropFilter: "blur(0px)" } : "exit"} transition={shouldReduceMotion ? reducedMotionTransition : undefined}>
-          <motion.div data-material="modal-surface" ref={panelRef} className={"bg-bg-surface text-text-primary border border-border rounded-[var(--ui-modal-radius)] shadow-[var(--ui-modal-shadow)] max-w-[900px] w-full sm:w-[95vw] max-h-[calc(100dvh-1rem)] sm:max-h-[95vh] max-[767px]:max-h-[calc(100dvh-0.5rem)] max-[767px]:rounded-t-[28px] max-[767px]:rounded-b-none flex flex-col overflow-hidden" + (panelClassName ? ` ${panelClassName}` : "")} onClick={e => e.stopPropagation()} variants={modalVariants} initial={shouldReduceMotion ? { opacity: 0 } : "initial"} animate="animate" exit={shouldReduceMotion ? { opacity: 0 } : "exit"} transition={shouldReduceMotion ? reducedMotionTransition : undefined} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} aria-describedby={description ? descriptionId : undefined} tabIndex={-1}>
+      {resolvedOpen && <motion.div data-material="modal-scrim" data-motion-surface className={"fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-bg-base/80 p-2 sm:p-4" + (overlayClassName ? ` ${overlayClassName}` : "")} onClick={isClosable ? () => onCloseRef.current() : undefined} variants={shouldReduceMotion ? undefined : overlayVariants} initial={shouldReduceMotion ? { opacity: 0 } : "initial"} animate={shouldReduceMotion ? { opacity: 1, transition: { duration: 0.08, ease: "linear" } } : "animate"} exit={shouldReduceMotion ? { opacity: 0, transition: { duration: 0.08, ease: "linear" } } : "exit"}>
+          <motion.div data-material="modal-surface" ref={panelRef} className={"bg-bg-surface text-text-primary border border-border rounded-[var(--ui-modal-radius)] shadow-[var(--ui-modal-shadow)] max-w-[900px] w-full sm:w-[95vw] max-h-[calc(100dvh-1rem)] sm:max-h-[95vh] max-[767px]:max-h-[calc(100dvh-0.5rem)] max-[767px]:rounded-t-[28px] max-[767px]:rounded-b-none flex flex-col overflow-hidden" + (panelClassName ? ` ${panelClassName}` : "")} onClick={e => e.stopPropagation()} variants={shouldReduceMotion ? undefined : modalVariants} initial={shouldReduceMotion ? { opacity: 0 } : "initial"} animate={shouldReduceMotion ? { opacity: 1, transition: { duration: 0.08, ease: "linear" } } : "animate"} exit={shouldReduceMotion ? { opacity: 0, transition: { duration: 0.08, ease: "linear" } } : "exit"} role="dialog" aria-modal="true" aria-labelledby={title ? titleId : undefined} aria-describedby={description ? descriptionId : undefined} tabIndex={-1}>
             {title && <div className="bg-bg-surface/90 px-4 py-3 sm:px-6 sm:py-4 border-b border-border flex-shrink-0">
                 <h2 id={titleId} className="text-lg font-black tracking-tight text-text-primary">{title}</h2>
                 {description && <p id={descriptionId} className="text-sm text-text-secondary mt-2 whitespace-pre-line">{description}</p>}

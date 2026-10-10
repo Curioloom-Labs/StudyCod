@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { animate, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, History, Play, Pause, SkipBack, SkipForward, Clock3, Terminal } from "lucide-react";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
@@ -9,25 +9,7 @@ import { getSolveReplay, type SolveReplaySession } from "../../lib/api/learning"
 import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 
 const CountUp: React.FC<{ value: number; decimals?: number; suffix?: string; className?: string }> = ({ value, decimals = 0, suffix = "", className }) => {
-  const reduce = useReducedMotion();
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    if (reduce) {
-      node.textContent = value.toFixed(decimals) + suffix;
-      return;
-    }
-    const controls = animate(0, value, {
-      duration: 0.8,
-      ease: "easeOut",
-      onUpdate: (v) => {
-        node.textContent = v.toFixed(decimals) + suffix;
-      },
-    });
-    return () => controls.stop();
-  }, [value, decimals, suffix, reduce]);
-  return <span ref={ref} className={className}>{value.toFixed(decimals) + suffix}</span>;
+  return <span className={className}>{value.toFixed(decimals) + suffix}</span>;
 };
 
 export const SolveReplayPage: React.FC = () => {
@@ -187,7 +169,7 @@ export const SolveReplayPage: React.FC = () => {
               className="h-full rounded-full origin-left bg-primary"
               animate={{ scaleX: pct / 100 }}
               initial={false}
-              transition={reduce ? { duration: 0.16, ease: "linear" } : { duration: 0.4, ease: easeOutQuint }}
+              transition={reduce ? { duration: 0, ease: "linear" } : { duration: 0.12, ease: easeOutQuint }}
               style={{ width: "100%", transformOrigin: "left" }}
             />
           </div>

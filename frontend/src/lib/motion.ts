@@ -91,7 +91,7 @@ export const modalVariants: Variants = {
     y: 10,
     scale: 0.98,
     transition: {
-      duration: 0.24,
+      duration: 0.14,
       ease: easeOutExpo
     }
   }

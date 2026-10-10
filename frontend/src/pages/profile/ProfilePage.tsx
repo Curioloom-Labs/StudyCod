@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { animate, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Award, Flame, Medal, Trophy, History, Star, Shield, Crown, Rocket, Gem, Sparkles } from "lucide-react";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
@@ -10,25 +10,7 @@ import { Button } from "../../components/ui/Button";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 
 const CountUp: React.FC<{ value: number; decimals?: number; className?: string }> = ({ value, decimals = 0, className }) => {
-  const reduce = useReducedMotion();
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    if (reduce) {
-      node.textContent = value.toFixed(decimals);
-      return;
-    }
-    const controls = animate(0, value, {
-      duration: 0.8,
-      ease: "easeOut",
-      onUpdate: (v) => {
-        node.textContent = v.toFixed(decimals);
-      },
-    });
-    return () => controls.stop();
-  }, [value, decimals, reduce]);
-  return <span ref={ref} className={className}>{value.toFixed(decimals)}</span>;
+  return <span className={className}>{value.toFixed(decimals)}</span>;
 };
 import { getEmailSubscription, updateEmailSubscription, updateProfile } from "../../lib/api/profile";
 import { prepareGoogleLinkSession } from "../../lib/api/auth";

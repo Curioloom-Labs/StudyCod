@@ -121,7 +121,7 @@ export const OutputDock: React.FC<OutputDockProps> = ({ examples, onPickExample,
       <div className="px-3 py-2 border-b border-border/60 flex items-center justify-between gap-2 bg-bg-surface">
         <div className="flex items-center gap-2"><div className="text-xs text-text-secondary uppercase tracking-widest">Execution Output</div>{onRefresh ? <button type="button" onClick={onRefresh} disabled={refreshing} className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-[10px] font-semibold text-text-secondary hover:bg-bg-hover hover:text-text-primary disabled:pointer-events-none disabled:opacity-50" aria-label="Refresh execution data" title="Refresh execution data"><RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />Refresh</button> : null}</div>
         <div className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border border-border bg-bg-base/70" role="status" aria-live="polite">
-          <Radio className={`w-3.5 h-3.5 ${wsStatus === "connected" ? "text-accent-success animate-pulse" : wsStatus === "connecting" ? "text-accent-warn" : "text-text-secondary"}`} />
+          <Radio className={`w-3.5 h-3.5 ${wsStatus === "connected" ? "text-accent-success" : wsStatus === "connecting" ? "text-accent-warn" : "text-text-secondary"}`} />
           <span className={wsStatus === "connected" ? "text-accent-success" : "text-text-secondary"}>
             {wsStatus === "connected" ? "Live" : wsStatus === "connecting" ? "Syncing" : "Polling"}
           </span>

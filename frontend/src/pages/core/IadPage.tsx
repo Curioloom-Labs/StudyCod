@@ -109,7 +109,7 @@ export const IadPage: React.FC = () => {
 
   return (
     <div className="min-h-[100dvh] bg-bg-base px-4 py-7 text-text-primary sm:px-6 lg:px-10">
-      <main className="mx-auto max-w-6xl pb-10">
+      <section className="mx-auto max-w-6xl pb-10">
         <ProfileSectionNav active="iad" className="mb-6" />
 
         <section className="overflow-hidden rounded-[32px] bg-[#183421] p-6 text-white shadow-[0_28px_70px_-44px_rgba(0,0,0,.9)] sm:p-9">
@@ -191,7 +191,7 @@ export const IadPage: React.FC = () => {
             </section>
           </>
         ) : null}
-      </main>
+      </section>
     </div>
   );
 };

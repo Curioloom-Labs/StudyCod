@@ -150,6 +150,7 @@ export const LearningCoursePage: React.FC = () => {
   const [activating, setActivating] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [celebratedNodeId, setCelebratedNodeId] = React.useState<string | null>(null);
 
   const load = React.useCallback(async (): Promise<LearningCourse | null> => {
     if (!courseId) return null;
@@ -309,9 +310,11 @@ export const LearningCoursePage: React.FC = () => {
     setBusyItem(item.id);
     setMessage(null);
     setError(null);
+    const completionNodeId = roadmapNodes.find((node) => nodeItems(node).some((nodeItem) => nodeItem.id === item.id))?.id ?? null;
     try {
       await completeCatalogItem(item.id);
       await load();
+      setCelebratedNodeId(completionNodeId);
       setMessage(tr("Елемент курсу зараховано.", "Course item completed."));
     } catch (caught: unknown) {
       setError(getErrorMessageFromUnknown(caught, "") === "THEORY_REQUIRED_BEFORE_PRACTICE"
@@ -443,6 +446,7 @@ export const LearningCoursePage: React.FC = () => {
                 <Icon className="size-4 lg:size-5" />
               </div>
                <button type="button" disabled={locked} onClick={() => handleNodeClick(node, index)} className={`group relative col-start-2 row-start-1 min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition-colors duration-200 ${index % 2 === 0 ? "lg:col-start-1" : "lg:col-start-3"} lg:p-5 ${node.kind === "TOPIC" ? `bg-bg-base ${topicAccent} border-l-4` : node.kind === "PROJECT" ? "border-l-4 border-l-[#bd8837] bg-[#bd8837]/[.04]" : "bg-bg-base"} ${completed ? "border-primary/35 bg-primary/[.04]" : locked ? "cursor-not-allowed border-border bg-bg-base/60 opacity-55" : isSelected ? "border-primary bg-primary/[.05]" : "border-border hover:border-primary/50 hover:bg-bg-surface"}`}>
+                {celebratedNodeId === node.id ? <span aria-hidden="true" className="studycod-confetti pointer-events-none absolute inset-x-4 top-0 z-20 h-16" /> : null}
                 {node.kind === "TOPIC" && <div className="mb-3 flex items-center justify-between"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-bg-surface text-xs font-black text-primary">{String(topicNumber).padStart(2, "0")}</span><span className="rounded-md border border-border bg-bg-surface px-2.5 py-1 text-[11px] font-bold text-primary">{completed ? tr("Готово", "Done") : locked ? tr("Попереду", "Ahead") : tr("У фокусі", "In focus")}</span></div>}
                 {node.kind === "PROJECT" && <div className="mb-3 flex items-center justify-between"><span className="flex size-8 items-center justify-center rounded-lg border border-[#bd8837]/35 bg-[#bd8837]/10 text-xs font-black text-[#bd8837] dark:text-[#ffbf68]">{String(projectNumber).padStart(2, "0")}</span><span className="rounded-md border border-[#bd8837]/30 bg-[#bd8837]/10 px-2.5 py-1 text-[11px] font-bold text-[#bd8837] dark:text-[#ffbf68]">{completed ? tr("Готово", "Done") : locked ? tr("Після тем", "After topics") : tr("Проєкт", "Project")}</span></div>}
                   <div className="flex items-start justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.12em] text-text-secondary">{node.kind === "TOPIC" ? tr("Навчальний фокус", "Learning focus") : node.kind === "PROJECT" ? tr("Мініпроєкт", "Mini-project") : tr("Етап", "Milestone")}</span><span className="text-xs font-bold text-primary">{progress}%</span></div>

@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { motion, useReducedMotion, animate } from "framer-motion";
 import { Button } from "../../components/ui/Button";
 import { PageHero } from "../../components/ui/PageHero";
 import { Modal } from "../../components/ui/Modal";
-import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { getStudents, getSummaryGrades, createSummaryGrade, updateSummaryGrade, deleteSummaryGrade, getTopics, type Student, type SummaryGradeGroup, type Topic } from "../../lib/api/edu";
 import { ArrowLeft, Plus, FileText, Trash2 } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
@@ -14,21 +12,7 @@ import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 
 const CountUp: React.FC<{ value: number }> = ({ value }) => {
-  const reduce = useReducedMotion();
-  const [display, setDisplay] = useState(reduce ? value : 0);
-  useEffect(() => {
-    if (reduce) {
-      setDisplay(value);
-      return;
-    }
-    const controls = animate(0, value, {
-      duration: 0.8,
-      ease: "easeOut",
-      onUpdate: latest => setDisplay(Math.round(latest))
-    });
-    return () => controls.stop();
-  }, [value, reduce]);
-  return <>{display}</>;
+  return <>{value}</>;
 };
 
 export const SummaryGradesPage: React.FC = () => {
@@ -162,8 +146,8 @@ export const SummaryGradesPage: React.FC = () => {
             </Button>
           </div>
         ) : (
-          <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-6">
-            {summaryGrades.map((group, index) => <motion.div key={index} variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-5">
+          <div className="space-y-6">
+            {summaryGrades.map((group, index) => <div key={index} className="rounded-xl border border-border bg-bg-surface p-5">
                 <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted mb-4 flex items-center gap-2">
                   <FileText className="w-3.5 h-3.5 text-primary" />
                   {group.name}
@@ -210,8 +194,8 @@ export const SummaryGradesPage: React.FC = () => {
                       </div>;
             })}
                 </div>
-              </motion.div>)}
-          </motion.div>
+              </div>)}
+          </div>
         )}
       </div>
 

@@ -3,14 +3,26 @@ import { ArrowRight, BarChart3, BookOpen, CheckCircle2, Compass, Layers3, Play, 
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { usePersonalLearning } from "../../components/learning/PersonalLearningProvider";
+import { getLearningContentState } from "../../lib/learningContentState";
 
 export const PersonalCourseDashboard: React.FC = () => {
-  const { currentCourse, loading } = usePersonalLearning();
+  const { currentCourse, loading, error, refresh } = usePersonalLearning();
   const navigate = useNavigate();
   const { i18n } = useTranslation();
   const uk = !i18n.language?.startsWith("en");
-  if (loading) return <div className="mx-auto max-w-6xl px-4 py-16 text-sm text-[#718078]">{uk ? "Завантажуємо навчальний простір…" : "Loading your learning space…"}</div>;
-  if (!currentCourse) return <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-10"><div className="rounded-[28px] border border-primary/25 bg-[#0d2519] p-8 text-white sm:p-12"><div className="flex size-12 items-center justify-center rounded-2xl bg-primary/15 text-[var(--brand-mint)]"><Compass /></div><p className="mt-6 text-xs font-bold uppercase tracking-[.2em] text-[var(--brand-mint)]">{uk ? "Твій навчальний простір" : "Your learning space"}</p><h1 className="mt-3 max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl">{uk ? "Обери перший курс і почни навчання." : "Choose your first course and start learning."}</h1><p className="mt-4 max-w-xl text-base leading-7 text-[#b7d1c0]">{uk ? "Курс поєднує теорію, практику й прогрес в одному плані." : "A course combines theory, practice, and progress in one plan."}</p><button type="button" onClick={() => navigate("/learning/catalog")} className="mt-8 inline-flex items-center gap-2 rounded-xl bg-[#eff7f1] px-5 py-3 font-bold text-[#122219]">{uk ? "Відкрити каталог" : "Browse courses"}<ArrowRight className="size-4" /></button></div></section>;
+  const contentState = getLearningContentState({ loading, hasError: Boolean(error), hasData: Boolean(currentCourse) });
+  if (contentState === "loading") return <div className="mx-auto max-w-6xl px-4 py-16 text-sm text-[#718078]" role="status" aria-live="polite">{uk ? "Завантажуємо навчальний простір…" : "Loading your learning space…"}</div>;
+  if (contentState === "error") return <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-10" aria-labelledby="learning-load-error">
+    <section className="rounded-3xl border border-accent-error/30 bg-accent-error/5 p-6 sm:p-8" role="alert">
+      <h1 id="learning-load-error" className="text-xl font-bold">{uk ? "Не вдалося завантажити навчальний простір" : "We couldn’t load your learning space"}</h1>
+      <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">{uk ? "Перевір з’єднання й спробуй ще раз. Ми не змінювали твої дані." : "Check your connection and try again. Your data has not been changed."}</p>
+      <button type="button" onClick={() => void refresh()} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+        <ArrowRight className="size-4" aria-hidden="true" />{uk ? "Повторити" : "Try again"}
+      </button>
+    </section>
+  </main>;
+  if (contentState === "empty") return <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:px-10"><div className="rounded-[28px] border border-primary/25 bg-[#0d2519] p-8 text-white sm:p-12"><div className="flex size-12 items-center justify-center rounded-2xl bg-primary/15 text-[var(--brand-mint)]"><Compass /></div><p className="mt-6 text-xs font-bold uppercase tracking-[.2em] text-[var(--brand-mint)]">{uk ? "Твій навчальний простір" : "Your learning space"}</p><h1 className="mt-3 max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl">{uk ? "Обери перший курс і почни навчання." : "Choose your first course and start learning."}</h1><p className="mt-4 max-w-xl text-base leading-7 text-[#b7d1c0]">{uk ? "Курс поєднує теорію, практику й прогрес в одному плані." : "A course combines theory, practice, and progress in one plan."}</p><button type="button" onClick={() => navigate("/learning/catalog")} className="mt-8 inline-flex items-center gap-2 rounded-xl bg-[#eff7f1] px-5 py-3 font-bold text-[#122219]">{uk ? "Відкрити каталог" : "Browse courses"}<ArrowRight className="size-4" /></button></div></section>;
+  if (!currentCourse) return null;
   const next = currentCourse.nextAction;
   const nextIsPractice = next?.kind === "CODE_TASK";
   const allItems = currentCourse.modules.flatMap((module) => module.items.map((item) => ({ ...item, moduleTitle: module.title })));
@@ -30,6 +42,13 @@ export const PersonalCourseDashboard: React.FC = () => {
         ? (uk ? "Мініпроєкт" : "Mini-project")
         : (uk ? "Етап курсу" : "Course step");
   return <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+    {contentState === "refreshing" ? <div className="mb-5 text-sm text-text-secondary" role="status" aria-live="polite">{uk ? "Оновлюємо навчальні дані. Поки показано останній курс." : "Refreshing learning data. Showing your latest course for now."}</div> : null}
+    {error ? <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-accent-error/30 bg-accent-error/5 px-4 py-3 text-sm" role="status">
+      <span className="text-text-secondary">{uk ? "Не вдалося оновити навчальні дані. Показано останні завантажені дані." : "We couldn’t refresh your learning data. Showing the last loaded data."}</span>
+      <button type="button" onClick={() => void refresh()} className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 font-semibold text-primary-strong hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        {uk ? "Повторити" : "Retry"}
+      </button>
+    </div> : null}
     <section className="rounded-[28px] border border-primary/25 bg-[#0d2519] p-7 text-white shadow-[0_24px_70px_-42px_rgba(0,200,117,.7)] sm:p-10">
       <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end"><div><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.2em] text-[var(--brand-mint)]"><Sparkles className="size-4" />{uk ? "Поточний курс" : "Current course"}</p><h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">{currentCourse.title}</h1><p className="mt-3 max-w-2xl text-base leading-7 text-[#b7d1c0]">{currentCourse.description || (uk ? "Послідовний маршрут із теорії та практики." : "A focused path through theory and practice.")}</p></div><div className="min-w-[220px] rounded-2xl border border-white/10 bg-black/10 p-4"><div className="flex items-center justify-between text-sm font-semibold"><span>{uk ? "Загальний прогрес" : "Overall progress"}</span><span>{Math.round(currentCourse.enrollment.completionPercent)}%</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-primary" style={{ width: `${currentCourse.enrollment.completionPercent}%` }} /></div><p className="mt-3 text-xs text-[#9eb9a8]">{currentCourse.modules.length} {uk ? "модулів у маршруті" : "modules in your path"}</p></div></div>
       <div className="mt-9 flex flex-wrap gap-3"><button type="button" onClick={() => next ? navigate(nextIsPractice ? `/learning/course/${currentCourse.id}/practice/${next.itemId}` : `/learning/course/${currentCourse.id}/path`) : navigate(`/learning/course/${currentCourse.id}/path`)} className="inline-flex items-center gap-2 rounded-xl bg-[#eff7f1] px-5 py-3 font-bold text-[#122219]"><Play className="size-4 fill-current" />{next ? (uk ? "Продовжити навчання" : "Continue learning") : (uk ? "Переглянути маршрут" : "View path")}<ArrowRight className="size-4" /></button><button type="button" onClick={() => navigate(`/learning/course/${currentCourse.id}/path`)} className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-5 py-3 font-semibold text-[#e1f1e6]">{uk ? "Відкрити маршрут" : "Open path"}</button></div>

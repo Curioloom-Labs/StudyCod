@@ -100,7 +100,7 @@ export const ContestDashboard: React.FC<ContestDashboardProps> = ({ title, start
           </div>
 
           <div className="mt-2 flex items-center gap-2 text-xs text-text-secondary">
-            <Activity className="w-4 h-4 text-primary animate-pulse" />
+            <Activity className="w-4 h-4 text-primary" />
             {tr("Пульс живого розв'язання", "Live solving pulse")}
           </div>
         </div>

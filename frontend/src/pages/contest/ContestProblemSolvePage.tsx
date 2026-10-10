@@ -791,19 +791,23 @@ export const ContestProblemSolvePage: React.FC = () => {
         trace={trace}
         tracing={tracing}
         onTrace={doTrace}
-        toolbar={(
+        toolbarStatus={(
           <>
-            <span className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-[#a7b5aa]" title={wsStatus === "connected" ? "Live updates connected" : "Live updates reconnect automatically"}>
-              <span className={`size-1.5 rounded-full ${wsStatus === "connected" ? "bg-primary" : wsStatus === "connecting" ? "animate-pulse bg-[#ffb454]" : "bg-[#82968a]"}`} />
-              {wsStatus === "connected" ? "LIVE" : wsStatus === "connecting" ? "SYNC" : "OFFLINE"}
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-[#a7b5aa]" title={wsStatus === "connected" ? "Оновлення підключено" : "Перепідключення відбувається автоматично"}>
+              <span className={`size-1.5 rounded-full ${wsStatus === "connected" ? "bg-primary" : wsStatus === "connecting" ? "bg-[#ffb454]" : "bg-[#82968a]"}`} />
+              {wsStatus === "connected" ? "НА ЗВ’ЯЗКУ" : wsStatus === "connecting" ? "СИНХРОНІЗАЦІЯ" : "ОФЛАЙН"}
             </span>
             {contestMeta.endsAt ? <span className="hidden h-8 items-center rounded-lg border border-white/10 px-2 text-[10px] font-semibold text-[#a7b5aa] xl:inline-flex" title="Час завершення контесту">До {new Date(contestMeta.endsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span> : null}
-            {latestVerdict ? <span className="inline-flex h-8 max-w-28 items-center truncate rounded-lg border border-white/10 px-2 text-[10px] font-bold text-[#c8d6cc]" title={latestVerdictAt ? `Updated ${new Date(latestVerdictAt).toLocaleTimeString()}` : "Latest verdict"}>{latestVerdict}</span> : null}
-            {subsLoading ? <span className="hidden text-[10px] text-[#82968a] xl:inline">Syncing…</span> : null}
-            <Link to={`/contest/contests/${contestId}/scoreboard`} className="grid size-8 place-items-center rounded-lg border border-white/10 text-[#c8d6cc] transition hover:border-[#ffb454]/30 hover:bg-[#ffb454]/10 hover:text-[#ffca7e]" aria-label="Таблиця контесту" title="Таблиця контесту">
+            {latestVerdict ? <span className="inline-flex h-8 max-w-28 items-center truncate rounded-lg border border-white/10 px-2 text-[10px] font-bold text-[#c8d6cc]" title={latestVerdictAt ? `Оновлено ${new Date(latestVerdictAt).toLocaleTimeString()}` : "Останній результат"}>{latestVerdict}</span> : null}
+            {subsLoading ? <span className="hidden text-[10px] text-[#82968a] xl:inline">Синхронізація…</span> : null}
+          </>
+        )}
+        toolbar={(
+          <>
+            <Link to={`/contest/contests/${contestId}/scoreboard`} className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-white/10 text-[#c8d6cc] transition hover:border-[#ffb454]/30 hover:bg-[#ffb454]/10 hover:text-[#ffca7e]" aria-label="Таблиця контесту" title="Таблиця контесту">
               <Trophy className="size-3.5" />
             </Link>
-            {hasToken ? <button type="button" onClick={() => { setOrganizerQuestionSent(false); setOrganizerDialogOpen(true); }} className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 px-2 text-[10px] font-semibold text-[#c8d6cc] transition hover:bg-white/[.06]" title="Поставити питання організатору"><MessageSquareText className="size-3.5" /><span className="hidden xl:inline">Організатор</span></button> : null}
+            {hasToken ? <button type="button" onClick={() => { setOrganizerQuestionSent(false); setOrganizerDialogOpen(true); }} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-white/10 px-3 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.06]" title="Поставити питання організатору"><MessageSquareText className="size-3.5" /><span>Організатор</span></button> : null}
           </>
         )}
       />

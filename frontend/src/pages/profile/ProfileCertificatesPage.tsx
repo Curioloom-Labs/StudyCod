@@ -47,7 +47,7 @@ export const ProfileCertificatesPage: React.FC = () => {
 
   return (
     <div className="min-h-[100dvh] bg-bg-base text-text-primary">
-      <main className="mx-auto flex min-h-[100dvh] max-w-6xl flex-col px-4 py-7 sm:px-6 lg:px-10 lg:py-10">
+      <section className="mx-auto flex min-h-[100dvh] max-w-6xl flex-col px-4 py-7 sm:px-6 lg:px-10 lg:py-10">
         <ProfileSectionNav
           active="certificates"
           className="mb-6"
@@ -138,7 +138,7 @@ export const ProfileCertificatesPage: React.FC = () => {
             </div>
           )}
         </section>
-      </main>
+      </section>
     </div>
   );
 };

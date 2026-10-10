@@ -919,7 +919,7 @@ const AppContent: React.FC = React.memo(() => {
       onToggleTheme={toggleTheme}
       onLogout={handleLogout}
     >
-      <main id="main-content" className="min-h-0 overflow-y-auto">
+      <main id="main-content" tabIndex={-1} className="min-h-0 overflow-y-auto outline-none">
         <Suspense fallback={<PageLoader />}>
           <AdminWorkspacePage />
         </Suspense>
@@ -936,7 +936,7 @@ const AppContent: React.FC = React.memo(() => {
     onToggleTheme={toggleTheme}
     onLogout={handleLogout}
   >
-    <main id="main-content" className="min-h-0 overflow-y-auto">{content}</main>
+    <main id="main-content" tabIndex={-1} className="min-h-0 overflow-y-auto outline-none">{content}</main>
     <Suspense fallback={null}>
       <PlacementEntry user={user} onUserChange={setUser} />
     </Suspense>
@@ -1553,7 +1553,7 @@ const ContestRoutes: React.FC = React.memo(() => {
     navigate("/contest", { replace: true });
     window.location.reload();
   };
-  const content = <div id="main-content" className="relative min-w-0 overflow-x-clip">
+  const content = <main id="main-content" tabIndex={-1} className="relative min-w-0 overflow-x-clip outline-none">
         <Suspense fallback={<ContestRouteFallback />}>
           <PageMotionScope.Provider value={false}>
           <AnimatePresence mode="sync" initial={false}>
@@ -1573,7 +1573,7 @@ const ContestRoutes: React.FC = React.memo(() => {
           </AnimatePresence>
           </PageMotionScope.Provider>
         </Suspense>
-      </div>;
+      </main>;
 
   if (user.userMode === "EDUCATIONAL") {
     return <PremiumModuleShell product="EDU" user={user} theme={theme} currentPath={location.pathname} onNavigate={goTo} onToggleTheme={toggleTheme} onLogout={logout} onEduContextChange={async (studentId) => {
@@ -1857,7 +1857,7 @@ const EduRoutes: React.FC = React.memo(() => {
   const teacherOnly = (element: React.ReactElement) => user.studentId ? <Navigate to="/edu/lessons" replace /> : element;
   const orgAdminOnly = (element: React.ReactElement) => isOrgAdmin ? element : <Navigate to="/edu" replace />;
   const studentOnly = (element: React.ReactElement) => user.studentId ? element : <Navigate to="/edu" replace />;
-  const eduMain = <main id="main-content" className={`relative flex-1 min-h-0 flex flex-col ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
+  const eduMain = <div id="main-content" tabIndex={-1} className={`relative flex-1 min-h-0 flex flex-col outline-none ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
         <PageMotionScope.Provider value={false}>
         <AnimatePresence mode="sync" initial={false}>
@@ -1911,7 +1911,7 @@ const EduRoutes: React.FC = React.memo(() => {
         </AnimatePresence>
         </PageMotionScope.Provider>
       </Suspense>
-    </main>;
+  </div>;
 
   return <PremiumModuleShell
       product="EDU"

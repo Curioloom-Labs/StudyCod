@@ -252,7 +252,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
               type="button"
               onClick={onToggleTheme}
               data-motion-press
-              className="grid size-9 place-items-center rounded-xl text-text-muted transition motion-safe:active:scale-[.97] hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.07]"
+              className="grid size-9 max-md:size-11 place-items-center rounded-xl text-text-muted transition motion-safe:active:scale-[.97] hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.07]"
               aria-label={theme === "dark" ? (uk ? "Перемкнути на світлу тему" : "Switch to light theme") : (uk ? "Перемкнути на темну тему" : "Switch to dark theme")}
             >
               {theme === "dark" ? (
@@ -423,9 +423,9 @@ export const PremiumModuleShell: React.FC<Props> = ({
           </div>
         </nav>
       )}
-      <main className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0">
+      <div className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] md:pb-0">
         {children}
-      </main>
+      </div>
       {!navigationHidden && !isContestOnly && <PlatformFooter />}
     </div>
   );

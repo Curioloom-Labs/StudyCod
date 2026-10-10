@@ -190,7 +190,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
             <button type="button" onClick={() => navigateTo("/support")} className="hidden size-10 place-items-center rounded-xl text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white sm:grid" aria-label={ukrainian ? "Підтримка" : "Support"}>
               <HelpCircle className="size-[18px]" />
             </button>
-            <button type="button" onClick={toggleTheme} className="grid size-10 place-items-center rounded-xl text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white" aria-label={theme === "dark" ? (ukrainian ? "Увімкнути світлу тему" : "Switch to light theme") : (ukrainian ? "Увімкнути темну тему" : "Switch to dark theme")}>
+            <button type="button" onClick={toggleTheme} className="grid size-10 max-lg:size-11 place-items-center rounded-xl text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white" aria-label={theme === "dark" ? (ukrainian ? "Увімкнути світлу тему" : "Switch to light theme") : (ukrainian ? "Увімкнути темну тему" : "Switch to dark theme")}>
               {theme === "dark" ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
             </button>
             <div className="relative hidden sm:block" ref={accountRef}>
@@ -236,7 +236,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
                 </div>
               ) : null}
             </div>
-            <button type="button" onClick={() => setMobileOpen(true)} className="grid size-10 place-items-center rounded-xl text-[#627166] transition hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.07] lg:hidden" aria-label={ukrainian ? "Відкрити навігацію" : "Open navigation"}>
+            <button type="button" onClick={() => setMobileOpen(true)} className="grid size-10 max-lg:size-11 place-items-center rounded-xl text-[#627166] transition hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.07] lg:hidden" aria-label={ukrainian ? "Відкрити навігацію" : "Open navigation"}>
               <Menu className="size-5" />
             </button>
           </div>
@@ -248,7 +248,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
           <div data-material="standalone-drawer" className="flex max-h-[85dvh] w-full flex-col overflow-y-auto rounded-[28px] border border-border/70 bg-bg-surface p-5 shadow-[var(--ui-modal-shadow)]" role="dialog" aria-modal="true" aria-label={ukrainian ? "Мобільна навігація" : "Mobile navigation"} tabIndex={-1}>
             <div className="flex items-center justify-between">
               <span className="font-[family-name:var(--font-display)] text-xl font-bold tracking-[-.05em]">StudyCod</span>
-              <button type="button" onClick={() => setMobileOpen(false)} aria-label={ukrainian ? "Закрити навігацію" : "Close navigation"} className="grid size-10 place-items-center rounded-xl bg-bg-hover">
+              <button type="button" onClick={() => setMobileOpen(false)} aria-label={ukrainian ? "Закрити навігацію" : "Close navigation"} className="grid size-10 max-lg:size-11 place-items-center rounded-xl bg-bg-hover">
                 <X className="size-5" />
               </button>
             </div>
@@ -270,7 +270,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
         </div>
       ) : null}
 
-      <main id="main-content" className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
+      <main id="main-content" tabIndex={-1} className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] outline-none lg:pb-0">{children}</main>
       <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/70 bg-bg-base/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl lg:hidden" aria-label={ukrainian ? "Мобільна навігація" : "Mobile navigation"}>
         <div className="grid grid-cols-5 gap-1">
           {[
