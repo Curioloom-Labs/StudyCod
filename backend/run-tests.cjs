@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { randomBytes } = require("node:crypto");
 
 function findTestFiles(directory) {
   const files = [];
@@ -30,7 +31,13 @@ if (testFiles.length === 0) {
 // runner does not need it, so this wrapper intentionally discovers files and
 // invokes Node directly without relying on shell-specific glob expansion.
 const result = spawnSync(process.execPath, ["--test", ...testFiles], {
-  env: process.env,
+  // Each test run gets its own signing key before application config is loaded.
+  // Never depend on a developer's .env or pass a production signing key to tests.
+  env: {
+    ...process.env,
+    NODE_ENV: "test",
+    JWT_SECRET: randomBytes(32).toString("hex"),
+  },
   stdio: "inherit",
 });
 
