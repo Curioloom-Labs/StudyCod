@@ -158,7 +158,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
             aria-label={isAdmin ? (uk ? "На головну адмінки StudyCod" : "Go to StudyCod admin home") : (uk ? "На головну сторінку StudyCod" : "Go to StudyCod home")}
             title={isAdmin ? (uk ? "Головна адмінки" : "Admin home") : (uk ? "На головну" : "Home")}
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-strong text-primary-foreground">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#173423]">
               <Logo size={19} />
             </span>
             <span className="hidden font-[family-name:var(--font-display)] text-lg font-bold tracking-[-.04em] xl:inline">StudyCod</span>

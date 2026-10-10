@@ -19,7 +19,7 @@ export const Header: React.FC<Props> = ({
   return <header className="h-16 border-b border-border bg-bg-surface flex items-center justify-between px-6 flex-shrink-0">
       <div className="flex items-center gap-4">
         <button type="button" onClick={() => onNavigate("home")} className="flex items-center gap-2 hover:opacity-80 transition-fast">
-          <Logo size={24} className="text-primary-strong" />
+          <span className="grid size-9 place-items-center rounded-xl bg-[#173423]"><Logo size={22} /></span>
           <span className="text-lg font-mono text-text-primary">StudyCod</span>
         </button>
         <div className="h-6 w-px bg-border" />

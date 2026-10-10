@@ -166,7 +166,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
       <header className="sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl">
         <div className="mx-auto flex h-[72px] max-w-[1500px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-9">
           <button type="button" onClick={() => navigateTo(education ? (shellUser.studentId ? "/edu/lessons" : "/edu") : "/")} className="flex shrink-0 items-center gap-2.5 text-left">
-            <span className="grid size-10 place-items-center rounded-[14px] bg-primary-strong text-primary-foreground shadow-sm">
+            <span className="grid size-10 place-items-center rounded-[14px] bg-[#173423] shadow-sm">
               <Logo size={20} />
             </span>
             <span className="hidden font-[family-name:var(--font-display)] text-[19px] font-bold tracking-[-.055em] xl:inline">StudyCod</span>

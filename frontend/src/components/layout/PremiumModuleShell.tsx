@@ -218,7 +218,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
             onClick={() => !navigationHidden && onNavigate(productHome)}
             className="flex items-center gap-2.5"
           >
-            <span className="grid size-9 place-items-center rounded-xl bg-primary-strong text-primary-foreground">
+            <span className="grid size-9 place-items-center rounded-xl bg-[#173423]">
               <Logo size={19} />
             </span>
             <span className="font-[family-name:var(--font-display)] text-lg font-bold tracking-[-.04em]">

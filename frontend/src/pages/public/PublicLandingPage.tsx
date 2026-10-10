@@ -96,7 +96,7 @@ const LegacyDashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
   <div className="relative overflow-hidden rounded-[26px] border border-[#132319]/15 bg-white text-left shadow-[0_48px_110px_rgba(21,40,27,0.15),0_9px_28px_rgba(21,40,27,0.07)]">
     <div className="grid h-[60px] grid-cols-[1fr_1.25fr_1fr] items-center border-b border-border/10 bg-[#fcfdfb] px-5 max-md:grid-cols-[1fr_auto]">
       <div className="flex items-center gap-2.5 text-[13px] font-bold tracking-tight">
-        <span className="grid size-7 place-items-center rounded-lg bg-bg-hover text-text-primary"><Logo size={18} /></span>
+        <span className="grid size-7 place-items-center rounded-lg bg-[#173423]"><Logo size={18} /></span>
         StudyCod
       </div>
       <div className="flex h-8 items-center justify-between rounded-[10px] border border-border/10 bg-bg-base px-3 text-[10px] text-text-muted max-md:hidden">
