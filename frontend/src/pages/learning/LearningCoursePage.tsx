@@ -27,6 +27,7 @@ import { MarkdownView } from "../../components/MarkdownView";
 import { Modal } from "../../components/ui/Modal";
 import { tr } from "../../i18n";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { withDevPreview } from "../../lib/devPreview";
 
 type RoadmapNode = {
   id: string;
@@ -285,7 +286,7 @@ export const LearningCoursePage: React.FC = () => {
   React.useEffect(() => {
     if (loading || !course || !focusPractice) return;
     if (nextPracticeItem) {
-      navigate(`/learning/course/${course.id}/practice/${nextPracticeItem.id}`, { replace: true });
+      navigate(withDevPreview(`/learning/course/${course.id}/practice/${nextPracticeItem.id}`), { replace: true });
     } else {
       setMessage(tr("Усі практичні завдання курсу вже завершені.", "All course practice tasks are already completed."));
     }
@@ -304,7 +305,7 @@ export const LearningCoursePage: React.FC = () => {
         setError(tr("Спочатку прочитай і заверши теорію цієї теми.", "Read and complete this topic's theory first."));
         return;
       }
-      navigate(`/learning/course/${course?.id ?? ""}/practice/${item.id}`);
+      navigate(withDevPreview(`/learning/course/${course?.id ?? ""}/practice/${item.id}`));
       return;
     }
     setBusyItem(item.id);
@@ -345,7 +346,7 @@ export const LearningCoursePage: React.FC = () => {
 
     if (nodeCompleted(node)) return;
     if (node.kind === "PROJECT" && node.item) {
-      navigate(`/learning/course/${course.id}/practice/${node.item.id}`);
+      navigate(withDevPreview(`/learning/course/${course.id}/practice/${node.item.id}`));
       return;
     }
     if (node.kind === "MILESTONE") setSelectedNodeId(node.id);
@@ -362,7 +363,7 @@ export const LearningCoursePage: React.FC = () => {
   const selectedItem = selectedNode?.kind === "MILESTONE" ? selectedNode.item : undefined;
 
   if (loading) return <div role="status" aria-live="polite" className="mx-auto max-w-5xl px-6 py-16 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо курс…", "Loading course…")}</div>;
-  if (error && !course) return <main className="mx-auto max-w-3xl px-6 py-12"><button type="button" onClick={() => navigate("/learning/catalog")} className="mb-8 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button><div role="alert" className="rounded-2xl border border-accent-error/30 bg-accent-error/10 p-5 text-sm text-accent-error"><p>{error}</p><button type="button" onClick={() => void load()} className="mt-4 rounded-xl border border-current px-4 py-2 font-bold">{tr("Повторити", "Retry")}</button></div></main>;
+  if (error && !course) return <main className="mx-auto max-w-3xl px-6 py-12"><button type="button" onClick={() => navigate(withDevPreview("/learning/catalog"))} className="mb-8 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button><div role="alert" className="rounded-2xl border border-accent-error/30 bg-accent-error/10 p-5 text-sm text-accent-error"><p>{error}</p><button type="button" onClick={() => void load()} className="mt-4 rounded-xl border border-current px-4 py-2 font-bold">{tr("Повторити", "Retry")}</button></div></main>;
   if (!course) return null;
 
   const roadmapWavePath = "M50 0 C28 16 28 34 50 50 C72 66 72 84 50 100";
@@ -373,11 +374,11 @@ export const LearningCoursePage: React.FC = () => {
 
   return <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
     <nav aria-label={tr("Навігація курсу", "Course navigation")} className="mb-5 flex flex-wrap items-center gap-2 text-xs font-semibold text-text-secondary">
-      <button type="button" onClick={() => navigate("/learning/catalog")} className="rounded-lg px-2 py-1 transition hover:bg-bg-hover hover:text-text-primary">{tr("Каталог", "Catalog")}</button>
+      <button type="button" onClick={() => navigate(withDevPreview("/learning/catalog"))} className="rounded-lg px-2 py-1 transition hover:bg-bg-hover hover:text-text-primary">{tr("Каталог", "Catalog")}</button>
       <span aria-hidden="true">/</span>
       <span className="max-w-[min(70vw,32rem)] truncate text-text-primary">{course.title}</span>
     </nav>
-    <button type="button" onClick={() => navigate("/learning/catalog")} className="mb-7 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button>
+    <button type="button" onClick={() => navigate(withDevPreview("/learning/catalog"))} className="mb-7 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button>
 
     {!courseIsActive ? <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-primary/[.05] p-4"><div><p className="font-bold text-text-primary">{tr("Цей курс ще не активовано", "This course is not active yet")}</p><p className="mt-1 text-sm text-text-secondary">{tr("Активація відкриє теорію, послідовний roadmap і контекстну практику.", "Activation unlocks theory, the ordered roadmap, and course-scoped practice.")}</p></div><button type="button" disabled={activating} onClick={() => void activateCourse()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{activating ? tr("Активуємо…", "Activating…") : tr("Активувати курс", "Activate course")}</button></div> : null}
     {message && <div role="status" aria-live="polite" className="mb-6 rounded-2xl border border-primary/25 bg-primary/[.05] px-4 py-3 text-sm text-primary">{message}</div>}
@@ -502,11 +503,11 @@ export const LearningCoursePage: React.FC = () => {
           })}
         </div>
 
-        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5"><p className="text-xs leading-5 text-text-secondary">{tr("Оцінка теми формується з її елементів. Невдала спроба зменшує результат, але не відкриває наступну тему.", "The topic result is built from its items. A failed attempt lowers the result without unlocking the next topic.")}</p>{selectedTopicPractice && course && <button type="button" onClick={() => { const generate = selectedTopicPractice.progress.status !== "COMPLETED" ? "?generate=1" : ""; setSelectedNodeId(null); navigate(`/learning/course/${course.id}/practice/${selectedTopicPractice.id}${generate}`); }} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-white"><Play className="size-4" />{selectedTopicPractice.progress.status === "COMPLETED" ? tr("Переглянути практику", "View practice") : tr("Продовжити тему", "Continue topic")}<ArrowLeft className="size-4 rotate-180" /></button>}</div>
+        <div className="mt-7 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5"><p className="text-xs leading-5 text-text-secondary">{tr("Оцінка теми формується з її елементів. Невдала спроба зменшує результат, але не відкриває наступну тему.", "The topic result is built from its items. A failed attempt lowers the result without unlocking the next topic.")}</p>{selectedTopicPractice && course && <button type="button" onClick={() => { const generate = selectedTopicPractice.progress.status !== "COMPLETED" ? "?generate=1" : ""; setSelectedNodeId(null); navigate(withDevPreview(`/learning/course/${course.id}/practice/${selectedTopicPractice.id}${generate}`)); }} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-white"><Play className="size-4" />{selectedTopicPractice.progress.status === "COMPLETED" ? tr("Переглянути практику", "View practice") : tr("Продовжити тему", "Continue topic")}<ArrowLeft className="size-4 rotate-180" /></button>}</div>
       </div>}
     </Modal>
 
-    <section className="mt-6 rounded-2xl border border-border bg-bg-surface p-6"><div className="flex items-start gap-3"><ClipboardCheck className="mt-1 size-5 text-primary" /><div className="flex-1"><h2 className="text-xl font-bold text-text-primary">{tr("Фінальна робота", "Final work")}</h2><p className="mt-2 text-sm leading-6 text-text-secondary">{finalWork?.progress.status === "COMPLETED" ? tr("Фінальну роботу подано. Курс завершено.", "The final work was submitted. The course is complete.") : `${learningItemsCompleted} / ${learningItems.length} ${tr("навчальних елементів завершено", "learning items completed")}. ${tr("Заверши маршрут, потім відкрий фінальну роботу у вкладці практики.", "Complete the path, then open the final work in the Practice tab.")}`}</p>{finalWork && finalWork.progress.status !== "COMPLETED" && <button type="button" disabled={!canStartFinalWork} onClick={() => navigate(`/learning/course/${course.id}/practice/${finalWork.id}`)} className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-45">{canStartFinalWork ? tr("Відкрити фінальну роботу", "Open final work") : tr("Заверши маршрут спочатку", "Complete the path first")}</button>}</div></div></section>
+    <section className="mt-6 rounded-2xl border border-border bg-bg-surface p-6"><div className="flex items-start gap-3"><ClipboardCheck className="mt-1 size-5 text-primary" /><div className="flex-1"><h2 className="text-xl font-bold text-text-primary">{tr("Фінальна робота", "Final work")}</h2><p className="mt-2 text-sm leading-6 text-text-secondary">{finalWork?.progress.status === "COMPLETED" ? tr("Фінальну роботу подано. Курс завершено.", "The final work was submitted. The course is complete.") : `${learningItemsCompleted} / ${learningItems.length} ${tr("навчальних елементів завершено", "learning items completed")}. ${tr("Заверши маршрут, потім відкрий фінальну роботу у вкладці практики.", "Complete the path, then open the final work in the Practice tab.")}`}</p>{finalWork && finalWork.progress.status !== "COMPLETED" && <button type="button" disabled={!canStartFinalWork} onClick={() => navigate(withDevPreview(`/learning/course/${course.id}/practice/${finalWork.id}`))} className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-45">{canStartFinalWork ? tr("Відкрити фінальну роботу", "Open final work") : tr("Заверши маршрут спочатку", "Complete the path first")}</button>}</div></div></section>
   </main>;
 };
 

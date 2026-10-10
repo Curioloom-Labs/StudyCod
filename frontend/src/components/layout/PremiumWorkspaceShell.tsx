@@ -7,6 +7,7 @@ import {
   CircleUserRound,
   HelpCircle,
   Home,
+  Languages,
   Library,
   LogOut,
   Moon,
@@ -22,6 +23,8 @@ import type { AppTheme } from "../../theme";
 import { usePersonalLearning } from "../learning/PersonalLearningProvider";
 import { SelectMenu } from "../ui/SelectMenu";
 import { DialogA11yObserver } from "../ui/DialogA11yObserver";
+import { WorkspaceTopNavigation } from "./WorkspaceTopNavigation";
+import { withDevPreview } from "../../lib/devPreview";
 
 type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "student" | "admin";
 type NavId = Page | "library" | "playground" | "contests";
@@ -141,34 +144,38 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   };
   const hasSupportDesk = user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN";
   const isAdmin = user.role === "SYSTEM_ADMIN";
-  const workspaceSectionLabel = page === "admin"
-    ? (uk ? "Адміністрування" : "Administration")
-    : area === "contest"
-      ? (uk ? "Контести" : "Contests")
-      : area === "lab"
-        ? (uk ? "Практика" : "Practice")
-        : (uk ? "Навчання" : "Learning");
-
+  const showCourseNavigation = area === "learning" && page !== "admin" && Boolean(learning.currentCourse);
   return (
-    <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary">
+    <div ref={shellRef} className={`mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary ${showCourseNavigation ? "has-course-context" : ""}`}>
       <a className="skip-link" href="#main-content">{uk ? "Перейти до основного вмісту" : "Skip to main content"}</a>
       <DialogA11yObserver rootRef={shellRef} />
       <header data-material="premium-header" className="sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl">
-        <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-10">
+        <div className="mx-auto flex h-14 max-w-[1600px] items-center justify-between gap-2 px-3 max-[360px]:gap-1 max-[360px]:px-2 sm:h-16 sm:px-6 lg:px-8">
           <button
             type="button"
             onClick={() => onNavigate("home")}
-            className="flex shrink-0 items-center gap-2.5 text-left"
+            className="flex min-h-11 shrink-0 items-center gap-2.5 text-left max-[360px]:gap-1.5"
             aria-label={isAdmin ? (uk ? "На головну адмінки StudyCod" : "Go to StudyCod admin home") : (uk ? "На головну сторінку StudyCod" : "Go to StudyCod home")}
             title={isAdmin ? (uk ? "Головна адмінки" : "Admin home") : (uk ? "На головну" : "Home")}
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#173423]">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#173423] max-[360px]:h-8 max-[360px]:w-8">
               <Logo size={19} />
             </span>
-            <span className="hidden font-[family-name:var(--font-display)] text-lg font-bold tracking-[-.04em] xl:inline">StudyCod</span>
+            <span className="font-[family-name:var(--font-display)] text-base font-bold tracking-[-.04em] max-[360px]:text-sm sm:text-lg">StudyCod</span>
           </button>
 
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <WorkspaceTopNavigation
+            label={uk ? "Основна навігація" : "Primary navigation"}
+            closeLabel={uk ? "Закрити навігацію" : "Close navigation"}
+            items={nav.map((item) => ({
+              label: item.label,
+              Icon: item.Icon,
+              active: active(item.id),
+              onSelect: () => item.onClick ? item.onClick() : onNavigate(item.id as Page),
+            }))}
+          />
+
+          <div className="flex shrink-0 items-center gap-1.5 max-[360px]:gap-1 sm:gap-2">
             <button
               type="button"
               onClick={onToggleTheme}
@@ -186,11 +193,12 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               type="button"
               onClick={onToggleLanguage}
               data-motion-press
-              className="hidden h-9 rounded-xl px-2.5 text-xs font-semibold text-text-muted transition motion-safe:active:scale-[.97] hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.07] sm:block"
+              className="grid h-9 max-lg:min-h-11 max-lg:min-w-11 place-items-center rounded-xl px-2.5 text-xs font-semibold text-text-muted transition motion-safe:active:scale-[.97] hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.07]"
               aria-label={uk ? "Перемкнути на англійську" : "Switch to Ukrainian"}
               title={uk ? "English" : "Українська"}
             >
-              {uk ? "EN" : "UA"}
+              <Languages className="size-4 sm:hidden" aria-hidden="true" />
+              <span className="hidden sm:inline">{uk ? "EN" : "UA"}</span>
             </button>
 
             <div className="relative" ref={accountRef}>
@@ -223,7 +231,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               </button>
 
               {accountOpen ? (
-                <div ref={accountMenuRef} data-material="account-menu" data-motion-surface className="material-popover absolute right-0 top-[calc(100%+10px)] z-50 w-72 overflow-hidden rounded-2xl border border-border/70 bg-bg-surface p-2 shadow-[var(--ui-modal-shadow)] max-sm:fixed max-sm:inset-x-3 max-sm:bottom-[calc(4.75rem+env(safe-area-inset-bottom)+0.75rem)] max-sm:top-auto max-sm:w-auto max-sm:rounded-3xl max-sm:p-3" role="menu" aria-label={uk ? "Меню акаунта" : "Account menu"} onKeyDown={(event) => {
+                <div ref={accountMenuRef} data-material="account-menu" data-motion-surface className="material-popover absolute right-0 top-[calc(100%+10px)] z-50 w-72 max-w-[calc(100vw-1.25rem)] overflow-hidden rounded-2xl border border-border/70 bg-bg-surface p-2 shadow-[var(--ui-modal-shadow)]" role="menu" aria-label={uk ? "Меню акаунта" : "Account menu"} onKeyDown={(event) => {
                   const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[role='menuitem']"));
                   const currentIndex = items.indexOf(document.activeElement as HTMLElement);
                   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -265,26 +273,9 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
         </div>
 
       </header>
-      <aside data-material="workspace-rail" className="fixed bottom-0 left-0 top-[72px] z-40 hidden w-[68px] flex-col border-r border-border/70 bg-bg-surface/90 py-4 backdrop-blur-xl lg:flex xl:w-[236px]" aria-label={uk ? "Розділи StudyCod" : "StudyCod sections"}>
-        <div className="workspace-rail-heading hidden px-6 pb-3 pt-1 text-[10px] font-bold uppercase tracking-[.16em] text-text-muted xl:block">{workspaceSectionLabel}</div>
-        <nav className="flex flex-col gap-1 overflow-y-auto px-2 xl:px-3" aria-label={uk ? "Основна навігація" : "Primary navigation"}>
-          {nav.map((item) => {
-            const isActive = active(item.id);
-            return <button key={item.id} type="button" onClick={() => item.onClick ? item.onClick() : onNavigate(item.id as Page)} aria-current={isActive ? "page" : undefined} title={item.label} className={`group relative flex h-12 items-center justify-center gap-3 rounded-xl px-2 text-sm font-semibold transition xl:justify-start xl:px-3 ${isActive ? "bg-primary/12 text-primary-strong dark:bg-primary/14 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:text-text-primary"}`}>
-              {isActive ? <span aria-hidden="true" className="absolute bottom-2 left-0 top-2 w-1 rounded-r-full bg-primary" /> : null}
-              <item.Icon className="size-[18px] shrink-0" />
-              <span className="hidden truncate xl:inline">{item.label}</span>
-            </button>;
-          })}
-        </nav>
-        <div className="mt-auto hidden px-6 pb-2 text-xs leading-5 text-text-muted xl:block">
-          <span className="block font-semibold text-text-secondary">StudyCod</span>
-          <span>{uk ? "Навчайся через практику" : "Learn by building"}</span>
-        </div>
-      </aside>
-      <div className="min-w-0 flex-1 lg:ml-[68px] xl:ml-[236px]">
-      {area === "learning" && page !== "admin" && learning.currentCourse ? (
-        <div data-material="premium-course-nav" className="sticky top-[72px] z-40 border-b border-border/70 bg-bg-base/92 backdrop-blur-xl">
+      <div className="min-w-0 flex-1">
+      {showCourseNavigation && learning.currentCourse ? (
+        <div data-material="premium-course-nav" className="sticky top-14 z-40 border-b border-border/70 bg-bg-base/92 backdrop-blur-xl sm:top-16">
           <div className="mx-auto flex max-w-[1440px] items-center gap-3 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-10">
             <SelectMenu
               value={String(learning.me?.currentEnrollmentId ?? "")}
@@ -298,27 +289,16 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               className="shrink-0 border-primary/35 bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"
             />
             <div className="hidden h-5 w-px bg-[#152219]/12 dark:bg-white/10 sm:block" />
-            {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Теми" : "Topics", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: nextPractice ? `/learning/course/${learning.currentCourse.id}/practice/${nextPractice.id}` : `/learning/course/${learning.currentCourse.id}/path` }].map((tab) => <button key={tab.id} type="button" aria-current={courseTab === tab.id ? "page" : undefined} onClick={() => navigate(tab.path)} className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold transition ${courseTab === tab.id ? "bg-primary-strong text-primary-foreground dark:bg-primary/12 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.06]"}`}>{tab.label}</button>)}
+            {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Теми" : "Topics", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: nextPractice ? `/learning/course/${learning.currentCourse.id}/practice/${nextPractice.id}` : `/learning/course/${learning.currentCourse.id}/path` }].map((tab) => <button key={tab.id} type="button" aria-current={courseTab === tab.id ? "page" : undefined} onClick={() => navigate(withDevPreview(tab.path))} className={`min-h-11 shrink-0 rounded-lg px-3 text-sm font-semibold transition ${courseTab === tab.id ? "bg-primary-strong text-primary-foreground dark:bg-primary/12 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.06]"}`}>{tab.label}</button>)}
             <div className="ml-auto hidden items-center gap-2 text-xs font-semibold text-text-muted sm:flex"><span>{Math.round(learning.currentCourse.enrollment.completionPercent)}%</span><span className="h-1.5 w-24 overflow-hidden rounded-full bg-bg-hover"><span className="block h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, learning.currentCourse.enrollment.completionPercent))}%` }} /></span></div>
           </div>
         </div>
       ) : null}
-      <nav data-material="premium-mobile-nav" className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/70 bg-bg-base/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl lg:hidden" aria-label={uk ? "Мобільна навігація" : "Mobile navigation"}>
-        <div className="grid grid-cols-4 gap-1">
-          {[
-            { id: "home" as const, label: nav.find((item) => item.id === "home")?.label ?? "Home", Icon: Home, onClick: () => onNavigate("home") },
-            { id: "contests" as const, label: nav.find((item) => item.id === "contests")?.label ?? "Contests", Icon: Trophy, onClick: onContests ?? (() => navigate("/contest/contests")) },
-            { id: "library" as const, label: nav.find((item) => item.id === "library")?.label ?? "Library", Icon: Library, onClick: onLibrary },
-            { id: "playground" as const, label: nav.find((item) => item.id === "playground")?.label ?? "Playground", Icon: PlaySquare, onClick: onPlayground },
-          ].map(({ id, label, Icon, onClick }) => (
-            <button key={id} type="button" onClick={onClick} aria-current={active(id) ? "page" : undefined} data-motion-press className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition motion-safe:active:scale-[.97] ${active(id) ? "bg-primary-strong text-primary-foreground dark:bg-primary/12 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white"}`}>
-              <Icon className="size-4" />
-              <span className="max-w-full truncate leading-none">{label}</span>
-            </button>
-          ))}
-        </div>
-      </nav>
-      <div id="main-content" tabIndex={-1} className="mobile-app-viewport relative min-w-0 flex-1 overflow-x-clip pb-[calc(4.75rem+env(safe-area-inset-bottom))] outline-none lg:pb-0">{children}</div>
+      {page === "admin" ? (
+        <main id="main-content" tabIndex={-1} className="mobile-app-viewport relative min-w-0 flex-1 overflow-x-clip outline-none">{children}</main>
+      ) : (
+        <div id="main-content" tabIndex={-1} className="mobile-app-viewport relative min-w-0 flex-1 overflow-x-clip outline-none">{children}</div>
+      )}
       <PlatformFooter />
       </div>
     </div>

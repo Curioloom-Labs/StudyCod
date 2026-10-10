@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, Clock3, Download, Edit2, ExternalLink, GripVertical, Library, Play, Plus, Rocket, Search, Send, Share2, Star, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, Clock3, Download, Edit2, ExternalLink, GripVertical, Library, Play, Plus, Rocket, Search, Send, Share2, SlidersHorizontal, Star, Trash2, Upload, X } from "lucide-react";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
@@ -406,7 +406,7 @@ export const TaskLibraryPage: React.FC = () => {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailsTab, setDetailsTab] = useState<"description" | "theory" | "tests">("description");
 
-  const [, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const hydratedFromUrlRef = useRef(false);
   const listSectionRef = useRef<HTMLDivElement | null>(null);
@@ -687,6 +687,12 @@ export const TaskLibraryPage: React.FC = () => {
       setDetails(null);
       return;
     }
+    if (isDesignPreview) {
+      const task = PREVIEW_LIBRARY_TASKS.find((candidate) => candidate.id === selectedId);
+      setDetails(task ? { task, theory: null, tests: [] } : null);
+      setLoadingDetails(false);
+      return;
+    }
     setLoadingDetails(true);
     getLibraryTask(selectedId)
       .then((d) => setDetails(d))
@@ -697,7 +703,7 @@ export const TaskLibraryPage: React.FC = () => {
         // statement and use the solve action instead of seeing an empty pane.
       })
       .finally(() => setLoadingDetails(false));
-  }, [selectedId]);
+  }, [isDesignPreview, selectedId]);
 
   const selectTask = (task: LibraryTaskListItem) => {
     setSelectedId(task.id);
@@ -1656,66 +1662,22 @@ export const TaskLibraryPage: React.FC = () => {
   return (
     <div className="min-h-full bg-bg-base px-4 py-6 text-[#152018] dark:bg-bg-base dark:text-[#eef4ef] sm:px-6 lg:px-10 lg:py-9">
       <div className="mx-auto max-w-7xl space-y-6">
-        <motion.section
-          variants={staggerContainer}
-          initial="initial"
-          animate="animate"
-          className="overflow-hidden rounded-[32px] border border-[#142018]/10 bg-white shadow-[0_24px_70px_-48px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-bg-surface"
-        >
-          <div className="relative p-5 sm:p-7 lg:p-8">
-            <div className="pointer-events-none absolute right-0 top-0 h-full w-2/3 bg-[radial-gradient(circle_at_top_right,rgba(0,255,136,.14),transparent_58%)]" />
-            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-              <motion.div variants={fadeUpItem} className="max-w-3xl">
-                <button
-                  type="button"
-                  onClick={leaveLibrary}
-                  className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#142018]/10 bg-[#f4f7f3] px-4 py-2 text-sm font-semibold text-[#526258] transition hover:bg-[#e9efe9] dark:border-white/10 dark:bg-white/[.04] dark:text-[#b4c0b8] dark:hover:bg-white/[.08]"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  {tr("Назад", "Back")}
-                </button>
-                <div className="inline-flex items-center gap-2 rounded-full bg-[#eaf5ee] px-3 py-1 text-sm font-semibold text-primary-strong dark:bg-primary/10 dark:text-[#73efb0]">
-                  <Library className="h-4 w-4" />
-                  {tr("Бібліотека StudyCod", "StudyCod library")}
-                </div>
-                <h1 className="mt-4 max-w-2xl text-3xl font-semibold tracking-[-0.05em] text-[#121b15] dark:text-white sm:text-4xl lg:text-5xl">
-                  {view === "mine"
-                    ? tr("Керуйте задачами без старого робочого хаосу.", "Manage tasks without the old workspace clutter.")
-                    : tr("Обирайте задачу за навичкою, рівнем і контекстом.", "Pick a task by skill, level, and context.")}
-                </h1>
-                <p className="mt-4 max-w-2xl text-base leading-7 text-[#637267] dark:text-[#a8b5aa]">
-                  {view === "mine"
-                    ? tr(
-                      "Тут зібрані чернетки, задачі на модерації та опубліковані матеріали. Пошук, масові дії й preview лишаються під рукою.",
-                      "Drafts, moderation submissions, and published materials live here. Search, bulk actions, and preview stay close."
-                    )
-                    : tr(
-                      "Швидкий каталог практики з живими фільтрами, прогресом і preview перед переходом у розв’язання.",
-                      "A fast practice catalog with live filters, progress, and preview before opening the solver."
-                    )}
-                </p>
-              </motion.div>
-
-              <motion.div variants={fadeUpItem} className="grid min-w-[280px] grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2">
-                {[
-                  [tr("Показано", "Shown"), visibleTasks.length, "text-[#121b15] dark:text-white"],
-                  [tr("Виконано", "Solved"), solvedCount, "text-primary-strong dark:text-primary-soft"],
-                  [tr("Обрані", "Favorites"), favoritesCount, "text-[#d97706] dark:text-[#ffb85e]"],
-                  [tr("Всього", "Total"), typeof total === "number" && view === "approved" ? total : tasks.length, "text-[#121b15] dark:text-white"],
-                ].map(([label, value, tone]) => (
-                  <div key={String(label)} className="rounded-2xl border border-[#142018]/10 bg-[#f6f8f5]/85 p-4 dark:border-white/10 dark:bg-white/[.04]">
-                    <div className="text-xs font-semibold text-[#748177] dark:text-[#9fac9f]">{label}</div>
-                    <div className={`mt-2 text-3xl font-semibold tracking-[-0.05em] ${tone}`}>
-                      <CountUp value={Number(value)} />
-                    </div>
-                  </div>
-                ))}
-              </motion.div>
-            </div>
+        <header className="flex flex-col justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-end">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{tr("Бібліотека", "Library")}</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-[-.04em] text-text-primary">{view === "mine" ? tr("Мої матеріали", "My materials") : tr("Задачі для практики", "Practice problems")}</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">
+              {view === "mine"
+                ? tr("Керуй чернетками, матеріалами на модерації та опублікованими задачами.", "Manage drafts, materials awaiting moderation, and published tasks.")
+                : tr("Знайди задачу за темою й складністю, а перед розв’язанням переглянь умову та тести.", "Find a problem by topic and difficulty, then preview its statement and tests before solving.")}
+            </p>
           </div>
-        </motion.section>
+          <button type="button" onClick={leaveLibrary} className="inline-flex min-h-11 items-center gap-2 self-start rounded-lg px-3 text-sm font-semibold text-text-secondary transition hover:bg-bg-hover hover:text-text-primary sm:self-auto">
+            <ArrowLeft className="size-4" aria-hidden="true" />{tr("Назад", "Back")}
+          </button>
+        </header>
 
-        <section className="rounded-[28px] border border-[#142018]/10 bg-white p-4 shadow-[0_18px_55px_-45px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-bg-surface sm:p-5">
+        <section className="border-b border-border pb-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="inline-flex w-fit rounded-2xl bg-[#edf2ed] p-1 dark:bg-white/[.05]">
               <button
@@ -1770,7 +1732,7 @@ export const TaskLibraryPage: React.FC = () => {
                   const parsed = parseSort(e.target.value);
                   if (parsed) setSort(parsed);
                 }}
-                className="h-12 rounded-2xl border border-[#142018]/10 bg-[#f7f9f6] px-4 text-sm font-semibold text-[#26352b] outline-none dark:border-white/10 dark:bg-white/[.035] dark:text-white"
+                className="hidden h-12 rounded-lg border border-border bg-bg-base px-3 text-sm font-semibold text-text-secondary outline-none dark:text-text-primary lg:block"
               >
                 <option value="UPDATED_DESC">{tr("Спочатку нові", "Newest first")}</option>
                 <option value="TITLE_ASC">{tr("Назва A–Z", "Title A–Z")}</option>
@@ -1792,7 +1754,7 @@ export const TaskLibraryPage: React.FC = () => {
                     const parsed = parseJudgeLanguage(next);
                     if (parsed) setJudgeLang(parsed);
                   }}
-                  className="h-12 rounded-2xl border border-[#142018]/10 bg-[#f7f9f6] px-4 text-sm font-semibold text-[#26352b] outline-none dark:border-white/10 dark:bg-white/[.035] dark:text-white"
+                  className="hidden h-12 rounded-lg border border-border bg-bg-base px-3 text-sm font-semibold text-text-secondary outline-none dark:text-text-primary lg:block"
                 >
                   <option value="ALL">{tr("Усі мови", "All languages")}</option>
                   {ALL_JUDGE_LANGS.map((l) => (
@@ -1809,7 +1771,7 @@ export const TaskLibraryPage: React.FC = () => {
                     const parsed = parseMineStatus(e.target.value);
                     if (parsed) setMineStatus(parsed);
                   }}
-                  className="h-12 rounded-2xl border border-[#142018]/10 bg-[#f7f9f6] px-4 text-sm font-semibold text-[#26352b] outline-none dark:border-white/10 dark:bg-white/[.035] dark:text-white"
+                  className="hidden h-12 rounded-lg border border-border bg-bg-base px-3 text-sm font-semibold text-text-secondary outline-none dark:text-text-primary lg:block"
                 >
                   <option value="ALL">{tr("Усі статуси", "All statuses")}</option>
                   <option value="DRAFT">Draft</option>
@@ -1821,8 +1783,36 @@ export const TaskLibraryPage: React.FC = () => {
             </div>
           </div>
 
+          <details open={filtersOpen} onToggle={(event) => setFiltersOpen(event.currentTarget.open)} className="mt-3 rounded-lg border border-border lg:hidden">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-sm font-semibold text-text-secondary [&::-webkit-details-marker]:hidden">
+              <SlidersHorizontal className="size-4" aria-hidden="true" />{tr("Фільтри й сортування", "Filters and sorting")}
+              {(onlySolved || onlyFavorites || sort !== "UPDATED_DESC" || judgeLang !== "ALL" || mineStatus !== "ALL") ? <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary-strong">{tr("Змінено", "Active")}</span> : null}
+            </summary>
+            <div className="grid gap-3 border-t border-border p-3">
+              <label className="grid gap-1.5 text-xs font-semibold text-text-muted">{tr("Сортування", "Sort by")}
+                <select id="task-library-sort-mobile" name="sort-mobile" aria-label={tr("Сортування задач", "Sort tasks")} value={sort} onChange={(e) => { const parsed = parseSort(e.target.value); if (parsed) setSort(parsed); }} className="min-h-11 rounded-lg border border-border bg-bg-base px-3 text-sm text-text-primary">
+                  <option value="UPDATED_DESC">{tr("Спочатку нові", "Newest first")}</option><option value="TITLE_ASC">{tr("Назва A–Z", "Title A–Z")}</option><option value="DIFFICULTY_ASC">{tr("Рівень: від легких", "Level: easiest first")}</option>
+                </select>
+              </label>
+              {view === "approved" ? <label className="grid gap-1.5 text-xs font-semibold text-text-muted">{tr("Мова задачі", "Task language")}
+                <select id="task-library-language-mobile" name="language-mobile" aria-label={tr("Мова задачі", "Task language")} value={judgeLang} onChange={(e) => { const value = e.target.value; if (value === "ALL") setJudgeLang("ALL"); else { const parsed = parseJudgeLanguage(value); if (parsed) setJudgeLang(parsed); } }} className="min-h-11 rounded-lg border border-border bg-bg-base px-3 text-sm text-text-primary">
+                  <option value="ALL">{tr("Усі мови", "All languages")}</option>{ALL_JUDGE_LANGS.map((language) => <option key={language} value={language}>{FRIENDLY_JUDGE_LANG[language]}</option>)}
+                </select>
+              </label> : <label className="grid gap-1.5 text-xs font-semibold text-text-muted">{tr("Статус задачі", "Task status")}
+                <select id="task-library-status-mobile" name="status-mobile" aria-label={tr("Статус задачі", "Task status")} value={mineStatus} onChange={(e) => { const parsed = parseMineStatus(e.target.value); if (parsed) setMineStatus(parsed); }} className="min-h-11 rounded-lg border border-border bg-bg-base px-3 text-sm text-text-primary">
+                  <option value="ALL">{tr("Усі статуси", "All statuses")}</option><option value="DRAFT">{tr("Чернетка", "Draft")}</option><option value="PENDING">{tr("На модерації", "Pending")}</option><option value="APPROVED">{tr("Опубліковано", "Approved")}</option><option value="REJECTED">{tr("Відхилено", "Rejected")}</option>
+                </select>
+              </label>}
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" aria-pressed={onlySolved} onClick={() => setOnlySolved((value) => !value)} className={`min-h-11 rounded-lg border px-3 text-sm font-semibold ${onlySolved ? "border-primary/40 bg-primary/10 text-primary-strong dark:text-primary-soft" : "border-border text-text-secondary"}`}>{tr("Лише виконані", "Solved only")}</button>
+                <button type="button" aria-pressed={onlyFavorites} onClick={() => setOnlyFavorites((value) => !value)} className={`min-h-11 rounded-lg border px-3 text-sm font-semibold ${onlyFavorites ? "border-primary/40 bg-primary/10 text-primary-strong dark:text-primary-soft" : "border-border text-text-secondary"}`}>{tr("Обрані", "Favorites")}</button>
+              </div>
+              <button type="button" onClick={resetFilters} className="min-h-11 rounded-lg px-3 text-left text-sm font-semibold text-text-secondary hover:bg-bg-hover">{tr("Скинути фільтри", "Reset filters")}</button>
+            </div>
+          </details>
+
           <div className="mt-4 flex flex-col gap-3 border-t border-[#142018]/8 pt-4 dark:border-white/[.08] lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="hidden flex-wrap items-center gap-2 lg:flex">
               <button
                 type="button"
                 onClick={() => setOnlySolved((value) => !value)}
@@ -1920,11 +1910,11 @@ export const TaskLibraryPage: React.FC = () => {
           <section ref={listSectionRef} className="lg:col-span-8">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-xl font-semibold tracking-[-0.03em] text-[#142018] dark:text-white">
+                <h2 className="text-xl font-semibold tracking-[-0.03em] text-text-primary">
                   {view === "mine" ? tr("Мої задачі", "My tasks") : tr("Каталог задач", "Task catalog")}
                 </h2>
-                <p className="mt-1 text-sm text-[#6a786d] dark:text-[#9fac9f]">
-                  {tr("Відкрийте preview кнопкою на картці або назвою задачі.", "Open the preview with the card button or task title.")}
+                <p className="mt-1 text-sm text-text-muted">
+                  {typeof total === "number" && view === "approved" ? `${visibleTasks.length} ${tr("із", "of")} ${total}` : visibleTasks.length} · {solvedCount} {tr("виконано", "solved")} · {favoritesCount} {tr("обрано", "favorites")}
                 </p>
               </div>
 
@@ -1964,7 +1954,7 @@ export const TaskLibraryPage: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid gap-4 md:grid-cols-2">
+              <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid gap-2 md:grid-cols-1">
                 {visibleTasks.map((task) => {
                   const isSelected = selectedId === task.id;
                   const isFav = favoriteIds.has(task.id);
@@ -1981,7 +1971,7 @@ export const TaskLibraryPage: React.FC = () => {
                     <motion.article
                       key={task.id}
                       variants={fadeUpItem}
-                      className={`group flex min-h-[230px] flex-col rounded-[28px] border bg-white p-5 text-left shadow-[0_20px_55px_-44px_rgba(18,42,26,.55)] transition dark:bg-bg-surface ${isSelected ? "border-primary/55 ring-4 ring-primary/10 dark:border-primary/35" : "border-[#142018]/10 hover:-translate-y-1 hover:border-primary/30 dark:border-[#294333] dark:hover:border-primary/25"}`}
+                      className={`group flex min-h-0 flex-col rounded-xl border bg-bg-surface p-4 text-left transition-colors ${isSelected ? "border-primary/55 bg-primary/5 ring-2 ring-primary/10 dark:border-primary/35" : "border-border hover:border-primary/30 hover:bg-bg-hover/40"}`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
@@ -2048,7 +2038,7 @@ export const TaskLibraryPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-[#748177] dark:text-[#9fac9f]">
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium text-text-muted">
                         {(task.problemCode || task.slug) ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.problemCode || task.slug}</span> : null}
                         {task.section ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.section}</span> : null}
                         <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{formatShortDate(task.updatedAt, i18n.language || "uk")}</span>
@@ -2067,7 +2057,7 @@ export const TaskLibraryPage: React.FC = () => {
                         </div>
                       ) : null}
 
-                      <div className="mt-auto pt-5">
+                      <div className="mt-auto pt-3">
                         {progress != null ? (
                           <div>
                             <div className="flex items-center justify-between text-xs font-semibold text-[#748177] dark:text-[#9fac9f]">

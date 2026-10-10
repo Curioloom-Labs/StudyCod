@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, ClipboardCheck, Plus, Users } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { ArrowRight, ClipboardCheck, Plus, RefreshCw, Users } from "lucide-react";
 import { createClass, getClasses, getPendingReviews, type Class, type PendingReview } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { Modal } from "../../components/ui/Modal";
+import { withDevPreview } from "../../lib/devPreview";
 
 export const TeacherWorkspacePage: React.FC = () => {
   const navigate = useNavigate();
+  const { i18n } = useTranslation();
+  const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const isPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
   const [classes, setClasses] = useState<Class[]>([]);
   const [reviews, setReviews] = useState<PendingReview[]>([]);
@@ -13,29 +18,105 @@ export const TeacherWorkspacePage: React.FC = () => {
   const [openCreate, setOpenCreate] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
+      if (isPreview) {
+        const now = new Date().toISOString();
+        setClasses([{ id: 31, name: tr("10-Б · StudyCod", "Year 10 B · StudyCod"), gradingSystem: "POINTS_12", studentsCount: 24, createdAt: "2026-07-01" }, { id: 32, name: tr("9-А · Основи коду", "Year 9 A · Coding foundations"), gradingSystem: "POINTS_12", studentsCount: 19, createdAt: "2026-07-01" }]);
+        setReviews([{ gradeId: 1, classId: 31, className: tr("10-Б", "Year 10 B"), student: { id: 1, firstName: tr("Софія", "Sofia"), lastName: tr("Мельник", "Melnyk"), email: "" }, task: { id: 1001, title: tr("Частотний словник", "Frequency map"), lesson: { id: 101, title: tr("Рядки", "Strings"), type: "LESSON" } }, submittedCode: "from collections import Counter\nprint(Counter(['a', 'b', 'a']))", submittedAt: now, system: "new" }, { gradeId: 2, classId: 31, className: tr("10-Б", "Year 10 B"), student: { id: 2, firstName: tr("Марко", "Marko"), lastName: tr("Литвин", "Lytvyn"), email: "" }, task: { id: 1002, title: tr("Сума парних", "Sum of even numbers"), lesson: { id: 102, title: tr("Цикли", "Loops"), type: "LESSON" } }, submittedCode: "print(sum(x for x in numbers if x % 2 == 0))", submittedAt: now, system: "new" }]);
+        return;
+      }
       const [classesResult, reviewsResult] = await Promise.allSettled([getClasses(), getPendingReviews()]);
       if (classesResult.status === "rejected" && reviewsResult.status === "rejected") throw classesResult.reason;
-      setClasses(classesResult.status === "fulfilled" ? classesResult.value : []);
-      setReviews(reviewsResult.status === "fulfilled" ? reviewsResult.value.pendingReviews || [] : []);
-      if (classesResult.status === "rejected" || reviewsResult.status === "rejected") setError("Частину даних кабінету тимчасово не вдалося завантажити. Натисніть «Повторити»." );
+      if (classesResult.status === "fulfilled") setClasses(classesResult.value);
+      if (reviewsResult.status === "fulfilled") setReviews(reviewsResult.value.pendingReviews || []);
+      if (classesResult.status === "rejected" || reviewsResult.status === "rejected") setError("Частину даних кабінету тимчасово не вдалося завантажити.");
     } catch (cause: unknown) {
-      if (isPreview) {
-        setClasses([{ id: -31, name: "10-Б · StudyCod", gradingSystem: "POINTS_12", studentsCount: 24, createdAt: "2026-07-01" }, { id: -32, name: "9-А · Основи коду", gradingSystem: "POINTS_12", studentsCount: 19, createdAt: "2026-07-01" }]);
-        setReviews([{ gradeId: -11, student: { id: 1, firstName: "Софія", lastName: "Мельник", email: "" }, task: { id: 501, title: "Колекції та зрізи", lesson: { id: -31, title: "Колекції та зрізи", type: "LESSON" } }, submittedCode: "print('ok')", submittedAt: new Date().toISOString(), system: "new" }, { gradeId: -12, student: { id: 2, firstName: "Марко", lastName: "Литвин", email: "" }, task: { id: 502, title: "Функції з характером", lesson: { id: -31, title: "Колекції та зрізи", type: "LESSON" } }, submittedCode: "def solve(): pass", submittedAt: new Date().toISOString(), system: "new" }]);
-      } else setError(getErrorMessageFromUnknown(cause, "Не вдалося завантажити простір викладача."));
+      setError(getErrorMessageFromUnknown(cause, tr("Не вдалося завантажити простір викладача.", "Could not load the teacher workspace.")));
     } finally { setLoading(false); }
   };
+
   useEffect(() => { void load(); }, []);
-  const submit = async (event: React.FormEvent) => { event.preventDefault(); try { await createClass(name); setName(""); setOpenCreate(false); await load(); } catch (cause: unknown) { setError(getErrorMessageFromUnknown(cause, "Не вдалося створити клас.")); } };
-  return <div className="min-h-full bg-bg-base px-4 py-7 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-10 lg:py-10"><div className="mx-auto max-w-7xl space-y-6">
-    <section className="rounded-[28px] bg-[#183023] p-6 text-white shadow-[0_24px_58px_-38px_rgba(4,24,12,.8)] sm:p-8"><div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end"><div><div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-soft">Teaching workspace</div><h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.055em] sm:text-5xl">Клас у фокусі.<br />Рішення під контролем.</h1><p className="mt-4 max-w-2xl text-base leading-7 text-[#bed1c0]">Плануй уроки, бач прогрес учнів та повертай фідбек саме тоді, коли він потрібен.</p></div><button type="button" onClick={() => setOpenCreate(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#eff6f0] px-4 py-3 text-sm font-semibold text-[#102117]"><Plus className="h-4 w-4" />Новий клас</button></div></section>
-    {error && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#fff0f4] p-4 text-sm text-[#bd3c62] dark:bg-[#ff6b9d]/10 dark:text-[#ffa5bf]" role="alert"><span>{error}</span><button type="button" onClick={() => void load()} className="rounded-xl border border-current px-3 py-2 text-xs font-bold">Повторити</button></div>}
-    <div className="grid gap-5 lg:grid-cols-[1.2fr_.8fr]"><section className="rounded-[24px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface"><div className="flex items-center justify-between"><div><div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">Класи</div><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Навчальні потоки</h2></div><span className="rounded-xl bg-primary/10 px-3 py-2 text-sm font-semibold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">{classes.length}</span></div><div className="mt-5 grid gap-3 sm:grid-cols-2">{loading ? Array.from({ length: 4 }, (_, index) => <div key={index} className="h-32 animate-pulse rounded-2xl bg-bg-hover dark:bg-white/[.045]" />) : classes.map((item) => <button type="button" key={item.id} onClick={() => navigate(`/edu/classes/${item.id}`)} className="group rounded-2xl border border-border/8 bg-bg-surface p-4 text-left transition hover:-translate-y-0.5 hover:border-primary/40 dark:border-white/8 dark:bg-white/[.025]"><div className="flex items-start justify-between"><span className="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">Клас</span><ArrowRight className="h-4 w-4 text-[#789086] transition group-hover:translate-x-1" /></div><div className="mt-5 text-lg font-semibold">{item.name}</div><div className="mt-2 flex items-center gap-2 text-sm text-[#718075] dark:text-text-secondary"><Users className="h-4 w-4" />{item.studentsCount} учнів</div></button>)}</div></section>
-      <section className="rounded-[24px] border border-border/10 bg-[#fff8ec] p-5 dark:border-[#ff8c00]/20 dark:bg-[#ff8c00]/[.07]"><div className="text-xs font-semibold uppercase tracking-[.16em] text-[#d97706]">Черга фідбеку</div><h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Рішення чекають</h2><div className="mt-5 space-y-3">{reviews.slice(0, 5).map((review) => <button type="button" key={review.gradeId} disabled={!review.classId} onClick={() => { if (review.classId) navigate(`/edu/classes/${review.classId}/gradebook?review=${review.gradeId}${isPreview ? "&preview=true" : ""}`); }} className="flex w-full items-center justify-between rounded-xl bg-white/70 p-3 text-left transition enabled:hover:bg-white dark:bg-white/[.06] disabled:cursor-default disabled:opacity-70"><div><div className="font-semibold">{review.task?.title || `Робота #${review.gradeId}`}</div><div className="mt-1 text-sm text-[#776e5d] dark:text-[#c2b08e]">{review.student.firstName} {review.student.lastName} · {review.className || review.task?.lesson?.title || "ручна перевірка"}</div></div><ClipboardCheck className="h-4 w-4 text-[#d97706]" /></button>)}{!loading && reviews.length === 0 && <div className="rounded-xl bg-white/70 p-4 text-sm text-[#776e5d] dark:bg-white/[.06] dark:text-[#c2b08e]">Черга порожня. Можна підготувати наступний урок.</div>}</div></section></div>
-    {openCreate && <div className="fixed inset-0 z-[70] grid place-items-center bg-[#06110a]/55 p-4 backdrop-blur-sm"><form onSubmit={submit} className="w-full max-w-md rounded-[26px] bg-white p-6 shadow-2xl dark:bg-bg-surface"><div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">Новий клас</div><h2 className="mt-2 text-2xl font-semibold">Почнімо новий потік</h2><p className="mt-2 text-sm leading-6 text-[#718075] dark:text-text-secondary">Клас об’єднує учнів. Мову програмування обирайте окремо для кожної теми.</p><label htmlFor="teacher-class-name" className="sr-only">Назва класу</label><input id="teacher-class-name" name="className" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Назва класу" className="mt-5 w-full rounded-xl border border-border/10 bg-bg-surface px-4 py-3 text-sm outline-none focus:border-primary dark:border-white/10 dark:bg-white/[.035]" /><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setOpenCreate(false)} className="rounded-xl px-4 py-3 text-sm font-semibold">Скасувати</button><button type="submit" className="rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">Створити клас</button></div></form></div>}
-  </div></div>;
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      if (isPreview) {
+        setClasses((current) => [...current, { id: Date.now(), name, gradingSystem: "POINTS_12", studentsCount: 0, createdAt: new Date().toISOString() }]);
+        setName("");
+        setOpenCreate(false);
+        return;
+      }
+      await createClass(name);
+      setName("");
+      setOpenCreate(false);
+      await load();
+    } catch (cause: unknown) {
+      setError(getErrorMessageFromUnknown(cause, "Не вдалося створити клас."));
+    }
+  };
+
+  return <main className="min-h-full bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-8 lg:py-8">
+    <div className="mx-auto max-w-7xl">
+      <header className="flex flex-col justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-end">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{tr("Освітній простір", "Education")}</p>
+          <h1 className="mt-2 text-3xl font-bold tracking-[-.04em]">{tr("Кабінет викладача", "Teacher workspace")}</h1>
+          <p className="mt-2 text-sm text-text-secondary">{tr("Перевір роботи учнів і керуй класами з одного місця.", "Review student work and manage classes from one place.")}</p>
+        </div>
+        <button type="button" onClick={() => setOpenCreate(true)} className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:bg-primary-hover sm:self-auto"><Plus className="size-4" aria-hidden="true" />{tr("Новий клас", "New class")}</button>
+      </header>
+
+      {error ? <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent-warn/35 bg-accent-warn/5 px-4 py-3 text-sm" role="status">
+        <span className="text-text-secondary">{error} {classes.length || reviews.length ? tr("Показано дані, які вдалося завантажити.", "Showing the data that loaded successfully.") : ""}</span>
+        <button type="button" onClick={() => void load()} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 font-semibold text-primary-strong hover:bg-bg-hover"><RefreshCw className="size-4" aria-hidden="true" />{tr("Повторити", "Retry")}</button>
+      </div> : null}
+
+      <section className="mt-6" aria-labelledby="teacher-review-queue">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+          <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{tr("Перша дія", "Next action")}</p><h2 id="teacher-review-queue" className="mt-1 text-xl font-bold">{tr("На перевірку", "To review")}</h2></div>
+          <span className="text-sm tabular-nums text-text-muted">{reviews.length} {tr("робіт", "submissions")}</span>
+        </div>
+        {loading ? <div className="divide-y divide-border" role="status" aria-label="Завантаження робіт"><div className="h-16 animate-pulse bg-bg-hover/60" /><div className="h-16 animate-pulse bg-bg-hover/40" /></div>
+          : reviews.length ? <ul className="divide-y divide-border">
+            {reviews.slice(0, 8).map((review) => <li key={review.gradeId}>
+              <button type="button" disabled={!review.classId} onClick={() => { if (review.classId) navigate(withDevPreview(`/edu/classes/${review.classId}/gradebook?review=${review.gradeId}`)); }} className="grid min-h-[68px] w-full grid-cols-[36px_1fr_auto] items-center gap-3 py-3 text-left transition-colors hover:bg-bg-hover/50 disabled:cursor-default disabled:opacity-70">
+                <span className="grid size-9 place-items-center rounded-lg bg-bg-hover text-text-secondary"><ClipboardCheck className="size-4" aria-hidden="true" /></span>
+                <span className="min-w-0"><span className="block truncate text-sm font-semibold">{review.task?.title || `Робота #${review.gradeId}`}</span><span className="mt-1 block truncate text-xs text-text-muted">{review.student.firstName} {review.student.lastName} · {review.className || review.task?.lesson?.title || "Ручна перевірка"}</span></span>
+                <ArrowRight className="size-4 text-text-muted" aria-hidden="true" />
+              </button>
+            </li>)}
+          </ul>
+          : error ? <p className="py-5 text-sm text-text-secondary">{tr("Не вдалося підтвердити, чи є роботи в черзі.", "We couldn’t confirm whether there are submissions to review.")}</p>
+            : <p className="py-5 text-sm text-text-secondary">{tr("Черга порожня. Можна перейти до найближчих занять.", "The queue is empty. You can prepare an upcoming lesson.")}</p>}
+      </section>
+
+      <section className="mt-8" aria-labelledby="teacher-classes">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
+          <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{tr("Навчальні групи", "Learning groups")}</p><h2 id="teacher-classes" className="mt-1 text-xl font-bold">{tr("Мої класи", "My classes")}</h2></div>
+          <span className="text-sm tabular-nums text-text-muted">{classes.length} {tr("класів", "classes")}</span>
+        </div>
+        {loading ? <div className="mt-1 divide-y divide-border" role="status" aria-label="Завантаження класів"><div className="h-16 animate-pulse bg-bg-hover/60" /><div className="h-16 animate-pulse bg-bg-hover/40" /></div>
+          : classes.length ? <ul className="divide-y divide-border">
+            {classes.map((item) => <li key={item.id}><button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${item.id}`))} className="grid min-h-[68px] w-full grid-cols-[36px_1fr_auto] items-center gap-3 py-3 text-left hover:bg-bg-hover/50">
+              <span className="grid size-9 place-items-center rounded-lg bg-bg-hover text-text-secondary"><Users className="size-4" aria-hidden="true" /></span>
+                <span className="min-w-0"><span className="block truncate text-sm font-semibold">{item.name}</span><span className="mt-1 block text-xs text-text-muted">{item.studentsCount} {tr("учнів", "students")}</span></span>
+              <ArrowRight className="size-4 text-text-muted" aria-hidden="true" />
+            </button></li>)}
+          </ul>
+          : error ? <p className="py-5 text-sm text-text-secondary">{tr("Не вдалося завантажити класи.", "We couldn’t load classes.")}</p>
+            : <div className="flex flex-wrap items-center justify-between gap-3 py-5"><p className="text-sm text-text-secondary">{tr("Створи клас, щоб запросити учнів і призначати їм завдання.", "Create a class to invite learners and assign work.")}</p><button type="button" onClick={() => setOpenCreate(true)} className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold hover:bg-bg-hover">{tr("Створити клас", "Create a class")}</button></div>}
+      </section>
+    </div>
+
+    <Modal open={openCreate} title={tr("Новий клас", "New class")} description={tr("Клас об’єднує учнів. Мову програмування обирай окремо для кожної теми.", "A class brings learners together. Choose a programming language for each topic.")} onClose={() => setOpenCreate(false)}>
+      <form onSubmit={submit} className="grid gap-4">
+        <label htmlFor="teacher-class-name" className="grid gap-2 text-sm font-medium">{tr("Назва класу", "Class name")}<input id="teacher-class-name" name="className" required value={name} onChange={(event) => setName(event.target.value)} placeholder={tr("Наприклад, 10-Б", "For example, Year 10 A")} className="min-h-11 rounded-lg border border-border bg-bg-base px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" /></label>
+        <div className="flex justify-end gap-2"><button type="button" onClick={() => setOpenCreate(false)} className="min-h-11 rounded-lg px-4 text-sm font-semibold hover:bg-bg-hover">{tr("Скасувати", "Cancel")}</button><button type="submit" className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground">{tr("Створити клас", "Create class")}</button></div>
+      </form>
+    </Modal>
+  </main>;
 };

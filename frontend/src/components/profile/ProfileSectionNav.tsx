@@ -2,6 +2,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Award, Gauge, Trophy, UserRound } from "lucide-react";
+import { withDevPreview } from "../../lib/devPreview";
 
 type ProfileSection = "iad" | "certificates";
 
@@ -28,15 +29,15 @@ export const ProfileSectionNav: React.FC<Props> = ({ active, className = "", act
       aria-label={copy("Навігація профілю", "Profile navigation")}
     >
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div className="grid gap-2 sm:grid-cols-4 lg:flex lg:flex-wrap">
+        <div className="flex min-w-0 gap-2 overflow-x-auto pb-0.5 lg:flex-wrap">
           {links.map(({ id, label, href, Icon }) => {
             const selected = active === id;
             return (
               <Link
                 key={id}
-                to={href}
+                to={withDevPreview(href)}
                 aria-current={selected ? "page" : undefined}
-                className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition ${
                   selected
                     ? "bg-[#173321] text-white shadow-[0_14px_26px_-18px_rgba(23,51,33,.9)] dark:bg-[#edf4ef] dark:text-[#0b120d]"
                     : "bg-bg-surface text-text-secondary hover:bg-[#e5eee7] dark:bg-white/[.055] dark:text-[#dce7df] dark:hover:bg-white/[.09]"

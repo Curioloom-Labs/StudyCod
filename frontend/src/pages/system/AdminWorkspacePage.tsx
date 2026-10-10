@@ -51,7 +51,7 @@ import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { BookOpen, Boxes, Check, ChevronRight, CircleDot, FileText, Inbox, LayoutDashboard, Library, Plus, RotateCw, Save, Send, ShieldCheck, Trash2, UserRoundPlus, Users, Wrench, X } from "lucide-react";
 import { useDialogA11y } from "../../components/ui/useDialogA11y";
 
-const isPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
+const isPreview = (): boolean => Boolean(import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true");
 const languages: AdminMaterialsLanguage[] = ["JAVA", "PYTHON", "CPP"];
 const fieldKeys = ["contest_name", "name", "full_name", "place", "score", "max_score", "date", "organizer", "signature", "certificate_id", "qr_code"] as const;
 
@@ -165,14 +165,16 @@ export const AdminWorkspacePage: React.FC = () => {
     setLoading(true); setError(null);
     if (isPreview()) {
       const demoUsers = [{ id: 1, username: "oksana", firstName: "Оксана", lastName: "Коваль", email: "oksana@example.test", role: "USER", userMode: "PERSONAL", emailVerified: true, iad: 0, avatarUrl: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }] as AdminUser[];
-      setStats({ users: { total: 1840, teachers: 86, admins: 4, byMode: { PERSONAL: 1400, EDUCATIONAL: 350, CONTEST: 90 } }, classes: { total: 57 } });
-      setJudge({ active: 4, queued: 7, mode: "distributed" } as AdminJudgeLoad);
+      // The local preview uses representative records only. Aggregate and service
+      // metrics must come from the API, so leave them unavailable in preview.
+      setStats(null);
+      setJudge(null);
       setUsers(demoUsers); setUsersTotal(1); setClasses([{ id: 1, name: "10-Б · StudyCod", teacherId: 2, teacherName: "Ірина Кравець", createdAt: "", updatedAt: "" }]);
       setTopics([{ id: 1, order: 1, title: "Змінні та типи", description: "База", language: "PYTHON", theoryBlock: { id: 1, title: "Змінні", content: "Markdown theory", version: 3, level: null, tags: null, createdAt: "", updatedAt: "" } }]);
       setLibrary([{ id: 11, title: "Сума парних", description: "Опишіть алгоритм.", template: "n = int(input())", lang: "PYTHON", maxAttempts: 15, status: "PENDING", rejectionReason: null, submittedAt: "", publishedAt: null, createdAt: "", updatedAt: "", author: { id: 1, username: "mentor-anna", email: "anna@example.test" } }]);
       setDeadLetterItems([{ jobId: "job_demo_1", submissionId: "1042", state: "FAILED", attempts: 3, updatedAt: new Date().toISOString(), finishedAt: null, error: "Runner timeout" }]); setDeadLetterTotal(1);
-      setMaintenance({ enabled: false, title: "", message: "", until: null, updatedAt: new Date().toISOString() });
-      setMailOk(true); setCertificates([{ id: 1, name: "StudyCod achievement", isActive: true, type: "custom", version: 1, contestId: null }]);
+      setMaintenance(null);
+      setMailOk(null); setCertificates([{ id: 1, name: "StudyCod achievement", isActive: true, type: "custom", version: 1, contestId: null }]);
       setLoading(false); return;
     }
     try {
@@ -357,12 +359,12 @@ export const AdminWorkspacePage: React.FC = () => {
   const usersByRole = useMemo(() => ({ teachers: users.filter((user) => user.role === "TEACHER").length, admins: users.filter((user) => user.role === "SYSTEM_ADMIN").length }), [users]);
   const hasMoreUsers = usersTotal === null ? false : users.length < usersTotal;
 
-  return <div className="min-h-full bg-bg-base px-4 py-7 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-10 lg:py-10"><div className="mx-auto max-w-[1480px]">
-    <section aria-labelledby="admin-workspace-title" className="relative overflow-hidden rounded-[28px] border border-border bg-bg-surface px-6 py-7 text-text-primary shadow-sm dark:border-border dark:bg-bg-surface sm:px-8 sm:py-9"><div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary/8 blur-3xl" /><div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-end"><div><Label><span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" />{inEnglish ? "PLATFORM ADMINISTRATION" : "КЕРУВАННЯ ПЛАТФОРМОЮ"}</span></Label><h1 id="admin-workspace-title" className="mt-4 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.055em] sm:text-5xl">{inEnglish ? "Manage the StudyCod platform." : "Керуй платформою StudyCod."}</h1><p className="mt-4 max-w-2xl text-base leading-7 text-text-secondary">{inEnglish ? "Manage accounts, classrooms, learning content, solution reviews and platform operations from one workspace." : "Керуй обліковими записами, класами, навчальними матеріалами, перевіркою рішень і роботою платформи."}</p></div></div></section>
-    <nav aria-label={inEnglish ? "Administrative sections" : "Розділи адміністрування"} className="mt-5 flex gap-1.5 overflow-x-auto rounded-2xl border border-border/10 bg-white p-2 dark:border-white/10 dark:bg-bg-surface">{tabs.map(({ id, label, Icon }) => <button type="button" key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined} className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${tab === id ? "bg-[#17251c] text-white dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#6a796f] hover:bg-[#f1f5f1] dark:text-[#a6b5aa] dark:hover:bg-white/[.06]"}`}><Icon className="h-4 w-4" />{tabLabel(id, label)}</button>)}</nav>
+  return <div className="min-h-full bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-8 lg:py-8"><div className="mx-auto max-w-[1600px]">
+    <header aria-labelledby="admin-workspace-title" className="flex flex-col justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-end"><div><Label><span className="inline-flex items-center gap-2"><ShieldCheck className="h-4 w-4" />{inEnglish ? "PLATFORM ADMINISTRATION" : "КЕРУВАННЯ ПЛАТФОРМОЮ"}</span></Label><h1 id="admin-workspace-title" className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.045em] sm:text-3xl">{inEnglish ? "Platform administration" : "Адміністрування платформи"}</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">{inEnglish ? "Review service issues, accounts, learning content and operations." : "Перевіряй стан платформи, керуй обліковими записами, матеріалами й операціями."}</p>{isPreview() && <p className="mt-3 w-fit rounded-lg border border-[#ffb454]/25 bg-[#ffb454]/10 px-3 py-2 text-xs font-semibold text-[#80520b] dark:text-[#ffd699]">{inEnglish ? "Local preview · example records, no live platform metrics" : "Локальна демонстрація · прикладові записи, без статистики платформи"}</p>}</div></header>
+    <nav aria-label={inEnglish ? "Administrative sections" : "Розділи адміністрування"} className="mt-2 flex gap-1 overflow-x-auto border-b border-border">{tabs.map(({ id, label, Icon }) => <button type="button" key={id} onClick={() => setTab(id)} aria-current={tab === id ? "page" : undefined} className={`inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-sm font-semibold transition-colors ${tab === id ? "border-primary text-primary-strong dark:text-primary-soft" : "border-transparent text-text-muted hover:text-text-primary"}`}><Icon className="h-4 w-4" />{tabLabel(id, label)}</button>)}</nav>
     {error && <div role="alert" className="mt-5 flex items-center justify-between gap-4 rounded-2xl border border-[#ff6b9d]/30 bg-[#fff1f5] p-4 text-sm text-[#be315c] dark:bg-[#ff6b9d]/10 dark:text-[#ffabc4]"><span>{error}</span><button type="button" onClick={() => setError(null)} aria-label="Dismiss error"><X className="h-4 w-4" /></button></div>}
     {loading ? <div className="mt-5 grid gap-4 md:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-40 animate-pulse rounded-[24px] bg-[#e6ece7] dark:bg-white/[.045]" />)}</div> : <div className="mt-5">
-      {tab === "overview" && <Overview stats={stats} judge={judge} maintenance={maintenance} mailOk={mailOk} certificates={certificates} go={setTab} inEnglish={inEnglish} />}
+      {tab === "overview" && <Overview stats={stats} judge={judge} maintenance={maintenance} mailOk={mailOk} certificates={certificates} go={setTab} inEnglish={inEnglish} preview={isPreview()} />}
       {tab === "people" && <PeoplePanel users={users} usersTotal={usersTotal} hasMoreUsers={hasMoreUsers} usersLoadingMore={usersLoadingMore} usersPage={usersPage} classes={classes} usersByRole={usersByRole} onMore={() => loadPeople(usersPage + 1, true).catch((c) => reportError(c, "Не вдалося завантажити користувачів."))} onSelect={selectUser} onCreate={() => setShowCreateUser(true)} />}
       {tab === "classes" && <ClassesPanel classes={classes} users={users} draft={classDraft} setDraft={setClassDraft} onSave={saveClass} onDelete={removeClass} />}
       {tab === "materials" && <MaterialsPanel language={materialsLanguage} setLanguage={setMaterialsLanguage} topics={topics} selectedTopicId={selectedTopicId} draft={materialDraft} setDraft={setMaterialDraft} selectTopic={selectTopic} newTopic={newTopic} saveTopic={saveTopic} removeTopic={removeTopic} syncMaterials={syncMaterials} />}
@@ -380,21 +382,21 @@ export const AdminWorkspacePage: React.FC = () => {
   </div></div>;
 };
 
-const Overview: React.FC<{ stats: AdminStats | null; judge: AdminJudgeLoad | null; maintenance: MaintenanceState | null; mailOk: boolean | null; certificates: CertificateListItem[]; go: (tab: Tab) => void; inEnglish: boolean }> = ({ stats, judge, maintenance, mailOk, certificates, go, inEnglish }) => <>
-  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+const Overview: React.FC<{ stats: AdminStats | null; judge: AdminJudgeLoad | null; maintenance: MaintenanceState | null; mailOk: boolean | null; certificates: CertificateListItem[]; go: (tab: Tab) => void; inEnglish: boolean; preview: boolean }> = ({ stats, judge, maintenance, mailOk, certificates, go, inEnglish, preview }) => <>
+  {!preview && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
     <Metric value={stats?.users.total ?? "—"} label={inEnglish ? "users" : "користувачів"} />
     <Metric value={stats?.users.teachers ?? "—"} label={inEnglish ? "teachers" : "викладачів"} tone="text-primary-strong dark:text-primary-soft" />
     <Metric value={stats?.classes.total ?? "—"} label={inEnglish ? "active classes" : "активних класів"} />
     <Metric value={judge?.queued ?? "—"} label={inEnglish ? "in review queue" : "у черзі перевірки"} tone="text-[#d97706]" />
-  </div>
+  </div>}
   <div className="mt-5 grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
     <Surface>
       <Label>{inEnglish ? "System status" : "Стан системи"}</Label>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        <Status label={inEnglish ? "Review queue" : "Черга перевірок"} value={judge ? `${judge.active} ${inEnglish ? "active" : "активних"} · ${judge.queued} ${inEnglish ? "queued" : "у черзі"}` : inEnglish ? "No data" : "Немає даних"} healthy={(judge?.queued ?? 0) < 20} />
-        <Status label={inEnglish ? "Platform availability" : "Доступність платформи"} value={maintenance?.enabled ? inEnglish ? "Maintenance is enabled" : "Технічне обслуговування ввімкнено" : inEnglish ? "Available" : "Доступна"} healthy={!maintenance?.enabled} />
+        <Status label={inEnglish ? "Review queue" : "Черга перевірок"} value={judge ? `${judge.active} ${inEnglish ? "active" : "активних"} · ${judge.queued} ${inEnglish ? "queued" : "у черзі"}` : inEnglish ? "No data" : "Немає даних"} healthy={judge !== null && judge.queued < 20} />
+        <Status label={inEnglish ? "Platform availability" : "Доступність платформи"} value={maintenance === null ? inEnglish ? "No data" : "Немає даних" : maintenance.enabled ? inEnglish ? "Maintenance is enabled" : "Технічне обслуговування ввімкнено" : inEnglish ? "Available" : "Доступна"} healthy={maintenance !== null && !maintenance.enabled} />
         <Status label={inEnglish ? "Administrator email" : "Пошта адміністратора"} value={mailOk === null ? inEnglish ? "No data" : "Немає даних" : mailOk ? inEnglish ? "Connected" : "Підключено" : inEnglish ? "Needs attention" : "Потребує уваги"} healthy={mailOk === true} />
-        <Status label={inEnglish ? "Certificates" : "Сертифікати"} value={`${certificates.filter((item) => item.isActive).length} ${inEnglish ? "active templates" : "активних шаблонів"}`} healthy />
+        <Status label={inEnglish ? "Certificates" : "Сертифікати"} value={preview ? inEnglish ? "Example template in the certificates section" : "Приклад шаблону в розділі сертифікатів" : certificates.length ? `${certificates.filter((item) => item.isActive).length} ${inEnglish ? "active templates" : "активних шаблонів"}` : inEnglish ? "No data" : "Немає даних"} healthy={!preview && certificates.length > 0} />
       </div>
     </Surface>
     <Surface className="bg-[#fff8ec] dark:border-[#ff8c00]/20 dark:bg-[#ff8c00]/[.07]">

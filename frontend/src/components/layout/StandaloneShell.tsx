@@ -28,6 +28,7 @@ import { Logo } from "../Logo";
 import { PageLoader } from "../ui/PageLoadingTransition";
 import { PlatformFooter } from "./PlatformFooter";
 import { DialogA11yObserver } from "../ui/DialogA11yObserver";
+import { withDevPreview } from "../../lib/devPreview";
 
 type Props = {
   current: "home" | "tasks" | "grades" | "profile" | "learn" | "catalog" | "library" | "playground" | "blog" | "support" | "admin";
@@ -153,8 +154,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
   const navigateTo = (path: string) => {
     setMobileOpen(false);
     setAccountOpen(false);
-    const destination = devPreview ? `${path}${path.includes("?") ? "&" : "?"}preview=true` : path;
-    navigate(destination);
+    navigate(withDevPreview(path, location.search));
   };
 
   const displayName = shellUser.firstName || shellUser.username;
@@ -164,26 +164,27 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
       <a className="skip-link" href="#main-content">{ukrainian ? "Перейти до основного вмісту" : "Skip to main content"}</a>
       <DialogA11yObserver rootRef={shellRef} />
       <header className="sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl">
-        <div className="mx-auto flex h-[72px] max-w-[1500px] items-center justify-between gap-2 px-4 sm:px-6 lg:px-9">
-          <button type="button" onClick={() => navigateTo(education ? (shellUser.studentId ? "/edu/lessons" : "/edu") : "/")} className="flex shrink-0 items-center gap-2.5 text-left">
-            <span className="grid size-10 place-items-center rounded-[14px] bg-[#173423] shadow-sm">
+        <div className="mx-auto flex h-14 max-w-[1500px] items-center justify-between gap-1.5 px-2.5 sm:h-16 sm:gap-2 sm:px-6 lg:px-9">
+          <button type="button" onClick={() => navigateTo(education ? (shellUser.studentId ? "/edu/lessons" : "/edu") : "/")} className="flex min-h-11 shrink-0 items-center gap-2.5 text-left">
+            <span className="grid size-8 place-items-center rounded-xl bg-[#173423] sm:size-9">
               <Logo size={20} />
             </span>
-            <span className="hidden font-[family-name:var(--font-display)] text-[19px] font-bold tracking-[-.055em] xl:inline">StudyCod</span>
+            <span className="font-[family-name:var(--font-display)] text-base font-bold tracking-[-.055em] max-[359px]:hidden sm:text-[19px]">StudyCod</span>
           </button>
 
-          <nav aria-label={ukrainian ? "Основна навігація" : "Primary navigation"} className="hidden min-w-0 flex-1 items-center justify-start gap-1 overflow-x-auto rounded-xl bg-bg-hover p-1 whitespace-nowrap lg:flex">
+          <nav aria-label={ukrainian ? "Основна навігація" : "Primary navigation"} className="hidden min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap min-[1080px]:flex">
             {nav.map(({ key, label, icon: Icon, path }) => (
-              <button key={key} type="button" onClick={() => navigateTo(path)} aria-current={current === key ? "page" : undefined} className={`inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:px-3.5 xl:text-sm ${current === key ? "bg-bg-surface text-text-primary shadow-sm" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white"}`}>
+              <button key={key} type="button" onClick={() => navigateTo(path)} aria-current={current === key ? "page" : undefined} className={`relative inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-2.5 text-[13px] font-semibold transition xl:px-3.5 xl:text-sm ${current === key ? "text-primary-strong dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white"}`}>
                 <Icon className="size-4" />
                 {label}
+                {current === key ? <span className="absolute inset-x-3 -bottom-[9px] h-0.5 rounded-full bg-primary" aria-hidden="true" /> : null}
               </button>
             ))}
           </nav>
 
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
             {!education ? (
-              <button type="button" onClick={() => void i18n.changeLanguage(ukrainian ? "en" : "uk")} className="hidden h-10 rounded-xl px-3 text-xs font-semibold text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white sm:block">
+              <button type="button" onClick={() => void i18n.changeLanguage(ukrainian ? "en" : "uk")} className="grid size-11 place-items-center rounded-xl px-1 text-[11px] font-bold text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white sm:w-auto sm:px-3 sm:text-xs">
                 {ukrainian ? "EN" : "UA"}
               </button>
             ) : null}
@@ -193,13 +194,13 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
             <button type="button" onClick={toggleTheme} className="grid size-10 max-lg:size-11 place-items-center rounded-xl text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white" aria-label={theme === "dark" ? (ukrainian ? "Увімкнути світлу тему" : "Switch to light theme") : (ukrainian ? "Увімкнути темну тему" : "Switch to dark theme")}>
               {theme === "dark" ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
             </button>
-            <div className="relative hidden sm:block" ref={accountRef}>
+            <div className="relative" ref={accountRef}>
               <button ref={accountTriggerRef} type="button" onClick={() => setAccountOpen((open) => !open)} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); setAccountOpen(true); } }} data-motion-press className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm font-semibold transition motion-safe:active:scale-[.97] hover:bg-bg-hover dark:hover:bg-white/[.07]" aria-haspopup="menu" aria-expanded={accountOpen} aria-label={ukrainian ? `Відкрити меню акаунта ${displayName}` : `Open account menu for ${displayName}`}>
                 <span className="grid size-7 place-items-center overflow-hidden rounded-lg bg-[#dff2e5] text-xs font-bold text-[#147645] dark:bg-primary/12 dark:text-[#6eecad]">
                   {shellUser.avatarUrl ? <img src={shellUser.avatarUrl} alt="" width={28} height={28} loading="lazy" className="size-full object-cover" /> : displayName.slice(0, 1).toUpperCase()}
                 </span>
-                <span className="max-w-[190px] truncate">{displayName}</span>
-                <span className={`text-xs text-[#748177] transition ${accountOpen ? "rotate-180" : ""}`}>⌄</span>
+                <span className="hidden max-w-[190px] truncate sm:inline">{displayName}</span>
+                <span className={`hidden text-xs text-[#748177] transition sm:inline ${accountOpen ? "rotate-180" : ""}`}>⌄</span>
               </button>
               {accountOpen ? (
               <div ref={accountMenuRef} data-material="standalone-account-menu" data-motion-surface className="material-popover absolute right-0 top-12 z-50 w-72 overflow-hidden rounded-2xl border border-border/70 bg-bg-surface p-2 shadow-[var(--ui-modal-shadow)]" role="menu" aria-label={ukrainian ? "Меню акаунта" : "Account menu"} onKeyDown={(event) => {
@@ -236,7 +237,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
                 </div>
               ) : null}
             </div>
-            <button type="button" onClick={() => setMobileOpen(true)} className="grid size-10 max-lg:size-11 place-items-center rounded-xl text-[#627166] transition hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.07] lg:hidden" aria-label={ukrainian ? "Відкрити навігацію" : "Open navigation"}>
+            <button type="button" onClick={() => setMobileOpen(true)} className="grid size-11 place-items-center rounded-xl text-[#627166] transition hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.07] min-[1080px]:hidden" aria-label={ukrainian ? "Відкрити навігацію" : "Open navigation"}>
               <Menu className="size-5" />
             </button>
           </div>
@@ -270,26 +271,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
         </div>
       ) : null}
 
-      <main id="main-content" tabIndex={-1} className="mobile-app-viewport flex-1 pb-[calc(4.75rem+env(safe-area-inset-bottom))] outline-none lg:pb-0">{children}</main>
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/70 bg-bg-base/95 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl lg:hidden" aria-label={ukrainian ? "Мобільна навігація" : "Mobile navigation"}>
-        <div className="grid grid-cols-5 gap-1">
-          {[
-            ...(!education ? [nav.find((item) => item.key === "home")] : [nav[0]]),
-            ...(!education ? [nav.find((item) => item.key === "tasks")] : [nav[1]]),
-            ...(!education ? [nav.find((item) => item.key === "library")] : [nav[3]]),
-            ...(!education ? [nav.find((item) => item.key === "playground")] : [nav[2]]),
-          ].filter((item): item is (typeof nav)[number] => Boolean(item)).map(({ key, label, icon: Icon, path }) => (
-            <button key={`mobile-primary-${key}`} type="button" onClick={() => navigateTo(path)} aria-current={current === key ? "page" : undefined} className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 transition ${current === key ? "bg-primary-strong text-primary-foreground dark:bg-primary/12 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white"}`}>
-              <Icon className="size-4" />
-              <span className="max-w-full truncate text-[10px] font-semibold leading-none">{label}</span>
-            </button>
-          ))}
-          <button type="button" onClick={() => setMobileOpen(true)} className="flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[#637267] transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-white/[.07] dark:hover:text-white" aria-label={ukrainian ? "Ще" : "More"}>
-            <Menu className="size-4" />
-            <span className="text-[10px] font-semibold leading-none">{ukrainian ? "Ще" : "More"}</span>
-          </button>
-        </div>
-      </nav>
+      <main id="main-content" tabIndex={-1} className="mobile-app-viewport min-w-0 flex-1 outline-none">{children}</main>
       <PlatformFooter />
     </div>
   );

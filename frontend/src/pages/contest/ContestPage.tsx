@@ -4023,7 +4023,7 @@ export const ContestPage: React.FC = () => {
             <div className="contest-hero-card__content">
             {/* Hero heading */}
             <div className="space-y-1.5">
-              <PageEyebrow label="contest" />
+              <PageEyebrow label={tr("Контест", "Contest")} />
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <h1 className="flex min-w-0 flex-1 items-center gap-3 break-words text-3xl font-bold leading-tight tracking-tight text-text-primary md:text-4xl [text-wrap:balance]">
                   <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-2xl">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" width={44} height={44} fetchPriority="high" className="size-full object-cover" /> : data.contest.icon || "🏆"}</span>{data.contest.title}

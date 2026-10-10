@@ -31,6 +31,7 @@ import { getErrorMessageFromUnknown } from "./lib/safeError";
 import { clearControlExamSession, getControlExamSession, isPathAllowedInControlExam, subscribeControlExamSession } from "./lib/controlExamSession";
 import { setActiveEduStudentId } from "./lib/eduContext";
 import { applySeo } from "./lib/seo";
+import { getDevPreviewUser, isDevPreviewActive, withDevPreview } from "./lib/devPreview";
 import { MascotCompanion } from "./components/MascotCompanion";
 import { Button } from "./components/ui/Button";
 import { GlobalQuickSearch } from "./components/ui/GlobalQuickSearch";
@@ -309,18 +310,6 @@ function asPage(value: string): Page | null {
 
 function getRequestedAppPage(searchParams: URLSearchParams): Page | null {
   return asPage(String(searchParams.get("app") ?? ""));
-}
-
-function withDevPreview(target: string, currentSearch: string): string {
-  if (!import.meta.env.DEV) return target;
-  const currentParams = new URLSearchParams(currentSearch);
-  if (currentParams.get("preview") !== "true") return target;
-  const [pathname, query] = target.split("?");
-  const params = new URLSearchParams(query);
-  params.set("preview", "true");
-  const persona = currentParams.get("persona");
-  if (persona) params.set("persona", persona);
-  return `${pathname}?${params}`;
 }
 
 // Resume a saved page only on the document's first root load. Returning to
@@ -628,7 +617,7 @@ const AppContent: React.FC = React.memo(() => {
     let cancelled = false;
     if (isDevPreview) {
       initialRootResumeConsumed = true;
-      setUser(previewPersona === "admin" ? { ...DEV_PREVIEW_USER, role: "SYSTEM_ADMIN", username: "admin-preview", firstName: "Admin" } : DEV_PREVIEW_USER);
+      setUser(getDevPreviewUser(location.search));
       setBootResumeHandled(true);
       setLoading(false);
       return;
@@ -752,6 +741,11 @@ const AppContent: React.FC = React.memo(() => {
     };
   }, [isDevPreview, previewPersona]);
   const handleLogout = useCallback(() => {
+    if (isDevPreviewActive(location.search)) {
+      setUser(null);
+      navigate("/", { replace: true });
+      return;
+    }
     // Best-effort server logout clears the httpOnly cookie and revokes the
     // current JWT. Local state is cleared immediately so a slow API cannot
     // keep the UI in an authenticated state.
@@ -767,22 +761,22 @@ const AppContent: React.FC = React.memo(() => {
     // `page` state that those routes don't render, leaving the user stuck on a
     // now-unauthed EDU/contest page. Landing on "/" shows the shared login.
     navigate("/");
-  }, [navigate]);
+  }, [location.search, navigate]);
   const handleSetPage = useCallback((newPage: Page) => {
       if (user?.userMode !== "EDUCATIONAL") {
         if (newPage === "home") {
-          navigate("/");
+          navigate(withDevPreview("/", location.search));
           return;
         }
-      if (newPage === "tasks") { navigate("/lab/practice?workspace=personal"); return; }
-      if (newPage === "grades") { navigate("/learning/catalog"); return; }
-      navigate(`/?app=${newPage}`);
+      if (newPage === "tasks") { navigate(withDevPreview("/lab/practice?workspace=personal", location.search)); return; }
+      if (newPage === "grades") { navigate(withDevPreview("/learning/catalog", location.search)); return; }
+      navigate(withDevPreview(`/?app=${newPage}`, location.search));
       return;
     }
     startTransition(() => {
       setPage(newPage);
     });
-  }, [navigate, user?.userMode]);
+  }, [location.search, navigate, user?.userMode]);
   const toggleTheme = useCallback(() => {
     setTheme(prev => {
       const next: AppTheme = prev === "dark" ? "light" : "dark";
@@ -890,9 +884,9 @@ const AppContent: React.FC = React.memo(() => {
       page={resolvedPage}
       theme={theme}
       onNavigate={handleSetPage}
-      onLibrary={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/lab/library?preview=true" : "/lab/library")}
-      onCourses={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/learning/catalog?preview=true" : "/learning/catalog")}
-      onPlayground={() => navigate(import.meta.env.DEV && searchParams.get("preview") === "true" ? "/lab/playground?preview=true" : "/lab/playground")}
+      onLibrary={() => navigate(withDevPreview("/lab/library", location.search))}
+      onCourses={() => navigate(withDevPreview("/learning/catalog", location.search))}
+      onPlayground={() => navigate(withDevPreview("/lab/playground", location.search))}
       onToggleTheme={toggleTheme}
       onToggleLanguage={() => i18n.changeLanguage(i18n.language === "uk" ? "en" : "uk")}
       onSupport={() => navigate("/support")}
@@ -932,7 +926,7 @@ const AppContent: React.FC = React.memo(() => {
     user={user}
     theme={theme}
     currentPath={location.pathname}
-    onNavigate={navigate}
+      onNavigate={(path) => navigate(withDevPreview(path, location.search))}
     onToggleTheme={toggleTheme}
     onLogout={handleLogout}
   >
@@ -953,7 +947,7 @@ const isPersonalWorkspacePath = (path: string) => path === "/" || /^\/(?:lab|lea
 const PersonalWorkspaceFrame: React.FC<React.PropsWithChildren<{ routeLocation: Location }>> = ({ children, routeLocation }) => {
   const navigate = useNavigate();
   const { i18n } = useTranslation();
-  const [user, setUser] = useState<User | null>(() => getCachedMeUser());
+  const [user, setUser] = useState<User | null>(() => getCachedMeUser() ?? (isDevPreviewActive(routeLocation.search) ? getDevPreviewUser(routeLocation.search) : null));
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const path = routeLocation.pathname;
   const isPersonalPath = isPersonalWorkspacePath(path);
@@ -1477,35 +1471,13 @@ const ContestRoutes: React.FC = React.memo(() => {
   const location = useLocation();
   const { i18n } = useTranslation();
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
-  const [user, setUser] = useState<User | null>(() => getCachedMeUser());
-  const [ready, setReady] = useState(() => Boolean(getCachedMeUser()));
+  const [user, setUser] = useState<User | null>(() => getCachedMeUser() ?? (isDevPreviewActive(location.search) ? getDevPreviewUser(location.search, "contest") : null));
+  const [ready, setReady] = useState(() => Boolean(getCachedMeUser()) || isDevPreviewActive(location.search));
   const isDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
 
   useEffect(() => {
     if (isDevPreview) {
-      const persona = new URLSearchParams(location.search).get("persona");
-      if (persona === "personal") setUser(DEV_PREVIEW_USER);
-      else if (persona === "admin") setUser({ ...DEV_PREVIEW_USER, role: "SYSTEM_ADMIN", username: "admin-preview", firstName: "Admin" });
-      else if (persona === "teacher" || persona === "student") setUser({
-        id: persona === "student" ? -202 : -201,
-        username: `${persona}-preview`,
-        firstName: persona === "student" ? "Софія" : "Ірина",
-        activeRuntime: "PYTHON",
-        difus: 74,
-        avatarUrl: null,
-        userMode: "EDUCATIONAL",
-        role: persona === "student" ? "USER" : "TEACHER",
-        ...(persona === "student" ? { studentId: -202, classId: -31, className: "10-Б" } : {}),
-      });
-      else setUser({
-        id: -301,
-        username: "contest-preview",
-        firstName: "Марко",
-        activeRuntime: "PYTHON",
-        difus: 0,
-        avatarUrl: null,
-        userMode: "CONTEST",
-      });
+      setUser(getDevPreviewUser(location.search, "contest"));
       setReady(true);
       return;
     }
@@ -1625,7 +1597,10 @@ const EduRoutes: React.FC = React.memo(() => {
   const eduPreviewStudent = eduPreviewPersona !== "teacher" && (
     eduPreviewPersona === "student" || (/^\/edu\/(journal|lessons(?:\/|$)|tasks\/|grades\/|appeals(?:\/|$))/).test(location.pathname)
   );
-  const [user, setUser] = useState<User | null>(null);
+  const eduRouteOwnsMainLandmark = (path: string) => path === "/edu"
+    || path === "/edu/tutor"
+    || /^\/edu\/(?:topics\/\d+|control-works\/\d+|classes\/\d+\/live|lessons\/\d+(?:\/quiz)?|manual-tasks\/\d+(?:\/submissions)?)\/?$/.test(path);
+  const [user, setUser] = useState<User | null>(() => isDevPreviewActive(location.search) ? getDevPreviewUser(location.search) : null);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -1713,18 +1688,7 @@ const EduRoutes: React.FC = React.memo(() => {
 
   useEffect(() => {
     if (isEduDevPreview) {
-      setUser({
-        id: eduPreviewStudent ? -202 : -201,
-        username: eduPreviewStudent ? "student-preview" : "teacher-preview",
-        firstName: eduPreviewPersona === "student" ? "Софія" : "Ірина",
-        activeRuntime: "PYTHON",
-        difus: 74,
-        avatarUrl: null,
-        userMode: "EDUCATIONAL",
-        role: eduPreviewStudent ? "USER" : "TEACHER",
-        ...(eduPreviewStudent ? { studentId: -202, classId: -31, className: "10-Б" } : {}),
-        ...(eduPreviewPersona === "student" ? { studentId: -202, classId: -31, className: "10-Б" } : {}),
-      });
+      setUser(getDevPreviewUser(location.search, eduPreviewStudent ? "student" : "teacher"));
       setLoading(false);
       return;
     }
@@ -1857,7 +1821,7 @@ const EduRoutes: React.FC = React.memo(() => {
   const teacherOnly = (element: React.ReactElement) => user.studentId ? <Navigate to="/edu/lessons" replace /> : element;
   const orgAdminOnly = (element: React.ReactElement) => isOrgAdmin ? element : <Navigate to="/edu" replace />;
   const studentOnly = (element: React.ReactElement) => user.studentId ? element : <Navigate to="/edu" replace />;
-  const eduMain = <div id="main-content" tabIndex={-1} className={`relative flex-1 min-h-0 flex flex-col outline-none ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
+  const eduMain = <div id="main-content" role={eduRouteOwnsMainLandmark(location.pathname) ? undefined : "main"} tabIndex={-1} className={`relative flex-1 min-h-0 flex flex-col outline-none ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
         <PageMotionScope.Provider value={false}>
         <AnimatePresence mode="sync" initial={false}>

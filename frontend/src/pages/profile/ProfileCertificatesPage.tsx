@@ -4,6 +4,7 @@ import { ArrowRight, Award, CheckCircle2, RefreshCw, ShieldX } from "lucide-reac
 import { getMyCertificates, type ProfileCertificate } from "../../lib/api/certificates";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { ProfileSectionNav } from "../../components/profile/ProfileSectionNav";
+import { useTranslation } from "react-i18next";
 
 const devPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const previewCertificates: ProfileCertificate[] = [
@@ -18,7 +19,8 @@ const formatDate = (value: string | null | undefined, locale: string) => {
 };
 
 export const ProfileCertificatesPage: React.FC = () => {
-  const english = !navigator.language.toLowerCase().startsWith("uk");
+  const { i18n } = useTranslation();
+  const english = i18n.language.toLowerCase().startsWith("en");
   const copy = (uk: string, en: string) => english ? en : uk;
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -59,19 +61,17 @@ export const ProfileCertificatesPage: React.FC = () => {
           )}
         />
 
-        <section className="relative overflow-hidden rounded-[30px] bg-[#1a2d20] px-6 py-8 text-white shadow-[0_26px_58px_-38px_rgba(0,0,0,.85)] sm:px-9 sm:py-10">
-          <div className="absolute -right-20 -top-24 size-80 rounded-full bg-[#ffd93d]/10 blur-3xl" />
-          <div className="absolute -bottom-28 left-10 size-72 rounded-full bg-primary/10 blur-3xl" />
-          <div className="relative flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
-            <div>
-              <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#8df0bc]">
+        <section className="border-b border-border/70 pb-6 pt-2">
+          <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+            <div className="min-w-0">
+              <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[.12em] text-primary-strong dark:text-primary-soft">
                 <Award className="size-4" />
                 {copy("Досягнення", "Achievements")}
               </span>
-              <h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.055em] sm:text-5xl">
+              <h1 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.045em] sm:text-3xl">
                 {copy("Твої сертифікати", "Your certificates")}
               </h1>
-              <p className="mt-4 max-w-xl text-base leading-7 text-[#b6c6b9]">
+              <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">
                 {copy("Підтвердження завершених контестів і результатів зібрані тут. Звідси можна повернутися в профіль або відкрити IAD.", "Verified records of completed contests and your results live here. You can return to profile or open IAD from here.")}
               </p>
             </div>
@@ -83,16 +83,17 @@ export const ProfileCertificatesPage: React.FC = () => {
             <p className="text-sm text-[#627166] dark:text-text-secondary">
               {loading ? copy("Оновлюємо список…", "Updating your list…") : copy(`${certificates.length} доступно`, `${certificates.length} available`)}
             </p>
+            {devPreview() ? <span className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-text-muted">{copy("Дані локального прев’ю", "Local preview data")}</span> : null}
           </div>
 
           {error ? (
             <div className="rounded-2xl border border-[#ff6b9d]/30 bg-[#fff1f5] p-4 text-sm text-[#b83259] dark:bg-[#ff6b9d]/10 dark:text-[#ffabc4]">{error}</div>
           ) : loading ? (
             <div className="grid gap-4 md:grid-cols-2">
-              {Array.from({ length: 4 }, (_, index) => <div key={index} className="h-52 animate-pulse rounded-[24px] bg-[#e6ece7] dark:bg-white/[.055]" />)}
+              {Array.from({ length: 4 }, (_, index) => <div key={index} className="h-40 animate-pulse rounded-xl bg-bg-hover" />)}
             </div>
           ) : certificates.length === 0 ? (
-            <div className="grid min-h-72 place-items-center rounded-[28px] border border-dashed border-border/15 bg-white p-8 text-center dark:border-white/10 dark:bg-[#18231b]">
+            <div className="grid min-h-56 place-items-center rounded-xl border border-dashed border-border bg-bg-surface p-8 text-center">
               <div>
                 <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
                   <Award className="size-6" />
@@ -108,9 +109,8 @@ export const ProfileCertificatesPage: React.FC = () => {
               {certificates.map((certificate) => {
                 const valid = String(certificate.status).toLowerCase() === "valid";
                 return (
-                  <article key={certificate.certificateId} className="group relative overflow-hidden rounded-[24px] border border-border/10 bg-white p-5 shadow-[0_20px_45px_-38px_rgba(11,31,17,.55)] transition hover:-translate-y-1 hover:border-primary/35 dark:border-white/10 dark:bg-[#18231b]">
-                    <div className="absolute right-0 top-0 size-28 translate-x-8 -translate-y-8 rounded-full bg-primary/[.07]" />
-                    <div className="relative flex items-start justify-between gap-4">
+                  <article key={certificate.certificateId} className="rounded-xl border border-border bg-bg-surface p-5 transition-colors hover:border-primary/45">
+                    <div className="flex items-start justify-between gap-4">
                       <span className={`grid size-11 place-items-center rounded-2xl ${valid ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-[#fff0f4] text-[#d34e72] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abb]"}`}>
                         {valid ? <Award className="size-5" /> : <ShieldX className="size-5" />}
                       </span>
@@ -119,13 +119,13 @@ export const ProfileCertificatesPage: React.FC = () => {
                         {certificate.status}
                       </span>
                     </div>
-                    <h2 className="relative mt-6 text-xl font-semibold tracking-[-.03em]">{certificate.contestTitle}</h2>
-                    <div className="relative mt-5 grid grid-cols-3 gap-3 border-y border-border/8 py-4 text-sm dark:border-white/[.08]">
+                    <h2 className="mt-5 text-lg font-semibold tracking-[-.02em]">{certificate.contestTitle}</h2>
+                    <div className="mt-4 grid grid-cols-3 gap-3 border-y border-border py-4 text-sm">
                       <div><div className="text-xs text-[#78867c] dark:text-[#98a89c]">{copy("Бали", "Score")}</div><strong className="mt-1 block">{certificate.score}/{certificate.maxScore}</strong></div>
                       <div><div className="text-xs text-[#78867c] dark:text-[#98a89c]">{copy("Місце", "Place")}</div><strong className="mt-1 block">{certificate.place ?? "—"}</strong></div>
                       <div><div className="text-xs text-[#78867c] dark:text-[#98a89c]">ID</div><strong className="mt-1 block truncate">{certificate.certificateId}</strong></div>
                     </div>
-                    <div className="relative mt-4 flex items-center justify-between gap-3">
+                    <div className="mt-4 flex items-center justify-between gap-3">
                       <span className="text-xs text-[#78867c] dark:text-[#98a89c]">{formatDate(certificate.issuedAt ?? certificate.createdAt, english ? "en-US" : "uk-UA")}</span>
                       <Link to={`/certificate/${encodeURIComponent(certificate.certificateId)}`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-strong transition group-hover:gap-2.5 dark:text-primary-soft">
                         {copy("Перевірити", "Verify")}

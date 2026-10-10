@@ -43,6 +43,8 @@ import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
 import { ContestSetupDialog } from "./ContestSetupDialog";
 import { CONTEST_BANNER_THEMES, contestTheme } from "./contestBranding";
+import { withDevPreview } from "../../lib/devPreview";
+import { previewStandings } from "./contestPreviewData";
 
 const isPreview = () =>
   import.meta.env.DEV &&
@@ -229,54 +231,6 @@ const previewDetails = (id: number): ContestDetails => ({
   phase: { started: id !== 103, finished: false },
 });
 
-const previewStandings: ContestStandings = {
-  contestId: 102,
-  scoringMode: "IOI",
-  problems: [
-    { id: 501, order: 1, label: "A", maxScore: 100 },
-    { id: 502, order: 2, label: "B", maxScore: 150 },
-    { id: 503, order: 3, label: "C", maxScore: 200 },
-  ],
-  rows: [
-    {
-      rank: 1,
-      participantId: 31,
-      displayName: "Іра М.",
-      totalScore: 350,
-      lastImprovementAt: null,
-      problems: [
-        { problemId: 501, score: 100, bestAt: null },
-        { problemId: 502, score: 150, bestAt: null },
-        { problemId: 503, score: 100, bestAt: null },
-      ],
-    },
-    {
-      rank: 2,
-      participantId: 32,
-      displayName: "Данило Р.",
-      totalScore: 300,
-      lastImprovementAt: null,
-      problems: [
-        { problemId: 501, score: 100, bestAt: null },
-        { problemId: 502, score: 100, bestAt: null },
-        { problemId: 503, score: 100, bestAt: null },
-      ],
-    },
-    {
-      rank: 3,
-      participantId: 33,
-      displayName: "Софія Л.",
-      totalScore: 250,
-      lastImprovementAt: null,
-      problems: [
-        { problemId: 501, score: 100, bestAt: null },
-        { problemId: 502, score: 150, bestAt: null },
-        { problemId: 503, score: 0, bestAt: null },
-      ],
-    },
-  ],
-};
-
 function Notice({
   children,
   tone = "neutral",
@@ -333,7 +287,8 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
   canJoinPrivateByCode = true,
   favoriteScope = "guest",
 }) => {
-  const navigate = useNavigate();
+  const routerNavigate = useNavigate();
+  const navigate = React.useCallback((path: string, options?: { replace?: boolean }) => routerNavigate(withDevPreview(path), options), [routerNavigate]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = React.useState<ContestListItem[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -399,6 +354,19 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
     setLoading(true);
     setError(null);
     try {
+      if (isPreview()) {
+        const q = debouncedSearch.toLowerCase();
+        const fallback = previewContests
+          .filter((item) => filter === "all" || phaseFor(item) === filter)
+          .filter((item) => difficulty === "all" || item.difficulty === difficulty)
+          .filter((item) => !showSaved || favoriteIds.includes(item.id))
+          .filter((item) => !q || `${item.title} ${item.description ?? ""}`.toLowerCase().includes(q));
+        setItems(fallback);
+        setTotal(fallback.length);
+        setTotalPages(1);
+        setMessage("Демо-режим: показано сценарій контестів.");
+        return;
+      }
       const response = await listContests({ page, pageSize: 12, search: debouncedSearch, phase: filter, sort, ...(difficulty !== "all" ? { difficulty } : {}), ...(showSaved ? { ids: favoriteIds.join(",") } : {}) });
       setItems(response.contests ?? []);
       setTotal(response.total ?? response.contests?.length ?? 0);
@@ -442,7 +410,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
     setError(null);
     try {
       const result = await joinContestByCode(code.trim());
-      navigate(`/contest/contests/${result.contestId}`);
+      navigate(withDevPreview(`/contest/contests/${isPreview() ? 102 : result.contestId}`));
     } catch (caught) {
       setError(
         getErrorMessageFromUnknown(caught, "Не вдалося приєднатися за кодом."),
@@ -655,7 +623,8 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
 
 export const ContestDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const routerNavigate = useNavigate();
+  const navigate = React.useCallback((path: string, options?: { replace?: boolean }) => routerNavigate(withDevPreview(path), options), [routerNavigate]);
   const [searchParams] = useSearchParams();
   const contestId = Number(id);
   const requestedTab = searchParams.get("tab");
@@ -692,6 +661,15 @@ export const ContestDetailPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
+      if (isPreview()) {
+        const preview = previewDetails(contestId);
+        setData(preview);
+        setClockOffset(Date.parse(preview.serverTime) - Date.now());
+        setStandings(previewStandings);
+        setMyProgress([]);
+        setMyParticipantId(1);
+        return;
+      }
       const [details, score] = await Promise.all([
         getContestDetails(contestId),
         getContestScoreboard(contestId).catch(() => null),
@@ -728,6 +706,10 @@ export const ContestDetailPage: React.FC = () => {
     setJoining(true);
     setError(null);
     try {
+      if (isPreview()) {
+        setData((current) => current ? { ...current, access: { ...current.access, canAccessContent: true, isJoined: true, joinRequired: false } } : current);
+        return;
+      }
       await joinContest(contestId);
       await load();
     } catch (caught) {
@@ -1011,7 +993,8 @@ const previewStatement: ContestProblemStatement = {
 
 export const ContestProblemPage: React.FC = () => {
   const { id, problemId } = useParams<{ id: string; problemId: string }>();
-  const navigate = useNavigate();
+  const routerNavigate = useNavigate();
+  const navigate = React.useCallback((path: string, options?: { replace?: boolean }) => routerNavigate(withDevPreview(path), options), [routerNavigate]);
   const contestId = Number(id);
   const numericProblemId = Number(problemId);
   const [statement, setStatement] =
@@ -1044,6 +1027,13 @@ export const ContestProblemPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
+      if (isPreview()) {
+        setStatement(previewStatement);
+        setLanguage("python");
+        setCode(previewStatement.task.template);
+        setSubmissions([{ id: 1, verdict: "AC", score: 100, createdAt: new Date().toISOString() }]);
+        return;
+      }
       const [data, history] = await Promise.all([
         getContestProblemStatement(contestId, numericProblemId),
         getContestProblemSubmissions(contestId, numericProblemId).catch(
@@ -1100,7 +1090,15 @@ export const ContestProblemPage: React.FC = () => {
     setRunning(true);
     setResult(null);
     try {
-      const response = await runContestProblem({
+      const response = isPreview() ? {
+        success: true,
+        verdict: "OK",
+        stdout: input.trim() || "2 3 5",
+        stderr: "",
+        exitCode: 0,
+        timeMs: 1,
+        memoryKb: 128,
+      } : await runContestProblem({
         contestId,
         problemId: numericProblemId,
         language,
@@ -1131,7 +1129,15 @@ export const ContestProblemPage: React.FC = () => {
     setChecking(true);
     setResult(null);
     try {
-      const response = await checkContestProblem({
+      const response = isPreview() ? {
+        verdict: "AC",
+        testsPassed: 3,
+        testsTotal: 3,
+        score: 100,
+        maxScore: 100,
+        compileError: null,
+        firstFailure: null,
+      } : await checkContestProblem({
         contestId,
         problemId: numericProblemId,
         language,
@@ -1159,11 +1165,11 @@ export const ContestProblemPage: React.FC = () => {
         good: response.verdict === "AC",
         text: `${response.verdict || "Готово"} · ${response.testsPassed}/${response.testsTotal} тестів · ${response.score}/${response.maxScore}`,
       });
-      const history = await getContestProblemSubmissions(
-        contestId,
-        numericProblemId,
-      ).catch(() => null);
-      setSubmissions(history?.submissions ?? submissions);
+      if (isPreview()) setSubmissions((current) => [{ id: Date.now(), verdict: "AC", score: 100, createdAt: new Date().toISOString() }, ...current]);
+      else {
+        const history = await getContestProblemSubmissions(contestId, numericProblemId).catch(() => null);
+        setSubmissions(history?.submissions ?? submissions);
+      }
     } catch (caught) {
       setResult({
         kind: "check",

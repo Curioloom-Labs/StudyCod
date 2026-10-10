@@ -1695,6 +1695,11 @@ export const TasksPage: React.FC<Props> = ({
         });
         setConsoleOutput(tr("Усі тести пройдено · 6/6\nЧас: 42 ms · Пам’ять: 18.4 MB", "All tests passed · 6/6\nTime: 42 ms · Memory: 18.4 MB"));
         setUIState("success");
+        if (courseMode && effectiveCourseItemId) {
+          // Keep the development-only course fixture in sync with the mock
+          // judge result so the next course step unlocks in the preview.
+          void completeCatalogItem(effectiveCourseItemId, 12).catch(() => undefined);
+        }
         setSubmitting(false);
       }, 550);
       return;

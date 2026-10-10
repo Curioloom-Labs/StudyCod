@@ -1343,7 +1343,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
             Monaco did not mount (5s). Check the browser console and bundled editor assets.
           </div>
         </div>}
-      {import.meta.env.DEV && <div className="absolute z-10 left-2 bottom-2 pointer-events-none">
+      {import.meta.env.DEV && new URLSearchParams(window.location.search).get("debugEditor") === "1" && <div className="absolute z-10 left-2 bottom-2 pointer-events-none">
           <div className="rounded border border-border bg-bg-surface/80 px-3 py-2 text-[11px] leading-4 font-mono text-text-secondary">
             <div>
               <span className="text-text-primary">Monaco debug</span>

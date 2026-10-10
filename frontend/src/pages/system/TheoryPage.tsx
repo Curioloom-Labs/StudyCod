@@ -95,7 +95,7 @@ export const TheoryPage: React.FC<TheoryPageProps> = ({ user }) => {
         <div className="px-4 py-3 border-b border-border bg-bg-code/50">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-primary" />
-            <PageEyebrow label="theory" />
+            <PageEyebrow label={tr("Теорія", "Theory")} />
           </div>
           <div className="mt-1 text-sm font-semibold tracking-tight text-text-primary">
             {tr("Курс:", "Course:")} {courseLabel}

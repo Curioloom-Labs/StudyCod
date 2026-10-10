@@ -1,4 +1,13 @@
 import { api } from "./client";
+import { isDevPreviewActive } from "../devPreview";
+import {
+  completeLearningPreviewItem,
+  enrollLearningPreviewCourse,
+  getLearningPreviewCatalog,
+  getLearningPreviewCourse,
+  getLearningPreviewMe,
+  setCurrentLearningPreviewCourse,
+} from "../learningPreview";
 
 export type CatalogRuntime = "JAVA" | "PYTHON" | "CPP";
 export type CatalogEnrollmentStatus = "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED";
@@ -167,31 +176,47 @@ export interface LearningMe {
 }
 
 export async function getLearningMe(): Promise<LearningMe> {
+  if (isDevPreviewActive()) return getLearningPreviewMe();
   const response = await api.get("/learning/me");
   return response.data;
 }
 
 export async function setCurrentCourse(enrollmentId: number) {
+  if (isDevPreviewActive()) {
+    setCurrentLearningPreviewCourse(enrollmentId);
+    return getLearningPreviewMe().current;
+  }
   const response = await api.put("/learning/me/current-course", { enrollmentId });
   return response.data?.enrollment;
 }
 
 export async function getLearningCatalog(): Promise<CatalogCourse[]> {
+  if (isDevPreviewActive()) return getLearningPreviewCatalog();
   const response = await api.get("/learning/catalog");
   return response.data?.courses ?? [];
 }
 
 export async function enrollInCatalogCourse(courseId: number, variantId: number) {
+  if (isDevPreviewActive()) {
+    enrollLearningPreviewCourse(courseId);
+    return getLearningPreviewMe().current;
+  }
   const response = await api.post(`/learning/courses/${courseId}/enroll`, { variantId });
   return response.data?.enrollment;
 }
 
 export async function getLearningCourse(courseId: number): Promise<LearningCourse> {
+  if (isDevPreviewActive()) return getLearningPreviewCourse(courseId);
   const response = await api.get(`/learning/courses/${courseId}`);
   return response.data?.course;
 }
 
 export async function completeCatalogItem(itemId: number, score?: number) {
+  if (isDevPreviewActive()) {
+    completeLearningPreviewItem(itemId);
+    window.dispatchEvent(new Event("studycod:course-progress-changed"));
+    return getLearningPreviewMe().current;
+  }
   const response = await api.post(`/learning/items/${itemId}/complete`, score == null ? {} : { score });
   return response.data?.enrollment;
 }

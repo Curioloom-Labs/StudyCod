@@ -68,7 +68,7 @@ export const PublicProductNav: React.FC<Props> = ({ active = "none", homeMode = 
     setTheme(next);
   };
 
-  return <><a className="skip-link" href="#main-content">{tr("Перейти до основного вмісту", "Skip to main content")}</a><header className={(homeMode ? "fixed" : "sticky") + " inset-x-0 top-0 z-50 h-[74px] border-b border-border/60 bg-bg-base/92 backdrop-blur-xl max-md:h-16"}>
+  return <><a className="skip-link" href="#main-content">{tr("Перейти до основного вмісту", "Skip to main content")}</a><header className={(homeMode ? "fixed" : "sticky") + " inset-x-0 top-0 z-50 h-16 border-b border-border/60 bg-bg-base/92 backdrop-blur-xl max-md:h-14"}>
     <div className="mx-auto flex h-full w-[min(1240px,calc(100%_-_48px))] items-center justify-between gap-7 max-md:w-[calc(100%_-_28px)] max-md:gap-2">
       <button type="button" onClick={() => homeMode ? window.scrollTo({ top: 0, behavior: scrollBehavior() }) : go("/")} className="bg-transparent text-left max-md:[&>span>span:last-child]:hidden" aria-label={tr("StudyCod — навчання через практику", "StudyCod — learn by building")}>
         <BrandLockup />

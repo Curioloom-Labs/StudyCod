@@ -9,14 +9,16 @@ import { PageLoader } from "../ui/PageLoadingTransition";
 import { PersonalLearningProvider } from "../learning/PersonalLearningProvider";
 import { PremiumWorkspaceShell } from "./PremiumWorkspaceShell";
 import { PersonalWorkspaceContext } from "./PersonalWorkspaceContext";
+import { getDevPreviewUser, isDevPreviewActive, withDevPreview } from "../../lib/devPreview";
 
 export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "learning" | "lab"; courseTab?: "overview" | "path" | "practice" | "progress" }> = ({ children, area = "learning", courseTab = "overview" }) => {
   const sharedWorkspace = useContext(PersonalWorkspaceContext);
-  const [user, setUser] = React.useState<User | null>(() => getCachedMeUser());
+  const [user, setUser] = React.useState<User | null>(() => getCachedMeUser() ?? (isDevPreviewActive() ? getDevPreviewUser() : null));
   const [loading, setLoading] = React.useState(() => !getCachedMeUser());
   const [loadError, setLoadError] = React.useState(false);
   const [theme, setTheme] = React.useState<AppTheme>(getCurrentTheme);
   const navigate = useNavigate();
+  const navigateWithPreview = (path: string) => navigate(withDevPreview(path));
   const { i18n } = useTranslation();
   React.useEffect(() => {
     if (sharedWorkspace?.active) return;
@@ -50,11 +52,11 @@ export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "l
     </main>;
   }
   const go = (page: string) => {
-    if (page === "home") navigate("/");
-    else if (page === "tasks") navigate("/lab/practice?workspace=personal");
-    else if (page === "grades") navigate("/learning/catalog");
-    else if (page === "admin") navigate("/?app=admin");
-    else if (page === "profile") navigate("/?app=profile");
+    if (page === "home") navigateWithPreview("/");
+    else if (page === "tasks") navigateWithPreview("/lab/practice?workspace=personal");
+    else if (page === "grades") navigateWithPreview("/learning/catalog");
+    else if (page === "admin") navigateWithPreview("/?app=admin");
+    else if (page === "profile") navigateWithPreview("/?app=profile");
   };
-  return <PersonalLearningProvider><PremiumWorkspaceShell user={user} page={area === "lab" ? "tasks" : "home"} area={area} courseTab={courseTab} theme={theme} onNavigate={go} onLibrary={() => navigate("/lab/library")} onCourses={() => navigate("/learning/catalog")} onPlayground={() => navigate("/lab/playground")} onToggleTheme={() => setTheme((prev) => { const next = prev === "dark" ? "light" : "dark"; applyTheme(next); return next; })} onToggleLanguage={() => void i18n.changeLanguage(i18n.language.startsWith("en") ? "uk" : "en")} onSupport={() => navigate("/support")} onSupportDesk={() => navigate("/support/desk")} onLogout={() => { void api.post("/auth/logout").finally(() => navigate("/")); }}>{children}</PremiumWorkspaceShell></PersonalLearningProvider>;
+  return <PersonalLearningProvider><PremiumWorkspaceShell user={user} page={area === "lab" ? "tasks" : "home"} area={area} courseTab={courseTab} theme={theme} onNavigate={go} onLibrary={() => navigateWithPreview("/lab/library")} onCourses={() => navigateWithPreview("/learning/catalog")} onPlayground={() => navigateWithPreview("/lab/playground")} onToggleTheme={() => setTheme((prev) => { const next = prev === "dark" ? "light" : "dark"; applyTheme(next); return next; })} onToggleLanguage={() => void i18n.changeLanguage(i18n.language.startsWith("en") ? "uk" : "en")} onSupport={() => navigateWithPreview("/support")} onSupportDesk={() => navigateWithPreview("/support/desk")} onLogout={() => { if (import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true") { navigate("/", { replace: true }); return; } void api.post("/auth/logout").finally(() => navigate("/")); }}>{children}</PremiumWorkspaceShell></PersonalLearningProvider>;
 };

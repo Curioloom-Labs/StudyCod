@@ -455,7 +455,7 @@ export const StudentAppealsPage: React.FC = () => {
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("До уроків", "Back to lessons")}
           </Button>
-          <PageEyebrow label="appeals" />
+          <PageEyebrow label={tr("Апеляції", "Appeals")} />
           <div className="mt-2 flex flex-col lg:flex-row lg:items-end justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-3 flex-wrap">

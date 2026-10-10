@@ -7,6 +7,7 @@ import {
   type LearningCourse,
   type LearningMe,
 } from "../../lib/api/learningCatalog";
+import { isDevPreviewActive } from "../../lib/devPreview";
 
 type PersonalLearningContextValue = {
   me: LearningMe | null;
@@ -22,6 +23,7 @@ const PersonalLearningContext = React.createContext<PersonalLearningContextValue
 export const PersonalLearningProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { i18n } = useTranslation();
   const locale = i18n.language.startsWith("en") ? "en" : "uk";
+  const preview = isDevPreviewActive();
   const [me, setMe] = React.useState<LearningMe | null>(null);
   const [currentCourse, setCurrentCourseData] = React.useState<LearningCourse | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -31,6 +33,12 @@ export const PersonalLearningProvider: React.FC<{ children: React.ReactNode }> =
     setLoading(true);
     setError(null);
     try {
+      if (preview) {
+        const nextMe = await getLearningMe();
+        setMe(nextMe);
+        setCurrentCourseData(nextMe.current ? await getLearningCourse(nextMe.current.courseId) : null);
+        return;
+      }
       const nextMe = await getLearningMe();
       setMe(nextMe);
       if (nextMe.current) {
@@ -43,7 +51,7 @@ export const PersonalLearningProvider: React.FC<{ children: React.ReactNode }> =
     } finally {
       setLoading(false);
     }
-  }, [locale]);
+  }, [locale, preview]);
 
   React.useEffect(() => { void refresh(); }, [refresh]);
   React.useEffect(() => {

@@ -1300,7 +1300,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   );
 
   return (
-    <div className="studycod-ide-workspace relative flex h-[calc(100dvh-9rem-env(safe-area-inset-bottom))] min-h-0 flex-col overflow-hidden rounded-[24px] border border-[#203428] bg-[#0b110d] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-[0_24px_70px_-56px_rgba(0,217,120,.35)] sm:rounded-[30px] lg:h-[min(1100px,calc(100dvh-9rem))] lg:min-h-[560px]">
+    <div className="studycod-ide-workspace relative flex h-[calc(100dvh-var(--workspace-header-height,64px)-env(safe-area-inset-bottom))] min-h-0 flex-col overflow-hidden rounded-none border-x-0 border-y border-[#203428] bg-[#0b110d] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-none sm:rounded-xl sm:border-x lg:h-[min(1100px,calc(100dvh-var(--workspace-header-height,64px)))] lg:min-h-[560px] lg:rounded-2xl lg:shadow-[0_24px_70px_-56px_rgba(0,217,120,.35)]">
       <header className="flex min-h-[72px] items-center gap-2 border-b border-[#203428] bg-[#111b14] px-3 py-2 sm:px-5 lg:gap-2.5">
         {props.onBack ? (
           <button
@@ -1580,7 +1580,31 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         ) : null}
 
         <section aria-label={tr("Редактор коду", "Code editor")} className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-          <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-x-2 gap-y-2 border-b border-[#203428] bg-[#0d1610] px-3 py-2.5">
+          <details className="shrink-0 border-b border-[#203428] bg-[#0d1610] px-3 py-2 lg:hidden">
+            <summary className="flex min-h-8 cursor-pointer list-none items-center gap-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a8b7ab]">
+              {tr("Ввід для запуску", "Run input")}
+              <span className="rounded-md border border-[#294333] bg-[#111f15] px-1.5 py-0.5 font-mono text-[9px] normal-case tracking-normal text-[#6f8877]">stdin</span>
+              <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-[#718075]">{tr("Змінити", "Edit")}</span>
+            </summary>
+            <label htmlFor="ide-run-input-mobile" className="sr-only">{tr("Ввід для запуску", "Run input")}</label>
+            <textarea
+              id="ide-run-input-mobile"
+              name="runInputMobile"
+              value={props.stdin}
+              onChange={(event) => props.onStdinChange(event.target.value)}
+              disabled={props.isWebTask || isEmptyTask}
+              rows={3}
+              aria-label={tr("Ввід для запуску", "Run input")}
+              spellCheck={false}
+              placeholder={props.isWebTask ? tr("WEB без stdin", "WEB has no stdin") : tr("Власний input для Run", "Custom input for Run")}
+              className="mt-2 min-h-16 max-h-24 w-full resize-y overflow-auto rounded-lg border border-[#294333] bg-[#101b13] px-3 py-2 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] focus:border-primary/60"
+            />
+            <div className="mt-2 flex items-center justify-between gap-2">
+              {props.publicExamples?.length ? <div className="flex items-center gap-1.5"><span className="text-[10px] text-[#82968a]">{tr("Приклад", "Example")}</span>{props.publicExamples.map((example, index) => <button key={example.testId} type="button" onClick={() => props.onStdinChange(example.input)} disabled={props.isWebTask || isEmptyTask} className="min-h-8 rounded-md border border-[#294333] px-2 text-[10px] font-semibold text-primary-soft disabled:opacity-40" aria-label={tr(`Вставити відкритий приклад ${index + 1}`, `Use public example ${index + 1}`)}>#{index + 1}</button>)}</div> : <span />}
+              <button type="button" onClick={() => props.onStdinChange("")} disabled={!props.stdin || props.isWebTask || isEmptyTask} className="min-h-8 rounded-md px-2 text-[10px] font-semibold text-[#82968a] disabled:opacity-40">{tr("Очистити ввід", "Clear input")}</button>
+            </div>
+          </details>
+          <div className="hidden shrink-0 grid-cols-[1fr_auto] items-center gap-x-2 gap-y-2 border-b border-[#203428] bg-[#0d1610] px-3 py-2.5 lg:grid">
             <div className="col-start-1 row-start-1 flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-[.15em] text-[#82968a]">
                 {tr("Ввід для запуску", "Run input")}
@@ -2304,12 +2328,12 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         <span className="ml-auto flex items-center gap-1 text-primary-soft">
           {props.checking ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
           {props.checking
-            ? tr("Система тестує", "Testing")
+            ? tr("Перевіряємо", "Testing")
             : props.checkResult
               ? allTestsPassed
-                ? "Accepted"
-                : "Needs attention"
-              : "Autosave"}
+                ? tr("Прийнято", "Accepted")
+                : tr("Потрібні зміни", "Needs attention")
+              : tr("Автозбереження", "Autosave")}
         </span>
       </footer>
     </div>

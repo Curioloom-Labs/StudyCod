@@ -26,6 +26,7 @@ import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunR
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { tracePlayground, type TraceResult } from "../../lib/api/playground";
 import { getCachedMeUser } from "../../lib/api/profile";
+import { isDevPreviewActive, withDevPreview } from "../../lib/devPreview";
 
 type TurnstileRenderOptions = {
   sitekey: string;
@@ -111,6 +112,23 @@ function normalizeVerdict(v: string | null | undefined): string | null {
   return raw || null;
 }
 
+const previewContestStatement = (problemId: number): ContestProblemStatement => ({
+  problem: { id: problemId, order: 1, label: "A" },
+  task: {
+    id: 41,
+    title: "Тиха перестановка",
+    description: "Знайди найменше значення та його номер у послідовності.\n\nВхідні дані\n```text\n5\n12 7 7 18 9\n```\nВихідні дані\n```text\n2 7\n```",
+    template: "values = list(map(int, input().split()))\nindex = min(range(len(values)), key=values.__getitem__)\nprint(index + 1, values[index])\n",
+    templatesByLanguage: { python: "values = list(map(int, input().split()))\nindex = min(range(len(values)), key=values.__getitem__)\nprint(index + 1, values[index])\n" },
+    defaultLanguage: "python",
+    allowedLanguages: ["python"],
+    timeLimitMs: 1000,
+    memoryLimitMb: 256,
+    outputLimitKb: 64,
+    checkerSpec: null,
+  },
+});
+
 export const ContestProblemSolvePage: React.FC = () => {
   const navigate = useNavigate();
   const params = useParams<{ id?: string; problemId?: string }>();
@@ -126,6 +144,7 @@ export const ContestProblemSolvePage: React.FC = () => {
   }, [params]);
 
   const hasToken = true;
+  const isPreview = isDevPreviewActive();
   const sessionUser = getCachedMeUser();
   const turnstileSiteKey = React.useMemo(() => String(import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "").trim(), []);
   // Live updates (SSE) are on by default; can be disabled explicitly.
@@ -189,6 +208,11 @@ export const ContestProblemSolvePage: React.FC = () => {
     const silent = !!opts?.silent;
     if (!silent) setSubsLoading(true);
     try {
+      if (isDevPreviewActive()) {
+        setSubmissions([{ id: 1, createdAt: new Date().toISOString(), phase: "CONTEST", language: "python", verdict: "AC", score: 100, maxScore: 100, testsPassed: 3, testsTotal: 3, compileErrorKind: null }]);
+        setLatestVerdict("AC");
+        return;
+      }
       const res = await getContestProblemSubmissions(contestId, problemId, 30);
       const rows = Array.isArray(res.submissions) ? res.submissions : [];
       setSubmissions(rows);
@@ -219,8 +243,9 @@ export const ContestProblemSolvePage: React.FC = () => {
   const hydrateDraft = React.useCallback(
     (stmt: ContestProblemStatement) => {
       if (!storageBase) return;
-      // Every problem accepts every supported language — no per-problem restriction.
-      const allowed = enabledJudgeLanguages();
+      // The real contest editor can use every judge language. The local design
+      // preview stays on its own seeded Python example and never submits to the judge.
+      const allowed = isDevPreviewActive() ? stmt.task.allowedLanguages : enabledJudgeLanguages();
       const fallbackLang = (allowed[0] ?? "java") as JudgeLanguage;
 
       try {
@@ -233,7 +258,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         setCode(savedCode != null ? savedCode : tpl);
 
         const savedInput = localStorage.getItem(`${storageBase}:runInput`);
-        setRunInput(savedInput ?? "");
+        setRunInput(savedInput ?? (isDevPreviewActive() ? "5\n12 7 7 18 9" : ""));
 
       } catch {
         // ignore
@@ -248,6 +273,13 @@ export const ContestProblemSolvePage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
+      if (isDevPreviewActive()) {
+        const stmt = previewContestStatement(problemId);
+        setStatement(stmt);
+        setContestMeta({ title: "Алгоритмічна субота", endsAt: new Date(Date.now() + 60 * 60_000).toISOString() });
+        hydrateDraft(stmt);
+        return;
+      }
       const [stmt, contest] = await Promise.all([getContestProblemStatement(contestId, problemId), getContestDetails(contestId)]);
       setStatement(stmt);
       setContestMeta({
@@ -274,6 +306,7 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   React.useEffect(() => {
     if (!turnstileEnabled) return;
+    if (isPreview) return;
 
     const existing = document.querySelector<HTMLScriptElement>('script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]');
     if (window.turnstile) {
@@ -312,10 +345,11 @@ export const ContestProblemSolvePage: React.FC = () => {
     return () => {
       // Keep shared script in document for other pages.
     };
-  }, [turnstileEnabled]);
+  }, [isPreview, turnstileEnabled]);
 
   React.useEffect(() => {
     if (!turnstileEnabled || !turnstileScriptReady) return;
+    if (isPreview) return;
     const container = turnstileContainerRef.current;
     if (!container || !window.turnstile) return;
 
@@ -343,7 +377,7 @@ export const ContestProblemSolvePage: React.FC = () => {
       turnstileWidgetIdRef.current = null;
       setTurnstileToken(null);
     };
-  }, [turnstileEnabled, turnstileScriptReady, turnstileSiteKey]);
+  }, [isPreview, turnstileEnabled, turnstileScriptReady, turnstileSiteKey]);
 
   React.useEffect(() => {
     if (!statement || !storageBase) return;
@@ -394,6 +428,7 @@ export const ContestProblemSolvePage: React.FC = () => {
   };
 
   React.useEffect(() => {
+    if (isPreview) { setWsStatus("offline"); return; }
     if (!liveUpdatesEnabled || !contestId || !hasToken || typeof window === "undefined" || typeof EventSource === "undefined") {
       setWsStatus("offline");
       return;
@@ -448,17 +483,19 @@ export const ContestProblemSolvePage: React.FC = () => {
         // ignore
       }
     };
-  }, [liveUpdatesEnabled, contestId, hasToken, syncLiveData]);
+  }, [isPreview, liveUpdatesEnabled, contestId, hasToken, syncLiveData]);
 
   React.useEffect(() => {
+    if (isPreview) return;
     const id = window.setInterval(() => {
       syncLiveData(false);
     }, wsStatus === "connected" ? 20000 : 5000 + Math.random() * 1000);
     return () => window.clearInterval(id);
-  }, [wsStatus, syncLiveData]);
+  }, [isPreview, wsStatus, syncLiveData]);
 
   // Poll organizer announcements so participants see them without leaving the workspace.
   React.useEffect(() => {
+    if (isPreview) { setAnnouncements([{ id: 1, author: "StudyCod", text: "Зосередься на коректному виборі найменшого елемента." , createdAt: new Date().toISOString() }]); return; }
     if (!contestId || !hasToken) return;
     let cancelled = false;
     const tick = async () => {
@@ -475,10 +512,11 @@ export const ContestProblemSolvePage: React.FC = () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [contestId, hasToken]);
+  }, [isPreview, contestId, hasToken]);
 
   // Integrity signals: report tab/focus loss and large pastes to the organizer.
   React.useEffect(() => {
+    if (isPreview) return;
     if (!contestId || !hasToken) return;
     const report = (type: "FOCUS_LOST" | "PASTE", detail?: string) => {
       void recordContestIntegrityEvent(contestId, type, detail).catch(() => {});
@@ -499,7 +537,7 @@ export const ContestProblemSolvePage: React.FC = () => {
       document.removeEventListener("visibilitychange", onHidden);
       document.removeEventListener("paste", onPaste);
     };
-  }, [contestId, hasToken]);
+  }, [isPreview, contestId, hasToken]);
 
   const applyCheckResult = React.useCallback((res: ContestCheckResult) => {
       const firstPublicFailure = res.firstFailure && !res.firstFailure.hidden ? res.firstFailure : null;
@@ -523,6 +561,7 @@ export const ContestProblemSolvePage: React.FC = () => {
       });
   }, []);
   React.useEffect(() => {
+    if (isPreview) return;
     if (!contestId || !problemId || !hasToken) return;
     let cancelled = false;
     const restore = async (kind: "check" | "run") => {
@@ -541,7 +580,7 @@ export const ContestProblemSolvePage: React.FC = () => {
     };
     void restore("check"); void restore("run");
     return () => { cancelled = true; };
-  }, [contestId, problemId, hasToken, applyCheckResult, syncLiveData]);
+  }, [isPreview, contestId, problemId, hasToken, applyCheckResult, syncLiveData]);
 
   const doRun = async () => {
     if (!contestId || !problemId || !statement) return;
@@ -554,7 +593,15 @@ export const ContestProblemSolvePage: React.FC = () => {
     setRunResult(null);
     setRunning(true);
     try {
-      const res = await runContestProblem({
+      const res = isPreview ? {
+        stdout: runInput.trim() ? "2 7" : "2 7",
+        stderr: "",
+        exitCode: 0,
+        success: true,
+        verdict: "OK",
+        timeMs: 1,
+        memoryKb: 128,
+      } : await runContestProblem({
         contestId,
         problemId,
         language: judgeLanguage,
@@ -575,6 +622,7 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   const doTrace = async () => {
     if (!statement || tracing || !code.trim()) return;
+    if (isPreview) { setError(null); return; }
     setTracing(true);
     try {
       const result = await tracePlayground({ language: judgeLanguage, code, stdin: runInput || undefined });
@@ -598,7 +646,11 @@ export const ContestProblemSolvePage: React.FC = () => {
     setCheckResult(null);
     setChecking(true);
     try {
-      const res = await checkContestProblem({
+      const res: ContestCheckResult = isPreview ? {
+        submissionId: Date.now(), phase: "CONTEST", verdict: "AC", testsPassed: 3, testsTotal: 3,
+        score: 100, maxScore: 100, compileError: null, compileErrorKind: null,
+        groupScores: [{ group: "Основні тести", score: 100, maxScore: 100 }],
+      } : await checkContestProblem({
         contestId,
         problemId,
         language: judgeLanguage,
@@ -610,7 +662,8 @@ export const ContestProblemSolvePage: React.FC = () => {
       setError(null);
       setLatestVerdict(normalizeVerdict(res.verdict));
       setLatestVerdictAt(Date.now());
-      syncLiveData(true);
+      if (isPreview) setSubmissions((current) => [{ id: res.submissionId, createdAt: new Date().toISOString(), phase: "CONTEST", language: judgeLanguage, verdict: res.verdict, score: res.score, maxScore: res.maxScore, testsPassed: res.testsPassed, testsTotal: res.testsTotal, compileErrorKind: res.compileErrorKind }, ...current]);
+      else syncLiveData(true);
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
       if (msg === "TURNSTILE_REQUIRED") {
@@ -639,6 +692,13 @@ export const ContestProblemSolvePage: React.FC = () => {
 
     setAskingOrganizer(true);
     try {
+      if (isPreview) {
+        setAnnouncements((current) => [{ id: Date.now(), author: "Оксана · демо", text: question.trim(), createdAt: new Date().toISOString() }, ...current]);
+        setOrganizerDialogOpen(false);
+        setOrganizerQuestion("");
+        setOrganizerQuestionSent(true);
+        return;
+      }
       await postContestCommunityQuestion(contestId, message);
       setOrganizerDialogOpen(false);
       setOrganizerQuestion("");
@@ -699,7 +759,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         </aside>
       ) : null}
 
-      {turnstileEnabled ? (
+      {turnstileEnabled && !isPreview ? (
         <Card className="flex flex-wrap items-center gap-3 border-border/80 p-3 dark:border-white/10 dark:bg-[#0d1510]">
             <div className="min-w-0 flex-1 text-xs text-text-muted dark:text-[#a7b5aa]">
               {turnstileLoadFailed
@@ -761,7 +821,7 @@ export const ContestProblemSolvePage: React.FC = () => {
           setRunResult(null);
           setCheckResult(null);
         }}
-        onBack={() => navigate(`/contest/contests/${contestId ?? ""}`)}
+        onBack={() => navigate(withDevPreview(`/contest/contests/${contestId ?? ""}`))}
         runResult={runResult}
         checkResult={checkResult}
         attemptsUsed={submissions.length}

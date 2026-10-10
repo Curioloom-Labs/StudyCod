@@ -19,6 +19,8 @@ import {
 } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { showToast } from "../../lib/toast";
+import { Modal } from "../../components/ui/Modal";
+import { withDevPreview } from "../../lib/devPreview";
 import {
   DEFAULT_GRADING_SYSTEM,
   formatGradeForSystem,
@@ -134,15 +136,15 @@ const gradeTone = (value: number | null | undefined) => {
 const Header: React.FC<{ title: string; text: string; classId?: string; actions?: React.ReactNode }> = ({ title, text, classId, actions }) => {
   const navigate = useNavigate();
   return (
-    <header className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+    <header className="mb-6 flex flex-col justify-between gap-4 border-b border-border/70 pb-5 md:flex-row md:items-end dark:border-white/10">
       <div>
         <p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">EDU / журнал</p>
-        <h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] sm:text-5xl">{title}</h1>
-        <p className="mt-3 max-w-2xl text-base leading-7 text-[#69796e] dark:text-[#a9b6ac]">{text}</p>
+        <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-semibold tracking-[-.045em]">{title}</h1>
+        <p className="mt-1 max-w-2xl text-sm leading-6 text-text-secondary">{text}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         {actions}
-        <button type="button" onClick={() => navigate(`/edu/classes/${classId}${preview() ? "?preview=true" : ""}`)} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold dark:border-white/10">
+        <button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${classId}`))} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold dark:border-white/10">
           <ArrowLeft className="size-4" />
           Клас
         </button>
@@ -366,18 +368,18 @@ export const GradebookWorkspace: React.FC = () => {
             </div>
           </section>
 
-          <div className="overflow-x-auto rounded-[28px] border border-border/10 bg-white shadow-[0_18px_50px_rgba(12,36,20,.05)] dark:border-white/[.09] dark:bg-bg-surface">
+          <div className="max-h-[min(68vh,740px)] overflow-auto rounded-2xl border border-border/10 bg-white dark:border-white/[.09] dark:bg-bg-surface">
             <table className="min-w-full border-collapse">
               <thead>
                 <tr className="border-b border-border/10 dark:border-white/[.08]">
-                  <th className="sticky left-0 z-20 min-w-56 bg-white px-5 py-4 text-left text-xs font-bold uppercase tracking-[.13em] text-[#718075] dark:bg-bg-surface">Учень</th>
-                  {columns.map((column) => <th key={column.id} className="min-w-40 px-3 py-4 text-left align-bottom"><div className="text-xs font-bold text-[#26362c] dark:text-[#e4ede7]">{column.title}</div><div className="mt-1 text-[11px] font-medium text-[#718075] dark:text-[#a6b4a9]">{column.subtitle}</div></th>)}
+                  <th className="sticky left-0 top-0 z-30 min-w-56 bg-bg-surface px-5 py-4 text-left text-xs font-bold uppercase tracking-[.13em] text-text-secondary">Учень</th>
+                  {columns.map((column) => <th key={column.id} className="sticky top-0 z-20 min-w-40 bg-bg-surface px-3 py-4 text-left align-bottom"><div className="text-xs font-semibold text-text-primary">{column.title}</div><div className="mt-1 text-[11px] font-medium text-text-secondary">{column.subtitle}</div></th>)}
                 </tr>
               </thead>
               <tbody>
                 {visibleStudents.map((student) => (
                   <tr key={student.studentId} className="border-b border-border/8 last:border-0 dark:border-white/[.06]">
-                  <td className="sticky left-0 z-10 bg-white px-5 py-4 text-sm font-bold dark:bg-bg-surface">{student.studentName}</td>
+                  <td className="sticky left-0 z-10 bg-bg-surface px-5 py-4 text-sm font-semibold">{student.studentName}</td>
                     {columns.map((column) => {
                       const grade = findGrade(student, column);
                       return <td key={column.id} className="px-3 py-3"><button type="button" onClick={() => openEditor(student, column)} className={`inline-flex min-h-11 min-w-12 items-center justify-center rounded-xl px-3 text-sm font-extrabold transition hover:-translate-y-0.5 hover:ring-4 hover:ring-primary/15 ${gradeTone(grade?.grade)}`}>{grade?.grade == null ? "—" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</button></td>;
@@ -392,29 +394,23 @@ export const GradebookWorkspace: React.FC = () => {
       )}
 
       {editing && (
-        <div data-material="grade-dialog-scrim" className="fixed inset-0 z-[80] flex items-end justify-center bg-[#071009]/45 p-4 backdrop-blur-sm sm:items-center" role="presentation">
-          <section role="dialog" aria-modal="true" aria-label="Редагування оцінки" tabIndex={-1} className="w-full max-w-md rounded-[26px] bg-white p-6 shadow-2xl dark:bg-[#142018]">
-            <div className="flex items-start justify-between gap-4">
-              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">Оцінка</p><h2 className="mt-2 text-2xl font-bold tracking-[-.04em]">{editing.student.studentName}</h2><p className="mt-1 text-sm text-[#718075] dark:text-[#a6b4a9]">{editing.column.title}</p></div>
-              <button type="button" onClick={() => setEditing(null)} aria-label="Закрити редагування оцінки" className="rounded-xl bg-[#edf1ed] p-2 text-text-secondary dark:bg-white/[.08] dark:text-[#c0cdc2]"><X className="size-4" aria-hidden="true" /></button>
+        <Modal open onClose={() => setEditing(null)} title="Редагування оцінки" description={`${editing.student.studentName} · ${editing.column.title}`} showCloseButton={false} panelClassName="max-w-md">
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setEditing(null)} aria-label="Закрити редагування оцінки" className="rounded-xl bg-bg-subtle p-2 text-text-secondary"><X className="size-4" aria-hidden="true" /></button>
             </div>
  <label htmlFor="teacher-grade-value" className="sr-only">Оцінка</label><input id="teacher-grade-value" name="gradeValue" inputMode="decimal" value={gradeValue} onChange={(event) => setGradeValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveGrade(); }} className="mt-6 w-full rounded-2xl border border-border/12 bg-[#f8fbf8] px-4 py-4 text-center text-3xl font-bold outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-base" placeholder={gradingSystemInputHint(gradingSystem, false)} />
             <div className="mt-4 grid grid-cols-5 gap-2">{quickGrades.map((value) => <button key={value} type="button" onClick={() => setGradeValue(value)} className="rounded-xl bg-[#f0f4f0] px-3 py-2 text-sm font-bold dark:bg-white/[.06]">{value}</button>)}</div>
             <div className="mt-6 flex gap-2"><button type="button" onClick={() => setEditing(null)} className="flex-1 rounded-xl px-4 py-3 font-bold">Скасувати</button><button type="button" disabled={saving || !gradeValue.trim()} onClick={() => void saveGrade()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-bold text-[#062211] disabled:opacity-55"><Save className="size-4" />Зберегти</button></div>
-          </section>
-        </div>
+        </Modal>
       )}
 
-      {thematicOpen && (
-        <div data-material="grade-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/45 p-4 backdrop-blur-sm" role="presentation">
-          <form role="dialog" aria-modal="true" aria-label="Додати тематичну оцінку" tabIndex={-1} onSubmit={addThematic} className="w-full max-w-md rounded-[26px] bg-white p-6 shadow-2xl dark:bg-[#142018]">
-            <h2 className="text-2xl font-bold tracking-[-.04em]">Додати тематичну в журнал</h2>
-            <p className="mt-2 text-sm leading-6 text-[#6d7c71] dark:text-[#a2b1a6]">Оберіть тему, і колонка зʼявиться в цьому журналі поруч з іншими оцінками.</p>
-            <select required value={thematicTopicId} onChange={(event) => setThematicTopicId(event.target.value)} className="mt-5 w-full rounded-xl border border-border/12 px-4 py-3 dark:border-white/10 dark:bg-bg-base"><option value="">Оберіть тему</option>{missingThematics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select>
+      <Modal open={thematicOpen} onClose={() => setThematicOpen(false)} title="Додати тематичну оцінку" description="Оберіть тему, щоб додати підсумкову колонку до журналу класу." showCloseButton={false} panelClassName="max-w-md">
+          <form onSubmit={addThematic}>
+            <label htmlFor="thematic-topic" className="text-sm font-semibold">Тема</label>
+            <select id="thematic-topic" required value={thematicTopicId} onChange={(event) => setThematicTopicId(event.target.value)} className="mt-2 w-full rounded-xl border border-border/12 bg-bg-surface px-4 py-3 dark:border-white/10"><option value="">Оберіть тему</option>{missingThematics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select>
             <div className="mt-5 flex gap-2"><button type="button" onClick={() => setThematicOpen(false)} className="flex-1 rounded-xl px-4 py-3 font-bold">Скасувати</button><button type="submit" disabled={busyAction || !thematicTopicId} className="flex-1 rounded-xl bg-primary px-4 py-3 font-bold text-[#062211] disabled:opacity-55">Додати</button></div>
           </form>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 };
@@ -469,7 +465,7 @@ export const SummaryGradesWorkspace: React.FC = () => {
         classId={classId}
         title="Підсумкові оцінки"
         text="Це архів і перегляд. Створення тематичних та семестрових перенесено в журнал класу, щоб оцінювання не дублювалось."
-        actions={<button type="button" onClick={() => navigate(`/edu/classes/${classId}/gradebook${preview() ? "?preview=true" : ""}`)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-primary dark:text-[#062211]">Відкрити журнал <ChevronRight className="size-4" /></button>}
+        actions={<button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${classId}/gradebook`))} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-primary dark:text-[#062211]">Відкрити журнал <ChevronRight className="size-4" /></button>}
       />
       {error && <div className="mb-5 rounded-2xl bg-[#ff6b9d]/10 px-4 py-3 text-sm text-[#c4436b]" role="alert">{error}</div>}
       <div className="mb-5 rounded-[24px] border border-border/10 bg-white px-5 py-4 text-sm dark:border-white/10 dark:bg-bg-surface">

@@ -1,90 +1,62 @@
 # StudyCod design system
 
-This document describes the shared visual and interaction rules for the public site, learner workspaces, EDU, contests, the code editor, and administration. Keep the StudyCod mark, Fixel fonts, and evergreen brand recognizable while letting each screen give its main task enough space.
+This specification covers the public site, self-study, EDU, contests, editor, administration, and support areas. The full reference set lives in [design/references/redesign-2026-10](design/references/redesign-2026-10/README.md). References guide composition and hierarchy; use the real StudyCod mark, actual product data, and current design tokens in the interface.
 
-## Brand
+## Direction
 
-- Use the existing mark in `frontend/public/favicon.svg` and the `Logo` component as the source of truth. The generated brand board is a visual reference, not an asset to ship; its logo rendering is approximate.
-- Use Fixel Text for interface and body text and Fixel Display for major headings. Keep the system monospace stack for code, identifiers, timestamps, and compact diagnostic data.
-- Dark and light themes are both supported. Use semantic tokens so the same component retains meaning in either theme.
-- Keep the forest and mint greens for primary actions and progress. Use amber for caution, red for errors, and blue-gray for secondary information. Reserve vivid colors for a clear status or action.
+Present the product clearly on public pages. Keep workspaces calm, direct, and easy to scan. Global navigation stays at the top on desktop and mobile. Contextual course, class, contest, and administration tabs sit under the current page title. Remove persistent side rails and their reserved margins.
 
-## Core tokens
+Keep the shipped StudyCod logo, Fixel Text, Fixel Display, and evergreen brand. Support Ukrainian and English, dark and light themes, keyboard use, and reduced motion. Do not copy generated logos, sample content, or invented metrics from reference images.
 
-| Token | Dark theme | Light theme | Use |
+## Tokens
+
+| Token | Dark | Light | Role |
 |---|---|---|---|
-| `--bg-base` | `#0c130e` | `#f4f4ef` | Page background |
-| `--bg-surface` | `#151f18` | `#fffefa` | Cards, menus, dialogs |
+| `--bg-base` | `#0c130e` | `#f4f4ef` | Main page canvas |
+| `--bg-surface` | `#151f18` | `#fffefa` | Menus, dialogs, and distinct work surfaces |
 | `--bg-hover` | `#202c23` | `#edf0e9` | Hover and selected surfaces |
 | `--bg-code` | `#0a110c` | `#ecefe9` | Code and inset controls |
-| `--text-primary` | `#f2f7f2` | `#1b2720` | Headings and main content |
-| `--text-secondary` | `#d0dbd1` | `#405047` | Supporting content |
-| `--text-muted` | `#aab9ad` | `#617067` | Secondary labels |
-| `--primary` | `#8fbd99` | `#346f4b` | Main actions and progress |
-| `--accent-warn` | `#d3ac78` | `#936527` | Caution and attention |
-| `--accent-error` | `#e59c9c` | `#b4494d` | Errors and destructive state |
+| `--text-primary` | `#f2f7f2` | `#1b2720` | Main text |
+| `--text-secondary` | `#d0dbd1` | `#405047` | Supporting text |
+| `--text-muted` | `#aab9ad` | `#617067` | Metadata |
+| `--primary` | `#8fbd99` | `#346f4b` | Main action and progress |
+| `--accent-warn` | `#d3ac78` | `#936527` | Attention |
+| `--accent-error` | `#e59c9c` | `#b4494d` | Errors |
 | `--border` | `#34443a` | `#d5dbd2` | Structural boundaries |
 
-Prefer `bg-bg-base`, `bg-bg-surface`, `text-text-secondary`, `border-border`, `text-primary`, and the semantic accent tokens over literal color values. Keep literal colors for code syntax or a specific existing brand illustration; migrate other legacy values when editing that component. Do not add new `!important` color overrides.
+Use the existing semantic Tailwind tokens (`bg-bg-base`, `bg-bg-surface`, `text-text-secondary`, `border-border`, `text-primary`, and the status accents). Keep literal colors for code syntax or established artwork, not as a second palette. Avoid adding `!important` overrides.
 
-## Type and spacing
+## Layout and components
 
-- Use the existing hierarchy: caption `12px`, UI `14px`, body `16px` with a relaxed line height, and display headings from `22px` upward.
-- Keep heading line-height near `1.18`; use compact line-height for labels and controls and about `1.58` for paragraphs.
-- Use the existing 4px spacing scale: `4, 8, 12, 16, 24, 32, 48, 64px`. Denser layouts may use `4–16px` gaps; public and learner content can use `24–48px` between sections.
-- Prefer the existing surface, control, button, and modal radius tokens. Keep tables and code panels structurally square enough to scan; reserve large rounded corners for primary cards and dialogs.
+- Global navigation: 64px desktop, 56px mobile. At narrow widths, keep the logo, menu, theme, language, and account controls visible; place global sections in the top menu. Do not use a bottom bar or a permanent left rail.
+- Context navigation: compact tabs directly below the active section title. Preserve route parameters and deep links when changing tabs.
+- Standard reading width: 1280px. Dense tables can reach 1600px. The editor uses the available viewport width.
+- Use 16/24/32px as common content gaps. Controls have 8px corners; work surfaces use 12–16px corners. Prefer structural dividers and compact lists over nested cards.
+- Put the page title and its primary action together. Keep status beside the information it describes. Show loading, first-load error, successful emptiness, stale data, access denial, and success as distinct states.
+- Keep tables as tables. On phones, allow horizontal scrolling inside a table and keep its row identity clear.
+- Use 44×44px touch targets for primary mobile navigation and essential actions. Compact desktop controls retain the existing desktop density.
+- Use the shared `Modal` for confirmation and forms. Keep Escape, focus containment, focus restoration, and scroll locking.
+- Keep one `main` landmark per view. The skip link must focus the first useful content, not a later demo.
 
-## Components and interaction states
+## Editor behavior
 
-- Primary buttons should have one clear visual priority per region. Secondary actions use outline or ghost treatment. Destructive actions use the error semantic token.
-- Inputs and controls need a visible focus ring, a label or accessible name, and a disabled state that remains legible.
-- Use `Button`'s `touch` and `touch-icon` sizes for mobile actions. For mobile navigation and essential icon actions, target at least `44×44px`; preserve compact desktop density.
-- Keep status and commands visually distinct. A connection or result state should not resemble an enabled action.
-- Use `Modal` for confirmation and form dialogs. It handles Escape, focus containment and restoration, body scroll lock, and the reduced-motion variant.
-- A page has one main landmark. Shell skip links target a focusable `main-content` destination; keep the target near the beginning of the useful content.
+Below 1024px, use the tabs “Умова / Код / Результат”; at 1024px and above, use independently scrollable panes. Keep Monaco mounted as tabs change so code, selection, cursor, undo, scroll, language, and custom input survive. Collapse the mobile stdin field by default so code remains the largest working area. Keep Run and Submit grouped and visible. Put secondary commands in More. The result tab opens automatically only if the learner stayed in Code; otherwise mark the new result. Size the workspace against the visible viewport, including global and course navigation, safe areas, and the on-screen keyboard.
 
-## Layout and density
+## Motion
 
-- Let content and tables keep their natural structure. On small screens, scroll wide tables horizontally instead of turning each row into unrelated cards.
-- Public pages lead with one primary action and show the product quickly. Learner dashboards lead with the next course action and current status.
-- Dense teacher, contest, admin, and editor screens prioritize scan order, clear states, and stable control placement over decorative whitespace.
-- The IDE uses condition/code/result tabs below `1024px` and panels at `1024px` and above. Its mobile workspace follows the visible viewport and safe area. Keep the editor mounted while panes change so code, cursor, scroll position, language, and input survive.
-- Test layouts at `320, 390, 768, 1024, 1366, and 1920px`, at `200%` zoom, and with the on-screen keyboard open.
+Apply [design-motion-principles](https://github.com/kylezantos/design-motion-principles) by action frequency:
 
-## Motion policy
+- **Emil / frequent work:** editor keys, tab changes, filter edits, and table refreshes respond immediately. Never animate typing, cursor movement, or recurring counts.
+- **Jakub / controls:** feedback is about 120ms; menu and dialog opening is 180–240ms; closing is 120–160ms. Do not delay primary content.
+- **Jhey / presentation:** use a short guided “code → test → hint” demonstration and a one-time completion effect when a learner completes an action.
+- **Reduced motion:** show the final state immediately. Remove travel, scale, animated blur, and decorative loops. Keep the meaning in text and status indicators.
 
-Choose motion by action frequency and purpose, following [design-motion-principles](https://github.com/kylezantos/design-motion-principles):
+## Applied skills
 
-- **Frequent editing and keyboard actions:** instant. Do not animate keystrokes, cursor movement, repeated table updates, or tab key navigation.
-- **Daily controls:** short transitions, typically `120–180ms`. Open lightweight menus in about `180ms`; close them in `120–160ms`.
-- **Presentation and onboarding:** restrained reveals up to `240ms`; do not delay primary content.
-- **One-time learning completion:** a brief, non-blocking celebration may run once after the learner completes an action. Never replay it on ordinary page load.
-- **Reduced motion:** remove movement, scale, blur, and decorative loops; present the final state immediately. Keep text and status cues so meaning does not depend on animation.
-- Avoid persistent live pulses and repeated count-up animations. A live status can use a static indicator and a readable label.
+The requested taste-skill names were mapped to their installed equivalents: `taste-skill-v1` → `design-taste-frontend-v1`; `gpt-tasteskill` → `gpt-taste`; `redesign-skill` → `redesign-existing-projects`; `image-to-code-skill` → `image-to-code`; `output-skill` → `full-output-enforcement`; `soft-skill` → `high-end-visual-design`; `minimalist-skill` → `minimalist-ui`; `brutalist-skill` → `industrial-brutalist-ui`. `imagegen-frontend-web`, `imagegen-frontend-mobile`, `brandkit`, `stitch-design-taste`, and `design-motion-principles` were applied as separate reference, brand, implementation, and motion lenses. Product behavior, accessibility, and the preserved StudyCod brand take precedence over stylistic variations.
 
-## Reference boards
+## Reference and audit records
 
-The boards below are direction-setting examples. They were generated for this audit and must be translated into real components; use the current StudyCod mark and typography rather than copying any approximated logo or embedded text.
-
-| Reference | File |
-|---|---|
-| Brand board | [brandkit-studycod.png](design/references/brandkit-studycod.png) |
-| Public landing, desktop | [landing-desktop.png](design/references/landing-desktop.png) |
-| Learner dashboard, desktop | [learning-dashboard-desktop.png](design/references/learning-dashboard-desktop.png) |
-| Teacher workspace, desktop | [teacher-workspace-desktop.png](design/references/teacher-workspace-desktop.png) |
-| IDE, desktop | [ide-desktop.png](design/references/ide-desktop.png) |
-| IDE statement, mobile | [ide-mobile-condition.png](design/references/ide-mobile-condition.png) |
-| IDE code, mobile | [ide-mobile-code.png](design/references/ide-mobile-code.png) |
-| IDE result, mobile | [ide-mobile-result.png](design/references/ide-mobile-result.png) |
-
-## Applied audit lenses
-
-- `taste-skill-v1`, `gpt-tasteskill`, and `redesign-skill` guided hierarchy, layout variation, and changes to existing workflows.
-- `soft-skill`, `minimalist-skill`, and `brutalist-skill` informed the calmer surfaces, reduced decoration, and clearer dense work areas.
-- `image-to-code-skill`, `imagegen-frontend-web`, and `imagegen-frontend-mobile` produced separate desktop/mobile references that were translated into layout rules before implementation.
-- `brandkit` and `stitch-skill` informed the brand board and this portable `DESIGN.md` system spec; `output-skill` informed the evidence, priority, fix, and acceptance register.
-- `design-motion-principles` supplied the Emil-first daily-work weighting, Jakub's transition polish, selective Jhey celebration, and the reduced-motion audit.
-
-## Audit and acceptance
-
-The current audit register and implementation status are in [design/DESIGN_AUDIT.md](design/DESIGN_AUDIT.md). Closed scenarios that could only be inspected in code are marked there; verify their role-specific paths in preview after release. Use [motion-audits/studycod-frontend-2026-10-10.html](motion-audits/studycod-frontend-2026-10-10.html) for the motion audit and interactive motion examples.
+- [All 29 separate image references and their intended use](design/references/redesign-2026-10/README.md)
+- [Route, role, finding, evidence, and acceptance register](design/DESIGN_AUDIT.md)
+- [Motion audit and interactive examples](design/motion-audits/studycod-frontend-2026-10-10.html)

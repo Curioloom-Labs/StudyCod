@@ -26,6 +26,8 @@ import {
   type Topic,
 } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { tr } from "../../i18n";
+import { withDevPreview } from "../../lib/devPreview";
 
 const isPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const root = "min-h-[100dvh] bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-10 lg:py-10";
@@ -40,7 +42,7 @@ const sampleLessons: Lesson[] = [
 const initials = (student: Student) => `${student.firstName?.[0] || ""}${student.lastName?.[0] || ""}`.toUpperCase() || "У";
 
 const navigateWithPreview = (navigate: ReturnType<typeof useNavigate>, path: string) => {
-  navigate(`${path}${isPreview() ? (path.includes("?") ? "&" : "?") + "preview=true" : ""}`);
+  navigate(withDevPreview(path));
 };
 
 export const ClassHubPage: React.FC = () => {
@@ -58,6 +60,17 @@ export const ClassHubPage: React.FC = () => {
     if (!Number.isFinite(id) || id <= 0) return;
     setLoading(true);
     try {
+      if (isPreview()) {
+        setClassInfo({ id, name: "10-Б · StudyCod", gradingSystem: "POINTS_12", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+        setStudents(Array.from({ length: 24 }, (_, index) => ({ id: index + 1, firstName: index % 2 ? "Марко" : "Софія", lastName: index % 2 ? "Литвин" : "Мельник", email: "", generatedUsername: `student_${index + 1}`, createdAt: new Date().toISOString() })));
+        setTopics([
+          { id: 1, title: "Основи Python", description: "Синтаксис, змінні, введення та виведення", order: 1, language: "PYTHON", tasks: [{}, {}] },
+          { id: 2, title: "Колекції", description: "Списки, словники та проходи по даних", order: 2, language: "PYTHON", tasks: [{}], controlWorks: [{}] },
+        ]);
+        setLessons(sampleLessons);
+        setError(null);
+        return;
+      }
       const [groupResult, peopleResult, topicsResult, lessonsResult] = await Promise.allSettled([
         getClass(id),
         getStudents(id),
@@ -72,18 +85,7 @@ export const ClassHubPage: React.FC = () => {
       const failedPanels = [peopleResult, topicsResult, lessonsResult].filter((result) => result.status === "rejected").length;
       setError(failedPanels ? "Частину даних класу тимчасово не вдалося завантажити. Натисніть «Повторити»." : null);
     } catch (caught) {
-      if (isPreview()) {
-        setClassInfo({ id: -31, name: "10-Б · StudyCod", gradingSystem: "POINTS_12", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-        setStudents(Array.from({ length: 24 }, (_, index) => ({ id: index + 1, firstName: index % 2 ? "Марко" : "Софія", lastName: index % 2 ? "Литвин" : "Мельник", email: "", generatedUsername: `student_${index + 1}`, createdAt: new Date().toISOString() })));
-        setTopics([
-          { id: 1, title: "Основи Python", description: "Синтаксис, змінні, введення та виведення", order: 1, language: "PYTHON", tasks: [{}, {}] },
-          { id: 2, title: "Колекції", description: "Списки, словники та проходи по даних", order: 2, language: "PYTHON", tasks: [{}], controlWorks: [{}] },
-        ]);
-        setLessons(sampleLessons);
-        setError(null);
-      } else {
-        setError(getErrorMessageFromUnknown(caught, "Не вдалося завантажити клас."));
-      }
+      setError(getErrorMessageFromUnknown(caught, "Не вдалося завантажити клас."));
     } finally {
       setLoading(false);
     }
@@ -119,20 +121,25 @@ export const ClassHubPage: React.FC = () => {
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.14em] text-[#718077] dark:text-[#91a197]"><span>Викладач</span><span className="text-primary-strong">/</span><span>{className}</span></div>
         </div>
 
-        <section className="overflow-hidden rounded-[36px] border border-[#132117]/10 bg-[#13241a] text-white shadow-[0_30px_90px_rgba(7,24,13,.18)] dark:border-white/10">
-          <div className="grid lg:grid-cols-[1.25fr_.75fr]">
-            <div className="relative overflow-hidden p-6 sm:p-9 lg:p-12"><div className="pointer-events-none absolute -right-20 -top-28 size-80 rounded-full bg-primary/10 blur-3xl" /><div className="relative"><div className="text-xs font-extrabold uppercase tracking-[.18em] text-primary-soft">Класний центр</div><h1 className="mt-5 max-w-4xl font-[family-name:var(--font-display)] text-4xl font-black tracking-[-.07em] sm:text-6xl">{className}</h1><p className="mt-5 max-w-2xl text-base leading-7 text-[#c6d4c9]">Плануйте заняття, відкривайте навчальний маршрут і тримайте прогрес класу в одному зрозумілому просторі.</p><div className="mt-8 flex flex-wrap gap-3"><button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/live`)} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-black text-[#061e10] shadow-[0_16px_40px_rgba(0,217,120,.22)]"><Radio className="size-4" />Почати заняття</button><button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/topics/new`)} className="inline-flex items-center gap-2 rounded-2xl border border-white/15 px-5 py-3 text-sm font-bold text-white/95"><Plus className="size-4" />Нова тема</button><button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/manage`)} className="inline-flex items-center gap-2 rounded-2xl border border-white/15 px-5 py-3 text-sm font-bold text-white/95"><Settings className="size-4" />Налаштувати клас</button></div></div></div>
-            <div className="border-t border-white/10 bg-white/[.045] p-6 sm:p-9 lg:border-l lg:border-t-0 lg:p-10"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-extrabold uppercase tracking-[.16em] text-primary-soft">Стан класу</p><p className="mt-2 text-sm text-[#b9cdbd]">Навчальний маршрут готовий до роботи</p></div><span className="grid size-12 place-items-center rounded-2xl bg-primary/15 text-primary-soft"><Sparkles className="size-5" /></span></div><div className="mt-7 grid grid-cols-2 gap-3">{[{ value: students.length, label: "учнів" }, { value: topics.length, label: "тем" }, { value: lessons.length, label: "занять" }, { value: topicUnits, label: "навчальних блоків" }].map(item => <div key={item.label} className="rounded-2xl border border-white/10 bg-white/[.055] p-4"><strong className="block text-3xl font-black tracking-[-.06em]">{item.value}</strong><span className="mt-2 block text-xs font-bold text-[#b9cdbd]">{item.label}</span></div>)}</div></div>
+        <section className="border-b border-border pb-5">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+            <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{tr("Класний простір", "Class workspace")}</p><h1 className="mt-2 text-3xl font-bold tracking-[-.04em] sm:text-4xl">{className}</h1><p className="mt-2 max-w-2xl text-sm text-text-secondary">{tr("Плануй заняття, переглядай навчальний маршрут і переходь до робіт учнів.", "Plan lessons, follow the learning path, and review student work.")}</p></div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/live`)} className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground"><Radio className="size-4" />{tr("Почати заняття", "Start live class")}</button>
+              <button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/topics/new`)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold hover:bg-bg-hover"><Plus className="size-4" />{tr("Нова тема", "New topic")}</button>
+            </div>
           </div>
+          <dl className="mt-5 grid grid-cols-2 divide-x divide-border border-t border-border pt-4 sm:grid-cols-4">
+            {[{ value: students.length, label: tr("учнів", "students") }, { value: topics.length, label: tr("тем", "topics") }, { value: lessons.length, label: tr("занять", "lessons") }, { value: topicUnits, label: tr("навчальних блоків", "learning items") }].map((item) => <div key={item.label} className="px-3 first:pl-0 sm:px-5"><dd className="text-2xl font-bold tabular-nums">{item.value}</dd><dt className="mt-1 text-xs text-text-muted">{item.label}</dt></div>)}
+          </dl>
         </section>
 
         {error && <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#ff6b9d]/25 bg-[#fff0f4] px-4 py-3 text-sm text-[#bd3c62] dark:bg-[#ff6b9d]/10 dark:text-[#ffa5bf]"><span>{error}</span><button type="button" onClick={() => void load()} className="rounded-xl border border-current px-3 py-2 text-xs font-bold">Повторити</button></div>}
 
         <nav className="flex gap-2 overflow-x-auto rounded-2xl border border-[#142018]/10 bg-white/80 p-2 shadow-sm dark:border-white/10 dark:bg-white/[.04]" aria-label="Навігація класу">{[{ label: "Огляд", active: true, onClick: () => window.scrollTo({ top: 0, behavior: "smooth" }) }, { label: "Учні", onClick: () => navigateWithPreview(navigate, `/edu/classes/${id}/manage`) }, { label: "Навчання", onClick: () => document.getElementById("class-topics")?.scrollIntoView({ behavior: "smooth" }) }, { label: "Журнал", onClick: () => navigateWithPreview(navigate, `/edu/classes/${id}/gradebook`) }, { label: "Календар", onClick: () => navigateWithPreview(navigate, "/edu/calendar") }].map(item => <button type="button" key={item.label} onClick={item.onClick} className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold transition ${item.active ? "bg-[#13241a] text-white shadow-sm dark:bg-primary dark:text-primary-foreground" : "text-[#65746a] hover:bg-[#edf5ee] hover:text-text-primary dark:text-[#aab9ae] dark:hover:bg-white/[.07] dark:hover:text-white"}`}>{item.label}</button>)}</nav>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[{ label: "Live клас", text: "Провести заняття наживо", icon: Radio, path: `/edu/classes/${id}/live`, tone: "green" }, { label: "Журнал", text: "Оцінки та прогрес учнів", icon: GraduationCap, path: `/edu/classes/${id}/gradebook`, tone: "neutral" }, { label: "Нове заняття", text: "Додати матеріал до маршруту", icon: FilePlus2, path: `/edu/classes/${id}/lessons/new`, tone: "orange" }].map(item => { const Icon = item.icon; return <button type="button" key={item.label} onClick={() => navigateWithPreview(navigate, item.path)} className={`group rounded-[26px] border p-5 text-left transition hover:-translate-y-1 hover:shadow-[0_18px_55px_rgba(18,32,23,.10)] ${item.tone === "green" ? "border-primary/25 bg-[#e8f8ee] dark:bg-[#10271a]" : item.tone === "orange" ? "border-[#ffb454]/25 bg-[#fff8ec] dark:bg-[#2a2011]" : "border-[#142018]/10 bg-white dark:border-white/10 dark:bg-[#111a14]"}`}><span className="grid size-11 place-items-center rounded-2xl bg-[#13241a] text-primary-soft dark:bg-white/[.08]"><Icon className="size-5" /></span><h2 className="mt-5 text-xl font-black tracking-[-.04em]">{item.label}</h2><p className="mt-2 text-sm leading-6 text-[#6b7a70] dark:text-[#aebbb2]">{item.text}</p><span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-primary-strong opacity-0 transition group-hover:opacity-100 dark:text-primary-soft">Відкрити <ArrowRight className="size-4" /></span></button>; })}</section>
 
-        <main className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
           <section id="class-topics" className="rounded-[32px] border border-[#142018]/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111a14] sm:p-7"><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">Навчальний маршрут</p><h2 className="mt-2 text-3xl font-black tracking-[-.055em]">Теми класу</h2><p className="mt-2 text-sm text-[#718075] dark:text-[#aab9ae]">{activeTopics} активних тем із матеріалами</p></div><button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/topics/new`)} className="inline-flex items-center gap-2 rounded-xl bg-[#13241a] px-4 py-2.5 text-sm font-bold text-white dark:bg-primary dark:text-primary-foreground"><Plus className="size-4" />Додати тему</button></div><div className="mt-6 grid gap-3 md:grid-cols-2">{topics.map((topic, index) => { const practiceCount = topic.tasks?.length || 0; const controlCount = topic.controlWorks?.length || 0; return <button type="button" key={topic.id} onClick={() => navigateWithPreview(navigate, `/edu/topics/${topic.id}`)} className="group rounded-[24px] border border-[#142018]/10 bg-[#f7faf6] p-5 text-left transition hover:-translate-y-0.5 hover:border-primary/40 hover:bg-white dark:border-white/10 dark:bg-white/[.045] dark:hover:bg-white/[.07]"><div className="flex items-start justify-between gap-3"><span className="grid size-11 place-items-center rounded-2xl bg-white text-sm font-black text-primary-strong shadow-sm dark:bg-[#0b130e] dark:text-primary-soft">{String(index + 1).padStart(2, "0")}</span><span className="rounded-full border border-[#142018]/10 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[.08em] text-[#718077] dark:border-white/10 dark:text-[#aab9ae]">{languageName(topic.language)}</span></div><strong className="mt-5 block text-lg font-black tracking-[-.035em]">{topic.title}</strong><span className="mt-2 block min-h-12 text-sm leading-6 text-[#6b7a70] dark:text-[#aebbb2]">{topic.description || "Практика, теорія та контрольні для цієї теми."}</span><span className="mt-4 flex items-center justify-between gap-2 border-t border-[#142018]/8 pt-3 text-xs font-bold text-[#718077] dark:border-white/10 dark:text-[#aab9ae]"><span>{practiceCount} практик · {controlCount} контрольних</span><ArrowRight className="size-4 text-primary-strong transition group-hover:translate-x-1 dark:text-primary-soft" /></span></button>; })}{!topics.length && <div className="col-span-full rounded-[24px] border border-dashed border-[#142018]/15 p-12 text-center dark:border-white/10"><BookOpen className="mx-auto size-9 text-primary-strong dark:text-primary-soft" /><h3 className="mt-4 text-xl font-black">Створіть першу тему</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#6b7a70] dark:text-[#aebbb2]">Побудуйте маршрут класу з теорії, практики та контрольних.</p><button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/topics/new`)} className="mt-5 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground">Створити тему</button></div>}</div></section>
 
           <aside className="space-y-6"><section className="rounded-[32px] border border-[#142018]/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111a14] sm:p-7"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[.15em] text-[#e17800]">Поточний потік</p><h2 className="mt-2 text-2xl font-black tracking-[-.05em]">Останні заняття</h2></div><ClipboardList className="size-5 text-[#e17800]" /></div><div className="mt-5 space-y-3">{lessons.slice(0, 5).map(lesson => <button type="button" key={lesson.id} onClick={() => navigateWithPreview(navigate, `/edu/lessons/${lesson.id}?type=${encodeURIComponent(lesson.type || "LESSON")}`)} className="group flex w-full items-center gap-3 rounded-2xl bg-[#f7faf6] p-4 text-left transition hover:bg-[#eef6f0] dark:bg-white/[.045] dark:hover:bg-white/[.07]"><span className={`grid size-10 shrink-0 place-items-center rounded-xl text-xs font-black shadow-sm ${lesson.type === "CONTROL" ? "bg-[#fff1dc] text-[#a55e00]" : "bg-white text-primary-strong dark:bg-[#0b130e] dark:text-primary-soft"}`}>{lesson.type === "CONTROL" ? "К" : "У"}</span><span className="min-w-0 flex-1"><strong className="block truncate text-sm font-black">{lesson.title}</strong><span className="mt-1 block text-xs text-[#6b7a70] dark:text-[#aebbb2]">{lesson.type === "CONTROL" ? "Контрольна" : "Заняття"} · {lesson.tasksCount || 0} задач</span></span><ArrowRight className="size-4 text-[#91a095] transition group-hover:translate-x-1" /></button>)}{!lessons.length && <div className="rounded-2xl border border-dashed border-[#142018]/15 px-4 py-10 text-center text-sm text-[#6b7a70] dark:border-white/10 dark:text-[#aebbb2]">Додайте перше заняття, щоб клас отримав маршрут.</div>}</div><button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/lessons/new`)} className="mt-5 inline-flex items-center gap-2 text-sm font-black text-primary-strong dark:text-primary-soft"><Plus className="size-4" />Додати заняття</button></section>
@@ -141,7 +148,7 @@ export const ClassHubPage: React.FC = () => {
 
             <section className="rounded-[32px] border border-[#142018]/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111a14] sm:p-7"><div className="flex items-center gap-3"><span className="grid size-10 place-items-center rounded-2xl bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"><CheckCircle2 className="size-5" /></span><div><p className="text-xs font-black uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">Наступний крок</p><h2 className="mt-1 text-xl font-black">Підготуйте заняття</h2></div></div><p className="mt-4 text-sm leading-6 text-[#6b7a70] dark:text-[#aebbb2]">Додайте теорію та практику, а потім відкрийте журнал, щоб побачити результат класу.</p><div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/topics/new`)} className="rounded-xl bg-[#edf6ee] px-3 py-3 text-xs font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft"><BookOpen className="mx-auto mb-1 size-4" />Тема</button><button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/gradebook`)} className="rounded-xl bg-[#f3f5f3] px-3 py-3 text-xs font-bold text-[#536259] dark:bg-white/[.06] dark:text-[#c2d0c5]"><GraduationCap className="mx-auto mb-1 size-4" />Журнал</button></div></section>
           </aside>
-        </main>
+        </div>
       </div>
     </div>
   );

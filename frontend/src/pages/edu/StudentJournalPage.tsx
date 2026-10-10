@@ -5,6 +5,7 @@ import { getStudentGrades, getStudentLessons, type Grade, type Lesson } from "..
 import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, gradingSystemLabel, normalizeGradingSystem, normalizeScaleMode, type ClassGradingSystem, type GradeScaleMode } from "../../lib/gradingSystems";
 import type { User } from "../../types";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { withDevPreview } from "../../lib/devPreview";
 
 export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
   const navigate = useNavigate();
@@ -21,6 +22,22 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
     setLoading(true);
     setError(null);
     try {
+      if (isPreview) {
+        setLessons([
+          { id: 51, type: "LESSON", title: "Алгоритми: два вказівники", tasksCount: 3, hasTheory: true, createdAt: "2026-07-10" },
+          { id: 52, type: "TOPIC", title: "Колекції та словники", tasksCount: 4, hasTheory: true, createdAt: "2026-07-08" },
+          { id: 53, type: "LESSON", title: "Практика: маленький сервіс", tasksCount: 2, hasTheory: false, createdAt: "2026-07-05", reportOnly: true },
+        ] as Lesson[]);
+        setGrades([
+          { id: 71, total: 88, testsPassed: 8, testsTotal: 10, createdAt: "2026-07-12", isManuallyGraded: false, task: { id: 1, title: "Робота з циклами", lesson: { id: 51, title: "Алгоритми", type: "LESSON" } } } as Grade,
+          { id: 72, total: 75, testsPassed: 6, testsTotal: 8, createdAt: "2026-07-11", isManuallyGraded: true, task: null, topicTask: { id: 2, title: "Словники: частоти", topicTitle: "Колекції" } } as Grade,
+          { id: 73, total: 92, testsPassed: 10, testsTotal: 10, createdAt: "2026-07-09", isManuallyGraded: false, task: { id: 3, title: "Масиви", lesson: { id: 52, title: "Колекції", type: "LESSON" } } } as Grade,
+        ]);
+        setSummaryGrades([{ id: 1, name: "Тематична · Колекції", grade: 83, topicTitle: "Колекції та словники" }]);
+        setGradingSystem("POINTS_12");
+        setScaleMode(undefined);
+        return;
+      }
       const [lessonsResult, gradesResult] = await Promise.allSettled([
         getStudentLessons(),
         user.studentId ? getStudentGrades(user.studentId) : Promise.resolve({ grades: [], summaryGrades: [], gradingSystem: DEFAULT_GRADING_SYSTEM, gradeScaleMode: undefined }),
@@ -76,22 +93,18 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
   return (
     <div className="min-h-full bg-bg-base px-4 py-7 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-10 lg:py-10">
       <div className="mx-auto max-w-[1480px] space-y-6">
-        <section className="overflow-hidden rounded-[30px] bg-[#173024] p-6 text-white shadow-[0_26px_60px_-42px_rgba(0,0,0,.85)] sm:p-8">
-          <div className="grid gap-6 lg:grid-cols-[1fr_340px] lg:items-end">
-            <div>
-              <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-primary-soft"><GraduationCap className="size-4" />Мій журнал</div>
-              <h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.055em] sm:text-5xl">Оцінки, які видно.</h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-[#bed1c0]">Тут учень бачить свої практичні оцінки, тематичні підсумки й наступний навчальний крок в одній системі оцінювання класу.</p>
-            </div>
-            <div className="rounded-2xl bg-black/15 p-5">
-              <div className="text-sm text-[#b4c8b7]">Система класу</div>
-              <div className="mt-1 text-lg font-semibold">{gradingSystemLabel(normalizedSystem, false)}</div>
-              <div className="mt-5 text-sm text-[#b4c8b7]">Середній результат</div>
-              <div className="mt-1 text-5xl font-semibold tracking-[-.07em] text-primary-soft">{displayAverage}</div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, average)}%` }} /></div>
-            </div>
+        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border/70 pb-5 dark:border-white/10">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-text-secondary"><GraduationCap className="size-4 text-primary-strong dark:text-primary-soft" />Мій журнал</div>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-.04em]">Оцінки та прогрес</h1>
+            <p className="mt-1 text-sm text-text-secondary">Результати практики й тематичні підсумки класу.</p>
           </div>
-        </section>
+          <div className="flex items-center gap-5 rounded-xl border border-border/70 bg-bg-surface px-4 py-3 dark:border-white/10">
+            <div><div className="text-xs text-text-secondary">Система класу</div><div className="mt-1 text-sm font-semibold">{gradingSystemLabel(normalizedSystem, false)}</div></div>
+            <div className="h-8 w-px bg-border dark:bg-white/10" />
+            <div><div className="text-xs text-text-secondary">Середній результат</div><div className="mt-0.5 text-2xl font-semibold tracking-tight text-primary-strong dark:text-primary-soft">{displayAverage}</div></div>
+          </div>
+        </header>
 
         {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#fff0f4] p-4 text-sm text-[#bd3c62] dark:bg-[#ff6b9d]/10 dark:text-[#ffa5bf]"><span>{error}</span><button type="button" onClick={() => void load()} className="inline-flex items-center gap-1 rounded-xl border border-current px-3 py-2 text-xs font-bold"><RefreshCw className="size-3" />Повторити</button></div>}
 
@@ -99,16 +112,16 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
           <section className="rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface">
             <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">Наступний крок</div>
             {loading ? <div className="mt-5 h-44 animate-pulse rounded-2xl bg-bg-hover dark:bg-white/[.045]" /> : next ? (
-              <button type="button" onClick={() => navigate(`/edu/lessons/${next.id}`)} className="mt-4 block w-full rounded-2xl bg-[#17251c] p-5 text-left text-white transition hover:-translate-y-0.5">
+              <button type="button" onClick={() => navigate(withDevPreview(`/edu/lessons/${next.id}`))} className="mt-4 block w-full rounded-xl border border-border bg-bg-subtle p-5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 dark:border-white/10 dark:bg-white/[.035]">
                 <div className="flex justify-between gap-4">
                   <div>
-                    <div className="text-xs font-semibold text-[#8eb093]">{next.type === "CONTROL" ? "Контрольна" : next.type === "TOPIC" ? "Тема" : "Урок"}</div>
+                    <div className="text-xs font-semibold text-primary-strong dark:text-primary-soft">{next.type === "CONTROL" ? "Контрольна" : next.type === "TOPIC" ? "Тема" : "Урок"}</div>
                     <div className="mt-2 text-xl font-semibold">{next.title}</div>
                     <div className="mt-2 text-sm text-[#b4c7b7]">{next.tasksCount} задач · {next.hasTheory ? "є теорія" : "практичний блок"}</div>
                   </div>
-                  <ArrowRight className="h-5 w-5 shrink-0 text-primary-soft" />
+                  <ArrowRight className="h-5 w-5 shrink-0 text-primary-strong dark:text-primary-soft" />
                 </div>
-                <div className="mt-6 inline-flex items-center gap-2 text-sm font-semibold text-primary-soft"><BookOpen className="h-4 w-4" />Відкрити урок</div>
+                <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary-strong dark:text-primary-soft"><BookOpen className="h-4 w-4" />Відкрити урок</div>
               </button>
             ) : <div className="mt-5 rounded-2xl bg-[#f5f8f5] p-5 text-sm text-[#718075] dark:bg-white/[.04] dark:text-text-secondary">Поки що немає доступних уроків.</div>}
           </section>
@@ -158,7 +171,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
           <section className="rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface">
             <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">Активність</div>
             <div className="mt-5 space-y-3">{lessons.slice(0, 4).map((lesson) => (
-              <button type="button" key={lesson.id} onClick={() => navigate(`/edu/lessons/${lesson.id}`)} className="flex w-full items-center justify-between rounded-xl bg-[#f5f8f5] p-3 text-left dark:bg-white/[.04]">
+              <button type="button" key={lesson.id} onClick={() => navigate(withDevPreview(`/edu/lessons/${lesson.id}`))} className="flex w-full items-center justify-between rounded-xl bg-bg-subtle p-3 text-left dark:bg-white/[.04]">
                 <div>
                   <div className="font-semibold">{lesson.title}</div>
                   <div className="mt-1 text-sm text-[#647369] dark:text-[#a6b4a9]">{lesson.tasksCount} задач</div>

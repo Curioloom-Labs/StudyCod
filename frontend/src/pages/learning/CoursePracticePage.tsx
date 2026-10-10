@@ -21,6 +21,7 @@ import {
 import type { CodeFile, LibraryTaskProjectSpec } from "../../lib/api/library";
 import { tr } from "../../i18n";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { DEV_PREVIEW_USER, isDevPreviewActive, withDevPreview } from "../../lib/devPreview";
 
 const kindLabel = (kind: LearningCourseItem["kind"]): string => {
   switch (kind) {
@@ -213,7 +214,7 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
 
   return <main className="min-h-full bg-bg-base px-3 py-4 text-text-primary sm:px-5 sm:py-6 lg:px-8">
     <div className="mx-auto max-w-[1680px]">
-      <button type="button" onClick={() => navigate(`/learning/course/${courseId}/path`)} className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-primary transition hover:underline">
+      <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${courseId}/path`))} className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-primary transition hover:underline">
         <ArrowLeft className="size-4" />{tr("До тем курсу", "Back to course topics")}
       </button>
       <header className="mb-4 rounded-2xl border border-[#bd8837]/30 bg-[#bd8837]/[.06] p-5 sm:p-6">
@@ -283,9 +284,8 @@ export const CoursePracticePage: React.FC = () => {
 
   React.useEffect(() => {
     let cancelled = false;
-    void getMe({ suppressAuthRedirect: true }).then((nextUser) => {
-      if (!cancelled) setUser(nextUser);
-    });
+    if (isDevPreviewActive()) setUser(DEV_PREVIEW_USER);
+    else void getMe({ suppressAuthRedirect: true }).then((nextUser) => { if (!cancelled) setUser(nextUser); });
     if (!courseId || !courseItemId) {
       setCourseLookupState("failed");
       return () => { cancelled = true; };
@@ -319,7 +319,7 @@ export const CoursePracticePage: React.FC = () => {
         <p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{tr("Курсова практика", "Course practice")}</p>
         <h1 className="mt-3 text-2xl font-bold text-text-primary">{tr("Цей елемент не відкривається у практиці", "This item cannot be opened in Practice")}</h1>
         <p className="mt-3 leading-7 text-text-secondary">{tr(`${itemKindMessage} Відкрий маршрут, щоб продовжити навчання.`, `${itemKindMessage} Open the path to continue learning.`)}</p>
-        <button type="button" onClick={() => navigate(`/learning/course/${courseId}/path`, { replace: true })} className="mt-6 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white">{tr("Відкрити теми", "Open topics")}</button>
+        <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${courseId}/path`), { replace: true })} className="mt-6 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white">{tr("Відкрити теми", "Open topics")}</button>
       </section>
     </main>;
   }

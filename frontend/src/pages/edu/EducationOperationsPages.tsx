@@ -5,6 +5,7 @@ import { api } from "../../lib/api/client";
 import { cancelMyGradeAppeal, createGradeAppeal, getClassGradeAppeal, getClassGradeAppeals, getMyGradeAppeal, getMyGradeAppeals, postClassGradeAppealMessage, postMyGradeAppealMessage, resolveClassGradeAppeal, updateClassGradeAppealStatus, type GradeAppealItem, type GradeAppealMessageItem, type GradeAppealReasonCode, type GradeAppealStatus } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, normalizeScaleMode, type ClassGradingSystem, type GradeScaleMode } from "../../lib/gradingSystems";
+import { tr } from "../../i18n";
 
 const devPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const root = "mx-auto max-w-[1260px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12";
@@ -36,7 +37,8 @@ type ParentGradeData = { gradingSystem: ClassGradingSystem; gradeScaleMode?: Gra
 const parentDate = (value?: string | null) => {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short", year: "numeric" }).format(date);
+  const locale = typeof document !== "undefined" && document.documentElement.lang.toLowerCase().startsWith("en") ? "en-US" : "uk-UA";
+  return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric" }).format(date);
 };
 
 const parentGradeTitle = (grade: ParentGrade) => grade.topicTask?.title || grade.task?.title || "Навчальна робота";
@@ -52,6 +54,22 @@ export const ParentWorkspace: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
+      if (devPreview()) {
+        setChildren([{ studentId: 201, firstName: "Марія", lastName: "Коваль", classId: 31 }]);
+        setGrades({ 201: {
+          gradingSystem: DEFAULT_GRADING_SYSTEM,
+          grades: [
+            { id: 2011, total: 92, testsPassed: 8, testsTotal: 8, isManuallyGraded: false, createdAt: "2026-09-08T10:00:00Z", task: { id: 11, title: "Частотний словник", lesson: { id: 3, title: "Рядки", type: "TOPIC" } }, topicTask: null },
+            { id: 2012, total: 78, testsPassed: 6, testsTotal: 8, isManuallyGraded: true, createdAt: "2026-09-03T10:00:00Z", task: null, topicTask: { id: 12, title: "Словники", topicTitle: "Колекції" } },
+            { id: 2013, total: null, testsPassed: 0, testsTotal: 0, isManuallyGraded: false, createdAt: "2026-09-01T10:00:00Z", task: { id: 13, title: "Мініпроєкт", lesson: { id: 4, title: "Практика", type: "LESSON" } }, topicTask: null },
+          ],
+          summaryGrades: [
+            { id: 2021, name: "Тематична · Колекції", grade: 84, assessmentType: "INTERMEDIATE", topicTitle: "Колекції" },
+            { id: 2022, name: "I семестр", grade: 88, assessmentType: "SEMESTER", semester: 1 },
+          ],
+        }});
+        return;
+      }
       const { data } = await api.get("/edu/parent/children");
       const rawChildren: unknown = data?.children;
       const list: ParentChild[] = Array.isArray(rawChildren) ? rawChildren.filter(isParentChild) : [];
@@ -71,23 +89,7 @@ export const ParentWorkspace: React.FC = () => {
       }));
       setGrades(Object.fromEntries(entries));
     } catch (caught) {
-      if (devPreview()) {
-        setChildren([{ studentId: 1, firstName: "Марія", lastName: "Коваль", classId: 1 }]);
-        setGrades({ 1: {
-          gradingSystem: DEFAULT_GRADING_SYSTEM,
-          grades: [
-            { id: 1, total: 92, testsPassed: 8, testsTotal: 8, isManuallyGraded: false, createdAt: "2026-09-08T10:00:00Z", task: { id: 11, title: "Частотний словник", lesson: { id: 3, title: "Рядки", type: "TOPIC" } }, topicTask: null },
-            { id: 2, total: 78, testsPassed: 6, testsTotal: 8, isManuallyGraded: true, createdAt: "2026-09-03T10:00:00Z", task: null, topicTask: { id: 12, title: "Словники", topicTitle: "Колекції" } },
-            { id: 3, total: null, testsPassed: 0, testsTotal: 0, isManuallyGraded: false, createdAt: "2026-09-01T10:00:00Z", task: { id: 13, title: "Мініпроєкт", lesson: { id: 4, title: "Практика", type: "LESSON" } }, topicTask: null },
-          ],
-          summaryGrades: [
-            { id: 21, name: "Тематична · Колекції", grade: 84, assessmentType: "INTERMEDIATE", topicTitle: "Колекції" },
-            { id: 22, name: "I семестр", grade: 88, assessmentType: "SEMESTER", semester: 1 },
-          ],
-        }});
-      } else {
-        setError(getErrorMessageFromUnknown(caught, "Не вдалося отримати дані дітей."));
-      }
+      setError(getErrorMessageFromUnknown(caught, "Не вдалося отримати дані дітей."));
     } finally {
       setLoading(false);
     }
@@ -95,23 +97,14 @@ export const ParentWorkspace: React.FC = () => {
 
   React.useEffect(() => { void load(); }, [load]);
 
-  const totalGraded = Object.values(grades).reduce((count, data) => count + data.grades.filter((grade) => grade.total != null && Number.isFinite(Number(grade.total))).length, 0);
-  const latestGrade = Object.values(grades).flatMap((data) => data.grades).filter((grade) => grade.total != null).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
-
   return <div className={root}>
-    <header className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-      <div><p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">StudyCod для батьків</p><h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] sm:text-5xl">Спокійний погляд на прогрес</h1><p className="mt-3 max-w-2xl text-base leading-7 text-[#69796e] dark:text-[#a9b6ac]">Оцінки робіт і підсумки дітей — в одному місці, без доступу до редагування чи приватних даних учня.</p></div>
-      <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold text-[#304138] transition hover:bg-[#edf4ee] disabled:cursor-wait disabled:opacity-55 dark:border-white/10 dark:text-[#dce7df] dark:hover:bg-white/[.06]"><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />{loading ? "Оновлюємо…" : "Оновити дані"}</button>
+    <header className="mb-6 flex flex-col justify-between gap-4 border-b border-border/70 pb-5 sm:flex-row sm:items-end dark:border-white/10">
+      <div><p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">{tr("StudyCod для батьків", "StudyCod for parents")}</p><h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-semibold tracking-[-.045em]">{tr("Прогрес дитини", "Child progress")}</h1><p className="mt-1 max-w-2xl text-sm leading-6 text-text-secondary">{tr("Оцінки, підсумки та зворотний зв’язок у навчанні.", "Grades, summaries, and learning feedback.")}</p></div>
+      <button type="button" onClick={() => void load()} disabled={loading} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold text-[#304138] transition hover:bg-[#edf4ee] disabled:cursor-wait disabled:opacity-55 dark:border-white/10 dark:text-[#dce7df] dark:hover:bg-white/[.06]"><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />{loading ? tr("Оновлюємо…", "Refreshing…") : tr("Оновити дані", "Refresh")}</button>
     </header>
 
     {error && errorView(error)}
-    {loading ? <div role="status" aria-live="polite" className="h-72 animate-pulse rounded-[28px] bg-bg-hover dark:bg-white/[.05]" /> : children.length === 0 ? <div className="rounded-[28px] border border-dashed border-border/15 px-6 py-20 text-center dark:border-white/10"><UsersRound className="mx-auto h-8 w-8 text-[#ff9b2e]" aria-hidden="true" /><h2 className="mt-4 text-xl font-bold">Ще немає пов’язаних профілів</h2><p className="mt-2 text-sm text-[#718075] dark:text-[#a6b4a9]">Викладач надішле окреме запрошення для батьківського доступу.</p></div> : <>
-      <div className="mb-5 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-border/10 bg-white p-4 dark:border-white/[.09] dark:bg-bg-surface"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]"><UsersRound className="size-4 text-primary-strong dark:text-primary-soft" aria-hidden="true" />Діти</div><div className="mt-2 text-3xl font-black tabular-nums">{children.length}</div></div>
-        <div className="rounded-2xl border border-border/10 bg-white p-4 dark:border-white/[.09] dark:bg-bg-surface"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]"><BarChart3 className="size-4 text-primary-strong dark:text-primary-soft" aria-hidden="true" />Оцінені роботи</div><div className="mt-2 text-3xl font-black tabular-nums">{totalGraded}</div></div>
-        <div className="rounded-2xl border border-border/10 bg-white p-4 dark:border-white/[.09] dark:bg-bg-surface"><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]"><Clock3 className="size-4 text-[#d97706]" aria-hidden="true" />Останнє оновлення</div><div className="mt-2 text-lg font-black">{parentDate(latestGrade?.createdAt)}</div></div>
-      </div>
-
+    {loading ? <div role="status" aria-live="polite" className="h-72 animate-pulse rounded-[28px] bg-bg-hover dark:bg-white/[.05]" /> : children.length === 0 ? <div className="rounded-[28px] border border-dashed border-border/15 px-6 py-20 text-center dark:border-white/10"><UsersRound className="mx-auto h-8 w-8 text-[#ff9b2e]" aria-hidden="true" /><h2 className="mt-4 text-xl font-bold">{tr("Ще немає пов’язаних профілів", "No linked profiles yet")}</h2><p className="mt-2 text-sm text-[#718075] dark:text-[#a6b4a9]">{tr("Викладач надішле окреме запрошення для батьківського доступу.", "A teacher can send a separate invitation for parent access.")}</p></div> : <>
       <div className="space-y-5">
         {children.map((child) => {
           const data = grades[child.studentId];
@@ -127,7 +120,7 @@ export const ParentWorkspace: React.FC = () => {
             {data?.loadError ? <div role="alert" className="mt-5 rounded-2xl bg-[#fff0f4] px-4 py-3 text-sm text-[#bd3c62] dark:bg-[#ff6b9d]/10 dark:text-[#ffa5bf]">Не вдалося завантажити оцінки цієї дитини. Натисніть «Оновити дані».</div> : <>
               <div className="mt-5 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl bg-[#f5f8f5] px-4 py-3 dark:bg-white/[.045]"><div className="text-xs text-[#718075] dark:text-[#a6b4a9]">Оцінені роботи</div><div className="mt-1 text-xl font-black tabular-nums">{graded.length}</div></div><div className="rounded-2xl bg-[#f5f8f5] px-4 py-3 dark:bg-white/[.045]"><div className="text-xs text-[#718075] dark:text-[#a6b4a9]">Очікують перевірки</div><div className="mt-1 text-xl font-black tabular-nums">{pending.length}</div></div><div className="rounded-2xl bg-[#f5f8f5] px-4 py-3 dark:bg-white/[.045]"><div className="text-xs text-[#718075] dark:text-[#a6b4a9]">Остання оцінка</div><div className="mt-1 text-sm font-bold">{parentDate(recent[0]?.createdAt)}</div></div></div>
               <div className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_.85fr]">
-                <section><div className="flex items-center gap-2"><BookOpenCheck className="size-5 text-primary-strong dark:text-primary-soft" aria-hidden="true" /><h3 className="text-lg font-bold">Останні оцінки робіт</h3></div>{visibleRecent.length ? <div className="mt-3 space-y-2">{visibleRecent.map((grade) => <div key={grade.id} className="flex items-center justify-between gap-3 rounded-2xl bg-[#f5f8f5] px-4 py-3 dark:bg-white/[.045]"><div className="min-w-0"><div className="truncate text-sm font-bold">{parentGradeTitle(grade)}</div><div className="mt-1 truncate text-xs text-[#718075] dark:text-[#a6b4a9]">{parentGradeContext(grade)} · {parentDate(grade.createdAt)}</div></div><div className={`shrink-0 rounded-xl px-3 py-2 text-lg font-black ${getGradeToneForSystem(grade.total, data?.gradingSystem || DEFAULT_GRADING_SYSTEM, scaleMode)}`}>{formatGradeForSystem(grade.total, data?.gradingSystem || DEFAULT_GRADING_SYSTEM, scaleMode)}</div></div>)}</div> : <p className="mt-3 rounded-2xl bg-[#f5f8f5] p-4 text-sm text-[#718075] dark:bg-white/[.045] dark:text-[#a6b4a9]">Оцінок за перевірені роботи ще немає.</p>}{older.length > 0 && <details className="mt-3 rounded-2xl border border-border/10 p-4 dark:border-white/[.08]"><summary className="cursor-pointer text-sm font-bold text-primary-strong dark:text-primary-soft">Показати ще {older.length}</summary><div className="mt-3 space-y-2">{older.map((grade) => <div key={grade.id} className="flex items-center justify-between gap-3 border-t border-border/8 pt-2 text-sm dark:border-white/[.06]"><span className="min-w-0 truncate">{parentGradeTitle(grade)}</span><span className="shrink-0 font-black tabular-nums">{formatGradeForSystem(grade.total, data?.gradingSystem || DEFAULT_GRADING_SYSTEM, scaleMode)}</span></div>)}</div></details>}</section>
+                <section><div className="flex items-center gap-2"><BookOpenCheck className="size-5 text-primary-strong dark:text-primary-soft" aria-hidden="true" /><h3 className="text-lg font-bold">Останні оцінки робіт</h3></div>{visibleRecent.length ? <div className="mt-3 space-y-2">{visibleRecent.map((grade) => <div key={grade.id} className="flex items-center justify-between gap-3 rounded-xl bg-bg-subtle px-4 py-3 dark:bg-white/[.045]"><div className="min-w-0"><div className="truncate text-sm font-bold">{parentGradeTitle(grade)}</div><div className="mt-1 truncate text-xs text-text-secondary">{parentGradeContext(grade)} · {parentDate(grade.createdAt)}</div>{grade.feedback?.trim() && <p className="mt-2 text-sm leading-5 text-text-secondary">{grade.feedback}</p>}</div><div className={`shrink-0 rounded-xl px-3 py-2 text-lg font-black ${getGradeToneForSystem(grade.total, data?.gradingSystem || DEFAULT_GRADING_SYSTEM, scaleMode)}`}>{formatGradeForSystem(grade.total, data?.gradingSystem || DEFAULT_GRADING_SYSTEM, scaleMode)}</div></div>)}</div> : <p className="mt-3 rounded-xl bg-bg-subtle p-4 text-sm text-text-secondary dark:bg-white/[.045]">Оцінок за перевірені роботи ще немає.</p>}{pending.length > 0 && <div className="mt-4 border-t border-border/70 pt-4 dark:border-white/10"><h4 className="text-sm font-semibold">Очікують оцінки</h4><div className="mt-2 space-y-1.5">{pending.map((grade) => <div key={grade.id} className="flex items-center justify-between gap-3 text-sm"><span className="min-w-0 truncate">{parentGradeTitle(grade)}</span><span className="shrink-0 text-xs text-text-secondary">{parentDate(grade.createdAt)}</span></div>)}</div></div>}{older.length > 0 && <details className="mt-3 rounded-xl border border-border/70 p-4 dark:border-white/[.08]"><summary className="cursor-pointer text-sm font-semibold text-primary-strong dark:text-primary-soft">Показати ще {older.length}</summary><div className="mt-3 space-y-2">{older.map((grade) => <div key={grade.id} className="flex items-center justify-between gap-3 border-t border-border/70 pt-2 text-sm dark:border-white/[.06]"><span className="min-w-0 truncate">{parentGradeTitle(grade)}</span><span className="shrink-0 font-semibold tabular-nums">{formatGradeForSystem(grade.total, data?.gradingSystem || DEFAULT_GRADING_SYSTEM, scaleMode)}</span></div>)}</div></details>}</section>
                 <section><div className="flex items-center gap-2"><BarChart3 className="size-5 text-[#d97706]" aria-hidden="true" /><h3 className="text-lg font-bold">Підсумки</h3></div>{data?.summaryGrades.length ? <div className="mt-3 space-y-2">{data.summaryGrades.map((grade) => <div key={grade.id} className="flex items-center justify-between gap-3 rounded-2xl bg-[#fff8ec] px-4 py-3 dark:bg-[#ff8c00]/[.07]"><div className="min-w-0"><div className="truncate text-sm font-bold">{grade.name}</div><div className="mt-1 truncate text-xs text-[#8b765a] dark:text-[#c2b08e]">{grade.topicTitle || (grade.assessmentType === "SEMESTER" ? "Семестровий підсумок" : "Підсумкова оцінка")}</div></div><div className={`shrink-0 text-lg font-black ${getGradeToneForSystem(grade.grade, data.gradingSystem, scaleMode)}`}>{formatGradeForSystem(grade.grade, data.gradingSystem, scaleMode)}</div></div>)}</div> : <p className="mt-3 rounded-2xl bg-[#fff8ec] p-4 text-sm text-[#8b765a] dark:bg-[#ff8c00]/[.07] dark:text-[#c2b08e]">Підсумків ще немає.</p>}</section>
               </div>
               <p className="mt-5 border-t border-border/8 pt-4 text-xs leading-5 text-[#718075] dark:border-white/[.08] dark:text-[#a6b4a9]">Батьківський доступ показує лише оцінки та їхній стан. Код, тести й технічні деталі виконання залишаються приватними.</p>

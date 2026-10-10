@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Trophy, Search, Snowflake, Crown, Locate, Medal, Download, FileSpreadsheet } from "lucide-react";
-import { motion, useReducedMotion } from "framer-motion";
+import { ArrowLeft, Trophy, Search, Snowflake, Locate, Download, FileSpreadsheet, Crown } from "lucide-react";
 import { tr } from "../../i18n";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
@@ -12,9 +11,10 @@ import {
   type ContestStandings,
   type ScoreboardRow,
 } from "../../lib/api/contests";
-import { staggerContainer, fadeUpItem, easeOutQuint } from "../../lib/motion";
 import { getCachedMeUser } from "../../lib/api/profile";
 import { ContestSectionNav } from "./ContestSectionNav";
+import { previewStandings } from "./contestPreviewData";
+import { isDevPreviewActive } from "../../lib/devPreview";
 
 function currentUserLabel(): string | null {
   const user = getCachedMeUser();
@@ -55,13 +55,12 @@ export const ScoreboardPage: React.FC = () => {
   const navigate = useNavigate();
   const params = useParams<{ id?: string }>();
   const contestId = Number(params.id);
-  const prefersReducedMotion = useReducedMotion();
 
   const [board, setBoard] = useState<ContestStandings | null>(null);
   const [title, setTitle] = useState<string>("");
   const [canManage, setCanManage] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [live, setLive] = useState(true);
+  const [live, setLive] = useState(() => !isDevPreviewActive());
   const [query, setQuery] = useState("");
   const [exportError, setExportError] = useState<string | null>(null);
   const exportMenuRef = useRef<HTMLDetailsElement | null>(null);
@@ -74,6 +73,14 @@ export const ScoreboardPage: React.FC = () => {
   useEffect(() => {
     if (!Number.isFinite(contestId)) return;
     let cancelled = false;
+
+    if (isDevPreviewActive()) {
+      setTitle(contestId === 103 ? "Python: колекції" : contestId === 98 ? "Розминка: рядки" : "Алгоритмічна субота");
+      setCanManage(false);
+      setBoard({ ...previewStandings, contestId });
+      setError(null);
+      return () => { cancelled = true; };
+    }
 
     getContestDetails(contestId)
       .then((d) => {
@@ -157,7 +164,6 @@ export const ScoreboardPage: React.FC = () => {
     return stats;
   }, [board, problems, mode]);
 
-  const podium = useMemo(() => (board?.rows ?? []).slice(0, 3), [board]);
 
   const jumpToMe = () => meRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
 
@@ -230,20 +236,14 @@ export const ScoreboardPage: React.FC = () => {
   return (
     <div className="w-full bg-bg-base px-3 py-4 sm:px-6 md:py-6">
       <div className="mx-auto w-full max-w-6xl space-y-5">
-        {/* Hero */}
-        <motion.div
-          initial={prefersReducedMotion ? undefined : { opacity: 0, y: 10 }}
-          animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: easeOutQuint }}
-          className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-bg-surface/80 p-4 shadow-[0_18px_55px_-45px_rgba(0,0,0,.75)] sm:flex-row sm:items-start sm:justify-between sm:p-5"
-        >
+        <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <Button variant="ghost" onClick={() => navigate(`/contest/contests/${Number.isFinite(contestId) ? contestId : ""}`)} className="mb-3">
+            <Button variant="ghost" onClick={() => navigate(`/contest/contests/${Number.isFinite(contestId) ? contestId : ""}`)} className="mb-2">
               <ArrowLeft className="w-4 h-4 mr-2" />
               {tr("Назад", "Back")}
             </Button>
-            <PageEyebrow label="standings" />
-            <h1 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.035em] text-text-primary md:text-3xl">
+            <PageEyebrow label={tr("Результати", "Standings")} />
+            <h1 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.035em] text-text-primary md:text-3xl">
               {title || tr("Таблиця результатів", "Contest standings")}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -251,8 +251,9 @@ export const ScoreboardPage: React.FC = () => {
                 <Trophy className="w-3 h-3" />
                 {mode === "ICPC" ? tr("ICPC · бали + штраф", "ICPC · solved + penalty") : tr("IOI · сума балів", "IOI · points")}
               </span>
+              {isDevPreviewActive() && <span className="rounded-lg border border-[#ffb454]/30 bg-[#ffb454]/10 px-2.5 py-1 text-[11px] font-semibold text-[#80520b] dark:text-[#ffd699]">{tr("Демо · прикладові дані", "Demo · example data")}</span>}
               <p className="text-sm text-text-secondary">
-                {board?.hidden ? tr("Таблицю приховано відповідно до налаштувань контесту.", "The scoreboard is hidden by contest settings.") : tr("Таблиця оновлюється автоматично.", "Standings update automatically.")}
+                {board?.hidden ? tr("Таблицю приховано відповідно до налаштувань контесту.", "The scoreboard is hidden by contest settings.") : isDevPreviewActive() ? tr("Локальна демонстрація таблиці результатів.", "Local standings demonstration.") : tr("Таблиця оновлюється автоматично.", "Standings update automatically.")}
               </p>
             </div>
           </div>
@@ -270,11 +271,11 @@ export const ScoreboardPage: React.FC = () => {
                 LIVE
               </span>
             )}
-            {!board?.hidden && <Button variant="secondary" onClick={() => setLive((v) => !v)}>
+            {!isDevPreviewActive() && !board?.hidden && <Button variant="secondary" onClick={() => setLive((v) => !v)}>
               {live ? tr("Пауза", "Pause") : tr("Наживо", "Go live")}
             </Button>}
           </div>
-        </motion.div>
+        </header>
 
         {Number.isFinite(contestId) ? <ContestSectionNav contestId={contestId} active="standings" canManage={canManage} /> : null}
 
@@ -300,43 +301,6 @@ export const ScoreboardPage: React.FC = () => {
               <h2 className="mt-4 text-lg font-semibold text-text-primary">{board.hiddenReason === "ORGANIZERS_ONLY" ? tr("Таблиця доступна організаторам", "Scoreboard is available to organizers") : tr("Результати будуть після фінішу", "Results will be available after the finish")}</h2>
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-secondary">{board.hiddenReason === "ORGANIZERS_ONLY" ? tr("Організатор обрав не показувати поточні результати учасникам.", "The organizer chose to keep current results private.") : board.releaseAt ? `${tr("Таблицю буде відкрито", "The scoreboard opens")}: ${new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(board.releaseAt))}.` : tr("Організатору потрібно задати час завершення, щоб відкрити таблицю автоматично.", "The organizer needs to set an end time to reveal the scoreboard automatically.")}</p>
             </div>}
-
-            {/* Podium */}
-            {board && !board.hidden && podium.length > 0 ? (
-              <motion.div
-                variants={prefersReducedMotion ? undefined : staggerContainer}
-                initial={prefersReducedMotion ? undefined : "initial"}
-                animate={prefersReducedMotion ? undefined : "animate"}
-                className="grid grid-cols-1 gap-3 sm:grid-cols-3"
-              >
-                {podium.map((r, i) => {
-                  const PodiumIcon = i === 0 ? Crown : i === 1 ? Trophy : Medal;
-                  const iconCls = i === 0 ? "text-yellow-400" : i === 1 ? "text-slate-400" : "text-amber-500";
-                  return (
-                    <motion.div
-                      key={r.participantId}
-                      variants={prefersReducedMotion ? undefined : fadeUpItem}
-                      className={`rounded-2xl border p-4 transition-fast hover:-translate-y-0.5 ${rankBadgeTone(i + 1)} ${isMe(r) ? "ring-1 ring-secondary" : ""}`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${i === 0 ? "bg-yellow-400/15" : i === 1 ? "bg-slate-400/15" : "bg-amber-500/15"}`}>
-                          <PodiumIcon className={`w-4 h-4 ${iconCls}`} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-text-primary">{r.displayName}</div>
-                          <div className="text-xs text-text-muted">{tr("місце", "place")} #{i + 1}</div>
-                        </div>
-                      </div>
-                      <div className="mt-2 text-sm font-medium tabular-nums text-text-secondary">
-                        {mode === "ICPC"
-                          ? `${r.solved ?? 0} ${tr("розв.", "solved")} · ${tr("штраф", "pen")} ${r.penalty ?? 0}`
-                          : `${r.totalScore} ${tr("балів", "pts")}`}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </motion.div>
-            ) : null}
 
             {/* Controls */}
             {board && !board.hidden && (board.rows ?? []).length > 0 ? (

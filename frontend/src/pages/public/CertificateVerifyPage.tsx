@@ -4,6 +4,7 @@ import { ArrowLeft, BadgeCheck, CheckCircle2, RefreshCw, ShieldX } from "lucide-
 import { PublicProductNav } from "../../components/layout/PublicProductNav";
 import { getCertificateVerification, type CertificateVerification } from "../../lib/api/certificates";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { useTranslation } from "react-i18next";
 
 const formatDate = (value: string | null | undefined, locale: string) => {
   if (!value) return "—";
@@ -13,7 +14,8 @@ const formatDate = (value: string | null | undefined, locale: string) => {
 
 export const CertificateVerifyPage: React.FC = () => {
   const { certificateId = "" } = useParams<{ certificateId: string }>();
-  const english = !navigator.language.toLowerCase().startsWith("uk");
+  const { i18n } = useTranslation();
+  const english = i18n.language.toLowerCase().startsWith("en");
   const copy = (uk: string, en: string) => english ? en : uk;
   const [loading, setLoading] = React.useState(true);
   const [certificate, setCertificate] = React.useState<CertificateVerification | null>(null);

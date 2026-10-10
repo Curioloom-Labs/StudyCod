@@ -765,37 +765,33 @@
   }
 }
 
-/* Shared workspace shell: a quiet forest canvas, crisp working surfaces, and
-   a persistent rail make learning, EDU, contests, and admin feel like one app. */
+/* Shared workspace shell: a quiet neutral canvas with global navigation above
+   the current task, course, class, contest, or administration context. */
 [data-material="premium-header"] {
   border-color: color-mix(in srgb, var(--border) 82%, transparent);
   background-color: color-mix(in srgb, var(--bg-base) 94%, transparent);
 }
 
-[data-material="workspace-rail"] {
-  border-color: color-mix(in srgb, var(--border) 88%, transparent);
-  background: linear-gradient(180deg,
-    color-mix(in srgb, var(--bg-surface) 95%, var(--primary) 5%),
-    var(--bg-surface) 42%);
-  box-shadow: 12px 0 36px -32px color-mix(in srgb, var(--text-primary) 36%, transparent);
+.mobile-app-shell {
+  --global-shell-header-height: 56px;
+  --workspace-header-height: var(--global-shell-header-height);
 }
 
-[data-material="workspace-rail"] [aria-current="page"] {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 24%, transparent);
+.mobile-app-shell.has-course-context {
+  --workspace-header-height: calc(var(--global-shell-header-height) + 68px + 12px);
 }
 
-.workspace-rail-heading {
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+@media (min-width: 640px) {
+  .mobile-app-shell {
+    --global-shell-header-height: 64px;
+  }
 }
 
 [data-material="workspace-canvas"] {
   background-color: var(--bg-base);
-  background-image: radial-gradient(ellipse at 82% 0%,
-    color-mix(in srgb, var(--primary) 7%, transparent), transparent 34rem);
 }
 
-[data-material="premium-course-nav"],
-[data-material="premium-mobile-nav"] {
+[data-material="premium-course-nav"] {
   border-color: color-mix(in srgb, var(--border) 86%, transparent);
   background-color: color-mix(in srgb, var(--bg-base) 95%, transparent);
 }
