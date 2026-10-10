@@ -2,6 +2,7 @@ import { Router, Response, type NextFunction } from "express";
 import { Brackets, In, type EntityManager } from "typeorm";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import multer from "multer";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
 import { authOptional, authRequired, AuthRequest } from "../middleware/authMiddleware";
@@ -47,6 +48,23 @@ contestsRouter.use((req, res, next) => {
   next();
 });
 const contestTutorLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 8, message: "RATE_LIMIT" });
+const ACCOUNT_EMAIL_ATTACHMENT_MIME = new Set([
+  "image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp", "image/tiff", "image/heic", "image/heif",
+  "application/pdf", "text/plain", "application/json", "text/csv",
+  "application/zip", "application/x-zip-compressed",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+]);
+const accountEmailAttachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 5 },
+  fileFilter: (_req, file, cb) => {
+    if (ACCOUNT_EMAIL_ATTACHMENT_MIME.has(String(file.mimetype || "").toLowerCase())) cb(null, true);
+    else cb(new Error("UNSUPPORTED_MEDIA_TYPE"));
+  }
+});
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -2115,6 +2133,93 @@ contestsRouter.delete("/:id/admin/organizers/:userId", authRequired, async (req:
 });
 
 // Owner/admin: generate dedicated CONTEST accounts for this contest and auto-join them.
+contestsRouter.get("/:id/admin/accounts", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    if (!Number.isSafeInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (contest.createdBy?.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const rows = await AppDataSource.query(
+      `SELECT u.id AS userId, u.username AS username,
+              COALESCE(NULLIF(cp.notification_full_name, ''), NULLIF(TRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''), u.username) AS fullName,
+              cp.notification_email AS email, cp.id AS participantId
+       FROM contest_participants cp
+       INNER JOIN users u ON u.id = cp.user_id
+       WHERE cp.contest_id = ? AND cp.principal_type = 'USER' AND u.user_mode = 'CONTEST'
+       ORDER BY cp.id ASC`,
+      [contestId]
+    ) as Array<UnknownRecord>;
+    return res.json({
+      contestId,
+      accounts: rows.map((row) => ({
+        userId: Number(row.userId),
+        username: String(row.username ?? ""),
+        fullName: row.fullName != null ? String(row.fullName) : null,
+        email: row.email != null ? String(row.email) : null,
+        participantId: Number(row.participantId),
+      })),
+    });
+  } catch (error: unknown) {
+    logger.error("[contests] GET /:id/admin/accounts error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Owner/admin: delete a dedicated account issued only for this contest.
+contestsRouter.delete("/:id/admin/accounts/:userId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    const userId = Number(req.params.userId);
+    if (!Number.isSafeInteger(contestId) || contestId <= 0 || !Number.isSafeInteger(userId) || userId <= 0) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (contest.createdBy?.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    await ensureContestAdminTables();
+    await ensureContestCommunityTables();
+    await AppDataSource.transaction(async (manager) => {
+      const assignments = await manager.query(
+        `SELECT cp.id AS participantId
+         FROM contest_participants cp
+         INNER JOIN users u ON u.id = cp.user_id
+         WHERE cp.contest_id = ? AND cp.user_id = ? AND cp.principal_type = 'USER' AND u.user_mode = 'CONTEST'
+           AND (SELECT COUNT(*) FROM contest_participants other_cp WHERE other_cp.user_id = u.id) = 1
+           AND NOT EXISTS (SELECT 1 FROM contest_organizers co WHERE co.user_id = u.id)
+           AND NOT EXISTS (SELECT 1 FROM contests owned WHERE owned.created_by_user_id = u.id)
+         FOR UPDATE`,
+        [contestId, userId]
+      ) as Array<{ participantId: number | string }>;
+      const participantId = Number(assignments[0]?.participantId);
+      if (!Number.isSafeInteger(participantId) || participantId <= 0) throw new HttpError(404, "TEMPORARY_ACCOUNT_NOT_FOUND", { expose: true });
+
+      await manager.query("SELECT id FROM contest_execution_admission WHERE id=1 FOR UPDATE");
+      const [pending] = await manager.query(
+        "SELECT COUNT(*) AS count FROM contest_execution_jobs WHERE contest_id = ? AND participant_id = ? AND state IN ('queued','running')",
+        [contestId, participantId]
+      ) as Array<{ count: number | string }>;
+      if (Number(pending?.count ?? 0) > 0) throw new HttpError(409, "TEMPORARY_ACCOUNT_HAS_PENDING_JOBS", { expose: true });
+
+      await manager.query("DELETE FROM contest_annulments WHERE contest_id = ? AND participant_id = ?", [contestId, participantId]);
+      await manager.query("DELETE FROM contest_integrity_events WHERE contest_id = ? AND participant_id = ?", [contestId, participantId]);
+      await manager.query("DELETE FROM contest_questions WHERE contest_id = ? AND participant_id = ?", [contestId, participantId]);
+      await manager.query("DELETE FROM contest_execution_jobs WHERE contest_id = ? AND participant_id = ?", [contestId, participantId]);
+      await manager.getRepository(User).delete(userId);
+    });
+    return res.json({ deleted: true, userId });
+  } catch (error: unknown) {
+    const status = readProperty(error, "statusCode");
+    if (typeof status === "number" && status >= 400 && status < 500) return res.status(status).json({ message: errorMessage(error) });
+    logger.error("[contests] DELETE /:id/admin/accounts/:userId error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 contestsRouter.post("/:id/admin/accounts/generate", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
@@ -2219,7 +2324,20 @@ contestsRouter.post("/:id/admin/accounts/generate", authRequired, async (req: Au
 });
 
 // Owner/admin: send generated contest credentials to participants by email from StudyCod.
-contestsRouter.post("/:id/admin/accounts/send-emails", authRequired, async (req: AuthRequest, res: Response) => {
+contestsRouter.post("/:id/admin/accounts/send-emails", authRequired, (req, res, next) => {
+  accountEmailAttachmentUpload.array("attachments", 5)(req, res, (error: unknown) => {
+    if (!error) return next();
+    const code = error instanceof multer.MulterError ? error.code : undefined;
+    const message = error instanceof Error && error.message === "UNSUPPORTED_MEDIA_TYPE"
+      ? "UNSUPPORTED_MEDIA_TYPE"
+      : code === "LIMIT_FILE_SIZE"
+        ? "FILE_TOO_LARGE"
+        : code === "LIMIT_FILE_COUNT"
+          ? "TOO_MANY_FILES"
+          : "UPLOAD_FAILED";
+    return res.status(400).json({ message });
+  });
+}, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
     const contestId = Number(req.params.id);
@@ -2242,8 +2360,23 @@ contestsRouter.post("/:id/admin/accounts/send-emails", authRequired, async (req:
       includeContestInfo: z.boolean().optional(),
       customMessage: z.string().max(5000).optional(),
     });
-    const parsed = schema.safeParse(req.body ?? {});
+    let requestBody: unknown = req.body ?? {};
+    if (typeof req.body?.payload === "string") {
+      try {
+        requestBody = JSON.parse(req.body.payload);
+      } catch {
+        return res.status(400).json({ message: "INVALID_INPUT" });
+      }
+    }
+    const parsed = schema.safeParse(requestBody);
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+
+    const attachmentFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
+    const emailAttachments = attachmentFiles.map((file) => ({
+      filename: file.originalname.replace(/[\\/<>:\\"|?*\x00-\x1F]/g, "_").slice(0, 180) || "attachment",
+      content: file.buffer,
+      contentType: file.mimetype,
+    }));
 
     const includeContestInfo = parsed.data.includeContestInfo !== false;
     const customMessage = String(parsed.data.customMessage ?? "").trim();
@@ -2301,6 +2434,7 @@ contestsRouter.post("/:id/admin/accounts/send-emails", authRequired, async (req:
           title: "Дані для входу в контест",
           contentHtml: html,
           text,
+          attachments: emailAttachments,
         });
         sent.push({ email });
       } catch (error: unknown) {
@@ -3077,6 +3211,69 @@ contestsRouter.patch("/:id/problems/:problemId", authRequired, async (req: AuthR
     });
   } catch (error: unknown) {
     logger.error("[contests] PATCH /:id/problems/:problemId error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Delete a contest problem and its submissions. Contest-local draft snapshots are
+// removed only after their final contest reference is gone.
+contestsRouter.delete("/:id/problems/:problemId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    const problemId = Number(req.params.problemId);
+    if (!Number.isSafeInteger(contestId) || contestId <= 0 || !Number.isSafeInteger(problemId) || problemId <= 0) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (contest.createdBy?.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    await ensureContestAdminTables();
+    await AppDataSource.transaction(async (manager) => {
+      await manager.query("SELECT id FROM contest_execution_admission WHERE id=1 FOR UPDATE");
+      const [pending] = await manager.query(
+        "SELECT COUNT(*) AS count FROM contest_execution_jobs WHERE contest_id = ? AND problem_id = ? AND state IN ('queued','running')",
+        [contestId, problemId]
+      ) as Array<{ count: number | string }>;
+      if (Number(pending?.count ?? 0) > 0) throw new HttpError(409, "PROBLEM_HAS_PENDING_JOBS", { expose: true });
+
+      const problem = await manager.getRepository(ContestProblem).findOne({
+        where: { id: problemId, contest: { id: contestId } },
+        relations: ["libraryTask"],
+      });
+      if (!problem) throw new HttpError(404, "PROBLEM_NOT_FOUND", { expose: true });
+      const taskId = Number(problem.libraryTask?.id);
+
+      await manager.query("DELETE FROM contest_annulments WHERE contest_id = ? AND problem_id = ?", [contestId, problemId]);
+      await manager.query("DELETE FROM contest_execution_jobs WHERE contest_id = ? AND problem_id = ?", [contestId, problemId]);
+      await manager.getRepository(ContestProblem).delete({ id: problemId, contest: { id: contestId } });
+
+      const remaining = await manager.getRepository(ContestProblem).find({ where: { contest: { id: contestId } }, order: { order: "ASC" } });
+      await manager.query("UPDATE contest_problems SET `order` = `order` + 10000 WHERE contest_id = ?", [contestId]);
+      for (let order = 0; order < remaining.length; order += 1) {
+        await manager.query("UPDATE contest_problems SET `order` = ? WHERE id = ? AND contest_id = ?", [order, remaining[order].id, contestId]);
+      }
+
+      if (Number.isSafeInteger(taskId) && taskId > 0) {
+        const [references] = await manager.query("SELECT COUNT(*) AS count FROM contest_problems WHERE library_task_id = ?", [taskId]) as Array<{ count: number | string }>;
+        const snapshot = await manager.getRepository(LibraryTask).findOne({ where: { id: taskId } });
+        if (Number(references?.count ?? 0) === 0 && snapshot?.isHiddenFromLibrary && snapshot.status === "DRAFT") {
+          for (const table of ["library_task_revisions", "library_task_attempts", "test_data", "task_theories"]) {
+            try {
+              await manager.query(`DELETE FROM ${table} WHERE library_task_id = ?`, [taskId]);
+            } catch {
+              // Older installations may not have every optional task table.
+            }
+          }
+          await manager.getRepository(LibraryTask).delete(taskId);
+        }
+      }
+    });
+    return res.json({ deleted: true, problemId });
+  } catch (error: unknown) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
+    logger.error("[contests] DELETE /:id/problems/:problemId error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

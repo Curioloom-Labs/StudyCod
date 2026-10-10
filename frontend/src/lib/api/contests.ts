@@ -271,6 +271,14 @@ export type ContestGeneratedAccount = {
   participantId: number;
 };
 
+export type ContestTemporaryAccount = {
+  fullName: string | null;
+  email: string | null;
+  userId: number;
+  username: string;
+  participantId: number;
+};
+
 export type ContestAccountRecipient = {
   fullName: string;
   email: string;
@@ -569,6 +577,11 @@ export async function addContestProblem(
   return res.data;
 }
 
+export async function deleteContestProblem(contestId: number, problemId: number): Promise<{ deleted: boolean; problemId: number }> {
+  const res = await api.delete(`/contests/${contestId}/problems/${problemId}`);
+  return res.data;
+}
+
 export async function updateContestProblemSettings(
   contestId: number,
   problemId: number,
@@ -665,9 +678,23 @@ export async function sendContestAccountsEmails(
     recipients: ContestAccountRecipient[];
     includeContestInfo?: boolean;
     customMessage?: string;
-  }
+  },
+  attachments: File[] = []
 ): Promise<{ contestId: number; total: number; sentCount: number; failedCount: number; failed: Array<{ email: string; reason: string }> }> {
-  const res = await api.post(`/contests/${contestId}/admin/accounts/send-emails`, payload);
+  const formData = new FormData();
+  formData.append("payload", JSON.stringify(payload));
+  for (const file of attachments) formData.append("attachments", file, file.name);
+  const res = await api.post(`/contests/${contestId}/admin/accounts/send-emails`, formData);
+  return res.data;
+}
+
+export async function listContestTemporaryAccounts(contestId: number): Promise<{ contestId: number; accounts: ContestTemporaryAccount[] }> {
+  const res = await api.get(`/contests/${contestId}/admin/accounts`);
+  return res.data;
+}
+
+export async function deleteContestTemporaryAccount(contestId: number, userId: number): Promise<{ deleted: boolean; userId: number }> {
+  const res = await api.delete(`/contests/${contestId}/admin/accounts/${userId}`);
   return res.data;
 }
 

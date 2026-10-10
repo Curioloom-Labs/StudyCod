@@ -19,7 +19,10 @@ import {
   getContestCommunity,
   getContestDetails,
   generateContestAccounts,
+  listContestTemporaryAccounts,
+  deleteContestTemporaryAccount,
   deleteContest as deleteContestRequest,
+  deleteContestProblem,
   sendContestAccountsEmails,
   getContestMyProgress,
   listContestOrganizers,
@@ -39,6 +42,7 @@ import {
   type ContestAdminParticipant,
   type ContestAdminSubmission,
   type ContestGeneratedAccount,
+  type ContestTemporaryAccount,
   type ContestCommunityData,
   type ContestDetails,
   type ContestAnnulmentItem,
@@ -979,6 +983,7 @@ export const ContestPage: React.FC = () => {
   const [focusedProblemSettingsId, setFocusedProblemSettingsId] = React.useState<number | null>(null);
   const [savingProblemSettingsId, setSavingProblemSettingsId] = React.useState<number | null>(null);
   const [problemSettingsError, setProblemSettingsError] = React.useState<string | null>(null);
+  const [deletingContestProblemId, setDeletingContestProblemId] = React.useState<number | null>(null);
   const [problemSettingsDraft, setProblemSettingsDraft] = React.useState<Record<number, { label: string; points: string; order: string }>>({});
 
   const [progressLoading, setProgressLoading] = React.useState(false);
@@ -1006,10 +1011,15 @@ export const ContestPage: React.FC = () => {
   const [accountGenError, setAccountGenError] = React.useState<string | null>(null);
   const [accountGenMessage, setAccountGenMessage] = React.useState<string | null>(null);
   const [generatedAccounts, setGeneratedAccounts] = React.useState<ContestGeneratedAccount[]>([]);
+  const [temporaryAccounts, setTemporaryAccounts] = React.useState<ContestTemporaryAccount[]>([]);
+  const [temporaryAccountsLoading, setTemporaryAccountsLoading] = React.useState(false);
+  const [temporaryAccountsError, setTemporaryAccountsError] = React.useState<string | null>(null);
+  const [deletingTemporaryAccountId, setDeletingTemporaryAccountId] = React.useState<number | null>(null);
   const [accountMailLoading, setAccountMailLoading] = React.useState(false);
   const [accountMailError, setAccountMailError] = React.useState<string | null>(null);
   const [accountMailResult, setAccountMailResult] = React.useState<string | null>(null);
   const [accountMailCustomMessage, setAccountMailCustomMessage] = React.useState("");
+  const [accountMailAttachments, setAccountMailAttachments] = React.useState<File[]>([]);
 
   const [certificateMode, setCertificateMode] = React.useState<"none" | "studycod" | "custom">("studycod");
   const certificateEditorOpen = true;
@@ -1277,6 +1287,29 @@ export const ContestPage: React.FC = () => {
     if (tab !== "participants") return;
     loadAdminParticipants();
   }, [tab, loadAdminParticipants]);
+
+  const loadTemporaryAccounts = React.useCallback(async () => {
+    if (!contestId || !data?.access?.canManage) {
+      setTemporaryAccounts([]);
+      setTemporaryAccountsError(null);
+      return;
+    }
+    setTemporaryAccountsLoading(true);
+    setTemporaryAccountsError(null);
+    try {
+      const r = await listContestTemporaryAccounts(contestId);
+      setTemporaryAccounts(Array.isArray(r.accounts) ? r.accounts : []);
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e);
+      setTemporaryAccountsError(msg || tr("Не вдалося завантажити тимчасові акаунти", "Failed to load temporary accounts"));
+    } finally {
+      setTemporaryAccountsLoading(false);
+    }
+  }, [contestId, data?.access?.canManage, tr]);
+
+  React.useEffect(() => {
+    if (tab === "accounts") void loadTemporaryAccounts();
+  }, [tab, loadTemporaryAccounts]);
 
   React.useEffect(() => {
     if (!adminParticipantsActionMessage) return;
@@ -2665,11 +2698,35 @@ export const ContestPage: React.FC = () => {
       setGeneratedAccounts(Array.isArray(r.created) ? r.created : []);
       setAccountGenMessage(tr(`Згенеровано акаунтів: ${Array.isArray(r.created) ? r.created.length : 0}`, `Generated accounts: ${Array.isArray(r.created) ? r.created.length : 0}`));
       await loadAdminParticipants();
+      await loadTemporaryAccounts();
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
       setAccountGenError(msg || tr("Не вдалося згенерувати акаунти", "Failed to generate accounts"));
     } finally {
       setAccountGenLoading(false);
+    }
+  };
+
+  const deleteTemporaryAccount = async (account: ContestTemporaryAccount) => {
+    if (!contestId || deletingTemporaryAccountId != null) return;
+    const confirmed = window.confirm(tr(
+      `Видалити тимчасовий акаунт «${account.username}»? Його подачі й результати в цьому контесті також буде видалено.`,
+      `Delete temporary account “${account.username}”? Its submissions and results in this contest will also be deleted.`
+    ));
+    if (!confirmed) return;
+
+    setDeletingTemporaryAccountId(account.userId);
+    setTemporaryAccountsError(null);
+    try {
+      await deleteContestTemporaryAccount(contestId, account.userId);
+      setTemporaryAccounts((current) => current.filter((item) => item.userId !== account.userId));
+      setGeneratedAccounts((current) => current.filter((item) => item.userId !== account.userId));
+      void loadAdminParticipants();
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e);
+      setTemporaryAccountsError(msg || tr("Не вдалося видалити акаунт", "Failed to delete account"));
+    } finally {
+      setDeletingTemporaryAccountId(null);
     }
   };
 
@@ -2753,6 +2810,7 @@ export const ContestPage: React.FC = () => {
       .join(","));
     return [header, ...rows].join("\n");
   }, [generatedAccounts]);
+  const generatedAccountsByUserId = React.useMemo(() => new Map(generatedAccounts.map((account) => [account.userId, account])), [generatedAccounts]);
 
   const rosterInputAnalysis = React.useMemo(() => analyzeRosterInput(accountRosterText), [accountRosterText]);
   const rosterPreviewRows = React.useMemo(() => rosterInputAnalysis.entries.slice(0, 8), [rosterInputAnalysis.entries]);
@@ -2827,7 +2885,7 @@ export const ContestPage: React.FC = () => {
         recipients,
         includeContestInfo: true,
         customMessage: accountMailCustomMessage.trim() || undefined,
-      });
+      }, accountMailAttachments);
 
       setAccountMailResult(
         tr(
@@ -2835,6 +2893,7 @@ export const ContestPage: React.FC = () => {
           `Sent: ${r.sentCount}, failed: ${r.failedCount}`
         )
       );
+      if (r.failedCount === 0) setAccountMailAttachments([]);
 
       if (Array.isArray(r.failed) && r.failed.length > 0) {
         const preview = r.failed.slice(0, 5).map((f) => `${f.email}: ${f.reason}`).join("; ");
@@ -3541,6 +3600,34 @@ export const ContestPage: React.FC = () => {
     }
   };
 
+  const removeContestProblem = async (problemId: number, title: string) => {
+    if (!contestId || deletingContestProblemId != null) return;
+    const confirmed = window.confirm(tr(
+      `Видалити задачу «${title}» з контесту? Усі її подачі й результати також буде видалено.`,
+      `Remove “${title}” from the contest? All submissions and results for it will also be deleted.`
+    ));
+    if (!confirmed) return;
+
+    setDeletingContestProblemId(problemId);
+    setProblemSettingsError(null);
+    try {
+      await deleteContestProblem(contestId, problemId);
+      setProblemSettingsDraft((current) => {
+        const next = { ...current };
+        delete next[problemId];
+        return next;
+      });
+      setData((current) => current ? { ...current, problems: current.problems.filter((problem) => problem.id !== problemId) } : current);
+      load();
+      if (tab === "problems") loadProgress();
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e);
+      setProblemSettingsError(msg || tr("Не вдалося видалити задачу з контесту", "Failed to remove the problem from the contest"));
+    } finally {
+      setDeletingContestProblemId(null);
+    }
+  };
+
   return (
     <div className="contest-page-shell">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -3778,6 +3865,7 @@ export const ContestPage: React.FC = () => {
                   {data.problems.map((p) => {
                     const draft = problemSettingsDraft[p.id] ?? { label: p.label, points: p.points != null ? String(p.points) : "", order: String(p.order) };
                     const savingThis = savingProblemSettingsId === p.id;
+                    const deletingThis = deletingContestProblemId === p.id;
                     return (
                       <tr
                         key={p.id}
@@ -3811,9 +3899,12 @@ export const ContestPage: React.FC = () => {
                           />
                         </td>
                         <td className="p-2 border-b border-border text-right">
+                          <div className="flex items-center justify-end gap-1">
                           <Button variant="secondary" onClick={() => saveProblemSettings(p.id)} disabled={savingThis}>
                             {savingThis ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
                           </Button>
+                          <button type="button" onClick={() => void removeContestProblem(p.id, p.title)} disabled={deletingContestProblemId != null || savingProblemSettingsId != null} aria-label={tr(`Видалити задачу ${p.title}`, `Delete problem ${p.title}`)} title={tr("Видалити задачу й подачі", "Delete problem and submissions")} className="inline-grid size-9 shrink-0 place-items-center rounded-lg text-accent-error transition-colors hover:bg-accent-error/10 disabled:opacity-50">{deletingThis ? <RefreshCw aria-hidden="true" className="size-4 animate-spin" /> : <Trash2 aria-hidden="true" className="size-4" />}</button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -5757,28 +5848,35 @@ export const ContestPage: React.FC = () => {
                         <Button variant="outline" onClick={copyGeneratedAccounts} className="min-h-9 gap-2 rounded-xl border-[#17271c]/10 bg-white px-3 text-xs font-semibold text-[#3a4d3f] hover:bg-[#f1f7f2] dark:border-white/10 dark:bg-white/[.04] dark:text-[#dce7df] dark:hover:bg-white/[.08]"><Copy aria-hidden="true" className="size-3.5" />{tr("Копіювати CSV", "Copy CSV")}</Button>
                         <Button variant="outline" onClick={downloadGeneratedAccountsCsv} className="min-h-9 gap-2 rounded-xl border-[#17271c]/10 bg-white px-3 text-xs font-semibold text-[#3a4d3f] hover:bg-[#f1f7f2] dark:border-white/10 dark:bg-white/[.04] dark:text-[#dce7df] dark:hover:bg-white/[.08]"><Download aria-hidden="true" className="size-3.5" />CSV</Button>
                         <Button variant="outline" onClick={() => void downloadGeneratedAccountsXlsx()} className="min-h-9 gap-2 rounded-xl border-[#17271c]/10 bg-white px-3 text-xs font-semibold text-[#3a4d3f] hover:bg-[#f1f7f2] dark:border-white/10 dark:bg-white/[.04] dark:text-[#dce7df] dark:hover:bg-white/[.08]"><Download aria-hidden="true" className="size-3.5" />XLSX</Button>
-                        <Button variant="ghost" onClick={clearGeneratedAccounts} className="min-h-9 gap-2 rounded-xl px-3 text-xs font-semibold text-[#8c4e42] hover:bg-[#fff2ef] dark:text-[#ffad9b] dark:hover:bg-[#ff755a]/10"><Trash2 aria-hidden="true" className="size-3.5" />{tr("Очистити доступи", "Clear accounts")}</Button>
+                        <Button variant="ghost" onClick={clearGeneratedAccounts} className="min-h-9 gap-2 rounded-xl px-3 text-xs font-semibold text-[#8c4e42] hover:bg-[#fff2ef] dark:text-[#ffad9b] dark:hover:bg-[#ff755a]/10"><Trash2 aria-hidden="true" className="size-3.5" />{tr("Очистити з екрана", "Clear from screen")}</Button>
                       </div>}
                     </div>
 
                     {accountGenError && <div role="alert" className="mt-3 rounded-xl border border-[#f2c8b8] bg-[#fff5f1] px-3 py-2.5 text-sm text-[#9b3416] dark:border-[#ff755a]/20 dark:bg-[#ff755a]/[.06] dark:text-[#ffad9b]">{accountGenError}</div>}
                     {accountGenMessage && <div role="status" className="mt-3 rounded-xl border border-[#bfe5cd] bg-[#effaf2] px-3 py-2.5 text-sm text-[#176b3c] dark:border-primary/20 dark:bg-primary/[.06] dark:text-[#8deeb6]">{accountGenMessage}</div>}
 
-                    {generatedAccounts.length > 0 && <section className="mt-5 overflow-hidden rounded-2xl border border-[#17271c]/10 dark:border-white/10">
+                    {temporaryAccountsLoading && <div role="status" className="mt-4 text-sm text-[#708075] dark:text-[#a5b3a8]">{tr("Завантажую тимчасові акаунти…", "Loading temporary accounts…")}</div>}
+                    {temporaryAccountsError && <div role="alert" className="mt-4 rounded-xl border border-[#f2c8b8] bg-[#fff5f1] px-3 py-2.5 text-sm text-[#9b3416] dark:border-[#ff755a]/20 dark:bg-[#ff755a]/[.06] dark:text-[#ffad9b]">{temporaryAccountsError}</div>}
+                    {temporaryAccounts.length > 0 && <section className="mt-5 overflow-hidden rounded-2xl border border-[#17271c]/10 dark:border-white/10">
                       <div className="flex flex-col gap-3 bg-[#f8faf8] px-4 py-4 dark:bg-white/[.035] sm:flex-row sm:items-center sm:justify-between">
-                        <div><h3 className="font-[family-name:var(--font-display)] text-lg font-bold text-[#1a271e] dark:text-text-primary">{tr("Згенеровані доступи", "Generated accounts")}</h3><p className="mt-1 text-xs leading-5 text-[#708075] dark:text-[#a5b3a8]">{tr("Збережи файл зараз: паролі доступні лише після генерації.", "Save a copy now: passwords are only shown after generation.")}</p></div>
-                        <span className="inline-flex w-fit items-center rounded-full bg-[#e8f5ec] px-3 py-1.5 text-xs font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">{tr(`${generatedAccounts.length} доступів`, `${generatedAccounts.length} accounts`)}</span>
+                        <div><h3 className="font-[family-name:var(--font-display)] text-lg font-bold text-[#1a271e] dark:text-text-primary">{tr("Тимчасові акаунти", "Temporary accounts")}</h3><p className="mt-1 text-xs leading-5 text-[#708075] dark:text-[#a5b3a8]">{tr("Паролі показуються лише одразу після генерації. Видалення акаунта також видалить його подачі й результати.", "Passwords are shown only immediately after generation. Deleting an account also removes its submissions and results.")}</p></div>
+                        <span className="inline-flex w-fit items-center rounded-full bg-[#e8f5ec] px-3 py-1.5 text-xs font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">{tr(`${temporaryAccounts.length} акаунтів`, `${temporaryAccounts.length} accounts`)}</span>
                       </div>
                       <div className="max-h-[320px] overflow-auto">
                         <table className="min-w-[620px] w-full text-sm">
-                          <caption className="sr-only">{tr("Згенеровані облікові записи учасників", "Generated participant accounts")}</caption>
+                          <caption className="sr-only">{tr("Тимчасові облікові записи учасників", "Temporary participant accounts")}</caption>
                           <thead className="sticky top-0 bg-white text-left text-xs font-semibold text-[#708075] dark:bg-bg-surface dark:text-[#a5b3a8]">
-                            <tr><th className="px-4 py-3">{tr("Ім’я", "Name")}</th><th className="hidden px-4 py-3 md:table-cell">Email</th><th className="px-4 py-3">{tr("Логін", "Username")}</th><th className="px-4 py-3">{tr("Пароль", "Password")}</th><th className="hidden px-4 py-3 lg:table-cell">userId</th><th className="hidden px-4 py-3 lg:table-cell">participantId</th></tr>
+                            <tr><th className="px-4 py-3">{tr("Ім’я", "Name")}</th><th className="hidden px-4 py-3 md:table-cell">Email</th><th className="px-4 py-3">{tr("Логін", "Username")}</th><th className="px-4 py-3">{tr("Пароль", "Password")}</th><th className="hidden px-4 py-3 lg:table-cell">userId</th><th className="hidden px-4 py-3 lg:table-cell">participantId</th><th className="px-4 py-3 text-right">{tr("Дія", "Action")}</th></tr>
                           </thead>
                           <tbody>
-                            {generatedAccounts.map((a) => <tr key={`${a.userId}-${a.participantId}-${a.email ?? ""}`} className="border-t border-[#17271c]/[.07] text-[#34483a] odd:bg-white even:bg-[#f8faf8] dark:border-white/[.06] dark:text-[#d7e2da] dark:odd:bg-bg-surface dark:even:bg-white/[.02]">
-                              <td className="px-4 py-3 font-medium">{a.fullName ?? "—"}</td><td className="hidden px-4 py-3 text-[#637368] md:table-cell dark:text-[#aab8ae]">{a.email ?? "—"}</td><td className="px-4 py-3 font-mono text-xs">{a.username}</td><td className="px-4 py-3 font-mono text-xs">{a.password}</td><td className="hidden px-4 py-3 font-mono text-xs lg:table-cell">{a.userId}</td><td className="hidden px-4 py-3 font-mono text-xs lg:table-cell">{a.participantId}</td>
-                            </tr>)}
+                            {temporaryAccounts.map((a) => {
+                              const credentials = generatedAccountsByUserId.get(a.userId);
+                              const isDeleting = deletingTemporaryAccountId === a.userId;
+                              return <tr key={`${a.userId}-${a.participantId}`} className="border-t border-[#17271c]/[.07] text-[#34483a] odd:bg-white even:bg-[#f8faf8] dark:border-white/[.06] dark:text-[#d7e2da] dark:odd:bg-bg-surface dark:even:bg-white/[.02]">
+                                <td className="px-4 py-3 font-medium">{a.fullName ?? "—"}</td><td className="hidden px-4 py-3 text-[#637368] md:table-cell dark:text-[#aab8ae]">{a.email ?? "—"}</td><td className="px-4 py-3 font-mono text-xs">{a.username}</td><td className="px-4 py-3 font-mono text-xs">{credentials?.password ?? "—"}</td><td className="hidden px-4 py-3 font-mono text-xs lg:table-cell">{a.userId}</td><td className="hidden px-4 py-3 font-mono text-xs lg:table-cell">{a.participantId}</td>
+                                <td className="px-4 py-2 text-right"><button type="button" onClick={() => void deleteTemporaryAccount(a)} disabled={deletingTemporaryAccountId != null} aria-label={tr(`Видалити акаунт ${a.username}`, `Delete account ${a.username}`)} title={tr("Видалити акаунт", "Delete account")} className="inline-grid size-9 place-items-center rounded-lg text-[#8c4e42] transition-colors hover:bg-[#fff2ef] disabled:opacity-50 dark:text-[#ffad9b] dark:hover:bg-[#ff755a]/10">{isDeleting ? <RefreshCw aria-hidden="true" className="size-4 animate-spin" /> : <Trash2 aria-hidden="true" className="size-4" />}</button></td>
+                              </tr>;
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -5791,6 +5889,40 @@ export const ContestPage: React.FC = () => {
                           className="mt-2 min-h-[88px] w-full resize-y rounded-xl border border-[#17271c]/10 bg-bg-surface px-3.5 py-3 text-sm leading-6 text-[#24352a] outline-none transition-[border-color,box-shadow] placeholder:text-[#849288] focus:border-primary-strong/45 focus:ring-2 focus:ring-primary/15 dark:border-white/10 dark:bg-[#0b140e] dark:text-[#e5eee7] dark:placeholder:text-[#809087]"
                           placeholder={tr("Напиши коротке привітання або інструкцію для входу", "Add a short welcome or sign-in instruction")}
                         />
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-[#17271c]/12 px-3.5 text-sm font-semibold text-[#34483a] transition-colors hover:bg-[#f3f7f3] dark:border-white/10 dark:text-[#d7e2da] dark:hover:bg-white/[.04]">
+                            <Upload aria-hidden="true" className="size-4" />
+                            {tr("Додати файли", "Attach files")}
+                            <input
+                              type="file"
+                              multiple
+                              accept=".pdf,.txt,.csv,.json,.png,.jpg,.jpeg,.gif,.webp,.avif,.bmp,.tif,.tiff,.heic,.heif,.zip,.doc,.docx,.xls,.xlsx"
+                              className="sr-only"
+                              onChange={(event) => {
+                                const selected = Array.from(event.currentTarget.files ?? []);
+                                const unique = new Map(accountMailAttachments.map((file) => [`${file.name}:${file.size}:${file.lastModified}`, file]));
+                                for (const file of selected) unique.set(`${file.name}:${file.size}:${file.lastModified}`, file);
+                                if (Array.from(unique.values()).some((file) => file.size > 10 * 1024 * 1024)) {
+                                  setAccountMailError(tr("Файл завеликий. Максимальний розмір — 10 МБ", "A file is too large. Maximum size is 10 MB"));
+                                } else if (unique.size > 5) {
+                                  setAccountMailError(tr("Можна додати не більше 5 файлів", "You can attach up to 5 files"));
+                                } else {
+                                  setAccountMailAttachments(Array.from(unique.values()));
+                                  setAccountMailError(null);
+                                }
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                          <span className="text-xs text-[#708075] dark:text-[#a5b3a8]">{tr("До 5 файлів, максимум 10 МБ кожен", "Up to 5 files, 10 MB each")}</span>
+                        </div>
+                        {accountMailAttachments.length > 0 && <ul className="mt-2 flex flex-wrap gap-2" aria-label={tr("Вкладені файли", "Attached files")}>
+                          {accountMailAttachments.map((file) => <li key={`${file.name}:${file.size}:${file.lastModified}`} className="inline-flex max-w-full items-center gap-2 rounded-lg bg-[#edf4ee] px-2.5 py-1.5 text-xs text-[#34483a] dark:bg-white/[.06] dark:text-[#d7e2da]">
+                            <FileText aria-hidden="true" className="size-3.5 shrink-0" />
+                            <span className="max-w-[240px] truncate">{file.name}</span>
+                            <button type="button" aria-label={tr(`Прибрати файл ${file.name}`, `Remove ${file.name}`)} onClick={() => setAccountMailAttachments((current) => current.filter((item) => item !== file))} className="rounded p-0.5 hover:bg-black/10 dark:hover:bg-white/10"><X aria-hidden="true" className="size-3.5" /></button>
+                          </li>)}
+                        </ul>}
                         <div className="mt-3 flex flex-wrap items-center gap-3">
                           <Button variant="default" onClick={sendGeneratedAccountsByEmail} disabled={accountMailLoading} className="min-h-10 gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-[#062211] hover:bg-primary focus-visible:ring-primary">
                             <Send aria-hidden="true" className="size-4" />{accountMailLoading ? tr("Надсилаю…", "Sending…") : tr("Надіслати доступи поштою", "Email access details")}
