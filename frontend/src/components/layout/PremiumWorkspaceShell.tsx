@@ -141,6 +141,13 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   };
   const hasSupportDesk = user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN";
   const isAdmin = user.role === "SYSTEM_ADMIN";
+  const workspaceSectionLabel = page === "admin"
+    ? (uk ? "Адміністрування" : "Administration")
+    : area === "contest"
+      ? (uk ? "Контести" : "Contests")
+      : area === "lab"
+        ? (uk ? "Практика" : "Practice")
+        : (uk ? "Навчання" : "Learning");
 
   return (
     <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary">
@@ -259,7 +266,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
 
       </header>
       <aside data-material="workspace-rail" className="fixed bottom-0 left-0 top-[72px] z-40 hidden w-[68px] flex-col border-r border-border/70 bg-bg-surface/90 py-4 backdrop-blur-xl lg:flex xl:w-[236px]" aria-label={uk ? "Розділи StudyCod" : "StudyCod sections"}>
-        <div className="workspace-rail-heading hidden px-6 pb-3 pt-1 text-[10px] font-bold uppercase tracking-[.16em] text-text-muted xl:block">{uk ? "Навчання" : "Workspace"}</div>
+        <div className="workspace-rail-heading hidden px-6 pb-3 pt-1 text-[10px] font-bold uppercase tracking-[.16em] text-text-muted xl:block">{workspaceSectionLabel}</div>
         <nav className="flex flex-col gap-1 overflow-y-auto px-2 xl:px-3" aria-label={uk ? "Основна навігація" : "Primary navigation"}>
           {nav.map((item) => {
             const isActive = active(item.id);
