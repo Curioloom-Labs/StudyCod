@@ -83,6 +83,16 @@ function errorMessage(error: unknown): string {
   return typeof message === "string" && message ? message : String(error);
 }
 
+function decodeMultipartFilename(value: string): string {
+  // Busboy's default filename parameter charset is latin1. Some browsers still
+  // send UTF-8 bytes in that parameter, which makes Cyrillic names look like
+  // "Ð..." unless those bytes are decoded back as UTF-8.
+  if (!value || /[^\u0000-\u00ff]/.test(value)) return value;
+  const decoded = Buffer.from(value, "latin1").toString("utf8");
+  if (decoded.includes("\uFFFD") || !/[^\u0000-\u007f]/.test(decoded)) return value;
+  return decoded;
+}
+
 const contestRepo = () => AppDataSource.getRepository(Contest);
 const problemRepo = () => AppDataSource.getRepository(ContestProblem);
 const participantRepo = () => AppDataSource.getRepository(ContestParticipant);
@@ -2373,7 +2383,7 @@ contestsRouter.post("/:id/admin/accounts/send-emails", authRequired, (req, res, 
 
     const attachmentFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
     const emailAttachments = attachmentFiles.map((file) => ({
-      filename: file.originalname.replace(/[\\/<>:\\"|?*\x00-\x1F]/g, "_").slice(0, 180) || "attachment",
+      filename: decodeMultipartFilename(file.originalname).replace(/[\\/<>:\\"|?*\x00-\x1F]/g, "_").slice(0, 180) || "attachment",
       content: file.buffer,
       contentType: file.mimetype,
     }));
