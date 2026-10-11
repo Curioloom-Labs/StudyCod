@@ -13,8 +13,6 @@ import { RaiseHandButton, RaisedHandsBar } from "../../components/LiveRaiseHand"
 import { StudentCodeStream } from "../../components/StudentCodeStream";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
-import { useTranslation } from "react-i18next";
-import { tr } from "../../i18n";
 import {
   endLiveSession,
   getActiveLiveSession,
