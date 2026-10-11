@@ -7,6 +7,8 @@ import {
   type UpdateGradeRequest,
 } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { useTranslation } from "react-i18next";
+import { tr } from "../../i18n";
 
 const root = "mx-auto max-w-[1180px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10";
 const preview = () =>
@@ -28,6 +30,7 @@ const demo: GradePayload = {
 };
 
 export const GradeStudioPage: React.FC = () => {
+  useTranslation();
   const { gradeId } = useParams<{ gradeId: string }>();
   const id = Number(gradeId);
   const navigate = useNavigate();
@@ -52,7 +55,7 @@ export const GradeStudioPage: React.FC = () => {
         setFeedback(demo.grade.feedback || "");
       } else
         setError(
-          getErrorMessageFromUnknown(caught, "Не вдалося відкрити оцінку."),
+          getErrorMessageFromUnknown(caught, tr("Не вдалося відкрити оцінку.", "Could not open the grade.")),
         );
     } finally {
       setLoading(false);
@@ -72,7 +75,7 @@ export const GradeStudioPage: React.FC = () => {
       await load();
     } catch (caught) {
       setError(
-        getErrorMessageFromUnknown(caught, "Не вдалося зберегти оцінку."),
+        getErrorMessageFromUnknown(caught, tr("Не вдалося зберегти оцінку.", "Could not save the grade.")),
       );
     } finally {
       setBusy(false);
@@ -85,7 +88,7 @@ export const GradeStudioPage: React.FC = () => {
       </div>
     );
   if (!data)
-    return <div className={root}>{error || "Оцінку не знайдено."}</div>;
+    return <div className={root}>{error || tr("Оцінку не знайдено.", "Grade not found.")}</div>;
   const initial = `${data.student.firstName?.[0] || ""}${data.student.lastName?.[0] || ""}`;
   const tone =
     score >= 85
@@ -100,7 +103,7 @@ export const GradeStudioPage: React.FC = () => {
         className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"
       >
         <ArrowLeft className="h-4 w-4" />
-        Назад
+        {tr("Назад", "Back")}
       </button>
       <header className="flex flex-col justify-between gap-6 rounded-[32px] bg-bg-surface p-6 dark:bg-[#152119] sm:p-9 lg:flex-row lg:items-end">
         <div className="flex items-center gap-4">
@@ -109,7 +112,7 @@ export const GradeStudioPage: React.FC = () => {
           </span>
           <div>
             <p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
-              Результат учня
+              {tr("Результат учня", "Student result")}
             </p>
             <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em] sm:text-4xl">
               {data.task.title}
@@ -121,7 +124,7 @@ export const GradeStudioPage: React.FC = () => {
         </div>
         <div className={`rounded-2xl px-5 py-4 ${tone}`}>
           <p className="text-xs font-bold uppercase tracking-[.12em] opacity-75">
-            Поточний результат
+            {tr("Поточний результат", "Current score")}
           </p>
           <p className="mt-1 text-3xl font-extrabold">{score}</p>
         </div>
@@ -137,24 +140,24 @@ export const GradeStudioPage: React.FC = () => {
             <Code2 className="h-5 w-5 text-[#e17800]" />
             <div>
               <p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">
-                Відправлений код
+                {tr("Відправлений код", "Submitted code")}
               </p>
-              <h2 className="mt-1 text-xl font-bold">Розв'язок</h2>
+              <h2 className="mt-1 text-xl font-bold">{tr("Розв'язок", "Solution")}</h2>
             </div>
           </div>
           <pre className="max-h-[520px] overflow-auto bg-bg-surface p-6 font-mono text-sm leading-7 text-[#304238] dark:bg-[#0d1710] dark:text-[#d4dfd7]">
-            {data.code || "Учень не надіслав код."}
+            {data.code || tr("Учень не надіслав код.", "The student did not submit code.")}
           </pre>
         </section>
         <aside className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface">
           <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">
-            Фідбек
+            {tr("Фідбек", "Feedback")}
           </p>
           <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">
-            Підсумок перевірки
+            {tr("Підсумок перевірки", "Review summary")}
           </h2>
           <label className="mt-6 block text-sm font-bold">
-            Оцінка
+            {tr("Оцінка", "Grade")}
             <input
               value={score}
               onChange={(event) =>
@@ -169,19 +172,19 @@ export const GradeStudioPage: React.FC = () => {
             />
           </label>
           <label className="mt-5 block text-sm font-bold">
-            Коментар учню
+            {tr("Коментар учню", "Feedback for the student")}
             <textarea
               value={feedback}
               onChange={(event) => setFeedback(event.target.value)}
               rows={7}
-              placeholder="Що вже вийшло і що варто покращити…"
+              placeholder={tr("Що вже вийшло і що варто покращити…", "What went well and what could be improved…")}
               className="mt-2 w-full resize-none rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal leading-6 dark:border-white/10 dark:bg-[#0d1710]"
             />
           </label>
           <div className="mt-4 rounded-2xl bg-[#f3f7f3] p-4 dark:bg-white/[.045]">
             <CheckCircle2 className="h-5 w-5 text-primary-strong dark:text-primary-soft" />
             <p className="mt-2 text-sm leading-6 text-[#65766b] dark:text-[#bdc9c0]">
-              Збереження оновить і оцінку, і коментар у поточній роботі учня.
+              {tr("Збереження оновить і оцінку, і коментар у поточній роботі учня.", "Saving will update both the grade and feedback on the student's submission.")}
             </p>
           </div>
           <button type="button"
@@ -190,7 +193,7 @@ export const GradeStudioPage: React.FC = () => {
             className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"
           >
             <Save className="h-4 w-4" />
-            {busy ? "Зберігаємо…" : "Зберегти результат"}
+            {busy ? tr("Зберігаємо…", "Saving…") : tr("Зберегти результат", "Save grade")}
           </button>
         </aside>
       </main>

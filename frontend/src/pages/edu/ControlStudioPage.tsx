@@ -5,6 +5,8 @@ import { api } from "../../lib/api/client";
 import { updateControlWorkFormula } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { showToast } from "../../lib/toast";
+import { useTranslation } from "react-i18next";
+import { tr } from "../../i18n";
 
 type ControlTask = { id: number; title: string; description?: string; maxAttempts?: number };
 type QuizItem = { question?: string; options?: Record<string, string>; correct?: string };
@@ -55,6 +57,7 @@ function parseQuiz(raw?: string | null): QuizItem[] {
 }
 
 export const ControlStudioPage: React.FC = () => {
+  useTranslation();
   const { controlWorkId } = useParams<{ controlWorkId: string }>();
   const id = Number(controlWorkId);
   const navigate = useNavigate();
@@ -90,7 +93,7 @@ export const ControlStudioPage: React.FC = () => {
       setQuizText(value.quizJson || "");
       setError(null);
     } catch (caught) {
-      setError(getErrorMessageFromUnknown(caught, "Не вдалося відкрити контрольну."));
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося відкрити контрольну.", "Could not open the assessment.")));
     } finally {
       setLoading(false);
     }
@@ -111,9 +114,9 @@ export const ControlStudioPage: React.FC = () => {
         await updateControlWorkFormula(id, formula.trim() || null);
       }
       await load();
-      showToast({ type: "success", message: "Контрольну збережено." });
+      showToast({ type: "success", message: tr("Контрольну збережено.", "Assessment saved.") });
     } catch (caught) {
-      setError(getErrorMessageFromUnknown(caught, "Не вдалося зберегти зміни. Перевірте JSON квізу."));
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося зберегти зміни. Перевірте JSON квізу.", "Could not save changes. Check the quiz JSON.")));
     } finally {
       setBusy(false);
     }
@@ -128,9 +131,9 @@ export const ControlStudioPage: React.FC = () => {
         await api.post(`/topics/control-works/${id}/generate-quiz`, { count: 10, topicTitle: control?.topic?.title || title });
         await load();
       }
-      showToast({ type: "success", message: "Квіз підготовлено." });
+      showToast({ type: "success", message: tr("Квіз підготовлено.", "Quiz is ready.") });
     } catch (caught) {
-      setError(getErrorMessageFromUnknown(caught, "Не вдалося підготувати квіз."));
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося підготувати квіз.", "Could not prepare the quiz.")));
     } finally {
       setBusy(false);
     }
@@ -142,14 +145,14 @@ export const ControlStudioPage: React.FC = () => {
       setQuizText(JSON.stringify(parsed, null, 2));
       setError(null);
     } catch {
-      setError("JSON квізу має помилку. Виправте синтаксис перед збереженням.");
+      setError(tr("JSON квізу має помилку. Виправте синтаксис перед збереженням.", "The quiz JSON has an error. Fix the syntax before saving."));
     }
   };
 
   const createTask = async () => {
     if (!control?.topic?.id) return;
     if (!newTask.title.trim() || !newTask.description.trim() || !newTask.template.trim()) {
-      setError("Заповніть назву, умову та стартовий код практичної задачі.");
+      setError(tr("Заповніть назву, умову та стартовий код практичної задачі.", "Fill in the title, problem statement, and starter code."));
       return;
     }
     setBusy(true);
@@ -166,16 +169,16 @@ export const ControlStudioPage: React.FC = () => {
       setNewTask({ title: "", description: "", template: "" });
       setShowCreateTask(false);
       await load();
-      showToast({ type: "success", message: "Практичну задачу додано до контрольної." });
+      showToast({ type: "success", message: tr("Практичну задачу додано до контрольної.", "Practice problem added to the assessment.") });
     } catch (caught) {
-      setError(getErrorMessageFromUnknown(caught, "Не вдалося додати практичну задачу."));
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося додати практичну задачу.", "Could not add practice problem.")));
     } finally {
       setBusy(false);
     }
   };
 
   if (loading) return <div className={root}><div className="h-[600px] animate-pulse rounded-[34px] bg-bg-hover dark:bg-white/[.05]" /></div>;
-  if (!control) return <div className={root}>{error || "Контрольну не знайдено."}</div>;
+  if (!control) return <div className={root}>{error || tr("Контрольну не знайдено.", "Assessment not found.")}</div>;
 
   const tasks = control.tasks || [];
   const quiz = parseQuiz(quizText);
@@ -183,18 +186,18 @@ export const ControlStudioPage: React.FC = () => {
 
   return (
     <div className={root}>
-      <button type="button" onClick={() => navigate(control.topic?.id ? `/edu/topics/${control.topic.id}` : "/edu")} className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"><ArrowLeft className="h-4 w-4" />До теми</button>
+      <button type="button" onClick={() => navigate(control.topic?.id ? `/edu/topics/${control.topic.id}` : "/edu")} className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"><ArrowLeft className="h-4 w-4" />{tr("До теми", "Back to topic")}</button>
 
       <header className="rounded-[34px] bg-[#fff3e1] p-6 dark:bg-[#302513] sm:p-10">
-        <p className="text-xs font-bold uppercase tracking-[.16em] text-[#b76a00] dark:text-[#ffca7e]">Контрольна точка · {control.topic?.title || "EDU"}</p>
+        <p className="text-xs font-bold uppercase tracking-[.16em] text-[#b76a00] dark:text-[#ffca7e]">{tr("Контрольна точка", "Assessment")} · {control.topic?.title || "EDU"}</p>
         <div className="mt-3 flex flex-col justify-between gap-7 lg:flex-row lg:items-end">
           <div>
-            <h1 className="font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.06em] sm:text-6xl">{control.title || "Контрольна робота"}</h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-[#73562a] dark:text-[#decda9]">Одне місце для теорії, практики, квізу й формули оцінювання. Квіз тепер можна не тільки генерувати, а й редагувати.</p>
+            <h1 className="font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.06em] sm:text-6xl">{control.title || tr("Контрольна робота", "Assessment")}</h1>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-[#73562a] dark:text-[#decda9]">{tr("Одне місце для теорії, практики, квізу й формули оцінювання. Квіз тепер можна не тільки генерувати, а й редагувати.", "One place for theory, practice, a quiz, and the grading formula. You can now edit quizzes as well as generate them.")}</p>
           </div>
           <div className="rounded-2xl bg-white/75 px-5 py-4 dark:bg-black/15">
-            <p className="text-xs font-bold uppercase tracking-[.12em] text-[#8b692c] dark:text-[#d5c39d]">Тривалість</p>
-            <p className="mt-1 text-2xl font-bold">{control.timeLimitMinutes || "—"} хв</p>
+            <p className="text-xs font-bold uppercase tracking-[.12em] text-[#8b692c] dark:text-[#d5c39d]">{tr("Тривалість", "Duration")}</p>
+            <p className="mt-1 text-2xl font-bold">{control.timeLimitMinutes || "—"} {tr("хв", "min")}</p>
           </div>
         </div>
       </header>
@@ -206,62 +209,62 @@ export const ControlStudioPage: React.FC = () => {
           <section className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-8">
             <div className="flex items-center gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-2xl bg-[#fff1dc] text-[#c97600] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]"><FileCheck2 className="h-5 w-5" /></span>
-              <div><p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">Склад роботи</p><h2 className="mt-1 text-2xl font-bold tracking-[-.04em]">Що побачить учень</h2></div>
+              <div><p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">{tr("Склад роботи", "Assessment overview")}</p><h2 className="mt-1 text-2xl font-bold tracking-[-.04em]">{tr("Що побачить учень", "What students will see")}</h2></div>
             </div>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <StatusCard active={Boolean(control.hasTheory)} title="Теорія" text={control.hasTheory ? (hasQuiz ? "Квіз готовий." : "Увімкнено, квіз ще не заповнений.") : "Вимкнено."} />
-              <StatusCard active={Boolean(control.hasPractice)} title="Практика" text={control.hasPractice ? `${tasks.length} задач у наборі.` : "Вимкнено."} warm />
-              <StatusCard active={hasQuiz} title="Квіз" text={hasQuiz ? `${quiz.length} питань.` : "Питань ще немає."} />
+              <StatusCard active={Boolean(control.hasTheory)} title={tr("Теорія", "Theory")} text={control.hasTheory ? (hasQuiz ? tr("Квіз готовий.", "Quiz is ready.") : tr("Увімкнено, квіз ще не заповнений.", "Enabled, but the quiz is empty.") : tr("Вимкнено.", "Disabled."))} />
+              <StatusCard active={Boolean(control.hasPractice)} title={tr("Практика", "Practice")} text={control.hasPractice ? tr(`${tasks.length} задач у наборі.`, `${tasks.length} problems in the set.`) : tr("Вимкнено.", "Disabled.")} warm />
+              <StatusCard active={hasQuiz} title={tr("Квіз", "Quiz")} text={hasQuiz ? tr(`${quiz.length} питань.`, `${quiz.length} questions.`) : tr("Питань ще немає.", "No questions yet.")} />
             </div>
             <div className="mt-6 space-y-3">
               <div className="flex justify-end">
                 <button type="button" onClick={() => setShowCreateTask((value) => !value)} className="inline-flex items-center gap-2 rounded-xl border border-[#e17800]/25 px-4 py-2.5 text-sm font-bold text-[#a55e00] transition hover:bg-[#fff4e4] dark:border-[#ffca7e]/25 dark:text-[#ffca7e] dark:hover:bg-[#ff8c00]/10">
-                  <Plus className="h-4 w-4" />{showCreateTask ? "Скасувати" : "Додати практичну задачу"}
+                  <Plus className="h-4 w-4" />{showCreateTask ? tr("Скасувати", "Cancel") : tr("Додати практичну задачу", "Add practice problem")}
                 </button>
               </div>
               {showCreateTask && (
                 <div className="rounded-2xl border border-[#e17800]/20 bg-[#fffaf2] p-5 dark:border-[#ffca7e]/20 dark:bg-[#241d11]">
-                  <p className="text-sm font-bold">Нова задача контрольної</p>
-                  <label className="mt-4 block text-sm font-bold">Назва<input aria-label="Назва практичної задачі" value={newTask.title} onChange={(event) => setNewTask({ ...newTask, title: event.target.value })} className="mt-2 w-full rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
-                  <label className="mt-4 block text-sm font-bold">Умова<textarea aria-label="Умова практичної задачі" value={newTask.description} onChange={(event) => setNewTask({ ...newTask, description: event.target.value })} rows={4} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
-                  <label className="mt-4 block text-sm font-bold">Стартовий код<textarea aria-label="Стартовий код практичної задачі" value={newTask.template} onChange={(event) => setNewTask({ ...newTask, template: event.target.value })} rows={5} spellCheck={false} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 font-mono text-xs leading-6 outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
-                  <button type="button" disabled={busy} onClick={() => void createTask()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]">{busy ? "Додаємо…" : "Додати до контрольної"}</button>
+                  <p className="text-sm font-bold">{tr("Нова задача контрольної", "New assessment problem")}</p>
+                  <label className="mt-4 block text-sm font-bold">{tr("Назва", "Title")}<input aria-label={tr("Назва практичної задачі", "Practice problem title")} value={newTask.title} onChange={(event) => setNewTask({ ...newTask, title: event.target.value })} className="mt-2 w-full rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
+                  <label className="mt-4 block text-sm font-bold">{tr("Умова", "Problem statement")}<textarea aria-label={tr("Умова практичної задачі", "Practice problem statement")} value={newTask.description} onChange={(event) => setNewTask({ ...newTask, description: event.target.value })} rows={4} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
+                  <label className="mt-4 block text-sm font-bold">{tr("Стартовий код", "Starter code")}<textarea aria-label={tr("Стартовий код практичної задачі", "Practice problem starter code")} value={newTask.template} onChange={(event) => setNewTask({ ...newTask, template: event.target.value })} rows={5} spellCheck={false} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 font-mono text-xs leading-6 outline-none focus:ring-4 focus:ring-[#e17800]/15 dark:border-white/10 dark:bg-[#0d1710]" /></label>
+                  <button type="button" disabled={busy} onClick={() => void createTask()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]">{busy ? tr("Додаємо…", "Adding…") : tr("Додати до контрольної", "Add to assessment")}</button>
                 </div>
               )}
-              {tasks.map((task, index) => <div key={task.id} className="flex items-start gap-4 rounded-2xl bg-[#f4f7f4] p-4 dark:bg-white/[.045]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-xs font-extrabold text-[#a55e00] shadow-sm dark:bg-[#18251c] dark:text-[#ffca7e]">{String(index + 1).padStart(2, "0")}</span><div><p className="font-bold">{task.title}</p><p className="mt-1 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">{task.description || "Практична частина контрольної."}</p></div></div>)}
-              {!tasks.length && <p className="rounded-2xl border border-dashed border-border/15 px-5 py-8 text-center text-sm text-[#708077] dark:border-white/10 dark:text-[#a6b4a9]">Практичних задач ще немає.</p>}
+              {tasks.map((task, index) => <div key={task.id} className="flex items-start gap-4 rounded-2xl bg-[#f4f7f4] p-4 dark:bg-white/[.045]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-xs font-extrabold text-[#a55e00] shadow-sm dark:bg-[#18251c] dark:text-[#ffca7e]">{String(index + 1).padStart(2, "0")}</span><div><p className="font-bold">{task.title}</p><p className="mt-1 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">{task.description || tr("Практична частина контрольної.", "Practice section of the assessment.")}</p></div></div>)}
+              {!tasks.length && <p className="rounded-2xl border border-dashed border-border/15 px-5 py-8 text-center text-sm text-[#708077] dark:border-white/10 dark:text-[#a6b4a9]">{tr("Практичних задач ще немає.", "No practice problems yet.")}</p>}
             </div>
           </section>
 
           <section className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-8">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">Самоперевірка</p>
-                <h2 className="mt-1 text-2xl font-bold tracking-[-.04em]">Квіз</h2>
-                <p className="mt-2 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">Редагуйте JSON масив питань. Старий формат `{`question, options, correct`}` підтримується контрольними.</p>
+                <p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">{tr("Самоперевірка", "Self-check")}</p>
+                <h2 className="mt-1 text-2xl font-bold tracking-[-.04em]">{tr("Квіз", "Quiz")}</h2>
+                <p className="mt-2 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">{tr("Редагуйте JSON масив питань. Старий формат `{`question, options, correct`}` підтримується контрольними.", "Edit the quiz questions as JSON. Assessments support the legacy `{`question, options, correct`}` format.")}</p>
               </div>
               <Sparkles className="h-5 w-5 text-[#e17800]" />
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
-              <button type="button" disabled={busy} onClick={() => void generateQuiz()} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"><Wand2 className="h-4 w-4" />{busy ? "Готуємо…" : hasQuiz ? "Перегенерувати" : "Згенерувати"}</button>
-              <button type="button" onClick={normalizeQuiz} className="rounded-xl border border-border/10 px-4 py-3 text-sm font-bold dark:border-white/10">Форматувати JSON</button>
+              <button type="button" disabled={busy} onClick={() => void generateQuiz()} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"><Wand2 className="h-4 w-4" />{busy ? tr("Готуємо…", "Preparing…") : hasQuiz ? tr("Перегенерувати", "Regenerate") : tr("Згенерувати", "Generate")}</button>
+              <button type="button" onClick={normalizeQuiz} className="rounded-xl border border-border/10 px-4 py-3 text-sm font-bold dark:border-white/10">{tr("Форматувати JSON", "Format JSON")}</button>
             </div>
             <textarea value={quizText} onChange={(event) => setQuizText(event.target.value)} rows={16} spellCheck={false} className="mt-5 w-full resize-y rounded-2xl border border-border/10 bg-bg-surface p-4 font-mono text-xs leading-6 outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-[#0d1710]" placeholder={'[{"question":"...","options":{"A":"...","B":"..."},"correct":"A"}]'} />
-            {hasQuiz && <div className="mt-4 grid gap-2 md:grid-cols-2">{quiz.slice(0, 4).map((item, index) => <div key={`${item.question}-${index}`} className="rounded-2xl bg-[#f4f7f4] p-3 text-sm dark:bg-white/[.045]"><b>{index + 1}. {item.question || "Без питання"}</b><div className="mt-1 text-xs text-[#708077] dark:text-[#a6b4a9]">Правильна: {item.correct || "—"}</div></div>)}</div>}
+            {hasQuiz && <div className="mt-4 grid gap-2 md:grid-cols-2">{quiz.slice(0, 4).map((item, index) => <div key={`${item.question}-${index}`} className="rounded-2xl bg-[#f4f7f4] p-3 text-sm dark:bg-white/[.045]"><b>{index + 1}. {item.question || tr("Без питання", "No question")}</b><div className="mt-1 text-xs text-[#708077] dark:text-[#a6b4a9]">{tr("Правильна:", "Correct:")} {item.correct || "—"}</div></div>)}</div>}
           </section>
         </section>
 
         <aside className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface">
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">Налаштування</p>
-          <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">Рамка оцінювання</h2>
-          <label className="mt-6 block text-sm font-bold">Назва<input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-[#0d1710]" /></label>
-          <label className="mt-4 block text-sm font-bold">Час, хв<input value={minutes} onChange={(event) => setMinutes(event.target.value)} type="number" min="1" className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-[#0d1710]" /></label>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Налаштування", "Settings")}</p>
+          <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">{tr("Рамка оцінювання", "Grading framework")}</h2>
+          <label className="mt-6 block text-sm font-bold">{tr("Назва", "Title")}<input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-[#0d1710]" /></label>
+          <label className="mt-4 block text-sm font-bold">{tr("Час, хв", "Time, min")}<input value={minutes} onChange={(event) => setMinutes(event.target.value)} type="number" min="1" className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-[#0d1710]" /></label>
           <div className="mt-6 rounded-2xl bg-[#f3f7f3] p-4 dark:bg-white/[.045]">
-            <div className="flex items-center gap-2"><Calculator className="h-4 w-4 text-primary-strong dark:text-primary-soft" /><p className="text-sm font-bold">Формула результату</p></div>
+            <div className="flex items-center gap-2"><Calculator className="h-4 w-4 text-primary-strong dark:text-primary-soft" /><p className="text-sm font-bold">{tr("Формула результату", "Score formula")}</p></div>
             <textarea value={formula} onChange={(event) => setFormula(event.target.value)} rows={3} className="mt-3 w-full resize-none rounded-xl border border-border/10 bg-white px-3 py-2 font-mono text-xs dark:border-white/10 dark:bg-[#0d1710]" />
-            <p className="mt-2 text-xs leading-5 text-[#708077] dark:text-[#a6b4a9]">Наприклад: <code>0.35 * test + 0.65 * avg(practice)</code></p>
+            <p className="mt-2 text-xs leading-5 text-[#708077] dark:text-[#a6b4a9]">{tr("Наприклад:", "For example:")} <code>0.35 * test + 0.65 * avg(practice)</code></p>
           </div>
-          <button type="button" disabled={busy} onClick={() => void save()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"><Save className="h-4 w-4" />{busy ? "Зберігаємо…" : "Зберегти"}</button>
+          <button type="button" disabled={busy} onClick={() => void save()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"><Save className="h-4 w-4" />{busy ? tr("Зберігаємо…", "Saving…") : tr("Зберегти", "Save")}</button>
         </aside>
       </main>
     </div>

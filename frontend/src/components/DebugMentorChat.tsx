@@ -1,4 +1,5 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { tr } from "../i18n";
 import { Button } from "./ui/Button";
 import { debugChat, type DebugChatMessage, type ExplainErrorFailure } from "../lib/api/tasks";
@@ -15,22 +16,26 @@ type Props = {
   className?: string;
 };
 
-const INTRO = tr(
-  "Привіт! Я допоможу зрозуміти, ЧОМУ код не працює — навідними питаннями, без готового розв'язку. Опиши, що вже пробував, або просто запитай.",
-  "Hi! I'll help you figure out WHY your code fails — with guiding questions, never a ready solution. Tell me what you've tried, or just ask."
-);
-
 /**
  * Multi-turn Socratic debug mentor. The student chats with an AI that guides
  * with questions and never hands over a full solution (enforced server-side).
  * Stateless: the whole (bounded) transcript is replayed on each turn.
  */
 export const DebugMentorChat: React.FC<Props> = (props) => {
+  useTranslation();
+  const intro = tr(
+    "Привіт! Я допоможу зрозуміти, ЧОМУ код не працює — навідними питаннями, без готового розв'язку. Опиши, що вже пробував, або просто запитай.",
+    "Hi! I'll help you figure out WHY your code fails — with guiding questions, never a ready solution. Tell me what you've tried, or just ask."
+  );
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<DebugChatMessage[]>([{ role: "mentor", content: INTRO }]);
+  const [messages, setMessages] = useState<DebugChatMessage[]>([{ role: "mentor", content: intro }]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setMessages((current) => current.length === 1 ? [{ ...current[0], content: intro }] : current);
+  }, [intro]);
 
   const code = String(props.code ?? "");
   if (!code.trim()) return null;

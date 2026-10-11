@@ -1,4 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { tr } from "../../i18n";
 
 const TheoryModalPortal = React.lazy(() => import("./TheoryModalPortal").then(mod => ({ default: mod.TheoryModalPortal })));
 export type OpenTheoryParams = {
@@ -18,6 +20,7 @@ export function TheoryModalProvider({
 }: {
   children: React.ReactNode;
 }) {
+  useTranslation();
   const [state, setState] = useState<{
     open: boolean;
     title: string;
@@ -34,9 +37,9 @@ export function TheoryModalProvider({
   const openTheory = useCallback((params: OpenTheoryParams) => {
     setState({
       open: true,
-      title: params.title ?? "Теорія",
+      title: params.title ?? tr("Теорія", "Theory"),
       markdown: params.markdown,
-      acknowledgeLabel: params.acknowledgeLabel ?? "Я прочитав(ла) теорію",
+      acknowledgeLabel: params.acknowledgeLabel ?? tr("Я прочитав(ла) теорію", "I’ve read the theory"),
       onAcknowledge: params.onAcknowledge
     });
   }, []);

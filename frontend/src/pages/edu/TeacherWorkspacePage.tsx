@@ -33,7 +33,7 @@ export const TeacherWorkspacePage: React.FC = () => {
       if (classesResult.status === "rejected" && reviewsResult.status === "rejected") throw classesResult.reason;
       if (classesResult.status === "fulfilled") setClasses(classesResult.value);
       if (reviewsResult.status === "fulfilled") setReviews(reviewsResult.value.pendingReviews || []);
-      if (classesResult.status === "rejected" || reviewsResult.status === "rejected") setError("Частину даних кабінету тимчасово не вдалося завантажити.");
+      if (classesResult.status === "rejected" || reviewsResult.status === "rejected") setError(tr("Частину даних кабінету тимчасово не вдалося завантажити.", "Some workspace data could not be loaded right now."));
     } catch (cause: unknown) {
       setError(getErrorMessageFromUnknown(cause, tr("Не вдалося завантажити простір викладача.", "Could not load the teacher workspace.")));
     } finally { setLoading(false); }
@@ -55,7 +55,7 @@ export const TeacherWorkspacePage: React.FC = () => {
       setOpenCreate(false);
       await load();
     } catch (cause: unknown) {
-      setError(getErrorMessageFromUnknown(cause, "Не вдалося створити клас."));
+      setError(getErrorMessageFromUnknown(cause, tr("Не вдалося створити клас.", "Could not create the class.")));
     }
   };
 
@@ -80,12 +80,12 @@ export const TeacherWorkspacePage: React.FC = () => {
           <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{tr("Перша дія", "Next action")}</p><h2 id="teacher-review-queue" className="mt-1 text-xl font-bold">{tr("На перевірку", "To review")}</h2></div>
           <span className="text-sm tabular-nums text-text-muted">{reviews.length} {tr("робіт", "submissions")}</span>
         </div>
-        {loading ? <div className="divide-y divide-border" role="status" aria-label="Завантаження робіт"><div className="h-16 animate-pulse bg-bg-hover/60" /><div className="h-16 animate-pulse bg-bg-hover/40" /></div>
+        {loading ? <div className="divide-y divide-border" role="status" aria-label={tr("Завантаження робіт", "Loading submissions")}><div className="h-16 animate-pulse bg-bg-hover/60" /><div className="h-16 animate-pulse bg-bg-hover/40" /></div>
           : reviews.length ? <ul className="divide-y divide-border">
             {reviews.slice(0, 8).map((review) => <li key={review.gradeId}>
               <button type="button" disabled={!review.classId} onClick={() => { if (review.classId) navigate(withDevPreview(`/edu/classes/${review.classId}/gradebook?review=${review.gradeId}`)); }} className="grid min-h-[68px] w-full grid-cols-[36px_1fr_auto] items-center gap-3 py-3 text-left transition-colors hover:bg-bg-hover/50 disabled:cursor-default disabled:opacity-70">
                 <span className="grid size-9 place-items-center rounded-lg bg-bg-hover text-text-secondary"><ClipboardCheck className="size-4" aria-hidden="true" /></span>
-                <span className="min-w-0"><span className="block truncate text-sm font-semibold">{review.task?.title || `Робота #${review.gradeId}`}</span><span className="mt-1 block truncate text-xs text-text-muted">{review.student.firstName} {review.student.lastName} · {review.className || review.task?.lesson?.title || "Ручна перевірка"}</span></span>
+                <span className="min-w-0"><span className="block truncate text-sm font-semibold">{review.task?.title || `${tr("Робота", "Submission")} #${review.gradeId}`}</span><span className="mt-1 block truncate text-xs text-text-muted">{review.student.firstName} {review.student.lastName} · {review.className || review.task?.lesson?.title || tr("Ручна перевірка", "Manual review")}</span></span>
                 <ArrowRight className="size-4 text-text-muted" aria-hidden="true" />
               </button>
             </li>)}
@@ -99,7 +99,7 @@ export const TeacherWorkspacePage: React.FC = () => {
           <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{tr("Навчальні групи", "Learning groups")}</p><h2 id="teacher-classes" className="mt-1 text-xl font-bold">{tr("Мої класи", "My classes")}</h2></div>
           <span className="text-sm tabular-nums text-text-muted">{classes.length} {tr("класів", "classes")}</span>
         </div>
-        {loading ? <div className="mt-1 divide-y divide-border" role="status" aria-label="Завантаження класів"><div className="h-16 animate-pulse bg-bg-hover/60" /><div className="h-16 animate-pulse bg-bg-hover/40" /></div>
+        {loading ? <div className="mt-1 divide-y divide-border" role="status" aria-label={tr("Завантаження класів", "Loading classes")}><div className="h-16 animate-pulse bg-bg-hover/60" /><div className="h-16 animate-pulse bg-bg-hover/40" /></div>
           : classes.length ? <ul className="divide-y divide-border">
             {classes.map((item) => <li key={item.id}><button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${item.id}`))} className="grid min-h-[68px] w-full grid-cols-[36px_1fr_auto] items-center gap-3 py-3 text-left hover:bg-bg-hover/50">
               <span className="grid size-9 place-items-center rounded-lg bg-bg-hover text-text-secondary"><Users className="size-4" aria-hidden="true" /></span>

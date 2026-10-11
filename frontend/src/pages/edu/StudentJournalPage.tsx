@@ -6,8 +6,12 @@ import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, gradingSystemLabel, norma
 import type { User } from "../../types";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { withDevPreview } from "../../lib/devPreview";
+import { useTranslation } from "react-i18next";
+import { tr } from "../../i18n";
 
 export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
+  const { i18n } = useTranslation();
+  const isEn = i18n.language.startsWith("en");
   const navigate = useNavigate();
   const isPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -52,7 +56,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
         setScaleMode(normalizeScaleMode(nextGrades.gradeScaleMode));
       }
       if (lessonsResult.status === "rejected" || gradesResult.status === "rejected") {
-        setError("Частину журналу тимчасово не вдалося завантажити. Натисніть «Повторити»." );
+        setError(tr("Частину журналу тимчасово не вдалося завантажити. Натисніть «Повторити».", "Some journal data could not be loaded. Select Retry."));
       }
     } catch (cause: unknown) {
       if (isPreview) {
@@ -68,7 +72,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
         ]);
         setSummaryGrades([{ id: -1, name: "Тематична · Колекції", grade: 83, topicTitle: "Колекції та словники" }]);
       } else {
-        setError(getErrorMessageFromUnknown(cause, "Не вдалося завантажити журнал."));
+        setError(getErrorMessageFromUnknown(cause, tr("Не вдалося завантажити журнал.", "Could not load the journal.")));
       }
     } finally {
       setLoading(false);
@@ -95,86 +99,86 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
       <div className="mx-auto max-w-[1480px] space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border/70 pb-5 dark:border-white/10">
           <div>
-            <div className="flex items-center gap-2 text-sm font-medium text-text-secondary"><GraduationCap className="size-4 text-primary-strong dark:text-primary-soft" />Мій журнал</div>
-            <h1 className="mt-2 text-3xl font-semibold tracking-[-.04em]">Оцінки та прогрес</h1>
-            <p className="mt-1 text-sm text-text-secondary">Результати практики й тематичні підсумки класу.</p>
+            <div className="flex items-center gap-2 text-sm font-medium text-text-secondary"><GraduationCap className="size-4 text-primary-strong dark:text-primary-soft" />{tr("Мій журнал", "My journal")}</div>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-.04em]">{tr("Оцінки та прогрес", "Grades and progress")}</h1>
+            <p className="mt-1 text-sm text-text-secondary">{tr("Результати практики й тематичні підсумки класу.", "Practice results and topic summaries for your class.")}</p>
           </div>
           <div className="flex items-center gap-5 rounded-xl border border-border/70 bg-bg-surface px-4 py-3 dark:border-white/10">
-            <div><div className="text-xs text-text-secondary">Система класу</div><div className="mt-1 text-sm font-semibold">{gradingSystemLabel(normalizedSystem, false)}</div></div>
+            <div><div className="text-xs text-text-secondary">{tr("Система класу", "Class grading system")}</div><div className="mt-1 text-sm font-semibold">{gradingSystemLabel(normalizedSystem, isEn)}</div></div>
             <div className="h-8 w-px bg-border dark:bg-white/10" />
-            <div><div className="text-xs text-text-secondary">Середній результат</div><div className="mt-0.5 text-2xl font-semibold tracking-tight text-primary-strong dark:text-primary-soft">{displayAverage}</div></div>
+            <div><div className="text-xs text-text-secondary">{tr("Середній результат", "Average score")}</div><div className="mt-0.5 text-2xl font-semibold tracking-tight text-primary-strong dark:text-primary-soft">{displayAverage}</div></div>
           </div>
         </header>
 
-        {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#fff0f4] p-4 text-sm text-[#bd3c62] dark:bg-[#ff6b9d]/10 dark:text-[#ffa5bf]"><span>{error}</span><button type="button" onClick={() => void load()} className="inline-flex items-center gap-1 rounded-xl border border-current px-3 py-2 text-xs font-bold"><RefreshCw className="size-3" />Повторити</button></div>}
+        {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#fff0f4] p-4 text-sm text-[#bd3c62] dark:bg-[#ff6b9d]/10 dark:text-[#ffa5bf]"><span>{error}</span><button type="button" onClick={() => void load()} className="inline-flex items-center gap-1 rounded-xl border border-current px-3 py-2 text-xs font-bold"><RefreshCw className="size-3" />{tr("Повторити", "Retry")}</button></div>}
 
         <div className="grid gap-5 xl:grid-cols-[.95fr_1.05fr]">
           <section className="rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface">
-            <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">Наступний крок</div>
+            <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{tr("Наступний крок", "Next step")}</div>
             {loading ? <div className="mt-5 h-44 animate-pulse rounded-2xl bg-bg-hover dark:bg-white/[.045]" /> : next ? (
               <button type="button" onClick={() => navigate(withDevPreview(`/edu/lessons/${next.id}`))} className="mt-4 block w-full rounded-xl border border-border bg-bg-subtle p-5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 dark:border-white/10 dark:bg-white/[.035]">
                 <div className="flex justify-between gap-4">
                   <div>
-                    <div className="text-xs font-semibold text-primary-strong dark:text-primary-soft">{next.type === "CONTROL" ? "Контрольна" : next.type === "TOPIC" ? "Тема" : "Урок"}</div>
+                    <div className="text-xs font-semibold text-primary-strong dark:text-primary-soft">{next.type === "CONTROL" ? tr("Контрольна", "Test") : next.type === "TOPIC" ? tr("Тема", "Topic") : tr("Урок", "Lesson")}</div>
                     <div className="mt-2 text-xl font-semibold">{next.title}</div>
-                    <div className="mt-2 text-sm text-[#b4c7b7]">{next.tasksCount} задач · {next.hasTheory ? "є теорія" : "практичний блок"}</div>
+                    <div className="mt-2 text-sm text-[#b4c7b7]">{next.tasksCount} {tr("задач", "problems")} · {next.hasTheory ? tr("є теорія", "theory included") : tr("практичний блок", "practice section")}</div>
                   </div>
                   <ArrowRight className="h-5 w-5 shrink-0 text-primary-strong dark:text-primary-soft" />
                 </div>
-                <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary-strong dark:text-primary-soft"><BookOpen className="h-4 w-4" />Відкрити урок</div>
+                <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary-strong dark:text-primary-soft"><BookOpen className="h-4 w-4" />{tr("Відкрити урок", "Open lesson")}</div>
               </button>
-            ) : <div className="mt-5 rounded-2xl bg-[#f5f8f5] p-5 text-sm text-[#718075] dark:bg-white/[.04] dark:text-text-secondary">Поки що немає доступних уроків.</div>}
+            ) : <div className="mt-5 rounded-2xl bg-[#f5f8f5] p-5 text-sm text-[#718075] dark:bg-white/[.04] dark:text-text-secondary">{tr("Поки що немає доступних уроків.", "No lessons are available yet.")}</div>}
           </section>
 
           <section className="rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">Оцінки</div>
-                <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Останні результати</h2>
+                <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{tr("Оцінки", "Grades")}</div>
+                <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{tr("Останні результати", "Recent results")}</h2>
               </div>
               <Target className="size-5 text-primary-strong" />
             </div>
             <div className="mt-5 space-y-2">
               {loading ? <div className="h-40 animate-pulse rounded-2xl bg-bg-hover dark:bg-white/[.045]" /> : recentGrades.length ? recentGrades.map((grade) => {
-                const title = grade.topicTask?.title || grade.task?.title || "Оцінка";
-                const context = grade.topicTask?.topicTitle || grade.task?.lesson?.title || "Практика";
+                const title = grade.topicTask?.title || grade.task?.title || tr("Оцінка", "Grade");
+                const context = grade.topicTask?.topicTitle || grade.task?.lesson?.title || tr("Практика", "Practice");
                 return (
                   <div key={grade.id} className="flex items-center justify-between gap-4 rounded-2xl bg-[#f5f8f5] px-4 py-3 dark:bg-white/[.04]">
                     <div className="min-w-0">
                       <div className="truncate font-semibold">{title}</div>
-                      <div className="mt-1 truncate text-xs text-[#79877d] dark:text-[#9dac9f]">{context} · {new Date(grade.createdAt).toLocaleDateString("uk-UA")}</div>
+                      <div className="mt-1 truncate text-xs text-[#79877d] dark:text-[#9dac9f]">{context} · {new Date(grade.createdAt).toLocaleDateString(i18n.language)}</div>
                     </div>
-                    <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-lg font-bold text-primary-strong shadow-sm dark:bg-primary/10 dark:text-primary-soft">{grade.total != null && Number.isFinite(Number(grade.total)) ? formatGradeForSystem(Number(grade.total), normalizedSystem, normalizedScale) : "На перевірці"}</div>
+                    <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-lg font-bold text-primary-strong shadow-sm dark:bg-primary/10 dark:text-primary-soft">{grade.total != null && Number.isFinite(Number(grade.total)) ? formatGradeForSystem(Number(grade.total), normalizedSystem, normalizedScale) : tr("На перевірці", "Pending review")}</div>
                   </div>
                 );
-              }) : <div className="rounded-2xl bg-[#f5f8f5] p-5 text-sm text-[#718075] dark:bg-white/[.04] dark:text-text-secondary">Оцінок ще немає. Вони зʼявляться після виконання практик або перевірки вчителем.</div>}
+              }) : <div className="rounded-2xl bg-[#f5f8f5] p-5 text-sm text-[#718075] dark:bg-white/[.04] dark:text-text-secondary">{tr("Оцінок ще немає. Вони зʼявляться після виконання практик або перевірки вчителем.", "No grades yet. They will appear after you complete practice or your teacher reviews it.")}</div>}
             </div>
           </section>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-[1fr_.75fr]">
           <section className="rounded-[26px] border border-border/10 bg-[#fff8ec] p-5 dark:border-[#ff8c00]/20 dark:bg-[#ff8c00]/[.07]">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#d97706]"><NotebookTabs className="size-4" />Тематичні</div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-[#d97706]"><NotebookTabs className="size-4" />{tr("Тематичні", "Topic summaries")}</div>
             <div className="mt-5 space-y-2">
               {summaryGrades.length ? summaryGrades.map((item) => (
                 <div key={item.id} className="flex items-center justify-between gap-4 rounded-2xl bg-white/70 px-4 py-3 dark:bg-white/[.06]">
                   <div className="min-w-0">
                     <div className="truncate font-semibold">{item.name}</div>
-                    <div className="mt-1 truncate text-sm text-[#776e5d] dark:text-[#c2b08e]">{item.topicTitle || "Тема класу"}</div>
+                    <div className="mt-1 truncate text-sm text-[#776e5d] dark:text-[#c2b08e]">{item.topicTitle || tr("Тема класу", "Class topic")}</div>
                   </div>
                   <div className="shrink-0 text-xl font-bold text-primary-strong dark:text-primary-soft">{formatGradeForSystem(item.grade, normalizedSystem, normalizedScale)}</div>
                 </div>
-              )) : <p className="text-sm text-[#776e5d] dark:text-[#c2b08e]">Тематичні оцінки зʼявляться після завершення тем.</p>}
+              )) : <p className="text-sm text-[#776e5d] dark:text-[#c2b08e]">{tr("Тематичні оцінки зʼявляться після завершення тем.", "Topic grades will appear when you complete topics.")}</p>}
             </div>
           </section>
 
           <section className="rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface">
-            <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">Активність</div>
+            <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{tr("Активність", "Activity")}</div>
             <div className="mt-5 space-y-3">{lessons.slice(0, 4).map((lesson) => (
               <button type="button" key={lesson.id} onClick={() => navigate(withDevPreview(`/edu/lessons/${lesson.id}`))} className="flex w-full items-center justify-between rounded-xl bg-bg-subtle p-3 text-left dark:bg-white/[.04]">
                 <div>
                   <div className="font-semibold">{lesson.title}</div>
-                  <div className="mt-1 text-sm text-[#647369] dark:text-[#a6b4a9]">{lesson.tasksCount} задач</div>
+                  <div className="mt-1 text-sm text-[#647369] dark:text-[#a6b4a9]">{lesson.tasksCount} {tr("задач", "problems")}</div>
                 </div>
                 {lesson.reportOnly ? <CheckCircle2 className="h-4 w-4 text-primary-strong" /> : <Clock3 className="h-4 w-4 text-[#d97706]" />}
               </button>

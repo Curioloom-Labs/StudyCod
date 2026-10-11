@@ -146,6 +146,7 @@ type Props = {
   onReset: () => void;
   onTheoryComplete?: () => void;
   toolbar?: React.ReactNode;
+  contextToolbar?: React.ReactNode;
   toolbarStatus?: React.ReactNode;
   languageOptions?: JudgeLanguage[];
   disableAiAssistance?: boolean;
@@ -187,6 +188,7 @@ type Props = {
 };
 
 const LAYOUT_KEY = "studycod:ide:layout:v4";
+const SIMPLE_MODE_KEY = "studycod:ide:simple-mode:v1";
 const HISTORY_KEY = "studycod:ide:history:v1";
 const MINI_PROJECT_TIMER_KEY = "studycod:ide:mini-project-start:v1";
 const ACTIVE_FILE_KEY = "studycod:ide:active-file:v1";
@@ -364,6 +366,13 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     }
   });
   const [layout, setLayout] = React.useState<LayoutState>(readLayout);
+  const [simpleMode, setSimpleMode] = React.useState(() => {
+    try {
+      return localStorage.getItem(SIMPLE_MODE_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
   const [assistantTab, setAssistantTab] = React.useState<AssistantTab>("task");
   const [openHintIndex, setOpenHintIndex] = React.useState<number | null>(null);
   const [bottomTab, setBottomTab] = React.useState<BottomTab>("tests");
@@ -437,6 +446,18 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const lastHistoryCode = React.useRef(props.code);
 
   React.useEffect(() => writeLayout(layout), [layout]);
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(SIMPLE_MODE_KEY, simpleMode ? "1" : "0");
+    } catch {
+      // Keep the interface usable when storage is unavailable.
+    }
+  }, [simpleMode]);
+  React.useEffect(() => {
+    if (simpleMode && bottomTab !== "terminal" && bottomTab !== "tests") {
+      setBottomTab("tests");
+    }
+  }, [bottomTab, simpleMode]);
   React.useEffect(() => {
     let nextMode: IdeMode = props.theory ? "theory" : "practice";
     if (props.theory) {
@@ -596,8 +617,12 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   ) => {
     if (event.button !== 0) return;
     event.preventDefault();
-    const min = axis === "bottom" ? 150 : 170;
-    const max = axis === "bottom" ? 620 : 520;
+    const min = axis === "bottom" ? 150 : axis === "right" ? 220 : 170;
+    const max = axis === "bottom"
+      ? 620
+      : axis === "right"
+        ? Math.max(340, Math.min(920, window.innerWidth - layout.left - 400))
+        : 520;
     event.currentTarget.setPointerCapture(event.pointerId);
     resizeRef.current = {
       axis,
@@ -644,8 +669,12 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     axis: "left" | "right" | "bottom",
     event: React.KeyboardEvent<HTMLDivElement>,
   ) => {
-    const min = axis === "bottom" ? 150 : 170;
-    const max = axis === "bottom" ? 620 : 520;
+    const min = axis === "bottom" ? 150 : axis === "right" ? 220 : 170;
+    const max = axis === "bottom"
+      ? 620
+      : axis === "right"
+        ? Math.max(340, Math.min(920, window.innerWidth - layout.left - 400))
+        : 520;
     const step = event.shiftKey ? 48 : 16;
     let delta = 0;
     if (axis === "left" && event.key === "ArrowRight") delta = step;
@@ -1279,9 +1308,12 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     );
   }
 
-  const showLeft = !focusMode && !layout.leftCollapsed;
+  const showLeft = !focusMode && !layout.leftCollapsed && (!simpleMode || fileList.length > 1);
   const showRight = !focusMode && !layout.rightCollapsed;
   const showBottom = !focusMode && !layout.bottomCollapsed;
+  const rightPanelMax = typeof window === "undefined"
+    ? 520
+    : Math.max(340, Math.min(920, window.innerWidth - layout.left - 400));
   const activeMiniProjectRemainingSeconds =
     miniProjectTimer?.taskId === String(props.task.id)
       ? miniProjectRemainingSeconds
@@ -1327,7 +1359,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             </div>
           </div>
         </div>
-        {props.toolbarStatus ? <div className="hidden min-w-0 items-center gap-1 rounded-xl border border-white/[.07] bg-black/10 p-1 xl:flex">{props.toolbarStatus}</div> : null}
+        {props.contextToolbar ? <div className="hidden shrink-0 items-center gap-2 lg:flex">{props.contextToolbar}</div> : null}
+        {props.toolbarStatus && !simpleMode ? <div className="hidden min-w-0 items-center gap-1 rounded-xl border border-white/[.07] bg-black/10 p-1 xl:flex">{props.toolbarStatus}</div> : null}
         {props.saveStatus ? (
           <span className={`hidden items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold lg:inline-flex ${props.saveStatus === "error" ? "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]" : props.saveStatus === "saving" || props.saveStatus === "dirty" ? "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca7e]" : "border-primary/25 bg-primary/10 text-primary-soft"}`} role={props.saveStatus === "error" ? "alert" : "status"} aria-live={props.saveStatus === "error" ? "assertive" : "polite"}>
             {saveStatusLabel}
@@ -1335,7 +1368,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         ) : null}
         {saveStatusLabel ? <span className={`max-w-[92px] truncate text-[10px] font-semibold lg:hidden ${props.saveStatus === "error" ? "text-[#ff9aba]" : props.saveStatus === "saving" || props.saveStatus === "dirty" ? "text-[#ffca7e]" : "text-primary-soft"}`} title={saveStatusLabel} role={props.saveStatus === "error" ? "alert" : "status"} aria-live={props.saveStatus === "error" ? "assertive" : "polite"}>{saveStatusLabel}</span> : null}
         {props.attemptsUsed != null ? (
-          <span className="hidden rounded-lg border border-white/10 bg-white/[.04] px-2.5 py-1.5 text-[10px] font-semibold text-[#a7b5aa] lg:inline-flex" title={tr("Використані спроби", "Attempts used")}>
+          <span className={`rounded-lg border border-white/10 bg-white/[.04] px-2.5 py-1.5 text-[10px] font-semibold text-[#a7b5aa] ${simpleMode ? "hidden" : "lg:inline-flex"}`} title={tr("Використані спроби", "Attempts used")}>
             {tr("Спроби", "Attempts")}: {props.attemptsUsed}{props.maxAttempts && props.maxAttempts > 0 ? `/${props.maxAttempts}` : ""}
           </span>
         ) : null}
@@ -1357,6 +1390,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             <ChevronDown className="size-3.5" aria-hidden="true" />
           </summary>
           <div className="absolute right-0 top-full z-50 mt-2 grid w-64 gap-2 rounded-2xl border border-[#294333] bg-[#101a13] p-3 shadow-xl" role="group" aria-label={tr("Додаткові дії редактора", "Additional editor controls")}>
+            <button type="button" onClick={() => setSimpleMode((current) => !current)} className="flex h-10 items-center justify-between rounded-lg border border-primary/20 bg-primary/[.06] px-3 text-left text-xs font-semibold text-primary-soft hover:bg-primary/[.12]">
+              <span>{simpleMode ? tr("Повний інтерфейс", "Full interface") : tr("Спрощений інтерфейс", "Simple interface")}</span>
+              <span className="text-[10px] text-[#82968a]">{simpleMode ? tr("Усі інструменти", "All tools") : tr("Менше кнопок", "Fewer controls")}</span>
+            </button>
             {!props.isWebTask && languageOptions.length > 1 && !props.disableLanguageChange ? <SelectMenu
               value={props.language}
               options={languageOptions.map((language) => ({ value: language, label: languageLabel(language as JudgeLanguage) }))}
@@ -1376,6 +1413,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             /> : null}
             <button type="button" onClick={props.onSave} disabled={props.readOnly} className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:opacity-40"><Save className="size-3.5" />{tr("Зберегти", "Save")}</button>
             <button type="button" onClick={downloadCurrentCode} className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]"><Download className="size-3.5" />{tr("Завантажити код", "Download code")}</button>
+            <button type="button" onClick={() => setResetConfirmOpen(true)} className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]"><RotateCcw className="size-3.5" />{tr("Відновити шаблон", "Restore starter code")}</button>
             <button type="button" onClick={() => setFocusMode((current) => !current)} className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]"><Maximize2 className="size-3.5" />{focusMode ? tr("Вийти з режиму фокусу", "Exit focus mode") : tr("Режим фокусу", "Focus mode")}</button>
             {props.toolbar ? <div className="grid gap-2 border-t border-white/10 pt-2">{props.toolbar}</div> : null}
           </div>
@@ -1429,6 +1467,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           {tr("Ще", "More")}
         </summary>
         <div className="absolute right-1 top-full z-50 grid max-h-[min(70dvh,30rem)] w-[min(18rem,calc(100vw-1rem))] gap-3 overflow-auto rounded-2xl border border-[#294333] bg-[#101a13] p-3 shadow-xl" role="group" aria-label={tr("Додаткові дії редактора", "Additional editor controls")}>
+          <button type="button" onClick={() => setSimpleMode((current) => !current)} className="flex min-h-11 items-center justify-between rounded-lg border border-primary/20 bg-primary/[.06] px-3 text-left text-xs font-semibold text-primary-soft hover:bg-primary/[.12]">
+            <span>{simpleMode ? tr("Повний інтерфейс", "Full interface") : tr("Спрощений інтерфейс", "Simple interface")}</span>
+            <span className="text-[10px] text-[#82968a]">{simpleMode ? tr("Усі інструменти", "All tools") : tr("Менше кнопок", "Fewer controls")}</span>
+          </button>
           {!props.isWebTask && languageOptions.length > 1 && !props.disableLanguageChange ? <SelectMenu
             value={props.language}
             options={languageOptions.map((language) => ({ value: language, label: languageLabel(language as JudgeLanguage) }))}
@@ -1448,7 +1490,9 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           /> : null}
           <button type="button" onClick={props.onSave} disabled={props.readOnly} className="min-h-11 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:opacity-40">{tr("Зберегти", "Save")}</button>
           <button type="button" onClick={downloadCurrentCode} className="min-h-11 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]">{tr("Завантажити код", "Download code")}</button>
+          <button type="button" onClick={() => setResetConfirmOpen(true)} className="min-h-11 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]">{tr("Відновити шаблон", "Restore starter code")}</button>
           <button type="button" onClick={() => setFocusMode((current) => !current)} className="min-h-11 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]">{focusMode ? tr("Вийти з режиму фокусу", "Exit focus mode") : tr("Режим фокусу", "Focus mode")}</button>
+          {props.contextToolbar ? <div className="grid gap-2 border-t border-white/10 pt-2 [&>button]:min-h-11 [&>button]:px-3 [&>a]:min-h-11 [&>a]:min-w-11">{props.contextToolbar}</div> : null}
           {props.toolbarStatus ? <div className="flex flex-wrap items-center gap-1 border-t border-white/10 pt-2" role="status" aria-label={tr("Статус редактора", "Editor status")}>{props.toolbarStatus}</div> : null}
           {props.toolbar ? <div className="flex flex-wrap gap-2 border-t border-white/10 pt-2 [&>button]:min-h-11 [&>button]:px-3 [&>a]:min-h-11 [&>a]:min-w-11">{props.toolbar}</div> : null}
         </div>
@@ -1557,7 +1601,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         ) : (
           <button
             type="button"
-            onClick={() => updateLayout({ leftCollapsed: false })}
+            onClick={() => { setSimpleMode(false); updateLayout({ leftCollapsed: false }); }}
             className="hidden w-10 shrink-0 place-items-center border-r border-white/10 text-[#82968a] hover:text-white lg:grid"
             title={tr("Показати файли", "Show files")}
           >
@@ -1683,7 +1727,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <span className="text-[#557061]">·</span>
               <span className="text-[#82968a]">{tr("Редактор", "Editor")}</span>
             </div>
-            <div className="ml-auto flex items-center gap-1">
+            <div className={`ml-auto items-center gap-1 ${simpleMode ? "hidden" : "flex"}`}>
               <button
                 type="button"
                 onClick={() => setFontSize((size) => Math.max(11, size - 1))}
@@ -1797,16 +1841,18 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             role="separator"
             tabIndex={0}
             aria-orientation="vertical"
-            aria-label={tr("Змінити ширину панелі помічника", "Resize assistant panel")}
-            aria-valuemin={170}
-            aria-valuemax={520}
-            aria-valuenow={Math.round(layout.right)}
-            className="hidden w-1 shrink-0 cursor-col-resize touch-none bg-transparent hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none lg:block"
-          />
+            aria-label={props.disableAiAssistance ? tr("Змінити ширину умови задачі", "Resize task statement") : tr("Змінити ширину панелі помічника", "Resize assistant panel")}
+            aria-valuemin={220}
+            aria-valuemax={rightPanelMax}
+            aria-valuenow={Math.round(Math.max(220, Math.min(layout.right, rightPanelMax)))}
+            className="group relative z-10 hidden w-3 shrink-0 -mx-1.5 cursor-col-resize touch-none bg-transparent focus-visible:outline-none lg:flex lg:items-stretch lg:justify-center"
+          >
+            <span className="w-px bg-[#203428] transition-colors group-hover:bg-primary/70 group-focus-visible:bg-primary" aria-hidden="true" />
+          </div>
         ) : null}
         {showRight ? (
           <aside
-            style={{ width: layout.right }}
+            style={{ width: Math.max(220, Math.min(layout.right, rightPanelMax)) }}
             className="hidden shrink-0 flex-col border-l border-[#203428] bg-[#0f1812] lg:flex"
           >
             <div className="flex min-h-14 items-center gap-1 border-b border-[#203428] bg-[#111b14] px-2.5">
@@ -2212,7 +2258,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               icon={<TestTube2 className="size-3.5" />}
               label={tr("Результати тестів", "Tests")}
             />
-            <BottomTabButton
+            {!simpleMode ? <BottomTabButton
               active={bottomTab === "debugger"}
               onClick={() => {
                 setMode("debug");
@@ -2221,19 +2267,19 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               }}
               icon={<Gauge className="size-3.5" />}
               label={props.tracing ? "Tracing…" : "Debugger"}
-            />
-            <BottomTabButton
+            /> : null}
+            {!simpleMode ? <BottomTabButton
               active={bottomTab === "console"}
               onClick={() => setBottomTab("console")}
               icon={<Code2 className="size-3.5" />}
               label="Console"
-            />
-            <BottomTabButton
+            /> : null}
+            {!simpleMode ? <BottomTabButton
               active={bottomTab === "history"}
               onClick={() => setBottomTab("history")}
               icon={<History className="size-3.5" />}
               label={tr("Історія", "History")}
-            />
+            /> : null}
             <button
               type="button"
               onClick={() => updateLayout({ bottomCollapsed: true })}

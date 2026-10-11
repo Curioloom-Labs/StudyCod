@@ -162,7 +162,7 @@ const LegacyDashboardPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
               <div className="flex flex-col items-center"><strong className="text-xl">74%</strong><span className="text-[8px] text-text-muted">{tr("виконано", "complete")}</span></div>
             </div>
             <div className="mx-4 mt-1 flex h-14 items-end gap-1.5">{[44,68,54,88,72,34,20].map((height, index) => <i key={index} style={{ height: `${height}%` }} className={`min-h-2 flex-1 rounded-t ${index === 3 ? "bg-[#ff8c00]" : "bg-primary/25"}`} />)}</div>
-            <div className="mx-4 mt-1 flex justify-between text-[7px] text-text-muted"><span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Нд</span></div>
+            <div className="mx-4 mt-1 flex justify-between text-[7px] text-text-muted"><span>{tr("Пн", "Mon")}</span><span>{tr("Вт", "Tue")}</span><span>{tr("Ср", "Wed")}</span><span>{tr("Чт", "Thu")}</span><span>{tr("Пт", "Fri")}</span><span>{tr("Сб", "Sat")}</span><span>{tr("Нд", "Sun")}</span></div>
           </div>
         </div>
       </div>

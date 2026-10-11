@@ -560,7 +560,7 @@ const AppContent: React.FC = React.memo(() => {
       const d = (e.detail ?? null) as MaintenanceEventDetail | null;
       if (d && d.maintenance === true) {
         setMaintenance({
-          title: String(d.title ?? "Технічне обслуговування"),
+          title: String(d.title ?? t("maintenanceTitle")),
           message: String(d.message ?? ""),
           until: d.until ? String(d.until) : null
         });
@@ -569,7 +569,7 @@ const AppContent: React.FC = React.memo(() => {
     };
     window.addEventListener("studycod:maintenance", handler as EventListener);
     return () => window.removeEventListener("studycod:maintenance", handler as EventListener);
-  }, []);
+  }, [t]);
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
@@ -1385,6 +1385,7 @@ const SupportDeskGuard: React.FC<{ children: React.ReactNode }> = ({ children })
 };
 
 const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t } = useTranslation();
   const location = useLocation();
   const previewValue = new URLSearchParams(location.search).get("preview");
   const devPreview = import.meta.env.DEV && (previewValue === "1" || previewValue === "true");
@@ -1425,9 +1426,9 @@ const RequireToken: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       return (
         <main className="flex min-h-[60vh] items-center justify-center p-6">
           <div className="max-w-md rounded-2xl border border-amber-300/40 bg-amber-50 p-6 text-center text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-            <p className="font-semibold">Сесію тимчасово не вдалося перевірити</p>
-            <p className="mt-2 text-sm opacity-80">Спробуй оновити сторінку через кілька секунд.</p>
-            <Button className="mt-4" onClick={() => window.location.reload()}>Оновити</Button>
+            <p className="font-semibold">{t("sessionCheckUnavailable")}</p>
+            <p className="mt-2 text-sm opacity-80">{t("sessionCheckRetry")}</p>
+            <Button className="mt-4" onClick={() => window.location.reload()}>{t("reload")}</Button>
           </div>
         </main>
       );
@@ -1445,6 +1446,7 @@ const LegacyContestRouteRedirect: React.FC = () => {
 };
 
 const ContestRouteFallback: React.FC = () => {
+  const { t } = useTranslation();
   const [visible, setVisible] = React.useState(false);
 
   React.useEffect(() => {
@@ -1456,7 +1458,7 @@ const ContestRouteFallback: React.FC = () => {
 
   return (
     <div role="status" className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
-      <span className="sr-only">Завантаження контестів…</span>
+      <span className="sr-only">{t("loadingContests")}</span>
       <div className="mb-4 h-3 w-36 animate-pulse rounded-full bg-bg-hover dark:bg-white/[.06]" />
       <div className="mb-10 h-10 w-80 max-w-full animate-pulse rounded-xl bg-bg-hover dark:bg-white/[.06]" />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

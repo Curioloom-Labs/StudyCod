@@ -1,17 +1,20 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { ArrowRight, BookOpen, Check, Clock3, Compass, Play, Sparkles, Target } from "lucide-react";
 import { getDailyChallenge, getMySkillTree, type DailyChallenge, type SkillNode, type SkillTree } from "../../lib/api/learning";
 
 type PlanItem = Pick<SkillNode, "id" | "title" | "order" | "status" | "masteryPct" | "isNext">;
 
-const statusText = (item: PlanItem) => {
-  if (item.status === "mastered") return "Завершено";
-  if (item.isNext) return "Наступний крок";
-  if (item.status === "locked") return "Відкриється після попередніх тем";
-  return `${item.masteryPct}% освоєно`;
+const statusText = (item: PlanItem, en: boolean) => {
+  if (item.status === "mastered") return en ? "Completed" : "Завершено";
+  if (item.isNext) return en ? "Next step" : "Наступний крок";
+  if (item.status === "locked") return en ? "Unlocks after previous topics" : "Відкриється після попередніх тем";
+  return en ? `${item.masteryPct}% mastered` : `${item.masteryPct}% освоєно`;
 };
 
 export const LearningPlanPage: React.FC = () => {
+  const { i18n } = useTranslation();
+  const en = i18n.language?.toLowerCase().startsWith("en") ?? false;
   const [tree, setTree] = React.useState<SkillTree | null>(null);
   const [challenge, setChallenge] = React.useState<DailyChallenge | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -44,29 +47,31 @@ export const LearningPlanPage: React.FC = () => {
             <div>
               <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#83efb6]">
                 <Compass className="size-4" />
-                Навчальний план
+                {en ? "Learning plan" : "Навчальний план"}
               </span>
               <h1 className="mt-4 max-w-3xl font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.06em] sm:text-6xl">
-                Маршрут без туману.
+                {en ? "A clear path forward." : "Маршрут без туману."}
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-[#c1d0c4] sm:text-lg">
-                Тут видно, що вже закрито, що варто повторити й який крок відкривати далі. Без “порожнього плану” і загадкових системних статусів.
+                {en
+                  ? "See what you have completed, what to review, and which step to take next. No empty plans or mysterious system statuses."
+                  : "Тут видно, що вже закрито, що варто повторити й який крок відкривати далі. Без “порожнього плану” і загадкових системних статусів."}
               </p>
               <div className="mt-7 flex flex-wrap gap-3">
                 <button type="button" onClick={() => window.location.assign("/?app=tasks")} className="inline-flex items-center gap-2 rounded-2xl bg-[#00e47b] px-5 py-3 text-sm font-semibold text-[#07150d] transition hover:-translate-y-0.5 hover:bg-[#25ff97]">
                   <Play className="size-4 fill-current" />
-                  Відкрити практику
+                  {en ? "Open practice" : "Відкрити практику"}
                 </button>
                 <button type="button" onClick={() => window.location.assign("/library")} className="inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-white/[.07] px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/[.12]">
                   <BookOpen className="size-4" />
-                  Знайти задачу
+                  {en ? "Find a task" : "Знайти задачу"}
                 </button>
               </div>
             </div>
 
             <div className="rounded-[24px] border border-white/12 bg-white/[.08] p-5 backdrop-blur">
               <div className="flex items-center justify-between text-sm text-[#c4d2c7]">
-                <span>Прогрес маршруту</span>
+                <span>{en ? "Path progress" : "Прогрес маршруту"}</span>
                 <strong className="text-white">{items.length ? `${completed}/${items.length}` : "—"}</strong>
               </div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
@@ -77,9 +82,9 @@ export const LearningPlanPage: React.FC = () => {
                   <Sparkles className="size-5" />
                 </span>
                 <div>
-                  <strong>{current?.title ?? "Почни з першої практики"}</strong>
+                  <strong>{current?.title ?? (en ? "Start with your first practice task" : "Почни з першої практики")}</strong>
                   <p className="mt-1 text-sm leading-5 text-[#c1d0c4]">
-                    {current ? statusText(current) : "Після першої перевіреної роботи тут зʼявиться персональний маршрут."}
+                    {current ? statusText(current, en) : en ? "Your personal path will appear here after your first reviewed task." : "Після першої перевіреної роботи тут зʼявиться персональний маршрут."}
                   </p>
                 </div>
               </div>
@@ -95,8 +100,8 @@ export const LearningPlanPage: React.FC = () => {
         ) : (
           <div className="grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
             <section className="rounded-[28px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface sm:p-6">
-              <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">Послідовність</div>
-              <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">Твій маршрут</h2>
+              <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{en ? "Sequence" : "Послідовність"}</div>
+              <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{en ? "Your path" : "Твій маршрут"}</h2>
               <div className="mt-5 space-y-3">
                 {items.length ? (
                   items.map((item) => (
@@ -107,9 +112,9 @@ export const LearningPlanPage: React.FC = () => {
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <h3 className="font-semibold">{item.title}</h3>
-                          {item.isNext ? <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground">далі</span> : null}
+                          {item.isNext ? <span className="rounded-full bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground">{en ? "NEXT" : "далі"}</span> : null}
                         </div>
-                        <p className="mt-1 text-sm text-[#718075] dark:text-[#a2b1a6]">{statusText(item)}</p>
+                        <p className="mt-1 text-sm text-[#718075] dark:text-[#a2b1a6]">{statusText(item, en)}</p>
                       </div>
                     </article>
                   ))
@@ -118,9 +123,9 @@ export const LearningPlanPage: React.FC = () => {
                     <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-[#e8f7ed] text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
                       <Compass className="size-6" />
                     </div>
-                    <h3 className="mt-5 text-xl font-semibold">Маршрут ще не зібраний</h3>
+                    <h3 className="mt-5 text-xl font-semibold">{en ? "Your path is not ready yet" : "Маршрут ще не зібраний"}</h3>
                     <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#718075] dark:text-[#a2b1a6]">
-                      Система побудує його після перших перевірених робіт. А поки можеш стартувати з практики або бібліотеки.
+                      {en ? "Your path will take shape after your first reviewed tasks. For now, start with practice or browse the library." : "Система побудує його після перших перевірених робіт. А поки можеш стартувати з практики або бібліотеки."}
                     </p>
                   </div>
                 )}
@@ -131,26 +136,28 @@ export const LearningPlanPage: React.FC = () => {
               <section className="rounded-[28px] border border-[#ff8c00]/20 bg-[#fff7e9] p-6 dark:bg-[#ff8c00]/[.07]">
                 <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[.14em] text-[#c56b00] dark:text-[#ffb65c]">
                   <Clock3 className="size-4" />
-                  На сьогодні
+                  {en ? "For today" : "На сьогодні"}
                 </span>
                 <h2 className="mt-4 text-2xl font-semibold tracking-[-.04em]">
-                  {challenge?.available && challenge.task ? challenge.task.title : "Коротка практика для старту"}
+                  {challenge?.available && challenge.task ? challenge.task.title : en ? "A quick practice task to get started" : "Коротка практика для старту"}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-[#7a6d54] dark:text-[#c7b58f]">
-                  {challenge?.available ? "Невелике завдання, щоб підтримати темп без перевантаження." : "Якщо денний виклик ще не готовий, відкрий практику — маршрут оновиться після результату."}
+                  {challenge?.available
+                    ? en ? "A short task to keep up your pace without overloading your day." : "Невелике завдання, щоб підтримати темп без перевантаження."
+                    : en ? "If today's challenge is not ready yet, open practice. Your path will update when you get a result." : "Якщо денний виклик ще не готовий, відкрий практику — маршрут оновиться після результату."}
                 </p>
                 <button type="button" onClick={() => window.location.assign("/?app=tasks")} className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#b66200] dark:text-[#ffb65c]">
-                  Перейти до практики <ArrowRight className="size-4" />
+                  {en ? "Go to practice" : "Перейти до практики"} <ArrowRight className="size-4" />
                 </button>
               </section>
 
               <section className="rounded-[28px] border border-border/10 bg-white p-6 dark:border-white/10 dark:bg-bg-surface">
                 <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary-strong dark:text-primary-soft">
                   <Target className="size-4" />
-                  Темп
+                  {en ? "Pace" : "Темп"}
                 </span>
                 <div className="mt-4 text-4xl font-semibold tracking-[-.06em]">{progress}%</div>
-                <p className="mt-1 text-sm text-[#718075] dark:text-[#a2b1a6]">закрито в поточному маршруті</p>
+                <p className="mt-1 text-sm text-[#718075] dark:text-[#a2b1a6]">{en ? "completed on your current path" : "закрито в поточному маршруті"}</p>
               </section>
             </aside>
           </div>

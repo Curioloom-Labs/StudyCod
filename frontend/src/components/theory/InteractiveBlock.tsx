@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { tr } from "../../i18n";
 
 /**
  * Interactive theory blocks.
@@ -167,7 +169,7 @@ const PredictionBlock: React.FC<{ spec: PredictionSpec }> = ({ spec }) => {
 
   return (
     <div className={shellClass}>
-      <div className={labelClass}>{"// перевір себе"}</div>
+      <div className={labelClass}>{tr("// перевір себе", "// check yourself")}</div>
       <p className="mb-3 min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap text-sm font-semibold">{spec.question}</p>
       {spec.code ? (
         <pre className={codeClass}>
@@ -200,7 +202,7 @@ const PredictionBlock: React.FC<{ spec: PredictionSpec }> = ({ spec }) => {
       </div>
       {revealed && spec.explanation ? (
         <p className="mt-3 min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap border-t border-current/10 pt-3 text-sm opacity-90">
-          {choice === spec.answer ? "Правильно! " : "Не зовсім. "}
+          {choice === spec.answer ? tr("Правильно! ", "Correct! ") : tr("Не зовсім. ", "Not quite. ")}
           {spec.explanation}
         </p>
       ) : null}
@@ -214,9 +216,9 @@ const SpotTheBugBlock: React.FC<{ spec: SpotTheBugSpec }> = ({ spec }) => {
 
   return (
     <div className={shellClass}>
-      <div className={labelClass}>{"// знайди помилку"}</div>
+      <div className={labelClass}>{tr("// знайди помилку", "// find the bug")}</div>
       <p className="mb-3 min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap text-sm font-semibold">
-        {spec.question || "Натисни на рядок, у якому помилка:"}
+        {spec.question || tr("Натисни на рядок, у якому помилка:", "Click the line that contains the bug:")}
       </p>
       <div className="overflow-hidden rounded-lg border border-border bg-bg-code font-mono text-[13px] leading-relaxed">
         {spec.lines.map((line, i) => {
@@ -240,7 +242,7 @@ const SpotTheBugBlock: React.FC<{ spec: SpotTheBugSpec }> = ({ spec }) => {
               <span className="min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap">{line || " "}</span>
               {revealed && isBug ? (
                 <span aria-hidden className="ml-auto pl-2 text-emerald-500">
-                  ← помилка
+                  ← {tr("помилка", "bug")}
                 </span>
               ) : null}
             </button>
@@ -249,7 +251,7 @@ const SpotTheBugBlock: React.FC<{ spec: SpotTheBugSpec }> = ({ spec }) => {
       </div>
       {revealed && spec.explanation ? (
         <p className="mt-3 border-t border-current/10 pt-3 text-sm opacity-90">
-          {choice === spec.buggyLine ? "Правильно! " : "Помилка не тут. "}
+          {choice === spec.buggyLine ? tr("Правильно! ", "Correct! ") : tr("Помилка не тут. ", "The bug is elsewhere. ")}
           {spec.explanation}
         </p>
       ) : null}
@@ -273,7 +275,7 @@ const TraceBlock: React.FC<{ spec: TraceSpec }> = ({ spec }) => {
 
   return (
     <div className={shellClass}>
-      <div className={labelClass}>{"// покроковий прогін"}</div>
+      <div className={labelClass}>{tr("// покроковий прогін", "// step-by-step trace")}</div>
       {spec.caption ? <p className="mb-3 text-sm font-semibold">{spec.caption}</p> : null}
       <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
         <div className="overflow-hidden rounded-lg border border-border bg-bg-code font-mono text-[13px] leading-relaxed">
@@ -293,7 +295,7 @@ const TraceBlock: React.FC<{ spec: TraceSpec }> = ({ spec }) => {
           })}
         </div>
         <div className="min-w-[8rem] rounded-lg border border-border p-2">
-          <div className={labelClass + " mb-2"}>{"// змінні"}</div>
+          <div className={labelClass + " mb-2"}>{tr("// змінні", "// variables")}</div>
           {vars.length ? (
             <table className="w-full font-mono text-[13px]">
               <tbody>
@@ -313,7 +315,7 @@ const TraceBlock: React.FC<{ spec: TraceSpec }> = ({ spec }) => {
 
       {output ? (
         <div className="mt-3">
-          <div className={labelClass + " mb-1"}>{"// консоль"}</div>
+          <div className={labelClass + " mb-1"}>{tr("// консоль", "// console")}</div>
           <pre className="overflow-x-auto rounded-lg border border-border bg-bg-code p-2 font-mono text-[13px] text-text-primary">
             <code>{output}</code>
           </pre>
@@ -332,7 +334,7 @@ const TraceBlock: React.FC<{ spec: TraceSpec }> = ({ spec }) => {
           onClick={() => setCursor((c) => Math.max(0, c - 1))}
           disabled={cursor === 0}
         >
-          ← крок назад
+          ← {tr("крок назад", "step back")}
         </button>
         <button
           type="button"
@@ -340,10 +342,10 @@ const TraceBlock: React.FC<{ spec: TraceSpec }> = ({ spec }) => {
           onClick={() => setCursor((c) => Math.min(total - 1, c + 1))}
           disabled={cursor === total - 1}
         >
-          крок вперед →
+          {tr("крок вперед", "step forward")} →
         </button>
         <span className="ml-auto font-mono text-[12px] text-text-secondary">
-          крок {cursor + 1} / {total}
+          {tr("крок", "step")} {cursor + 1} / {total}
         </span>
       </div>
     </div>
@@ -382,11 +384,11 @@ const MemoryColumn: React.FC<{ title: string; boxes: MemoryBox[] }> = ({ title, 
 
 const MemoryBlock: React.FC<{ spec: MemorySpec }> = ({ spec }) => (
   <div className={shellClass}>
-    <div className={labelClass}>{"// пам’ять"}</div>
+    <div className={labelClass}>{tr("// пам’ять", "// memory")}</div>
     {spec.caption ? <p className="mb-3 text-sm font-semibold">{spec.caption}</p> : null}
     <div className="flex gap-4">
-      <MemoryColumn title="стек" boxes={spec.stack ?? []} />
-      <MemoryColumn title="купа (heap)" boxes={spec.heap ?? []} />
+      <MemoryColumn title={tr("стек", "stack")} boxes={spec.stack ?? []} />
+      <MemoryColumn title={tr("купа (heap)", "heap")} boxes={spec.heap ?? []} />
     </div>
     {spec.note ? <p className="mt-3 text-sm opacity-90">{spec.note}</p> : null}
   </div>
@@ -398,12 +400,12 @@ const DispatchBlock: React.FC<{ spec: DispatchSpec }> = ({ spec }) => {
 
   return (
     <div className={shellClass}>
-      <div className={labelClass}>{"// який метод виконається?"}</div>
+      <div className={labelClass}>{tr("// який метод виконається?", "// which method will run?")}</div>
       <p className="mb-3 font-mono text-sm">
-        {"Виклик: "}
+        {tr("Виклик: ", "Call: ")}
         <span className="text-text-primary">{spec.call}</span>
       </p>
-      <p className="mb-2 text-sm text-text-secondary">Обери реальний тип об’єкта:</p>
+      <p className="mb-2 text-sm text-text-secondary">{tr("Обери реальний тип об’єкта:", "Choose the object's actual type:")}</p>
       <div className="flex flex-wrap gap-2">
         {spec.cases.map((c, i) => (
           <button
@@ -448,19 +450,19 @@ const QuizBlock: React.FC<{ spec: QuizSpec }> = ({ spec }) => {
     const pct = Math.round((score / total) * 100);
     return (
       <div className={shellClass}>
-        <div className={labelClass}>{"// результат квізу"}</div>
+        <div className={labelClass}>{tr("// результат квізу", "// quiz results")}</div>
         <p className="text-sm font-semibold">
-          Правильних відповідей: {score} / {total}
+          {tr("Правильних відповідей:", "Correct answers:")} {score} / {total}
         </p>
         <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-bg-code">
           <div className="h-full bg-emerald-500" style={{ width: `${pct}%` }} />
         </div>
         <p className="mt-2 text-sm opacity-90">
           {score === total
-            ? "Бездоганно! 🎯"
+            ? tr("Бездоганно! 🎯", "Perfect! 🎯")
             : score * 2 >= total
-              ? "Непогано — повтори те, що не вийшло."
-              : "Варто ще раз перечитати урок."}
+              ? tr("Непогано — повтори те, що не вийшло.", "Not bad — review the parts you missed.")
+              : tr("Варто ще раз перечитати урок.", "Consider reviewing the lesson again.")}
         </p>
         <button
           type="button"
@@ -471,7 +473,7 @@ const QuizBlock: React.FC<{ spec: QuizSpec }> = ({ spec }) => {
             setFinished(false);
           }}
         >
-          ⟲ пройти ще раз
+          ⟲ {tr("пройти ще раз", "try again")}
         </button>
       </div>
     );
@@ -480,9 +482,9 @@ const QuizBlock: React.FC<{ spec: QuizSpec }> = ({ spec }) => {
   return (
     <div className={shellClass}>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <span className={labelClass + " mb-0"}>{"// міні-квіз"}</span>
+        <span className={labelClass + " mb-0"}>{tr("// міні-квіз", "// quick quiz")}</span>
         <span className="font-mono text-[12px] text-text-secondary">
-          питання {index + 1} / {total}
+          {tr("питання", "question")} {index + 1} / {total}
         </span>
       </div>
       {spec.caption && index === 0 ? (
@@ -520,7 +522,7 @@ const QuizBlock: React.FC<{ spec: QuizSpec }> = ({ spec }) => {
       </div>
       {answered && q.explanation ? (
         <p className="mt-3 min-w-0 break-words [overflow-wrap:anywhere] whitespace-pre-wrap border-t border-border pt-3 text-sm opacity-90">
-          {chosen === q.answer ? "Правильно! " : "Не зовсім. "}
+          {chosen === q.answer ? tr("Правильно! ", "Correct! ") : tr("Не зовсім. ", "Not quite. ")}
           {q.explanation}
         </p>
       ) : null}
@@ -531,7 +533,7 @@ const QuizBlock: React.FC<{ spec: QuizSpec }> = ({ spec }) => {
             className={btnClass}
             onClick={() => (index < total - 1 ? setIndex(index + 1) : setFinished(true))}
           >
-            {index < total - 1 ? "далі →" : "завершити"}
+            {index < total - 1 ? tr("далі →", "Next →") : tr("завершити", "Finish")}
           </button>
         </div>
       ) : null}
@@ -540,6 +542,7 @@ const QuizBlock: React.FC<{ spec: QuizSpec }> = ({ spec }) => {
 };
 
 export const InteractiveBlock: React.FC<{ spec: InteractiveSpec }> = ({ spec }) => {
+  useTranslation();
   if (isPrediction(spec)) return <PredictionBlock spec={spec} />;
   if (isSpotTheBug(spec)) return <SpotTheBugBlock spec={spec} />;
   if (isTrace(spec)) return <TraceBlock spec={spec} />;

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -51,11 +52,11 @@ const isPreview = () =>
   import.meta.env.DEV &&
   new URLSearchParams(window.location.search).get("preview") === "true";
 const date = (value: string | null | undefined) => {
-  if (!value) return "Без дати";
+  if (!value) return tr("Без дати", "No date");
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime())
     ? value
-    : new Intl.DateTimeFormat("uk-UA", {
+    : new Intl.DateTimeFormat(tr("uk-UA", "en-US"), {
         day: "numeric",
         month: "short",
         hour: "2-digit",
@@ -70,7 +71,9 @@ const phaseFor = (item: { startsAt: string | null; endsAt: string | null }) => {
     return "ended" as const;
   return "live" as const;
 };
-const phaseCopy = { live: "Триває", soon: "Незабаром", ended: "Завершено" };
+const phaseCopy = (phase: "live" | "soon" | "ended") => phase === "live"
+  ? tr("Триває", "Live")
+  : phase === "soon" ? tr("Незабаром", "Coming soon") : tr("Завершено", "Ended");
 const phaseStyle = {
   live: "bg-[#ddf8e9] text-[#147345] dark:bg-primary/12 dark:text-primary-soft",
   soon: "bg-[#fff0d7] text-[#a75c00] dark:bg-[#ff8c00]/12 dark:text-[#ffb760]",
@@ -96,8 +99,8 @@ function downloadContestCalendar(contest: ContestDetails["contest"]): void {
     "CALSCALE:GREGORIAN", "BEGIN:VEVENT", `UID:studycod-contest-${contest.id}@studycod.org`,
     `DTSTAMP:${calendarTimestamp(new Date().toISOString())}`, `DTSTART:${start}`, `DTEND:${end}`,
     `SUMMARY:${title}`, `DESCRIPTION:${description}`, `URL:${window.location.origin}/contest/contests/${contest.id}`,
-    "BEGIN:VALARM", "TRIGGER:-P1D", "ACTION:DISPLAY", `DESCRIPTION:${title} почнеться завтра`, "END:VALARM",
-    "BEGIN:VALARM", "TRIGGER:-PT15M", "ACTION:DISPLAY", `DESCRIPTION:${title} почнеться за 15 хвилин`, "END:VALARM",
+    "BEGIN:VALARM", "TRIGGER:-P1D", "ACTION:DISPLAY", `DESCRIPTION:${title} ${tr("почнеться завтра", "starts tomorrow")}`, "END:VALARM",
+    "BEGIN:VALARM", "TRIGGER:-PT15M", "ACTION:DISPLAY", `DESCRIPTION:${title} ${tr("почнеться за 15 хвилин", "starts in 15 minutes")}`, "END:VALARM",
     "END:VEVENT", "END:VCALENDAR",
   ].join("\r\n");
   const url = URL.createObjectURL(new Blob([content], { type: "text/calendar;charset=utf-8" }));
@@ -115,7 +118,7 @@ function formatCountdown(milliseconds: number): string {
   const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = seconds % 60;
   return days > 0
-    ? `${days} д ${String(hours).padStart(2, "0")} год ${String(minutes).padStart(2, "0")} хв`
+    ? `${days}${tr(" д ", "d ")}${String(hours).padStart(2, "0")}${tr(" год ", "h ")}${String(minutes).padStart(2, "0")}${tr(" хв", "m")}`
     : `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
@@ -288,6 +291,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
   canJoinPrivateByCode = true,
   favoriteScope = "guest",
 }) => {
+  useTranslation();
   const routerNavigate = useNavigate();
   const navigate = React.useCallback((path: string, options?: { replace?: boolean }) => routerNavigate(withDevPreview(path), options), [routerNavigate]);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -365,7 +369,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
         setItems(fallback);
         setTotal(fallback.length);
         setTotalPages(1);
-        setMessage("Демо-режим: показано сценарій контестів.");
+        setMessage(tr("Демо-режим: показано сценарій контестів.", "Preview mode: showing sample contests."));
         return;
       }
       const response = await listContests({ page, pageSize: 12, search: debouncedSearch, phase: filter, sort, ...(difficulty !== "all" ? { difficulty } : {}), ...(showSaved ? { ids: favoriteIds.join(",") } : {}) });
@@ -384,12 +388,12 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
         setItems(fallback);
         setTotal(fallback.length);
         setTotalPages(1);
-        setMessage("Демо-режим: показано сценарій контестів.");
+        setMessage(tr("Демо-режим: показано сценарій контестів.", "Preview mode: showing sample contests."));
       } else
         setError(
           getErrorMessageFromUnknown(
             caught,
-            "Не вдалося завантажити контести.",
+            tr("Не вдалося завантажити контести.", "Could not load contests."),
           ),
         );
     } finally {
@@ -414,7 +418,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
       navigate(withDevPreview(`/contest/contests/${isPreview() ? 102 : result.contestId}`));
     } catch (caught) {
       setError(
-        getErrorMessageFromUnknown(caught, "Не вдалося приєднатися за кодом."),
+        getErrorMessageFromUnknown(caught, tr("Не вдалося приєднатися за кодом.", "Could not join with this code.")),
       );
     } finally {
       setJoinBusy(false);
@@ -423,7 +427,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
   return (
     <Shell
       eyebrow="StudyCod Contest"
-      title="Змагання, де видно хід думки"
+      title={tr("Змагання, де видно хід думки", "Contests where you can show your thinking")}
       aside={
         <div className="flex flex-wrap gap-2">
           {canJoinPrivateByCode && <button type="button"
@@ -431,14 +435,14 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
             className="rounded-xl border border-[#1a2a1e]/12 px-4 py-2.5 text-sm font-bold text-[#243329] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:text-[#dce7df] dark:hover:bg-white/[.06]"
           >
             <LockKeyhole className="mr-2 inline h-4 w-4" aria-hidden="true" />
-            Ввести код
+            {tr("Ввести код", "Enter code")}
           </button>}
           {canCreate && <button type="button"
             onClick={() => setCreateOpen(true)}
             className="rounded-xl bg-[#153321] px-4 py-2.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(20,67,40,.2)] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-primary dark:text-[#062211]"
           >
             <Plus className="mr-2 inline h-4 w-4" aria-hidden="true" />
-            Новий контест
+            {tr("Новий контест", "New contest")}
           </button>}
         </div>
       }
@@ -451,14 +455,14 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
             aria-pressed={filter === item}
             className={`rounded-full px-4 py-2 text-sm font-bold transition ${filter === item ? "bg-[#17251c] text-white dark:bg-[#edf3ef] dark:text-[#112016]" : "text-[#617167] hover:bg-[#edf2ed] dark:text-[#a9b7ad] dark:hover:bg-white/[.06]"}`}
           >
-            {item === "all" ? "Усі" : phaseCopy[item]}
+            {item === "all" ? tr("Усі", "All") : phaseCopy(item)}
           </button>
         ))}
         <button type="button" onClick={() => { setShowSaved((value) => !value); setPage(1); }} aria-pressed={showSaved} className={`rounded-full px-4 py-2 text-sm font-bold transition ${showSaved ? "bg-[#17251c] text-white dark:bg-[#edf3ef] dark:text-[#112016]" : "text-[#617167] hover:bg-[#edf2ed] dark:text-[#a9b7ad] dark:hover:bg-white/[.06]"}`}>
-          Збережені{favoriteIds.length ? ` · ${favoriteIds.length}` : ""}
+          {tr("Збережені", "Saved")}{favoriteIds.length ? ` · ${favoriteIds.length}` : ""}
         </button>
         <label className="relative min-w-[220px] flex-1 sm:max-w-sm">
-          <span className="sr-only">Пошук контестів</span>
+          <span className="sr-only">{tr("Пошук контестів", "Search contests")}</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#7e8d82]" aria-hidden="true" />
           <input
             type="search"
@@ -466,11 +470,11 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
             autoComplete="off"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Назва або опис…"
+            placeholder={tr("Назва або опис…", "Title or description…")}
             className="w-full rounded-xl border border-[#1a2a1e]/10 bg-white py-2.5 pl-9 pr-3 text-sm text-[#1e2d22] outline-none transition placeholder:text-[#94a097] focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-text-primary"
           />
         </label>
-        <label className="sr-only" htmlFor="contest-sort">Сортування контестів</label>
+        <label className="sr-only" htmlFor="contest-sort">{tr("Сортування контестів", "Sort contests")}</label>
         <select
           id="contest-sort"
           name="contest-sort"
@@ -478,22 +482,22 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
           onChange={(event) => { setSort(event.target.value as NonNullable<ContestListQuery["sort"]>); setPage(1); }}
           className="rounded-xl border border-[#1a2a1e]/10 bg-white px-3 py-2.5 text-sm font-semibold text-[#344338] outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-[#dce7df]"
         >
-          <option value="newest">Найновіші</option>
-          <option value="soonest">Найближчий старт</option>
-          <option value="title">За назвою</option>
+          <option value="newest">{tr("Найновіші", "Newest")}</option>
+          <option value="soonest">{tr("Найближчий старт", "Soonest start")}</option>
+          <option value="title">{tr("За назвою", "By title")}</option>
         </select>
-        <label className="sr-only" htmlFor="contest-difficulty">Рівень складності</label>
+        <label className="sr-only" htmlFor="contest-difficulty">{tr("Рівень складності", "Difficulty")}</label>
         <select id="contest-difficulty" name="contest-difficulty" value={difficulty} onChange={(event) => { setDifficulty(event.target.value as typeof difficulty); setPage(1); }} className="rounded-xl border border-[#1a2a1e]/10 bg-white px-3 py-2.5 text-sm font-semibold text-[#344338] outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-[#dce7df]">
-          <option value="all">Будь-який рівень</option>
-          <option value="EASY">Початковий</option>
-          <option value="MEDIUM">Середній</option>
-          <option value="HARD">Складний</option>
+          <option value="all">{tr("Будь-який рівень", "Any level")}</option>
+          <option value="EASY">{tr("Початковий", "Beginner")}</option>
+          <option value="MEDIUM">{tr("Середній", "Intermediate")}</option>
+          <option value="HARD">{tr("Складний", "Advanced")}</option>
         </select>
-        <span className="text-xs font-semibold tabular-nums text-[#718075] dark:text-[#a9b7ad]">{total} контестів</span>
+        <span className="text-xs font-semibold tabular-nums text-[#718075] dark:text-[#a9b7ad]">{tr(`Контестів: ${total}`, `Contests: ${total}`)}</span>
         <button type="button"
           onClick={() => void refresh()}
           className="ml-auto flex h-9 w-9 items-center justify-center rounded-full text-[#65756a] hover:bg-[#edf2ed] dark:text-[#a9b7ad] dark:hover:bg-white/[.06]"
-          aria-label="Оновити контести"
+          aria-label={tr("Оновити контести", "Refresh contests")}
         >
           <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
         </button>
@@ -520,9 +524,9 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
       ) : filtered.length === 0 ? (
         <div className="rounded-[28px] border border-dashed border-[#1a2a1e]/15 px-6 py-20 text-center dark:border-white/10">
           <Trophy className="mx-auto mb-4 h-8 w-8 text-[#ff9b2e]" />
-          <h2 className="text-xl font-bold">{showSaved ? "Ще немає збережених контестів" : search || difficulty !== "all" ? "Нічого не знайшлося" : "Тут поки тихо"}</h2>
+          <h2 className="text-xl font-bold">{showSaved ? tr("Ще немає збережених контестів", "No saved contests yet") : search || difficulty !== "all" ? tr("Нічого не знайшлося", "No results found") : tr("Тут поки тихо", "Nothing here yet")}</h2>
           <p className="mx-auto mt-2 max-w-md text-base leading-7 text-[#68786e] dark:text-[#a6b4aa]">
-            {showSaved ? "Познач контест закладкою — і він з’явиться тут." : search || difficulty !== "all" ? "Спробуй змінити запит або фільтри." : "Створи перший контест або зайди за кодом від викладача."}
+            {showSaved ? tr("Познач контест закладкою — і він з’явиться тут.", "Bookmark a contest to save it here.") : search || difficulty !== "all" ? tr("Спробуй змінити запит або фільтри.", "Try changing your search or filters.") : tr("Створи перший контест або зайди за кодом від викладача.", "Create the first contest or join with a code from your teacher.")}
           </p>
         </div>
       ) : (
@@ -542,12 +546,12 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
                 <div className="flex min-w-0 flex-1 flex-col p-5">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className={`max-w-[45%] truncate rounded-full px-3 py-1.5 text-xs font-bold ${phaseStyle[state]}`}>
-                      {item.isPublished ? phaseCopy[state] : "Чернетка"}
+                      {item.isPublished ? phaseCopy(state) : tr("Чернетка", "Draft")}
                     </span>
                     <span className="min-w-0 truncate rounded-full bg-[#f1f5f1] px-3 py-1.5 text-xs font-semibold text-[#627168] dark:bg-white/[.06] dark:text-[#b5c1b8]">
-                      {item.visibility === "PRIVATE_CODE" ? "За кодом" : item.visibility === "CLASS" ? "Для класу" : item.visibility === "TEMPORARY_ACCOUNTS" ? "Тимчасовий доступ" : "Відкритий"}
+                      {item.visibility === "PRIVATE_CODE" ? tr("За кодом", "Code access") : item.visibility === "CLASS" ? tr("Для класу", "For class") : item.visibility === "TEMPORARY_ACCOUNTS" ? tr("Тимчасовий доступ", "Temporary access") : tr("Відкритий", "Public")}
                     </span>
-                    <button type="button" onClick={() => toggleFavorite(item.id)} aria-label={favoriteIds.includes(item.id) ? `Прибрати ${item.title} зі збережених` : `Зберегти ${item.title}`} aria-pressed={favoriteIds.includes(item.id)} className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-[#748277] transition hover:bg-[#edf3ed] hover:text-[#17834d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-[#a9b7ad] dark:hover:bg-white/[.08] dark:hover:text-primary-soft">
+                    <button type="button" onClick={() => toggleFavorite(item.id)} aria-label={favoriteIds.includes(item.id) ? tr(`Прибрати ${item.title} зі збережених`, `Remove ${item.title} from saved`) : tr(`Зберегти ${item.title}`, `Save ${item.title}`)} aria-pressed={favoriteIds.includes(item.id)} className="ml-auto grid size-9 shrink-0 place-items-center rounded-full text-[#748277] transition hover:bg-[#edf3ed] hover:text-[#17834d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-[#a9b7ad] dark:hover:bg-white/[.08] dark:hover:text-primary-soft">
                       <Bookmark className={`size-4 ${favoriteIds.includes(item.id) ? "fill-current text-primary-strong dark:text-primary-soft" : ""}`} aria-hidden="true" />
                     </button>
                   </div>
@@ -562,20 +566,20 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
                   </div>
 
                   <p className="mt-3 line-clamp-2 text-sm leading-6 text-[#68786e] dark:text-[#aab8ae]">
-                    {item.description || "Умови й задачі вже чекають на старті."}
+                    {item.description || tr("Умови й задачі вже чекають на старті.", "The problem statements and tasks are ready when you are.")}
                   </p>
 
                   <div className="mt-4 mb-4 flex flex-wrap items-center gap-1.5">
-                    {item.difficulty && <span className="rounded-full bg-[#edf4ee] px-2.5 py-1 text-[11px] font-bold text-[#3b5944] dark:bg-white/[.07] dark:text-[#b8c8bc]">{{ EASY: "Початковий", MEDIUM: "Середній", HARD: "Складний" }[item.difficulty]}</span>}
-                    {item.participantAccessMode === "ISSUED_ACCOUNTS" && <span className="inline-flex items-center gap-1 rounded-full bg-[#fff2dc] px-2.5 py-1 text-[11px] font-bold text-[#8a5100] dark:bg-[#ffb547]/10 dark:text-[#ffcc83]"><KeyRound aria-hidden="true" className="size-3" />Тимчасовий доступ</span>}
-                    {item.scoreboardVisibility === "AFTER_END" && <span className="rounded-full bg-[#f1f0ff] px-2.5 py-1 text-[11px] font-bold text-[#594d9c] dark:bg-[#9c8cff]/10 dark:text-[#c5baff]">Таблиця після фінішу</span>}
+                    {item.difficulty && <span className="rounded-full bg-[#edf4ee] px-2.5 py-1 text-[11px] font-bold text-[#3b5944] dark:bg-white/[.07] dark:text-[#b8c8bc]">{{ EASY: tr("Початковий", "Beginner"), MEDIUM: tr("Середній", "Intermediate"), HARD: tr("Складний", "Advanced") }[item.difficulty]}</span>}
+                    {item.participantAccessMode === "ISSUED_ACCOUNTS" && <span className="inline-flex items-center gap-1 rounded-full bg-[#fff2dc] px-2.5 py-1 text-[11px] font-bold text-[#8a5100] dark:bg-[#ffb547]/10 dark:text-[#ffcc83]"><KeyRound aria-hidden="true" className="size-3" />{tr("Тимчасовий доступ", "Temporary access")}</span>}
+                    {item.scoreboardVisibility === "AFTER_END" && <span className="rounded-full bg-[#f1f0ff] px-2.5 py-1 text-[11px] font-bold text-[#594d9c] dark:bg-[#9c8cff]/10 dark:text-[#c5baff]">{tr("Таблиця після фінішу", "Scoreboard after the contest")}</span>}
                     {(item.tags ?? []).slice(0, 2).map((tag) => <span key={tag} className="max-w-full truncate rounded-full bg-[#f1f5f1] px-2.5 py-1 text-[11px] font-semibold text-[#627168] dark:bg-white/[.05] dark:text-[#aebbb2]">{tag}</span>)}
                   </div>
 
                   <div className="mt-auto flex min-w-0 items-center gap-4 border-t border-border/8 pt-4 dark:border-white/[.08]">
                     <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-[#64746a] dark:text-[#a6b4aa]">
                       <Clock3 aria-hidden="true" className="size-4 shrink-0" />
-                      <span className="truncate">{state === "ended" ? "Фінішував" : date(state === "soon" ? item.startsAt : item.endsAt)}</span>
+                      <span className="truncate">{state === "ended" ? tr("Фінішував", "Ended") : date(state === "soon" ? item.startsAt : item.endsAt)}</span>
                     </span>
                     <span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs font-semibold tabular-nums text-[#718075] dark:text-[#a6b4aa]">
                       <UsersRound className="size-3.5" aria-hidden="true" /> {item.participantsCount}
@@ -583,7 +587,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
                     <button type="button"
                       onClick={() => navigate(`/contest/contests/${item.id}`)}
                       className="grid size-10 shrink-0 place-items-center rounded-full bg-[#eff4ef] text-[#183422] transition group-hover:bg-[#153321] group-hover:text-white dark:bg-white/[.07] dark:text-[#e7f0e9] dark:group-hover:bg-primary dark:group-hover:text-[#062211]"
-                      aria-label={`Відкрити ${item.title}`}
+                      aria-label={tr(`Відкрити ${item.title}`, `Open ${item.title}`)}
                     >
                       <ArrowRight className="size-4" />
                     </button>
@@ -593,10 +597,10 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
             );
           })}
         </div>
-        {totalPages > 1 && <nav className="mt-7 flex items-center justify-center gap-3" aria-label="Сторінки контестів">
-          <button type="button" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-xl border border-[#1a2a1e]/10 px-4 py-2 text-sm font-bold disabled:opacity-40 dark:border-white/10">Назад</button>
+        {totalPages > 1 && <nav className="mt-7 flex items-center justify-center gap-3" aria-label={tr("Сторінки контестів", "Contest pages")}>
+          <button type="button" disabled={page <= 1 || loading} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-xl border border-[#1a2a1e]/10 px-4 py-2 text-sm font-bold disabled:opacity-40 dark:border-white/10">{tr("Назад", "Previous")}</button>
           <span className="min-w-24 text-center text-sm font-semibold tabular-nums text-[#617167] dark:text-[#a9b7ad]">{page} / {totalPages}</span>
-          <button type="button" disabled={page >= totalPages || loading} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="rounded-xl border border-[#1a2a1e]/10 px-4 py-2 text-sm font-bold disabled:opacity-40 dark:border-white/10">Далі</button>
+          <button type="button" disabled={page >= totalPages || loading} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="rounded-xl border border-[#1a2a1e]/10 px-4 py-2 text-sm font-bold disabled:opacity-40 dark:border-white/10">{tr("Далі", "Next")}</button>
         </nav>}
         </>
       )}
@@ -604,15 +608,15 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
         <div data-material="contest-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-[#071009]/50 px-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setJoinOpen(false); }}>
           <form onSubmit={submitCode} role="dialog" aria-modal="true" aria-labelledby="contest-join-title" className="w-full max-w-[440px] rounded-[26px] border border-white/55 bg-bg-surface p-6 shadow-2xl dark:border-white/10 dark:bg-[#142018]">
             <div className="mb-6 flex items-start justify-between gap-4">
-              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">Доступ</p><h2 id="contest-join-title" className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">Приєднатися до контесту</h2></div>
-              <button type="button" onClick={() => { setJoinOpen(false); setError(null); }} aria-label="Закрити вікно" className="grid size-9 shrink-0 place-items-center rounded-xl text-[#68786e] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:bg-white/[.06]"><span aria-hidden="true" className="text-xl">×</span></button>
+              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">{tr("Доступ", "Access")}</p><h2 id="contest-join-title" className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">{tr("Приєднатися до контесту", "Join a contest")}</h2></div>
+              <button type="button" onClick={() => { setJoinOpen(false); setError(null); }} aria-label={tr("Закрити вікно", "Close dialog")} className="grid size-9 shrink-0 place-items-center rounded-xl text-[#68786e] transition hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:hover:bg-white/[.06]"><span aria-hidden="true" className="text-xl">×</span></button>
             </div>
-            <label htmlFor="contest-access-code" className="block text-sm font-bold">Код доступу
-              <input id="contest-access-code" name="code" autoComplete="off" spellCheck={false} value={code} onChange={(event) => setCode(event.target.value)} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 font-mono text-base uppercase tracking-wider outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-base" placeholder="Наприклад, CLASS-24…" />
+            <label htmlFor="contest-access-code" className="block text-sm font-bold">{tr("Код доступу", "Access code")}
+              <input id="contest-access-code" name="code" autoComplete="off" spellCheck={false} value={code} onChange={(event) => setCode(event.target.value)} className="mt-2 w-full rounded-xl border border-[#18271c]/14 bg-white px-4 py-3 font-mono text-base uppercase tracking-wider outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-base" placeholder={tr("Наприклад, CLASS-24…", "For example, CLASS-24…")} />
             </label>
             {error && <p role="alert" aria-live="polite" className="mt-3 rounded-xl bg-[#fff1ef] px-3 py-2 text-sm font-semibold text-[#a93232] dark:bg-[#451d1a] dark:text-[#ffb0a6]">{error}</p>}
             <button type="submit" disabled={joinBusy || !code.trim()} className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-[#072514] transition hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-wait disabled:opacity-60">
-              {joinBusy ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <LockKeyhole aria-hidden="true" className="size-4" />}{joinBusy ? "Приєднання…" : "Приєднатися"}
+              {joinBusy ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <LockKeyhole aria-hidden="true" className="size-4" />}{joinBusy ? tr("Приєднання…", "Joining…") : tr("Приєднатися", "Join")}
             </button>
           </form>
         </div>
@@ -623,6 +627,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
 };
 
 export const ContestDetailPage: React.FC = () => {
+  useTranslation();
   const { id } = useParams<{ id: string }>();
   const routerNavigate = useNavigate();
   const navigate = React.useCallback((path: string, options?: { replace?: boolean }) => routerNavigate(withDevPreview(path), options), [routerNavigate]);
@@ -694,7 +699,7 @@ export const ContestDetailPage: React.FC = () => {
         setMyParticipantId(null);
       } else
         setError(
-          getErrorMessageFromUnknown(caught, "Не вдалося відкрити контест."),
+          getErrorMessageFromUnknown(caught, tr("Не вдалося відкрити контест.", "Could not open the contest.")),
         );
     } finally {
       setLoading(false);
@@ -753,32 +758,33 @@ export const ContestDetailPage: React.FC = () => {
       await joinContest(contestId);
       await load();
     } catch (caught) {
-      setError(getErrorMessageFromUnknown(caught, "Не вдалося приєднатися."));
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося приєднатися.", "Could not join the contest.")));
     } finally {
       setJoining(false);
     }
   };
   if (loading)
     return (
-      <Shell eyebrow="Contest" title="Відкриваємо контест">
+      <Shell eyebrow="Contest" title={tr("Відкриваємо контест", "Opening contest")}>
         <div className="h-[480px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" />
       </Shell>
     );
   if (!data)
     return (
-      <Shell eyebrow="Contest" title="Контест недоступний">
-        <Notice tone="error">{error || "Такого контесту не знайдено."}</Notice>
+      <Shell eyebrow="Contest" title={tr("Контест недоступний", "Contest unavailable")}>
+        <Notice tone="error">{error || tr("Такого контесту не знайдено.", "Contest not found.")}</Notice>
         <button type="button"
           onClick={() => navigate("/contest/contests")}
           className="mt-5 font-bold text-primary-strong"
         >
-          До списку контестів
+          {tr("До списку контестів", "Back to contests")}
         </button>
       </Shell>
     );
   const state = phaseFor(data.contest);
   const joined = data.access.isJoined;
   const access = data.access.canAccessContent;
+  const canManage = Boolean(data.access.canManage);
   const startMs = data.contest.startsAt ? Date.parse(data.contest.startsAt) : null;
   const startsIn = startMs == null ? null : startMs - (clockNow + clockOffset);
   const canOpenProblems = access && (canManage || startsIn == null || startsIn <= 0);
@@ -787,30 +793,29 @@ export const ContestDetailPage: React.FC = () => {
   const progressByProblem = new Map(myProgress.map((item) => [item.problemId, item]));
   const hasCompletedContest = state === "ended";
   const officialStanding = standings?.rows.find((row) => row.participantId === myParticipantId);
-  const canManage = Boolean(data.access.canManage);
   const shouldSetUpAccounts = canManage && searchParams.get("setup") === "accounts";
   return (
     <Shell
       eyebrow={
         state === "live"
-          ? "Зараз у грі"
+          ? tr("Зараз у грі", "Live now")
           : state === "soon"
-            ? "Наступний старт"
-            : "Архів контесту"
+            ? tr("Наступний старт", "Upcoming")
+            : tr("Архів контесту", "Contest archive")
       }
       title={data.contest.title}
       aside={<div className="flex flex-wrap gap-2">
         {(access || canManage) && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/scoreboard`)} className="inline-flex items-center gap-2 rounded-xl border border-[#1a2a1e]/10 px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
-          <Trophy className="h-4 w-4" aria-hidden="true" /> Таблиця
+          <Trophy className="h-4 w-4" aria-hidden="true" /> {tr("Таблиця", "Scoreboard")}
         </button>}
         {canManage && data.contest.participantAccessMode === "ISSUED_ACCOUNTS" && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=accounts`)} className="inline-flex items-center gap-2 rounded-xl border border-[#1a2a1e]/10 px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
-          <KeyRound className="h-4 w-4" aria-hidden="true" /> Акаунти
+          <KeyRound className="h-4 w-4" aria-hidden="true" /> {tr("Акаунти", "Accounts")}
         </button>}
         {canManage && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=management`)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-3 py-2 text-sm font-bold text-white hover:bg-[#214a31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-primary dark:text-[#062211]">
-          <FileCode2 className="h-4 w-4" aria-hidden="true" /> Налаштувати
+          <FileCode2 className="h-4 w-4" aria-hidden="true" /> {tr("Налаштувати", "Manage")}
         </button>}
         <button type="button" onClick={() => navigate("/contest/contests")} className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-[#65756a] hover:bg-[#edf2ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-[#aab8ad] dark:hover:bg-white/[.06]">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Усі контести
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> {tr("Усі контести", "All contests")}
         </button>
       </div>}
     >
@@ -825,31 +830,31 @@ export const ContestDetailPage: React.FC = () => {
         <div aria-hidden="true" className="absolute -right-16 -top-24 -z-10 h-72 w-72 rounded-full blur-3xl" style={{ background: CONTEST_BANNER_THEMES[contestTheme(data.contest.bannerTheme)].glow }} />
         <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(340px,.8fr)]">
           <div>
-            <div className="mb-4 flex items-center gap-3"><span className="grid size-14 place-items-center rounded-2xl bg-white/[.12] text-3xl shadow-inner" aria-hidden="true">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" className="size-10 rounded-xl border border-white/25 object-cover" /> : data.contest.icon || "🏆"}</span><div><p className="text-xs font-bold uppercase tracking-[.14em] text-white/65">StudyCod Contests</p>{data.contest.participantAccessMode === "ISSUED_ACCOUNTS" && <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/90"><KeyRound className="size-3.5" aria-hidden="true" />Тимчасові акаунти</span>}</div></div>
+            <div className="mb-4 flex items-center gap-3"><span className="grid size-14 place-items-center rounded-2xl bg-white/[.12] text-3xl shadow-inner" aria-hidden="true">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" className="size-10 rounded-xl border border-white/25 object-cover" /> : data.contest.icon || "🏆"}</span><div><p className="text-xs font-bold uppercase tracking-[.14em] text-white/65">StudyCod Contests</p>{data.contest.participantAccessMode === "ISSUED_ACCOUNTS" && <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white/90"><KeyRound className="size-3.5" aria-hidden="true" />{tr("Тимчасові акаунти", "Temporary accounts")}</span>}</div></div>
             <div className="mb-6 flex flex-wrap gap-2">
               <span className="rounded-full bg-white/12 px-3 py-1.5 text-xs font-bold text-[#baf9d4]">
-                {phaseCopy[state]}
+                {phaseCopy(state)}
               </span>
               <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-white/80">
                 {data.contest.scoringMode || "IOI"} scoring
               </span>
-              {data.contest.difficulty && <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-white/80">{{ EASY: "Початковий", MEDIUM: "Середній", HARD: "Складний" }[data.contest.difficulty]}</span>}
-              {data.access.isPaused && <span className="rounded-full bg-[#ffb547]/15 px-3 py-1.5 text-xs font-bold text-[#ffd18a]">На паузі</span>}
+              {data.contest.difficulty && <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-white/80">{{ EASY: tr("Початковий", "Beginner"), MEDIUM: tr("Середній", "Intermediate"), HARD: tr("Складний", "Advanced") }[data.contest.difficulty]}</span>}
+              {data.access.isPaused && <span className="rounded-full bg-[#ffb547]/15 px-3 py-1.5 text-xs font-bold text-[#ffd18a]">{tr("На паузі", "Paused")}</span>}
             </div>
             {data.contest.tags.length > 0 && <div className="mb-4 flex flex-wrap gap-2">{data.contest.tags.map((tag) => <span key={tag} className="rounded-full border border-white/15 px-2.5 py-1 text-[11px] font-semibold text-[#c6d7cc]">{tag}</span>)}</div>}
             {startsIn != null && startsIn > 0 ? <div className="mb-5 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[.08] px-4 py-3">
               <Clock3 className="h-5 w-5 text-[#8cf0b7]" aria-hidden="true" />
-              <span><span className="block text-[10px] font-bold uppercase tracking-[.13em] text-[#a9c4b2]">Старт через</span><span className="mt-0.5 block font-mono text-xl font-extrabold tabular-nums">{formatCountdown(startsIn)}</span></span>
+              <span><span className="block text-[10px] font-bold uppercase tracking-[.13em] text-[#a9c4b2]">{tr("Старт через", "Starts in")}</span><span className="mt-0.5 block font-mono text-xl font-extrabold tabular-nums">{formatCountdown(startsIn)}</span></span>
             </div> : endsIn != null && endsIn > 0 ? <div className="mb-5 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[.08] px-4 py-3">
               <Clock3 className="h-5 w-5 text-[#8cf0b7]" aria-hidden="true" />
-              <span><span className="block text-[10px] font-bold uppercase tracking-[.13em] text-[#a9c4b2]">До фінішу</span><span className="mt-0.5 block font-mono text-xl font-extrabold tabular-nums">{formatCountdown(endsIn)}</span></span>
+              <span><span className="block text-[10px] font-bold uppercase tracking-[.13em] text-[#a9c4b2]">{tr("До фінішу", "Time remaining")}</span><span className="mt-0.5 block font-mono text-xl font-extrabold tabular-nums">{formatCountdown(endsIn)}</span></span>
             </div> : null}
             <p className="max-w-2xl text-base leading-7 text-[#c6d7cc]">
               {data.contest.description ||
-                "Задачі зібрані в один короткий, чесний маршрут."}
+                tr("Задачі зібрані в один короткий, чесний маршрут.", "A focused set of problems in one clear route.")}
             </p>
             {!access && data.access.accountRequired ? (
-              <div className="mt-7 inline-flex max-w-lg items-start gap-3 rounded-2xl border border-white/15 bg-white/[.09] px-4 py-3 text-sm leading-6 text-[#e1f0e6]"><LockKeyhole className="mt-0.5 size-4 shrink-0 text-[#aef0c9]" /><span><span className="block font-bold text-white">Потрібен виданий акаунт</span>Для участі звернись до організатора. Він надасть окремий логін і пароль.</span></div>
+              <div className="mt-7 inline-flex max-w-lg items-start gap-3 rounded-2xl border border-white/15 bg-white/[.09] px-4 py-3 text-sm leading-6 text-[#e1f0e6]"><LockKeyhole className="mt-0.5 size-4 shrink-0 text-[#aef0c9]" /><span><span className="block font-bold text-white">{tr("Потрібен виданий акаунт", "An issued account is required")}</span>{tr("Для участі звернись до організатора. Він надасть окремий логін і пароль.", "Contact the organizer to receive a separate username and password.")}</span></div>
             ) : !access ? (
               <button type="button"
                 disabled={joining}
@@ -861,30 +866,30 @@ export const ContestDetailPage: React.FC = () => {
                 ) : (
                   <UsersRound className="h-4 w-4" />
                 )}
-                Приєднатися
+                {tr("Приєднатися", "Join")}
               </button>
             ) : joined ? (
               <div className="mt-7 flex items-center gap-2 text-sm font-bold text-[#aef0c9]">
                 <Check className="h-4 w-4" />
-                Ти зареєстрований на контест
+                {tr("Ти зареєстрований на контест", "You are registered for this contest")}
               </div>
             ) : canManage ? (
-              <div className="mt-7 flex items-center gap-2 text-sm font-bold text-[#aef0c9]"><Check className="h-4 w-4" />Ти організатор цього контесту</div>
+              <div className="mt-7 flex items-center gap-2 text-sm font-bold text-[#aef0c9]"><Check className="h-4 w-4" />{tr("Ти організатор цього контесту", "You are the organizer of this contest")}</div>
             ) : (
               <button type="button" disabled={joining} onClick={() => void join()} className="mt-7 inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-[#062211] transition hover:bg-primary disabled:opacity-60">
                 {joining ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UsersRound className="h-4 w-4" />}
-                Зареєструватися
+                {tr("Зареєструватися", "Register")}
               </button>
             )}
             {data.contest.startsAt && <button type="button" onClick={() => downloadContestCalendar(data.contest)} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-bold text-[#d6e8dc] transition hover:bg-white/[.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-              <CalendarDays className="h-4 w-4" aria-hidden="true" /> Додати в календар
+              <CalendarDays className="h-4 w-4" aria-hidden="true" /> {tr("Додати в календар", "Add to calendar")}
             </button>}
-            {officialStanding && <p className="mt-4 text-sm font-semibold text-[#a9cbb5]">Твоє місце: <span className="font-extrabold text-white">#{officialStanding.rank}</span> · {officialStanding.totalScore} балів</p>}
+            {officialStanding && <p className="mt-4 text-sm font-semibold text-[#a9cbb5]">{tr("Твоє місце:", "Your rank:")} <span className="font-extrabold text-white">#{officialStanding.rank}</span> · {officialStanding.totalScore} {tr("балів", "points")}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3 self-end sm:grid-cols-3">
             <div className="rounded-2xl border border-white/[.11] bg-[#06150d]/45 p-4 shadow-lg backdrop-blur-md">
               <p className="text-xs font-bold uppercase tracking-[.12em] text-white/70">
-                Фініш
+                {tr("Фініш", "Ends")}
               </p>
               <p className="mt-2 text-sm font-bold">
                 {date(data.contest.endsAt)}
@@ -892,14 +897,14 @@ export const ContestDetailPage: React.FC = () => {
             </div>
             <div className="rounded-2xl border border-white/[.11] bg-[#06150d]/45 p-4 shadow-lg backdrop-blur-md">
               <p className="text-xs font-bold uppercase tracking-[.12em] text-white/70">
-                Задачі
+                {tr("Задачі", "Problems")}
               </p>
               <p className="mt-2 text-2xl font-bold tracking-[-.04em]">
                 {data.problems.length}
               </p>
             </div>
             <div className="rounded-2xl border border-white/[.11] bg-[#06150d]/45 p-4 shadow-lg backdrop-blur-md">
-              <p className="text-xs font-bold uppercase tracking-[.12em] text-white/70">Учасники</p>
+              <p className="text-xs font-bold uppercase tracking-[.12em] text-white/70">{tr("Учасники", "Participants")}</p>
               <p className="mt-2 text-2xl font-bold tracking-[-.04em] tabular-nums">{data.participantsCount}</p>
             </div>
           </div>
@@ -908,10 +913,10 @@ export const ContestDetailPage: React.FC = () => {
       {shouldSetUpAccounts && <section className="mt-5 flex flex-col gap-4 rounded-2xl border border-primary/25 bg-[#eaf8ef] p-4 dark:bg-primary/[.07] sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div className="flex items-start gap-3">
           <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#d8f2e2] text-primary-strong dark:bg-primary/15 dark:text-primary-soft"><KeyRound className="size-5" aria-hidden="true" /></span>
-          <div><p className="font-bold text-[#183422] dark:text-[#e5eee7]">Чернетку контесту створено</p><p className="mt-1 text-sm leading-6 text-[#52675a] dark:text-[#aebdb2]">Додай список учасників, щоб згенерувати для них окремі акаунти. До цього розділу можна повернутися будь-коли.</p></div>
+          <div><p className="font-bold text-[#183422] dark:text-[#e5eee7]">{tr("Чернетку контесту створено", "Contest draft created")}</p><p className="mt-1 text-sm leading-6 text-[#52675a] dark:text-[#aebdb2]">{tr("Додай список учасників, щоб згенерувати для них окремі акаунти. До цього розділу можна повернутися будь-коли.", "Add a participant list to generate separate accounts for them. You can return to this section at any time.")}</p></div>
         </div>
         <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/manage?tab=accounts`)} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-[#062211] transition hover:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-strong">
-          <UsersRound className="size-4" aria-hidden="true" /> Додати учасників
+          <UsersRound className="size-4" aria-hidden="true" /> {tr("Додати учасників", "Add participants")}
         </button>
       </section>}
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.32fr_.68fr]">
@@ -919,10 +924,10 @@ export const ContestDetailPage: React.FC = () => {
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.14em] text-[#ff8c00]">
-                Задачі
+                {tr("Задачі", "Problems")}
               </p>
               <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">
-                Твій маршрут
+                {tr("Твій маршрут", "Your route")}
               </h2>
             </div>
             <span className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[#f0f5f0] px-3 py-2 text-sm font-bold tabular-nums text-[#526257] dark:bg-white/[.06] dark:text-[#c2d0c6]"><FileCode2 className="h-4 w-4 text-primary-strong dark:text-primary-soft" aria-hidden="true" />{data.problems.length}</span>
@@ -952,31 +957,31 @@ export const ContestDetailPage: React.FC = () => {
                     {problem.title === "(hidden until start)" ? tr("(приховано до початку)", "(hidden until start)") : problem.title}
                   </span>
                   <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-[#637368] dark:text-[#aab8ae]">
-                    {progress ? <><span className="tabular-nums">Найкращий результат: <strong className="font-bold text-[#263b2d] dark:text-[#e4eee7]">{score}{progress.maxScore != null ? ` / ${progress.maxScore}` : ""}</strong></span>{maxScore > 0 && <span aria-hidden="true" className="h-1.5 w-16 overflow-hidden rounded-full bg-[#dfe8e1] dark:bg-white/10"><span className="block h-full rounded-full bg-primary" style={{ width: `${scorePercent}%` }} /></span>}</> : <span>До {problem.points ?? 100} балів</span>}
+                    {progress ? <><span className="tabular-nums">{tr("Найкращий результат:", "Best score:")} <strong className="font-bold text-[#263b2d] dark:text-[#e4eee7]">{score}{progress.maxScore != null ? ` / ${progress.maxScore}` : ""}</strong></span>{maxScore > 0 && <span aria-hidden="true" className="h-1.5 w-16 overflow-hidden rounded-full bg-[#dfe8e1] dark:bg-white/10"><span className="block h-full rounded-full bg-primary" style={{ width: `${scorePercent}%` }} /></span>}</> : <span>{tr("До", "Up to")} {problem.points ?? 100} {tr("балів", "points")}</span>}
                   </span>
                 </span>
-                {canOpenProblems ? <>{hasCompletedContest && data.contest.allowUpsolve ? <span className="shrink-0 rounded-lg border border-[#ffb454]/20 bg-[#fff4df] px-2.5 py-1.5 text-xs font-bold text-[#895000] dark:bg-[#ffb454]/10 dark:text-[#ffca7e]">Дорішати</span> : solved ? <span className="hidden shrink-0 items-center gap-1.5 rounded-lg bg-[#e7f7ed] px-2.5 py-1.5 text-xs font-bold text-primary-strong sm:inline-flex dark:bg-primary/10 dark:text-primary-soft"><Check className="size-3.5" aria-hidden="true" />Готово</span> : <span className="hidden shrink-0 rounded-lg bg-[#edf1ed] px-2.5 py-1.5 text-xs font-bold text-text-muted sm:inline-flex dark:bg-white/[.06] dark:text-[#aab8ae]">Відкрити</span>}<ChevronRight className="size-5 shrink-0 text-[#9aa79e] transition-transform group-hover:translate-x-0.5 group-hover:text-primary-strong dark:group-hover:text-primary-soft" aria-hidden="true" /></> : null}
+                {canOpenProblems ? <>{hasCompletedContest && data.contest.allowUpsolve ? <span className="shrink-0 rounded-lg border border-[#ffb454]/20 bg-[#fff4df] px-2.5 py-1.5 text-xs font-bold text-[#895000] dark:bg-[#ffb454]/10 dark:text-[#ffca7e]">{tr("Дорішати", "Upsolve")}</span> : solved ? <span className="hidden shrink-0 items-center gap-1.5 rounded-lg bg-[#e7f7ed] px-2.5 py-1.5 text-xs font-bold text-primary-strong sm:inline-flex dark:bg-primary/10 dark:text-primary-soft"><Check className="size-3.5" aria-hidden="true" />{tr("Готово", "Done")}</span> : <span className="hidden shrink-0 rounded-lg bg-[#edf1ed] px-2.5 py-1.5 text-xs font-bold text-text-muted sm:inline-flex dark:bg-white/[.06] dark:text-[#aab8ae]">{tr("Відкрити", "Open")}</span>}<ChevronRight className="size-5 shrink-0 text-[#9aa79e] transition-transform group-hover:translate-x-0.5 group-hover:text-primary-strong dark:group-hover:text-primary-soft" aria-hidden="true" /></> : null}
               </button>;
             })}
-            {data.problems.length === 0 && <p className="rounded-xl border border-dashed border-[#17271c]/15 px-4 py-6 text-center text-sm text-[#708075] dark:border-white/10 dark:text-[#a5b3a8]">Задачі ще не додано.</p>}
+            {data.problems.length === 0 && <p className="rounded-xl border border-dashed border-[#17271c]/15 px-4 py-6 text-center text-sm text-[#708075] dark:border-white/10 dark:text-[#a5b3a8]">{tr("Задачі ще не додано.", "No problems have been added yet.")}</p>}
           </div>
         </section>
         <section className="rounded-[28px] border border-border/10 bg-[#fafbf9] p-5 dark:border-white/[.09] dark:bg-[#101913] sm:p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.14em] text-[#ff8c00]">
-                Таблиця
+                {tr("Таблиця", "Scoreboard")}
               </p>
               <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">
-                Топ зараз
+                {tr("Топ зараз", "Top participants")}
               </h2>
             </div>
             <Crown className="h-5 w-5 text-[#ff9b2e]" />
           </div>
           {standings?.hidden ? (
-            <p className="mt-5 rounded-xl bg-[#f1f5f1] px-3 py-3 text-sm leading-6 text-[#708075] dark:bg-white/[.05] dark:text-[#a5b3a8]">{standings.hiddenReason === "ORGANIZERS_ONLY" ? "Таблиця доступна організаторам." : standings.releaseAt ? `Таблиця відкриється після фінішу: ${date(standings.releaseAt)}.` : "Таблиця відкриється після завершення контесту."}</p>
+            <p className="mt-5 rounded-xl bg-[#f1f5f1] px-3 py-3 text-sm leading-6 text-[#708075] dark:bg-white/[.05] dark:text-[#a5b3a8]">{standings.hiddenReason === "ORGANIZERS_ONLY" ? tr("Таблиця доступна організаторам.", "The scoreboard is available to organizers.") : standings.releaseAt ? tr(`Таблиця відкриється після фінішу: ${date(standings.releaseAt)}.`, `The scoreboard will open after the contest ends: ${date(standings.releaseAt)}.`) : tr("Таблиця відкриється після завершення контесту.", "The scoreboard will open after the contest ends.")}</p>
           ) : data.access.accountRequired ? (
-            <p className="mt-5 rounded-xl bg-[#f1f5f1] px-3 py-3 text-sm leading-6 text-[#708075] dark:bg-white/[.05] dark:text-[#a5b3a8]">Для перегляду таблиці ввійди в акаунт, виданий організатором для цього контесту.</p>
+            <p className="mt-5 rounded-xl bg-[#f1f5f1] px-3 py-3 text-sm leading-6 text-[#708075] dark:bg-white/[.05] dark:text-[#a5b3a8]">{tr("Для перегляду таблиці ввійди в акаунт, виданий організатором для цього контесту.", "Sign in with the account issued by the organizer to view the scoreboard.")}</p>
           ) : standings?.rows.length ? (
             <div className="mt-5 space-y-2">
               {standings.rows.slice(0, 5).map((row) => (
@@ -1000,11 +1005,11 @@ export const ContestDetailPage: React.FC = () => {
             </div>
           ) : (
             <p className="mt-5 text-sm leading-6 text-[#708075] dark:text-[#a5b3a8]">
-              Рейтинг з'явиться після перших посилань.
+              {tr("Рейтинг з'явиться після перших відправлень.", "The standings will appear after the first submissions.")}
             </p>
           )}
           {(access || canManage) && <button type="button" onClick={() => navigate(`/contest/contests/${contestId}/scoreboard`)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#edf4ee] px-4 py-2.5 text-sm font-bold text-[#183422] transition hover:bg-[#e2eee4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:bg-white/[.07] dark:text-[#e7f0e9] dark:hover:bg-white/[.1]">
-            Повна таблиця <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            {tr("Повна таблиця", "Full scoreboard")} <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </button>}
         </section>
       </div>
@@ -1032,6 +1037,7 @@ const previewStatement: ContestProblemStatement = {
 };
 
 export const ContestProblemPage: React.FC = () => {
+  useTranslation();
   const { id, problemId } = useParams<{ id: string; problemId: string }>();
   const routerNavigate = useNavigate();
   const navigate = React.useCallback((path: string, options?: { replace?: boolean }) => routerNavigate(withDevPreview(path), options), [routerNavigate]);
@@ -1107,7 +1113,7 @@ export const ContestProblemPage: React.FC = () => {
         ]);
       } else
         setError(
-          getErrorMessageFromUnknown(caught, "Не вдалося відкрити задачу."),
+          getErrorMessageFromUnknown(caught, tr("Не вдалося відкрити задачу.", "Could not open the problem.")),
         );
     } finally {
       setLoading(false);
@@ -1152,13 +1158,13 @@ export const ContestProblemPage: React.FC = () => {
         text:
           response.stdout ||
           response.stderr ||
-          `${response.verdict || "Готово"} · ${response.timeMs ?? 0} ms`,
+          `${response.verdict || tr("Готово", "Done")} · ${response.timeMs ?? 0} ms`,
       });
     } catch (caught) {
       setResult({
         kind: "run",
         good: false,
-        text: getErrorMessageFromUnknown(caught, "Запуск не вдався."),
+        text: getErrorMessageFromUnknown(caught, tr("Запуск не вдався.", "Run failed.")),
       });
     } finally {
       setRunning(false);
@@ -1203,7 +1209,7 @@ export const ContestProblemPage: React.FC = () => {
       setResult({
         kind: "check",
         good: response.verdict === "AC",
-        text: `${response.verdict || "Готово"} · ${response.testsPassed}/${response.testsTotal} тестів · ${response.score}/${response.maxScore}`,
+        text: `${response.verdict || tr("Готово", "Done")} · ${response.testsPassed}/${response.testsTotal} ${tr("тестів", "tests")} · ${response.score}/${response.maxScore}`,
       });
       if (isPreview()) setSubmissions((current) => [{ id: Date.now(), verdict: "AC", score: 100, createdAt: new Date().toISOString() }, ...current]);
       else {
@@ -1214,7 +1220,7 @@ export const ContestProblemPage: React.FC = () => {
       setResult({
         kind: "check",
         good: false,
-        text: getErrorMessageFromUnknown(caught, "Перевірка не вдалася."),
+        text: getErrorMessageFromUnknown(caught, tr("Перевірка не вдалася.", "Submission failed.")),
       });
     } finally {
       setChecking(false);
@@ -1222,14 +1228,14 @@ export const ContestProblemPage: React.FC = () => {
   };
   if (loading)
     return (
-      <Shell eyebrow="Задача" title="Готуємо умову">
+      <Shell eyebrow={tr("Задача", "Problem")} title={tr("Готуємо умову", "Loading problem")}>
         <div className="h-[560px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" />
       </Shell>
     );
   if (!statement)
     return (
-      <Shell eyebrow="Задача" title="Не вдалося відкрити">
-        <Notice tone="error">{error || "Задача недоступна."}</Notice>
+      <Shell eyebrow={tr("Задача", "Problem")} title={tr("Не вдалося відкрити", "Could not open problem")}>
+        <Notice tone="error">{error || tr("Задача недоступна.", "Problem unavailable.")}</Notice>
       </Shell>
     );
   const contestEntryFile = language === "java" ? "Main.java" : language === "python" ? "main.py" : "main.cpp";
@@ -1275,7 +1281,7 @@ export const ContestProblemPage: React.FC = () => {
           className="inline-flex items-center gap-2 text-sm font-bold text-[#64756a] hover:text-[#1b3324] dark:text-[#abb9af] dark:hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
-          До задач
+           {tr("До задач", "Back to tasks")}
         </button>
         <span className="rounded-full bg-[#fff0d7] px-3 py-1.5 text-xs font-bold text-[#a75c00] dark:bg-[#ff8c00]/12 dark:text-[#ffb760]">
           {statement.task.timeLimitMs ?? 1000} ms ·{" "}
@@ -1303,7 +1309,7 @@ export const ContestProblemPage: React.FC = () => {
           <div className="mt-9 border-t border-border/10 pt-5 dark:border-white/[.08]">
             <div className="mb-3 flex items-center gap-2">
               <Clock3 className="h-4 w-4 text-[#708075]" />
-              <h2 className="font-bold">Останні посилання</h2>
+               <h2 className="font-bold">{tr("Останні посилання", "Recent submissions")}</h2>
             </div>
             {submissions.length ? (
               <div className="space-y-2">
@@ -1332,7 +1338,7 @@ export const ContestProblemPage: React.FC = () => {
               </div>
             ) : (
               <p className="text-sm leading-6 text-[#718075] dark:text-text-secondary">
-                Тут з'явиться історія після першого запуску на перевірку.
+                 {tr("Тут з'явиться історія після першого запуску на перевірку.", "Your submission history will appear here after your first run.")}
               </p>
             )}
           </div>
@@ -1341,7 +1347,7 @@ export const ContestProblemPage: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#1d2a20] px-4 py-3">
             <div className="flex items-center gap-2 text-sm font-bold text-[#edf5ef]">
               <Code2 className="h-4 w-4 text-primary-soft" />
-              Рішення
+               {tr("Рішення", "Solution")}
             </div>
             <select
               value={language}
@@ -1362,16 +1368,16 @@ export const ContestProblemPage: React.FC = () => {
             value={code}
             onChange={(event) => setCode(event.target.value)}
             className="h-[min(51dvh,620px)] w-full resize-none bg-[#17211a] p-5 font-mono text-[14px] leading-6 text-[#e6efe8] outline-none placeholder:text-[#819084]"
-            placeholder="Напиши рішення тут…"
+            placeholder={tr("Напиши рішення тут…", "Write your solution here…")}
           />
           <div className="border-t border-white/10 bg-[#1a261d] p-4">
             <label className="block text-xs font-bold uppercase tracking-[.13em] text-[#a9b9ad]">
-              Власний ввід
+               {tr("Власний ввід", "Custom input")}
               <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 className="mt-2 h-20 w-full resize-none rounded-xl border border-white/10 bg-[#111a13] p-3 font-mono text-sm text-[#e8f0e9] outline-none focus:border-primary/40"
-                placeholder="Необов'язково: дані для Run"
+                placeholder={tr("Необов'язково: дані для Run", "Optional input for Run")}
               />
             </label>
             <div className="mt-3 flex flex-wrap justify-between gap-2">

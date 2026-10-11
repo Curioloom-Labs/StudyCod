@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "../../components/ui/Button";
@@ -6,6 +7,8 @@ import { CheckCircle2, XCircle, ArrowLeft, LifeBuoy } from "lucide-react";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
 
 export const EmailPreferencesResultPage: React.FC = () => {
+  const { i18n } = useTranslation();
+  const en = i18n.language?.toLowerCase().startsWith("en") ?? false;
   const prefersReducedMotion = useReducedMotion();
   const [searchParams] = useSearchParams();
 
@@ -16,15 +19,15 @@ export const EmailPreferencesResultPage: React.FC = () => {
   const eyebrow = ok ? "// email preferences" : "// error";
   const title = ok
     ? action === "unsubscribe"
-      ? "Ви успішно відписалися"
-      : "Підписку успішно увімкнено"
-    : "Не вдалося оновити налаштування";
+      ? en ? "You have unsubscribed" : "Ви успішно відписалися"
+      : en ? "Subscription enabled" : "Підписку успішно увімкнено"
+    : en ? "Could not update preferences" : "Не вдалося оновити налаштування";
 
   const subtitle = ok
     ? action === "unsubscribe"
-      ? "Маркетингові листи StudyCod для цієї адреси вимкнено."
-      : "Маркетингові листи StudyCod для цієї адреси увімкнено."
-    : "Посилання недійсне або застаріле. Спробуйте оновити налаштування в профілі.";
+      ? en ? "StudyCod marketing emails have been turned off for this address." : "Маркетингові листи StudyCod для цієї адреси вимкнено."
+      : en ? "StudyCod marketing emails have been turned on for this address." : "Маркетингові листи StudyCod для цієї адреси увімкнено."
+    : en ? "This link is invalid or expired. Update your preferences from your profile." : "Посилання недійсне або застаріле. Спробуйте оновити налаштування в профілі.";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-bg-base px-4 py-8">
@@ -73,13 +76,13 @@ export const EmailPreferencesResultPage: React.FC = () => {
               <Link to="/">
                 <Button variant="primary">
                   <ArrowLeft className="w-4 h-4 mr-2" />
-                  На головну
+                  {en ? "Home" : "На головну"}
                 </Button>
               </Link>
               <Link to="/support">
                 <Button variant="secondary">
                   <LifeBuoy className="w-4 h-4 mr-2" />
-                  Підтримка
+                  {en ? "Support" : "Підтримка"}
                 </Button>
               </Link>
             </motion.div>

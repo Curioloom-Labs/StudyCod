@@ -3,6 +3,8 @@ import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "../../components/ui/Button";
 import { Wrench } from "lucide-react";
 import { fadeUpItem, easeOutQuint } from "../../lib/motion";
+import { useTranslation } from "react-i18next";
+import { tr } from "../../i18n";
 
 export type MaintenancePayload = {
   title: string;
@@ -55,6 +57,7 @@ function setBestMs(ms: number) {
 }
 
 const ReflexGame: React.FC = () => {
+  useTranslation();
   const [state, setState] = useState<ReflexState>({ phase: "idle" });
   const timerRef = useRef<number | null>(null);
   useEffect(() => { return () => { if (timerRef.current) window.clearTimeout(timerRef.current); }; }, []);
@@ -82,10 +85,10 @@ const ReflexGame: React.FC = () => {
     if (state.phase === "result") { start(); }
   };
   const ui = (() => {
-    if (state.phase === "idle") return { label: "Start", hint: "Натисніть Start, потім клікніть коли блок стане зеленим" };
-    if (state.phase === "waiting") return { label: "Wait…", hint: "Не клікайте завчасно — гра перезапуститься" };
-    if (state.phase === "ready") return { label: "CLICK!", hint: "Зараз!" };
-    return { label: `Your time: ${state.reactionMs} ms`, hint: state.bestMs != null ? `Best: ${state.bestMs} ms` : "" };
+    if (state.phase === "idle") return { label: tr("Старт", "Start"), hint: tr("Натисніть «Старт», потім клікніть, коли блок стане зеленим", "Press Start, then click when the block turns green") };
+    if (state.phase === "waiting") return { label: tr("Зачекай…", "Wait…"), hint: tr("Не клікайте завчасно — гра перезапуститься", "Don't click early or the game will restart") };
+    if (state.phase === "ready") return { label: tr("ТИСНИ!", "CLICK!"), hint: tr("Зараз!", "Now!") };
+    return { label: tr(`Твій час: ${state.reactionMs} мс`, `Your time: ${state.reactionMs} ms`), hint: state.bestMs != null ? tr(`Рекорд: ${state.bestMs} мс`, `Best: ${state.bestMs} ms`) : "" };
   })();
   const boxClass = state.phase === "ready"
     ? "border-accent-success bg-accent-success/10 text-accent-success"
@@ -97,10 +100,10 @@ const ReflexGame: React.FC = () => {
       <div className="flex items-center justify-between gap-3 mb-3">
         <div>
           <div className="text-sm font-mono text-text-primary">Mini-game: Reflex</div>
-          <div className="text-xs text-text-secondary mt-0.5">Коротка гра на реакцію, щоб час пролетів швидше.</div>
+          <div className="text-xs text-text-secondary mt-0.5">{tr("Коротка гра на реакцію, щоб час пролетів швидше.", "A quick reaction game to help pass the time.")}</div>
         </div>
         <Button variant="secondary" size="sm" onClick={() => start()}>
-          {state.phase === "idle" ? "Start" : "Restart"}
+          {state.phase === "idle" ? "Start" : tr("Restart", "Restart")}
         </Button>
       </div>
       <button
@@ -120,6 +123,7 @@ export const MaintenancePage: React.FC<{
   onRetry?: () => void;
   onAdminLogin?: () => void;
 }> = ({ state, onRetry, onAdminLogin }) => {
+  useTranslation();
   const prefersReducedMotion = useReducedMotion();
   const countdown = useCountdown(state.until);
 
@@ -155,7 +159,7 @@ export const MaintenancePage: React.FC<{
                   onClick={onAdminLogin}
                   className="inline-flex h-6 items-center justify-center rounded border border-border/80 bg-bg-hover/50 px-2 text-[10px] font-mono text-text-secondary transition-fast hover:border-primary/50 hover:text-text-primary"
                 >
-                  Admin
+                  {tr("Admin", "Admin")}
                 </button>
               )}
             </div>
@@ -189,22 +193,22 @@ export const MaintenancePage: React.FC<{
                 animate={prefersReducedMotion ? undefined : "animate"}
                 className="mb-6 rounded-xl border border-border bg-bg-code/60 p-4"
               >
-                <div className="text-xs font-mono uppercase tracking-[0.08em] text-text-muted mb-3">До завершення</div>
+                <div className="text-xs font-mono uppercase tracking-[0.08em] text-text-muted mb-3">{tr("До завершення", "Time remaining")}</div>
                 <div className="flex flex-wrap items-center gap-3">
                   {[
-                    { value: countdown.parts.d, label: "days" },
-                    { value: String(countdown.parts.h).padStart(2, "0"), label: "hours" },
-                    { value: String(countdown.parts.m).padStart(2, "0"), label: "min" },
-                    { value: String(countdown.parts.s).padStart(2, "0"), label: "sec" },
+                    { value: countdown.parts.d, label: tr("днів", "days") },
+                    { value: String(countdown.parts.h).padStart(2, "0"), label: tr("год", "hours") },
+                    { value: String(countdown.parts.m).padStart(2, "0"), label: tr("хв", "min") },
+                    { value: String(countdown.parts.s).padStart(2, "0"), label: tr("сек", "sec") },
                   ].map(({ value, label }) => (
-                    <div key={label} className="px-3 py-2 rounded-lg border border-border bg-bg-surface min-w-[56px] text-center">
+                  <div key={label} className="px-3 py-2 rounded-lg border border-border bg-bg-surface min-w-[56px] text-center">
                       <div className="text-lg font-mono font-bold text-text-primary">{value}</div>
-                      <div className="text-[10px] font-mono text-text-secondary">{label}</div>
+                    <div className="text-[10px] font-mono text-text-secondary">{label}</div>
                     </div>
                   ))}
                 </div>
                 <div className="mt-3 text-xs font-mono text-text-muted">
-                  Орієнтовно до: <span className="text-text-primary">{countdown.until.toLocaleString()}</span>
+                  {tr("Орієнтовно до:", "Estimated until:")} <span className="text-text-primary">{countdown.until.toLocaleString(tr("uk-UA", "en-US"))}</span>
                 </div>
               </motion.div>
             )}
@@ -212,7 +216,7 @@ export const MaintenancePage: React.FC<{
             {/* Actions */}
             <div className="flex flex-wrap gap-2">
               <Button onClick={onRetry || (() => window.location.reload())}>
-                Спробувати знову
+                {tr("Спробувати знову", "Try again")}
               </Button>
             </div>
 

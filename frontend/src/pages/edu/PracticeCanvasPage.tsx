@@ -14,6 +14,8 @@ import {
 } from "../../components/ide/StudyCodIDEWorkspace";
 import { defaultCompilerForFamily, JUDGE_ENTRY_FILES } from "../../lib/judgeLanguages";
 import type { JudgeLanguage } from "../../lib/judgeLanguages";
+import { useTranslation } from "react-i18next";
+import { tr } from "../../i18n";
 
 const preview = () =>
   import.meta.env.DEV &&
@@ -47,6 +49,7 @@ const workspace = "mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-10";
 const entryFileForLanguage = (language: string) => JUDGE_ENTRY_FILES[String(language).toLowerCase() as JudgeLanguage] || "main.py";
 
 export const PracticeCanvasPage: React.FC = () => {
+  useTranslation();
   const { taskId } = useParams<{ taskId: string }>();
   const id = Number(taskId);
   const navigate = useNavigate();
@@ -55,7 +58,7 @@ export const PracticeCanvasPage: React.FC = () => {
   const [code, setCode] = React.useState("");
   const [input, setInput] = React.useState("");
   const [consoleText, setConsoleText] = React.useState(
-    "Запустіть код, щоб побачити результат тут.",
+    tr("Запустіть код, щоб побачити результат тут.", "Run your code to see the output here."),
   );
   const [consoleTone, setConsoleTone] = React.useState<"idle" | "ok" | "bad">(
     "idle",
@@ -80,7 +83,7 @@ export const PracticeCanvasPage: React.FC = () => {
         setCode(demoTask.savedCode || demoTask.template);
       } else
         setError(
-          getErrorMessageFromUnknown(caught, "Не вдалося відкрити задачу."),
+          getErrorMessageFromUnknown(caught, tr("Не вдалося відкрити задачу.", "Could not open the problem.")),
         );
     } finally {
       setLoading(false);
@@ -95,7 +98,7 @@ export const PracticeCanvasPage: React.FC = () => {
     try {
       if (preview()) {
         setConsoleTone("ok");
-        setConsoleText("4\n\nКод виконано без помилок.");
+        setConsoleText(`4\n\n${tr("Код виконано без помилок.", "Code ran without errors.")}`);
         return;
       }
       const result = await runCode(task.id, code, input);
@@ -103,12 +106,12 @@ export const PracticeCanvasPage: React.FC = () => {
       setConsoleText(
         result.stderr
           ? `${result.output || ""}\n${result.stderr}`
-          : result.output || "Виконано без виводу.",
+          : result.output || tr("Виконано без виводу.", "No output."),
       );
     } catch (caught) {
       setConsoleTone("bad");
       setConsoleText(
-        getErrorMessageFromUnknown(caught, "Не вдалося виконати код."),
+        getErrorMessageFromUnknown(caught, tr("Не вдалося виконати код.", "Could not run the code.")),
       );
     } finally {
       setBusy(null);
@@ -120,10 +123,10 @@ export const PracticeCanvasPage: React.FC = () => {
     try {
       if (preview()) {
         setConsoleTone("ok");
-        setConsoleText("5 / 5 тестів пройдено\nРоботу надіслано на перевірку.");
+        setConsoleText(tr("5 / 5 тестів пройдено\nРоботу надіслано на перевірку.", "5 / 5 tests passed\nYour solution was submitted for review."));
         setHints([
-          "Перевір, де саме формується словник частот, і чи всі слова проходять через lower().",
-          "Спробуй використати один прохід по списку та оновлювати значення ключа під час зустрічі слова.",
+          tr("Перевір, де саме формується словник частот, і чи всі слова проходять через lower().", "Check where the frequency map is built and whether every word passes through lower()."),
+          tr("Спробуй використати один прохід по списку та оновлювати значення ключа під час зустрічі слова.", "Try a single pass through the list, updating each key when you encounter a word."),
         ]);
         setTask({
           ...task,
@@ -144,13 +147,13 @@ export const PracticeCanvasPage: React.FC = () => {
       setHints(Array.isArray(response.hints) ? response.hints : []);
       setConsoleTone(passed === total ? "ok" : "bad");
       setConsoleText(
-        `${passed} / ${total} тестів пройдено\n${response.hints?.join("\n") || "Результат збережено."}`,
+        `${passed} / ${total} ${tr("тестів пройдено", "tests passed")}\n${response.hints?.join("\n") || tr("Результат збережено.", "Result saved.")}`,
       );
       await load();
     } catch (caught) {
       setConsoleTone("bad");
       setConsoleText(
-        getErrorMessageFromUnknown(caught, "Не вдалося надіслати розв'язок."),
+        getErrorMessageFromUnknown(caught, tr("Не вдалося надіслати розв'язок.", "Could not submit the solution.")),
       );
     } finally {
       setBusy(null);
@@ -163,7 +166,7 @@ export const PracticeCanvasPage: React.FC = () => {
       </div>
     );
   if (!task)
-    return <div className={workspace}>{error || "Задачу не знайдено."}</div>;
+    return <div className={workspace}>{error || tr("Задачу не знайдено.", "Problem not found.")}</div>;
   const grade = task.grade;
   /* const status = grade?.isCompleted
     ? "Завершено"
@@ -260,7 +263,7 @@ export const PracticeCanvasPage: React.FC = () => {
           className="inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"
         >
           <ArrowLeft className="h-4 w-4" />
-          До уроку
+          {tr("До уроку", "Back to lesson")}
         </button>
         <div className="flex items-center gap-2">
           <span
@@ -295,7 +298,7 @@ export const PracticeCanvasPage: React.FC = () => {
             onClick={() => setDetailsOpen(!detailsOpen)}
             className="flex w-full items-center justify-between border-y border-border/10 px-6 py-4 text-sm font-bold dark:border-white/[.08] sm:px-8"
           >
-            <span>Що перевіряється</span>
+            <span>{tr("Що перевіряється", "What is checked")}</span>
             <ChevronDown
               className={`h-4 w-4 transition ${detailsOpen ? "rotate-180" : ""}`}
             />
@@ -320,7 +323,7 @@ export const PracticeCanvasPage: React.FC = () => {
           )}
           <div className="p-6 sm:p-8">
             <p className="text-xs font-bold uppercase tracking-[.13em] text-[#718075] dark:text-[#a6b4a9]">
-              Ваш результат
+              {tr("Ваш результат", "Your result")}
             </p>
             <div className="mt-3 flex items-end gap-3">
               <span className="font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.06em]">
@@ -340,7 +343,7 @@ export const PracticeCanvasPage: React.FC = () => {
               <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
                 <Code2 className="h-4 w-4" />
               </span>
-              <span className="text-sm font-bold">Розв'язок</span>
+              <span className="text-sm font-bold">{tr("Розв'язок", "Solution")}</span>
             </div>
             <div className="flex gap-2">
               <button type="button"
@@ -387,12 +390,12 @@ export const PracticeCanvasPage: React.FC = () => {
           <div className="mt-3 grid gap-3 lg:grid-cols-[.8fr_1.2fr]">
             <label className="rounded-2xl bg-white p-4 dark:bg-[#152018]">
               <span className="text-xs font-bold uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">
-                Ввід для запуску
+                {tr("Ввід для запуску", "Input for run")}
               </span>
               <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="За потреби додайте власні дані"
+                placeholder={tr("За потреби додайте власні дані", "Add custom input if needed")}
                 rows={4}
                 className="mt-3 w-full resize-none bg-transparent font-mono text-xs leading-6 outline-none placeholder:text-[#95a39a] dark:placeholder:text-[#718076]"
               />
@@ -405,7 +408,7 @@ export const PracticeCanvasPage: React.FC = () => {
                   className={`h-2 w-2 rounded-full ${consoleTone === "ok" ? "bg-[#18a45e]" : consoleTone === "bad" ? "bg-[#ff6b9d]" : "bg-[#d1ddd3]"}`}
                 />
                 <span className="text-xs font-bold uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">
-                  Результат
+                  {tr("Результат", "Result")}
                 </span>
               </div>
               <pre className="mt-3 max-h-28 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6 text-[#3c4d42] dark:text-[#d3dfd6]">

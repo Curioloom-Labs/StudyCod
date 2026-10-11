@@ -47,7 +47,7 @@ export const PersonalLearningProvider: React.FC<{ children: React.ReactNode }> =
         setCurrentCourseData(null);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не вдалося завантажити навчальний простір.");
+      setError(err instanceof Error ? err.message : (locale === "en" ? "Could not load the learning workspace." : "Не вдалося завантажити навчальний простір."));
     } finally {
       setLoading(false);
     }

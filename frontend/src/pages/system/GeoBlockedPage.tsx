@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { motion, useReducedMotion } from "framer-motion";
 import { ShieldBan, Globe2 } from "lucide-react";
 import { easeOutQuint, fadeUpItem, staggerContainer } from "../../lib/motion";
@@ -18,6 +19,8 @@ function countryLabel(code: string | null): { uk: string; en: string } | null {
 }
 
 export const GeoBlockedPage: React.FC<{ state: GeoBlockedPayload }> = ({ state }) => {
+  const { i18n } = useTranslation();
+  const en = i18n.language?.toLowerCase().startsWith("en") ?? false;
   const prefersReducedMotion = useReducedMotion();
   const label = countryLabel(state.country);
 
@@ -86,46 +89,29 @@ export const GeoBlockedPage: React.FC<{ state: GeoBlockedPayload }> = ({ state }
               <div>
                 <span className="font-mono text-xs text-accent-error/70">// access denied</span>
                 <h1 className="mt-1 text-2xl md:text-3xl font-semibold tracking-tight text-text-primary">
-                  Доступ обмежено
+                  {en ? "Access restricted" : "Доступ обмежено"}
                 </h1>
                 <p className="mt-2 text-sm text-text-secondary leading-relaxed">
-                  Вхід на StudyCod{label ? <> з&nbsp;<span className="text-text-primary font-medium">{label.uk}</span></> : " з вашого регіону"} заблоковано.
+                  {en
+                    ? <>Access to StudyCod from{label ? <> <span className="text-text-primary font-medium">{label.en}</span></> : " your region"} is blocked.</>
+                    : <>Вхід на StudyCod{label ? <> з&nbsp;<span className="text-text-primary font-medium">{label.uk}</span></> : " з вашого регіону"} заблоковано.</>}
                 </p>
               </div>
             </motion.div>
 
             <div className="h-px bg-gradient-to-r from-accent-error/40 via-border to-transparent mb-6" />
 
-            {/* Reason — UA */}
             <motion.div
               variants={prefersReducedMotion ? undefined : fadeUpItem}
               className="rounded-xl border border-border bg-bg-code/60 p-4 mb-4"
             >
               <div className="text-xs font-mono uppercase tracking-[0.08em] text-text-muted mb-2">
-                Чому я це бачу?
+                {en ? "Why am I seeing this?" : "Чому я це бачу?"}
               </div>
               <p className="text-sm text-text-secondary leading-relaxed">
-                StudyCod — українська освітня платформа. Через збройну агресію
-                росії проти України ми не надаємо доступ користувачам із росії та
-                білорусі. Якщо ви вважаєте, що це помилка (наприклад, ви в Україні,
-                але користуєтесь VPN), вимкніть VPN/проксі та оновіть сторінку.
-              </p>
-            </motion.div>
-
-            {/* Reason — EN */}
-            <motion.div
-              variants={prefersReducedMotion ? undefined : fadeUpItem}
-              className="rounded-xl border border-border bg-bg-surface p-4 mb-6"
-            >
-              <div className="text-xs font-mono uppercase tracking-[0.08em] text-text-muted mb-2">
-                Why am I seeing this?
-              </div>
-              <p className="text-sm text-text-secondary leading-relaxed">
-                StudyCod is a Ukrainian educational platform. Due to russia&apos;s
-                armed aggression against Ukraine, access is not available from
-                Russia and Belarus. If you believe this is a mistake (e.g. you are
-                in Ukraine but using a VPN), please turn off your VPN/proxy and
-                reload the page.
+                {en
+                  ? <>StudyCod is a Ukrainian educational platform. Due to Russia&apos;s armed aggression against Ukraine, access is not available from Russia and Belarus. If you believe this is a mistake (for example, you are in Ukraine but using a VPN), turn off your VPN or proxy and reload the page.</>
+                  : <>StudyCod — українська освітня платформа. Через збройну агресію росії проти України ми не надаємо доступ користувачам із росії та білорусі. Якщо ви вважаєте, що це помилка (наприклад, ви в Україні, але користуєтесь VPN), вимкніть VPN/проксі та оновіть сторінку.</>}
               </p>
             </motion.div>
 
@@ -140,7 +126,7 @@ export const GeoBlockedPage: React.FC<{ state: GeoBlockedPayload }> = ({ state }
                   <span className="h-full w-full bg-[#FFD700]" />
                 </span>
                 <span className="text-sm font-mono text-text-secondary">
-                  Слава Україні! 🇺🇦
+                  {en ? "Glory to Ukraine! 🇺🇦" : "Слава Україні! 🇺🇦"}
                 </span>
               </div>
               <button
@@ -148,7 +134,7 @@ export const GeoBlockedPage: React.FC<{ state: GeoBlockedPayload }> = ({ state }
                 onClick={() => window.location.reload()}
                 className="shrink-0 px-3 py-1.5 text-xs font-mono border border-border rounded-md text-text-secondary hover:border-primary/50 hover:text-text-primary transition-fast"
               >
-                Оновити / Reload
+                {en ? "Reload" : "Оновити"}
               </button>
             </motion.div>
           </motion.div>

@@ -1,8 +1,9 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { hasPendingContestJob, resumeContestJob, type ContestJobStatus } from "../../lib/api/contestJobs";
 import type { ContestCheckResult, ContestRunResult } from "../../lib/api/contests";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { MessageSquareText, Radio, Trophy, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, MessageSquareText, Radio, Trophy, X } from "lucide-react";
 import {
   checkContestProblem,
   getContestCommunity,
@@ -13,6 +14,7 @@ import {
   recordContestIntegrityEvent,
   runContestProblem,
   type ContestCommunityAnnouncement,
+  type ContestProblemListItem,
   type ContestProblemStatement,
   type ContestSubmissionListItem,
   type JudgeLanguage,
@@ -112,24 +114,56 @@ function normalizeVerdict(v: string | null | undefined): string | null {
   return raw || null;
 }
 
-const previewContestStatement = (problemId: number): ContestProblemStatement => ({
-  problem: { id: problemId, order: 1, label: "A" },
-  task: {
-    id: 41,
-    title: "Тиха перестановка",
-    description: "Знайди найменше значення та його номер у послідовності.\n\nВхідні дані\n```text\n5\n12 7 7 18 9\n```\nВихідні дані\n```text\n2 7\n```",
-    template: "values = list(map(int, input().split()))\nindex = min(range(len(values)), key=values.__getitem__)\nprint(index + 1, values[index])\n",
-    templatesByLanguage: { python: "values = list(map(int, input().split()))\nindex = min(range(len(values)), key=values.__getitem__)\nprint(index + 1, values[index])\n" },
-    defaultLanguage: "python",
-    allowedLanguages: ["python"],
-    timeLimitMs: 1000,
-    memoryLimitMb: 256,
-    outputLimitKb: 64,
-    checkerSpec: null,
-  },
-});
+const previewContestProblems = (en: boolean): ContestProblemListItem[] => [
+  { id: 501, order: 1, label: "A", points: 100, title: en ? "Quiet permutation" : "Тиха перестановка", libraryTaskId: 41 },
+  { id: 502, order: 2, label: "B", points: 150, title: en ? "Message queue" : "Черга повідомлень", libraryTaskId: 42 },
+  { id: 503, order: 3, label: "C", points: 200, title: en ? "Reachable route" : "Доступний маршрут", libraryTaskId: 43 },
+];
+
+const previewContestStatement = (problemId: number, en: boolean): ContestProblemStatement => {
+  const problem = previewContestProblems(en).find((item) => item.id === problemId) ?? previewContestProblems(en)[0]!;
+  const taskDemo = problem.label === "B"
+    ? {
+        description: en
+          ? "Count the positive numbers in the sequence.\n\nInput\n```text\n5\n-1 4 0 8 -3\n```\nOutput\n```text\n2\n```"
+          : "Порахуй додатні числа у послідовності.\n\nВхідні дані\n```text\n5\n-1 4 0 8 -3\n```\nВихідні дані\n```text\n2\n```",
+        template: "values = list(map(int, input().split()))\nprint(sum(value > 0 for value in values))\n",
+      }
+    : problem.label === "C"
+      ? {
+          description: en
+            ? "Find the sum of the numbers in the sequence.\n\nInput\n```text\n4\n3 7 2 1\n```\nOutput\n```text\n13\n```"
+            : "Знайди суму чисел у послідовності.\n\nВхідні дані\n```text\n4\n3 7 2 1\n```\nВихідні дані\n```text\n13\n```",
+          template: "values = list(map(int, input().split()))\nprint(sum(values))\n",
+        }
+      : {
+          description: en
+            ? "Find the smallest value and its position in the sequence.\n\nInput\n```text\n5\n12 7 7 18 9\n```\nOutput\n```text\n2 7\n```"
+            : "Знайди найменше значення та його номер у послідовності.\n\nВхідні дані\n```text\n5\n12 7 7 18 9\n```\nВихідні дані\n```text\n2 7\n```",
+          template: "values = list(map(int, input().split()))\nindex = min(range(len(values)), key=values.__getitem__)\nprint(index + 1, values[index])\n",
+        };
+  return {
+    problem: { id: problemId, order: problem.order, label: problem.label },
+    task: {
+      id: problem.libraryTaskId ?? 41,
+      title: problem.title,
+      description: taskDemo.description,
+      template: taskDemo.template,
+      templatesByLanguage: { python: taskDemo.template },
+      defaultLanguage: "python",
+      allowedLanguages: ["python"],
+      timeLimitMs: 1000,
+      memoryLimitMb: 256,
+      outputLimitKb: 64,
+      checkerSpec: null,
+    },
+  };
+};
 
 export const ContestProblemSolvePage: React.FC = () => {
+  const { i18n } = useTranslation();
+  const en = i18n.language?.toLowerCase().startsWith("en") ?? false;
+  const copy = (uk: string, english: string) => en ? english : uk;
   const navigate = useNavigate();
   const params = useParams<{ id?: string; problemId?: string }>();
 
@@ -166,6 +200,7 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [statement, setStatement] = React.useState<ContestProblemStatement | null>(null);
   const [contestMeta, setContestMeta] = React.useState<ContestMeta>({ title: "Contest", endsAt: null });
+  const [contestProblems, setContestProblems] = React.useState<ContestProblemListItem[]>([]);
 
   const [judgeLanguage, setJudgeLanguage] = React.useState<JudgeLanguage>("java");
   const [judgeCompiler, setJudgeCompiler] = React.useState<string>(defaultCompilerForFamily("java"));
@@ -272,16 +307,19 @@ export const ContestProblemSolvePage: React.FC = () => {
 
     setLoading(true);
     setError(null);
+    setContestProblems([]);
     try {
       if (isDevPreviewActive()) {
-        const stmt = previewContestStatement(problemId);
+        const stmt = previewContestStatement(problemId, en);
+        setContestProblems(previewContestProblems(en));
         setStatement(stmt);
-        setContestMeta({ title: "Алгоритмічна субота", endsAt: new Date(Date.now() + 60 * 60_000).toISOString() });
+        setContestMeta({ title: en ? "Algorithm Saturday" : "Алгоритмічна субота", endsAt: new Date(Date.now() + 60 * 60_000).toISOString() });
         hydrateDraft(stmt);
         return;
       }
       const [stmt, contest] = await Promise.all([getContestProblemStatement(contestId, problemId), getContestDetails(contestId)]);
       setStatement(stmt);
+      setContestProblems(contest.problems);
       setContestMeta({
         title: contest.contest.title,
         endsAt: contest.contest.endsAt,
@@ -294,7 +332,7 @@ export const ContestProblemSolvePage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [contestId, problemId, hydrateDraft]);
+  }, [contestId, problemId, hydrateDraft, en]);
 
   React.useEffect(() => {
     load();
@@ -495,7 +533,7 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   // Poll organizer announcements so participants see them without leaving the workspace.
   React.useEffect(() => {
-    if (isPreview) { setAnnouncements([{ id: 1, author: "StudyCod", text: "Зосередься на коректному виборі найменшого елемента." , createdAt: new Date().toISOString() }]); return; }
+    if (isPreview) { setAnnouncements([{ id: 1, author: "StudyCod", text: copy("Зосередься на коректному виборі найменшого елемента.", "Focus on choosing the smallest element correctly."), createdAt: new Date().toISOString() }]); return; }
     if (!contestId || !hasToken) return;
     let cancelled = false;
     const tick = async () => {
@@ -512,7 +550,7 @@ export const ContestProblemSolvePage: React.FC = () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [isPreview, contestId, hasToken]);
+  }, [isPreview, contestId, hasToken, en]);
 
   // Integrity signals: report tab/focus loss and large pastes to the organizer.
   React.useEffect(() => {
@@ -649,7 +687,7 @@ export const ContestProblemSolvePage: React.FC = () => {
       const res: ContestCheckResult = isPreview ? {
         submissionId: Date.now(), phase: "CONTEST", verdict: "AC", testsPassed: 3, testsTotal: 3,
         score: 100, maxScore: 100, compileError: null, compileErrorKind: null,
-        groupScores: [{ group: "Основні тести", score: 100, maxScore: 100 }],
+        groupScores: [{ group: copy("Основні тести", "Main tests"), score: 100, maxScore: 100 }],
       } : await checkContestProblem({
         contestId,
         problemId,
@@ -685,7 +723,7 @@ export const ContestProblemSolvePage: React.FC = () => {
   const askOrganizer = async (question: string) => {
     if (!contestId || !problemId || !hasToken || !statement || askingOrganizer || !question.trim()) return;
     const message = [
-      `Питання щодо задачі ${statement.problem.label}: ${statement.task.title}`,
+      `${copy("Питання щодо задачі", "Question about problem")} ${statement.problem.label}: ${statement.task.title}`,
       "",
       question.trim(),
     ].join("\n");
@@ -693,7 +731,7 @@ export const ContestProblemSolvePage: React.FC = () => {
     setAskingOrganizer(true);
     try {
       if (isPreview) {
-        setAnnouncements((current) => [{ id: Date.now(), author: "Оксана · демо", text: question.trim(), createdAt: new Date().toISOString() }, ...current]);
+        setAnnouncements((current) => [{ id: Date.now(), author: en ? "Olena · demo" : "Оксана · демо", text: question.trim(), createdAt: new Date().toISOString() }, ...current]);
         setOrganizerDialogOpen(false);
         setOrganizerQuestion("");
         setOrganizerQuestionSent(true);
@@ -741,6 +779,11 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   const entryFile = JUDGE_ENTRY_FILES[judgeLanguage];
   const publicExamples = examplesFromStatement(statement.task.description);
+  const orderedContestProblems = [...contestProblems].sort((a, b) => a.order - b.order);
+  const currentProblemIndex = orderedContestProblems.findIndex((problem) => problem.id === problemId);
+  const openContestProblem = (target: ContestProblemListItem) => {
+    navigate(withDevPreview(`/contest/contests/${contestId}/problems/${target.id}`));
+  };
   const latestAnnouncement = announcements[0] ?? null;
   const showAnnouncement = latestAnnouncement && latestAnnouncement.id !== dismissedAnnouncementId;
 
@@ -750,10 +793,10 @@ export const ContestProblemSolvePage: React.FC = () => {
         <aside className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 sm:items-center dark:bg-[#0d1b13]" aria-live="polite">
           <Radio className="mt-0.5 size-4 shrink-0 text-primary-strong dark:text-primary-soft sm:mt-0" />
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">Оголошення організатора</div>
+            <div className="text-[10px] font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{copy("Оголошення організатора", "Organizer announcement")}</div>
             <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-text-primary dark:text-[#dce8df]">{latestAnnouncement.text}</p>
           </div>
-          <button type="button" onClick={() => setDismissedAnnouncementId(latestAnnouncement.id)} className="grid size-8 shrink-0 place-items-center rounded-lg text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-[#82968a] dark:hover:bg-white/[.06] dark:hover:text-white" aria-label="Закрити оголошення">
+          <button type="button" onClick={() => setDismissedAnnouncementId(latestAnnouncement.id)} className="grid size-8 shrink-0 place-items-center rounded-lg text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-[#82968a] dark:hover:bg-white/[.06] dark:hover:text-white" aria-label={copy("Закрити оголошення", "Close announcement")}>
             <X className="size-4" />
           </button>
         </aside>
@@ -773,17 +816,17 @@ export const ContestProblemSolvePage: React.FC = () => {
       {error ? (
         <div role="alert" aria-live="assertive" className="flex items-start gap-3 rounded-xl border border-[#ff6b9d]/30 bg-[#ff6b9d]/10 px-3 py-2.5 text-sm text-[#ffb2c9]">
           <span className="min-w-0 flex-1">{error}</span>
-          <button type="button" onClick={() => setError(null)} className="shrink-0 rounded-md p-1 hover:bg-white/[.08]" aria-label="Закрити повідомлення про помилку"><X className="size-4" /></button>
+          <button type="button" onClick={() => setError(null)} className="shrink-0 rounded-md p-1 hover:bg-white/[.08]" aria-label={copy("Закрити повідомлення про помилку", "Close error message")}><X className="size-4" /></button>
         </div>
       ) : null}
       {organizerQuestionSent ? (
         <div role="status" aria-live="polite" className="rounded-xl border border-primary/25 bg-primary/[.08] px-3 py-2.5 text-sm text-primary-strong dark:text-[#9cf2c2]">
-          Питання надіслано організатору. Відповідь з’явиться у вкладці «Ком’юніті».
+          {copy("Питання надіслано організатору. Відповідь з’явиться у вкладці «Ком’юніті».", "Your question was sent to the organizer. The reply will appear in the Community tab.")}
         </div>
       ) : null}
 
       {jobStatus && <div role="status" className="px-4 py-2 text-sm text-primary-strong dark:text-emerald-200">
-        {jobStatus === "queued" ? "У черзі" : jobStatus === "running" ? "Перевіряється" : jobStatus === "completed" ? "Готово" : "Помилка судді — відправку збережено"}
+        {jobStatus === "queued" ? copy("У черзі", "Queued") : jobStatus === "running" ? copy("Перевіряється", "Checking") : jobStatus === "completed" ? copy("Готово", "Done") : copy("Помилка судді — відправку збережено", "Judge error — submission saved")}
       </div>}
       <StudyCodIDEWorkspace
         enableSemanticLsp={false}
@@ -791,7 +834,7 @@ export const ContestProblemSolvePage: React.FC = () => {
           id: `contest-${contestId}-${problemId}`,
           title: statement.task.title,
           description: statement.task.description,
-          section: `Контест · ${contestMeta.title} · ${statement.problem.label}`,
+          section: `${copy("Контест", "Contest")} · ${contestMeta.title} · ${statement.problem.label}`,
         }}
         theory={null}
         language={judgeLanguage}
@@ -826,17 +869,17 @@ export const ContestProblemSolvePage: React.FC = () => {
         checkResult={checkResult}
         attemptsUsed={submissions.length}
         resultCards={submissions.length ? (
-          <section className="mt-3 rounded-xl border border-white/10 bg-white/[.025] p-3" aria-label="Останні надсилання">
+          <section className="mt-3 rounded-xl border border-white/10 bg-white/[.025] p-3" aria-label={copy("Останні надсилання", "Recent submissions")}>
             <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">Останні надсилання</h3>
+              <h3 className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">{copy("Останні надсилання", "Recent submissions")}</h3>
               <span className="text-[10px] text-[#82968a]">{submissions.length}{submissions.length === 30 ? "+" : ""}</span>
             </div>
             <div className="space-y-1.5">
               {submissions.slice(0, 4).map((submission) => (
                 <div key={submission.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-black/15 px-2.5 py-2 text-[11px]">
                   <div className="min-w-0">
-                    <span className={`font-bold ${String(submission.verdict ?? "").toUpperCase() === "AC" ? "text-primary-soft" : "text-[#ffca7e]"}`}>{submission.verdict || "В черзі"}</span>
-                    <span className="ml-2 text-[#82968a]">{submission.createdAt ? new Date(submission.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Щойно"}</span>
+                    <span className={`font-bold ${String(submission.verdict ?? "").toUpperCase() === "AC" ? "text-primary-soft" : "text-[#ffca7e]"}`}>{submission.verdict || copy("В черзі", "Queued")}</span>
+                    <span className="ml-2 text-[#82968a]">{submission.createdAt ? new Date(submission.createdAt).toLocaleTimeString(en ? "en-US" : "uk-UA", { hour: "2-digit", minute: "2-digit" }) : copy("Щойно", "Just now")}</span>
                   </div>
                   <span className="shrink-0 tabular-nums text-[#c8d6cc]">{submission.score ?? 0}/{submission.maxScore ?? 0}</span>
                 </div>
@@ -851,34 +894,84 @@ export const ContestProblemSolvePage: React.FC = () => {
         trace={trace}
         tracing={tracing}
         onTrace={doTrace}
+        contextToolbar={(
+          <div className="flex items-center gap-1.5">
+            {orderedContestProblems.length > 1 ? (
+              <div className="flex h-9 items-center gap-1 rounded-lg border border-white/10 bg-white/[.035] p-0.5">
+                <button
+                  type="button"
+                  onClick={() => { const previous = orderedContestProblems[currentProblemIndex - 1]; if (previous) openContestProblem(previous); }}
+                  disabled={currentProblemIndex <= 0}
+                  className="grid size-8 place-items-center rounded-md text-[#c8d6cc] transition hover:bg-white/[.08] disabled:pointer-events-none disabled:opacity-35"
+                  aria-label={copy("Попередня задача", "Previous problem")}
+                  title={copy("Попередня задача", "Previous problem")}
+                >
+                  <ArrowLeft className="size-3.5" />
+                </button>
+                <select
+                  aria-label={copy("Перейти до задачі", "Switch problem")}
+                  value={String(problemId)}
+                  onChange={(event) => { const target = orderedContestProblems.find((problem) => problem.id === Number(event.target.value)); if (target) openContestProblem(target); }}
+                  className="h-8 max-w-[150px] cursor-pointer rounded-md border-0 bg-transparent px-1.5 text-[11px] font-semibold text-[#dce8df] outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  {orderedContestProblems.map((problem) => (
+                    <option key={problem.id} value={problem.id} className="bg-[#101a13] text-[#e8f1ea]">
+                      {problem.label} · {problem.title}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => { const next = orderedContestProblems[currentProblemIndex + 1]; if (next) openContestProblem(next); }}
+                  disabled={currentProblemIndex < 0 || currentProblemIndex >= orderedContestProblems.length - 1}
+                  className="grid size-8 place-items-center rounded-md text-[#c8d6cc] transition hover:bg-white/[.08] disabled:pointer-events-none disabled:opacity-35"
+                  aria-label={copy("Наступна задача", "Next problem")}
+                  title={copy("Наступна задача", "Next problem")}
+                >
+                  <ArrowRight className="size-3.5" />
+                </button>
+              </div>
+            ) : null}
+            {hasToken ? (
+              <button
+                type="button"
+                onClick={() => { setOrganizerQuestionSent(false); setOrganizerDialogOpen(true); }}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-[11px] font-semibold text-[#c8d6cc] transition hover:bg-white/[.06]"
+                title={copy("Поставити питання організатору", "Ask the organizer a question")}
+              >
+                <MessageSquareText className="size-3.5" />
+                <span>{copy("Організатор", "Organizer")}</span>
+              </button>
+            ) : null}
+          </div>
+        )}
         toolbarStatus={(
           <>
-            <span className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-[#a7b5aa]" title={wsStatus === "connected" ? "Оновлення підключено" : "Перепідключення відбувається автоматично"}>
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-[#a7b5aa]" title={wsStatus === "connected" ? copy("Оновлення підключено", "Live updates connected") : copy("Перепідключення відбувається автоматично", "Reconnecting automatically")}>
               <span className={`size-1.5 rounded-full ${wsStatus === "connected" ? "bg-primary" : wsStatus === "connecting" ? "bg-[#ffb454]" : "bg-[#82968a]"}`} />
-              {wsStatus === "connected" ? "НА ЗВ’ЯЗКУ" : wsStatus === "connecting" ? "СИНХРОНІЗАЦІЯ" : "ОФЛАЙН"}
+              {wsStatus === "connected" ? copy("НА ЗВ’ЯЗКУ", "CONNECTED") : wsStatus === "connecting" ? copy("СИНХРОНІЗАЦІЯ", "SYNCING") : "OFFLINE"}
             </span>
-            {contestMeta.endsAt ? <span className="hidden h-8 items-center rounded-lg border border-white/10 px-2 text-[10px] font-semibold text-[#a7b5aa] xl:inline-flex" title="Час завершення контесту">До {new Date(contestMeta.endsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span> : null}
-            {latestVerdict ? <span className="inline-flex h-8 max-w-28 items-center truncate rounded-lg border border-white/10 px-2 text-[10px] font-bold text-[#c8d6cc]" title={latestVerdictAt ? `Оновлено ${new Date(latestVerdictAt).toLocaleTimeString()}` : "Останній результат"}>{latestVerdict}</span> : null}
-            {subsLoading ? <span className="hidden text-[10px] text-[#82968a] xl:inline">Синхронізація…</span> : null}
+            {contestMeta.endsAt ? <span className="hidden h-8 items-center rounded-lg border border-white/10 px-2 text-[10px] font-semibold text-[#a7b5aa] xl:inline-flex" title={copy("Час завершення контесту", "Contest end time")}>{copy("До", "Until")} {new Date(contestMeta.endsAt).toLocaleTimeString(en ? "en-US" : "uk-UA", { hour: "2-digit", minute: "2-digit" })}</span> : null}
+            {latestVerdict ? <span className="inline-flex h-8 max-w-28 items-center truncate rounded-lg border border-white/10 px-2 text-[10px] font-bold text-[#c8d6cc]" title={latestVerdictAt ? `${copy("Оновлено", "Updated")} ${new Date(latestVerdictAt).toLocaleTimeString(en ? "en-US" : "uk-UA")}` : copy("Останній результат", "Latest result")}>{latestVerdict}</span> : null}
+            {subsLoading ? <span className="hidden text-[10px] text-[#82968a] xl:inline">{copy("Синхронізація…", "Syncing…")}</span> : null}
           </>
         )}
         toolbar={(
           <>
-            <Link to={`/contest/contests/${contestId}/scoreboard`} className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-white/10 text-[#c8d6cc] transition hover:border-[#ffb454]/30 hover:bg-[#ffb454]/10 hover:text-[#ffca7e]" aria-label="Таблиця контесту" title="Таблиця контесту">
+            <Link to={`/contest/contests/${contestId}/scoreboard`} className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-white/10 text-[#c8d6cc] transition hover:border-[#ffb454]/30 hover:bg-[#ffb454]/10 hover:text-[#ffca7e]" aria-label={copy("Таблиця контесту", "Contest scoreboard")} title={copy("Таблиця контесту", "Contest scoreboard")}>
               <Trophy className="size-3.5" />
             </Link>
-            {hasToken ? <button type="button" onClick={() => { setOrganizerQuestionSent(false); setOrganizerDialogOpen(true); }} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-white/10 px-3 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.06]" title="Поставити питання організатору"><MessageSquareText className="size-3.5" /><span>Організатор</span></button> : null}
           </>
         )}
       />
 
-      <Modal open={organizerDialogOpen} onClose={() => setOrganizerDialogOpen(false)} title="Питання організатору" description="Питання побачить організатор цього контесту. Відповідь буде у вкладці «Ком’юніті»." panelClassName="max-w-[620px]">
+      <Modal open={organizerDialogOpen} onClose={() => setOrganizerDialogOpen(false)} title={copy("Питання організатору", "Ask the organizer")} description={copy("Питання побачить організатор цього контесту. Відповідь буде у вкладці «Ком’юніті».", "The contest organizer will see your question. Their reply will appear in the Community tab.")} panelClassName="max-w-[620px]">
         <form onSubmit={(event) => { event.preventDefault(); void askOrganizer(organizerQuestion); }} className="space-y-4">
-          <label className="block text-sm font-semibold text-text-primary" htmlFor="contest-organizer-question">Твоє питання</label>
-          <textarea id="contest-organizer-question" value={organizerQuestion} onChange={(event) => setOrganizerQuestion(event.target.value)} rows={5} maxLength={4000} required placeholder="Опиши проблему з умовою, доступом або проведенням контесту…" className="w-full resize-y rounded-xl border border-border bg-bg-base px-3 py-2.5 text-sm leading-6 text-text-primary outline-none transition placeholder:text-text-muted focus:border-primary/50 focus:ring-2 focus:ring-primary/15" />
+          <label className="block text-sm font-semibold text-text-primary" htmlFor="contest-organizer-question">{copy("Твоє питання", "Your question")}</label>
+          <textarea id="contest-organizer-question" value={organizerQuestion} onChange={(event) => setOrganizerQuestion(event.target.value)} rows={5} maxLength={4000} required placeholder={copy("Опиши проблему з умовою, доступом або проведенням контесту…", "Describe an issue with the problem, access, or contest…")} className="w-full resize-y rounded-xl border border-border bg-bg-base px-3 py-2.5 text-sm leading-6 text-text-primary outline-none transition placeholder:text-text-muted focus:border-primary/50 focus:ring-2 focus:ring-primary/15" />
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs text-text-muted">{organizerQuestion.length}/4000</span>
-            <Button type="submit" disabled={askingOrganizer || !organizerQuestion.trim()}>{askingOrganizer ? "Надсилаємо…" : "Надіслати питання"}</Button>
+            <Button type="submit" disabled={askingOrganizer || !organizerQuestion.trim()}>{askingOrganizer ? copy("Надсилаємо…", "Sending…") : copy("Надіслати питання", "Send question")}</Button>
           </div>
         </form>
       </Modal>

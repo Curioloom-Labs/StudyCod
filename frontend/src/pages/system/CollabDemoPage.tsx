@@ -1,4 +1,6 @@
 import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import { tr } from "../../i18n";
 import * as Y from "yjs";
 import { Awareness } from "y-protocols/awareness";
 import { CollaborativeCodeEditor } from "../../components/edu/CollaborativeCodeEditor";
@@ -11,6 +13,7 @@ import { LiveKitYjsProvider, type CollabTransport } from "../../lib/collab/LiveK
  * code LiveKit will carry in P2) without needing LiveKit.
  */
 export const CollabDemoPage: React.FC = () => {
+  useTranslation();
   const { aText, bText, awA, awB } = useMemo(() => {
     const docA = new Y.Doc();
     const docB = new Y.Doc();
@@ -37,18 +40,18 @@ export const CollabDemoPage: React.FC = () => {
 
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
-      <h2 style={{ marginBottom: 12 }}>Collab demo — via LiveKitYjsProvider (in-memory bus)</h2>
+      <h2 style={{ marginBottom: 12 }}>{tr("Демо спільної роботи — через LiveKitYjsProvider (локальний канал)", "Collaboration demo — via LiveKitYjsProvider (in-memory bus)")}</h2>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <div>
-          <div style={{ fontSize: 13, marginBottom: 6 }}>Teacher (A)</div>
+          <div style={{ fontSize: 13, marginBottom: 6 }}>{tr("Викладач (A)", "Teacher (A)")}</div>
           <CollaborativeCodeEditor yText={aText} awareness={awA} height="320px" />
         </div>
         <div>
-          <div style={{ fontSize: 13, marginBottom: 6 }}>Student (B)</div>
+          <div style={{ fontSize: 13, marginBottom: 6 }}>{tr("Учень (B)", "Student (B)")}</div>
           <CollaborativeCodeEditor yText={bText} awareness={awB} height="320px" />
         </div>
       </div>
-      <p style={{ marginTop: 12, opacity: 0.7, fontSize: 13 }}>Тип у будь-якому редакторі — зміни й курсори синхронізуються через справжній sync/awareness-протокол.</p>
+      <p style={{ marginTop: 12, opacity: 0.7, fontSize: 13 }}>{tr("Введіть текст у будь-якому редакторі — зміни й курсори синхронізуються через протокол синхронізації та присутності.", "Type in either editor — changes and cursors sync through the real sync and awareness protocol.")}</p>
     </div>
   );
 };

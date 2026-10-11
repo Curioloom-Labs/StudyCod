@@ -45,9 +45,9 @@ export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "l
     return <main id="main-content" tabIndex={-1} className="flex min-h-[70vh] items-center justify-center px-6 py-12">
       <section role="alert" className="w-full max-w-md rounded-3xl border border-border bg-bg-surface p-7 text-center shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">StudyCod</p>
-        <h1 className="mt-3 text-xl font-bold text-text-primary">Не вдалося відкрити навчальний простір</h1>
-        <p className="mt-3 text-sm leading-6 text-text-secondary">З’єднання з профілем перервано. Сторінка більше не зависатиме на нескінченному завантаженні.</p>
-        <button type="button" onClick={() => window.location.reload()} className="mt-6 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white">Спробувати ще раз</button>
+        <h1 className="mt-3 text-xl font-bold text-text-primary">{i18n.language.startsWith("en") ? "Could not open your learning space" : "Не вдалося відкрити навчальний простір"}</h1>
+        <p className="mt-3 text-sm leading-6 text-text-secondary">{i18n.language.startsWith("en") ? "The connection to your profile was interrupted. Refresh the page to try again." : "З’єднання з профілем перервано. Сторінка більше не зависатиме на нескінченному завантаженні."}</p>
+        <button type="button" onClick={() => window.location.reload()} className="mt-6 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white">{i18n.language.startsWith("en") ? "Try again" : "Спробувати ще раз"}</button>
       </section>
     </main>;
   }

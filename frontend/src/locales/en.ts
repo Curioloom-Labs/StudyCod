@@ -344,5 +344,8 @@ export default {
   footerCookiePolicy: 'Cookie Policy',
   footerRefundPolicy: 'Refund Policy',
   maintenanceTitle: 'Technical maintenance',
-  maintenanceModeEnabled: 'MAINTENANCE MODE ENABLED'
+  maintenanceModeEnabled: 'MAINTENANCE MODE ENABLED',
+  sessionCheckUnavailable: 'Your session could not be checked right now',
+  sessionCheckRetry: 'Please reload the page in a few seconds.',
+  loadingContests: 'Loading contests…'
 };

@@ -2,6 +2,8 @@ import React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Volume2, VolumeX, SkipForward } from "lucide-react";
 import { lockBodyScroll } from "../lib/bodyScrollLock";
+import { useTranslation } from "react-i18next";
+import { tr } from "../i18n";
 
 const SEEN_KEY = "studycod.introSeen.v1";
 
@@ -25,6 +27,7 @@ export const IntroSplash: React.FC<IntroSplashProps> = ({
   onFinish,
   force = false,
 }) => {
+  useTranslation();
   const prefersReducedMotion = useReducedMotion();
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [show, setShow] = React.useState<boolean>(() => {
@@ -89,11 +92,11 @@ export const IntroSplash: React.FC<IntroSplashProps> = ({
           <div className="absolute bottom-6 right-6 flex items-center gap-3">
             <button type="button" onClick={toggleSound} className={btnClass}>
               {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-              {muted ? "Звук" : "Без звуку"}
+              {muted ? tr("Звук", "Sound on") : tr("Без звуку", "Sound off")}
             </button>
             <button type="button" onClick={finish} className={btnClass}>
               <SkipForward className="h-3.5 w-3.5" />
-              Пропустити
+              {tr("Пропустити", "Skip")}
             </button>
           </div>
         </motion.div>

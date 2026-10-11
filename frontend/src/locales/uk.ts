@@ -31,6 +31,7 @@ export default {
   eduNavCourses: 'Курси',
   eduNavCalendar: 'Календар',
   eduNavTutor: 'AI-тьютор',
+  eduAttendance: 'Відвідуваність',
   eduSimilarity: 'Антиплагіат',
   eduTabOverview: 'Огляд',
   eduTabLessons: 'Теми та уроки',
@@ -343,5 +344,8 @@ export default {
   footerCookiePolicy: 'Політика cookies',
   footerRefundPolicy: 'Повернення коштів',
   maintenanceTitle: 'Технічне обслуговування',
-  maintenanceModeEnabled: 'УВІМКНЕНО РЕЖИМ ОБСЛУГОВУВАННЯ'
+  maintenanceModeEnabled: 'УВІМКНЕНО РЕЖИМ ОБСЛУГОВУВАННЯ',
+  sessionCheckUnavailable: 'Не вдалося тимчасово перевірити сесію',
+  sessionCheckRetry: 'Оновіть сторінку за кілька секунд.',
+  loadingContests: 'Завантаження контестів…'
 };
