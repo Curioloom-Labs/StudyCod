@@ -21,10 +21,10 @@ type Plan = {
 };
 
 const accentStyles = {
-  green: "bg-primary/12 text-primary-strong dark:text-[#63efad]",
-  orange: "bg-[#ff8c00]/12 text-[#b96300] dark:text-[#ffad4a]",
-  yellow: "bg-[#ffd93d]/20 text-[#8b6b00] dark:text-[#ffe36c]",
-  pink: "bg-[#ff6b9d]/12 text-[#c64270] dark:text-[#ff8fb6]",
+  green: "bg-primary/12 text-primary-strong dark:text-primary-strong",
+  orange: "bg-accent-warn/12 text-accent-warn dark:text-accent-warn",
+  yellow: "bg-accent-warn/20 text-accent-warn dark:text-accent-warn",
+  pink: "bg-accent-error/12 text-accent-error dark:text-accent-error",
 };
 
 export const PricingPage: React.FC = () => {
@@ -92,41 +92,41 @@ export const PricingPage: React.FC = () => {
         <section className="relative mx-auto w-[min(1200px,calc(100%_-_40px))] pb-16 pt-24 text-center max-md:pt-16">
           <div className="pointer-events-none absolute left-1/2 top-5 size-[540px] -translate-x-1/2 rounded-full bg-primary/[.055] blur-[90px]" />
           <motion.div initial={reduceMotion ? undefined : { opacity: 0, y: 20 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: .7, ease: [0.16, 1, .3, 1] }} className="relative mx-auto max-w-[820px]">
-            <button type="button" onClick={() => navigate("/")} className="mx-auto mb-6 flex w-fit items-center gap-2 text-[12px] font-bold text-text-muted dark:text-[#99a59d]"><ArrowLeft className="size-4" />{tr("На головну", "Back home")}</button>
+            <button type="button" onClick={() => navigate("/")} className="mx-auto mb-6 flex w-fit items-center gap-2 text-[12px] font-bold text-text-muted dark:text-text-secondary"><ArrowLeft className="size-4" />{tr("На головну", "Back home")}</button>
             <h1 className="mt-6 text-balance text-[clamp(44px,6vw,76px)] font-bold leading-[1] tracking-[-.055em]">{tr("План для кожного способу навчатися.", "A plan for every way of learning.")}</h1>
-            <p className="mx-auto mt-6 max-w-[680px] text-[17px] leading-8 text-text-muted dark:text-[#a3aea6]">{tr("Починайте безкоштовно, розвивайте власну практику або організуйте навчання для цілого класу.", "Start free, deepen your own practice, or organize learning for an entire class.")}</p>
+            <p className="mx-auto mt-6 max-w-[680px] text-[17px] leading-8 text-text-muted dark:text-text-secondary">{tr("Починайте безкоштовно, розвивайте власну практику або організуйте навчання для цілого класу.", "Start free, deepen your own practice, or organize learning for an entire class.")}</p>
           </motion.div>
         </section>
 
         <section className="mx-auto grid w-[min(1200px,calc(100%_-_40px))] grid-cols-4 gap-3 pb-14 max-[1050px]:grid-cols-2 max-md:grid-cols-1">
           {plans.map((plan, index) => {
             const isAvailable = Boolean(plan.to);
-            return <motion.article {...reveal} transition={{ duration: .55, delay: index * .06, ease: [0.16, 1, .3, 1] }} key={plan.name} className={`relative flex min-h-[610px] flex-col overflow-hidden rounded-[25px] border p-6 ${plan.featured ? "border-primary/30 bg-[linear-gradient(165deg,rgba(0,255,136,.09),#fff_35%)] shadow-[0_30px_75px_rgba(18,32,23,.1)] dark:border-[#00e97c]/25 dark:bg-[linear-gradient(165deg,rgba(0,255,136,.08),#171f19_35%)] dark:shadow-[0_30px_75px_rgba(0,0,0,.28)]" : "border-border/10 bg-white shadow-[0_18px_50px_rgba(18,32,23,.045)] dark:border-white/10 dark:bg-bg-surface dark:shadow-[0_18px_50px_rgba(0,0,0,.2)]"}`}>
+            return <motion.article {...reveal} transition={{ duration: .55, delay: index * .06, ease: [0.16, 1, .3, 1] }} key={plan.name} className={`relative flex min-h-[610px] flex-col overflow-hidden rounded-[25px] border p-6 ${plan.featured ? "border-primary/30 bg-[linear-gradient(165deg,color-mix(in_srgb,var(--primary)_9%,transparent),var(--bg-surface)_35%)] shadow-[0_30px_75px_rgba(18,32,23,.1)] dark:border-primary/25 dark:bg-[linear-gradient(165deg,color-mix(in_srgb,var(--primary)_8%,transparent),var(--bg-surface)_35%)] dark:shadow-[0_30px_75px_rgba(0,0,0,.28)]" : "border-border/10 bg-white shadow-[0_18px_50px_rgba(18,32,23,.045)] dark:border-white/10 dark:bg-bg-surface dark:shadow-[0_18px_50px_rgba(0,0,0,.2)]"}`}>
               {plan.featured && <span className="absolute right-4 top-4 rounded-full bg-primary px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-[.1em] text-primary-foreground">{tr("Популярний", "Popular")}</span>}
               <span className={`grid size-11 place-items-center rounded-[14px] ${accentStyles[plan.accent]}`}><plan.icon className="size-5" /></span>
-              <span className="mt-6 text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e] dark:text-[#849188]">{plan.audience}</span>
+              <span className="mt-6 text-[10px] font-extrabold uppercase tracking-[.12em] text-text-muted dark:text-text-muted">{plan.audience}</span>
               <h2 className="mt-2 text-[27px] font-bold tracking-[-.04em]">{plan.name}</h2>
-              <div className="mt-5 min-h-[68px]"><strong className={`font-sans font-bold tracking-[-.045em] ${plan.price.length > 9 ? "text-[30px]" : "text-[39px]"}`}>{plan.price}</strong><span className="ml-2 text-[11px] text-[#7b877f] dark:text-[#88958c]">{plan.period}</span></div>
-              <p className="mt-4 min-h-[78px] text-[13px] leading-6 text-text-muted dark:text-[#a1aca4]">{plan.description}</p>
-              <div className="my-5 h-px bg-[#122017]/10 dark:bg-white/10" />
-              <ul className="flex-1 space-y-3.5 p-0">{plan.features.map(feature => <li key={feature} className="flex items-start gap-2.5 text-[12px] leading-5 text-[#536057] dark:text-[#b0bab3]"><Check className="mt-0.5 size-4 shrink-0 rounded-full bg-primary p-0.5 text-primary-foreground" />{feature}</li>)}</ul>
-              <button type="button" disabled={!isAvailable} onClick={() => isAvailable && plan.to && navigate(plan.to)} className={`mt-7 inline-flex h-12 items-center justify-center gap-2 rounded-[14px] text-[13px] font-bold transition ${isAvailable ? "hover:-translate-y-0.5" : "cursor-not-allowed opacity-60"} ${plan.featured ? "bg-primary text-primary-foreground shadow-[0_12px_28px_rgba(0,185,99,.18)]" : "border border-border/10 bg-bg-base dark:border-white/10 dark:bg-[#202821]"}`}>{plan.cta}{isAvailable && <ArrowRight className="size-4" />}</button>
+              <div className="mt-5 min-h-[68px]"><strong className={`font-sans font-bold tracking-[-.045em] ${plan.price.length > 9 ? "text-[30px]" : "text-[39px]"}`}>{plan.price}</strong><span className="ml-2 text-[11px] text-text-muted dark:text-text-muted">{plan.period}</span></div>
+              <p className="mt-4 min-h-[78px] text-[13px] leading-6 text-text-muted dark:text-text-secondary">{plan.description}</p>
+              <div className="my-5 h-px bg-bg-base/10 dark:bg-white/10" />
+              <ul className="flex-1 space-y-3.5 p-0">{plan.features.map(feature => <li key={feature} className="flex items-start gap-2.5 text-[12px] leading-5 text-text-muted dark:text-text-secondary"><Check className="mt-0.5 size-4 shrink-0 rounded-full bg-primary p-0.5 text-primary-foreground" />{feature}</li>)}</ul>
+              <button type="button" disabled={!isAvailable} onClick={() => isAvailable && plan.to && navigate(plan.to)} className={`mt-7 inline-flex h-12 items-center justify-center gap-2 rounded-[14px] text-[13px] font-bold transition ${isAvailable ? "hover:-translate-y-0.5" : "cursor-not-allowed opacity-60"} ${plan.featured ? "bg-primary text-primary-foreground shadow-[0_12px_28px_rgba(0,185,99,.18)]" : "border border-border/10 bg-bg-base dark:border-white/10 dark:bg-bg-base"}`}>{plan.cta}{isAvailable && <ArrowRight className="size-4" />}</button>
             </motion.article>;
           })}
         </section>
 
         <section className="mx-auto w-[min(1200px,calc(100%_-_40px))] pb-28">
           <motion.div {...reveal} className="grid gap-3 rounded-[28px] border border-border/10 bg-white p-5 shadow-[0_18px_50px_rgba(18,32,23,.045)] dark:border-white/10 dark:bg-bg-surface md:grid-cols-3">
-            <div className="rounded-2xl bg-bg-base p-4 dark:bg-white/[.045]"><p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Безкоштовно", "Free")}</p><h3 className="mt-2 text-lg font-bold">StudyCod Start - $0</h3><p className="mt-2 text-sm leading-6 text-text-muted dark:text-[#a3aea6]">{tr("Особиста практика, базова бібліотека, перевірка коду та 1 клас для старту.", "Personal practice, core library, code checks, and 1 class to get started.")}</p></div>
-            <div className="rounded-2xl bg-bg-base p-4 dark:bg-white/[.045]"><p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Підписка", "Subscription")}</p><h3 className="mt-2 text-lg font-bold">StudyCod Pro - $2/{tr("місяць", "month")}</h3><p className="mt-2 text-sm leading-6 text-text-muted dark:text-[#a3aea6]">{tr("Розширені курси, задачі, підказки, візуалізація виконання коду та сертифікати.", "Advanced courses, tasks, hints, code execution visualization, and certificates.")}</p></div>
-            <div className="rounded-2xl bg-bg-base p-4 dark:bg-white/[.045]"><p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{tr("Для викладача", "For teachers")}</p><h3 className="mt-2 text-lg font-bold">StudyCod Class - $10/{tr("місяць", "month")}</h3><p className="mt-2 text-sm leading-6 text-text-muted dark:text-[#a3aea6]">{tr("Необмежена кількість класів, до 30 учнів у класі, журнал, аналітика та Live Classroom.", "Unlimited classes, up to 30 students per class, gradebook, analytics, and Live Classroom.")}</p></div>
+            <div className="rounded-2xl bg-bg-base p-4 dark:bg-white/[.045]"><p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-text-muted">{tr("Безкоштовно", "Free")}</p><h3 className="mt-2 text-lg font-bold">StudyCod Start - $0</h3><p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Особиста практика, базова бібліотека, перевірка коду та 1 клас для старту.", "Personal practice, core library, code checks, and 1 class to get started.")}</p></div>
+            <div className="rounded-2xl bg-bg-base p-4 dark:bg-white/[.045]"><p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-text-muted">{tr("Підписка", "Subscription")}</p><h3 className="mt-2 text-lg font-bold">StudyCod Pro - $2/{tr("місяць", "month")}</h3><p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Розширені курси, задачі, підказки, візуалізація виконання коду та сертифікати.", "Advanced courses, tasks, hints, code execution visualization, and certificates.")}</p></div>
+            <div className="rounded-2xl bg-bg-base p-4 dark:bg-white/[.045]"><p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-text-muted">{tr("Для викладача", "For teachers")}</p><h3 className="mt-2 text-lg font-bold">StudyCod Class - $10/{tr("місяць", "month")}</h3><p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Необмежена кількість класів, до 30 учнів у класі, журнал, аналітика та Live Classroom.", "Unlimited classes, up to 30 students per class, gradebook, analytics, and Live Classroom.")}</p></div>
           </motion.div>
         </section>
 
-        <section className="bg-[#101713] text-white">
+        <section className="bg-bg-code text-text-primary">
           <motion.div {...reveal} className="mx-auto grid w-[min(1080px,calc(100%_-_40px))] grid-cols-[.8fr_1.2fr] gap-20 py-24 max-md:grid-cols-1 max-md:gap-10 max-md:py-16">
-            <div><span className="text-[11px] font-bold uppercase tracking-[.13em] text-[#6befb0]">{tr("Для команд", "For teams")}</span><h2 className="mt-4 text-[clamp(34px,4vw,50px)] font-bold leading-[1.06] tracking-[-.045em]">{tr("Потрібна інша конфігурація?", "Need a different setup?")}</h2></div>
-            <div className="flex flex-col justify-end"><p className="text-[15px] leading-7 text-[#aab5ad]">{tr("Підберемо пілот для вашої школи, ліцею або освітнього проєкту: потрібна кількість учнів, ролі, підтримка й план впровадження.", "We'll shape a pilot for your school, lyceum, or education project: student seats, roles, support, and a rollout plan.")}</p><button type="button" onClick={() => navigate("/support")} className="mt-7 inline-flex h-12 w-fit items-center gap-2 rounded-[14px] bg-white px-5 text-[13px] font-bold text-text-primary">{tr("Зв'язатися з нами", "Contact us")}<ArrowRight className="size-4" /></button></div>
+            <div><span className="text-[11px] font-bold uppercase tracking-[.13em] text-primary-strong">{tr("Для команд", "For teams")}</span><h2 className="mt-4 text-[clamp(34px,4vw,50px)] font-bold leading-[1.06] tracking-[-.045em]">{tr("Потрібна інша конфігурація?", "Need a different setup?")}</h2></div>
+            <div className="flex flex-col justify-end"><p className="text-[15px] leading-7 text-text-secondary">{tr("Підберемо пілот для вашої школи, ліцею або освітнього проєкту: потрібна кількість учнів, ролі, підтримка й план впровадження.", "We'll shape a pilot for your school, lyceum, or education project: student seats, roles, support, and a rollout plan.")}</p><button type="button" onClick={() => navigate("/support")} className="mt-7 inline-flex h-12 w-fit items-center gap-2 rounded-[14px] bg-white px-5 text-[13px] font-bold text-text-primary">{tr("Зв'язатися з нами", "Contact us")}<ArrowRight className="size-4" /></button></div>
           </motion.div>
         </section>
       </main>

@@ -1,6 +1,6 @@
 .failure-recovery-card {
   border: 1px solid var(--border);
-  background: #151d17;
+  background: var(--bg-surface);
   padding: 12px;
 }
 
@@ -18,7 +18,7 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  color: #83988a;
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
   line-height: 1.2;
@@ -30,40 +30,40 @@
   width: 26px;
   height: 26px;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border);
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #83988a;
+  background: var(--bg-hover);
+  color: var(--text-muted);
   font-size: 11px;
 }
 
 .failure-recovery-step.is-complete,
 .failure-recovery-step.is-current {
-  color: #dce9df;
+  color: var(--text-primary);
 }
 
 .failure-recovery-step.is-complete .failure-recovery-step-dot {
-  border-color: rgba(0, 217, 120, 0.35);
-  background: rgba(0, 217, 120, 0.16);
+  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  background: var(--surface-primary);
   color: var(--primary-soft);
 }
 
 .failure-recovery-step.is-current .failure-recovery-step-dot {
-  border-color: rgba(255, 180, 84, 0.45);
-  background: rgba(255, 180, 84, 0.14);
-  color: #ffca78;
-  box-shadow: 0 0 0 3px rgba(255, 180, 84, 0.08);
+  border-color: color-mix(in srgb, var(--accent-warn) 45%, transparent);
+  background: var(--surface-warning);
+  color: var(--accent-warn);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-warn) 8%, transparent);
 }
 
 .failure-recovery-step-line {
   flex: 0 1 32px;
   height: 1px;
   margin-top: 13px;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--border);
 }
 
 .failure-recovery-step-line.is-complete {
-  background: rgba(0, 217, 120, 0.42);
+  background: color-mix(in srgb, var(--primary) 42%, transparent);
 }
 
 @media (max-width: 560px) {

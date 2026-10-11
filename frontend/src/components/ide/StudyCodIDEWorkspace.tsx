@@ -164,6 +164,17 @@ type Props = {
   onReset: () => void;
   onTheoryComplete?: () => void;
   toolbar?: React.ReactNode;
+  problemNavigation?: {
+    items: Array<{
+      id: number | string;
+      label: string;
+      title: string;
+      points?: number | null;
+    }>;
+    activeId: number | string;
+    onSelect: (id: number | string) => void;
+    footer?: React.ReactNode;
+  };
   contextToolbar?: React.ReactNode;
   toolbarStatus?: React.ReactNode;
   languageOptions?: JudgeLanguage[];
@@ -205,7 +216,7 @@ type Props = {
   isWebTask?: boolean;
 };
 
-const LAYOUT_KEY = "studycod:ide:layout:v5";
+const LAYOUT_KEY = "studycod:ide:layout:v6";
 const SIMPLE_MODE_KEY = "studycod:ide:simple-mode:v1";
 const HISTORY_KEY = "studycod:ide:history:v1";
 const MINI_PROJECT_TIMER_KEY = "studycod:ide:mini-project-start:v1";
@@ -223,7 +234,7 @@ type LayoutState = {
 
 const DEFAULT_LAYOUT: LayoutState = {
   left: 224,
-  right: 480,
+  right: 520,
   bottom: 240,
   leftCollapsed: false,
   rightCollapsed: false,
@@ -441,7 +452,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     }
   });
   const [fileAddRequestToken, setFileAddRequestToken] = React.useState(0);
-  const [fontSize, setFontSize] = React.useState(14);
+  const [fontSize, setFontSize] = React.useState(16);
   const [wordWrap, setWordWrap] = React.useState(false);
   const [focusMode, setFocusMode] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
@@ -1494,7 +1505,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           </div>
         ) : null}
         {props.checkResult?.compileError ? (
-          <div className="mb-3 rounded-xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/5 p-3">
+          <div className="mb-3 rounded-xl border border-accent-error/25 bg-accent-error/5 p-3">
             <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--ide-error)]">
               <span>{tr("Помилка компіляції", "Compiler error")}</span>
               <button
@@ -1505,7 +1516,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                     "compile-error",
                   )
                 }
-                className="inline-flex items-center gap-1 rounded-md border border-[#ff6b9d]/25 px-2 py-1 text-[11px] normal-case tracking-normal text-[var(--ide-error)] hover:bg-[var(--ide-error-wash)]"
+                className="inline-flex items-center gap-1 rounded-md border border-accent-error/25 px-2 py-1 text-[11px] normal-case tracking-normal text-[var(--ide-error)] hover:bg-[var(--ide-error-wash)]"
                 aria-label={tr(
                   "Скопіювати помилку компіляції",
                   "Copy compiler error",
@@ -1540,7 +1551,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <button
                 type="button"
                 onClick={() => setShowFailedOnly((value) => !value)}
-                className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${showFailedOnly ? "border-[#ff6b9d]/35 bg-[var(--ide-error-wash)] text-[var(--ide-error)]" : "border-[var(--ide-border)] text-[var(--ide-muted)] hover:bg-white/[.06] hover:text-[var(--ide-text)]"}`}
+                className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${showFailedOnly ? "border-accent-error/35 bg-[var(--ide-error-wash)] text-[var(--ide-error)]" : "border-[var(--ide-border)] text-[var(--ide-muted)] hover:bg-white/[.06] hover:text-[var(--ide-text)]"}`}
                 aria-pressed={showFailedOnly}
               >
                 {showFailedOnly
@@ -1558,7 +1569,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                         current === test.testId ? null : test.testId,
                       )
                     }
-                    className={`w-full rounded-lg border p-2 text-center transition hover:brightness-125 ${test.testId === firstFailedPublicTestId ? "ring-2 ring-[#ff9aba]/70 ring-offset-1 ring-offset-[#0b120e]" : ""} ${test.skipped ? "border-[#f0c674]/30 bg-[#f0c674]/10 text-[#f0c674]" : test.passed ? "border-primary/30 bg-[var(--ide-accent-wash)] text-[var(--ide-accent)]" : "border-[#ff6b9d]/30 bg-[var(--ide-error-wash)] text-[var(--ide-error)]"}`}
+                    className={`w-full rounded-lg border p-2 text-center transition hover:brightness-125 ${test.testId === firstFailedPublicTestId ? "ring-2 ring-accent-error/70 ring-offset-1 ring-offset-[#0b120e]" : ""} ${test.skipped ? "border-accent-warn/30 bg-accent-warn/10 text-accent-warn" : test.passed ? "border-primary/30 bg-[var(--ide-accent-wash)] text-[var(--ide-accent)]" : "border-accent-error/30 bg-[var(--ide-error-wash)] text-[var(--ide-error)]"}`}
                     aria-label={`${tr("Тест", "Test")} #${test.testId}${test.testId === firstFailedPublicTestId ? ` · ${tr("перший невдалий", "first failed")}` : ""}`}
                   >
                     <span className="block font-bold">
@@ -1711,7 +1722,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           </div>
         )}
         {firstFailedPublicTest ? (
-          <div className="mt-4 rounded-xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/[.04] p-3">
+          <div className="mt-4 rounded-xl border border-accent-error/25 bg-accent-error/[.04] p-3">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--ide-error)]">
                 {tr("Перший невдалий тест", "First failed test")} #
@@ -1721,7 +1732,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 type="button"
                 onClick={() => setShowWhitespace((value) => !value)}
                 aria-pressed={showWhitespace}
-                className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${showWhitespace ? "border-[#ffb454]/35 bg-[#ffb454]/10 text-[var(--ide-warning)]" : "border-[var(--ide-border)] text-[var(--ide-muted)] hover:bg-white/[.06] hover:text-[var(--ide-text)]"}`}
+                className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${showWhitespace ? "border-accent-warn/35 bg-accent-warn/10 text-[var(--ide-warning)]" : "border-[var(--ide-border)] text-[var(--ide-muted)] hover:bg-white/[.06] hover:text-[var(--ide-text)]"}`}
               >
                 {showWhitespace
                   ? tr("Звичайний вигляд", "Normal output")
@@ -1791,7 +1802,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   if (mode === "theory") {
     return (
       <div className="studycod-workbench ide-theory">
-        <header className="ide-header">
+        <header
+          className="ide-header"
+          data-contest={Boolean(props.problemNavigation)}
+        >
           <button
             type="button"
             className="ide-icon-btn"
@@ -1877,6 +1891,13 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     (timestamp) => formatIdeTimestamp(timestamp, i18n.language || "uk"),
   );
   const busy = props.running || props.checking;
+  const activeProblemLabel = props.problemNavigation?.items.find(
+    (problem) => problem.id === props.problemNavigation?.activeId,
+  )?.label;
+  const taskHeading =
+    activeProblemLabel && !props.task.title.startsWith(`${activeProblemLabel}.`)
+      ? `${activeProblemLabel}. ${props.task.title}`
+      : props.task.title;
   const runActions = (
     <>
       <button
@@ -1918,7 +1939,9 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     assistantTab === "task" ? (
       <>
         <div className="ide-task-meta">
-          <span>{tr("Задача", "Problem")}</span>
+          {!props.problemNavigation ? (
+            <span>{tr("Задача", "Problem")}</span>
+          ) : null}
           {props.task.difficulty ? (
             <span className="ide-difficulty">
               {props.task.difficulty === "EASY"
@@ -1937,7 +1960,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             <span className="ide-difficulty">{tr("Розв’язано", "Solved")}</span>
           ) : null}
         </div>
-        <h1 className="ide-task-title">{props.task.title}</h1>
+        <h1 className="ide-task-title">{taskHeading}</h1>
         <article className="ide-task-document">
           <MarkdownView content={taskBody} variant="task" />
         </article>
@@ -2186,7 +2209,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         } as React.CSSProperties
       }
     >
-      <header className="ide-header">
+      <header
+        className="ide-header"
+        data-contest={Boolean(props.problemNavigation)}
+      >
         {props.onBack ? (
           <button
             type="button"
@@ -2210,6 +2236,12 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         >
           {props.task.section || props.task.title}
         </div>
+        {props.problemNavigation ? (
+          <div className="ide-header-context">
+            {props.toolbarStatus}
+            {props.toolbar}
+          </div>
+        ) : null}
         <div className="ide-actions">
           {props.saveStatus ? (
             <span
@@ -2300,26 +2332,6 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                     onChange={(event) => setSimpleMode(!event.target.checked)}
                   />
                 </label>
-                {!props.isWebTask &&
-                compilersForFamily(props.language).length > 1 ? (
-                  <label className="ide-setting-row">
-                    <span>{tr("Компілятор", "Compiler")}</span>
-                    <select
-                      className="ide-language-select"
-                      value={props.compiler}
-                      onChange={(event) =>
-                        props.onCompilerChange(event.target.value)
-                      }
-                      aria-label={tr("Версія компілятора", "Compiler version")}
-                    >
-                      {compilersForFamily(props.language).map((compiler) => (
-                        <option key={compiler.id} value={compiler.id}>
-                          {compiler.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
                 <div className="ide-settings-divider" />
                 <h2 className="ide-settings-title">
                   {tr("Робоча область", "Workspace")}
@@ -2398,7 +2410,11 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   <RotateCcw />
                   {tr("Відновити початковий код", "Restore starter code")}
                 </button>
-                {!props.contextToolbar && !props.toolbarStatus ? props.toolbar : null}
+                {!props.problemNavigation &&
+                !props.contextToolbar &&
+                !props.toolbarStatus
+                  ? props.toolbar
+                  : null}
                 {props.attemptsUsed != null ? (
                   <p className="ide-input-note mt-3">
                     {tr("Надсилання", "Submissions")}: {props.attemptsUsed}
@@ -2411,7 +2427,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           <div className="ide-actions ide-run-actions">{runActions}</div>
         </div>
       </header>
-      {props.contextToolbar || props.toolbarStatus ? (
+      {!props.problemNavigation &&
+      (props.contextToolbar || props.toolbarStatus) ? (
         <nav
           className="ide-context-bar"
           aria-label={tr("Навігація задачами", "Problem navigation")}
@@ -2423,476 +2440,599 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           </div>
         </nav>
       ) : null}
-      <div
-        className="ide-mobile-tabs"
-        role="tablist"
-        aria-label={tr("Панелі редактора", "Editor panels")}
-        onKeyDown={handleMobileTabKeyDown}
-      >
-        {mobileTabs.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            id={`mobile-ide-tab-${id}`}
-            type="button"
-            className="ide-tab"
-            role="tab"
-            aria-selected={mobilePane === id}
-            aria-controls={`mobile-ide-panel-${id}`}
-            tabIndex={mobilePane === id ? 0 : -1}
-            onClick={() => setMobilePane(id)}
-          >
-            <Icon />
-            <span>{label}</span>
-            {id === "result" && mobileResultUnread ? (
-              <span
-                className="ide-tab-count"
-                aria-label={tr("Новий результат", "New result")}
-              >
-                1
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </div>
-      <div
-        ref={bodyRef}
-        className="ide-body"
-        data-statement-side={statementOnRight ? "right" : "left"}
-        data-mobile-pane={mobilePane}
-      >
-        {showStatement ? (
-          <aside
-            id="mobile-ide-panel-condition"
-            className="ide-statement"
-            data-assistance={!props.disableAiAssistance}
-            aria-label={tr("Умова задачі", "Problem statement")}
+      <div className="ide-workbench-content">
+        {props.problemNavigation ? (
+          <nav
+            className="ide-problem-rail"
+            aria-label={tr("Навігація задачами", "Problem navigation")}
           >
             <div
-              className="ide-panel-bar"
-              role="tablist"
-              onKeyDown={handlePanelTabKeyDown}
-              aria-label={tr("Задача та допомога", "Problem and assistance")}
+              className="ide-problem-rail-list"
+              onKeyDown={(event) => {
+                const keys = [
+                  "ArrowUp",
+                  "ArrowDown",
+                  "ArrowLeft",
+                  "ArrowRight",
+                  "Home",
+                  "End",
+                ];
+                if (!keys.includes(event.key)) return;
+                const buttons = Array.from(
+                  event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                    "button",
+                  ),
+                );
+                const index = buttons.indexOf(
+                  event.target as HTMLButtonElement,
+                );
+                if (index < 0) return;
+                event.preventDefault();
+                const next =
+                  event.key === "Home"
+                    ? 0
+                    : event.key === "End"
+                      ? buttons.length - 1
+                      : (index +
+                          (event.key === "ArrowUp" || event.key === "ArrowLeft"
+                            ? -1
+                            : 1) +
+                          buttons.length) %
+                        buttons.length;
+                buttons[next]?.focus();
+                buttons[next]?.scrollIntoView({
+                  block: "nearest",
+                  inline: "nearest",
+                });
+              }}
             >
+              {props.problemNavigation.items.map((problem) => (
+                <button
+                  type="button"
+                  key={problem.id}
+                  className="ide-problem-tab"
+                  aria-current={
+                    problem.id === props.problemNavigation?.activeId
+                      ? "page"
+                      : undefined
+                  }
+                  aria-label={`${problem.label}. ${problem.title}`}
+                  title={`${problem.label}. ${problem.title}${problem.points != null ? ` · ${problem.points} ${tr("балів", "points")}` : ""}`}
+                  onClick={() => props.problemNavigation?.onSelect(problem.id)}
+                >
+                  {problem.label}
+                </button>
+              ))}
+            </div>
+            {props.problemNavigation.footer ? (
+              <div className="ide-problem-rail-footer">
+                {props.problemNavigation.footer}
+              </div>
+            ) : null}
+          </nav>
+        ) : null}
+        <div className="ide-workbench-main">
+          <div
+            className="ide-mobile-tabs"
+            role="tablist"
+            aria-label={tr("Панелі редактора", "Editor panels")}
+            onKeyDown={handleMobileTabKeyDown}
+          >
+            {mobileTabs.map(({ id, label, Icon }) => (
               <button
+                key={id}
+                id={`mobile-ide-tab-${id}`}
                 type="button"
                 className="ide-tab"
                 role="tab"
-                id="ide-context-tab-task"
-                aria-selected={assistantTab === "task"}
-                tabIndex={assistantTab === "task" ? 0 : -1}
-                aria-controls="ide-context-panel"
-                onClick={() => setAssistantTab("task")}
+                aria-selected={mobilePane === id}
+                aria-controls={`mobile-ide-panel-${id}`}
+                tabIndex={mobilePane === id ? 0 : -1}
+                onClick={() => setMobilePane(id)}
               >
-                <FileText />
-                {tr("Умова", "Description")}
-              </button>
-              {!props.disableAiAssistance ? (
-                <>
-                  <button
-                    type="button"
-                    className="ide-tab"
-                    role="tab"
-                    id="ide-context-tab-hints"
-                    aria-selected={assistantTab === "hints"}
-                    tabIndex={assistantTab === "hints" ? 0 : -1}
-                    aria-controls="ide-context-panel"
-                    onClick={() => setAssistantTab("hints")}
+                <Icon />
+                <span>{label}</span>
+                {id === "result" && mobileResultUnread ? (
+                  <span
+                    className="ide-tab-count"
+                    aria-label={tr("Новий результат", "New result")}
                   >
-                    <Lightbulb />
-                    {tr("Підказки", "Hints")}
-                    {props.hints?.length ? (
-                      <span className="ide-tab-count">
-                        {props.hints.length}
-                      </span>
-                    ) : null}
-                  </button>
-                  <button
-                    type="button"
-                    className="ide-tab"
-                    role="tab"
-                    id="ide-context-tab-mentor"
-                    aria-selected={assistantTab === "mentor"}
-                    tabIndex={assistantTab === "mentor" ? 0 : -1}
-                    aria-controls="ide-context-panel"
-                    onClick={() => setAssistantTab("mentor")}
-                  >
-                    <Bot />
-                    {tr("Ментор", "Mentor")}
-                  </button>
-                </>
-              ) : null}
-              <button
-                type="button"
-                className="ide-icon-btn ide-expand-statement ide-desktop-control"
-                onClick={() =>
-                  updateLayout({
-                    right:
-                      statementWidth > bodySize.width * 0.5
-                        ? bodySize.width * 0.42
-                        : statementBounds.max,
-                  })
-                }
-                aria-label={tr(
-                  "Розширити або звузити умову",
-                  "Expand or narrow the statement",
-                )}
-                title={tr("Розширити умову", "Expand statement")}
-              >
-                <Maximize2 />
+                    1
+                  </span>
+                ) : null}
               </button>
-              <button
-                type="button"
-                className="ide-icon-btn ide-desktop-control"
-                onClick={() => updateLayout({ rightCollapsed: true })}
-                aria-label={tr("Згорнути умову", "Collapse statement")}
-                title={tr("Згорнути умову", "Collapse statement")}
-              >
-                <Minimize2 />
-              </button>
-            </div>
-            <div
-              className="ide-context-content"
-              id="ide-context-panel"
-              role="tabpanel"
-              aria-labelledby={`ide-context-tab-${assistantTab}`}
-            >
-              {contextContent}
-            </div>
-          </aside>
-        ) : (
-          <button
-            type="button"
-            className="ide-statement-rail"
-            onClick={() => {
-              setFocusMode(false);
-              updateLayout({ rightCollapsed: false });
-            }}
-            aria-label={tr("Показати умову", "Show statement")}
-          >
-            <FileText className="size-4" />
-            <span>{tr("Умова", "Statement")}</span>
-          </button>
-        )}
-        {showStatement ? (
+            ))}
+          </div>
           <div
-            className="ide-resize ide-resize-vertical"
-            onPointerDown={(event) => beginResize("right", event)}
-            onKeyDown={(event) => handleResizeKeyDown("right", event)}
-            onDoubleClick={() => updateLayout({ right: bodySize.width * 0.42 })}
-            role="separator"
-            tabIndex={0}
-            aria-orientation="vertical"
-            aria-label={tr(
-              "Змінити ширину умови задачі",
-              "Resize task statement",
-            )}
-            aria-valuemin={statementBounds.min}
-            aria-valuemax={Math.round(statementBounds.max)}
-            aria-valuenow={Math.round(statementWidth)}
-            title={tr(
-              "Перетягни, щоб змінити ширину. Подвійний клік — відновити.",
-              "Drag to resize. Double-click to reset.",
-            )}
-          />
-        ) : null}
-        <section
-          id="mobile-ide-panel-code"
-          className="ide-solution"
-          aria-label={tr("Рішення", "Solution")}
-        >
-          <div className="ide-panel-bar ide-editor-bar">
-            <span className="ide-code-label">
-              <Code2 className="size-4" />
-              {tr("Код", "Code")}
-            </span>
-            {!props.isWebTask ? (
-              <select
-                className="ide-language-select"
-                value={props.language}
-                onChange={(event) =>
-                  props.onLanguageChange(event.target.value as JudgeLanguage)
-                }
-                disabled={
-                  props.disableLanguageChange ||
-                  props.readOnly ||
-                  busy ||
-                  languageOptions.length < 2
-                }
-                aria-label={tr("Мова програмування", "Programming language")}
-              >
-                {languageOptions.map((language) => (
-                  <option key={language} value={language}>
-                    {languageLabel(language)}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span className="ide-code-label">HTML / CSS / JS</span>
-            )}
-            {props.readOnly ? (
-              <span className="ide-input-note">
-                {tr("Лише перегляд", "Read only")}
-              </span>
-            ) : null}
-            <span className="ml-auto ide-code-label hidden sm:flex">
-              {!props.useFiles
-                ? activeFile
-                : tr(`Файлів: ${fileList.length}`, `Files: ${fileList.length}`)}
-            </span>
-            <button
-              type="button"
-              className="ide-icon-btn"
-              onClick={() => setFocusMode((current) => !current)}
-              aria-label={
-                focusMode
-                  ? tr("Показати панелі", "Show panels")
-                  : tr("Розгорнути редактор", "Expand editor")
-              }
-              title={tr("Розгорнути редактор", "Expand editor")}
-            >
-              {focusMode ? <Minimize2 /> : <Maximize2 />}
-            </button>
-          </div>
-          {props.localRecovery ? (
-            <div className="ide-recovery" role="status">
-              <span>
-                {tr(
-                  "Знайдено незбережену локальну версію",
-                  "A local unsaved version was found",
-                )}
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="ide-btn"
-                  onClick={props.localRecovery.onRecover}
-                >
-                  {tr("Відновити", "Recover")}
-                </button>
-                <button
-                  type="button"
-                  className="ide-btn ide-btn-quiet"
-                  onClick={props.localRecovery.onDismiss}
-                >
-                  {tr("Ігнорувати", "Dismiss")}
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {props.actionRecovery ? (
-            <div
-              className="ide-recovery"
-              data-error={props.actionRecovery.tone === "error"}
-              role="alert"
-            >
-              <span>{props.actionRecovery.message}</span>
-              <button
-                type="button"
-                className="ide-btn"
-                onClick={props.actionRecovery.onRetry}
-                disabled={busy}
-              >
-                {props.actionRecovery.retryLabel}
-              </button>
-            </div>
-          ) : null}
-          {props.useFiles || !simpleMode ? (
-            <div
-              className="ide-file-tabs"
-              role="tablist"
-              aria-label={tr("Файли рішення", "Solution files")}
-            >
-              {fileList.map((file) => (
-                <button
-                  key={file.path}
-                  type="button"
-                  className="ide-file-tab"
-                  role="tab"
-                  aria-selected={activeFile === file.path}
-                  onClick={() => setActiveFile(file.path)}
-                >
-                  <FileCode2 className="size-3.5" />
-                  {file.path}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="ide-icon-btn"
-                disabled={props.readOnly || props.submitMode}
-                onClick={() => {
-                  if (!props.useFiles) props.onEnableFiles();
-                  setFileAddRequestToken((value) => value + 1);
-                }}
-                aria-label={tr("Додати файл", "Add file")}
-                title={tr("Додати файл", "Add file")}
-              >
-                <Plus />
-              </button>
-            </div>
-          ) : null}
-          <div className="ide-editor" data-web={Boolean(props.isWebTask)}>
-            <div className="ide-code-surface">
-              {isEmptyTask ? (
-                <div className="ide-empty-editor">
-                  <h2>
-                    {tr("Завдання ще не готове", "The task is not ready yet")}
-                  </h2>
-                  <p>
-                    {props.emptyStateMessage ||
-                      tr(
-                        "Вибери активну задачу, щоб почати писати код.",
-                        "Choose an active problem to start coding.",
-                      )}
-                  </p>
-                  {props.emptyStateAction}
-                </div>
-              ) : props.useFiles ? (
-                <MultiFileEditor
-                  enableSemanticLsp={props.enableSemanticLsp}
-                  language={props.isWebTask ? "html" : props.language}
-                  entryFile={props.entryFile}
-                  files={props.files}
-                  onChange={props.onFilesChange}
-                  readOnly={props.readOnly}
-                  fontSize={fontSize}
-                  wordWrap={wordWrap}
-                  minimap={false}
-                  activePath={activeFile}
-                  onActivePathChange={setActiveFile}
-                  hideTabs
-                  hasUnsavedChanges={props.hasUnsavedChanges}
-                  focusLine={compilerErrorLine}
-                  requestAddToken={fileAddRequestToken}
-                />
-              ) : (
-                <PracticeCodeEditor
-                  enableSemanticLsp={props.enableSemanticLsp}
-                  taskId={props.task.id}
-                  language={props.language}
-                  value={props.code}
-                  readOnly={Boolean(props.readOnly)}
-                  fontSize={fontSize}
-                  wordWrap={wordWrap}
-                  isWebTask={Boolean(props.isWebTask)}
-                  focusLine={compilerErrorLine}
-                  onChange={handleCodeChange}
-                />
-              )}
-            </div>
-            {props.isWebTask && props.webPreviewFiles ? (
-              <div className="ide-code-surface border-l border-[var(--ide-border)]">
-                <WebPreviewPane
-                  files={props.webPreviewFiles}
-                  title={tr("Перегляд сторінки", "Page preview")}
-                />
-              </div>
-            ) : null}
-          </div>
-          {showRunner ? (
-            <>
-              <div
-                className="ide-resize ide-resize-horizontal"
-                onPointerDown={(event) => beginResize("bottom", event)}
-                onKeyDown={(event) => handleResizeKeyDown("bottom", event)}
-                onDoubleClick={() => updateLayout({ bottom: 240 })}
-                role="separator"
-                tabIndex={0}
-                aria-orientation="horizontal"
-                aria-label={tr("Змінити висоту результатів", "Resize results")}
-                aria-valuemin={runnerBounds.min}
-                aria-valuemax={Math.round(runnerBounds.max)}
-                aria-valuenow={Math.round(runnerHeight)}
-              />
-              <section
-                className="ide-runner"
-                id="mobile-ide-panel-result"
-                aria-label={tr("Запуск та перевірка", "Run and check")}
+            ref={bodyRef}
+            className="ide-body"
+            data-statement-side={statementOnRight ? "right" : "left"}
+            data-mobile-pane={mobilePane}
+          >
+            {showStatement ? (
+              <aside
+                id="mobile-ide-panel-condition"
+                className="ide-statement"
+                data-assistance={!props.disableAiAssistance}
+                aria-label={tr("Умова задачі", "Problem statement")}
               >
                 <div
                   className="ide-panel-bar"
                   role="tablist"
                   onKeyDown={handlePanelTabKeyDown}
-                  aria-label={tr("Ввід та результати", "Input and results")}
+                  aria-label={tr(
+                    "Задача та допомога",
+                    "Problem and assistance",
+                  )}
                 >
-                  <BottomTabButton
-                    active={bottomTab === "input"}
-                    onClick={() => setBottomTab("input")}
-                    icon={<Braces />}
-                    label={tr("Ввід", "Input")}
-                  />
-                  <BottomTabButton
-                    active={bottomTab === "terminal"}
-                    onClick={() => setBottomTab("terminal")}
-                    icon={<SquareTerminal />}
-                    label={tr("Результат", "Output")}
-                  />
-                  <BottomTabButton
-                    active={bottomTab === "tests"}
-                    onClick={() => setBottomTab("tests")}
-                    icon={<TestTube2 />}
-                    label={tr("Перевірка", "Tests")}
-                  />
-                  {!simpleMode ? (
+                  <button
+                    type="button"
+                    className="ide-tab"
+                    role="tab"
+                    id="ide-context-tab-task"
+                    aria-selected={assistantTab === "task"}
+                    tabIndex={assistantTab === "task" ? 0 : -1}
+                    aria-controls="ide-context-panel"
+                    onClick={() => setAssistantTab("task")}
+                  >
+                    <FileText />
+                    {tr("Умова", "Description")}
+                  </button>
+                  {!props.disableAiAssistance ? (
                     <>
-                      <BottomTabButton
-                        active={bottomTab === "history"}
-                        onClick={() => setBottomTab("history")}
-                        icon={<History />}
-                        label={tr("Історія", "History")}
-                      />
-                      {props.onTrace ? (
-                        <BottomTabButton
-                          active={bottomTab === "debugger"}
-                          onClick={() => {
-                            setMode("debug");
-                            setBottomTab("debugger");
-                            props.onTrace?.();
-                          }}
-                          icon={<Gauge />}
-                          label={tr("Налагодження", "Debugger")}
-                        />
-                      ) : null}
-                      <BottomTabButton
-                        active={bottomTab === "console"}
-                        onClick={() => setBottomTab("console")}
-                        icon={<Code2 />}
-                        label={tr("Консоль", "Console")}
-                      />
+                      <button
+                        type="button"
+                        className="ide-tab"
+                        role="tab"
+                        id="ide-context-tab-hints"
+                        aria-selected={assistantTab === "hints"}
+                        tabIndex={assistantTab === "hints" ? 0 : -1}
+                        aria-controls="ide-context-panel"
+                        onClick={() => setAssistantTab("hints")}
+                      >
+                        <Lightbulb />
+                        {tr("Підказки", "Hints")}
+                        {props.hints?.length ? (
+                          <span className="ide-tab-count">
+                            {props.hints.length}
+                          </span>
+                        ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        className="ide-tab"
+                        role="tab"
+                        id="ide-context-tab-mentor"
+                        aria-selected={assistantTab === "mentor"}
+                        tabIndex={assistantTab === "mentor" ? 0 : -1}
+                        aria-controls="ide-context-panel"
+                        onClick={() => setAssistantTab("mentor")}
+                      >
+                        <Bot />
+                        {tr("Ментор", "Mentor")}
+                      </button>
                     </>
                   ) : null}
                   <button
                     type="button"
-                    className="ide-icon-btn ide-desktop-control"
-                    onClick={() => updateLayout({ bottomCollapsed: true })}
-                    aria-label={tr("Згорнути результати", "Collapse results")}
-                    title={tr("Згорнути результати", "Collapse results")}
+                    className="ide-icon-btn ide-expand-statement ide-desktop-control"
+                    onClick={() =>
+                      updateLayout({
+                        right:
+                          statementWidth > bodySize.width * 0.5
+                            ? bodySize.width * 0.42
+                            : statementBounds.max,
+                      })
+                    }
+                    aria-label={tr(
+                      "Розширити або звузити умову",
+                      "Expand or narrow the statement",
+                    )}
+                    title={tr("Розширити умову", "Expand statement")}
                   >
-                    <ChevronDown />
+                    <Maximize2 />
+                  </button>
+                  <button
+                    type="button"
+                    className="ide-icon-btn ide-desktop-control"
+                    onClick={() => updateLayout({ rightCollapsed: true })}
+                    aria-label={tr("Згорнути умову", "Collapse statement")}
+                    title={tr("Згорнути умову", "Collapse statement")}
+                  >
+                    <Minimize2 />
                   </button>
                 </div>
-                <div id="ide-runner-panel" className="ide-runner-body">
-                  {bottomTab === "input" ? renderInput() : renderBottom()}
+                <div
+                  className="ide-context-content"
+                  id="ide-context-panel"
+                  role="tabpanel"
+                  aria-labelledby={`ide-context-tab-${assistantTab}`}
+                >
+                  {contextContent}
                 </div>
-              </section>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="ide-btn ide-btn-quiet rounded-none"
-              onClick={() => {
-                setFocusMode(false);
-                updateLayout({ bottomCollapsed: false });
-              }}
-              aria-label={tr(
-                "Показати ввід та результати",
-                "Show input and results",
-              )}
+              </aside>
+            ) : (
+              <button
+                type="button"
+                className="ide-statement-rail"
+                onClick={() => {
+                  setFocusMode(false);
+                  updateLayout({ rightCollapsed: false });
+                }}
+                aria-label={tr("Показати умову", "Show statement")}
+              >
+                <FileText className="size-4" />
+                <span>{tr("Умова", "Statement")}</span>
+              </button>
+            )}
+            {showStatement ? (
+              <div
+                className="ide-resize ide-resize-vertical"
+                onPointerDown={(event) => beginResize("right", event)}
+                onKeyDown={(event) => handleResizeKeyDown("right", event)}
+                onDoubleClick={() =>
+                  updateLayout({ right: bodySize.width * 0.42 })
+                }
+                role="separator"
+                tabIndex={0}
+                aria-orientation="vertical"
+                aria-label={tr(
+                  "Змінити ширину умови задачі",
+                  "Resize task statement",
+                )}
+                aria-valuemin={statementBounds.min}
+                aria-valuemax={Math.round(statementBounds.max)}
+                aria-valuenow={Math.round(statementWidth)}
+                title={tr(
+                  "Перетягни, щоб змінити ширину. Подвійний клік — відновити.",
+                  "Drag to resize. Double-click to reset.",
+                )}
+              />
+            ) : null}
+            <section
+              id="mobile-ide-panel-code"
+              className="ide-solution"
+              aria-label={tr("Рішення", "Solution")}
             >
-              <ChevronDown className="rotate-180" />
-              {tr("Ввід та результати", "Input and results")}
-            </button>
-          )}
-        </section>
+              <div className="ide-panel-bar ide-editor-bar">
+                <span className="ide-code-label">
+                  <Code2 className="size-4" />
+                  {tr("Код", "Code")}
+                </span>
+                {!props.isWebTask ? (
+                  <select
+                    className="ide-language-select"
+                    value={props.language}
+                    onChange={(event) =>
+                      props.onLanguageChange(
+                        event.target.value as JudgeLanguage,
+                      )
+                    }
+                    disabled={
+                      props.disableLanguageChange ||
+                      props.readOnly ||
+                      busy ||
+                      languageOptions.length < 2
+                    }
+                    aria-label={tr(
+                      "Мова програмування",
+                      "Programming language",
+                    )}
+                  >
+                    {languageOptions.map((language) => (
+                      <option key={language} value={language}>
+                        {languageLabel(language)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="ide-code-label">HTML / CSS / JS</span>
+                )}
+                {!props.isWebTask ? (
+                  <label className="ide-compiler-control">
+                    <span className="ide-compiler-label">
+                      {tr("Компілятор", "Compiler")}
+                    </span>
+                    <select
+                      className="ide-language-select ide-compiler-select"
+                      value={props.compiler}
+                      onChange={(event) =>
+                        props.onCompilerChange(event.target.value)
+                      }
+                      disabled={
+                        props.disableLanguageChange ||
+                        props.readOnly ||
+                        busy ||
+                        compilersForFamily(props.language).length < 2
+                      }
+                      aria-label={tr("Версія компілятора", "Compiler version")}
+                    >
+                      {compilersForFamily(props.language).map((compiler) => (
+                        <option key={compiler.id} value={compiler.id}>
+                          {compiler.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                {props.readOnly ? (
+                  <span className="ide-input-note">
+                    {tr("Лише перегляд", "Read only")}
+                  </span>
+                ) : null}
+                <span className="ml-auto ide-code-label hidden sm:flex">
+                  {!props.useFiles
+                    ? activeFile
+                    : tr(
+                        `Файлів: ${fileList.length}`,
+                        `Files: ${fileList.length}`,
+                      )}
+                </span>
+                <button
+                  type="button"
+                  className="ide-icon-btn"
+                  onClick={() => setFocusMode((current) => !current)}
+                  aria-label={
+                    focusMode
+                      ? tr("Показати панелі", "Show panels")
+                      : tr("Розгорнути редактор", "Expand editor")
+                  }
+                  title={tr("Розгорнути редактор", "Expand editor")}
+                >
+                  {focusMode ? <Minimize2 /> : <Maximize2 />}
+                </button>
+              </div>
+              {props.localRecovery ? (
+                <div className="ide-recovery" role="status">
+                  <span>
+                    {tr(
+                      "Знайдено незбережену локальну версію",
+                      "A local unsaved version was found",
+                    )}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="ide-btn"
+                      onClick={props.localRecovery.onRecover}
+                    >
+                      {tr("Відновити", "Recover")}
+                    </button>
+                    <button
+                      type="button"
+                      className="ide-btn ide-btn-quiet"
+                      onClick={props.localRecovery.onDismiss}
+                    >
+                      {tr("Ігнорувати", "Dismiss")}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              {props.actionRecovery ? (
+                <div
+                  className="ide-recovery"
+                  data-error={props.actionRecovery.tone === "error"}
+                  role="alert"
+                >
+                  <span>{props.actionRecovery.message}</span>
+                  <button
+                    type="button"
+                    className="ide-btn"
+                    onClick={props.actionRecovery.onRetry}
+                    disabled={busy}
+                  >
+                    {props.actionRecovery.retryLabel}
+                  </button>
+                </div>
+              ) : null}
+              {props.useFiles || !simpleMode ? (
+                <div
+                  className="ide-file-tabs"
+                  role="tablist"
+                  aria-label={tr("Файли рішення", "Solution files")}
+                >
+                  {fileList.map((file) => (
+                    <button
+                      key={file.path}
+                      type="button"
+                      className="ide-file-tab"
+                      role="tab"
+                      aria-selected={activeFile === file.path}
+                      onClick={() => setActiveFile(file.path)}
+                    >
+                      <FileCode2 className="size-3.5" />
+                      {file.path}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="ide-icon-btn"
+                    disabled={props.readOnly || props.submitMode}
+                    onClick={() => {
+                      if (!props.useFiles) props.onEnableFiles();
+                      setFileAddRequestToken((value) => value + 1);
+                    }}
+                    aria-label={tr("Додати файл", "Add file")}
+                    title={tr("Додати файл", "Add file")}
+                  >
+                    <Plus />
+                  </button>
+                </div>
+              ) : null}
+              <div className="ide-editor" data-web={Boolean(props.isWebTask)}>
+                <div className="ide-code-surface">
+                  {isEmptyTask ? (
+                    <div className="ide-empty-editor">
+                      <h2>
+                        {tr(
+                          "Завдання ще не готове",
+                          "The task is not ready yet",
+                        )}
+                      </h2>
+                      <p>
+                        {props.emptyStateMessage ||
+                          tr(
+                            "Вибери активну задачу, щоб почати писати код.",
+                            "Choose an active problem to start coding.",
+                          )}
+                      </p>
+                      {props.emptyStateAction}
+                    </div>
+                  ) : props.useFiles ? (
+                    <MultiFileEditor
+                      enableSemanticLsp={props.enableSemanticLsp}
+                      language={props.isWebTask ? "html" : props.language}
+                      entryFile={props.entryFile}
+                      files={props.files}
+                      onChange={props.onFilesChange}
+                      readOnly={props.readOnly}
+                      fontSize={fontSize}
+                      wordWrap={wordWrap}
+                      minimap={false}
+                      activePath={activeFile}
+                      onActivePathChange={setActiveFile}
+                      hideTabs
+                      hasUnsavedChanges={props.hasUnsavedChanges}
+                      focusLine={compilerErrorLine}
+                      requestAddToken={fileAddRequestToken}
+                    />
+                  ) : (
+                    <PracticeCodeEditor
+                      enableSemanticLsp={props.enableSemanticLsp}
+                      taskId={props.task.id}
+                      language={props.language}
+                      value={props.code}
+                      readOnly={Boolean(props.readOnly)}
+                      fontSize={fontSize}
+                      wordWrap={wordWrap}
+                      isWebTask={Boolean(props.isWebTask)}
+                      focusLine={compilerErrorLine}
+                      onChange={handleCodeChange}
+                    />
+                  )}
+                </div>
+                {props.isWebTask && props.webPreviewFiles ? (
+                  <div className="ide-code-surface border-l border-[var(--ide-border)]">
+                    <WebPreviewPane
+                      files={props.webPreviewFiles}
+                      title={tr("Перегляд сторінки", "Page preview")}
+                    />
+                  </div>
+                ) : null}
+              </div>
+              {showRunner ? (
+                <>
+                  <div
+                    className="ide-resize ide-resize-horizontal"
+                    onPointerDown={(event) => beginResize("bottom", event)}
+                    onKeyDown={(event) => handleResizeKeyDown("bottom", event)}
+                    onDoubleClick={() => updateLayout({ bottom: 240 })}
+                    role="separator"
+                    tabIndex={0}
+                    aria-orientation="horizontal"
+                    aria-label={tr(
+                      "Змінити висоту результатів",
+                      "Resize results",
+                    )}
+                    aria-valuemin={runnerBounds.min}
+                    aria-valuemax={Math.round(runnerBounds.max)}
+                    aria-valuenow={Math.round(runnerHeight)}
+                  />
+                  <section
+                    className="ide-runner"
+                    id="mobile-ide-panel-result"
+                    aria-label={tr("Запуск та перевірка", "Run and check")}
+                  >
+                    <div
+                      className="ide-panel-bar"
+                      role="tablist"
+                      onKeyDown={handlePanelTabKeyDown}
+                      aria-label={tr("Ввід та результати", "Input and results")}
+                    >
+                      <BottomTabButton
+                        active={bottomTab === "input"}
+                        onClick={() => setBottomTab("input")}
+                        icon={<Braces />}
+                        label={tr("Ввід", "Input")}
+                      />
+                      <BottomTabButton
+                        active={bottomTab === "terminal"}
+                        onClick={() => setBottomTab("terminal")}
+                        icon={<SquareTerminal />}
+                        label={tr("Результат", "Output")}
+                      />
+                      <BottomTabButton
+                        active={bottomTab === "tests"}
+                        onClick={() => setBottomTab("tests")}
+                        icon={<TestTube2 />}
+                        label={tr("Перевірка", "Tests")}
+                      />
+                      {!simpleMode ? (
+                        <>
+                          <BottomTabButton
+                            active={bottomTab === "history"}
+                            onClick={() => setBottomTab("history")}
+                            icon={<History />}
+                            label={tr("Історія", "History")}
+                          />
+                          {props.onTrace ? (
+                            <BottomTabButton
+                              active={bottomTab === "debugger"}
+                              onClick={() => {
+                                setMode("debug");
+                                setBottomTab("debugger");
+                                props.onTrace?.();
+                              }}
+                              icon={<Gauge />}
+                              label={tr("Налагодження", "Debugger")}
+                            />
+                          ) : null}
+                          <BottomTabButton
+                            active={bottomTab === "console"}
+                            onClick={() => setBottomTab("console")}
+                            icon={<Code2 />}
+                            label={tr("Консоль", "Console")}
+                          />
+                        </>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="ide-icon-btn ide-desktop-control"
+                        onClick={() => updateLayout({ bottomCollapsed: true })}
+                        aria-label={tr(
+                          "Згорнути результати",
+                          "Collapse results",
+                        )}
+                        title={tr("Згорнути результати", "Collapse results")}
+                      >
+                        <ChevronDown />
+                      </button>
+                    </div>
+                    <div id="ide-runner-panel" className="ide-runner-body">
+                      {bottomTab === "input" ? renderInput() : renderBottom()}
+                    </div>
+                  </section>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="ide-btn ide-btn-quiet rounded-none"
+                  onClick={() => {
+                    setFocusMode(false);
+                    updateLayout({ bottomCollapsed: false });
+                  }}
+                  aria-label={tr(
+                    "Показати ввід та результати",
+                    "Show input and results",
+                  )}
+                >
+                  <ChevronDown className="rotate-180" />
+                  {tr("Ввід та результати", "Input and results")}
+                </button>
+              )}
+            </section>
+          </div>
+        </div>
       </div>
       <div className="ide-mobile-actions">{runActions}</div>
       <footer className="ide-footer">

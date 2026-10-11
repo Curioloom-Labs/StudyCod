@@ -181,7 +181,7 @@ export function TaskGenerationOverlay({
                   const done = activePhase !== "error" && index < activeIndex;
                   const current = activePhase === step;
                   return (
-                    <div key={step} className={`min-w-0 rounded-xl px-3 py-3 transition ${current ? "bg-primary text-[#062211]" : done ? "bg-accent-success/10 text-primary" : "bg-bg-base text-text-muted border border-border"}`}>
+                    <div key={step} className={`min-w-0 rounded-xl px-3 py-3 transition ${current ? "bg-primary text-primary-foreground" : done ? "bg-accent-success/10 text-primary" : "bg-bg-base text-text-muted border border-border"}`}>
                       <div className="text-[11px] font-bold tabular-nums">{String(index + 1).padStart(2, "0")}</div>
                       <div className="mt-1 truncate text-xs font-semibold">{phaseSteps[step]}</div>
                     </div>
@@ -207,7 +207,7 @@ export function TaskGenerationOverlay({
             <p className="mt-3 text-sm leading-6 text-text-secondary">{tr("Тут видно, що саме готується: зміст, перевірки та робочий шаблон. Це зрозумілий стан очікування, а не порожній екран.", "This makes the waiting state clear: content, checks, and the workspace template are being prepared.")}</p>
 
             <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-bg-code p-4">
-              <div className="relative mb-4 h-24 overflow-hidden rounded-xl bg-[#0f1a12]">
+              <div className="relative mb-4 h-24 overflow-hidden rounded-xl bg-bg-code">
                 <div className="absolute inset-x-5 top-1/2 h-px bg-primary/35" />
                 <div className="absolute left-1/2 top-1/2 grid size-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-primary/35 bg-primary/10 text-primary"><Layers3 className="size-6" /></div>
                 <div className="absolute top-0 h-full w-1/3 animate-[pulse_1.8s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-primary/25 to-transparent" style={{ left: `${Math.min(64, activeIndex * 16)}%` }} />
@@ -220,7 +220,7 @@ export function TaskGenerationOverlay({
                   const current = activePhase !== "error" && activeIndex === labStepIndex;
                   return (
                     <div key={item.title} className="flex min-w-0 items-center gap-3 rounded-xl bg-bg-surface px-4 py-3">
-                      <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${done ? "bg-primary text-[#062211]" : current ? "bg-accent-warn/10 text-accent-warn" : "bg-bg-hover text-text-muted"}`}>
+                      <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${done ? "bg-primary text-primary-foreground" : current ? "bg-accent-warn/10 text-accent-warn" : "bg-bg-hover text-text-muted"}`}>
                         {done ? <CheckCircle2 className="size-4" /> : <Clock3 className="size-4" />}
                       </span>
                       <span className="min-w-0"><span className="block truncate text-sm font-semibold">{item.title}</span><span className="block truncate text-xs text-text-muted">{item.detail}</span></span>

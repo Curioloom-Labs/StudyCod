@@ -54,7 +54,7 @@ export const ProfileCertificatesPage: React.FC = () => {
           active="certificates"
           className="mb-6"
           action={(
-            <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-[#173321] px-4 text-sm font-semibold text-white transition hover:bg-[#20462d] disabled:opacity-50 dark:bg-[#edf4ef] dark:text-[#0b120d]">
+            <button type="button" onClick={() => void refresh()} disabled={loading} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:bg-bg-surface disabled:opacity-50 dark:bg-bg-hover dark:text-text-primary">
               <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
               {copy("Оновити", "Refresh")}
             </button>
@@ -80,14 +80,14 @@ export const ProfileCertificatesPage: React.FC = () => {
 
         <section className="mt-6 flex-1">
           <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm text-[#627166] dark:text-text-secondary">
+            <p className="text-sm text-text-muted dark:text-text-secondary">
               {loading ? copy("Оновлюємо список…", "Updating your list…") : copy(`${certificates.length} доступно`, `${certificates.length} available`)}
             </p>
             {devPreview() ? <span className="rounded-full border border-border px-2.5 py-1 text-xs font-medium text-text-muted">{copy("Дані локального прев’ю", "Local preview data")}</span> : null}
           </div>
 
           {error ? (
-            <div className="rounded-2xl border border-[#ff6b9d]/30 bg-[#fff1f5] p-4 text-sm text-[#b83259] dark:bg-[#ff6b9d]/10 dark:text-[#ffabc4]">{error}</div>
+            <div className="rounded-2xl border border-accent-error/30 bg-bg-hover p-4 text-sm text-accent-error dark:bg-accent-error/10 dark:text-accent-error">{error}</div>
           ) : loading ? (
             <div className="grid gap-4 md:grid-cols-2">
               {Array.from({ length: 4 }, (_, index) => <div key={index} className="h-40 animate-pulse rounded-xl bg-bg-hover" />)}
@@ -99,7 +99,7 @@ export const ProfileCertificatesPage: React.FC = () => {
                   <Award className="size-6" />
                 </span>
                 <h2 className="mt-5 text-xl font-semibold">{copy("Сертифікатів ще немає", "No certificates yet")}</h2>
-                <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#6d7c71] dark:text-[#a2b1a6]">
+                <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-text-muted dark:text-text-secondary">
                   {copy("Після успішного контесту тут з’явиться верифікований результат.", "A verified record will appear here after a successful contest.")}
                 </p>
               </div>
@@ -111,22 +111,22 @@ export const ProfileCertificatesPage: React.FC = () => {
                 return (
                   <article key={certificate.certificateId} className="rounded-xl border border-border bg-bg-surface p-5 transition-colors hover:border-primary/45">
                     <div className="flex items-start justify-between gap-4">
-                      <span className={`grid size-11 place-items-center rounded-2xl ${valid ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-[#fff0f4] text-[#d34e72] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abb]"}`}>
+                      <span className={`grid size-11 place-items-center rounded-2xl ${valid ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-bg-hover text-accent-error dark:bg-accent-error/10 dark:text-accent-error"}`}>
                         {valid ? <Award className="size-5" /> : <ShieldX className="size-5" />}
                       </span>
-                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${valid ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-[#fff0f4] text-[#c84268] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abb]"}`}>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${valid ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-bg-hover text-accent-error dark:bg-accent-error/10 dark:text-accent-error"}`}>
                         {valid && <CheckCircle2 className="size-3.5" />}
                         {certificate.status}
                       </span>
                     </div>
                     <h2 className="mt-5 text-lg font-semibold tracking-[-.02em]">{certificate.contestTitle}</h2>
                     <div className="mt-4 grid grid-cols-3 gap-3 border-y border-border py-4 text-sm">
-                      <div><div className="text-xs text-[#78867c] dark:text-[#98a89c]">{copy("Бали", "Score")}</div><strong className="mt-1 block">{certificate.score}/{certificate.maxScore}</strong></div>
-                      <div><div className="text-xs text-[#78867c] dark:text-[#98a89c]">{copy("Місце", "Place")}</div><strong className="mt-1 block">{certificate.place ?? "—"}</strong></div>
-                      <div><div className="text-xs text-[#78867c] dark:text-[#98a89c]">ID</div><strong className="mt-1 block truncate">{certificate.certificateId}</strong></div>
+                      <div><div className="text-xs text-text-muted dark:text-text-secondary">{copy("Бали", "Score")}</div><strong className="mt-1 block">{certificate.score}/{certificate.maxScore}</strong></div>
+                      <div><div className="text-xs text-text-muted dark:text-text-secondary">{copy("Місце", "Place")}</div><strong className="mt-1 block">{certificate.place ?? "—"}</strong></div>
+                      <div><div className="text-xs text-text-muted dark:text-text-secondary">ID</div><strong className="mt-1 block truncate">{certificate.certificateId}</strong></div>
                     </div>
                     <div className="mt-4 flex items-center justify-between gap-3">
-                      <span className="text-xs text-[#78867c] dark:text-[#98a89c]">{formatDate(certificate.issuedAt ?? certificate.createdAt, english ? "en-US" : "uk-UA")}</span>
+                      <span className="text-xs text-text-muted dark:text-text-secondary">{formatDate(certificate.issuedAt ?? certificate.createdAt, english ? "en-US" : "uk-UA")}</span>
                       <Link to={`/certificate/${encodeURIComponent(certificate.certificateId)}`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-strong transition group-hover:gap-2.5 dark:text-primary-soft">
                         {copy("Перевірити", "Verify")}
                         <ArrowRight className="size-4" />

@@ -251,7 +251,7 @@ export const ScoreboardPage: React.FC = () => {
                 <Trophy className="w-3 h-3" />
                 {mode === "ICPC" ? tr("ICPC · бали + штраф", "ICPC · solved + penalty") : tr("IOI · сума балів", "IOI · points")}
               </span>
-              {isDevPreviewActive() && <span className="rounded-lg border border-[#ffb454]/30 bg-[#ffb454]/10 px-2.5 py-1 text-[11px] font-semibold text-[#80520b] dark:text-[#ffd699]">{tr("Демо · прикладові дані", "Demo · example data")}</span>}
+              {isDevPreviewActive() && <span className="rounded-lg border border-accent-warn/30 bg-accent-warn/10 px-2.5 py-1 text-[11px] font-semibold text-accent-warn dark:text-accent-warn">{tr("Демо · прикладові дані", "Demo · example data")}</span>}
               <p className="text-sm text-text-secondary">
                 {board?.hidden ? tr("Таблицю приховано відповідно до налаштувань контесту.", "The scoreboard is hidden by contest settings.") : isDevPreviewActive() ? tr("Локальна демонстрація таблиці результатів.", "Local standings demonstration.") : tr("Таблиця оновлюється автоматично.", "Standings update automatically.")}
               </p>
@@ -357,8 +357,8 @@ export const ScoreboardPage: React.FC = () => {
               <div className="overflow-x-auto rounded-2xl border border-border/80 bg-bg-surface shadow-[0_18px_55px_-42px_rgba(0,0,0,.7)]">
                 <table className="w-full min-w-[760px] border-separate border-spacing-0 text-sm">
                   <thead className="sticky top-0 z-20">
-                    <tr className="bg-[#111a14] text-xs font-bold uppercase tracking-[.08em] text-[#aebdb2]">
-                      <th scope="col" className="sticky left-0 z-20 border-b border-border/80 bg-[#111a14] px-4 py-4 text-left">#</th>
+                    <tr className="bg-bg-code text-xs font-bold uppercase tracking-[.08em] text-text-secondary">
+                      <th scope="col" className="sticky left-0 z-20 border-b border-border/80 bg-bg-code px-4 py-4 text-left">#</th>
                       <th scope="col" className="border-b border-border/80 px-4 py-4 text-left">{tr("Учасник", "Participant")}</th>
                       {problems.map((p) => (
                         <th scope="col" key={p.id} className="border-b border-border/80 px-4 py-4 text-center" title={p.maxScore ? `max ${p.maxScore}` : undefined}>
@@ -369,8 +369,8 @@ export const ScoreboardPage: React.FC = () => {
                       <th scope="col" className="border-b border-border/80 px-4 py-4 text-center">{tr("Штраф", "Pen.")}</th>
                     </tr>
                     {/* Per-problem solve stats */}
-                    <tr className="bg-[#0d1510] text-[11px] text-text-muted">
-                      <th scope="col" className="sticky left-0 z-20 border-b border-border/80 bg-[#0d1510] px-4 py-2" />
+                    <tr className="bg-bg-code text-[11px] text-text-muted">
+                      <th scope="col" className="sticky left-0 z-20 border-b border-border/80 bg-bg-code px-4 py-2" />
                       <th scope="col" className="border-b border-border/80 px-4 py-2 text-left font-medium">{tr("розв./спроб", "solved/att")}</th>
                       {problems.map((p) => {
                         const s = solveStats[p.id] ?? { solved: 0, attempted: 0 };
@@ -395,7 +395,7 @@ export const ScoreboardPage: React.FC = () => {
                           ref={me ? meRowRef : undefined}
                       className={`group transition-colors hover:bg-bg-hover ${me ? "bg-secondary/[.12]" : "odd:bg-bg-base/50 even:bg-bg-surface"}`}
                         >
-                          <td className={`sticky left-0 z-10 border-b border-border/70 px-4 py-3 ${me ? "bg-[#153321]" : "bg-bg-surface group-odd:bg-bg-base"}`}>
+                          <td className={`sticky left-0 z-10 border-b border-border/70 px-4 py-3 ${me ? "bg-primary" : "bg-bg-surface group-odd:bg-bg-base"}`}>
                             <span className={`inline-flex h-8 min-w-8 items-center justify-center rounded-lg border px-2 text-xs font-extrabold tabular-nums ${rankBadgeTone(r.rank)}`}>
                               {r.rank}
                             </span>

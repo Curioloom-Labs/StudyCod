@@ -117,23 +117,23 @@ const Overlay: React.FC<{
 }> = ({ title, sub, children, onClose }) => {
   const titleId = React.useId();
   const panelRef = useDialogA11y({ open: true, onClose });
-  return <div data-dialog-a11y="direct" data-material="lesson-dialog-scrim" className="fixed inset-0 z-[80] overflow-y-auto bg-[#07100a]/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={panelRef as React.RefObject<HTMLElement>} data-dialog-a11y="direct" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-material="lesson-dialog" className="mx-auto mt-8 max-w-xl rounded-[30px] bg-bg-surface p-6 shadow-2xl dark:bg-[#101a13] sm:p-8">
+  return <div data-dialog-a11y="direct" data-material="lesson-dialog-scrim" className="fixed inset-0 z-[80] overflow-y-auto bg-bg-code/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section ref={panelRef as React.RefObject<HTMLElement>} data-dialog-a11y="direct" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-material="lesson-dialog" className="mx-auto mt-8 max-w-xl rounded-[30px] bg-bg-surface p-6 shadow-2xl dark:bg-bg-code sm:p-8">
       <button type="button"
         onClick={onClose}
         aria-label={tr("Закрити вікно", "Close dialog")}
-        className="float-right grid h-10 w-10 place-items-center rounded-full bg-[#edf2ed] text-xl dark:bg-white/[.07]"
+        className="float-right grid h-10 w-10 place-items-center rounded-full bg-bg-hover text-xl dark:bg-white/[.07]"
       >
         ×
       </button>
-      <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">
+      <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">
         {tr("Урок / редактор", "Lesson / editor")}
       </p>
       <h2 id={titleId} className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">
         {title}
       </h2>
       {sub && (
-        <p className="mt-2 text-sm leading-6 text-[#718075] dark:text-[#a6b4a9]">
+        <p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
           {sub}
         </p>
       )}
@@ -156,7 +156,7 @@ const markdownBlocks = (source?: string) =>
       ) : block.startsWith("-") ? (
         <ul
           key={index}
-          className="mt-4 space-y-2 text-base leading-7 text-[#405046] dark:text-[#c5d1c8]"
+          className="mt-4 space-y-2 text-base leading-7 text-text-primary dark:text-text-secondary"
         >
           {block.split("\n").map((item) => (
             <li key={item} className="flex gap-2">
@@ -168,7 +168,7 @@ const markdownBlocks = (source?: string) =>
       ) : (
         <p
           key={index}
-          className="mt-4 text-base leading-8 text-[#405046] dark:text-[#c5d1c8]"
+          className="mt-4 text-base leading-8 text-text-primary dark:text-text-secondary"
         >
           {block}
         </p>
@@ -309,21 +309,21 @@ const LessonTeacherStudio: React.FC = () => {
           const back = (location.state as { from?: string } | null)?.from;
           navigate(back || "/edu/lessons");
         }}
-        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] transition hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"
+        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-text-muted transition hover:text-primary-strong dark:text-text-secondary dark:hover:text-primary-soft"
       >
         <ArrowLeft className="h-4 w-4" />
         {tr("До навчального плану", "Back to learning plan")}
       </button>
-      <header className="overflow-hidden rounded-[34px] bg-[#f2f6f2] p-6 dark:bg-[#152119] sm:p-10">
+      <header className="overflow-hidden rounded-[34px] bg-bg-hover p-6 dark:bg-bg-base sm:p-10">
         <div className="flex flex-col justify-between gap-8 xl:flex-row xl:items-end">
           <div className="max-w-3xl">
-            <p className="text-xs font-bold uppercase tracking-[.16em] text-[#e17800]">
+            <p className="text-xs font-bold uppercase tracking-[.16em] text-accent-warn">
               {lesson.parentTopicTitle || tr("Навчальний модуль", "Learning module")}
             </p>
             <h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.065em] sm:text-6xl">
               {title}
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-[#617268] dark:text-[#bfccc3]">
+            <p className="mt-4 max-w-2xl text-base leading-7 text-text-muted dark:text-text-secondary">
               {isControl
                 ? tr("Зосереджена перевірка навичок — без зайвих екранів і несподіванок.", "A focused skills check, without extra screens or surprises.")
                 : tr("Пройдіть матеріал у власному темпі, закріпіть його практикою та короткою перевіркою.", "Work through the material at your own pace, practice, and finish with a short check.")}
@@ -332,14 +332,14 @@ const LessonTeacherStudio: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             <button type="button"
               onClick={() => void begin()}
-              className="rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-primary dark:text-[#062211]"
+              className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground dark:bg-primary dark:text-primary-foreground"
             >
               <Play className="mr-2 inline h-4 w-4" />
               {tr("Почати", "Start")}
             </button>
             <button type="button"
               onClick={() => setModal("task")}
-              className="rounded-xl border border-border/12 px-4 py-3 text-sm font-bold text-[#32443a] dark:border-white/10 dark:text-white"
+              className="rounded-xl border border-border/12 px-4 py-3 text-sm font-bold text-text-primary dark:border-white/10 dark:text-white"
             >
               <Plus className="mr-2 inline h-4 w-4" />
               {tr("Практика", "Practice")}
@@ -348,7 +348,7 @@ const LessonTeacherStudio: React.FC = () => {
         </div>
         <div className="mt-10 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl bg-white/85 px-4 py-4 dark:bg-white/[.06]">
-            <p className="text-xs font-bold uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">
+            <p className="text-xs font-bold uppercase tracking-[.12em] text-text-muted dark:text-text-secondary">
               {tr("Матеріал", "Material")}
             </p>
             <p className="mt-2 text-lg font-bold">
@@ -358,7 +358,7 @@ const LessonTeacherStudio: React.FC = () => {
             </p>
           </div>
           <div className="rounded-2xl bg-white/85 px-4 py-4 dark:bg-white/[.06]">
-            <p className="text-xs font-bold uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">
+            <p className="text-xs font-bold uppercase tracking-[.12em] text-text-muted dark:text-text-secondary">
               {tr("Практика", "Practice")}
             </p>
             <p className="mt-2 text-lg font-bold">
@@ -366,7 +366,7 @@ const LessonTeacherStudio: React.FC = () => {
             </p>
           </div>
           <div className="rounded-2xl bg-white/85 px-4 py-4 dark:bg-white/[.06]">
-            <p className="text-xs font-bold uppercase tracking-[.12em] text-[#718075] dark:text-[#a6b4a9]">
+            <p className="text-xs font-bold uppercase tracking-[.12em] text-text-muted dark:text-text-secondary">
               {tr("Режим", "Mode")}
             </p>
             <p className="mt-2 text-lg font-bold">
@@ -378,7 +378,7 @@ const LessonTeacherStudio: React.FC = () => {
         </div>
       </header>
       {error && (
-        <div className="mt-5 rounded-2xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/[.08] px-4 py-3 text-sm text-[#c4436b] dark:text-[#ff9abd]">
+        <div className="mt-5 rounded-2xl border border-accent-error/25 bg-accent-error/[.08] px-4 py-3 text-sm text-accent-error dark:text-accent-error">
           {error}
         </div>
       )}
@@ -401,9 +401,9 @@ const LessonTeacherStudio: React.FC = () => {
             {lesson.theory ? (
               markdownBlocks(lesson.theory)
             ) : (
-              <div className="rounded-2xl bg-[#f3f7f3] px-5 py-8 text-center dark:bg-white/[.045]">
-                <Sparkles className="mx-auto h-6 w-6 text-[#e17800]" />
-                <p className="mt-3 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">
+              <div className="rounded-2xl bg-bg-hover px-5 py-8 text-center dark:bg-white/[.045]">
+                <Sparkles className="mx-auto h-6 w-6 text-accent-warn" />
+                <p className="mt-3 text-sm leading-6 text-text-muted dark:text-text-secondary">
                   {tr("Цей блок поки без теорії. Можна почати з практики або додати матеріал у редакторі уроку.", "This lesson has no theory yet. You can start with practice or add material in the lesson editor.")}
                 </p>
               </div>
@@ -411,14 +411,14 @@ const LessonTeacherStudio: React.FC = () => {
           </div>
         </article>
         <aside className="space-y-5">
-          <section className="rounded-[30px] bg-[#163321] p-6 text-white shadow-[0_16px_45px_rgba(13,51,27,.16)] dark:bg-[#1b2b20]">
+          <section className="rounded-[30px] bg-bg-surface p-6 text-text-primary shadow-[0_16px_45px_rgba(13,51,27,.16)] dark:bg-bg-surface">
             <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-soft">
               {tr("Наступний крок", "Next step")}
             </p>
             <h2 className="mt-3 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">
               {tr("Застосуйте знання", "Apply what you learned")}
             </h2>
-            <p className="mt-3 text-sm leading-6 text-[#c5d3c9]">
+            <p className="mt-3 text-sm leading-6 text-text-primary">
               {tr("Практика одразу після пояснення допомагає зрозуміти, де саме потрібна ще одна спроба.", "Practicing right after an explanation helps you see where you need another attempt.")}
             </p>
             <button type="button"
@@ -429,7 +429,7 @@ const LessonTeacherStudio: React.FC = () => {
                 })
               }
               disabled={!tasks.length}
-              className="mt-5 w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-[#062211] disabled:opacity-40"
+              className="mt-5 w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-40"
             >
               {tr("Відкрити перше завдання", "Open the first task")}{" "}
               <ArrowRight className="ml-1 inline h-4 w-4" />
@@ -438,12 +438,12 @@ const LessonTeacherStudio: React.FC = () => {
           <section className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">
+                <p className="text-xs font-bold uppercase tracking-[.13em] text-accent-warn">
                   {tr("Самоперевірка", "Self-check")}
                 </p>
                 <h2 className="mt-1 text-xl font-bold">{tr("Квіз", "Quiz")}</h2>
               </div>
-              <ClipboardCheck className="h-5 w-5 text-[#e17800]" />
+              <ClipboardCheck className="h-5 w-5 text-accent-warn" />
             </div>
             {quiz.length ? (
               <button type="button"
@@ -470,7 +470,7 @@ const LessonTeacherStudio: React.FC = () => {
       <section id="lesson-practice" className="mt-8">
         <div className="flex items-end justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">
               {tr("Практика", "Practice")}
             </p>
             <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">
@@ -496,14 +496,14 @@ const LessonTeacherStudio: React.FC = () => {
               className="group rounded-[24px] border border-border/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/[.09] dark:bg-bg-surface"
             >
               <div className="flex gap-4">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-[#fff1dc] text-sm font-extrabold text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-bg-hover text-sm font-extrabold text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn">
                   {String(index + 1).padStart(2, "0")}
                 </span>
                 <div>
                   <h3 className="font-bold group-hover:text-primary-strong dark:group-hover:text-primary-soft">
                     {entry.title}
                   </h3>
-                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">
+                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
                     {entry.description}
                   </p>
                 </div>
@@ -513,7 +513,7 @@ const LessonTeacherStudio: React.FC = () => {
           {!tasks.length && (
             <button type="button"
               onClick={() => setModal("task")}
-              className="rounded-[24px] border border-dashed border-border/15 px-5 py-12 text-center text-sm font-bold text-[#708077] dark:border-white/10 dark:text-[#a6b4a9]"
+              className="rounded-[24px] border border-dashed border-border/15 px-5 py-12 text-center text-sm font-bold text-text-muted dark:border-white/10 dark:text-text-secondary"
             >
               {tr("Додайте першу практику", "Add your first practice task")}
             </button>
@@ -527,7 +527,7 @@ const LessonTeacherStudio: React.FC = () => {
         >
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">
+              <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">
                 {tr("Самоперевірка", "Self-check")}
               </p>
               <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">
@@ -545,7 +545,7 @@ const LessonTeacherStudio: React.FC = () => {
             {quiz.map((question, index) => (
               <fieldset
                 key={`${question.question}-${index}`}
-                className="rounded-2xl bg-[#f3f7f3] p-5 dark:bg-white/[.045]"
+                className="rounded-2xl bg-bg-hover p-5 dark:bg-white/[.045]"
               >
                 <legend className="text-base font-bold leading-7">
                   {index + 1}. {question.question}
@@ -555,7 +555,7 @@ const LessonTeacherStudio: React.FC = () => {
                     ([key, value]) => (
                       <label
                         key={key}
-                        className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${answers[index] === key ? "bg-[#dff6e7] text-[#134c2d] dark:bg-primary/12 dark:text-[#a4f4c8]" : "bg-white text-[#415147] dark:bg-bg-surface dark:text-[#dbe6de]"}`}
+                        className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${answers[index] === key ? "bg-[var(--surface-primary)] text-text-primary dark:bg-primary/12 dark:text-primary-strong" : "bg-white text-text-primary dark:bg-bg-surface dark:text-text-primary"}`}
                       >
                         <input
                           type="radio"
@@ -577,7 +577,7 @@ const LessonTeacherStudio: React.FC = () => {
           <button type="button"
             disabled={busy || quizState === "done"}
             onClick={() => void submit()}
-            className="mt-6 rounded-xl bg-[#153321] px-5 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"
+            className="mt-6 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground"
           >
             {busy ? tr("Перевіряємо…", "Checking…") : tr("Надіслати відповіді", "Submit answers")}
           </button>
@@ -596,7 +596,7 @@ const LessonTeacherStudio: React.FC = () => {
                 setTask({ ...task, title: event.target.value })
               }
               placeholder={tr("Назва завдання", "Task title")}
-              className="w-full rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]"
+              className="w-full rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-bg-code"
             />
             <textarea
               value={task.description}
@@ -605,7 +605,7 @@ const LessonTeacherStudio: React.FC = () => {
               }
               placeholder={tr("Умова", "Problem statement")}
               rows={5}
-              className="w-full resize-none rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-[#0d1710]"
+              className="w-full resize-none rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-bg-code"
             />
             <textarea
               value={task.template}
@@ -614,7 +614,7 @@ const LessonTeacherStudio: React.FC = () => {
               }
               placeholder={tr("Стартовий код (за потреби)", "Starter code (optional)")}
               rows={4}
-              className="w-full resize-none rounded-xl border border-border/10 bg-white px-4 py-3 font-mono text-sm dark:border-white/10 dark:bg-[#0d1710]"
+              className="w-full resize-none rounded-xl border border-border/10 bg-white px-4 py-3 font-mono text-sm dark:border-white/10 dark:bg-bg-code"
             />
             <textarea
               value={task.projectSpecJson || ""}
@@ -624,12 +624,12 @@ const LessonTeacherStudio: React.FC = () => {
               placeholder={'Mini-project JSON (optional): {"version":1,"kind":"MINI_PROJECT",...}'}
               rows={7}
               spellCheck={false}
-              className="w-full resize-none rounded-xl border border-primary-strong/25 bg-[#f3f8f3] px-4 py-3 font-mono text-xs dark:border-primary/25 dark:bg-[#0d1710]"
+              className="w-full resize-none rounded-xl border border-primary-strong/25 bg-bg-hover px-4 py-3 font-mono text-xs dark:border-primary/25 dark:bg-bg-code"
             />
             <button type="button"
               disabled={busy || !task.title.trim()}
               onClick={() => void create()}
-              className="w-full rounded-xl bg-[#153321] px-4 py-3 font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"
+              className="w-full rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground"
             >
               {busy ? tr("Створюємо…", "Creating…") : tr("Додати практику", "Add practice")}
             </button>
@@ -642,16 +642,16 @@ const LessonTeacherStudio: React.FC = () => {
           sub={tr("Квіз генерується на основі теми уроку та одразу зберігається у ньому.", "The quiz is generated from the lesson topic and saved to the lesson.")}
           onClose={() => setModal(null)}
         >
-          <div className="rounded-2xl bg-[#f3f7f3] p-5 dark:bg-white/[.045]">
-            <LockKeyhole className="h-5 w-5 text-[#e17800]" />
-            <p className="mt-3 text-sm leading-6 text-[#617268] dark:text-[#c5d1c8]">
+          <div className="rounded-2xl bg-bg-hover p-5 dark:bg-white/[.045]">
+            <LockKeyhole className="h-5 w-5 text-accent-warn" />
+            <p className="mt-3 text-sm leading-6 text-text-muted dark:text-text-secondary">
               {tr("Буде створено 8 коротких запитань. Перед публікацією їх можна переглянути у цьому самому уроці.", "Eight short questions will be created. You can review them in this lesson before publishing.")}
             </p>
           </div>
           <button type="button"
             disabled={busy}
             onClick={() => void createQuiz()}
-            className="mt-5 w-full rounded-xl bg-[#153321] px-4 py-3 font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"
+            className="mt-5 w-full rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground"
           >
             {busy ? tr("Готуємо…", "Preparing…") : tr("Згенерувати квіз", "Generate quiz")}
           </button>
@@ -722,7 +722,7 @@ const StudentLessonWorkspace: React.FC = () => {
   if (!lesson)
     return (
       <div className={shell}>
-        <p className="rounded-2xl bg-[#ff6b9d]/10 p-5 text-[#c4436b]">
+        <p className="rounded-2xl bg-accent-error/10 p-5 text-accent-error">
         {error || tr("Урок не знайдено.", "Lesson not found.")}
         </p>
       </div>
@@ -762,20 +762,20 @@ const StudentLessonWorkspace: React.FC = () => {
         onClick={() =>
           navigate(`/edu/lessons${preview() ? "?preview=true" : ""}`)
         }
-        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"
+        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-text-muted hover:text-primary-strong dark:text-text-secondary dark:hover:text-primary-soft"
       >
         <ArrowLeft className="size-4" />
         {tr("До моїх уроків", "Back to my lessons")}
       </button>
-      <header className="overflow-hidden rounded-[34px] bg-[#172c20] p-7 text-white sm:p-10">
+      <header className="overflow-hidden rounded-[34px] bg-bg-surface p-7 text-text-primary sm:p-10">
         <div className="max-w-3xl">
-          <p className="text-xs font-bold uppercase tracking-[.16em] text-[#83efb6]">
+          <p className="text-xs font-bold uppercase tracking-[.16em] text-primary-strong">
             {tr("Призначений урок", "Assigned lesson")} · {lesson.parentTopicTitle || tr("Навчальний модуль", "Learning module")}
           </p>
           <h1 className="mt-4 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.06em] sm:text-6xl">
             {lesson.title}
           </h1>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-[#bed0c2]">
+          <p className="mt-5 max-w-2xl text-base leading-7 text-text-secondary">
             {tr("Пройди матеріал, виконай призначену практику й заверши короткою самоперевіркою. Створювати чи змінювати урок не потрібно.", "Work through the material, complete the assigned practice, and finish with a short self-check. You don't need to create or edit the lesson.")}
           </p>
           <button
@@ -793,14 +793,14 @@ const StudentLessonWorkspace: React.FC = () => {
                 setStartBusy(false);
               }
             })()}
-            className="mt-7 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-[#062211]"
+            className="mt-7 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground"
           >
             {startBusy ? tr("Запускаємо…", "Starting…") : started ? tr("Урок розпочато", "Lesson started") : tr("Почати урок", "Start lesson")}
           </button>
         </div>
       </header>
       {error && (
-        <div role="alert" className="mt-5 rounded-2xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/[.08] px-4 py-3 text-sm text-[#c4436b] dark:text-[#ff9abd]">
+        <div role="alert" className="mt-5 rounded-2xl border border-accent-error/25 bg-accent-error/[.08] px-4 py-3 text-sm text-accent-error dark:text-accent-error">
           {error}
         </div>
       )}
@@ -821,49 +821,49 @@ const StudentLessonWorkspace: React.FC = () => {
             {lesson.theory ? (
               markdownBlocks(lesson.theory)
             ) : (
-              <p className="text-base leading-8 text-[#617268] dark:text-[#c5d1c8]">
+              <p className="text-base leading-8 text-text-muted dark:text-text-secondary">
                 {tr("Викладач додав практику без окремого текстового матеріалу. Почни з першої задачі.", "Your teacher added practice without separate reading material. Start with the first task.")}
               </p>
             )}
           </div>
         </article>
-        <aside className="rounded-[30px] bg-[#fff8e5] p-6 dark:bg-[#ff8c00]/[.08]">
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#bd6800] dark:text-[#ffb760]">
+        <aside className="rounded-[30px] bg-bg-hover p-6 dark:bg-accent-warn/[.08]">
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn dark:text-accent-warn">
             {tr("Твій маршрут", "Your path")}
           </p>
-          <ol className="mt-5 space-y-4 text-sm leading-6 text-[#65746a] dark:text-[#c7b795]">
+          <ol className="mt-5 space-y-4 text-sm leading-6 text-text-muted dark:text-accent-warn">
             <li>
-              <b className="mr-2 text-[#bd6800] dark:text-[#ffb760]">01</b>
+              <b className="mr-2 text-accent-warn dark:text-accent-warn">01</b>
               {tr("Ознайомся з матеріалом.", "Review the material.")}
             </li>
             <li>
-              <b className="mr-2 text-[#bd6800] dark:text-[#ffb760]">02</b>
+              <b className="mr-2 text-accent-warn dark:text-accent-warn">02</b>
               {tr("Виконай", "Complete")} {tasks.length} {tasks.length === 1 ? tr("задачу", "task") : tr("задачі", "tasks")}.
             </li>
             <li>
-              <b className="mr-2 text-[#bd6800] dark:text-[#ffb760]">03</b>
+              <b className="mr-2 text-accent-warn dark:text-accent-warn">03</b>
               {tr("Повернися до журналу за результатом.", "Return to the journal to see your results.")}
             </li>
           </ol>
         </aside>
       </main>
       {isControl && quizRequired && (
-        <section className="mt-8 rounded-[30px] border border-[#e17800]/30 bg-white p-6 dark:border-[#ffb760]/30 dark:bg-bg-surface sm:p-9">
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#bd6800] dark:text-[#ffb760]">{tr("Теоретична частина", "Theory section")}</p>
+        <section className="mt-8 rounded-[30px] border border-accent-warn/30 bg-white p-6 dark:border-accent-warn/30 dark:bg-bg-surface sm:p-9">
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn dark:text-accent-warn">{tr("Теоретична частина", "Theory section")}</p>
           <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">{tr("Пройдіть короткий квіз перед практикою", "Complete a short quiz before practice")}</h2>
           {!quiz.length ? (
-            <p className="mt-4 rounded-2xl bg-[#fff8e5] p-4 text-sm text-[#8b5c18] dark:bg-[#ff8c00]/[.08] dark:text-[#ffca7e]">{tr("Квіз ще не налаштовано. Зверніться до викладача.", "The quiz hasn't been set up yet. Contact your teacher.")}</p>
+            <p className="mt-4 rounded-2xl bg-bg-hover p-4 text-sm text-accent-warn dark:bg-accent-warn/[.08] dark:text-accent-warn">{tr("Квіз ще не налаштовано. Зверніться до викладача.", "The quiz hasn't been set up yet. Contact your teacher.")}</p>
           ) : quizSubmitted ? (
-            <p className="mt-4 rounded-2xl bg-primary/10 p-4 text-sm font-bold text-primary-strong dark:bg-primary/10 dark:text-[#a4f4c8]">{tr("Квіз завершено. Практичні задачі відкриті.", "Quiz complete. Practice tasks are now available.")}</p>
+            <p className="mt-4 rounded-2xl bg-primary/10 p-4 text-sm font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-strong">{tr("Квіз завершено. Практичні задачі відкриті.", "Quiz complete. Practice tasks are now available.")}</p>
           ) : (
             <>
               <div className="mt-7 space-y-5">
                 {quiz.map((question, index) => (
-                  <fieldset key={`${question.question}-${index}`} className="rounded-2xl bg-[#f3f7f3] p-5 dark:bg-white/[.045]">
+                  <fieldset key={`${question.question}-${index}`} className="rounded-2xl bg-bg-hover p-5 dark:bg-white/[.045]">
                     <legend className="text-base font-bold leading-7">{index + 1}. {question.question}</legend>
                     <div className="mt-4 grid gap-2">
                       {Object.entries(question.options || {}).map(([key, value]) => (
-                        <label key={key} className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${quizAnswers[index] === key ? "bg-[#dff6e7] text-[#134c2d] dark:bg-primary/12 dark:text-[#a4f4c8]" : "bg-white text-[#415147] dark:bg-bg-surface dark:text-[#dbe6de]"}`}>
+                        <label key={key} className={`flex cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${quizAnswers[index] === key ? "bg-[var(--surface-primary)] text-text-primary dark:bg-primary/12 dark:text-primary-strong" : "bg-white text-text-primary dark:bg-bg-surface dark:text-text-primary"}`}>
                           <input type="radio" name={`student-quiz-${index}`} checked={quizAnswers[index] === key} onChange={() => setQuizAnswers((current) => { const next = { ...current, [index]: key }; localStorage.setItem(`studycod.edu.lesson.${id}.quiz`, JSON.stringify(next)); return next; })} />
                           <span className="font-bold">{key}</span><span>{value}</span>
                         </label>
@@ -872,13 +872,13 @@ const StudentLessonWorkspace: React.FC = () => {
                   </fieldset>
                 ))}
               </div>
-              <button type="button" disabled={quizBusy || Object.keys(quizAnswers).length < quiz.length} onClick={() => void submitStudentQuiz()} className="mt-6 rounded-xl bg-[#153321] px-5 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]">{quizBusy ? tr("Перевіряємо…", "Checking…") : tr("Надіслати квіз", "Submit quiz")}</button>
+              <button type="button" disabled={quizBusy || Object.keys(quizAnswers).length < quiz.length} onClick={() => void submitStudentQuiz()} className="mt-6 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground">{quizBusy ? tr("Перевіряємо…", "Checking…") : tr("Надіслати квіз", "Submit quiz")}</button>
             </>
           )}
         </section>
       )}
       <section className="mt-8">
-        <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">
+        <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">
           {tr("Призначена практика", "Assigned practice")}
         </p>
         <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">
@@ -897,13 +897,13 @@ const StudentLessonWorkspace: React.FC = () => {
               }
               className="group rounded-[24px] border border-border/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[.09] dark:bg-bg-surface"
             >
-              <span className="grid size-10 place-items-center rounded-2xl bg-[#fff1dc] text-sm font-extrabold text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]">
+              <span className="grid size-10 place-items-center rounded-2xl bg-bg-hover text-sm font-extrabold text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn">
                 {String(index + 1).padStart(2, "0")}
               </span>
               <h3 className="mt-5 font-bold group-hover:text-primary-strong dark:group-hover:text-primary-soft">
                 {task.title}
               </h3>
-              <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">
+              <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
                 {task.description}
               </p>
               <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-primary-strong dark:text-primary-soft">
@@ -911,9 +911,9 @@ const StudentLessonWorkspace: React.FC = () => {
               </span>
             </button>
           ))}
-          {!quizGatePassed && <p className="rounded-2xl border border-dashed border-[#e17800]/35 bg-[#fff8e5] px-5 py-4 text-sm text-[#8b5c18] dark:border-[#ffb760]/35 dark:bg-[#ff8c00]/[.08] dark:text-[#ffca7e]">{tr("Спочатку завершіть квіз — після цього відкриється практична частина.", "Complete the quiz first to unlock the practice section.")}</p>}
+          {!quizGatePassed && <p className="rounded-2xl border border-dashed border-accent-warn/35 bg-bg-hover px-5 py-4 text-sm text-accent-warn dark:border-accent-warn/35 dark:bg-accent-warn/[.08] dark:text-accent-warn">{tr("Спочатку завершіть квіз — після цього відкриється практична частина.", "Complete the quiz first to unlock the practice section.")}</p>}
           {!tasks.length && (
-            <div className="rounded-[24px] border border-dashed border-border/15 p-8 text-sm text-[#718075] dark:border-white/10 dark:text-[#a6b4a9]">
+            <div className="rounded-[24px] border border-dashed border-border/15 p-8 text-sm text-text-muted dark:border-white/10 dark:text-text-secondary">
               {tr("Викладач ще не додав задачі до уроку.", "Your teacher hasn't added any tasks to this lesson yet.")}
             </div>
           )}

@@ -32,12 +32,12 @@ const CATEGORY_LABEL: Record<BlogCategory, [string, string]> = {
 };
 
 const CATEGORY_CLASS: Record<BlogCategory, string> = {
-  NEWS: "bg-primary/12 text-primary-strong dark:text-[#65ecad]",
-  ANNOUNCEMENT: "bg-[#ffd93d]/20 text-[#806500] dark:text-[#ffe16a]",
-  FEATURE: "bg-[#ff8c00]/12 text-[#a85900] dark:text-[#ffad4a]",
-  FIX: "bg-[#ff6b9d]/12 text-[#c43b6d] dark:text-[#ff8fb6]",
+  NEWS: "bg-primary/12 text-primary-strong dark:text-primary-strong",
+  ANNOUNCEMENT: "bg-accent-warn/20 text-accent-warn dark:text-accent-warn",
+  FEATURE: "bg-accent-warn/12 text-accent-warn dark:text-accent-warn",
+  FIX: "bg-accent-error/12 text-accent-error dark:text-accent-error",
   IMPROVEMENT:
-    "bg-[#dce6df] text-[#536158] dark:bg-white/[.07] dark:text-[#b2bdb5]",
+    "bg-bg-hover text-text-muted dark:bg-white/[.07] dark:text-text-secondary",
 };
 
 const PREVIEW_POSTS: BlogPostListItem[] = [
@@ -242,7 +242,7 @@ const CoverVisual: React.FC<{
           ? "#ffd93d"
           : "var(--primary)";
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#101713]">
+    <div className="relative h-full w-full overflow-hidden bg-bg-code">
       <div
         className="absolute -right-16 -top-20 size-56 rounded-full blur-[70px]"
         style={{ backgroundColor: color + "26" }}
@@ -315,12 +315,12 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
           <motion.div
             initial={reduceMotion ? undefined : { opacity: 0, y: 18 }}
             animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-            className="relative overflow-hidden rounded-[32px] bg-[#101713] px-[clamp(24px,6vw,76px)] py-[clamp(52px,7vw,82px)] text-white"
+            className="relative overflow-hidden rounded-[32px] bg-bg-code px-[clamp(24px,6vw,76px)] py-[clamp(52px,7vw,82px)] text-text-primary"
           >
             <div className="absolute -right-24 -top-40 size-[420px] rounded-full bg-primary/10 blur-[100px]" />
             <div className="relative flex flex-wrap items-end justify-between gap-8">
               <div className="max-w-[750px]">
-                <span className="text-[10px] font-extrabold uppercase tracking-[.16em] text-[#65ecad]">
+                <span className="text-[10px] font-extrabold uppercase tracking-[.16em] text-primary-strong">
                   StudyCod Journal
                 </span>
                 <h1 className="mt-5 text-balance text-[clamp(42px,6vw,74px)] font-extrabold leading-[.98] tracking-[-.055em]">
@@ -331,7 +331,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                         "How the learning experience evolves.",
                       )}
                 </h1>
-                <p className="mt-6 max-w-[610px] text-[16px] leading-7 text-[#aab5ad]">
+                <p className="mt-6 max-w-[610px] text-[16px] leading-7 text-text-secondary">
                   {tr(
                     "Оновлення продукту, педагогічні рішення й деталі, які роблять практику програмування зрозумілішою.",
                     "Product updates, teaching decisions, and details that make programming practice clearer.",
@@ -341,7 +341,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
               {isAdmin && (
                 <button type="button"
                   onClick={() => navigate("/blog/admin")}
-                  className="inline-flex h-11 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[.06] px-4 text-[11px] font-bold text-[#c2ccc5]"
+                  className="inline-flex h-11 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[.06] px-4 text-[11px] font-bold text-text-secondary"
                 >
                   <Settings className="size-4" />
                   {tr("Керування", "Manage")}
@@ -354,7 +354,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
         <section className="mx-auto w-[min(1120px,calc(100%_-_48px))] py-16 max-md:w-[calc(100%_-_28px)]">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <span className="text-[10px] font-extrabold uppercase tracking-[.14em] text-primary-strong dark:text-[#65ecad]">
+              <span className="text-[10px] font-extrabold uppercase tracking-[.14em] text-primary-strong dark:text-primary-strong">
                 {tr("Журнал продукту", "Product journal")}
               </span>
               <h2 className="mt-2 text-[32px] font-bold tracking-[-.045em]">
@@ -370,8 +370,8 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                     className={
                       "whitespace-nowrap rounded-xl px-3.5 py-2.5 text-[10px] font-bold transition " +
                       (category === value
-                        ? "bg-[#111814] text-white dark:bg-[#edf3ef] dark:text-text-primary"
-                        : "text-[#718078] dark:text-[#96a299]")
+                        ? "bg-bg-code text-text-primary dark:bg-bg-hover dark:text-text-primary"
+                        : "text-text-muted dark:text-text-secondary")
                     }
                   >
                     {value === "ALL"
@@ -385,11 +385,11 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
 
           {loading && !sourcePosts.length ? (
             <div className="mt-8 grid gap-4 md:grid-cols-2">
-              <div className="h-[420px] animate-pulse rounded-[26px] bg-[#e9ede8] dark:bg-bg-surface" />
-              <div className="h-[420px] animate-pulse rounded-[26px] bg-[#e9ede8] dark:bg-bg-surface" />
+              <div className="h-[420px] animate-pulse rounded-[26px] bg-bg-hover dark:bg-bg-surface" />
+              <div className="h-[420px] animate-pulse rounded-[26px] bg-bg-hover dark:bg-bg-surface" />
             </div>
           ) : showError ? (
-            <div className="mt-8 rounded-[24px] border border-[#ff6b9d]/20 bg-[#ff6b9d]/5 p-8 text-center text-[14px] text-[#b83b67]">
+            <div className="mt-8 rounded-[24px] border border-accent-error/20 bg-accent-error/5 p-8 text-center text-[14px] text-accent-error">
               {error}
             </div>
           ) : featured ? (
@@ -407,17 +407,17 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                     {featured.pinned && (
                       <Pin className="size-3.5 text-primary-strong" />
                     )}
-                    <span className="ml-auto text-[10px] text-[#7c8980]">
+                    <span className="ml-auto text-[10px] text-text-muted">
                       {formatDate(featured.publishedAt, locale)}
                     </span>
                   </div>
                   <h3 className="mt-7 text-[clamp(25px,3vw,36px)] font-bold leading-[1.08] tracking-[-.045em]">
                     {featured.title}
                   </h3>
-                  <p className="mt-5 text-[14px] leading-6 text-text-muted dark:text-[#a5b0a8]">
+                  <p className="mt-5 text-[14px] leading-6 text-text-muted dark:text-text-secondary">
                     {featured.excerpt}
                   </p>
-                  <div className="mt-auto flex items-center gap-5 pt-8 text-[10px] text-[#7a867e]">
+                  <div className="mt-auto flex items-center gap-5 pt-8 text-[10px] text-text-muted">
                     <span className="flex items-center gap-1.5">
                       <Clock className="size-3.5" />
                       {featured.readingMinutes} {tr("хв", "min")}
@@ -426,7 +426,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                       <MessageSquare className="size-3.5" />
                       {featured.commentCount}
                     </span>
-                    <span className="ml-auto flex items-center gap-1 text-[11px] font-bold text-primary-strong transition group-hover:gap-2 dark:text-[#65ecad]">
+                    <span className="ml-auto flex items-center gap-1 text-[11px] font-bold text-primary-strong transition group-hover:gap-2 dark:text-primary-strong">
                       {tr("Читати", "Read")}
                       <ArrowRight className="size-3.5" />
                     </span>
@@ -446,17 +446,17 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
                     <div className="p-6">
                       <div className="flex items-center gap-3">
                         <CategoryPill category={post.category} tr={tr} />
-                        <span className="ml-auto text-[9px] text-[#7c8980]">
+                        <span className="ml-auto text-[9px] text-text-muted">
                           {formatDate(post.publishedAt, locale)}
                         </span>
                       </div>
                       <h3 className="mt-5 text-[20px] font-bold leading-[1.2] tracking-[-.035em]">
                         {post.title}
                       </h3>
-                      <p className="mt-3 line-clamp-2 text-[13px] leading-5 text-[#6c796f] dark:text-text-secondary">
+                      <p className="mt-3 line-clamp-2 text-[13px] leading-5 text-text-muted dark:text-text-secondary">
                         {post.excerpt}
                       </p>
-                      <div className="mt-6 flex items-center gap-4 text-[9px] text-[#7c8980]">
+                      <div className="mt-6 flex items-center gap-4 text-[9px] text-text-muted">
                         <span>
                           {post.readingMinutes} {tr("хв читання", "min read")}
                         </span>
@@ -471,7 +471,7 @@ export const BlogFeedExperience: React.FC<FeedProps> = ({
               </div>
             </>
           ) : (
-            <div className="mt-8 rounded-[24px] border border-border/10 bg-white p-12 text-center text-[14px] text-[#718078] dark:border-white/10 dark:bg-bg-surface">
+            <div className="mt-8 rounded-[24px] border border-border/10 bg-white p-12 text-center text-[14px] text-text-muted dark:border-white/10 dark:bg-bg-surface">
               {tr(
                 "У цій категорії поки немає матеріалів.",
                 "No stories in this category yet.",
@@ -511,14 +511,14 @@ export const BlogPostExperience: React.FC<PostProps> = ({
     return (
       <div className="min-h-[100dvh] bg-bg-base dark:bg-bg-base">
         <PublicProductNav active="blog" />
-        <div className="mx-auto mt-12 h-[620px] w-[min(900px,calc(100%_-_32px))] animate-pulse rounded-[28px] bg-[#e8ece7] dark:bg-bg-surface" />
+        <div className="mx-auto mt-12 h-[620px] w-[min(900px,calc(100%_-_32px))] animate-pulse rounded-[28px] bg-bg-hover dark:bg-bg-surface" />
       </div>
     );
   if (!resolved)
     return (
       <div className="min-h-[100dvh] bg-bg-base dark:bg-bg-base">
         <PublicProductNav active="blog" />
-        <div className="mx-auto mt-16 w-[min(720px,calc(100%_-_32px))] rounded-[24px] border border-[#ff6b9d]/20 p-10 text-center text-[#c23e6c]">
+        <div className="mx-auto mt-16 w-[min(720px,calc(100%_-_32px))] rounded-[24px] border border-accent-error/20 p-10 text-center text-accent-error">
           {error || tr("Матеріал не знайдено", "Story not found")}
         </div>
       </div>
@@ -530,7 +530,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
       <main id="main-content" tabIndex={-1} className="mx-auto w-[min(1080px,calc(100%_-_32px))] py-10">
         <button type="button"
         onClick={() => go("/blog")}
-          className="inline-flex h-11 items-center gap-2 rounded-[14px] border border-border/10 bg-white px-4 text-[11px] font-bold text-text-muted dark:border-white/10 dark:bg-bg-surface dark:text-[#a5b0a8]"
+          className="inline-flex h-11 items-center gap-2 rounded-[14px] border border-border/10 bg-white px-4 text-[11px] font-bold text-text-muted dark:border-white/10 dark:bg-bg-surface dark:text-text-secondary"
         >
           <ArrowLeft className="size-4" />
           {tr("До журналу", "Back to journal")}
@@ -538,7 +538,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
         <motion.article
           initial={reduceMotion ? undefined : { opacity: 0, y: 18 }}
           animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          className="mt-7 overflow-hidden rounded-[30px] border border-border/10 bg-white shadow-[0_26px_80px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111713]"
+          className="mt-7 overflow-hidden rounded-[30px] border border-border/10 bg-white shadow-[0_26px_80px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-bg-code"
         >
           <div className="h-[clamp(260px,42vw,480px)]">
             <CoverVisual post={resolved} />
@@ -547,11 +547,11 @@ export const BlogPostExperience: React.FC<PostProps> = ({
             <div className="flex flex-wrap items-center gap-3">
               <CategoryPill category={resolved.category} tr={tr} />
               {resolved.version && (
-                <span className="text-[10px] font-semibold text-[#7b877f]">
+                <span className="text-[10px] font-semibold text-text-muted">
                   {resolved.version}
                 </span>
               )}
-              <span className="ml-auto text-[10px] text-[#7b877f]">
+              <span className="ml-auto text-[10px] text-text-muted">
                 {formatDate(resolved.publishedAt, locale)}
               </span>
             </div>
@@ -559,11 +559,11 @@ export const BlogPostExperience: React.FC<PostProps> = ({
               {resolved.title}
             </h1>
             {resolved.excerpt && (
-              <p className="mt-6 text-[17px] leading-8 text-text-muted dark:text-[#a8b3ab]">
+              <p className="mt-6 text-[17px] leading-8 text-text-muted dark:text-text-secondary">
                 {resolved.excerpt}
               </p>
             )}
-            <div className="mt-7 flex flex-wrap items-center gap-4 text-[10px] text-[#7b877f]">
+            <div className="mt-7 flex flex-wrap items-center gap-4 text-[10px] text-text-muted">
               <span>{resolved.author || "StudyCod Team"}</span>
               <span>·</span>
               <span>
@@ -573,7 +573,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
                 <button type="button"
                   key={tag.slug}
                     onClick={() => go("/blog/tag/" + tag.slug)}
-                  className="rounded-full bg-[#eef2ed] px-2.5 py-1.5 dark:bg-white/[.06]"
+                  className="rounded-full bg-bg-hover px-2.5 py-1.5 dark:bg-white/[.06]"
                 >
                   #{tag.name}
                 </button>
@@ -600,7 +600,7 @@ export const BlogPostExperience: React.FC<PostProps> = ({
                       <button type="button"
                         key={item.slug}
                             onClick={() => go("/blog/" + item.slug)}
-                        className="rounded-[18px] border border-border/10 bg-[#f7f9f6] p-4 text-left transition hover:border-primary/25 dark:border-white/10 dark:bg-white/[.035]"
+                        className="rounded-[18px] border border-border/10 bg-bg-hover p-4 text-left transition hover:border-primary/25 dark:border-white/10 dark:bg-white/[.035]"
                       >
                         <CategoryPill category={item.category} tr={tr} />
                         <strong className="mt-4 block text-[13px] leading-5">

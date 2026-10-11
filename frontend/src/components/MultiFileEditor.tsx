@@ -166,7 +166,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   return (
     <div className={`studycod-multi-file-editor flex h-full min-h-0 flex-col ${hideTabsOnDesktop ? "studycod-hide-tabs-desktop" : ""}`}>
       {hideTabsOnDesktop ? <style>{`@media (min-width: 1024px) { .studycod-hide-tabs-desktop > [role="tablist"] { display: none; } }`}</style> : null}
-      <div className="flex min-h-12 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-white/10 bg-[#151d17] px-3 py-1.5" style={hideTabs ? { display: "none" } : undefined} role="tablist" aria-label={tr("Файли редактора", "Editor files")}>
+      <div className="flex min-h-12 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-white/10 bg-bg-base px-3 py-1.5" style={hideTabs ? { display: "none" } : undefined} role="tablist" aria-label={tr("Файли редактора", "Editor files")}>
         {normalized
           .slice()
           .sort((a, b) => (a.path === entryFile ? -1 : b.path === entryFile ? 1 : a.path.localeCompare(b.path)))
@@ -186,20 +186,20 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
                   className={
                     "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition " +
                     (isActive
-                      ? "bg-white/[.09] text-white shadow-sm"
-                      : "text-[#91a198] hover:bg-white/[.05] hover:text-[#dce7df]")
+                      ? "bg-white/[.09] text-text-primary shadow-sm"
+                      : "text-text-secondary hover:bg-white/[.05] hover:text-text-primary")
                   }
                   title={isEntry ? `${f.path} (entry)` : f.path}
                 >
-                  <FileCode2 className={`size-3.5 ${isActive ? "text-primary-soft" : "text-[#718078]"}`} />
+                  <FileCode2 className={`size-3.5 ${isActive ? "text-primary-soft" : "text-text-muted"}`} />
                   {f.path}
-                  {hasUnsavedChanges && isActive ? <span className="size-1.5 rounded-full bg-[#f0c674]" title={tr("Є незбережені зміни", "Unsaved changes")} aria-label={tr("Є незбережені зміни", "Unsaved changes")} /> : null}
+                  {hasUnsavedChanges && isActive ? <span className="size-1.5 rounded-full bg-accent-warn" title={tr("Є незбережені зміни", "Unsaved changes")} aria-label={tr("Є незбережені зміни", "Unsaved changes")} /> : null}
                 </button>
                 {!readOnly && !isEntry ? (
                   <button
                     type="button"
                     onClick={() => doRemove(f.path)}
-                    className="ml-0.5 grid size-7 place-items-center rounded-lg text-[#718078] opacity-0 transition hover:bg-white/[.07] hover:text-white group-hover:opacity-100 focus:opacity-100"
+                    className="ml-0.5 grid size-7 place-items-center rounded-lg text-text-muted opacity-0 transition hover:bg-white/[.07] hover:text-white group-hover:opacity-100 focus:opacity-100"
                     title="Remove file"
                     aria-label={tr(`Видалити файл ${f.path}`, `Remove file ${f.path}`)}
                   >
@@ -211,7 +211,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
           })}
 
         {!readOnly ? (
-          <button type="button" onClick={openAdd} className="ml-auto grid size-9 shrink-0 place-items-center rounded-lg text-[#91a198] transition hover:bg-white/[.07] hover:text-white" title={tr("Додати файл", "Add file")} aria-label={tr("Додати файл", "Add file")}><Plus className="size-4" /></button>
+          <button type="button" onClick={openAdd} className="ml-auto grid size-9 shrink-0 place-items-center rounded-lg text-text-secondary transition hover:bg-white/[.07] hover:text-white" title={tr("Додати файл", "Add file")} aria-label={tr("Додати файл", "Add file")}><Plus className="size-4" /></button>
         ) : null}
       </div>
 

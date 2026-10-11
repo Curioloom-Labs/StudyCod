@@ -123,7 +123,7 @@ export const GeoBlockedPage: React.FC<{ state: GeoBlockedPayload }> = ({ state }
               <div className="flex items-center gap-3">
                 <span className="flex h-6 w-9 overflow-hidden rounded border border-border shrink-0" aria-hidden>
                   <span className="h-full w-full bg-[#0057B7]" />
-                  <span className="h-full w-full bg-[#FFD700]" />
+                  <span className="h-full w-full bg-accent-warn" />
                 </span>
                 <span className="text-sm font-mono text-text-secondary">
                   {en ? "Glory to Ukraine! 🇺🇦" : "Слава Україні! 🇺🇦"}

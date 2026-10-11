@@ -56,7 +56,7 @@ const RecentTasksBanner: React.FC<{ onOpen: (task: LibraryTaskListItem) => void 
     }
   });
   if (!tasks.length) return null;
-  return <section className="mx-auto max-w-7xl px-4 pt-5 text-text-primary dark:text-text-primary sm:px-6 lg:px-10"><div className="rounded-[24px] border border-border/10 bg-white p-4 dark:border-white/10 dark:bg-bg-surface sm:p-5"><div className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-primary-strong dark:text-primary-soft" aria-hidden="true" /><div><div className="text-xs font-semibold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">{en ? "Pick up where you left off" : "Продовжити з останнього"}</div><p className="mt-1 text-xs text-[#718075] dark:text-[#9dac9f]">{en ? "Your latest practice tasks are kept on this device." : "Останні практичні задачі зберігаються на цьому пристрої."}</p></div></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{tasks.map((task) => <button key={task.id} type="button" onClick={() => onOpen(task)} className="rounded-xl border border-border/10 bg-bg-surface p-3 text-left transition hover:-translate-y-0.5 hover:border-primary/45 dark:border-white/10 dark:bg-white/[.035]"><span className="block truncate text-sm font-semibold">{task.title}</span><span className="mt-1 block truncate text-xs text-[#718075] dark:text-[#9dac9f]">{task.section || (task.taskMode === "WEB" ? (en ? "Web task" : "Веб-задача") : (en ? "Code task" : "Кодова задача"))}</span></button>)}</div></div></section>;
+  return <section className="mx-auto max-w-7xl px-4 pt-5 text-text-primary dark:text-text-primary sm:px-6 lg:px-10"><div className="rounded-[24px] border border-border/10 bg-white p-4 dark:border-white/10 dark:bg-bg-surface sm:p-5"><div className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-primary-strong dark:text-primary-soft" aria-hidden="true" /><div><div className="text-xs font-semibold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">{en ? "Pick up where you left off" : "Продовжити з останнього"}</div><p className="mt-1 text-xs text-text-muted dark:text-text-secondary">{en ? "Your latest practice tasks are kept on this device." : "Останні практичні задачі зберігаються на цьому пристрої."}</p></div></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{tasks.map((task) => <button key={task.id} type="button" onClick={() => onOpen(task)} className="rounded-xl border border-border/10 bg-bg-surface p-3 text-left transition hover:-translate-y-0.5 hover:border-primary/45 dark:border-white/10 dark:bg-white/[.035]"><span className="block truncate text-sm font-semibold">{task.title}</span><span className="mt-1 block truncate text-xs text-text-muted dark:text-text-secondary">{task.section || (task.taskMode === "WEB" ? (en ? "Web task" : "Веб-задача") : (en ? "Code task" : "Кодова задача"))}</span></button>)}</div></div></section>;
 };
 
 type TaskDetails = {
@@ -1644,7 +1644,7 @@ export const TaskLibraryPage: React.FC = () => {
   // the specialised workspace below, where its dense controls are necessary.
   if (!canManage && view === "approved") {
     return <>
-      <div className="mx-auto flex max-w-7xl justify-end px-4 pt-4 text-text-primary dark:text-text-primary sm:px-6 lg:px-10"><button type="button" onClick={() => void copyCurrentLibraryLink()} className="inline-flex items-center gap-1.5 rounded-lg border border-border/10 bg-white px-3 py-2 text-xs font-semibold text-text-muted transition hover:border-primary/40 hover:text-primary-strong dark:border-white/10 dark:bg-bg-surface dark:text-[#a7b5aa] dark:hover:text-primary-soft" aria-label={tr("Скопіювати посилання на бібліотеку", "Copy library link")} title={tr("Скопіювати посилання з фільтрами", "Copy link with filters")}><Share2 className="size-3.5" />{linkCopied ? tr("Скопійовано", "Copied") : tr("Поділитися", "Share")}</button></div>
+      <div className="mx-auto flex max-w-7xl justify-end px-4 pt-4 text-text-primary dark:text-text-primary sm:px-6 lg:px-10"><button type="button" onClick={() => void copyCurrentLibraryLink()} className="inline-flex items-center gap-1.5 rounded-lg border border-border/10 bg-white px-3 py-2 text-xs font-semibold text-text-muted transition hover:border-primary/40 hover:text-primary-strong dark:border-white/10 dark:bg-bg-surface dark:text-text-secondary dark:hover:text-primary-soft" aria-label={tr("Скопіювати посилання на бібліотеку", "Copy library link")} title={tr("Скопіювати посилання з фільтрами", "Copy link with filters")}><Share2 className="size-3.5" />{linkCopied ? tr("Скопійовано", "Copied") : tr("Поділитися", "Share")}</button></div>
       <RecentTasksBanner onOpen={rememberAndOpenTask} />
       <PremiumLibrary
         tasks={learnerTasks}
@@ -1660,7 +1660,7 @@ export const TaskLibraryPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-full bg-bg-base px-4 py-6 text-[#152018] dark:bg-bg-base dark:text-[#eef4ef] sm:px-6 lg:px-10 lg:py-9">
+    <div className="min-h-full bg-bg-base px-4 py-6 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-10 lg:py-9">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-end">
           <div>
@@ -1679,11 +1679,11 @@ export const TaskLibraryPage: React.FC = () => {
 
         <section className="border-b border-border pb-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="inline-flex w-fit rounded-2xl bg-[#edf2ed] p-1 dark:bg-white/[.05]">
+            <div className="inline-flex w-fit rounded-2xl bg-bg-hover p-1 dark:bg-white/[.05]">
               <button
                 type="button"
                 onClick={() => setView("approved")}
-                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${view === "approved" ? "bg-white text-[#142018] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#69776d] hover:text-[#142018] dark:text-[#a7b4a9] dark:hover:text-white"}`}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${view === "approved" ? "bg-white text-text-primary shadow-sm dark:bg-bg-hover dark:text-text-primary" : "text-text-muted hover:text-text-primary dark:text-text-secondary dark:hover:text-white"}`}
               >
                 {tr("Каталог", "Catalog")}
               </button>
@@ -1691,7 +1691,7 @@ export const TaskLibraryPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setView("mine")}
-                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${view === "mine" ? "bg-white text-[#142018] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#69776d] hover:text-[#142018] dark:text-[#a7b4a9] dark:hover:text-white"}`}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${view === "mine" ? "bg-white text-text-primary shadow-sm dark:bg-bg-hover dark:text-text-primary" : "text-text-muted hover:text-text-primary dark:text-text-secondary dark:hover:text-white"}`}
                 >
                   {tr("Мої задачі", "My tasks")}
                 </button>
@@ -1700,7 +1700,7 @@ export const TaskLibraryPage: React.FC = () => {
 
             <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center xl:max-w-4xl">
               <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#7b897e]" />
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-text-muted" />
                 <input
                   id="task-library-search"
                   name="taskSearch"
@@ -1708,13 +1708,13 @@ export const TaskLibraryPage: React.FC = () => {
                   aria-label={tr("Пошук задач", "Search tasks")}
                   value={qDraft}
                   onChange={(e) => setQDraft(e.target.value)}
-                  className="h-12 w-full rounded-2xl border border-[#142018]/10 bg-[#f7f9f6] pl-12 pr-12 text-sm font-medium text-[#152018] outline-none transition placeholder:font-normal placeholder:text-[#98a39b] focus:border-primary focus:ring-4 focus:ring-primary/10 dark:border-white/10 dark:bg-white/[.035] dark:text-white"
+                  className="h-12 w-full rounded-2xl border border-border/10 bg-bg-hover pl-12 pr-12 text-sm font-medium text-text-primary outline-none transition placeholder:font-normal placeholder:text-text-secondary focus:border-primary focus:ring-4 focus:ring-primary/10 dark:border-white/10 dark:bg-white/[.035] dark:text-white"
                   placeholder={tr("Пошук за назвою, тегом, кодом або темою", "Search by title, tag, code, or topic")}
                 />
                 {qDraft.trim() ? (
                   <button
                     type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[#7b897e] transition hover:bg-[#e7eee7] hover:text-[#142018] dark:hover:bg-white/[.08] dark:hover:text-white"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:hover:bg-white/[.08] dark:hover:text-white"
                     onClick={() => setQDraft("")}
                     aria-label={tr("Очистити пошук", "Clear search")}
                   >
@@ -1811,26 +1811,26 @@ export const TaskLibraryPage: React.FC = () => {
             </div>
           </details>
 
-          <div className="mt-4 flex flex-col gap-3 border-t border-[#142018]/8 pt-4 dark:border-white/[.08] lg:flex-row lg:items-center lg:justify-between">
+          <div className="mt-4 flex flex-col gap-3 border-t border-border/8 pt-4 dark:border-white/[.08] lg:flex-row lg:items-center lg:justify-between">
             <div className="hidden flex-wrap items-center gap-2 lg:flex">
               <button
                 type="button"
                 onClick={() => setOnlySolved((value) => !value)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${onlySolved ? "bg-[#e8f8ed] text-primary-strong ring-1 ring-primary/25 dark:bg-primary/10 dark:text-primary-soft" : "bg-[#f3f6f3] text-[#637267] dark:bg-white/[.045] dark:text-[#a8b5aa]"}`}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${onlySolved ? "bg-bg-hover text-primary-strong ring-1 ring-primary/25 dark:bg-primary/10 dark:text-primary-soft" : "bg-bg-hover text-text-muted dark:bg-white/[.045] dark:text-text-secondary"}`}
               >
                 {tr("Лише виконані", "Solved only")}
               </button>
               <button
                 type="button"
                 onClick={() => setOnlyFavorites((value) => !value)}
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${onlyFavorites ? "bg-[#fff4df] text-[#b96300] ring-1 ring-[#ff8c00]/20 dark:bg-[#ff8c00]/10 dark:text-[#ffbf72]" : "bg-[#f3f6f3] text-[#637267] dark:bg-white/[.045] dark:text-[#a8b5aa]"}`}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${onlyFavorites ? "bg-bg-hover text-accent-warn ring-1 ring-accent-warn/20 dark:bg-accent-warn/10 dark:text-accent-warn" : "bg-bg-hover text-text-muted dark:bg-white/[.045] dark:text-text-secondary"}`}
               >
                 {tr("Обрані", "Favorites")}
               </button>
               <button
                 type="button"
                 onClick={resetFilters}
-                className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-[#637267] transition hover:bg-[#f0f4ef] hover:text-[#142018] dark:text-[#a8b5aa] dark:hover:bg-white/[.06] dark:hover:text-white"
+                className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-white/[.06] dark:hover:text-white"
               >
                 <RotateCcwIcon />
                 {tr("Скинути", "Reset")}
@@ -1871,7 +1871,7 @@ export const TaskLibraryPage: React.FC = () => {
           </div>
 
           {view === "mine" && canManage ? (
-            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-[#f6f8f5] p-3 text-sm text-[#637267] dark:bg-white/[.035] dark:text-[#a8b5aa]">
+            <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-bg-hover p-3 text-sm text-text-muted dark:bg-white/[.035] dark:text-text-secondary">
               <label className="inline-flex items-center gap-2 font-semibold">
                 <input
                   type="checkbox"
@@ -1923,7 +1923,7 @@ export const TaskLibraryPage: React.FC = () => {
                   <Button variant="ghost" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
                     {tr("Назад", "Prev")}
                   </Button>
-                  <div className="rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-[#637267] ring-1 ring-[#142018]/10 dark:bg-white/[.05] dark:text-[#a8b5aa] dark:ring-white/10">
+                  <div className="rounded-full bg-white px-3 py-1.5 text-sm font-semibold text-text-muted ring-1 ring-border/10 dark:bg-white/[.05] dark:text-text-secondary dark:ring-white/10">
                     {page} / {totalPages}
                   </div>
                   <Button variant="ghost" size="sm" disabled={page >= totalPages || loading} onClick={() => setPage((p) => clamp(p + 1, 1, totalPages))}>
@@ -1940,15 +1940,15 @@ export const TaskLibraryPage: React.FC = () => {
                 ))}
               </div>
             ) : visibleTasks.length === 0 ? (
-              <div className="rounded-[28px] border border-dashed border-[#142018]/15 bg-white px-5 py-16 text-center dark:border-white/10 dark:bg-bg-surface">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e8f8ed] dark:bg-primary/10">
+              <div className="rounded-[28px] border border-dashed border-border/15 bg-white px-5 py-16 text-center dark:border-white/10 dark:bg-bg-surface">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-bg-hover dark:bg-primary/10">
                   <Search className="h-6 w-6 text-primary-strong dark:text-primary-soft" />
                 </div>
-                <div className="text-base font-semibold text-[#142018] dark:text-white">{tr("Нічого не знайдено", "No results")}</div>
-                <div className="mt-2 text-sm text-[#6a786d] dark:text-[#9fac9f]">
+                <div className="text-base font-semibold text-text-primary dark:text-white">{tr("Нічого не знайдено", "No results")}</div>
+                <div className="mt-2 text-sm text-text-muted dark:text-text-secondary">
                   {tr("Змініть пошук, фільтри або відкрийте інший розділ.", "Adjust search, filters, or open another section.")}
                 </div>
-                <button type="button" onClick={resetFilters} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-[#e8f8ed] px-3.5 py-2 text-sm font-semibold text-primary-strong transition hover:border-primary/55 hover:bg-[#dff5e7] dark:bg-primary/10 dark:text-primary-soft dark:hover:bg-primary/15">
+                <button type="button" onClick={resetFilters} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-bg-hover px-3.5 py-2 text-sm font-semibold text-primary-strong transition hover:border-primary/55 hover:bg-[var(--surface-primary)] dark:bg-primary/10 dark:text-primary-soft dark:hover:bg-primary/15">
                   <RotateCcwIcon />
                   {tr("Скинути фільтри", "Reset filters")}
                 </button>
@@ -1995,7 +1995,7 @@ export const TaskLibraryPage: React.FC = () => {
                               </Badge>
                             ) : null}
                           </div>
-                          <h3 className="mt-4 line-clamp-2 text-lg font-semibold tracking-[-0.03em] text-[#142018] dark:text-white">
+                          <h3 className="mt-4 line-clamp-2 text-lg font-semibold tracking-[-0.03em] text-text-primary dark:text-white">
                             <button type="button" onClick={() => selectTask(task)} className="text-left hover:text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:hover:text-primary-soft">
                               {task.title}
                             </button>
@@ -2006,7 +2006,7 @@ export const TaskLibraryPage: React.FC = () => {
                             href={buildSolvePath(task)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="rounded-xl p-2 text-[#7c8a80] transition hover:bg-[#f1f5f1] hover:text-primary-strong dark:hover:bg-white/[.07] dark:hover:text-primary-soft"
+                            className="rounded-xl p-2 text-text-muted transition hover:bg-bg-hover hover:text-primary-strong dark:hover:bg-white/[.07] dark:hover:text-primary-soft"
                             aria-label={tr("Відкрити задачу в новій вкладці", "Open task in a new tab")}
                             title={tr("Відкрити в новій вкладці", "Open in a new tab")}
                           >
@@ -2018,11 +2018,11 @@ export const TaskLibraryPage: React.FC = () => {
                               e.stopPropagation();
                               toggleFavorite(task.id);
                             }}
-                            className="rounded-xl p-2 text-[#7c8a80] transition hover:bg-[#f1f5f1] hover:text-[#d97706] dark:hover:bg-white/[.07]"
+                            className="rounded-xl p-2 text-text-muted transition hover:bg-bg-hover hover:text-accent-warn dark:hover:bg-white/[.07]"
                             aria-pressed={isFav}
                             aria-label={isFav ? tr("Прибрати з обраного", "Remove from favorites") : tr("Додати в обране", "Add to favorites")}
                           >
-                            <Star className={`h-4 w-4 ${isFav ? "text-[#d97706]" : ""}`} fill={isFav ? "currentColor" : "none"} />
+                            <Star className={`h-4 w-4 ${isFav ? "text-accent-warn" : ""}`} fill={isFav ? "currentColor" : "none"} />
                           </button>
                           <button
                             type="button"
@@ -2030,7 +2030,7 @@ export const TaskLibraryPage: React.FC = () => {
                               e.stopPropagation();
                               handleDownload(task.id);
                             }}
-                            className="rounded-xl p-2 text-[#7c8a80] transition hover:bg-[#f1f5f1] hover:text-[#142018] dark:hover:bg-white/[.07] dark:hover:text-white"
+                            className="rounded-xl p-2 text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:hover:bg-white/[.07] dark:hover:text-white"
                             aria-label={tr("Експортувати архів", "Export archive")}
                           >
                             <Download className="h-4 w-4" />
@@ -2039,37 +2039,37 @@ export const TaskLibraryPage: React.FC = () => {
                       </div>
 
                       <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium text-text-muted">
-                        {(task.problemCode || task.slug) ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.problemCode || task.slug}</span> : null}
-                        {task.section ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{task.section}</span> : null}
-                        <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{formatShortDate(task.updatedAt, i18n.language || "uk")}</span>
-                        {lastCheckedAt ? <span className="rounded-full bg-[#e8f8ed] px-2.5 py-1 text-primary-strong dark:bg-primary/10 dark:text-primary-soft">{tr("Перевірено", "Checked")}: {formatShortDateTime(lastCheckedAt, i18n.language || "uk")}</span> : null}
-                        {task.projectSpec ? <span className="rounded-full bg-[#fff4df] px-2.5 py-1 text-[#a65600] dark:bg-[#ffb454]/10 dark:text-[#ffca7e]">{task.projectSpec.estimatedMinutes} {tr("хв проєкту", "min project")}</span> : null}
+                        {(task.problemCode || task.slug) ? <span className="rounded-full bg-bg-hover px-2.5 py-1 dark:bg-white/[.055]">{task.problemCode || task.slug}</span> : null}
+                        {task.section ? <span className="rounded-full bg-bg-hover px-2.5 py-1 dark:bg-white/[.055]">{task.section}</span> : null}
+                        <span className="rounded-full bg-bg-hover px-2.5 py-1 dark:bg-white/[.055]">{formatShortDate(task.updatedAt, i18n.language || "uk")}</span>
+                        {lastCheckedAt ? <span className="rounded-full bg-bg-hover px-2.5 py-1 text-primary-strong dark:bg-primary/10 dark:text-primary-soft">{tr("Перевірено", "Checked")}: {formatShortDateTime(lastCheckedAt, i18n.language || "uk")}</span> : null}
+                        {task.projectSpec ? <span className="rounded-full bg-bg-hover px-2.5 py-1 text-accent-warn dark:bg-accent-warn/10 dark:text-accent-warn">{task.projectSpec.estimatedMinutes} {tr("хв проєкту", "min project")}</span> : null}
                       </div>
 
                       {Array.isArray(task.tags) && task.tags.length ? (
                         <div className="mt-4 flex flex-wrap gap-1.5">
                           {task.tags.slice(0, 4).map((tag) => (
-                            <span key={tag} className="rounded-lg bg-[#eef3ee] px-2 py-1 text-xs font-medium text-[#637267] dark:bg-white/[.055] dark:text-[#a8b5aa]">
+                            <span key={tag} className="rounded-lg bg-bg-hover px-2 py-1 text-xs font-medium text-text-muted dark:bg-white/[.055] dark:text-text-secondary">
                               {tag}
                             </span>
                           ))}
-                          {task.tags.length > 4 ? <span className="rounded-lg bg-[#eef3ee] px-2 py-1 text-xs font-medium text-[#637267] dark:bg-white/[.055] dark:text-[#a8b5aa]">+{task.tags.length - 4}</span> : null}
+                          {task.tags.length > 4 ? <span className="rounded-lg bg-bg-hover px-2 py-1 text-xs font-medium text-text-muted dark:bg-white/[.055] dark:text-text-secondary">+{task.tags.length - 4}</span> : null}
                         </div>
                       ) : null}
 
                       <div className="mt-auto pt-3">
                         {progress != null ? (
                           <div>
-                            <div className="flex items-center justify-between text-xs font-semibold text-[#748177] dark:text-[#9fac9f]">
+                            <div className="flex items-center justify-between text-xs font-semibold text-text-muted dark:text-text-secondary">
                               <span>{tr("Прогрес тестів", "Test progress")}</span>
                               <span>{testsPassed}/{testsTotal}</span>
                             </div>
-                            <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#e7eee7] dark:bg-white/[.07]">
+                            <div className="mt-2 h-2 overflow-hidden rounded-full bg-bg-hover dark:bg-white/[.07]">
                               <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round(progress * 100)}%` }} />
                             </div>
                           </div>
                         ) : task.attempt?.submissionsCount ? (
-                          <div className="text-sm font-semibold text-[#748177] dark:text-[#9fac9f]">
+                          <div className="text-sm font-semibold text-text-muted dark:text-text-secondary">
                             {tr("Спроб", "Submissions")}: {task.attempt.submissionsCount}
                           </div>
                         ) : null}
@@ -2102,7 +2102,7 @@ export const TaskLibraryPage: React.FC = () => {
                             ) : null}
                           </div>
                         ) : (
-                          <button type="button" onClick={() => selectTask(task)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-primary/30 px-3 py-2 text-xs font-semibold text-primary-strong transition hover:border-primary/55 hover:bg-[#e8f8ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-primary-soft dark:hover:bg-primary/10">
+                          <button type="button" onClick={() => selectTask(task)} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-primary/30 px-3 py-2 text-xs font-semibold text-primary-strong transition hover:border-primary/55 hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-primary-soft dark:hover:bg-primary/10">
                             <Play className="h-3 w-3" />
                             {tr("Переглянути", "Preview")}
                           </button>
@@ -2116,14 +2116,14 @@ export const TaskLibraryPage: React.FC = () => {
           </section>
 
           <aside ref={previewSectionRef} className="lg:col-span-4">
-            <div className="sticky top-6 rounded-[28px] border border-[#142018]/10 bg-white p-5 shadow-[0_22px_60px_-45px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-bg-surface">
+            <div className="sticky top-6 rounded-[28px] border border-border/10 bg-white p-5 shadow-[0_22px_60px_-45px_rgba(18,42,26,.55)] dark:border-white/10 dark:bg-bg-surface">
               {!selectedId ? (
-                <div className="rounded-[24px] bg-[#f6f8f5] px-5 py-12 text-center dark:bg-white/[.035]">
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8f8ed] dark:bg-primary/10">
+                <div className="rounded-[24px] bg-bg-hover px-5 py-12 text-center dark:bg-white/[.035]">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-bg-hover dark:bg-primary/10">
                     <Play className="h-6 w-6 text-primary-strong dark:text-primary-soft" />
                   </div>
-                  <div className="text-base font-semibold text-[#142018] dark:text-white">{tr("Оберіть задачу", "Pick a task")}</div>
-                  <div className="mt-2 text-sm leading-6 text-[#6a786d] dark:text-[#9fac9f]">
+                  <div className="text-base font-semibold text-text-primary dark:text-white">{tr("Оберіть задачу", "Pick a task")}</div>
+                  <div className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
                     {tr("Тут з’явиться умова, теорія, тести й швидкий перехід до розв’язання.", "Statement, theory, tests, and a quick solve action will appear here.")}
                   </div>
                 </div>
@@ -2135,7 +2135,7 @@ export const TaskLibraryPage: React.FC = () => {
                   <Skeleton className="h-[220px] rounded-3xl" />
                 </div>
               ) : !details ? (
-                <div className="rounded-2xl bg-[#f6f8f5] p-5 text-sm text-[#6a786d] dark:bg-white/[.035] dark:text-[#9fac9f]">
+                <div className="rounded-2xl bg-bg-hover p-5 text-sm text-text-muted dark:bg-white/[.035] dark:text-text-secondary">
                   {tr("Не вдалося завантажити preview.", "Failed to load preview.")}
                 </div>
               ) : (
@@ -2153,20 +2153,20 @@ export const TaskLibraryPage: React.FC = () => {
                         </Badge>
                       ) : null}
                     </div>
-                    <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-[#142018] dark:text-white">
+                    <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-text-primary dark:text-white">
                       {details.task.title}
                     </h2>
-                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-[#748177] dark:text-[#9fac9f]">
-                      {(details.task.problemCode || details.task.slug) ? <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">{details.task.problemCode || details.task.slug}</span> : null}
-                      <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-text-muted dark:text-text-secondary">
+                      {(details.task.problemCode || details.task.slug) ? <span className="rounded-full bg-bg-hover px-2.5 py-1 dark:bg-white/[.055]">{details.task.problemCode || details.task.slug}</span> : null}
+                      <span className="rounded-full bg-bg-hover px-2.5 py-1 dark:bg-white/[.055]">
                         {tr("Мови", "Languages")}: {getAllowedJudgeLanguages(details.task).map((l) => FRIENDLY_JUDGE_LANG[l]).join(", ")}
                       </span>
-                      <span className="rounded-full bg-[#f2f5f2] px-2.5 py-1 dark:bg-white/[.055]">
+                      <span className="rounded-full bg-bg-hover px-2.5 py-1 dark:bg-white/[.055]">
                         {tr("Спроб", "Attempts")}: {details.task.maxAttempts}
                       </span>
                     </div>
                     {view === "mine" && canManage && details.task.status === "REJECTED" && details.task.rejectionReason ? (
-                      <div className="mt-3 rounded-2xl bg-[#fff4df] p-3 text-sm font-medium text-[#a65600] dark:bg-[#ff8c00]/10 dark:text-[#ffbf72]">
+                      <div className="mt-3 rounded-2xl bg-bg-hover p-3 text-sm font-medium text-accent-warn dark:bg-accent-warn/10 dark:text-accent-warn">
                         {tr("Причина:", "Reason:")} {details.task.rejectionReason}
                       </div>
                     ) : null}
@@ -2174,7 +2174,7 @@ export const TaskLibraryPage: React.FC = () => {
 
                   <div className="flex flex-wrap gap-2">
                     {details.task.status === "APPROVED" ? (
-                      <Button variant="primary" size="lg" onClick={() => navigate(buildSolvePath(details.task))} className="rounded-xl px-4 text-sm font-bold shadow-[0_10px_24px_-16px_rgba(0,201,109,.9)]">
+                      <Button variant="primary" size="lg" onClick={() => navigate(buildSolvePath(details.task))} className="rounded-xl px-4 text-sm font-bold shadow-[var(--ui-card-shadow)]">
                         <Play className="mr-2 h-4 w-4" />
                         {tr("Розв’язати", "Solve")}
                       </Button>
@@ -2185,7 +2185,7 @@ export const TaskLibraryPage: React.FC = () => {
                     </Button>
                   </div>
 
-                  <div className="flex rounded-2xl bg-[#f2f5f2] p-1 dark:bg-white/[.045]">
+                  <div className="flex rounded-2xl bg-bg-hover p-1 dark:bg-white/[.045]">
                     {[
                       ["description", tr("Умова", "Statement")],
                       ["theory", tr("Теорія", "Theory")],
@@ -2195,7 +2195,7 @@ export const TaskLibraryPage: React.FC = () => {
                         key={tab}
                         type="button"
                         onClick={() => setDetailsTab(tab as typeof detailsTab)}
-                        className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${detailsTab === tab ? "bg-white text-[#142018] shadow-sm dark:bg-[#edf3ef] dark:text-[#0b120e]" : "text-[#6a786d] hover:text-[#142018] dark:text-[#a8b5aa] dark:hover:text-white"}`}
+                        className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${detailsTab === tab ? "bg-white text-text-primary shadow-sm dark:bg-bg-hover dark:text-text-primary" : "text-text-muted hover:text-text-primary dark:text-text-secondary dark:hover:text-white"}`}
                       >
                         {label}
                       </button>
@@ -2205,31 +2205,31 @@ export const TaskLibraryPage: React.FC = () => {
                   <div className="max-h-[520px] overflow-auto pr-1">
                     {detailsTab === "description" ? <MarkdownView content={details.task.description || ""} /> : null}
                     {detailsTab === "theory" ? (
-                      details.theory ? <MarkdownView content={details.theory} /> : <div className="rounded-2xl bg-[#f6f8f5] p-4 text-sm text-[#6a786d] dark:bg-white/[.035] dark:text-[#9fac9f]">{tr("Теорію для цієї задачі не додано.", "No theory has been added for this task.")}</div>
+                      details.theory ? <MarkdownView content={details.theory} /> : <div className="rounded-2xl bg-bg-hover p-4 text-sm text-text-muted dark:bg-white/[.035] dark:text-text-secondary">{tr("Теорію для цієї задачі не додано.", "No theory has been added for this task.")}</div>
                     ) : null}
                     {detailsTab === "tests" ? (
                       details.tests.length === 0 ? (
-                        <div className="rounded-2xl bg-[#f6f8f5] p-4 text-sm text-[#6a786d] dark:bg-white/[.035] dark:text-[#9fac9f]">{tr("Тести не додано.", "No tests added.")}</div>
+                        <div className="rounded-2xl bg-bg-hover p-4 text-sm text-text-muted dark:bg-white/[.035] dark:text-text-secondary">{tr("Тести не додано.", "No tests added.")}</div>
                       ) : (
                         <div className="space-y-3">
                           {details.tests.slice(0, 12).map((test) => {
                             const hiddenForCatalog = test.isHidden && view === "approved";
                             return (
-                              <div key={test.id} className="rounded-2xl border border-[#142018]/10 bg-bg-surface p-3 dark:border-white/10 dark:bg-white/[.035]">
-                                <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-[#748177] dark:text-[#9fac9f]">
+                              <div key={test.id} className="rounded-2xl border border-border/10 bg-bg-surface p-3 dark:border-white/10 dark:bg-white/[.035]">
+                                <div className="mb-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-text-muted dark:text-text-secondary">
                                   {test.isHidden ? <Badge color="warn">{tr("прихований", "hidden")}</Badge> : <Badge color="info">{tr("публічний", "public")}</Badge>}
                                   <span>{tr("бали", "points")}: {test.points}</span>
                                 </div>
                                 <div className="grid gap-2">
                                   <div>
-                                    <div className="mb-1 text-xs font-semibold text-[#4f5f54] dark:text-[#c1cbc4]">{tr("Ввід", "Input")}</div>
-                                    <pre className="overflow-auto rounded-xl bg-white p-3 text-xs text-[#26352b] ring-1 ring-[#142018]/10 dark:bg-bg-base dark:text-[#dce7df] dark:ring-white/10">
+                                    <div className="mb-1 text-xs font-semibold text-text-muted dark:text-text-secondary">{tr("Ввід", "Input")}</div>
+                                    <pre className="overflow-auto rounded-xl bg-white p-3 text-xs text-text-primary ring-1 ring-border/10 dark:bg-bg-base dark:text-text-primary dark:ring-white/10">
                                       {hiddenForCatalog ? tr("(приховано)", "(hidden)") : test.input || ""}
                                     </pre>
                                   </div>
                                   <div>
-                                    <div className="mb-1 text-xs font-semibold text-[#4f5f54] dark:text-[#c1cbc4]">{tr("Очікувано", "Expected")}</div>
-                                    <pre className="overflow-auto rounded-xl bg-white p-3 text-xs text-[#26352b] ring-1 ring-[#142018]/10 dark:bg-bg-base dark:text-[#dce7df] dark:ring-white/10">
+                                    <div className="mb-1 text-xs font-semibold text-text-muted dark:text-text-secondary">{tr("Очікувано", "Expected")}</div>
+                                    <pre className="overflow-auto rounded-xl bg-white p-3 text-xs text-text-primary ring-1 ring-border/10 dark:bg-bg-base dark:text-text-primary dark:ring-white/10">
                                       {hiddenForCatalog ? tr("(приховано)", "(hidden)") : test.expectedOutput || ""}
                                     </pre>
                                   </div>
@@ -2238,7 +2238,7 @@ export const TaskLibraryPage: React.FC = () => {
                             );
                           })}
                           {details.tests.length > 12 ? (
-                            <div className="text-sm text-[#6a786d] dark:text-[#9fac9f]">
+                            <div className="text-sm text-text-muted dark:text-text-secondary">
                               {tr("Показано перші 12 тестів.", "Showing the first 12 tests.")}
                             </div>
                           ) : null}

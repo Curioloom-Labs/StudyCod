@@ -93,10 +93,10 @@ const LearningSuccessCard: React.FC<{
 }> = ({ topic, testsPassed, testsTotal, nextTask, onNextTask }) => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
-  return <div className="mt-4 rounded-2xl border border-primary/25 bg-primary/[.07] p-4 text-[#e7f7eb]">
-    <div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary-soft" /><div><div className="text-sm font-bold text-primary-soft">{tr("Рішення перевірено", "Solution verified")}</div><p className="mt-1 text-xs leading-5 text-[#b9cfbe]">{tr("Рішення пройшло всі доступні перевірки. Це результат цієї задачі, а не навчальна навичка.", "The solution passed all available checks. This is a result for this task, not a learning skill.")} {testsPassed}/{testsTotal}</p></div></div>
-    <div className="mt-4 grid gap-2 sm:grid-cols-2"><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Задача", "Task")}</span><strong className="mt-1 block text-sm">{topic}</strong></div><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Статус", "Status")}</span><strong className="mt-1 block text-sm">{tr("Завершено", "Completed")}</strong></div></div>
-    {nextTask ? <button type="button" onClick={onNextTask} className="mt-4 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[.05] p-3 text-left transition hover:bg-white/[.09]"><span><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{tr("Наступна рекомендована задача", "Next recommended task")}</span><strong className="mt-1 block text-sm">{nextTask.title}</strong></span><ArrowLeft className="size-4 rotate-180 text-primary-soft" /></button> : <p className="mt-4 text-xs text-[#9fb5a5]">{tr("Відкрий бібліотеку, щоб обрати наступну задачу з цієї теми.", "Open the library to choose the next task from this topic.")}</p>}
+  return <div className="mt-4 rounded-2xl border border-primary/25 bg-primary/[.07] p-4 text-text-primary">
+    <div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary-soft" /><div><div className="text-sm font-bold text-primary-soft">{tr("Рішення перевірено", "Solution verified")}</div><p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Рішення пройшло всі доступні перевірки. Це результат цієї задачі, а не навчальна навичка.", "The solution passed all available checks. This is a result for this task, not a learning skill.")} {testsPassed}/{testsTotal}</p></div></div>
+    <div className="mt-4 grid gap-2 sm:grid-cols-2"><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{tr("Задача", "Task")}</span><strong className="mt-1 block text-sm">{topic}</strong></div><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{tr("Статус", "Status")}</span><strong className="mt-1 block text-sm">{tr("Завершено", "Completed")}</strong></div></div>
+    {nextTask ? <button type="button" onClick={onNextTask} className="mt-4 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[.05] p-3 text-left transition hover:bg-white/[.09]"><span><span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{tr("Наступна рекомендована задача", "Next recommended task")}</span><strong className="mt-1 block text-sm">{nextTask.title}</strong></span><ArrowLeft className="size-4 rotate-180 text-primary-soft" /></button> : <p className="mt-4 text-xs text-text-secondary">{tr("Відкрий бібліотеку, щоб обрати наступну задачу з цієї теми.", "Open the library to choose the next task from this topic.")}</p>}
   </div>;
 };
 
@@ -1093,10 +1093,10 @@ export const LibraryTaskSolvePage: React.FC = () => {
     return (
       <div className="min-h-full bg-bg-base p-6 dark:bg-bg-base">
         <div className="mx-auto flex min-h-[520px] max-w-xl items-center justify-center">
-          <Card className="w-full border-[#ff6b9d]/25 bg-white p-6 text-center dark:border-[#ff6b9d]/20 dark:bg-bg-surface">
+          <Card className="w-full border-accent-error/25 bg-white p-6 text-center dark:border-accent-error/20 dark:bg-bg-surface">
             <div className="text-base font-bold text-text-primary dark:text-white">{tr("Не вдалося завантажити задачу", "Could not load the task")}</div>
-            <p className="mt-2 break-words text-sm leading-6 text-[#6a786d] dark:text-[#a7b5aa]">{loadError}</p>
-            <button type="button" onClick={() => setLoadAttempt((value) => value + 1)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-[#062211] transition hover:bg-[#25e88d]">
+            <p className="mt-2 break-words text-sm leading-6 text-text-muted dark:text-text-secondary">{loadError}</p>
+            <button type="button" onClick={() => setLoadAttempt((value) => value + 1)} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition hover:bg-primary-hover">
               {tr("Повторити", "Retry")}
             </button>
           </Card>
@@ -1106,7 +1106,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
   }
 
   if (loading || !task) {
-    return <div className="min-h-full bg-bg-base p-6 dark:bg-bg-base"><div className="mx-auto h-[720px] max-w-[1500px] animate-pulse rounded-[28px] bg-[#e8ede8] dark:bg-white/[.04]" /></div>;
+    return <div className="min-h-full bg-bg-base p-6 dark:bg-bg-base"><div className="mx-auto h-[720px] max-w-[1500px] animate-pulse rounded-[28px] bg-bg-hover dark:bg-white/[.04]" /></div>;
   }
 
   const ideResultCards = checkResult && String(checkResult.verdict ?? "").toUpperCase() === "AC" ? (

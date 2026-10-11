@@ -217,8 +217,8 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
       <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${courseId}/path`))} className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-primary transition hover:underline">
         <ArrowLeft className="size-4" />{tr("До тем курсу", "Back to course topics")}
       </button>
-      <header className="mb-4 rounded-2xl border border-[#bd8837]/30 bg-[#bd8837]/[.06] p-5 sm:p-6">
-        <p className="text-[11px] font-black uppercase tracking-[.18em] text-[#bd8837] dark:text-[#ffbf68]">{tr("Практика курсу · мініпроєкт", "Course practice · mini-project")}</p>
+      <header className="mb-4 rounded-2xl border border-accent-warn/30 bg-accent-warn/[.06] p-5 sm:p-6">
+        <p className="text-[11px] font-black uppercase tracking-[.18em] text-accent-warn dark:text-accent-warn">{tr("Практика курсу · мініпроєкт", "Course practice · mini-project")}</p>
         <h1 className="mt-2 text-2xl font-bold tracking-[-.04em] text-text-primary sm:text-4xl">{projectTitle(item.title)}</h1>
         <p className="mt-2 text-sm leading-6 text-text-secondary">{tr("Це повноцінна практична задача: пиши код в IDE, запускай його та отримуй оцінку за прихованими тестами.", "This is a full practice task: write code in the IDE, run it, and get a score from hidden tests.")}</p>
       </header>
@@ -230,7 +230,7 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
             <p className="text-xs font-black uppercase tracking-[.14em] text-text-secondary">{tr("Докази готовності", "Readiness evidence")}</p>
             <p className="mt-1 text-sm text-text-secondary">{tr("Перевірка коду й milestones — різні кроки. Подання відкривається лише після обох.", "Code checking and milestones are separate steps. Submission opens only after both.")}</p>
           </div>
-          <button type="button" onClick={() => void submit()} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white">{tr("Подати проєкт", "Submit project")}</button>
+          <button type="button" onClick={() => void submit()} className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">{tr("Подати проєкт", "Submit project")}</button>
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           {project.projectSpec.assessment.requiredEvidence.map((evidence) => <label key={evidence.id} className="flex gap-3 rounded-xl border border-border/70 p-3 text-sm">
@@ -319,7 +319,7 @@ export const CoursePracticePage: React.FC = () => {
         <p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{tr("Курсова практика", "Course practice")}</p>
         <h1 className="mt-3 text-2xl font-bold text-text-primary">{tr("Цей елемент не відкривається у практиці", "This item cannot be opened in Practice")}</h1>
         <p className="mt-3 leading-7 text-text-secondary">{tr(`${itemKindMessage} Відкрий маршрут, щоб продовжити навчання.`, `${itemKindMessage} Open the path to continue learning.`)}</p>
-        <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${courseId}/path`), { replace: true })} className="mt-6 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white">{tr("Відкрити теми", "Open topics")}</button>
+        <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${courseId}/path`), { replace: true })} className="mt-6 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground">{tr("Відкрити теми", "Open topics")}</button>
       </section>
     </main>;
   }

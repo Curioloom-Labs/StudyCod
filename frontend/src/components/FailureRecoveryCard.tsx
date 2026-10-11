@@ -157,11 +157,11 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
             <Sparkles className="size-4" />
             {languageCopy(isEnglish, "Знайдемо наступний крок", "Let’s find the next step")}
           </div>
-          <p className="mt-2 text-xs leading-5 text-[#a7b9ac]">
+          <p className="mt-2 text-xs leading-5 text-text-secondary">
             {languageCopy(isEnglish, "Невдала спроба — це сигнал для наступної перевірки, а не готове рішення.", "A failed attempt is a signal for the next check, not a finished solution.")}
           </p>
         </div>
-        <span className="rounded-full bg-[#ff6b9d]/10 px-2.5 py-1 text-[10px] font-bold text-[#ff9aba]">{upperVerdict || "—"}</span>
+        <span className="rounded-full bg-accent-error/10 px-2.5 py-1 text-[10px] font-bold text-accent-error">{upperVerdict || "—"}</span>
       </div>
 
       <div className="failure-recovery-steps" aria-label={languageCopy(isEnglish, trackLearning ? "Шлях від помилки до навички" : "Шлях до завершення задачі", trackLearning ? "Path from failure to skill" : "Path to task completion")}>
@@ -181,19 +181,19 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        <div className="rounded-xl bg-white/[.05] p-3 text-xs text-[#cbd9ce]">
-          <span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{languageCopy(isEnglish, hasTestCount ? "Що не пройшло" : "Результат", hasTestCount ? "What failed" : "Result")}</span>
+        <div className="rounded-xl bg-white/[.05] p-3 text-xs text-text-primary">
+          <span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{languageCopy(isEnglish, hasTestCount ? "Що не пройшло" : "Результат", hasTestCount ? "What failed" : "Result")}</span>
           <strong className="mt-1 block">{resultLabel}{hasTestCount && (firstFailure?.testId ?? firstFailure?.testPublicIndex) ? ` · #${firstFailure.testId ?? firstFailure.testPublicIndex}` : ""}</strong>
         </div>
-        <div className="rounded-xl bg-white/[.05] p-3 text-xs text-[#cbd9ce]">
-          <span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{languageCopy(isEnglish, "Категорія", "Category")}</span>
+        <div className="rounded-xl bg-white/[.05] p-3 text-xs text-text-primary">
+          <span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{languageCopy(isEnglish, "Категорія", "Category")}</span>
           <strong className="mt-1 block">{category ?? languageCopy(isEnglish, "Поки не визначено надійно", "Not reliably determined yet")}</strong>
         </div>
       </div>
 
       {(firstFailure?.expectedPreview || firstFailure?.actualPreview || firstFailure?.inputPreview) && (
-        <details className="mt-4 rounded-xl border border-white/10 bg-white/[.035] p-3 text-xs text-[#cbd9ce]">
-          <summary className="cursor-pointer list-none font-semibold text-[#dce9df]">
+        <details className="mt-4 rounded-xl border border-white/10 bg-white/[.035] p-3 text-xs text-text-primary">
+          <summary className="cursor-pointer list-none font-semibold text-text-primary">
             {languageCopy(isEnglish, "Подивитися доказ невдалого тесту", "Inspect the failing-test evidence")}
           </summary>
           <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -201,7 +201,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
               [languageCopy(isEnglish, "Ввід", "Input"), firstFailure?.inputPreview],
               [languageCopy(isEnglish, "Очікувано", "Expected"), firstFailure?.expectedPreview],
               [languageCopy(isEnglish, "Отримано", "Actual"), firstFailure?.actualPreview],
-            ].map(([label, value]) => value ? <div key={label} className="min-w-0"><span className="block text-[10px] uppercase tracking-[.12em] text-[#83988a]">{label}</span><code className="mt-1 block max-h-20 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/20 p-2 text-[11px] text-[#e1eee4]">{value}</code></div> : null)}
+            ].map(([label, value]) => value ? <div key={label} className="min-w-0"><span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{label}</span><code className="mt-1 block max-h-20 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/20 p-2 text-[11px] text-text-primary">{value}</code></div> : null)}
           </div>
         </details>
       )}
@@ -209,10 +209,10 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
       <div className="mt-4 rounded-xl border border-primary/20 bg-primary/[.06] p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="text-[10px] font-bold uppercase tracking-[.12em] text-primary-soft">{languageCopy(isEnglish, `Підказка ${hintLevel + 1} з ${hints.length}`, `Hint ${hintLevel + 1} of ${hints.length}`)}</div>
-          <span className="rounded-full bg-white/[.07] px-2 py-1 text-[10px] font-semibold text-[#a7b9ac]">{hintStageLabel(hintLevel, isEnglish)}</span>
+          <span className="rounded-full bg-white/[.07] px-2 py-1 text-[10px] font-semibold text-text-secondary">{hintStageLabel(hintLevel, isEnglish)}</span>
         </div>
-        <p className="mt-2 text-sm leading-6 text-[#e1eee4]">{hints[hintLevel]}</p>
-        <p className="mt-2 text-[11px] leading-5 text-[#9fb5a5]">{languageCopy(isEnglish, "Підказка спрямовує до власного рішення й не показує готовий код.", "This hint points toward your own solution and does not reveal the finished code.")}</p>
+        <p className="mt-2 text-sm leading-6 text-text-primary">{hints[hintLevel]}</p>
+        <p className="mt-2 text-[11px] leading-5 text-text-secondary">{languageCopy(isEnglish, "Підказка спрямовує до власного рішення й не показує готовий код.", "This hint points toward your own solution and does not reveal the finished code.")}</p>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -229,7 +229,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
               hintLevel: nextLevel + 1,
             }).catch(() => undefined);
           }
-        }} disabled={hintLevel >= hints.length - 1} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2.5 text-xs font-bold text-[#062211] disabled:cursor-not-allowed disabled:opacity-45">
+        }} disabled={hintLevel >= hints.length - 1} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2.5 text-xs font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45">
           {languageCopy(isEnglish, "Показати ще одну підказку", "Show another hint")} <ArrowRight className="size-3.5" />
         </button>
         <button type="button" onClick={() => {
@@ -237,7 +237,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
             void recordLearningEvent({ eventType: "retry_started", taskId, taskKind, learningAttemptId, failureCategory: persistedCategory }).catch(() => undefined);
           }
           onTryAgain?.();
-        }} aria-label={languageCopy(isEnglish, "Спробувати ще раз", "Try again")} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3.5 py-2.5 text-xs font-semibold text-[#dbe8de] hover:bg-white/[.06]">
+        }} aria-label={languageCopy(isEnglish, "Спробувати ще раз", "Try again")} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3.5 py-2.5 text-xs font-semibold text-text-primary hover:bg-white/[.06]">
           <RotateCcw className="size-3.5" aria-hidden="true" /> {languageCopy(isEnglish, "Спробувати ще раз", "Try again")}
         </button>
       </div>

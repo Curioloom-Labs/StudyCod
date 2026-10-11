@@ -158,7 +158,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
             aria-label={isAdmin ? (uk ? "На головну адмінки StudyCod" : "Go to StudyCod admin home") : (uk ? "На головну сторінку StudyCod" : "Go to StudyCod home")}
             title={isAdmin ? (uk ? "Головна адмінки" : "Admin home") : (uk ? "На головну" : "Home")}
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#173423] max-[360px]:h-8 max-[360px]:w-8">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl brand-logo-surface max-[360px]:h-8 max-[360px]:w-8">
               <Logo size={19} />
             </span>
             <span className="font-[family-name:var(--font-display)] text-base font-bold tracking-[-.04em] max-[360px]:text-sm sm:text-lg">StudyCod</span>
@@ -248,7 +248,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                 }}>
                   <div className="px-3 py-3">
                     <div className="truncate text-sm font-semibold text-text-primary">{user.username}</div>
-                    <div className="mt-1 truncate text-xs uppercase tracking-[.08em] text-[#718075] dark:text-text-secondary">{modeLabel}</div>
+                    <div className="mt-1 truncate text-xs uppercase tracking-[.08em] text-text-muted dark:text-text-secondary">{modeLabel}</div>
                   </div>
                   <button type="button" onClick={goProfile} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-text-secondary transition hover:bg-bg-hover dark:hover:bg-bg-hover" role="menuitem">
                     <CircleUserRound className="h-4 w-4" />
@@ -262,7 +262,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
                      <HelpCircle className="h-4 w-4" />
                      Support desk
                    </button> : null}
-                  <button type="button" onClick={onLogout} className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-[#d34e72] transition hover:bg-[#fff0f4] dark:text-[#ff9aba] dark:hover:bg-[#ff6b9d]/10" role="menuitem">
+                  <button type="button" onClick={onLogout} className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-accent-error transition hover:bg-bg-hover dark:text-accent-error dark:hover:bg-accent-error/10" role="menuitem">
                     <LogOut className="h-4 w-4" />
                     {uk ? "Вийти" : "Sign out"}
                   </button>
@@ -288,7 +288,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
               menuMinWidth={240}
               className="shrink-0 border-primary/35 bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"
             />
-            <div className="hidden h-5 w-px bg-[#152219]/12 dark:bg-white/10 sm:block" />
+            <div className="hidden h-5 w-px bg-bg-base/12 dark:bg-white/10 sm:block" />
             {[{ id: "overview", label: uk ? "Огляд" : "Overview", path: `/learning/course/${learning.currentCourse.id}/overview` }, { id: "path", label: uk ? "Теми" : "Topics", path: `/learning/course/${learning.currentCourse.id}/path` }, { id: "practice", label: uk ? "Практика" : "Practice", path: nextPractice ? `/learning/course/${learning.currentCourse.id}/practice/${nextPractice.id}` : `/learning/course/${learning.currentCourse.id}/path` }].map((tab) => <button key={tab.id} type="button" aria-current={courseTab === tab.id ? "page" : undefined} onClick={() => navigate(withDevPreview(tab.path))} className={`min-h-11 shrink-0 rounded-lg px-3 text-sm font-semibold transition ${courseTab === tab.id ? "bg-primary-strong text-primary-foreground dark:bg-primary/12 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-bg-surface/[.06]"}`}>{tab.label}</button>)}
             <div className="ml-auto hidden items-center gap-2 text-xs font-semibold text-text-muted sm:flex"><span>{Math.round(learning.currentCourse.enrollment.completionPercent)}%</span><span className="h-1.5 w-24 overflow-hidden rounded-full bg-bg-hover"><span className="block h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.max(0, learning.currentCourse.enrollment.completionPercent))}%` }} /></span></div>
           </div>

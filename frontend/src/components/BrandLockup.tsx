@@ -14,7 +14,7 @@ export const BrandLockup: React.FC<BrandLockupProps> = ({
   className = "",
 }) => (
   <span className={`inline-flex items-center gap-2.5 ${className}`}>
-    <span className={`grid place-items-center rounded-xl border border-white/10 bg-[#173423] shadow-sm ${compact ? "size-8" : "size-9"}`}>
+    <span className={`grid place-items-center rounded-xl brand-logo-surface ${compact ? "size-8" : "size-9"}`}>
       <Logo size={compact ? 22 : 25} />
     </span>
     <span className="flex min-w-0 flex-col items-start leading-none">
@@ -22,7 +22,7 @@ export const BrandLockup: React.FC<BrandLockupProps> = ({
         StudyCod
       </span>
       {showTagline && (
-        <span className="mt-1 text-[8px] font-semibold uppercase tracking-[.12em] text-[#6c7b70] dark:text-[#9eada2]">
+        <span className="mt-1 text-[8px] font-semibold uppercase tracking-[.12em] text-text-muted dark:text-text-secondary">
           learn by building
         </span>
       )}

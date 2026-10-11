@@ -129,10 +129,10 @@ function missingThematicTopics(data: GradebookResponse | null, topics: Topic[]) 
 }
 
 const gradeTone = (value: number | null | undefined) => {
-  if (value == null) return "bg-[#f0f3f0] text-[#87958c] dark:bg-white/[.05] dark:text-[#a6b4a9]";
+  if (value == null) return "bg-bg-hover text-text-muted dark:bg-white/[.05] dark:text-text-secondary";
   if (value >= 90) return "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft";
-  if (value >= 70) return "bg-[#fff0d7] text-[#a55e00] dark:bg-[#ff8c00]/14 dark:text-[#ffbb6a]";
-  return "bg-[#fff0f4] text-[#c4436b] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]";
+  if (value >= 70) return "bg-bg-hover text-accent-warn dark:bg-accent-warn/14 dark:text-accent-warn";
+  return "bg-bg-hover text-accent-error dark:bg-accent-error/10 dark:text-accent-error";
 };
 
 const Header: React.FC<{ title: string; text: string; classId?: string; actions?: React.ReactNode }> = ({ title, text, classId, actions }) => {
@@ -335,27 +335,27 @@ export const GradebookWorkspace: React.FC = () => {
         actions={
           <>
             <button type="button" onClick={() => navigate(`/edu/classes/${classId}`)} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold dark:border-white/10"><Settings2 className="size-4" />{tr("Налаштування класу", "Class settings")}</button>
-            <button type="button" disabled={!missingThematics.length} onClick={() => setThematicOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-45 dark:bg-primary dark:text-[#062211]"><Plus className="size-4" />{missingThematics.length ? tr("Тематична", "Thematic") : tr("Усі тематичні створено", "All thematic grades created")}</button>
-            <button type="button" disabled={busyAction || !canUseSemesterGrades} onClick={() => void recomputeSemester()} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold text-[#304138] disabled:opacity-55 dark:border-white/10 dark:text-[#dce7df]"><Calculator className="size-4" />{tr("Семестрові", "Semester grades")}</button>
+            <button type="button" disabled={!missingThematics.length} onClick={() => setThematicOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45 dark:bg-primary dark:text-primary-foreground"><Plus className="size-4" />{missingThematics.length ? tr("Тематична", "Thematic") : tr("Усі тематичні створено", "All thematic grades created")}</button>
+            <button type="button" disabled={busyAction || !canUseSemesterGrades} onClick={() => void recomputeSemester()} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold text-text-primary disabled:opacity-55 dark:border-white/10 dark:text-text-primary"><Calculator className="size-4" />{tr("Семестрові", "Semester grades")}</button>
           </>
         }
       />
 
-      {error && <div className="mb-5 rounded-2xl bg-[#ff6b9d]/10 px-4 py-3 text-sm text-[#c4436b]" role="alert">{error}</div>}
+      {error && <div className="mb-5 rounded-2xl bg-accent-error/10 px-4 py-3 text-sm text-accent-error" role="alert">{error}</div>}
       {!data ? (
         <div className="h-80 animate-pulse rounded-[28px] bg-bg-hover dark:bg-white/[.05]" />
       ) : (
         <>
           <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_.8fr]">
-            <div className={`rounded-[24px] border px-5 py-4 text-sm font-bold ${canUseSemesterGrades ? "border-primary/20 bg-[#e8f8ee] text-[#16623d] dark:bg-primary/10 dark:text-primary-soft" : "border-[#ff8c00]/25 bg-[#fff1dc] text-[#8b5300] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]"}`}>
+            <div className={`rounded-[24px] border px-5 py-4 text-sm font-bold ${canUseSemesterGrades ? "border-primary/20 bg-bg-hover text-[#16623d] dark:bg-primary/10 dark:text-primary-soft" : "border-accent-warn/25 bg-bg-hover text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn"}`}>
               {canUseSemesterGrades
                 ? tr("Журнал строгий: тематичні колонки готові, семестрові можна перераховувати.", "Gradebook is ready: all thematic columns are present, so semester grades can be recalculated.")
                 : tr(`Семестрові заблоковано: бракує тематичних колонок для ${missingThematics.length} тем.`, `Semester grades are blocked: ${missingThematics.length} thematic column(s) are missing.`)}
             </div>
             <div className="rounded-[24px] border border-border/10 bg-white px-5 py-4 text-sm dark:border-white/10 dark:bg-bg-surface">
-              <div className="text-xs font-bold uppercase tracking-[.14em] text-[#718075] dark:text-[#a6b4a9]">{tr("Система оцінювання класу", "Class grading system")}</div>
+              <div className="text-xs font-bold uppercase tracking-[.14em] text-text-muted dark:text-text-secondary">{tr("Система оцінювання класу", "Class grading system")}</div>
               <div className="mt-1 text-lg font-bold">{gradingSystemLabel(gradingSystem, isEn)}</div>
-              <div className="mt-1 text-xs text-[#718075] dark:text-[#a6b4a9]">{tr("Введення:", "Input:")} {gradingSystemInputHint(gradingSystem, isEn)}</div>
+              <div className="mt-1 text-xs text-text-muted dark:text-text-secondary">{tr("Введення:", "Input:")} {gradingSystemInputHint(gradingSystem, isEn)}</div>
             </div>
           </div>
 
@@ -367,8 +367,8 @@ export const GradebookWorkspace: React.FC = () => {
 
           <section className="mb-4 rounded-[24px] border border-border/10 bg-white p-4 dark:border-white/[.09] dark:bg-bg-surface">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-[#718075] dark:text-[#a6b4a9]">{tr("Фільтр класу", "Class filter")}</p><p className="mt-1 text-sm text-[#516157] dark:text-[#c2cec5]">{tr("Швидко знайдіть роботи, які потребують уваги.", "Quickly find work that needs attention.")}</p></div>
-              <div className="flex flex-wrap gap-2">{(["all", "missing", "low"] as const).map((filter) => <button type="button" key={filter} onClick={() => setStudentFilter(filter)} className={`rounded-full px-3 py-2 text-xs font-bold ${studentFilter === filter ? "bg-[#153321] text-white dark:bg-primary dark:text-[#062211]" : "bg-[#edf2ed] text-[#617268] dark:bg-white/[.06] dark:text-[#c2cec5]"}`}>{filter === "all" ? `${tr("Усі", "All")} · ${students.length}` : filter === "missing" ? `${tr("Без оцінки", "No grade")} · ${students.filter((student) => student.grades.length === 0 || student.grades.some((grade) => grade.grade == null)).length}` : `${tr("Низькі", "Low grades")} · ${students.filter((student) => student.grades.some((grade) => grade.grade != null && grade.grade < 60)).length}`}</button>)}</div>
+              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-text-muted dark:text-text-secondary">{tr("Фільтр класу", "Class filter")}</p><p className="mt-1 text-sm text-text-muted dark:text-text-secondary">{tr("Швидко знайдіть роботи, які потребують уваги.", "Quickly find work that needs attention.")}</p></div>
+              <div className="flex flex-wrap gap-2">{(["all", "missing", "low"] as const).map((filter) => <button type="button" key={filter} onClick={() => setStudentFilter(filter)} className={`rounded-full px-3 py-2 text-xs font-bold ${studentFilter === filter ? "bg-primary text-primary-foreground dark:bg-primary dark:text-primary-foreground" : "bg-bg-hover text-text-muted dark:bg-white/[.06] dark:text-text-secondary"}`}>{filter === "all" ? `${tr("Усі", "All")} · ${students.length}` : filter === "missing" ? `${tr("Без оцінки", "No grade")} · ${students.filter((student) => student.grades.length === 0 || student.grades.some((grade) => grade.grade == null)).length}` : `${tr("Низькі", "Low grades")} · ${students.filter((student) => student.grades.some((grade) => grade.grade != null && grade.grade < 60)).length}`}</button>)}</div>
             </div>
           </section>
 
@@ -392,7 +392,7 @@ export const GradebookWorkspace: React.FC = () => {
                 ))}
               </tbody>
             </table>
-            {!visibleStudents.length && <div className="px-5 py-10 text-center text-sm text-[#718075] dark:text-[#a6b4a9]">{tr("За цим фільтром учнів не знайдено.", "No students match this filter.")}</div>}
+            {!visibleStudents.length && <div className="px-5 py-10 text-center text-sm text-text-muted dark:text-text-secondary">{tr("За цим фільтром учнів не знайдено.", "No students match this filter.")}</div>}
           </div>
         </>
       )}
@@ -402,9 +402,9 @@ export const GradebookWorkspace: React.FC = () => {
             <div className="flex justify-end">
               <button type="button" onClick={() => setEditing(null)} aria-label={tr("Закрити редагування оцінки", "Close grade editor")} className="rounded-xl bg-bg-subtle p-2 text-text-secondary"><X className="size-4" aria-hidden="true" /></button>
             </div>
- <label htmlFor="teacher-grade-value" className="sr-only">{tr("Оцінка", "Grade")}</label><input id="teacher-grade-value" name="gradeValue" inputMode="decimal" value={gradeValue} onChange={(event) => setGradeValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveGrade(); }} className="mt-6 w-full rounded-2xl border border-border/12 bg-[#f8fbf8] px-4 py-4 text-center text-3xl font-bold outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-base" placeholder={gradingSystemInputHint(gradingSystem, isEn)} />
-            <div className="mt-4 grid grid-cols-5 gap-2">{quickGrades.map((value) => <button key={value} type="button" onClick={() => setGradeValue(value)} className="rounded-xl bg-[#f0f4f0] px-3 py-2 text-sm font-bold dark:bg-white/[.06]">{value}</button>)}</div>
-            <div className="mt-6 flex gap-2"><button type="button" onClick={() => setEditing(null)} className="flex-1 rounded-xl px-4 py-3 font-bold">{tr("Скасувати", "Cancel")}</button><button type="button" disabled={saving || !gradeValue.trim()} onClick={() => void saveGrade()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-bold text-[#062211] disabled:opacity-55"><Save className="size-4" />{tr("Зберегти", "Save")}</button></div>
+ <label htmlFor="teacher-grade-value" className="sr-only">{tr("Оцінка", "Grade")}</label><input id="teacher-grade-value" name="gradeValue" inputMode="decimal" value={gradeValue} onChange={(event) => setGradeValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveGrade(); }} className="mt-6 w-full rounded-2xl border border-border/12 bg-bg-hover px-4 py-4 text-center text-3xl font-bold outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-base" placeholder={gradingSystemInputHint(gradingSystem, isEn)} />
+            <div className="mt-4 grid grid-cols-5 gap-2">{quickGrades.map((value) => <button key={value} type="button" onClick={() => setGradeValue(value)} className="rounded-xl bg-bg-hover px-3 py-2 text-sm font-bold dark:bg-white/[.06]">{value}</button>)}</div>
+            <div className="mt-6 flex gap-2"><button type="button" onClick={() => setEditing(null)} className="flex-1 rounded-xl px-4 py-3 font-bold">{tr("Скасувати", "Cancel")}</button><button type="button" disabled={saving || !gradeValue.trim()} onClick={() => void saveGrade()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground disabled:opacity-55"><Save className="size-4" />{tr("Зберегти", "Save")}</button></div>
         </Modal>
       )}
 
@@ -412,7 +412,7 @@ export const GradebookWorkspace: React.FC = () => {
           <form onSubmit={addThematic}>
             <label htmlFor="thematic-topic" className="text-sm font-semibold">{tr("Тема", "Topic")}</label>
             <select id="thematic-topic" required value={thematicTopicId} onChange={(event) => setThematicTopicId(event.target.value)} className="mt-2 w-full rounded-xl border border-border/12 bg-bg-surface px-4 py-3 dark:border-white/10"><option value="">{tr("Оберіть тему", "Choose a topic")}</option>{missingThematics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select>
-            <div className="mt-5 flex gap-2"><button type="button" onClick={() => setThematicOpen(false)} className="flex-1 rounded-xl px-4 py-3 font-bold">{tr("Скасувати", "Cancel")}</button><button type="submit" disabled={busyAction || !thematicTopicId} className="flex-1 rounded-xl bg-primary px-4 py-3 font-bold text-[#062211] disabled:opacity-55">{tr("Додати", "Add")}</button></div>
+            <div className="mt-5 flex gap-2"><button type="button" onClick={() => setThematicOpen(false)} className="flex-1 rounded-xl px-4 py-3 font-bold">{tr("Скасувати", "Cancel")}</button><button type="submit" disabled={busyAction || !thematicTopicId} className="flex-1 rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground disabled:opacity-55">{tr("Додати", "Add")}</button></div>
           </form>
       </Modal>
     </div>
@@ -471,36 +471,36 @@ export const SummaryGradesWorkspace: React.FC = () => {
         classId={classId}
         title={tr("Підсумкові оцінки", "Summary grades")}
         text={tr("Це архів і перегляд. Створення тематичних та семестрових перенесено в журнал класу, щоб оцінювання не дублювалось.", "This page is for reviewing archived grades. Create thematic and semester grades in the class gradebook to keep grading in one place.")}
-        actions={<button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${classId}/gradebook`))} className="inline-flex items-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white dark:bg-primary dark:text-[#062211]">{tr("Відкрити журнал", "Open gradebook")} <ChevronRight className="size-4" /></button>}
+        actions={<button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${classId}/gradebook`))} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground dark:bg-primary dark:text-primary-foreground">{tr("Відкрити журнал", "Open gradebook")} <ChevronRight className="size-4" /></button>}
       />
-      {error && <div className="mb-5 rounded-2xl bg-[#ff6b9d]/10 px-4 py-3 text-sm text-[#c4436b]" role="alert">{error}</div>}
+      {error && <div className="mb-5 rounded-2xl bg-accent-error/10 px-4 py-3 text-sm text-accent-error" role="alert">{error}</div>}
       <div className="mb-5 rounded-[24px] border border-border/10 bg-white px-5 py-4 text-sm dark:border-white/10 dark:bg-bg-surface">
-        <div className="text-xs font-bold uppercase tracking-[.14em] text-[#718075] dark:text-[#a6b4a9]">{tr("Система оцінювання класу", "Class grading system")}</div>
+        <div className="text-xs font-bold uppercase tracking-[.14em] text-text-muted dark:text-text-secondary">{tr("Система оцінювання класу", "Class grading system")}</div>
         <div className="mt-1 text-lg font-bold">{gradingSystemLabel(gradingSystem, isEn)}</div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         {groups.map((group) => (
           <section key={group.name} className="rounded-[26px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface">
             <div className="flex items-start justify-between gap-4">
-              <div><p className="text-xs font-bold uppercase tracking-[.13em] text-[#ff8c00]">{tr("тематичний зріз", "thematic summary")}</p><h2 className="mt-2 text-xl font-bold">{group.name}</h2></div>
-              <button type="button" disabled={!group.grades[0]} onClick={() => group.grades[0] && void remove(group.grades[0].id)} aria-label={tr(`Видалити оцінку ${group.name}`, `Delete grade for ${group.name}`)} className="rounded-xl bg-[#fff0f4] p-2 text-[#c4436b] disabled:opacity-40 dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]"><Trash2 className="size-4" aria-hidden="true" /></button>
+              <div><p className="text-xs font-bold uppercase tracking-[.13em] text-accent-warn">{tr("тематичний зріз", "thematic summary")}</p><h2 className="mt-2 text-xl font-bold">{group.name}</h2></div>
+              <button type="button" disabled={!group.grades[0]} onClick={() => group.grades[0] && void remove(group.grades[0].id)} aria-label={tr(`Видалити оцінку ${group.name}`, `Delete grade for ${group.name}`)} className="rounded-xl bg-bg-hover p-2 text-accent-error disabled:opacity-40 dark:bg-accent-error/10 dark:text-accent-error"><Trash2 className="size-4" aria-hidden="true" /></button>
             </div>
             <div className="mt-5 space-y-2">
-              {(group.grades || []).map((grade) => <div key={grade.id} className="flex items-center justify-between rounded-xl bg-[#f5f8f5] px-3 py-2.5 text-sm dark:bg-white/[.045]"><span>{grade.studentName || `${tr("Учень", "Student")} #${grade.studentId}`}</span><b className="text-primary-strong dark:text-primary-soft">{formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</b></div>)}
-              {!group.grades?.length && <p className="rounded-xl bg-[#f5f8f5] p-3 text-sm text-[#718075] dark:bg-white/[.045] dark:text-[#a6b4a9]">{tr("Оцінки ще не додані.", "No grades added yet.")}</p>}
+              {(group.grades || []).map((grade) => <div key={grade.id} className="flex items-center justify-between rounded-xl bg-bg-hover px-3 py-2.5 text-sm dark:bg-white/[.045]"><span>{grade.studentName || `${tr("Учень", "Student")} #${grade.studentId}`}</span><b className="text-primary-strong dark:text-primary-soft">{formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</b></div>)}
+              {!group.grades?.length && <p className="rounded-xl bg-bg-hover p-3 text-sm text-text-muted dark:bg-white/[.045] dark:text-text-secondary">{tr("Оцінки ще не додані.", "No grades added yet.")}</p>}
             </div>
           </section>
         ))}
-        {!groups.length && <div className="rounded-[26px] border border-dashed border-border/15 bg-white px-5 py-16 text-center text-sm text-[#718075] dark:border-white/10 dark:bg-bg-surface dark:text-[#a7b5aa]">{tr("Підсумкових оцінок ще немає. Додайте тематичну у журналі.", "No summary grades yet. Add a thematic grade in the gradebook.")}</div>}
+        {!groups.length && <div className="rounded-[26px] border border-dashed border-border/15 bg-white px-5 py-16 text-center text-sm text-text-muted dark:border-white/10 dark:bg-bg-surface dark:text-text-secondary">{tr("Підсумкових оцінок ще немає. Додайте тематичну у журналі.", "No summary grades yet. Add a thematic grade in the gradebook.")}</div>}
       </div>
     </div>
   );
 };
 
 const Metric: React.FC<{ icon: React.ComponentType<{ className?: string }>; value: React.ReactNode; label: string; tone: "green" | "orange" | "yellow" }> = ({ icon: Icon, value, label, tone }) => (
-  <div className={`rounded-2xl p-4 ${tone === "green" ? "bg-primary/10 dark:bg-primary/10" : tone === "orange" ? "bg-[#fff5df] dark:bg-[#ff8c00]/10" : "bg-[#fff8d5] dark:bg-[#ffd93d]/10"}`}>
-    <Icon className={`size-5 ${tone === "green" ? "text-primary-strong dark:text-primary-soft" : tone === "orange" ? "text-[#b66a00] dark:text-[#ffb760]" : "text-[#9c7400] dark:text-[#ffe780]"}`} />
+  <div className={`rounded-2xl p-4 ${tone === "green" ? "bg-primary/10 dark:bg-primary/10" : tone === "orange" ? "bg-bg-hover dark:bg-accent-warn/10" : "bg-bg-hover dark:bg-accent-warn/10"}`}>
+    <Icon className={`size-5 ${tone === "green" ? "text-primary-strong dark:text-primary-soft" : tone === "orange" ? "text-accent-warn dark:text-accent-warn" : "text-accent-warn dark:text-accent-warn"}`} />
     <b className="mt-4 block text-xl">{value}</b>
-    <span className="text-sm text-[#627166] dark:text-[#aab8ad]">{label}</span>
+    <span className="text-sm text-text-muted dark:text-text-secondary">{label}</span>
   </div>
 );

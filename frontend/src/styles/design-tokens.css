@@ -77,45 +77,49 @@
 :root {
   color-scheme: dark;
 
-  /* Brand: rich evergreen surfaces with a lively, high-contrast mint action. */
-  --brand-green: #86d394;
-  --brand-green-deep: #488455;
-  --brand-orange: #f0b96b;
-  --brand-forest: #142119;
-  --brand-mint: #c8e8ce;
+  /* Shared with the IDE: graphite surfaces and a restrained sage action. */
+  --brand-green: #a3c8ab;
+  --brand-green-deep: #819f87;
+  --brand-orange: #dbbd80;
+  --brand-forest: #171b19;
+  --brand-mint: #c0d7c6;
+  --brand-logo-surface: #26342b;
+  --brand-logo-border: #46544b;
 
-  --bg-base: #142119;
-  --bg-surface: #263b2c;
-  --bg-hover: #354c3a;
-  --bg-code: #0f1912;
+  --bg-base: #171b19;
+  --bg-surface: #1d221f;
+  --bg-hover: #242b26;
+  --bg-code: #171b19;
 
-  --text-primary: #f4fbf5;
-  --text-secondary: #dbeadd;
-  --text-muted: #bed3c2;
-  --border: #55785f;
+  --text-primary: #e9eee9;
+  --text-secondary: #b6c1b8;
+  --text-muted: #8d9c91;
+  --border: #343c36;
 
-  --primary: #86d394;
-  --primary-hover: #9be0a5;
-  --primary-muted: #70b97e;
-  --primary-strong: #92d69d;
-  --primary-soft: #b8e8c0;
-  --primary-foreground: #13301b;
+  --primary: #a3c8ab;
+  --primary-hover: #b4d4bb;
+  --primary-muted: #819f87;
+  --primary-strong: #a3c8ab;
+  --primary-soft: #c0d7c6;
+  --primary-foreground: #18291e;
 
-  --secondary: #b6c9e8;
-  --secondary-hover: #d0dcf2;
-  --accent-error: #ff9295;
-  --accent-success: #9af0a7;
-  --accent-warn: #f1be68;
+  --secondary: #a5b8c5;
+  --secondary-hover: #bbccd6;
+  --accent-error: #eba8a1;
+  --accent-error-foreground: #39231f;
+  --accent-success: #a3c8ab;
+  --accent-warn: #dbbd80;
+  --accent-warn-foreground: #302716;
   --accent-warning: var(--accent-warn);
-  --accent-logic-warning: #f29b72;
+  --accent-logic-warning: #d6a386;
   --accent-logic-warn: var(--accent-logic-warning);
   --accent-info: var(--secondary);
 
-  --surface-primary: color-mix(in srgb, var(--primary) 12%, var(--bg-surface));
+  --surface-primary: #293e30;
   --surface-secondary: color-mix(in srgb, var(--secondary) 14%, var(--bg-surface));
   --surface-success: color-mix(in srgb, var(--accent-success) 12%, var(--bg-surface));
-  --surface-warning: color-mix(in srgb, var(--accent-warn) 16%, var(--bg-surface));
-  --surface-error: color-mix(in srgb, var(--accent-error) 15%, var(--bg-surface));
+  --surface-warning: #353124;
+  --surface-error: #392b29;
 
   --motion-fast: 120ms;
   --motion-base: 180ms;
@@ -162,7 +166,7 @@
   --space-3xl: 64px;
 
   --ui-card-radius: 1rem;
-  --ui-card-shadow: 0 16px 42px -36px rgba(0, 0, 0, 0.46);
+  --ui-card-shadow: none;
   --ui-button-radius: 0.75rem;
   --ui-control-radius: 0.7rem;
   --ui-badge-radius: 999px;
@@ -173,9 +177,9 @@
   --foreground: var(--text-primary);
   --card: var(--bg-surface);
   --card-foreground: var(--text-primary);
-  --popover: #2b4131;
+  --popover: #1d221f;
   --popover-foreground: var(--text-primary);
-  --secondary-foreground: var(--text-primary);
+  --secondary-foreground: #18291e;
   --muted: var(--bg-hover);
   --muted-foreground: var(--text-secondary);
   --accent: var(--bg-hover);
@@ -183,13 +187,13 @@
   --destructive: var(--accent-error);
   --input: var(--border);
   --ring: var(--primary);
-  --chart-1: #9af0a7;
-  --chart-2: #b6c9e8;
-  --chart-3: #f1be68;
-  --chart-4: #f29b72;
-  --chart-5: #c9a8ed;
+  --chart-1: #a3c8ab;
+  --chart-2: #a5b8c5;
+  --chart-3: #dbbd80;
+  --chart-4: #d6a386;
+  --chart-5: #b6aec5;
   --radius: 0.75rem;
-  --sidebar: #203629;
+  --sidebar: #1d221f;
   --sidebar-foreground: var(--text-primary);
   --sidebar-primary: var(--primary);
   --sidebar-primary-foreground: var(--primary-foreground);
@@ -199,49 +203,67 @@
   --sidebar-ring: var(--primary);
 }
 
+.brand-logo-surface {
+  background-color: var(--brand-logo-surface);
+  border: 1px solid var(--brand-logo-border);
+}
+
+/* Uploaded contest artwork keeps its readable foreground in either app theme. */
+.contest-banner-surface {
+  --text-primary: #e9eee9;
+  --text-secondary: #b6c1b8;
+  --text-muted: #8d9c91;
+  --primary-strong: #a3c8ab;
+  --primary-soft: #c0d7c6;
+  --accent-warn: #dbbd80;
+  --accent-error: #eba8a1;
+}
+
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --brand-green: #356f4b;
-  --brand-green-deep: #285c3e;
-  --brand-orange: #a96e36;
-  --brand-forest: #203326;
-  --brand-mint: #d7e8d7;
+  --brand-green: #3a7050;
+  --brand-green-deep: #284f39;
+  --brand-orange: #8d6926;
+  --brand-forest: #26342b;
+  --brand-mint: #ecf3ec;
 
-  --bg-base: #f4f4ef;
-  --bg-surface: #fffefa;
-  --bg-hover: #edf0e9;
-  --bg-code: #ecefe9;
+  --bg-base: #f6f7f4;
+  --bg-surface: #ffffff;
+  --bg-hover: #f0f3ee;
+  --bg-code: #ffffff;
 
-  --text-primary: #1b2720;
-  --text-secondary: #405047;
-  --text-muted: #617067;
-  --border: #d5dbd2;
+  --text-primary: #26342b;
+  --text-secondary: #536458;
+  --text-muted: #66756b;
+  --border: #e1e6de;
 
-  --primary: #346f4b;
-  --primary-hover: #285c3e;
-  --primary-muted: #4c795b;
-  --primary-strong: #2d6443;
-  --primary-soft: #34724d;
-  --primary-foreground: #fffdf8;
+  --primary: #315e43;
+  --primary-hover: #284f39;
+  --primary-muted: #5b7d65;
+  --primary-strong: #3a7050;
+  --primary-soft: #3a7050;
+  --primary-foreground: #ffffff;
 
-  --secondary: #536c83;
-  --secondary-hover: #405c75;
-  --accent-error: #b4494d;
-  --accent-success: #346f4b;
-  --accent-warn: #936527;
+  --secondary: #4e6b7d;
+  --secondary-hover: #3e596b;
+  --accent-error: #a64940;
+  --accent-error-foreground: #ffffff;
+  --accent-success: #315e43;
+  --accent-warn: #8d6926;
+  --accent-warn-foreground: #ffffff;
   --accent-warning: var(--accent-warn);
-  --accent-logic-warning: #925d38;
+  --accent-logic-warning: #906a4d;
   --accent-logic-warn: var(--accent-logic-warning);
   --accent-info: var(--secondary);
 
-  --surface-primary: color-mix(in srgb, var(--primary) 8%, var(--bg-surface));
+  --surface-primary: #ecf3ec;
   --surface-secondary: color-mix(in srgb, var(--secondary) 8%, var(--bg-surface));
   --surface-success: color-mix(in srgb, var(--accent-success) 8%, var(--bg-surface));
-  --surface-warning: color-mix(in srgb, var(--accent-warn) 9%, var(--bg-surface));
-  --surface-error: color-mix(in srgb, var(--accent-error) 8%, var(--bg-surface));
+  --surface-warning: #faf4e7;
+  --surface-error: #fbefed;
 
-  --ui-card-shadow: 0 18px 44px -34px rgba(35, 48, 37, 0.34);
+  --ui-card-shadow: none;
   --ui-modal-shadow: 0 28px 72px -38px rgba(30, 42, 32, 0.48);
 
   --background: var(--bg-base);
@@ -258,11 +280,11 @@
   --destructive: var(--accent-error);
   --input: var(--border);
   --ring: var(--primary);
-  --chart-1: #346f4b;
-  --chart-2: #536c83;
-  --chart-3: #936527;
-  --chart-4: #925d38;
-  --chart-5: #819188;
+  --chart-1: #315e43;
+  --chart-2: #4e6b7d;
+  --chart-3: #8d6926;
+  --chart-4: #906a4d;
+  --chart-5: #738178;
   --sidebar: #ffffff;
   --sidebar-foreground: var(--text-primary);
   --sidebar-primary: var(--primary);

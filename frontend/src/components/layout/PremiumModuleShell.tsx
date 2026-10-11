@@ -226,7 +226,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
             onClick={() => !navigationHidden && onNavigate(productHome)}
             className="flex min-h-11 items-center gap-2.5"
           >
-            <span className="grid size-8 place-items-center rounded-xl bg-[#173423] sm:size-9">
+            <span className="grid size-8 place-items-center rounded-xl brand-logo-surface sm:size-9">
               <Logo size={19} />
             </span>
             <span className="whitespace-nowrap font-[family-name:var(--font-display)] text-sm font-bold tracking-[-.04em] max-[359px]:hidden sm:text-lg">
@@ -329,7 +329,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                       <div className="break-words text-sm font-semibold text-text-primary dark:text-text-primary">
                         {displayName}
                       </div>
-                      <div className="mt-0.5 break-all text-xs text-[#6b7a70] dark:text-text-secondary">
+                      <div className="mt-0.5 break-all text-xs text-text-muted dark:text-text-secondary">
                         @{user.username}
                       </div>
                     </div>
@@ -338,7 +338,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                     (user.eduContexts?.students?.length ||
                       user.eduContexts?.organizations?.length) ? (
                       <div className="border-y border-border/10 px-2 py-2 dark:border-white/10">
-                        <div className="px-1 pb-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#718075] dark:text-text-secondary">
+                        <div className="px-1 pb-1 text-[10px] font-bold uppercase tracking-[.12em] text-text-muted dark:text-text-secondary">
                           {uk ? "Контекст EDU" : "EDU context"}
                         </div>
                         {user.eduContexts?.organizations?.some((org) =>
@@ -396,7 +396,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                         setAccountOpen(false);
                         void onLogout();
                       }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[#d84d71] hover:bg-[#fff1f4] dark:text-[#ff94b7] dark:hover:bg-[#ff6b9d]/10"
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-accent-error hover:bg-bg-hover dark:text-accent-error dark:hover:bg-accent-error/10"
                       role="menuitem"
                     >
                       <LogOut className="size-4" />

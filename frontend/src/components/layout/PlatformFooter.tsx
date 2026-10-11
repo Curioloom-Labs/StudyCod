@@ -20,7 +20,7 @@ export const PlatformFooter: React.FC<PlatformFooterProps> = ({ className = "", 
     <div className="mx-auto max-w-[1480px] px-4 py-3 sm:px-6 sm:py-4 lg:px-10">
       <div className={`flex gap-2 ${compact ? "flex-col" : "flex-col lg:flex-row lg:items-center lg:justify-between"}`}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="inline-flex items-center gap-2 text-sm font-bold text-text-primary"><span className="grid size-7 place-items-center rounded-lg bg-[#173423]"><Logo size={14} /></span>StudyCod</span>
+          <span className="inline-flex items-center gap-2 text-sm font-bold text-text-primary"><span className="grid size-7 place-items-center rounded-lg brand-logo-surface"><Logo size={14} /></span>StudyCod</span>
           <span className="text-xs text-text-muted sm:text-sm">{t("footerTagline")}</span>
         </div>
         <nav className="flex flex-wrap gap-x-2 gap-y-0 text-xs font-semibold sm:gap-x-3 sm:text-[13px]" aria-label="Footer navigation">

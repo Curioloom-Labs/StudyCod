@@ -2,7 +2,7 @@
   overflow: visible;
   border-color: color-mix(in srgb, var(--color-border, var(--border)) 80%, var(--primary));
   background:
-    radial-gradient(ellipse at 50% -24%, rgb(0 217 120 / 8%), transparent 52%),
+    radial-gradient(ellipse at 50% -24%, color-mix(in srgb, var(--primary) 8%, transparent), transparent 52%),
     var(--bg-surface, #0e1712);
 }
 
@@ -18,8 +18,8 @@
 }
 
 .certificate-studio {
-  --studio-border: color-mix(in srgb, var(--color-border, var(--border)) 86%, #789484);
-  --studio-panel: color-mix(in srgb, var(--bg-surface, #0e1712) 88%, #17251d);
+  --studio-border: var(--border);
+  --studio-panel: var(--bg-surface);
   display: grid;
   grid-template-columns: minmax(190px, 238px) minmax(360px, 1fr) minmax(235px, 290px);
   grid-template-areas:

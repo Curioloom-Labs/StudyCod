@@ -536,7 +536,7 @@
 
 [data-theme="dark"] .deep-workspace--tasks > div > aside,
 [data-theme="dark"] .deep-workspace--library > div > aside {
-  background: #0d1710 !important;
+  background: var(--bg-code) !important;
 }
 
 @theme inline {

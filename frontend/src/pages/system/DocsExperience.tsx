@@ -93,10 +93,10 @@ export const DocsExperience: React.FC<Props> = ({
           <aside className="sticky top-24 hidden rounded-[22px] border border-border/10 bg-white p-4 lg:block dark:border-white/10 dark:bg-bg-surface">
             <div className="px-2 pb-3">
               <span className="text-[10px] font-extrabold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{audienceLabel(selected.audience, tr)}</span>
-              <p className="mt-2 text-[12px] leading-5 text-[#748078] dark:text-[#96a299]">{tr("Продовжити за темою", "Continue this topic")}</p>
+              <p className="mt-2 text-[12px] leading-5 text-text-muted dark:text-text-secondary">{tr("Продовжити за темою", "Continue this topic")}</p>
             </div>
             <nav className="space-y-1">
-              {sameAudience.map(section => <button type="button" key={section.id} onClick={() => open(section.id)} className="w-full rounded-[13px] px-3 py-2.5 text-left text-[12px] font-semibold leading-[1.45] text-[#657269] transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-white/[.05] dark:hover:text-white">{section.title}</button>)}
+              {sameAudience.map(section => <button type="button" key={section.id} onClick={() => open(section.id)} className="w-full rounded-[13px] px-3 py-2.5 text-left text-[12px] font-semibold leading-[1.45] text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-white/[.05] dark:hover:text-white">{section.title}</button>)}
             </nav>
           </aside>
 
@@ -104,17 +104,17 @@ export const DocsExperience: React.FC<Props> = ({
             key={selected.id}
             initial={reduceMotion ? undefined : { opacity: 0, y: 16 }}
             animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-            className="overflow-hidden rounded-[28px] border border-border/10 bg-white shadow-[0_24px_80px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-[#111713] dark:shadow-[0_24px_80px_rgba(0,0,0,.22)]"
+            className="overflow-hidden rounded-[28px] border border-border/10 bg-white shadow-[0_24px_80px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-bg-code dark:shadow-[0_24px_80px_rgba(0,0,0,.22)]"
           >
             <header className="border-b border-border/10 px-[clamp(24px,6vw,72px)] py-[clamp(44px,7vw,76px)] dark:border-white/10">
               <div className="flex items-start justify-between gap-5">
                 <div className="max-w-[700px]">
                   <span className="text-[11px] font-extrabold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{audienceLabel(selected.audience, tr)} · {tr("Практичний гайд", "Practical guide")}</span>
                   <h1 className="mt-5 text-balance text-[clamp(36px,5vw,58px)] font-extrabold leading-[1.03] tracking-[-.055em]">{selected.title}</h1>
-                  <p className="mt-6 max-w-[650px] text-[16px] leading-7 text-[#657269] dark:text-[#a7b2aa]">{sectionDescription(selected.content)}</p>
-                  <div className="mt-6 flex flex-wrap gap-2">{selected.tags.slice(0, 4).map(tag => <span key={tag} className="rounded-full bg-[#eef2ed] px-3 py-1.5 text-[10px] font-semibold text-[#718078] dark:bg-white/[.06] dark:text-text-secondary">{tag}</span>)}</div>
+                  <p className="mt-6 max-w-[650px] text-[16px] leading-7 text-text-muted dark:text-text-secondary">{sectionDescription(selected.content)}</p>
+                  <div className="mt-6 flex flex-wrap gap-2">{selected.tags.slice(0, 4).map(tag => <span key={tag} className="rounded-full bg-bg-hover px-3 py-1.5 text-[10px] font-semibold text-text-muted dark:bg-white/[.06] dark:text-text-secondary">{tag}</span>)}</div>
                 </div>
-                <button type="button" onClick={onCopyLink} aria-label={tr("Копіювати посилання", "Copy link")} className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-border/10 text-text-muted transition hover:bg-[#f1f4f0] dark:border-white/10 dark:text-text-secondary dark:hover:bg-white/5" title={tr("Копіювати посилання", "Copy link")}><Copy className="size-4" aria-hidden="true" /></button>
+                <button type="button" onClick={onCopyLink} aria-label={tr("Копіювати посилання", "Copy link")} className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-border/10 text-text-muted transition hover:bg-bg-hover dark:border-white/10 dark:text-text-secondary dark:hover:bg-white/5" title={tr("Копіювати посилання", "Copy link")}><Copy className="size-4" aria-hidden="true" /></button>
               </div>
             </header>
 
@@ -122,10 +122,10 @@ export const DocsExperience: React.FC<Props> = ({
               <MarkdownView content={selected.content} variant="handbook" />
             </div>
 
-            <footer className="border-t border-border/10 bg-bg-surface p-[clamp(24px,4vw,42px)] dark:border-white/10 dark:bg-[#0e1410]">
+            <footer className="border-t border-border/10 bg-bg-surface p-[clamp(24px,4vw,42px)] dark:border-white/10 dark:bg-bg-code">
               <button type="button" onClick={() => open(next.id)} className="group flex w-full items-center justify-between gap-6 rounded-[20px] border border-border/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-primary/30 dark:border-white/10 dark:bg-bg-surface">
                 <span><span className="text-[10px] font-extrabold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Наступний гайд", "Next guide")}</span><strong className="mt-2 block text-[16px] leading-5">{next.title}</strong></span>
-                <ArrowRight className="size-5 shrink-0 text-[#809087] transition group-hover:translate-x-1 group-hover:text-primary-strong" />
+                <ArrowRight className="size-5 shrink-0 text-text-muted transition group-hover:translate-x-1 group-hover:text-primary-strong" />
               </button>
             </footer>
           </motion.article>
@@ -151,7 +151,7 @@ export const DocsExperience: React.FC<Props> = ({
       description: tr("Класи, курси, live-уроки, журнал і аналітика в одному маршруті.", "Classes, courses, live lessons, gradebook, and analytics in one path."),
       steps: [tr("Підготувати клас", "Prepare a class"), tr("Призначити матеріал", "Assign material"), tr("Оцінити прогрес", "Assess progress")],
       target: "edu-teacher" as DocsSectionId,
-      accent: "bg-[#ff8c00]/12 text-[#b96300] dark:text-[#ffad4a]",
+      accent: "bg-accent-warn/12 text-accent-warn dark:text-accent-warn",
     },
     {
       Icon: UserRound,
@@ -160,7 +160,7 @@ export const DocsExperience: React.FC<Props> = ({
       description: tr("Бібліотека, редактор, пісочниця й прогрес без прив’язки до класу.", "Library, editor, playground, and progress without a class."),
       steps: [tr("Обрати тему", "Choose a topic"), tr("Розв’язати задачу", "Solve a task"), tr("Побачити прогрес", "See progress")],
       target: "personal" as DocsSectionId,
-      accent: "bg-[#ffd93d]/20 text-[#8b6b00] dark:text-[#ffe36c]",
+      accent: "bg-accent-warn/20 text-accent-warn dark:text-accent-warn",
     },
   ];
 
@@ -171,30 +171,30 @@ export const DocsExperience: React.FC<Props> = ({
         <motion.div
           initial={reduceMotion ? undefined : { opacity: 0, y: 18 }}
           animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-[32px] bg-[#101713] px-[clamp(24px,6vw,78px)] py-[clamp(54px,8vw,92px)] text-white shadow-[0_36px_90px_rgba(12,25,17,.16)]"
+          className="relative overflow-hidden rounded-[32px] bg-bg-code px-[clamp(24px,6vw,78px)] py-[clamp(54px,8vw,92px)] text-text-primary shadow-[0_36px_90px_rgba(12,25,17,.16)]"
         >
           <div className="absolute -right-32 -top-44 size-[440px] rounded-full bg-primary/10 blur-[95px]" />
-          <div className="absolute -bottom-48 left-1/4 size-[380px] rounded-full bg-[#ff8c00]/10 blur-[110px]" />
+          <div className="absolute -bottom-48 left-1/4 size-[380px] rounded-full bg-accent-warn/10 blur-[110px]" />
           <div className="relative max-w-[790px]">
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.06] px-3 py-1.5 text-[12px] font-semibold text-[#b9c3bc]">
-              <BookOpen className="size-4 text-[#62efaa]" />
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.06] px-3 py-1.5 text-[12px] font-semibold text-text-secondary">
+              <BookOpen className="size-4 text-primary-strong" />
               StudyCod Handbook · {sections.length} {tr("гайдів", "guides")}
             </span>
             <h1 className="mt-7 text-balance text-[clamp(43px,6vw,72px)] font-bold leading-[.98] tracking-[-.055em]">
               {tr("Усе про StudyCod — зрозуміло й по суті.", "Everything about StudyCod, clearly explained.")}
             </h1>
-            <p className="mt-6 max-w-[650px] text-[17px] leading-7 text-[#aab5ad]">
+            <p className="mt-6 max-w-[650px] text-[17px] leading-7 text-text-secondary">
               {tr("Актуальні інструкції для практики, навчання в класі та викладання. Тут описано стани інтерфейсу, схеми й основні сценарії.", "Current guidance for practice, classroom learning, and teaching. It covers interface states, diagrams, and common workflows.")}
             </p>
             <label className="mt-9 flex max-w-[660px] items-center gap-3 rounded-[18px] border border-white/10 bg-white/[.075] p-2 backdrop-blur">
-              <Search className="ml-3 size-5 text-[#7f8d84]" />
+              <Search className="ml-3 size-5 text-text-muted" />
               <input
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 placeholder={tr("Знайти функцію, дію або проблему…", "Find a feature, action, or issue…")}
-                className="h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[#78867d]"
+                className="h-12 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-text-muted"
               />
-              {query && <span className="mr-2 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] text-[#c6d0c9]">{filtered.length}</span>}
+              {query && <span className="mr-2 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] text-text-secondary">{filtered.length}</span>}
             </label>
           </div>
         </motion.div>
@@ -214,10 +214,10 @@ export const DocsExperience: React.FC<Props> = ({
         <div className="mt-7 grid grid-cols-3 gap-3 max-md:grid-cols-1">
           {tracks.map(({ Icon, label, title, description, steps, target, accent }) => <button type="button" key={label} onClick={() => open(target)} className={`${surface} group rounded-[24px] p-6 text-left shadow-[0_16px_45px_rgba(18,32,23,.045)] transition hover:-translate-y-1 dark:shadow-[0_16px_45px_rgba(0,0,0,.16)]`}>
             <span className={`grid size-11 place-items-center rounded-[14px] ${accent}`}><Icon className="size-5" /></span>
-            <span className="mt-7 block text-[11px] font-extrabold uppercase tracking-[.12em] text-[#7a867e]">{label}</span>
+            <span className="mt-7 block text-[11px] font-extrabold uppercase tracking-[.12em] text-text-muted">{label}</span>
             <h3 className="mt-2 text-[19px] font-bold leading-[1.22] tracking-[-.035em]">{title}</h3>
-            <p className="mt-3 min-h-[48px] text-[13px] leading-5 text-[#718078] dark:text-text-secondary">{description}</p>
-            <div className="mt-6 space-y-2.5">{steps.map(step => <span key={step} className="flex items-center gap-2 text-[12px] text-[#68746c] dark:text-[#a0aba3]"><Check className="size-4 rounded-full bg-primary p-0.5 text-primary-foreground" />{step}</span>)}</div>
+            <p className="mt-3 min-h-[48px] text-[13px] leading-5 text-text-muted dark:text-text-secondary">{description}</p>
+            <div className="mt-6 space-y-2.5">{steps.map(step => <span key={step} className="flex items-center gap-2 text-[12px] text-text-muted dark:text-text-secondary"><Check className="size-4 rounded-full bg-primary p-0.5 text-primary-foreground" />{step}</span>)}</div>
             <span className="mt-7 flex items-center gap-1 text-[11px] font-bold text-primary-strong transition group-hover:gap-2 dark:text-primary-soft">{tr("Відкрити гайд", "Open guide")}<ArrowRight className="size-3.5" /></span>
           </button>)}
         </div>
@@ -226,10 +226,10 @@ export const DocsExperience: React.FC<Props> = ({
           <div>
             <span className="text-[11px] font-extrabold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Бібліотека знань", "Knowledge library")}</span>
             <h2 className="mt-2 text-[clamp(30px,4vw,40px)] font-bold tracking-[-.045em]">{query ? tr("Результати пошуку", "Search results") : tr("Усі інструкції", "All guides")}</h2>
-            <p className="mt-2 text-[14px] text-[#718078] dark:text-text-secondary">{filtered.length} {tr("матеріалів у вибраному розділі", "articles in the selected view")}</p>
+            <p className="mt-2 text-[14px] text-text-muted dark:text-text-secondary">{filtered.length} {tr("матеріалів у вибраному розділі", "articles in the selected view")}</p>
           </div>
           <div className="flex gap-1 rounded-2xl border border-border/10 bg-white p-1 dark:border-white/10 dark:bg-bg-surface">
-            {(["ALL", "EDU", "PERSONAL"] as DocsAudience[]).map(value => <button type="button" key={value} onClick={() => setAudience(value)} className={`rounded-xl px-4 py-2.5 text-[11px] font-extrabold transition ${audience === value ? "bg-[#111814] text-white dark:bg-[#edf3ef] dark:text-text-primary" : "text-[#718078] hover:text-text-primary dark:text-[#8e9a92] dark:hover:text-white"}`}>{value === "ALL" ? tr("Усі", "All") : value === "PERSONAL" ? "Personal" : "EDU"}</button>)}
+            {(["ALL", "EDU", "PERSONAL"] as DocsAudience[]).map(value => <button type="button" key={value} onClick={() => setAudience(value)} className={`rounded-xl px-4 py-2.5 text-[11px] font-extrabold transition ${audience === value ? "bg-bg-code text-text-primary dark:bg-bg-hover dark:text-text-primary" : "text-text-muted hover:text-text-primary dark:text-text-muted dark:hover:text-white"}`}>{value === "ALL" ? tr("Усі", "All") : value === "PERSONAL" ? "Personal" : "EDU"}</button>)}
           </div>
         </div>
 
@@ -238,15 +238,15 @@ export const DocsExperience: React.FC<Props> = ({
             const active = selected.id === section.id;
             return <button type="button" key={section.id} onClick={() => open(section.id)} className={`${surface} group min-h-[196px] rounded-[21px] p-5 text-left transition hover:-translate-y-0.5 hover:border-primary/30 ${active ? "ring-2 ring-primary/20" : ""}`}>
               <div className="flex items-start justify-between gap-3">
-                <span className="rounded-lg bg-bg-hover px-2.5 py-1.5 text-[9px] font-extrabold uppercase tracking-[.08em] text-text-muted dark:bg-[#202821] dark:text-[#a0aba3]">{audienceLabel(section.audience, tr)}</span>
-                <ArrowRight className="size-4 text-[#9aa59d] transition group-hover:translate-x-1 group-hover:text-primary-strong" />
+                <span className="rounded-lg bg-bg-hover px-2.5 py-1.5 text-[9px] font-extrabold uppercase tracking-[.08em] text-text-muted dark:bg-bg-base dark:text-text-secondary">{audienceLabel(section.audience, tr)}</span>
+                <ArrowRight className="size-4 text-text-secondary transition group-hover:translate-x-1 group-hover:text-primary-strong" />
               </div>
               <h3 className="mt-6 line-clamp-2 text-[16px] font-bold leading-5 tracking-[-.025em]">{section.title}</h3>
-              <p className="mt-3 line-clamp-2 text-[12px] leading-[1.55] text-[#748078] dark:text-[#96a299]">{sectionDescription(section.content)}</p>
-              <p className="mt-4 line-clamp-1 text-[10px] text-[#89948d]">{section.tags.slice(0, 3).join(" · ")}</p>
+              <p className="mt-3 line-clamp-2 text-[12px] leading-[1.55] text-text-muted dark:text-text-secondary">{sectionDescription(section.content)}</p>
+              <p className="mt-4 line-clamp-1 text-[10px] text-text-muted">{section.tags.slice(0, 3).join(" · ")}</p>
             </button>;
           })}
-        </div> : <div className={`${surface} mt-7 rounded-[24px] px-6 py-14 text-center`}><Search className="mx-auto size-6 text-[#8d9991]" /><h3 className="mt-4 text-[18px] font-bold">{tr("Нічого не знайдено", "No guides found")}</h3><p className="mt-2 text-[13px] text-[#718078]">{tr("Спробуйте коротший запит або змініть фільтр.", "Try a shorter query or change the filter.")}</p></div>}
+        </div> : <div className={`${surface} mt-7 rounded-[24px] px-6 py-14 text-center`}><Search className="mx-auto size-6 text-text-muted" /><h3 className="mt-4 text-[18px] font-bold">{tr("Нічого не знайдено", "No guides found")}</h3><p className="mt-2 text-[13px] text-text-muted">{tr("Спробуйте коротший запит або змініть фільтр.", "Try a shorter query or change the filter.")}</p></div>}
       </section>
 
     </main>

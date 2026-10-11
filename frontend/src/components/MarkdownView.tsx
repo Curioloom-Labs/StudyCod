@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, memo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useId } from "react";
+import { useTranslation } from "react-i18next";
+import { CopyIcon, CheckIcon } from "@phosphor-icons/react";
 import type { Components } from "react-markdown";
 import type { Pluggable, PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
@@ -465,10 +467,34 @@ type MathPluginBundle = {
   rehypeKatex: Pluggable | null;
 };
 
-const PlainCodeBlock: React.FC<{ code: string }> = ({ code }) => {
-  return <pre className="my-4 w-full min-w-0 max-w-full overflow-x-auto whitespace-pre rounded-2xl border border-border/80 bg-bg-code/80 p-4 text-sm leading-relaxed shadow-sm">
-      <code className="whitespace-pre font-mono text-text-primary">{code}</code>
-    </pre>;
+const PlainCodeBlock: React.FC<{ code: string; copyable?: boolean }> = ({ code, copyable = false }) => {
+  const { i18n } = useTranslation();
+  const en = i18n.language?.startsWith("en");
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
+  const resetTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (resetTimer.current) clearTimeout(resetTimer.current); }, []);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("error");
+    }
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setCopyStatus("idle"), 2000);
+  };
+  return <div className="markdown-code-block not-prose my-4 min-w-0 overflow-hidden rounded-lg border border-border bg-bg-code text-text-primary">
+      {copyable ? <div className="flex justify-end px-2 pt-1.5">
+        <button type="button" onClick={() => void copy()} className="markdown-code-copy inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
+          aria-label={en ? "Copy example" : "Копіювати приклад"}>
+          {copyStatus === "copied" ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+          <span aria-live="polite">{copyStatus === "copied" ? (en ? "Copied" : "Скопійовано") : copyStatus === "error" ? (en ? "Try again" : "Спробуй ще раз") : (en ? "Copy" : "Копіювати")}</span>
+        </button>
+      </div> : null}
+      <pre className={`m-0 max-w-full overflow-x-auto whitespace-pre p-4 font-mono text-sm font-normal leading-6 ${copyable ? "pt-1" : ""}`}>
+        <code className="block whitespace-pre border-0 bg-transparent p-0 font-mono font-normal text-text-primary">{code}</code>
+      </pre>
+    </div>;
 };
 
 export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
@@ -602,12 +628,12 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
         const raw = String(children).replace(/\n$/, "");
         const spec = parseInteractiveSpec(raw);
         if (spec) return <InteractiveBlock spec={spec} />;
-        return <PlainCodeBlock code={raw} />;
+        return <PlainCodeBlock code={raw} copyable={variant === "task"} />;
       }
       if (!isInlineCode && match && language !== "text") {
         const code = decodeEscapedInputText(String(children).replace(/\n$/, ""));
         if (!SyntaxHighlighter || !syntaxStyle) {
-          return <PlainCodeBlock code={code} />;
+          return <PlainCodeBlock code={code} copyable={variant === "task"} />;
         }
         return <div className="my-4 w-full min-w-0 overflow-x-auto rounded-2xl border border-border">
               <SyntaxHighlighter language={language} style={syntaxStyle} customStyle={{
@@ -623,7 +649,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
       }
       if (!isInlineCode) {
         const code = decodeEscapedInputText(String(children).replace(/\n$/, ""));
-        return <PlainCodeBlock code={code} />;
+        return <PlainCodeBlock code={code} copyable={variant === "task"} />;
       }
       const inlineCode = decodeEscapedInputText(String(children ?? ""));
       const hasMultilineInline = inlineCode.includes("\n");
@@ -636,7 +662,14 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     },
     // Custom code blocks already include their own container. Removing the
     // default wrapper prevents invalid <pre><pre> nesting and excess spacing.
-    pre({ children }: React.ComponentPropsWithoutRef<"pre">) {
+    pre({ children, node }) {
+      const codeNode = (node as HastNode | undefined)?.children?.[0] as HastNode | undefined;
+      const classes = codeNode?.properties?.className;
+      const hasLanguage = Array.isArray(classes) && classes.some((value) => String(value).startsWith("language-"));
+      if (variant === "task" && !hasLanguage) {
+        const raw = getTextFromHast(node as HastNode).replace(/\n$/, "");
+        return <PlainCodeBlock code={decodeEscapedInputText(raw)} copyable />;
+      }
       return <>{children}</>;
     },
     a({
@@ -700,7 +733,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
 
       return <p {...props}>{children}</p>;
     }
-  }), [SyntaxHighlighter, syntaxStyle]);
+  }), [SyntaxHighlighter, syntaxStyle, variant]);
   const processedContent = useMemo(() => {
     if (!content) return "";
     let processed = normalizeMarkdownEscapes(content);
@@ -720,7 +753,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     return processed;
   }, [content]);
   const taskMarkdownClasses = variant === "task"
-    ? "prose-p:my-3 prose-p:text-[14px] prose-p:leading-[1.75] prose-p:text-[#b9c9bd] prose-headings:mb-2 prose-headings:mt-6 prose-headings:text-[15px] prose-headings:leading-6 prose-headings:tracking-[-.01em] prose-h1:text-[18px] prose-h2:text-[17px] prose-h3:text-[15px] prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-li:text-[14px] prose-li:leading-6 prose-strong:text-[#edf5ee] [&>pre]:my-3 [&>pre]:border-[#294333] [&>pre]:bg-[#08100b] [&>pre]:p-3 [&>pre]:shadow-none [&>pre>code]:text-[12px] [&>pre>code]:leading-6"
+    ? "prose-p:my-3 prose-p:text-[14px] prose-p:leading-[1.75] prose-p:text-text-secondary prose-headings:mb-2 prose-headings:mt-6 prose-headings:text-[15px] prose-headings:leading-6 prose-headings:tracking-[-.01em] prose-h1:text-[18px] prose-h2:text-[17px] prose-h3:text-[15px] prose-ul:my-3 prose-ol:my-3 prose-li:my-1 prose-li:text-[14px] prose-li:leading-6 prose-strong:text-text-primary [&>pre]:my-3 [&>pre]:border-border [&>pre]:bg-bg-code [&>pre]:p-3 [&>pre]:shadow-none [&>pre>code]:text-[12px] [&>pre>code]:leading-6"
     : "";
   return <div className={`${variant === "handbook" ? "docs-handbook-prose font-sans" : "font-sans prose-invert"} ${variant === "task" ? "task-markdown" : ""} prose max-w-none
       prose-pre:bg-transparent prose-pre:p-0 prose-pre:my-4 prose-pre:border-0

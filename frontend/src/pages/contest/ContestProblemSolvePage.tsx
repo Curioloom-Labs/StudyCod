@@ -11,8 +11,6 @@ import type {
 } from "../../lib/api/contests";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeftIcon as ArrowLeft,
-  ArrowRightIcon as ArrowRight,
   ChatCircleTextIcon as MessageSquareText,
   BroadcastIcon as Radio,
   TrophyIcon as Trophy,
@@ -1137,9 +1135,6 @@ export const ContestProblemSolvePage: React.FC = () => {
   const orderedContestProblems = [...contestProblems].sort(
     (a, b) => a.order - b.order,
   );
-  const currentProblemIndex = orderedContestProblems.findIndex(
-    (problem) => problem.id === problemId,
-  );
   const openContestProblem = (target: ContestProblemListItem) => {
     navigate(
       withDevPreview(`/contest/contests/${contestId}/problems/${target.id}`),
@@ -1161,7 +1156,7 @@ export const ContestProblemSolvePage: React.FC = () => {
             <div className="text-xs font-semibold text-text-secondary">
               {copy("Оголошення організатора", "Organizer announcement")}
             </div>
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-text-primary dark:text-[#dce8df]">
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-text-primary dark:text-text-primary">
               {latestAnnouncement.text}
             </p>
           </div>
@@ -1177,8 +1172,8 @@ export const ContestProblemSolvePage: React.FC = () => {
       ) : null}
 
       {turnstileEnabled && !isPreview ? (
-        <Card className="flex flex-wrap items-center gap-3 border-border/80 p-3 dark:border-white/10 dark:bg-[#0d1510]">
-          <div className="min-w-0 flex-1 text-xs text-text-muted dark:text-[#a7b5aa]">
+        <Card className="flex flex-wrap items-center gap-3 border-border/80 p-3 dark:border-white/10 dark:bg-bg-code">
+          <div className="min-w-0 flex-1 text-xs text-text-muted dark:text-text-secondary">
             {turnstileLoadFailed
               ? copy(
                   "Перевірка людини не завантажилась. Спробуй оновити сторінку перед надсиланням.",
@@ -1197,7 +1192,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         <div
           role="alert"
           aria-live="assertive"
-          className="flex items-start gap-3 rounded-xl border border-[#ff6b9d]/30 bg-[#ff6b9d]/10 px-3 py-2.5 text-sm text-[#ffb2c9]"
+          className="flex items-start gap-3 rounded-xl border border-accent-error/30 bg-accent-error/10 px-3 py-2.5 text-sm text-accent-error"
         >
           <span className="min-w-0 flex-1">{error}</span>
           <button
@@ -1217,7 +1212,7 @@ export const ContestProblemSolvePage: React.FC = () => {
         <div
           role="status"
           aria-live="polite"
-          className="flex items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/[.08] px-3 py-2.5 text-sm text-primary-strong dark:text-[#9cf2c2]"
+          className="flex items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/[.08] px-3 py-2.5 text-sm text-primary-strong dark:text-primary-strong"
         >
           <span>
             {copy(
@@ -1267,7 +1262,7 @@ export const ContestProblemSolvePage: React.FC = () => {
           id: `contest-${contestId}-${problemId}`,
           title: statement.task.title,
           description: statement.task.description,
-          section: `${copy("Контест", "Contest")} · ${contestMeta.title} · ${statement.problem.label}`,
+          section: `${copy("Контест", "Contest")} · ${contestMeta.title}`,
         }}
         theory={null}
         language={judgeLanguage}
@@ -1370,83 +1365,26 @@ export const ContestProblemSolvePage: React.FC = () => {
         trace={trace}
         tracing={tracing}
         onTrace={doTrace}
-        contextToolbar={
-          <div className="ide-contest-nav">
-            <span className="ide-nav-label">{copy("Задачі", "Problems")}</span>
-            <div className="ide-problem-list">
-              <button
-                type="button"
-                className="ide-icon-btn"
-                onClick={() => {
-                  const previous =
-                    orderedContestProblems[currentProblemIndex - 1];
-                  if (previous) openContestProblem(previous);
-                }}
-                disabled={currentProblemIndex <= 0}
-                aria-label={copy("Попередня задача", "Previous problem")}
-                title={copy("Попередня задача", "Previous problem")}
-              >
-                <ArrowLeft />
-              </button>
-              {orderedContestProblems.map((problem) => (
-                <button
-                  type="button"
-                  key={problem.id}
-                  className="ide-problem-tab"
-                  aria-current={problem.id === problemId ? "page" : undefined}
-                  onClick={() => openContestProblem(problem)}
-                  aria-label={`${problem.label}. ${problem.title}`}
-                  title={`${problem.label}. ${problem.title} · ${problem.points} ${copy("балів", "points")}`}
-                >
-                  <span>{problem.label}</span>
-                  {problem.id === problemId ? (
-                    <small>{problem.title}</small>
-                  ) : null}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="ide-icon-btn"
-                onClick={() => {
-                  const next = orderedContestProblems[currentProblemIndex + 1];
-                  if (next) openContestProblem(next);
-                }}
-                disabled={
-                  currentProblemIndex < 0 ||
-                  currentProblemIndex >= orderedContestProblems.length - 1
-                }
-                aria-label={copy("Наступна задача", "Next problem")}
-                title={copy("Наступна задача", "Next problem")}
-              >
-                <ArrowRight />
-              </button>
-            </div>
-            {hasToken ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setOrganizerQuestionSent(false);
-                  setOrganizerDialogOpen(true);
-                }}
-                className="ide-btn ide-btn-quiet ide-organizer-btn"
-                data-short-label={copy("Питання", "Ask")}
-                aria-label={copy(
-                  "Поставити питання організатору",
-                  "Ask the organizer a question",
-                )}
-                title={copy(
-                  "Поставити питання організатору",
-                  "Ask the organizer a question",
-                )}
-              >
-                <MessageSquareText />
-                <span className="ide-organizer-label">
-                  {copy("Питання організатору", "Ask organizer")}
-                </span>
-              </button>
-            ) : null}
-          </div>
-        }
+        problemNavigation={{
+          items: orderedContestProblems,
+          activeId: problemId ?? statement.problem.id,
+          onSelect: (id) => {
+            const target = orderedContestProblems.find(
+              (problem) => problem.id === id,
+            );
+            if (target) openContestProblem(target);
+          },
+          footer: (
+            <Link
+              to={withDevPreview(`/contest/contests/${contestId}/scoreboard`)}
+              className="ide-icon-btn"
+              aria-label={copy("Таблиця контесту", "Contest scoreboard")}
+              title={copy("Таблиця контесту", "Contest scoreboard")}
+            >
+              <Trophy />
+            </Link>
+          ),
+        }}
         toolbarStatus={
           <>
             {!isPreview ? (
@@ -1478,14 +1416,30 @@ export const ContestProblemSolvePage: React.FC = () => {
           </>
         }
         toolbar={
-          <Link
-            to={withDevPreview(`/contest/contests/${contestId}/scoreboard`)}
-            className="ide-icon-btn"
-            aria-label={copy("Таблиця контесту", "Contest scoreboard")}
-            title={copy("Таблиця контесту", "Contest scoreboard")}
-          >
-            <Trophy />
-          </Link>
+          hasToken ? (
+            <button
+              type="button"
+              onClick={() => {
+                setOrganizerQuestionSent(false);
+                setOrganizerDialogOpen(true);
+              }}
+              className="ide-btn ide-btn-quiet ide-organizer-btn"
+              data-short-label={copy("Питання", "Ask")}
+              aria-label={copy(
+                "Поставити питання організатору",
+                "Ask the organizer a question",
+              )}
+              title={copy(
+                "Поставити питання організатору",
+                "Ask the organizer a question",
+              )}
+            >
+              <MessageSquareText />
+              <span className="ide-organizer-label">
+                {copy("Питання організатору", "Ask organizer")}
+              </span>
+            </button>
+          ) : null
         }
       />
 

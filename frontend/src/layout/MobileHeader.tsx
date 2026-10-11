@@ -8,7 +8,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
   onOpenMenu
 }) => <div className="md:hidden bg-bg-surface text-text-primary p-4 flex justify-between items-center sticky top-0 z-30 shadow-md border-b border-border">
     <div className="flex items-center space-x-2">
-      <div className="grid size-8 place-items-center rounded-lg bg-[#173423]">
+      <div className="grid size-8 place-items-center rounded-lg brand-logo-surface">
         <Logo size={20} />
       </div>
       <span className="font-bold text-lg font-mono">StudyCod</span>

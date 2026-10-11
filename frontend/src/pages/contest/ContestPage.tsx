@@ -5761,25 +5761,25 @@ export const ContestPage: React.FC = () => {
 
                   {tab === "accounts" ? (
                   <Card id="contest-account-generation" className="scroll-mt-6 overflow-hidden rounded-2xl border border-border bg-bg-surface p-4 shadow-sm sm:p-5">
-                    <div className="flex flex-col gap-4 border-b border-[#17271c]/[.08] pb-5 dark:border-white/[.08] sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-4 border-b border-border/[.08] pb-5 dark:border-white/[.08] sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-start gap-3">
-                        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-[#e8f5ec] text-primary-strong dark:bg-primary/10 dark:text-primary-soft"><KeyRound aria-hidden="true" className="size-5" /></span>
+                        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-bg-hover text-primary-strong dark:bg-primary/10 dark:text-primary-soft"><KeyRound aria-hidden="true" className="size-5" /></span>
                         <div>
                           <p className="text-xs font-bold uppercase tracking-[.12em] text-primary">{tr("ДОСТУПИ УЧАСНИКІВ", "PARTICIPANT ACCESS")}</p>
-                          <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em] text-[#1a271e] dark:text-text-primary">{tr("Тимчасові акаунти", "Temporary accounts")}</h2>
-                          <p className="mt-1 max-w-2xl text-sm leading-6 text-[#637368] dark:text-[#aab8ae]">{tr("Додай список людей і створи окремі логіни для цього контесту.", "Add a roster and create separate logins for this contest.")}</p>
+                          <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em] text-text-primary dark:text-text-primary">{tr("Тимчасові акаунти", "Temporary accounts")}</h2>
+                          <p className="mt-1 max-w-2xl text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Додай список людей і створи окремі логіни для цього контесту.", "Add a roster and create separate logins for this contest.")}</p>
                         </div>
                       </div>
-                      {generatedAccounts.length > 0 && <span className="inline-flex w-fit items-center gap-2 rounded-full bg-[#e8f5ec] px-3 py-1.5 text-xs font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft"><UsersRound aria-hidden="true" className="size-3.5" />{tr(`Доступів створено: ${generatedAccounts.length}`, `Accounts created: ${generatedAccounts.length}`)}</span>}
+                      {generatedAccounts.length > 0 && <span className="inline-flex w-fit items-center gap-2 rounded-full bg-bg-hover px-3 py-1.5 text-xs font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft"><UsersRound aria-hidden="true" className="size-3.5" />{tr(`Доступів створено: ${generatedAccounts.length}`, `Accounts created: ${generatedAccounts.length}`)}</span>}
                     </div>
 
-                    <div className="mt-5 rounded-2xl border border-[#17271c]/[.08] bg-[#f8faf8] p-3.5 dark:border-white/[.08] dark:bg-white/[.025] sm:p-4">
+                    <div className="mt-5 rounded-2xl border border-border/[.08] bg-bg-hover p-3.5 dark:border-white/[.08] dark:bg-white/[.025] sm:p-4">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="min-w-0">
-                          <p className="flex items-center gap-2 text-sm font-bold text-[#24352a] dark:text-[#e5eee7]"><FileSpreadsheet aria-hidden="true" className="size-4 shrink-0 text-primary-strong dark:text-primary-soft" /><span className="truncate">{accountRosterImportFileName || tr("Завантажити список", "Upload a roster")}</span></p>
-                          <p className="mt-1 text-xs text-[#708075] dark:text-[#a5b3a8]">{tr("XLSX, XLS, ODS, CSV, TSV або TXT · до 10 МБ", "XLSX, XLS, ODS, CSV, TSV, or TXT · up to 10 MB")}</p>
+                          <p className="flex items-center gap-2 text-sm font-bold text-text-primary dark:text-text-primary"><FileSpreadsheet aria-hidden="true" className="size-4 shrink-0 text-primary-strong dark:text-primary-soft" /><span className="truncate">{accountRosterImportFileName || tr("Завантажити список", "Upload a roster")}</span></p>
+                          <p className="mt-1 text-xs text-text-muted dark:text-text-secondary">{tr("XLSX, XLS, ODS, CSV, TSV або TXT · до 10 МБ", "XLSX, XLS, ODS, CSV, TSV, or TXT · up to 10 MB")}</p>
                         </div>
-                        <label htmlFor="contest-roster-file" className="inline-flex min-h-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#17271c]/10 bg-white px-4 py-2 text-sm font-bold text-[#263b2d] transition-colors hover:bg-[#f1f7f2] focus-within:outline-none focus-within:ring-2 focus-within:ring-primary dark:border-white/10 dark:bg-white/[.06] dark:text-[#e7f0e9] dark:hover:bg-white/[.1]">
+                        <label htmlFor="contest-roster-file" className="inline-flex min-h-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-border/10 bg-white px-4 py-2 text-sm font-bold text-text-primary transition-colors hover:bg-bg-hover focus-within:outline-none focus-within:ring-2 focus-within:ring-primary dark:border-white/10 dark:bg-white/[.06] dark:text-text-primary dark:hover:bg-white/[.1]">
                           <Upload aria-hidden="true" className="size-4 text-primary-strong dark:text-primary-soft" />{tr("Обрати файл", "Choose file")}
                           <input
                             key={accountRosterImportKey}
@@ -5794,103 +5794,103 @@ export const ContestPage: React.FC = () => {
                     </div>
 
                     <div className="mt-5">
-                      <label htmlFor="contest-roster-text" className="block text-sm font-bold text-[#24352a] dark:text-[#e5eee7]">{tr("Список учасників", "Participant list")}</label>
-                      <p className="mt-1 text-xs leading-5 text-[#708075] dark:text-[#a5b3a8]">{tr("Одне ім’я на рядок. Email можна додати після коми — він потрібен лише для розсилки.", "One name per line. Add an email after a comma if you want to send credentials by email.")}</p>
+                      <label htmlFor="contest-roster-text" className="block text-sm font-bold text-text-primary dark:text-text-primary">{tr("Список учасників", "Participant list")}</label>
+                      <p className="mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Одне ім’я на рядок. Email можна додати після коми — він потрібен лише для розсилки.", "One name per line. Add an email after a comma if you want to send credentials by email.")}</p>
                       <textarea
                         id="contest-roster-text"
                         value={accountRosterText}
                         onChange={(e) => { setAccountRosterText(e.target.value); setAccountGenError(null); setAccountGenMessage(null); }}
-                        className="mt-3 min-h-[150px] w-full resize-y rounded-2xl border border-[#17271c]/10 bg-bg-surface px-4 py-3 text-sm leading-6 text-[#24352a] outline-none transition-[border-color,box-shadow] placeholder:text-[#849288] focus:border-primary-strong/45 focus:ring-2 focus:ring-primary/15 dark:border-white/10 dark:bg-[#0b140e] dark:text-[#e5eee7] dark:placeholder:text-[#809087]"
+                        className="mt-3 min-h-[150px] w-full resize-y rounded-2xl border border-border/10 bg-bg-surface px-4 py-3 text-sm leading-6 text-text-primary outline-none transition-[border-color,box-shadow] placeholder:text-text-muted focus:border-primary-strong/45 focus:ring-2 focus:ring-primary/15 dark:border-white/10 dark:bg-bg-code dark:text-text-primary dark:placeholder:text-text-muted"
                         placeholder={tr("Іван Петренко\nОлена Коваль, olena@example.com", "John Smith\nAlex Green, alex@example.com")}
                       />
 
                       {accountRosterText.trim() ? <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f5ec] px-2.5 py-1 text-xs font-semibold text-primary-strong dark:bg-primary/10 dark:text-primary-soft"><CircleCheck aria-hidden="true" className="size-3.5" />{tr(`${rosterInputAnalysis.entries.length} розпізнано`, `${rosterInputAnalysis.entries.length} recognized`)}</span>
-                        {rosterInputAnalysis.invalidLines.length > 0 && <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff1e8] px-2.5 py-1 text-xs font-semibold text-[#a34710] dark:bg-[#ff8c00]/10 dark:text-[#ffb760]"><TriangleAlert aria-hidden="true" className="size-3.5" />{tr(`${rosterInputAnalysis.invalidLines.length} помилок`, `${rosterInputAnalysis.invalidLines.length} invalid`)}</span>}
-                        {rosterInputAnalysis.duplicateEmails.length > 0 && <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff7e5] px-2.5 py-1 text-xs font-semibold text-[#8a5a00] dark:bg-[#ffb547]/10 dark:text-[#ffd18a]"><TriangleAlert aria-hidden="true" className="size-3.5" />{tr(`${rosterInputAnalysis.duplicateEmails.length} повторів email`, `${rosterInputAnalysis.duplicateEmails.length} duplicate emails`)}</span>}
-                      </div> : <p className="mt-3 text-xs text-[#708075] dark:text-[#a5b3a8]">{tr("Після вставлення побачиш кількість розпізнаних імен та помилки формату.", "Once you paste names, you’ll see how many were recognized and any formatting issues.")}</p>}
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-bg-hover px-2.5 py-1 text-xs font-semibold text-primary-strong dark:bg-primary/10 dark:text-primary-soft"><CircleCheck aria-hidden="true" className="size-3.5" />{tr(`${rosterInputAnalysis.entries.length} розпізнано`, `${rosterInputAnalysis.entries.length} recognized`)}</span>
+                        {rosterInputAnalysis.invalidLines.length > 0 && <span className="inline-flex items-center gap-1.5 rounded-full bg-bg-hover px-2.5 py-1 text-xs font-semibold text-accent-warn dark:bg-accent-warn/10 dark:text-accent-warn"><TriangleAlert aria-hidden="true" className="size-3.5" />{tr(`${rosterInputAnalysis.invalidLines.length} помилок`, `${rosterInputAnalysis.invalidLines.length} invalid`)}</span>}
+                        {rosterInputAnalysis.duplicateEmails.length > 0 && <span className="inline-flex items-center gap-1.5 rounded-full bg-bg-hover px-2.5 py-1 text-xs font-semibold text-accent-warn dark:bg-accent-warn/10 dark:text-accent-warn"><TriangleAlert aria-hidden="true" className="size-3.5" />{tr(`${rosterInputAnalysis.duplicateEmails.length} повторів email`, `${rosterInputAnalysis.duplicateEmails.length} duplicate emails`)}</span>}
+                      </div> : <p className="mt-3 text-xs text-text-muted dark:text-text-secondary">{tr("Після вставлення побачиш кількість розпізнаних імен та помилки формату.", "Once you paste names, you’ll see how many were recognized and any formatting issues.")}</p>}
 
-                      {rosterInputAnalysis.duplicateEmails.length > 0 && <div role="status" className="mt-3 rounded-xl border border-[#f0d99d] bg-[#fffaf0] px-3 py-2.5 text-xs leading-5 text-[#805900] dark:border-[#ffb547]/20 dark:bg-[#ffb547]/[.06] dark:text-[#ffd18a]">
+                      {rosterInputAnalysis.duplicateEmails.length > 0 && <div role="status" className="mt-3 rounded-xl border border-accent-warn bg-bg-hover px-3 py-2.5 text-xs leading-5 text-accent-warn dark:border-accent-warn/20 dark:bg-accent-warn/[.06] dark:text-accent-warn">
                         {tr(`Повторювані email: ${rosterInputAnalysis.duplicateEmails.slice(0, 5).join(", ")}`, `Duplicate emails: ${rosterInputAnalysis.duplicateEmails.slice(0, 5).join(", ")}`)}
                       </div>}
-                      {rosterInputAnalysis.invalidLines.length > 0 && <div role="alert" className="mt-3 rounded-xl border border-[#f2c8b8] bg-[#fff5f1] px-3 py-2.5 text-xs leading-5 text-[#9b3416] dark:border-[#ff755a]/20 dark:bg-[#ff755a]/[.06] dark:text-[#ffad9b]">
+                      {rosterInputAnalysis.invalidLines.length > 0 && <div role="alert" className="mt-3 rounded-xl border border-accent-error bg-bg-hover px-3 py-2.5 text-xs leading-5 text-accent-error dark:border-accent-error/20 dark:bg-accent-error/[.06] dark:text-accent-error">
                         {tr(`Перевір рядки: ${rosterInputAnalysis.invalidLines.slice(0, 3).join(" · ")}`, `Check these rows: ${rosterInputAnalysis.invalidLines.slice(0, 3).join(" · ")}`)}
                       </div>}
                     </div>
 
-                    {rosterPreviewRows.length > 0 && <div className="mt-5 overflow-hidden rounded-2xl border border-[#17271c]/10 dark:border-white/10">
-                      <div className="flex items-center justify-between gap-3 bg-[#f8faf8] px-4 py-3 dark:bg-white/[.035]">
-                        <p className="text-sm font-bold text-[#24352a] dark:text-[#e5eee7]">{tr("Перевірка списку", "Roster preview")}</p>
-                        <span className="text-xs font-medium text-[#708075] dark:text-[#a5b3a8]">{tr(`${rosterPreviewRows.length} з ${rosterInputAnalysis.entries.length}`, `${rosterPreviewRows.length} of ${rosterInputAnalysis.entries.length}`)}</span>
+                    {rosterPreviewRows.length > 0 && <div className="mt-5 overflow-hidden rounded-2xl border border-border/10 dark:border-white/10">
+                      <div className="flex items-center justify-between gap-3 bg-bg-hover px-4 py-3 dark:bg-white/[.035]">
+                        <p className="text-sm font-bold text-text-primary dark:text-text-primary">{tr("Перевірка списку", "Roster preview")}</p>
+                        <span className="text-xs font-medium text-text-muted dark:text-text-secondary">{tr(`${rosterPreviewRows.length} з ${rosterInputAnalysis.entries.length}`, `${rosterPreviewRows.length} of ${rosterInputAnalysis.entries.length}`)}</span>
                       </div>
                       <div className="max-h-[220px] overflow-auto">
                         <table className="min-w-[520px] w-full text-sm">
-                          <thead className="sticky top-0 bg-white text-left text-xs font-semibold text-[#708075] dark:bg-bg-surface dark:text-[#a5b3a8]">
+                          <thead className="sticky top-0 bg-white text-left text-xs font-semibold text-text-muted dark:bg-bg-surface dark:text-text-secondary">
                             <tr><th className="px-4 py-2.5">{tr("Ім’я", "Name")}</th><th className="px-4 py-2.5">Email</th></tr>
                           </thead>
                           <tbody>
-                            {rosterPreviewRows.map((row, idx) => <tr key={`${row.email}-${idx}`} className="border-t border-[#17271c]/[.07] text-[#34483a] odd:bg-white even:bg-[#f8faf8] dark:border-white/[.06] dark:text-[#d7e2da] dark:odd:bg-bg-surface dark:even:bg-white/[.02]">
-                              <td className="px-4 py-2.5 font-medium">{row.fullName}</td><td className="px-4 py-2.5 text-[#637368] dark:text-[#aab8ae]">{row.email || "—"}</td>
+                            {rosterPreviewRows.map((row, idx) => <tr key={`${row.email}-${idx}`} className="border-t border-border/[.07] text-text-primary odd:bg-white even:bg-bg-hover dark:border-white/[.06] dark:text-text-primary dark:odd:bg-bg-surface dark:even:bg-white/[.02]">
+                              <td className="px-4 py-2.5 font-medium">{row.fullName}</td><td className="px-4 py-2.5 text-text-muted dark:text-text-secondary">{row.email || "—"}</td>
                             </tr>)}
                           </tbody>
                         </table>
                       </div>
                     </div>}
 
-                    <div className="mt-5 flex flex-col gap-3 border-t border-[#17271c]/[.08] pt-4 dark:border-white/[.08] sm:flex-row sm:flex-wrap sm:items-center">
-                      <Button variant="default" onClick={generateAccounts} disabled={accountGenLoading || rosterInputAnalysis.entries.length === 0} className="min-h-10 gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-[#062211] hover:bg-primary focus-visible:ring-primary">
+                    <div className="mt-5 flex flex-col gap-3 border-t border-border/[.08] pt-4 dark:border-white/[.08] sm:flex-row sm:flex-wrap sm:items-center">
+                      <Button variant="default" onClick={generateAccounts} disabled={accountGenLoading || rosterInputAnalysis.entries.length === 0} className="min-h-10 gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-primary focus-visible:ring-primary">
                         <UsersRound aria-hidden="true" className="size-4" />{accountGenLoading ? tr("Створюю акаунти…", "Creating accounts…") : tr("Згенерувати акаунти", "Generate accounts")}
                       </Button>
-                      {accountRosterText.trim() && <Button variant="ghost" onClick={clearRosterInput} className="min-h-10 gap-2 rounded-xl px-3 text-text-muted hover:bg-[#f1f5f1] dark:text-[#aab8ae] dark:hover:bg-white/[.06]">
+                      {accountRosterText.trim() && <Button variant="ghost" onClick={clearRosterInput} className="min-h-10 gap-2 rounded-xl px-3 text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.06]">
                         <Trash2 aria-hidden="true" className="size-4" />{tr("Очистити список", "Clear list")}
                       </Button>}
                       {generatedAccounts.length > 0 && <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-                        <Button variant="outline" onClick={copyGeneratedAccounts} className="min-h-9 gap-2 rounded-xl border-[#17271c]/10 bg-white px-3 text-xs font-semibold text-[#3a4d3f] hover:bg-[#f1f7f2] dark:border-white/10 dark:bg-white/[.04] dark:text-[#dce7df] dark:hover:bg-white/[.08]"><Copy aria-hidden="true" className="size-3.5" />{tr("Копіювати CSV", "Copy CSV")}</Button>
-                        <Button variant="outline" onClick={downloadGeneratedAccountsCsv} className="min-h-9 gap-2 rounded-xl border-[#17271c]/10 bg-white px-3 text-xs font-semibold text-[#3a4d3f] hover:bg-[#f1f7f2] dark:border-white/10 dark:bg-white/[.04] dark:text-[#dce7df] dark:hover:bg-white/[.08]"><Download aria-hidden="true" className="size-3.5" />CSV</Button>
-                        <Button variant="outline" onClick={() => void downloadGeneratedAccountsXlsx()} className="min-h-9 gap-2 rounded-xl border-[#17271c]/10 bg-white px-3 text-xs font-semibold text-[#3a4d3f] hover:bg-[#f1f7f2] dark:border-white/10 dark:bg-white/[.04] dark:text-[#dce7df] dark:hover:bg-white/[.08]"><Download aria-hidden="true" className="size-3.5" />XLSX</Button>
-                        <Button variant="ghost" onClick={clearGeneratedAccounts} className="min-h-9 gap-2 rounded-xl px-3 text-xs font-semibold text-[#8c4e42] hover:bg-[#fff2ef] dark:text-[#ffad9b] dark:hover:bg-[#ff755a]/10"><Trash2 aria-hidden="true" className="size-3.5" />{tr("Очистити з екрана", "Clear from screen")}</Button>
+                        <Button variant="outline" onClick={copyGeneratedAccounts} className="min-h-9 gap-2 rounded-xl border-border/10 bg-white px-3 text-xs font-semibold text-text-primary hover:bg-bg-hover dark:border-white/10 dark:bg-white/[.04] dark:text-text-primary dark:hover:bg-white/[.08]"><Copy aria-hidden="true" className="size-3.5" />{tr("Копіювати CSV", "Copy CSV")}</Button>
+                        <Button variant="outline" onClick={downloadGeneratedAccountsCsv} className="min-h-9 gap-2 rounded-xl border-border/10 bg-white px-3 text-xs font-semibold text-text-primary hover:bg-bg-hover dark:border-white/10 dark:bg-white/[.04] dark:text-text-primary dark:hover:bg-white/[.08]"><Download aria-hidden="true" className="size-3.5" />CSV</Button>
+                        <Button variant="outline" onClick={() => void downloadGeneratedAccountsXlsx()} className="min-h-9 gap-2 rounded-xl border-border/10 bg-white px-3 text-xs font-semibold text-text-primary hover:bg-bg-hover dark:border-white/10 dark:bg-white/[.04] dark:text-text-primary dark:hover:bg-white/[.08]"><Download aria-hidden="true" className="size-3.5" />XLSX</Button>
+                        <Button variant="ghost" onClick={clearGeneratedAccounts} className="min-h-9 gap-2 rounded-xl px-3 text-xs font-semibold text-accent-error hover:bg-bg-hover dark:text-accent-error dark:hover:bg-accent-error/10"><Trash2 aria-hidden="true" className="size-3.5" />{tr("Очистити з екрана", "Clear from screen")}</Button>
                       </div>}
                     </div>
 
-                    {accountGenError && <div role="alert" className="mt-3 rounded-xl border border-[#f2c8b8] bg-[#fff5f1] px-3 py-2.5 text-sm text-[#9b3416] dark:border-[#ff755a]/20 dark:bg-[#ff755a]/[.06] dark:text-[#ffad9b]">{accountGenError}</div>}
-                    {accountGenMessage && <div role="status" className="mt-3 rounded-xl border border-[#bfe5cd] bg-[#effaf2] px-3 py-2.5 text-sm text-[#176b3c] dark:border-primary/20 dark:bg-primary/[.06] dark:text-[#8deeb6]">{accountGenMessage}</div>}
+                    {accountGenError && <div role="alert" className="mt-3 rounded-xl border border-accent-error bg-bg-hover px-3 py-2.5 text-sm text-accent-error dark:border-accent-error/20 dark:bg-accent-error/[.06] dark:text-accent-error">{accountGenError}</div>}
+                    {accountGenMessage && <div role="status" className="mt-3 rounded-xl border border-border bg-bg-hover px-3 py-2.5 text-sm text-[#176b3c] dark:border-primary/20 dark:bg-primary/[.06] dark:text-primary-strong">{accountGenMessage}</div>}
 
-                    {temporaryAccountsLoading && <div role="status" className="mt-4 text-sm text-[#708075] dark:text-[#a5b3a8]">{tr("Завантажую тимчасові акаунти…", "Loading temporary accounts…")}</div>}
-                    {temporaryAccountsError && <div role="alert" className="mt-4 rounded-xl border border-[#f2c8b8] bg-[#fff5f1] px-3 py-2.5 text-sm text-[#9b3416] dark:border-[#ff755a]/20 dark:bg-[#ff755a]/[.06] dark:text-[#ffad9b]">{temporaryAccountsError}</div>}
-                    {temporaryAccounts.length > 0 && <section className="mt-5 overflow-hidden rounded-2xl border border-[#17271c]/10 dark:border-white/10">
-                      <div className="flex flex-col gap-3 bg-[#f8faf8] px-4 py-4 dark:bg-white/[.035] sm:flex-row sm:items-center sm:justify-between">
-                        <div><h3 className="font-[family-name:var(--font-display)] text-lg font-bold text-[#1a271e] dark:text-text-primary">{tr("Тимчасові акаунти", "Temporary accounts")}</h3><p className="mt-1 text-xs leading-5 text-[#708075] dark:text-[#a5b3a8]">{tr("Паролі показуються лише одразу після генерації. Видалення акаунта також видалить його подачі й результати.", "Passwords are shown only immediately after generation. Deleting an account also removes its submissions and results.")}</p></div>
-                        <span className="inline-flex w-fit items-center rounded-full bg-[#e8f5ec] px-3 py-1.5 text-xs font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">{tr(`${temporaryAccounts.length} акаунтів`, `${temporaryAccounts.length} accounts`)}</span>
+                    {temporaryAccountsLoading && <div role="status" className="mt-4 text-sm text-text-muted dark:text-text-secondary">{tr("Завантажую тимчасові акаунти…", "Loading temporary accounts…")}</div>}
+                    {temporaryAccountsError && <div role="alert" className="mt-4 rounded-xl border border-accent-error bg-bg-hover px-3 py-2.5 text-sm text-accent-error dark:border-accent-error/20 dark:bg-accent-error/[.06] dark:text-accent-error">{temporaryAccountsError}</div>}
+                    {temporaryAccounts.length > 0 && <section className="mt-5 overflow-hidden rounded-2xl border border-border/10 dark:border-white/10">
+                      <div className="flex flex-col gap-3 bg-bg-hover px-4 py-4 dark:bg-white/[.035] sm:flex-row sm:items-center sm:justify-between">
+                        <div><h3 className="font-[family-name:var(--font-display)] text-lg font-bold text-text-primary dark:text-text-primary">{tr("Тимчасові акаунти", "Temporary accounts")}</h3><p className="mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Паролі показуються лише одразу після генерації. Видалення акаунта також видалить його подачі й результати.", "Passwords are shown only immediately after generation. Deleting an account also removes its submissions and results.")}</p></div>
+                        <span className="inline-flex w-fit items-center rounded-full bg-bg-hover px-3 py-1.5 text-xs font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">{tr(`${temporaryAccounts.length} акаунтів`, `${temporaryAccounts.length} accounts`)}</span>
                       </div>
                       <div className="max-h-[320px] overflow-auto">
                         <table className="min-w-[620px] w-full text-sm">
                           <caption className="sr-only">{tr("Тимчасові облікові записи учасників", "Temporary participant accounts")}</caption>
-                          <thead className="sticky top-0 bg-white text-left text-xs font-semibold text-[#708075] dark:bg-bg-surface dark:text-[#a5b3a8]">
+                          <thead className="sticky top-0 bg-white text-left text-xs font-semibold text-text-muted dark:bg-bg-surface dark:text-text-secondary">
                             <tr><th className="px-4 py-3">{tr("Ім’я", "Name")}</th><th className="hidden px-4 py-3 md:table-cell">Email</th><th className="px-4 py-3">{tr("Логін", "Username")}</th><th className="px-4 py-3">{tr("Пароль", "Password")}</th><th className="hidden px-4 py-3 lg:table-cell">userId</th><th className="hidden px-4 py-3 lg:table-cell">participantId</th><th className="px-4 py-3 text-right">{tr("Дія", "Action")}</th></tr>
                           </thead>
                           <tbody>
                             {temporaryAccounts.map((a) => {
                               const credentials = generatedAccountsByUserId.get(a.userId);
                               const isDeleting = deletingTemporaryAccountId === a.userId;
-                              return <tr key={`${a.userId}-${a.participantId}`} className="border-t border-[#17271c]/[.07] text-[#34483a] odd:bg-white even:bg-[#f8faf8] dark:border-white/[.06] dark:text-[#d7e2da] dark:odd:bg-bg-surface dark:even:bg-white/[.02]">
-                                <td className="px-4 py-3 font-medium">{a.fullName ?? "—"}</td><td className="hidden px-4 py-3 text-[#637368] md:table-cell dark:text-[#aab8ae]">{a.email ?? "—"}</td><td className="px-4 py-3 font-mono text-xs">{a.username}</td><td className="px-4 py-3 font-mono text-xs">{credentials?.password ?? "—"}</td><td className="hidden px-4 py-3 font-mono text-xs lg:table-cell">{a.userId}</td><td className="hidden px-4 py-3 font-mono text-xs lg:table-cell">{a.participantId}</td>
-                                <td className="px-4 py-2 text-right"><button type="button" onClick={() => void deleteTemporaryAccount(a)} disabled={deletingTemporaryAccountId != null} aria-label={tr(`Видалити акаунт ${a.username}`, `Delete account ${a.username}`)} title={tr("Видалити акаунт", "Delete account")} className="inline-grid size-9 place-items-center rounded-lg text-[#8c4e42] transition-colors hover:bg-[#fff2ef] disabled:opacity-50 dark:text-[#ffad9b] dark:hover:bg-[#ff755a]/10">{isDeleting ? <RefreshCw aria-hidden="true" className="size-4 animate-spin" /> : <Trash2 aria-hidden="true" className="size-4" />}</button></td>
+                              return <tr key={`${a.userId}-${a.participantId}`} className="border-t border-border/[.07] text-text-primary odd:bg-white even:bg-bg-hover dark:border-white/[.06] dark:text-text-primary dark:odd:bg-bg-surface dark:even:bg-white/[.02]">
+                                <td className="px-4 py-3 font-medium">{a.fullName ?? "—"}</td><td className="hidden px-4 py-3 text-text-muted md:table-cell dark:text-text-secondary">{a.email ?? "—"}</td><td className="px-4 py-3 font-mono text-xs">{a.username}</td><td className="px-4 py-3 font-mono text-xs">{credentials?.password ?? "—"}</td><td className="hidden px-4 py-3 font-mono text-xs lg:table-cell">{a.userId}</td><td className="hidden px-4 py-3 font-mono text-xs lg:table-cell">{a.participantId}</td>
+                                <td className="px-4 py-2 text-right"><button type="button" onClick={() => void deleteTemporaryAccount(a)} disabled={deletingTemporaryAccountId != null} aria-label={tr(`Видалити акаунт ${a.username}`, `Delete account ${a.username}`)} title={tr("Видалити акаунт", "Delete account")} className="inline-grid size-9 place-items-center rounded-lg text-accent-error transition-colors hover:bg-bg-hover disabled:opacity-50 dark:text-accent-error dark:hover:bg-accent-error/10">{isDeleting ? <RefreshCw aria-hidden="true" className="size-4 animate-spin" /> : <Trash2 aria-hidden="true" className="size-4" />}</button></td>
                               </tr>;
                             })}
                           </tbody>
                         </table>
                       </div>
-                      <div className="border-t border-[#17271c]/[.08] bg-white p-4 dark:border-white/[.08] dark:bg-bg-surface sm:p-5">
-                        <label htmlFor="contest-account-email-message" className="block text-sm font-bold text-[#24352a] dark:text-[#e5eee7]">{tr("Повідомлення для учасників", "Message to participants")} <span className="font-normal text-[#819087] dark:text-[#8f9e93]">{tr("(необов’язково)", "(optional)")}</span></label>
+                      <div className="border-t border-border/[.08] bg-white p-4 dark:border-white/[.08] dark:bg-bg-surface sm:p-5">
+                        <label htmlFor="contest-account-email-message" className="block text-sm font-bold text-text-primary dark:text-text-primary">{tr("Повідомлення для учасників", "Message to participants")} <span className="font-normal text-text-muted dark:text-text-muted">{tr("(необов’язково)", "(optional)")}</span></label>
                         <textarea
                           id="contest-account-email-message"
                           value={accountMailCustomMessage}
                           onChange={(e) => setAccountMailCustomMessage(e.target.value)}
-                          className="mt-2 min-h-[88px] w-full resize-y rounded-xl border border-[#17271c]/10 bg-bg-surface px-3.5 py-3 text-sm leading-6 text-[#24352a] outline-none transition-[border-color,box-shadow] placeholder:text-[#849288] focus:border-primary-strong/45 focus:ring-2 focus:ring-primary/15 dark:border-white/10 dark:bg-[#0b140e] dark:text-[#e5eee7] dark:placeholder:text-[#809087]"
+                          className="mt-2 min-h-[88px] w-full resize-y rounded-xl border border-border/10 bg-bg-surface px-3.5 py-3 text-sm leading-6 text-text-primary outline-none transition-[border-color,box-shadow] placeholder:text-text-muted focus:border-primary-strong/45 focus:ring-2 focus:ring-primary/15 dark:border-white/10 dark:bg-bg-code dark:text-text-primary dark:placeholder:text-text-muted"
                           placeholder={tr("Напиши коротке привітання або інструкцію для входу", "Add a short welcome or sign-in instruction")}
                         />
                         <div className="mt-3 flex flex-wrap items-center gap-3">
-                          <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-[#17271c]/12 px-3.5 text-sm font-semibold text-[#34483a] transition-colors hover:bg-[#f3f7f3] dark:border-white/10 dark:text-[#d7e2da] dark:hover:bg-white/[.04]">
+                          <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-border/12 px-3.5 text-sm font-semibold text-text-primary transition-colors hover:bg-bg-hover dark:border-white/10 dark:text-text-primary dark:hover:bg-white/[.04]">
                             <Upload aria-hidden="true" className="size-4" />
                             {tr("Додати файли", "Attach files")}
                             <input
@@ -5914,21 +5914,21 @@ export const ContestPage: React.FC = () => {
                               }}
                             />
                           </label>
-                          <span className="text-xs text-[#708075] dark:text-[#a5b3a8]">{tr("До 5 файлів, максимум 10 МБ кожен", "Up to 5 files, 10 MB each")}</span>
+                          <span className="text-xs text-text-muted dark:text-text-secondary">{tr("До 5 файлів, максимум 10 МБ кожен", "Up to 5 files, 10 MB each")}</span>
                         </div>
                         {accountMailAttachments.length > 0 && <ul className="mt-2 flex flex-wrap gap-2" aria-label={tr("Вкладені файли", "Attached files")}>
-                          {accountMailAttachments.map((file) => <li key={`${file.name}:${file.size}:${file.lastModified}`} className="inline-flex max-w-full items-center gap-2 rounded-lg bg-[#edf4ee] px-2.5 py-1.5 text-xs text-[#34483a] dark:bg-white/[.06] dark:text-[#d7e2da]">
+                          {accountMailAttachments.map((file) => <li key={`${file.name}:${file.size}:${file.lastModified}`} className="inline-flex max-w-full items-center gap-2 rounded-lg bg-bg-hover px-2.5 py-1.5 text-xs text-text-primary dark:bg-white/[.06] dark:text-text-primary">
                             <FileText aria-hidden="true" className="size-3.5 shrink-0" />
                             <span className="max-w-[240px] truncate">{file.name}</span>
                             <button type="button" aria-label={tr(`Прибрати файл ${file.name}`, `Remove ${file.name}`)} onClick={() => setAccountMailAttachments((current) => current.filter((item) => item !== file))} className="rounded p-0.5 hover:bg-black/10 dark:hover:bg-white/10"><X aria-hidden="true" className="size-3.5" /></button>
                           </li>)}
                         </ul>}
                         <div className="mt-3 flex flex-wrap items-center gap-3">
-                          <Button variant="default" onClick={sendGeneratedAccountsByEmail} disabled={accountMailLoading} className="min-h-10 gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-[#062211] hover:bg-primary focus-visible:ring-primary">
+                          <Button variant="default" onClick={sendGeneratedAccountsByEmail} disabled={accountMailLoading} className="min-h-10 gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground hover:bg-primary focus-visible:ring-primary">
                             <Send aria-hidden="true" className="size-4" />{accountMailLoading ? tr("Надсилаю…", "Sending…") : tr("Надіслати доступи поштою", "Email access details")}
                           </Button>
-                          {accountMailError && <span role="alert" className="text-sm text-[#9b3416] dark:text-[#ffad9b]">{accountMailError}</span>}
-                          {accountMailResult && <span role="status" className="text-sm text-[#176b3c] dark:text-[#8deeb6]">{accountMailResult}</span>}
+                          {accountMailError && <span role="alert" className="text-sm text-accent-error dark:text-accent-error">{accountMailError}</span>}
+                          {accountMailResult && <span role="status" className="text-sm text-[#176b3c] dark:text-primary-strong">{accountMailResult}</span>}
                         </div>
                       </div>
                     </section>}

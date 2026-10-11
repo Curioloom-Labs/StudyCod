@@ -94,18 +94,18 @@ export const GradeStudioPage: React.FC = () => {
     score >= 85
       ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"
       : score >= 60
-        ? "bg-[#fff1dc] text-[#a55e00] dark:bg-[#ff8c00]/12 dark:text-[#ffca7e]"
-        : "bg-[#fff0f5] text-[#bd4067] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]";
+        ? "bg-bg-hover text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn"
+        : "bg-bg-hover text-accent-error dark:bg-accent-error/10 dark:text-accent-error";
   return (
     <div className={root}>
       <button type="button"
         onClick={() => navigate(-1)}
-        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-[#617268] hover:text-primary-strong dark:text-[#aab7ad] dark:hover:text-primary-soft"
+        className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-text-muted hover:text-primary-strong dark:text-text-secondary dark:hover:text-primary-soft"
       >
         <ArrowLeft className="h-4 w-4" />
         {tr("Назад", "Back")}
       </button>
-      <header className="flex flex-col justify-between gap-6 rounded-[32px] bg-bg-surface p-6 dark:bg-[#152119] sm:p-9 lg:flex-row lg:items-end">
+      <header className="flex flex-col justify-between gap-6 rounded-[32px] bg-bg-surface p-6 dark:bg-bg-base sm:p-9 lg:flex-row lg:items-end">
         <div className="flex items-center gap-4">
           <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white text-lg font-extrabold text-primary-strong shadow-sm dark:bg-white/[.08] dark:text-primary-soft">
             {initial}
@@ -117,7 +117,7 @@ export const GradeStudioPage: React.FC = () => {
             <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em] sm:text-4xl">
               {data.task.title}
             </h1>
-            <p className="mt-2 text-sm text-[#66776c] dark:text-[#c0cec4]">
+            <p className="mt-2 text-sm text-text-muted dark:text-text-secondary">
               {data.student.lastName} {data.student.firstName}
             </p>
           </div>
@@ -130,27 +130,27 @@ export const GradeStudioPage: React.FC = () => {
         </div>
       </header>
       {error && (
-        <div className="mt-5 rounded-2xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/[.08] px-4 py-3 text-sm text-[#c4436b] dark:text-[#ff9abd]">
+        <div className="mt-5 rounded-2xl border border-accent-error/25 bg-accent-error/[.08] px-4 py-3 text-sm text-accent-error dark:text-accent-error">
           {error}
         </div>
       )}
       <main className="mt-8 grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
         <section className="overflow-hidden rounded-[30px] border border-border/10 bg-white dark:border-white/[.09] dark:bg-bg-surface">
           <div className="flex items-center gap-3 border-b border-border/10 px-6 py-5 dark:border-white/[.08]">
-            <Code2 className="h-5 w-5 text-[#e17800]" />
+            <Code2 className="h-5 w-5 text-accent-warn" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">
+              <p className="text-xs font-bold uppercase tracking-[.13em] text-accent-warn">
                 {tr("Відправлений код", "Submitted code")}
               </p>
               <h2 className="mt-1 text-xl font-bold">{tr("Розв'язок", "Solution")}</h2>
             </div>
           </div>
-          <pre className="max-h-[520px] overflow-auto bg-bg-surface p-6 font-mono text-sm leading-7 text-[#304238] dark:bg-[#0d1710] dark:text-[#d4dfd7]">
+          <pre className="max-h-[520px] overflow-auto bg-bg-surface p-6 font-mono text-sm leading-7 text-text-primary dark:bg-bg-code dark:text-text-primary">
             {data.code || tr("Учень не надіслав код.", "The student did not submit code.")}
           </pre>
         </section>
         <aside className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface">
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">
             {tr("Фідбек", "Feedback")}
           </p>
           <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">
@@ -168,7 +168,7 @@ export const GradeStudioPage: React.FC = () => {
               type="number"
               min="0"
               max="100"
-              className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-lg font-bold dark:border-white/10 dark:bg-[#0d1710]"
+              className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-lg font-bold dark:border-white/10 dark:bg-bg-code"
             />
           </label>
           <label className="mt-5 block text-sm font-bold">
@@ -178,19 +178,19 @@ export const GradeStudioPage: React.FC = () => {
               onChange={(event) => setFeedback(event.target.value)}
               rows={7}
               placeholder={tr("Що вже вийшло і що варто покращити…", "What went well and what could be improved…")}
-              className="mt-2 w-full resize-none rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal leading-6 dark:border-white/10 dark:bg-[#0d1710]"
+              className="mt-2 w-full resize-none rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal leading-6 dark:border-white/10 dark:bg-bg-code"
             />
           </label>
-          <div className="mt-4 rounded-2xl bg-[#f3f7f3] p-4 dark:bg-white/[.045]">
+          <div className="mt-4 rounded-2xl bg-bg-hover p-4 dark:bg-white/[.045]">
             <CheckCircle2 className="h-5 w-5 text-primary-strong dark:text-primary-soft" />
-            <p className="mt-2 text-sm leading-6 text-[#65766b] dark:text-[#bdc9c0]">
+            <p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
               {tr("Збереження оновить і оцінку, і коментар у поточній роботі учня.", "Saving will update both the grade and feedback on the student's submission.")}
             </p>
           </div>
           <button type="button"
             disabled={busy}
             onClick={() => void save()}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#153321] px-4 py-3 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground"
           >
             <Save className="h-4 w-4" />
             {busy ? tr("Зберігаємо…", "Saving…") : tr("Зберегти результат", "Save grade")}

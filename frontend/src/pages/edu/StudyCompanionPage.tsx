@@ -39,33 +39,33 @@ export const StudyCompanionPage: React.FC = () => {
 
   return (
     <div className={root}>
-      <header className="grid gap-7 rounded-[34px] bg-[#f2f6f2] p-6 dark:bg-[#152119] lg:grid-cols-[1.2fr_.8fr] lg:p-10">
+      <header className="grid gap-7 rounded-[34px] bg-bg-hover p-6 dark:bg-bg-base lg:grid-cols-[1.2fr_.8fr] lg:p-10">
         <div>
           <p className="text-xs font-bold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{copy("Навчальний супровід", "Study companion")}</p>
           <h1 className="mt-3 max-w-xl font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.065em] sm:text-6xl">{copy("Розберімося, а не просто знайдемо відповідь.", "Understand the problem, not just find an answer.")}</h1>
-          <p className="mt-5 max-w-lg text-base leading-8 text-[#64756a] dark:text-[#c2d0c6]">{copy("Сформулюйте, де саме зупинилися. Помічник допоможе побачити наступний крок, але рішення лишається вашим.", "Describe where you got stuck. The companion will help you find the next step while the solution stays yours.")}</p>
+          <p className="mt-5 max-w-lg text-base leading-8 text-text-muted dark:text-text-secondary">{copy("Сформулюйте, де саме зупинилися. Помічник допоможе побачити наступний крок, але рішення лишається вашим.", "Describe where you got stuck. The companion will help you find the next step while the solution stays yours.")}</p>
         </div>
         <aside className="self-end rounded-[26px] bg-white p-5 shadow-sm dark:bg-white/[.06]">
-          <BookOpen className="h-5 w-5 text-[#e17800]" />
+          <BookOpen className="h-5 w-5 text-accent-warn" />
           <p className="mt-3 text-sm font-bold">{copy("Спробуйте конкретно", "Be specific")}</p>
-          <p className="mt-2 text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">{copy("Назвіть мову, задачу, очікуваний результат і те, що вже пробували.", "Mention the language, task, expected result, and what you have tried so far.")}</p>
+          <p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">{copy("Назвіть мову, задачу, очікуваний результат і те, що вже пробували.", "Mention the language, task, expected result, and what you have tried so far.")}</p>
         </aside>
       </header>
 
       <main className="mt-8 grid gap-6 lg:grid-cols-[.75fr_1.25fr]">
         <aside>
-          <p className="text-xs font-bold uppercase tracking-[.14em] text-[#e17800]">{copy("Почати розмову", "Start a conversation")}</p>
+          <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">{copy("Почати розмову", "Start a conversation")}</p>
           <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">{copy("Що саме не сходиться?", "What isn't adding up?")}</h2>
           <div className="mt-5 flex flex-wrap gap-2">
             {suggestions.map(([uk, english]) => {
               const item = copy(uk, english);
-              return <button type="button" key={uk} onClick={() => void ask(item)} className="rounded-full border border-border/10 bg-white px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:border-primary/35 hover:text-primary-strong dark:border-white/10 dark:bg-white/[.04] dark:text-[#bdc9c0] dark:hover:text-primary-soft">{item}<ArrowUpRight className="ml-1 inline h-3 w-3" /></button>;
+              return <button type="button" key={uk} onClick={() => void ask(item)} className="rounded-full border border-border/10 bg-white px-3 py-2 text-left text-xs font-semibold text-text-secondary transition hover:border-primary/35 hover:text-primary-strong dark:border-white/10 dark:bg-white/[.04] dark:text-text-secondary dark:hover:text-primary-soft">{item}<ArrowUpRight className="ml-1 inline h-3 w-3" /></button>;
             })}
           </div>
-          <div className="mt-7 rounded-[26px] bg-[#fff4e4] p-5 dark:bg-[#ff8c00]/10">
-            <Lightbulb className="h-5 w-5 text-[#c97600] dark:text-[#ffca7e]" />
-            <p className="mt-3 text-sm font-bold text-[#805917] dark:text-[#ffd296]">{copy("Точний опис допоможе швидше знайти причину.", "A clear description helps find the cause faster.")}</p>
-            <p className="mt-2 text-sm leading-6 text-[#856c3d] dark:text-[#decda9]">{copy("Замість «не працює» опишіть фактичний і очікуваний результат.", "Instead of saying “it doesn't work,” describe what happened and what you expected.")}</p>
+          <div className="mt-7 rounded-[26px] bg-bg-hover p-5 dark:bg-accent-warn/10">
+            <Lightbulb className="h-5 w-5 text-accent-warn dark:text-accent-warn" />
+            <p className="mt-3 text-sm font-bold text-accent-warn dark:text-accent-warn">{copy("Точний опис допоможе швидше знайти причину.", "A clear description helps find the cause faster.")}</p>
+            <p className="mt-2 text-sm leading-6 text-accent-warn dark:text-accent-warn">{copy("Замість «не працює» опишіть фактичний і очікуваний результат.", "Instead of saying “it doesn't work,” describe what happened and what you expected.")}</p>
           </div>
         </aside>
 
@@ -80,10 +80,10 @@ export const StudyCompanionPage: React.FC = () => {
             ) : answer ? (
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{copy("Наступний крок", "Next step")}</p>
-                <p className="mt-4 whitespace-pre-wrap text-base leading-8 text-[#35483b] dark:text-[#d4dfd7]">{answer.answer}</p>
+                <p className="mt-4 whitespace-pre-wrap text-base leading-8 text-text-primary dark:text-text-primary">{answer.answer}</p>
                 {answer.tips?.length > 0 && <div className="mt-7 border-t border-border/10 pt-5 dark:border-white/[.08]">
-                  <p className="text-xs font-bold uppercase tracking-[.13em] text-[#e17800]">{copy("Спробуйте далі", "Try this next")}</p>
-                  <ul className="mt-3 space-y-3">{answer.tips.map((tip) => <li key={tip} className="flex gap-3 text-sm leading-6 text-[#64756a] dark:text-[#bdc9c0]"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />{tip}</li>)}</ul>
+                  <p className="text-xs font-bold uppercase tracking-[.13em] text-accent-warn">{copy("Спробуйте далі", "Try this next")}</p>
+                  <ul className="mt-3 space-y-3">{answer.tips.map((tip) => <li key={tip} className="flex gap-3 text-sm leading-6 text-text-muted dark:text-text-secondary"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />{tip}</li>)}</ul>
                 </div>}
               </div>
             ) : (
@@ -91,16 +91,16 @@ export const StudyCompanionPage: React.FC = () => {
                 <div>
                   <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"><Lightbulb className="h-6 w-6" /></span>
                   <h3 className="mt-4 text-xl font-bold">{copy("Тут з’явиться розбір.", "Your explanation will appear here.")}</h3>
-                  <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#708077] dark:text-[#a6b4a9]">{copy("Оберіть підказку ліворуч або сформулюйте власне питання нижче.", "Choose a prompt on the left or write your own question below.")}</p>
+                  <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-text-muted dark:text-text-secondary">{copy("Оберіть підказку ліворуч або сформулюйте власне питання нижче.", "Choose a prompt on the left or write your own question below.")}</p>
                 </div>
               </div>
             )}
           </div>
-          {error && <p role="alert" aria-live="polite" className="mt-4 rounded-xl bg-[#fff0f5] px-3 py-2 text-sm text-[#bd4067] dark:bg-[#ff6b9d]/10 dark:text-[#ff9abd]">{error}</p>}
+          {error && <p role="alert" aria-live="polite" className="mt-4 rounded-xl bg-bg-hover px-3 py-2 text-sm text-accent-error dark:bg-accent-error/10 dark:text-accent-error">{error}</p>}
           <div className="mt-5 rounded-2xl border border-border/10 p-3 dark:border-white/[.09]">
             <label htmlFor="study-companion-question" className="sr-only">{copy("Питання", "Question")}</label>
-            <textarea id="study-companion-question" name="question" value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") void ask(); }} rows={3} placeholder={copy("Напишіть питання про код, логіку або підхід…", "Ask about code, logic, or an approach…")} className="w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-[#97a49b] dark:placeholder:text-[#718076]" />
-            <div className="mt-2 flex items-center justify-between gap-3"><span className="text-xs text-[#8a988f] dark:text-[#849188]">Ctrl + Enter</span><button type="button" disabled={busy || !question.trim()} onClick={() => void ask()} className="rounded-xl bg-[#153321] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40 dark:bg-primary dark:text-[#062211]"><Send className="mr-1 inline h-4 w-4" />{copy("Надіслати", "Send")}</button></div>
+            <textarea id="study-companion-question" name="question" value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") void ask(); }} rows={3} placeholder={copy("Напишіть питання про код, логіку або підхід…", "Ask about code, logic, or an approach…")} className="w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-text-secondary dark:placeholder:text-text-muted" />
+            <div className="mt-2 flex items-center justify-between gap-3"><span className="text-xs text-text-muted dark:text-text-muted">Ctrl + Enter</span><button type="button" disabled={busy || !question.trim()} onClick={() => void ask()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground"><Send className="mr-1 inline h-4 w-4" />{copy("Надіслати", "Send")}</button></div>
           </div>
         </section>
       </main>

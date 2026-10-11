@@ -112,30 +112,30 @@ export const IadPage: React.FC = () => {
       <section className="mx-auto max-w-6xl pb-10">
         <ProfileSectionNav active="iad" className="mb-6" />
 
-        <section className="overflow-hidden rounded-[32px] bg-[#183421] p-6 text-white shadow-[0_28px_70px_-44px_rgba(0,0,0,.9)] sm:p-9">
+        <section className="overflow-hidden rounded-[32px] bg-bg-surface p-6 text-text-primary shadow-[0_28px_70px_-44px_rgba(0,0,0,.9)] sm:p-9">
           <div className="grid gap-8 lg:grid-cols-[1.1fr_.9fr] lg:items-end">
             <div>
-              <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#8df0bc]"><Gauge className="size-4" />IAD</span>
+              <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary-strong"><Gauge className="size-4" />IAD</span>
               <h1 className="mt-4 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.06em] sm:text-6xl">
                 {tr("Індекс адаптивної складності", "Adaptive difficulty index")}
               </h1>
-              <p className="mt-4 max-w-2xl text-base leading-7 text-[#c0d0c5]">
+              <p className="mt-4 max-w-2xl text-base leading-7 text-text-secondary">
                 {tr("Тут видно, чому система піднімає або знижує складність задач. Без чорного дна: з цієї сторінки можна одразу повернутися в профіль або сертифікати.", "See why the system raises or lowers task difficulty. You can return to profile or certificates from here.")}
               </p>
             </div>
             <div className="rounded-3xl border border-white/10 bg-white/[.08] p-5">
-              <div className="text-sm text-[#b7caba]">{tr("Поточне значення", "Current value")}</div>
+              <div className="text-sm text-text-secondary">{tr("Поточне значення", "Current value")}</div>
               <div className="mt-2 text-6xl font-semibold tracking-[-.07em] text-primary-soft">{loading ? "…" : metrics.current.toFixed(3)}</div>
               <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-primary" style={{ width: `${metrics.progress}%` }} /></div>
-              <div className="mt-3 text-sm text-[#b7caba]">{details?.lang ?? tr("мова не визначена", "language unknown")}</div>
+              <div className="mt-3 text-sm text-text-secondary">{details?.lang ?? tr("мова не визначена", "language unknown")}</div>
             </div>
           </div>
         </section>
 
         {loading ? (
-          <div className="mt-6 grid gap-4 md:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="h-40 animate-pulse rounded-[24px] bg-[#e5ebe6] dark:bg-white/[.045]" />)}</div>
+          <div className="mt-6 grid gap-4 md:grid-cols-3">{[1, 2, 3].map((item) => <div key={item} className="h-40 animate-pulse rounded-[24px] bg-bg-hover dark:bg-white/[.045]" />)}</div>
         ) : error ? (
-          <div className="mt-6 rounded-2xl border border-[#ff6b9d]/30 bg-[#fff1f5] p-5 text-sm text-[#b83259] dark:bg-[#ff6b9d]/10 dark:text-[#ffabc4]">{error}</div>
+          <div className="mt-6 rounded-2xl border border-accent-error/30 bg-bg-hover p-5 text-sm text-accent-error dark:bg-accent-error/10 dark:text-accent-error">{error}</div>
         ) : details ? (
           <>
             <section className="mt-6 grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -147,7 +147,7 @@ export const IadPage: React.FC = () => {
 
             <section className="mt-6 grid gap-5 lg:grid-cols-[.82fr_1.18fr]">
               <article className="rounded-[28px] border border-border/10 bg-white p-6 dark:border-white/10 dark:bg-bg-surface">
-                <div className="text-xs font-semibold uppercase tracking-[.14em] text-[#d97706]">{tr("Прогноз", "What-if")}</div>
+                <div className="text-xs font-semibold uppercase tracking-[.14em] text-accent-warn">{tr("Прогноз", "What-if")}</div>
                 <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{tr("Наступна оцінка", "Next grade")}</h2>
                 <label htmlFor="iad-next-grade" className="sr-only">{tr("Наступна оцінка", "Next grade")}</label><input id="iad-next-grade" name="nextGrade" type="range" min={0} max={100} value={nextGrade} onChange={(event) => setNextGrade(Number(event.target.value))} className="mt-6 w-full accent-primary" />
                 <div className="mt-5 grid grid-cols-3 gap-3">
@@ -163,17 +163,17 @@ export const IadPage: React.FC = () => {
                     <div className="text-xs font-semibold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Останні зміни", "Recent changes")}</div>
                     <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{tr("Звідки складається індекс", "What shapes the index")}</h2>
                   </div>
-                  {metrics.net >= 0 ? <TrendingUp className="size-5 text-primary-strong dark:text-primary-soft" /> : <TrendingDown className="size-5 text-[#d34e72]" />}
+                  {metrics.net >= 0 ? <TrendingUp className="size-5 text-primary-strong dark:text-primary-soft" /> : <TrendingDown className="size-5 text-accent-error" />}
                 </div>
                 <div className="mt-5 space-y-2">
-                  {metrics.events.length === 0 ? <div className="rounded-2xl bg-[#f5f8f5] p-4 text-sm text-[#718075] dark:bg-white/[.04] dark:text-[#a3b1a6]">{tr("Подій ще немає.", "No events yet.")}</div> : metrics.events.slice(0, 8).map((event) => {
+                  {metrics.events.length === 0 ? <div className="rounded-2xl bg-bg-hover p-4 text-sm text-text-muted dark:bg-white/[.04] dark:text-text-secondary">{tr("Подій ще немає.", "No events yet.")}</div> : metrics.events.slice(0, 8).map((event) => {
                     const delta = appliedDelta(event);
-                    return <div key={`${event.id}-${event.gradeId}`} className="flex items-center justify-between gap-4 rounded-2xl bg-[#f5f8f5] px-4 py-3 dark:bg-white/[.04]">
+                    return <div key={`${event.id}-${event.gradeId}`} className="flex items-center justify-between gap-4 rounded-2xl bg-bg-hover px-4 py-3 dark:bg-white/[.04]">
                       <div className="min-w-0">
                         <div className="truncate font-semibold">{event.taskTitle || `#${event.taskId}`}</div>
-                        <div className="mt-1 text-xs text-[#77857b] dark:text-[#9dac9f]">{reason(event, tr)} · {new Date(event.createdAt).toLocaleDateString(locale)}</div>
+                        <div className="mt-1 text-xs text-text-muted dark:text-text-secondary">{reason(event, tr)} · {new Date(event.createdAt).toLocaleDateString(locale)}</div>
                       </div>
-                      <strong className={delta >= 0 ? "text-primary-strong dark:text-primary-soft" : "text-[#d34e72]"}>{signed(delta)}</strong>
+                      <strong className={delta >= 0 ? "text-primary-strong dark:text-primary-soft" : "text-accent-error"}>{signed(delta)}</strong>
                     </div>;
                   })}
                 </div>
@@ -183,9 +183,9 @@ export const IadPage: React.FC = () => {
             <section className="mt-6 rounded-[28px] border border-border/10 bg-white p-6 dark:border-white/10 dark:bg-bg-surface">
               <div className="text-xs font-semibold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Правила", "Rules")}</div>
               <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {details.rules.map((rule) => <div key={`${rule.minGrade}-${rule.maxGrade}`} className="rounded-2xl bg-[#f5f8f5] p-4 text-sm dark:bg-white/[.04]">
+                {details.rules.map((rule) => <div key={`${rule.minGrade}-${rule.maxGrade}`} className="rounded-2xl bg-bg-hover p-4 text-sm dark:bg-white/[.04]">
                   <div className="font-semibold">{rule.minGrade}-{rule.maxGrade}</div>
-                  <div className={rule.delta >= 0 ? "mt-2 text-primary-strong dark:text-primary-soft" : "mt-2 text-[#d34e72]"}>{signed(rule.delta)}</div>
+                  <div className={rule.delta >= 0 ? "mt-2 text-primary-strong dark:text-primary-soft" : "mt-2 text-accent-error"}>{signed(rule.delta)}</div>
                 </div>)}
               </div>
             </section>
@@ -198,14 +198,14 @@ export const IadPage: React.FC = () => {
 
 const Metric: React.FC<{ label: string; value: React.ReactNode; tone: "green" | "red" | "neutral" }> = ({ label, value, tone }) => (
   <div className="flex h-full min-h-[126px] flex-col justify-between rounded-2xl border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface">
-    <div className="text-sm text-[#6d7c71] dark:text-[#a2b1a6]">{label}</div>
-    <div className={`mt-3 text-3xl font-semibold tracking-[-.05em] ${tone === "green" ? "text-primary-strong dark:text-primary-soft" : tone === "red" ? "text-[#d34e72]" : ""}`}>{value}</div>
+    <div className="text-sm text-text-muted dark:text-text-secondary">{label}</div>
+    <div className={`mt-3 text-3xl font-semibold tracking-[-.05em] ${tone === "green" ? "text-primary-strong dark:text-primary-soft" : tone === "red" ? "text-accent-error" : ""}`}>{value}</div>
   </div>
 );
 
 const Small: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-  <div className="min-w-0 overflow-hidden rounded-2xl bg-[#f5f8f5] p-4 dark:bg-white/[.04]">
-    <div className="truncate text-xs text-[#718075] dark:text-[#a3b1a6]">{label}</div>
+  <div className="min-w-0 overflow-hidden rounded-2xl bg-bg-hover p-4 dark:bg-white/[.04]">
+    <div className="truncate text-xs text-text-muted dark:text-text-secondary">{label}</div>
     <div className="mt-1 min-w-0 whitespace-nowrap text-[clamp(.9rem,5vw,1.25rem)] font-semibold leading-tight tracking-[-.03em]">{value}</div>
   </div>
 );

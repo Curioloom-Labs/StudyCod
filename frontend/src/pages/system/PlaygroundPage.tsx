@@ -235,7 +235,7 @@ export const PlaygroundPage: React.FC = () => {
   return (
     <div className="min-h-[100dvh] bg-bg-base px-3 py-4 text-text-primary sm:px-5 lg:px-8">
       <div className="mx-auto flex max-w-[1900px] flex-col gap-5">
-        <section className="relative overflow-visible rounded-[34px] border border-[#132019]/10 bg-[#101812] px-5 py-5 text-white shadow-[0_28px_90px_rgba(8,24,14,.18)] dark:border-white/10 sm:px-7">
+        <section className="relative overflow-visible rounded-[34px] border border-border/10 bg-bg-code px-5 py-5 text-text-primary shadow-[0_28px_90px_rgba(8,24,14,.18)] dark:border-white/10 sm:px-7">
           <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-primary/15 blur-3xl" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
@@ -306,7 +306,7 @@ export const PlaygroundPage: React.FC = () => {
         </section>
 
         <div className="grid min-h-[720px] grid-cols-1 gap-5 xl:grid-cols-[340px_minmax(0,1fr)_460px]">
-          <aside className="order-2 flex flex-col gap-4 rounded-[30px] border border-[#132019]/10 bg-white p-4 shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-[#111a14] xl:order-1">
+          <aside className="order-2 flex flex-col gap-4 rounded-[30px] border border-border/10 bg-white p-4 shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-bg-code xl:order-1">
             <div>
               <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">{tr("Мова", "Language")}</div>
               <label htmlFor="playground-language" className="sr-only">Language</label><select id="playground-language" name="language" value={language} onChange={(event) => onLanguageChange(event.target.value as PlaygroundLanguage)} className={selectCls}>
@@ -341,11 +341,11 @@ export const PlaygroundPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <Button variant="primary" onClick={doRun} disabled={running || tracing} className="h-12 justify-center rounded-xl px-4 text-base shadow-[0_10px_24px_-16px_rgba(0,217,120,.9)]">
+              <Button variant="primary" onClick={doRun} disabled={running || tracing} className="h-12 justify-center rounded-xl px-4 text-base shadow-[var(--ui-card-shadow)]">
                 <Play className="mr-2 h-4 w-4" />
                 Run
               </Button>
-              <Button variant="secondary" onClick={doTrace} disabled={!canVisualize || running || tracing} className="h-12 justify-center rounded-xl border border-border bg-bg-hover text-base text-text-primary hover:bg-bg-surface dark:bg-[#16251b] dark:text-[#dcece0] dark:hover:bg-[#203429]">
+              <Button variant="secondary" onClick={doTrace} disabled={!canVisualize || running || tracing} className="h-12 justify-center rounded-xl border border-border bg-bg-hover text-base text-text-primary hover:bg-bg-surface dark:bg-bg-base dark:text-text-primary dark:hover:bg-bg-surface">
                 <Microscope className="mr-2 h-4 w-4" />
                 Trace
               </Button>
@@ -369,7 +369,7 @@ export const PlaygroundPage: React.FC = () => {
             </div>
           </aside>
 
-          <main className="order-1 overflow-hidden rounded-[30px] border border-[#132019]/10 bg-white shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-[#111a14] xl:order-2">
+          <main className="order-1 overflow-hidden rounded-[30px] border border-border/10 bg-white shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-bg-code xl:order-2">
             <div className="flex items-center gap-2 border-b border-border/70 bg-bg-hover/35 px-4 py-3">
               <span className="h-2.5 w-2.5 rounded-full bg-accent-error/60" />
               <span className="h-2.5 w-2.5 rounded-full bg-accent-warn/70" />
@@ -387,7 +387,7 @@ export const PlaygroundPage: React.FC = () => {
           </main>
 
           <aside className="order-3 flex min-h-0 flex-col gap-4 xl:min-h-[720px] xl:order-3">
-            <section className="overflow-hidden rounded-[30px] border border-[#132019]/10 bg-white shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-[#111a14]">
+            <section className="overflow-hidden rounded-[30px] border border-border/10 bg-white shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-bg-code">
               <div className="flex items-center gap-2 border-b border-border/70 bg-bg-hover/35 px-4 py-3">
                 <Terminal className="h-4 w-4 text-primary" />
                 <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted">{tr("Вивід", "Output")}</span>
@@ -410,7 +410,7 @@ export const PlaygroundPage: React.FC = () => {
               </div>
             </section>
 
-            <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[30px] border border-[#132019]/10 bg-white shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-[#111a14]">
+            <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[30px] border border-border/10 bg-white shadow-[0_18px_60px_rgba(18,32,23,.07)] dark:border-white/10 dark:bg-bg-code">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 bg-bg-hover/35 px-4 py-3">
                 <div className="flex items-center gap-2">
                   <Microscope className="h-4 w-4 text-primary" />
