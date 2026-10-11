@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { listTasks, generateTask, getTaskGenerationProgress, saveDraft, submitTask, runTask, getWebTaskTemplate, saveWebTaskDraft, checkWebTask, submitWebTask, getPersonalControlQuiz, submitPersonalControlQuiz, type WebTaskFile, type PersonalControlQuizPayload, type PersonalControlQuizSubmitResponse } from "../../lib/api/tasks";
+import { getTask, listTasks, generateTask, getTaskGenerationProgress, saveDraft, submitTask, runTask, getWebTaskTemplate, saveWebTaskDraft, checkWebTask, submitWebTask, getPersonalControlQuiz, submitPersonalControlQuiz, type WebTaskFile, type PersonalControlQuizPayload, type PersonalControlQuizSubmitResponse } from "../../lib/api/tasks";
 import { recordSuccessfulStudySession } from "../../lib/studySessions";
 import { Modal } from "../../components/ui/Modal";
 import { CodeEditor } from "../../components/CodeEditor";
@@ -813,6 +813,16 @@ export const TasksPage: React.FC<Props> = ({
     return extractFirstExampleInput(fullPracticeText);
   }, [segmentedPractice.examples, fullPracticeText]);
   const activeId = active?.id ?? null;
+  useEffect(() => {
+    if (activeId == null || isPreviewMode) return;
+    let cancelled = false;
+    getTask(activeId, uiLanguage).then(localized => {
+      if (cancelled) return;
+      setActive(current => current?.id === activeId ? { ...current, ...localized } : current);
+      setTasks(current => current.map(task => task.id === activeId ? { ...task, ...localized } : task));
+    }).catch(() => { /* Keep the original statement available if translation is unavailable. */ });
+    return () => { cancelled = true; };
+  }, [activeId, uiLanguage, isPreviewMode]);
   const resumeStep = useMemo(() => {
     if (!active) return undefined;
     const hasTheory = computeHasTheory(active);
@@ -2146,6 +2156,9 @@ export const TasksPage: React.FC<Props> = ({
     id: active.id,
     title: active.title,
     description: getPracticeText(active),
+    timeLimitMs: active.timeLimitMs,
+    memoryLimitMb: active.memoryLimitMb,
+    statementLanguage: active.statementLanguage,
     section: active.topicTitle,
     taskMode: active.taskMode,
     projectSpec: active.projectSpec
@@ -2154,7 +2167,7 @@ export const TasksPage: React.FC<Props> = ({
     title: tr("Обери завдання", "Choose a task"),
     description: tr("Вибери завдання з маршруту, щоб почати роботу.", "Choose a task from the route to start working."),
     section: tr("Особиста практика", "Personal practice")
-  }, [active?.id, active?.title, active?.topicTitle, active?.taskMode, active?.projectSpec, active?.practiceText, active?.descriptionMarkdown]);
+  }, [active?.id, active?.title, active?.topicTitle, active?.taskMode, active?.projectSpec, active?.practiceText, active?.descriptionMarkdown, active?.timeLimitMs, active?.memoryLimitMb, active?.statementLanguage]);
   const ideTheory = useMemo(
     () => active && hasTheoryForActive ? getTheoryMarkdown(active) : null,
     [active?.id, active?.theoryMarkdown, active?.descriptionMarkdown, hasTheoryForActive]

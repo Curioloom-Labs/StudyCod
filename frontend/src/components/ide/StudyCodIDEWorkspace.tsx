@@ -8,13 +8,13 @@ import {
   CaretDownIcon as ChevronDown,
   CaretRightIcon as ChevronRight,
   ClockIcon as Clock3,
+  HardDrivesIcon as HardDrives,
   CopyIcon as Copy,
   DownloadSimpleIcon as Download,
   EraserIcon as Eraser,
   CodeIcon as Code2,
   FileCodeIcon as FileCode2,
   FileTextIcon as FileText,
-  GaugeIcon as Gauge,
   GitDiffIcon as GitCompareArrows,
   ClockCounterClockwiseIcon as History,
   LightbulbIcon as Lightbulb,
@@ -59,21 +59,21 @@ import {
   compilersForFamily,
 } from "../../lib/judgeLanguages";
 
-type IdeMode = "theory" | "practice" | "debug";
-type AssistantTab = "task" | "hints" | "mentor";
-type BottomTab =
-  | "input"
-  | "terminal"
-  | "tests"
-  | "debugger"
-  | "console"
-  | "history";
+type IdeMode = "theory" | "practice";
+type AssistantTab = "task" | "history" | "hints" | "mentor";
+type BottomTab = "input" | "terminal" | "tests";
 type MobilePaneTab = "condition" | "code" | "result";
 
 export type StudyCodIdeTask = {
   id: number | string;
   title: string;
   description: string;
+  timeLimitMs?: number | null;
+  memoryLimitMb?: number | null;
+  limitsByLanguage?: Partial<
+    Record<JudgeLanguage, { timeLimitMs: number; memoryLimitMb: number }>
+  >;
+  statementLanguage?: "uk" | "en";
   section?: string | null;
   difficulty?: string | null;
   tags?: string[] | null;
@@ -405,6 +405,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     },
     [props.onCodeChange],
   );
+  const en = i18n.language?.toLowerCase().startsWith("en");
   const tr = (uk: string, en: string) => {
     return i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   };
@@ -552,7 +553,6 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const [expandedTestId, setExpandedTestId] = React.useState<number | null>(
     null,
   );
-  const [traceStep, setTraceStep] = React.useState(0);
   const [miniProjectTimer, setMiniProjectTimer] = React.useState<{
     taskId: string;
     endsAt: number;
@@ -619,7 +619,6 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     setOpenHintIndex(null);
     setBottomTab("input");
     setFocusMode(false);
-    setTraceStep(0);
     setShowFailedOnly(false);
     setShowWhitespace(false);
     setExpandedTestId(null);
@@ -1105,233 +1104,83 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     publicTestResults.find((test) => !test.passed) ?? null;
   const expandedPublicTest =
     publicTestResults.find((test) => test.testId === expandedTestId) ?? null;
-  const renderBottom = () => {
-    if (bottomTab === "debugger") {
-      const step =
-        props.trace?.steps?.[
-          Math.min(
-            traceStep,
-            Math.max(0, (props.trace?.steps?.length ?? 1) - 1),
-          )
-        ];
-      if (props.trace && step) {
-        const stack = step.stack?.length
-          ? step.stack
-          : [{ func: "<module>", line: step.line, locals: step.locals }];
-        return (
-          <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-auto p-4 text-xs text-[var(--ide-secondary)] lg:grid-cols-[1.2fr_.8fr]">
-            <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="font-semibold text-[var(--ide-text)]">
-                  {tr("Покрокове виконання", "Step execution")}
-                </div>
-                <span className="text-[var(--ide-accent)]">
-                  {tr("Крок", "Step")} {traceStep + 1}/
-                  {props.trace.steps.length}
-                </span>
-              </div>
-              <label htmlFor="ide-trace-step" className="sr-only">
-                {tr("Крок трасування", "Trace step")}
-              </label>
-              <input
-                id="ide-trace-step"
-                name="traceStep"
-                type="range"
-                min={0}
-                max={Math.max(0, props.trace.steps.length - 1)}
-                value={Math.min(
-                  traceStep,
-                  Math.max(0, props.trace.steps.length - 1),
-                )}
-                onChange={(event) => setTraceStep(Number(event.target.value))}
-                className="w-full accent-primary"
-              />
-              <div className="mt-3 rounded-lg border border-primary/20 bg-primary/[.06] p-3">
-                <div className="text-[11px] uppercase tracking-[.12em] text-[var(--ide-muted)]">
-                  {tr("Поточний рядок", "Current line")}
-                </div>
-                <div className="mt-1 font-mono text-[var(--ide-accent)]">
-                  Line {step.line} · {step.event || "line"}
-                </div>
-              </div>
-              <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-3 font-mono text-[11px] text-[var(--ide-text)]">
-                {props.trace.programOutput || ""}
-              </pre>
+  const renderHistory = () => {
+    return (
+      <div className="ide-history">
+        <div className="ide-history-content">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-semibold text-[var(--ide-text)]">
+              {tr("Локальна історія", "Local history")}
             </div>
-            <div className="space-y-3">
-              <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
-                <div className="mb-2 flex items-center gap-2 font-semibold text-[var(--ide-text)]">
-                  <Gauge className="size-4 text-[var(--ide-accent)]" />
-                  Variables
-                </div>
-                <pre className="max-h-44 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-[var(--ide-text)]">
-                  {JSON.stringify(step.locals || {}, null, 2)}
-                </pre>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 text-[var(--ide-accent)]">
+                <Check className="size-4" />
+                {tr("Автозбереження", "Autosave")}
               </div>
-              <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
-                <div className="mb-2 font-semibold text-[var(--ide-text)]">
-                  Call stack
-                </div>
-                {stack.map((frame, index) => (
-                  <div
-                    key={`${frame.func}-${index}`}
-                    className="flex items-center justify-between border-b border-white/5 py-1.5 text-[11px]"
-                  >
-                    <span className="text-[var(--ide-text)]">{frame.func}</span>
-                    <span className="text-[var(--ide-muted)]">
-                      L{frame.line}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        );
-      }
-      return (
-        <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-auto p-4 text-xs text-[var(--ide-secondary)] md:grid-cols-3">
-          <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
-            <div className="mb-2 flex items-center gap-2 font-semibold text-[var(--ide-text)]">
-              <Gauge className="size-4 text-[var(--ide-accent)]" />
-              Variables
-            </div>
-            <p>
-              {props.onTrace
-                ? tr(
-                    "Натисни Trace, щоб запустити покрокове виконання.",
-                    "Press Trace to start step execution.",
-                  )
-                : tr(
-                    "Для цього контексту debug trace ще не підключений.",
-                    "Debug trace is not connected for this context yet.",
-                  )}
-            </p>
-            {props.onTrace ? (
               <button
                 type="button"
-                onClick={props.onTrace}
-                disabled={props.tracing}
-                className="mt-3 rounded-lg bg-primary px-3 py-2 text-[11px] font-bold text-[var(--ide-action-text)] disabled:opacity-50"
-              >
-                {props.tracing ? tr("Трасуємо…", "Tracing…") : "Trace"}
-              </button>
-            ) : null}
-          </div>
-          <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
-            <div className="mb-2 font-semibold text-[var(--ide-text)]">
-              Call stack
-            </div>
-            <p>
-              {tr(
-                "Покроковий trace підключиться до debug runner для цієї задачі.",
-                "Step trace will connect to the debug runner for this task.",
-              )}
-            </p>
-          </div>
-          <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
-            <div className="mb-2 font-semibold text-[var(--ide-text)]">
-              Watch
-            </div>
-            <p>
-              {tr(
-                "Додай вирази для спостереження у наступному кроці.",
-                "Add expressions to watch in the next step.",
-              )}
-            </p>
-          </div>
-        </div>
-      );
-    }
-    if (bottomTab === "history") {
-      return (
-        <div className="h-full overflow-auto p-4 text-xs text-[var(--ide-secondary)]">
-          <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="font-semibold text-[var(--ide-text)]">
-                {tr("Локальна історія", "Local history")}
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 text-[var(--ide-accent)]">
-                  <Check className="size-4" />
-                  Autosave
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDiffOpen(true)}
-                  disabled={!history.length}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ide-border)] px-2 py-1 text-[11px] font-semibold text-[var(--ide-text)] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40"
-                  aria-label={tr(
-                    "Порівняти з останнім знімком",
-                    "Compare with latest snapshot",
-                  )}
-                  title={tr(
-                    "Порівняти з останнім знімком",
-                    "Compare with latest snapshot",
-                  )}
-                >
-                  <GitCompareArrows className="size-3.5" />
-                  {tr("Порівняти", "Compare")}
-                </button>
-              </div>
-            </div>
-            <p className="mt-2">
-              {tr(
-                "Знімки коду зберігаються у цьому браузері й не відправляються на сервер.",
-                "Code snapshots stay in this browser and are not sent to the server.",
-              )}
-            </p>
-            {history.length ? (
-              <div className="mt-3 space-y-2">
-                {history.map((entry, index) => (
-                  <div
-                    key={`${entry.at}-${index}`}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-2"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-[11px] text-[var(--ide-muted)]">
-                        {new Intl.DateTimeFormat(i18n.language || "uk", {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        }).format(new Date(entry.at))}
-                      </div>
-                      <pre className="mt-1 max-h-8 overflow-hidden whitespace-pre-wrap font-mono text-[11px] text-[var(--ide-text)]">
-                        {entry.code}
-                      </pre>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => props.onCodeChange(entry.code)}
-                      className="shrink-0 rounded-md border border-[var(--ide-border)] px-2 py-1 text-[11px] font-semibold text-[var(--ide-accent)] hover:bg-white/[.07]"
-                    >
-                      {tr("Відновити", "Restore")}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 text-[var(--ide-muted)]">
-                {tr(
-                  "Перші версії з’являться після редагування коду.",
-                  "Snapshots will appear after you edit the code.",
+                onClick={() => setDiffOpen(true)}
+                disabled={!history.length}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ide-border)] px-2 py-1 text-[11px] font-semibold text-[var(--ide-text)] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40"
+                aria-label={tr(
+                  "Порівняти з останнім знімком",
+                  "Compare with latest snapshot",
                 )}
-              </p>
-            )}
+                title={tr(
+                  "Порівняти з останнім знімком",
+                  "Compare with latest snapshot",
+                )}
+              >
+                <GitCompareArrows className="size-3.5" />
+                {tr("Порівняти", "Compare")}
+              </button>
+            </div>
           </div>
-        </div>
-      );
-    }
-    if (bottomTab === "console") {
-      return (
-        <pre className="h-full overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-6 text-[var(--ide-text)]">
-          {props.runResult?.stdout ||
-            props.runResult?.stderr ||
-            tr(
-              "Консоль порожня. Натисни Run, щоб побачити stdout і stderr.",
-              "Console is empty. Press Run to inspect stdout and stderr.",
+          <p className="mt-2">
+            {tr(
+              "Знімки коду зберігаються у цьому браузері й не відправляються на сервер.",
+              "Code snapshots stay in this browser and are not sent to the server.",
             )}
-        </pre>
-      );
-    }
+          </p>
+          {history.length ? (
+            <div className="ide-history-list">
+              {history.map((entry, index) => (
+                <div key={`${entry.at}-${index}`} className="ide-history-entry">
+                  <div className="min-w-0">
+                    <div className="text-[11px] text-[var(--ide-muted)]">
+                      {new Intl.DateTimeFormat(i18n.language || "uk", {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      }).format(new Date(entry.at))}
+                    </div>
+                    <pre className="mt-1 max-h-8 overflow-hidden whitespace-pre-wrap font-mono text-[11px] text-[var(--ide-text)]">
+                      {entry.code}
+                    </pre>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => props.onCodeChange(entry.code)}
+                    className="shrink-0 rounded-md border border-[var(--ide-border)] px-2 py-1 text-[11px] font-semibold text-[var(--ide-accent)] hover:bg-white/[.07]"
+                  >
+                    {tr("Відновити", "Restore")}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-[var(--ide-muted)]">
+              {tr(
+                "Перші версії з’являться після редагування коду.",
+                "Snapshots will appear after you edit the code.",
+              )}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderBottom = () => {
     if (bottomTab === "terminal") {
       const example =
         lastRunInput === null
@@ -1964,6 +1813,58 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           ) : null}
         </div>
         <h1 className="ide-task-title">{taskHeading}</h1>
+        {!props.isWebTask &&
+        (props.task.timeLimitMs ||
+          props.task.memoryLimitMb ||
+          props.task.limitsByLanguage?.[props.language]) ? (
+          <div
+            className="ide-task-limits"
+            aria-label={tr("Ліміти задачі", "Problem limits")}
+          >
+            {(props.task.limitsByLanguage?.[props.language]?.timeLimitMs ??
+              props.task.timeLimitMs ??
+              0) > 0 ? (
+              <span>
+                <Clock3 aria-hidden="true" />
+                {new Intl.NumberFormat(en ? "en" : "uk", {
+                  style: "unit",
+                  unit: "second",
+                  unitDisplay: "long",
+                  maximumFractionDigits: 3,
+                }).format(
+                  (props.task.limitsByLanguage?.[props.language]?.timeLimitMs ??
+                    props.task.timeLimitMs ??
+                    0) / 1000,
+                )}
+              </span>
+            ) : null}
+            {(props.task.limitsByLanguage?.[props.language]?.memoryLimitMb ??
+              props.task.memoryLimitMb ??
+              0) > 0 ? (
+              <span>
+                <HardDrives aria-hidden="true" />
+                {new Intl.NumberFormat(en ? "en" : "uk", {
+                  style: "unit",
+                  unit: "megabyte",
+                  unitDisplay: "long",
+                }).format(
+                  props.task.limitsByLanguage?.[props.language]
+                    ?.memoryLimitMb ??
+                    props.task.memoryLimitMb ??
+                    0,
+                )}
+              </span>
+            ) : null}
+            {props.task.statementLanguage &&
+            props.task.statementLanguage !== (en ? "en" : "uk") ? (
+              <small>
+                {props.task.statementLanguage === "uk"
+                  ? tr("Умова українською", "Statement in Ukrainian")
+                  : tr("Умова англійською", "Statement in English")}
+              </small>
+            ) : null}
+          </div>
+        ) : null}
         <article className="ide-task-document">
           <MarkdownView content={taskBody} variant="task" />
         </article>
@@ -2018,6 +1919,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           </details>
         ) : null}
       </>
+    ) : assistantTab === "history" ? (
+      renderHistory()
     ) : assistantTab === "hints" ? (
       <>
         {props.hints?.length ? (
@@ -2533,63 +2436,78 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 data-assistance={!props.disableAiAssistance}
                 aria-label={tr("Умова задачі", "Problem statement")}
               >
-                <div
-                  className="ide-panel-bar"
-                  role="tablist"
-                  onKeyDown={handlePanelTabKeyDown}
-                  aria-label={tr(
-                    "Задача та допомога",
-                    "Problem and assistance",
-                  )}
-                >
-                  <button
-                    type="button"
-                    className="ide-tab"
-                    role="tab"
-                    id="ide-context-tab-task"
-                    aria-selected={assistantTab === "task"}
-                    tabIndex={assistantTab === "task" ? 0 : -1}
-                    aria-controls="ide-context-panel"
-                    onClick={() => setAssistantTab("task")}
+                <div className="ide-panel-bar">
+                  <div
+                    className="ide-context-tabs"
+                    role="tablist"
+                    onKeyDown={handlePanelTabKeyDown}
+                    aria-label={tr(
+                      "Задача та допомога",
+                      "Problem and assistance",
+                    )}
                   >
-                    <FileText />
-                    {tr("Умова", "Description")}
-                  </button>
-                  {!props.disableAiAssistance ? (
-                    <>
-                      <button
-                        type="button"
-                        className="ide-tab"
-                        role="tab"
-                        id="ide-context-tab-hints"
-                        aria-selected={assistantTab === "hints"}
-                        tabIndex={assistantTab === "hints" ? 0 : -1}
-                        aria-controls="ide-context-panel"
-                        onClick={() => setAssistantTab("hints")}
-                      >
-                        <Lightbulb />
-                        {tr("Підказки", "Hints")}
-                        {props.hints?.length ? (
-                          <span className="ide-tab-count">
-                            {props.hints.length}
-                          </span>
-                        ) : null}
-                      </button>
-                      <button
-                        type="button"
-                        className="ide-tab"
-                        role="tab"
-                        id="ide-context-tab-mentor"
-                        aria-selected={assistantTab === "mentor"}
-                        tabIndex={assistantTab === "mentor" ? 0 : -1}
-                        aria-controls="ide-context-panel"
-                        onClick={() => setAssistantTab("mentor")}
-                      >
-                        <Bot />
-                        {tr("Ментор", "Mentor")}
-                      </button>
-                    </>
-                  ) : null}
+                    <button
+                      type="button"
+                      className="ide-tab"
+                      role="tab"
+                      id="ide-context-tab-task"
+                      aria-selected={assistantTab === "task"}
+                      tabIndex={assistantTab === "task" ? 0 : -1}
+                      aria-controls="ide-context-panel"
+                      onClick={() => setAssistantTab("task")}
+                    >
+                      <FileText />
+                      {tr("Умова", "Statement")}
+                    </button>
+                    <button
+                      type="button"
+                      className="ide-tab"
+                      role="tab"
+                      id="ide-context-tab-history"
+                      aria-selected={assistantTab === "history"}
+                      tabIndex={assistantTab === "history" ? 0 : -1}
+                      aria-controls="ide-context-panel"
+                      onClick={() => setAssistantTab("history")}
+                    >
+                      <History />
+                      {tr("Історія", "History")}
+                    </button>
+                    {!props.disableAiAssistance ? (
+                      <>
+                        <button
+                          type="button"
+                          className="ide-tab"
+                          role="tab"
+                          id="ide-context-tab-hints"
+                          aria-selected={assistantTab === "hints"}
+                          tabIndex={assistantTab === "hints" ? 0 : -1}
+                          aria-controls="ide-context-panel"
+                          onClick={() => setAssistantTab("hints")}
+                        >
+                          <Lightbulb />
+                          {tr("Підказки", "Hints")}
+                          {props.hints?.length ? (
+                            <span className="ide-tab-count">
+                              {props.hints.length}
+                            </span>
+                          ) : null}
+                        </button>
+                        <button
+                          type="button"
+                          className="ide-tab"
+                          role="tab"
+                          id="ide-context-tab-mentor"
+                          aria-selected={assistantTab === "mentor"}
+                          tabIndex={assistantTab === "mentor" ? 0 : -1}
+                          aria-controls="ide-context-panel"
+                          onClick={() => setAssistantTab("mentor")}
+                        >
+                          <Bot />
+                          {tr("Ментор", "Mentor")}
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
                   <button
                     type="button"
                     className="ide-icon-btn ide-expand-statement ide-desktop-control"
@@ -2948,34 +2866,6 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                           icon={<TestTube2 />}
                           label={tr("Тести", "Tests")}
                         />
-                        {!simpleMode ? (
-                          <>
-                            <BottomTabButton
-                              active={bottomTab === "history"}
-                              onClick={() => setBottomTab("history")}
-                              icon={<History />}
-                              label={tr("Історія", "History")}
-                            />
-                            {props.onTrace ? (
-                              <BottomTabButton
-                                active={bottomTab === "debugger"}
-                                onClick={() => {
-                                  setMode("debug");
-                                  setBottomTab("debugger");
-                                  props.onTrace?.();
-                                }}
-                                icon={<Gauge />}
-                                label={tr("Налагодження", "Debugger")}
-                              />
-                            ) : null}
-                            <BottomTabButton
-                              active={bottomTab === "console"}
-                              onClick={() => setBottomTab("console")}
-                              icon={<Code2 />}
-                              label={tr("Консоль", "Console")}
-                            />
-                          </>
-                        ) : null}
                       </div>
                       {bottomTab === "input" ? inputTools : null}
                       <button

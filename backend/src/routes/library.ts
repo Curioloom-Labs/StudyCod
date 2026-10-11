@@ -3,7 +3,6 @@ import { z } from "zod";
 import SafeZipArchive from "../utils/safeZip";
 import { validateUploadedZip, ZipValidationError, ZipExtractionBudget, ZIP_MAX_TOTAL_UNCOMPRESSED_BYTES } from "../utils/zipUploadValidator";
 import multer from "multer";
-import { createHash } from "crypto";
 import { AppDataSource } from "../data-source";
 import { authOptional, authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { submissionRateLimitMiddleware } from "../middleware/submissionRateLimit";
@@ -28,8 +27,9 @@ import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
 import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, normalizeSafeCodeFilePath, pickEntryContent } from "../utils/multiFileSubmission";
-import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn, translateTextUkToEn } from "../services/translation/translateUkToEn";
-import { hasLibraryTaskEnTranslationColumns } from "../services/translation/translationSchema";
+import { detectStatementLanguage } from "../services/translation/taskStatementLocalization";
+import { localizeLibraryTasksToEn } from "../services/translation/libraryTaskLocalization";
+import { taskLimitsByLanguage } from "../services/judgeWorker/taskLimitsDto";
 import { env } from "../env";
 import {
   normalizeWebTaskFiles,
@@ -516,6 +516,8 @@ function buildTaskDto(task: LibraryTask, quality: LibraryTaskQuality | null = nu
     tags: task.tags ?? null,
     section: task.section ?? null,
     maxAttempts: task.maxAttempts,
+    statementLanguage: detectStatementLanguage(task.description),
+    limitsByLanguage: taskLimitsByLanguage(task, DEFAULT_LIMITS_BY_LANG, getAllowedJudgeLanguages(task)),
     timeLimitMs: task.timeLimitMs ?? null,
     memoryLimitMb: task.memoryLimitMb ?? null,
     outputLimitKb: task.outputLimitKb ?? null,
@@ -536,110 +538,6 @@ function buildTaskDto(task: LibraryTask, quality: LibraryTaskQuality | null = nu
         }
       : null,
   };
-}
-
-const LIBRARY_TASK_EN_TRANSLATION_VERSION = 1;
-
-function computeLibraryTaskEnSourceHash(task: Pick<LibraryTask, "title" | "description">): string {
-  // Include the translation version in the hash so we can invalidate cached translations
-  // after changing our Markdown-masking/translation behavior.
-  const src = `v${LIBRARY_TASK_EN_TRANSLATION_VERSION}\nTITLE\n${task.title}\nDESC\n${task.description}`;
-  return createHash("sha256").update(src, "utf8").digest("hex");
-}
-
-function isLibraryTaskEnFresh(taskWithEn: LibraryTask, expectedSourceHash: string): boolean {
-  const titleEn = String(taskWithEn.titleEn ?? "");
-  const descEn = String(taskWithEn.descriptionEn ?? "");
-  const okTitle = titleEn.trim().length > 0 && !looksLikeTranslationProviderErrorText(titleEn);
-  const okDesc = descEn.trim().length > 0 && !looksLikeTranslationProviderErrorText(descEn);
-  const okHash = String(taskWithEn.translationSourceHashEn ?? "").trim() === expectedSourceHash;
-  const okVer = Number(taskWithEn.translationVersionEn ?? 0) === LIBRARY_TASK_EN_TRANSLATION_VERSION;
-  return okTitle && okDesc && okHash && okVer;
-}
-
-async function localizeLibraryTasksToEn(
-  tasks: LibraryTask[],
-  req: AuthRequest
-): Promise<Map<number, { title: string; description: string }>> {
-  const out = new Map<number, { title: string; description: string }>();
-  const ids = Array.from(new Set(tasks.map(t => t.id).filter((x): x is number => typeof x === "number")));
-  if (ids.length === 0) return out;
-
-  const hasCols = await hasLibraryTaskEnTranslationColumns();
-  if (!hasCols) {
-    logger.warn("[library] EN translation requested but DB columns are missing; serving uk content", {
-      requestId: req.requestId,
-      userId: req.userId ?? null
-    });
-    return out;
-  }
-
-  // Translation columns are marked select:false, so we explicitly select them.
-  const rows = await libraryRepo()
-    .createQueryBuilder("t")
-    .where("t.id IN (:...ids)", { ids })
-    .addSelect([
-      "t.titleEn",
-      "t.descriptionEn",
-      "t.translationSourceHashEn",
-      "t.translationVersionEn",
-      "t.translatedAtEn",
-    ])
-    .getMany();
-
-  const byId = new Map<number, LibraryTask>();
-  for (const r of rows) byId.set(r.id, r);
-
-  // Translate missing/stale ones sequentially to be gentle to free API.
-  for (const id of ids) {
-    const t = byId.get(id);
-    if (!t) continue;
-
-    const sourceHash = computeLibraryTaskEnSourceHash(t);
-    if (isLibraryTaskEnFresh(t, sourceHash)) {
-      out.set(id, {
-        title: t.titleEn as string,
-        description: t.descriptionEn as string,
-      });
-      continue;
-    }
-
-    try {
-      const [titleEn, descriptionEn] = await Promise.all([
-        translateTextUkToEn(t.title),
-        translateMarkdownUkToEn(t.description)
-      ]);
-
-      await AppDataSource.query(
-        `UPDATE \`library_tasks\`
-           SET \`title_en\` = ?,
-               \`description_en\` = ?,
-               \`translation_source_hash_en\` = ?,
-               \`translation_version_en\` = ?,
-               \`translated_at_en\` = ?,
-               \`updated_at\` = \`updated_at\`
-         WHERE \`id\` = ?`,
-        [titleEn, descriptionEn, sourceHash, LIBRARY_TASK_EN_TRANSLATION_VERSION, new Date(), id]
-      );
-
-      t.titleEn = titleEn;
-      t.descriptionEn = descriptionEn;
-      t.translationSourceHashEn = sourceHash;
-      t.translationVersionEn = LIBRARY_TASK_EN_TRANSLATION_VERSION;
-      t.translatedAtEn = new Date();
-      out.set(id, { title: titleEn, description: descriptionEn });
-    } catch (error: unknown) {
-      logger.warn("[library] translate uk->en failed", {
-        requestId: req.requestId,
-        userId: req.userId ?? null,
-        libraryTaskId: id,
-        error: errorMessage(error)
-      });
-      // Best-effort: fall back to Ukrainian content.
-    }
-  }
-
-  return out;
 }
 
 function buildAttemptSummary(attempt: LibraryTaskAttempt | null) {
@@ -897,6 +795,7 @@ libraryRouter.get("/tasks", authOptional, async (req: AuthRequest, res: Response
         if (en) {
           dto.title = en.title;
           dto.description = en.description;
+      dto.statementLanguage = "en";
         }
         return dto;
       }),
@@ -947,6 +846,7 @@ libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: 
     if (en) {
       dto.title = en.title;
       dto.description = en.description;
+      dto.statementLanguage = "en";
     }
 
     return res.json({
@@ -1013,6 +913,7 @@ libraryRouter.get("/tasks/mine", authRequired, async (req: AuthRequest, res: Res
         if (en) {
           dto.title = en.title;
           dto.description = en.description;
+      dto.statementLanguage = "en";
         }
         return dto;
       })
@@ -1059,6 +960,7 @@ libraryRouter.get("/tasks/:id", authOptional, async (req: AuthRequest, res: Resp
     if (en) {
       dto.title = en.title;
       dto.description = en.description;
+      dto.statementLanguage = "en";
     }
 
     return res.json({

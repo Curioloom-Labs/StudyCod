@@ -169,6 +169,9 @@ export interface Topic {
   isIntro: boolean;
 }
 export interface Task {
+  statementLanguage?: "uk" | "en";
+  timeLimitMs?: number | null;
+  memoryLimitMb?: number | null;
   id: number;
   title: string;
   subtitle?: string;

@@ -535,7 +535,10 @@ export const ContestProblemSolvePage: React.FC = () => {
 
         const savedInput = localStorage.getItem(`${storageBase}:runInput`);
         setRunInput(
-          savedInput ?? (isDevPreviewActive() ? examplesFromStatement(stmt.task.description)[0]?.input ?? "" : ""),
+          savedInput ??
+            (isDevPreviewActive()
+              ? (examplesFromStatement(stmt.task.description)[0]?.input ?? "")
+              : ""),
         );
       } catch {
         // ignore
@@ -544,12 +547,19 @@ export const ContestProblemSolvePage: React.FC = () => {
     [storageBase],
   );
 
+  const loadedProblemRef = React.useRef<string | null>(null);
+  const statementRequestRef = React.useRef(0);
   const load = React.useCallback(async () => {
     if (!contestId || !problemId) return;
 
-    setLoading(true);
+    const requestId = ++statementRequestRef.current;
+    const problemKey = `${contestId}:${problemId}`;
+    const retainWorkspace = loadedProblemRef.current === problemKey;
+    if (!retainWorkspace) {
+      setLoading(true);
+      setContestProblems([]);
+    }
     setError(null);
-    setContestProblems([]);
     try {
       if (isDevPreviewActive()) {
         const stmt = previewContestStatement(problemId, en);
@@ -559,26 +569,36 @@ export const ContestProblemSolvePage: React.FC = () => {
           title: en ? "Algorithm Saturday" : "Алгоритмічна субота",
           endsAt: new Date(Date.now() + 60 * 60_000).toISOString(),
         });
-        hydrateDraft(stmt);
+        if (!retainWorkspace) hydrateDraft(stmt);
+        loadedProblemRef.current = problemKey;
         return;
       }
       const [stmt, contest] = await Promise.all([
         getContestProblemStatement(contestId, problemId),
         getContestDetails(contestId),
       ]);
+      if (requestId !== statementRequestRef.current) return;
       setStatement(stmt);
-      setContestProblems(contest.problems);
+      setContestProblems(
+        contest.problems.map((problem) =>
+          problem.id === problemId
+            ? { ...problem, title: stmt.task.title }
+            : problem,
+        ),
+      );
       setContestMeta({
         title: contest.contest.title,
         endsAt: contest.contest.endsAt,
       });
-      hydrateDraft(stmt);
+      if (!retainWorkspace) hydrateDraft(stmt);
+      loadedProblemRef.current = problemKey;
     } catch (e: unknown) {
+      if (requestId !== statementRequestRef.current) return;
       const msg = getErrorMessage(e);
       setError(msg || "Failed to load contest workspace");
-      setStatement(null);
+      if (!retainWorkspace) setStatement(null);
     } finally {
-      setLoading(false);
+      if (requestId === statementRequestRef.current) setLoading(false);
     }
   }, [contestId, problemId, hydrateDraft, en]);
 
@@ -1331,6 +1351,10 @@ export const ContestProblemSolvePage: React.FC = () => {
           id: `contest-${contestId}-${problemId}`,
           title: statement.task.title,
           description: statement.task.description,
+          timeLimitMs: statement.task.timeLimitMs,
+          memoryLimitMb: statement.task.memoryLimitMb,
+          limitsByLanguage: statement.task.limitsByLanguage,
+          statementLanguage: statement.task.statementLanguage,
           section: `${copy("Контест", "Contest")} · ${contestMeta.title}`,
         }}
         theory={null}

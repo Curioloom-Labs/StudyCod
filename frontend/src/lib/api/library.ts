@@ -131,6 +131,8 @@ export type LibraryTaskListItem = {
   tags?: string[] | null;
   section?: string | null;
   maxAttempts: number;
+  statementLanguage?: "uk" | "en";
+  limitsByLanguage?: Partial<Record<JudgeLanguage, { timeLimitMs: number; memoryLimitMb: number }>>;
   timeLimitMs?: number | null;
   memoryLimitMb?: number | null;
   outputLimitKb?: number | null;

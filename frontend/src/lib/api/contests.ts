@@ -1,3 +1,4 @@
+import i18n from "../../i18n";
 import { api } from "./client";
 import { submitContestJob, type JobUpdate } from "./contestJobs";
 
@@ -132,6 +133,8 @@ export type ContestProblemStatement = {
       templatesByLanguage: Record<string, string> | null;
       defaultLanguage?: JudgeLanguage;
       allowedLanguages: JudgeLanguage[];
+    statementLanguage?: "uk" | "en";
+    limitsByLanguage?: Partial<Record<JudgeLanguage, { timeLimitMs: number; memoryLimitMb: number }>>;
     timeLimitMs: number | null;
     memoryLimitMb: number | null;
     outputLimitKb: number | null;
@@ -411,7 +414,7 @@ export async function joinContestByCode(code: string): Promise<{ joined: boolean
 }
 
 export async function getContestProblemStatement(contestId: number, problemId: number): Promise<ContestProblemStatement> {
-  const res = await api.get(`/contests/${contestId}/problems/${problemId}`);
+  const res = await api.get(`/contests/${contestId}/problems/${problemId}`, { params: { uiLang: i18n.language } });
   return res.data;
 }
 

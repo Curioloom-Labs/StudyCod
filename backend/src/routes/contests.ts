@@ -21,6 +21,10 @@ import { findContestJobByKey, enqueueContestJob, getContestJob, jobReceipt, regi
 import { sharedContestRead } from "../services/contest/sharedRead";
 import { readUserContestParticipant, userContestParticipantId, userOwnsContestParticipant } from "../services/contest/participantReads";
 import { normalizeJudgeMemoryMb } from "../services/judgeWorker/limits";
+import { taskLimitsByLanguage } from "../services/judgeWorker/taskLimitsDto";
+import { detectStatementLanguage } from "../services/translation/taskStatementLocalization";
+import { localizeLibraryTasksToEn } from "../services/translation/libraryTaskLocalization";
+import { normalizeUiLocale, resolveUiLocaleFromHeaders } from "../utils/uiLocale";
 import { buildJudgeTests } from "../services/judgeWorker/testCache";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, normalizeSafeCodeFilePath } from "../utils/multiFileSubmission";
@@ -3318,6 +3322,9 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
     const task = problem.libraryTask;
     if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
 
+    const uiLanguage = normalizeUiLocale(req.query.uiLang, req.uiLanguage ?? resolveUiLocaleFromHeaders(req.headers));
+    const localized = uiLanguage === "en" ? (await localizeLibraryTasksToEn([task], req)).get(task.id) : undefined;
+    res.setHeader("Content-Language", localized ? "en" : detectStatementLanguage(task.description));
     return res.json({
       problem: {
         id: problem.id,
@@ -3326,8 +3333,10 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
       },
       task: {
         id: task.id,
-        title: task.title,
-        description: task.description,
+        title: localized?.title ?? task.title,
+        description: localized?.description ?? task.description,
+        statementLanguage: localized ? "en" : detectStatementLanguage(task.description),
+        limitsByLanguage: taskLimitsByLanguage(task, DEFAULT_LIMITS_BY_LANG, getAllowedJudgeLanguages(task)),
         template: task.template,
         templatesByLanguage: task.templatesByLanguage ?? null,
         defaultLanguage: task.lang === "PYTHON" ? "python" : task.lang === "CPP" ? "cpp" : "java",

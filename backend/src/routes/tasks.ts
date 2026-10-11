@@ -1,3 +1,4 @@
+import { localizeTaskStatement, detectStatementLanguage, type LocalizedTaskStatement } from "../services/translation/taskStatementLocalization";
 import { encodeAiComparisonFeedback, parseGradeComparisonFeedback } from "../utils/gradeComparisonFeedback";
 import { Router, Response } from "express";
 import { body, validationResult } from "express-validator";
@@ -1658,6 +1659,7 @@ function latestTaskGrade(task: Task): Grade | null {
 }
 
 function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
+  localizedStatement?: LocalizedTaskStatement;
   includeTheoryDebug?: boolean;
   uiLanguage?: UiLanguage;
   localizedTheoryEnByBlockId?: Map<number, string>;
@@ -1671,7 +1673,7 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
   const hasGrade = gradeTaskIds ? gradeTaskIds.has(task.id) : Boolean(lastGrade) || !!task.completed;
   const status: TaskStatus = computeTaskStatus(task, lastGrade, hasGrade);
   const rawPractice = sanitizeMetaOutputFormatInStatement(
-    (task.descriptionMarkdown || task.description || "").toString(),
+    (opts?.localizedStatement?.description ?? (task.descriptionMarkdown || task.description || "")).toString(),
     task.ioType,
     uiLanguage
   );
@@ -1741,7 +1743,10 @@ function mapTaskToDto(task: Task, gradeTaskIds?: Set<number>, opts?: {
 
   return {
     id: task.id,
-    title: task.title,
+    title: opts?.localizedStatement?.title ?? task.title,
+    statementLanguage: opts?.localizedStatement?.language ?? detectStatementLanguage(task.descriptionMarkdown || task.description || ""),
+    timeLimitMs: task.lang === "JAVA" ? 1200 : task.lang === "PYTHON" ? 900 : 800,
+    memoryLimitMb: task.lang === "PYTHON" ? 128 : 256,
     subtitle: task.subtitle || undefined,
     topicId,
     topicTitle,
@@ -2581,9 +2586,15 @@ tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) 
       : new Map<number, string>();
     const catalogTheoryByTaskId = await loadCatalogTheoryByTaskId([task], uiLanguage);
 
+    const localizedStatement = await localizeTaskStatement({
+      id: task.id, title: task.title, description: task.descriptionMarkdown || task.description || ""
+    }, uiLanguage);
+    res.setHeader("Content-Language", localizedStatement.language);
+
     if (includeTheoryDebug) res.setHeader("Cache-Control", "no-store");
     return res.json(mapTaskToDto(task, gradeTaskIds, {
       includeTheoryDebug,
+      localizedStatement,
       uiLanguage,
       latestGrade: grade,
       localizedTheoryEnByBlockId,

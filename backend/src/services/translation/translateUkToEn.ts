@@ -52,6 +52,10 @@ function maskAll(input: string): Masked {
   replaceAll(/\$\$[\s\S]*?\$\$/g, "math");
   replaceAll(/\$[^\n$]+\$/g, "math");
 
+  // Raw HTML samples must stay byte-for-byte identical, including textual outputs.
+  replaceAll(/<pre\b[^>]*>[\s\S]*?<\/pre>/gi, "pre");
+  replaceAll(/<code\b[^>]*>[\s\S]*?<\/code>/gi, "code");
+
   // 4) HTML tags (rare in our markdown but safe to protect)
   replaceAll(/<[^>]+>/g, "html");
 
@@ -73,6 +77,7 @@ function maskAll(input: string): Masked {
       // Restore in reverse order to avoid accidental nested replacements.
       for (let j = mappings.length - 1; j >= 0; j--) {
         const { key, value } = mappings[j];
+        if (out.split(key).length !== 2) throw new Error("Translator changed a protected Markdown token");
         out = out.split(key).join(value);
       }
       return out;
@@ -159,7 +164,7 @@ function splitLeadingTrailingWhitespace(input: string): { prefix: string; core: 
   return { prefix, core, suffix };
 }
 
-async function translateViaLibreTranslate(text: string, timeoutMs: number): Promise<string> {
+async function translateViaLibreTranslate(text: string, timeoutMs: number, source: string, target: string): Promise<string> {
   const url = env.__translateUkEnUrl;
   if (!url) throw new Error("TRANSLATE_URL_NOT_CONFIGURED");
   const ac = new AbortController();
@@ -179,8 +184,8 @@ async function translateViaLibreTranslate(text: string, timeoutMs: number): Prom
       },
       body: JSON.stringify({
         q: text,
-        source: "uk",
-        target: "en",
+        source,
+        target,
         format: "text"
       }),
       signal: ac.signal
@@ -216,7 +221,7 @@ async function translateViaLibreTranslate(text: string, timeoutMs: number): Prom
   }
 }
 
-async function translateViaLibreTranslateChunked(text: string, timeoutMs: number): Promise<string> {
+async function translateViaLibreTranslateChunked(text: string, timeoutMs: number, source: string, target: string): Promise<string> {
   // Some public LibreTranslate instances enforce small per-request limits (commonly ~500 chars).
   // Chunk conservatively to avoid hard failures while keeping good translation quality.
   // NOTE: Some instances enforce 500 chars *on the raw query string*, and JSON escaping can
@@ -230,18 +235,18 @@ async function translateViaLibreTranslateChunked(text: string, timeoutMs: number
       out += c;
       continue;
     }
-    const translatedCore = await translateViaLibreTranslate(core, timeoutMs);
+    const translatedCore = await translateViaLibreTranslate(core, timeoutMs, source, target);
     out += `${prefix}${translatedCore}${suffix}`;
   }
   return out;
 }
 
-async function translateViaMyMemory(text: string, timeoutMs: number): Promise<string> {
+async function translateViaMyMemory(text: string, timeoutMs: number, source: string, target: string): Promise<string> {
   // Free endpoint, no API key required. Limited and should be a fallback.
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), timeoutMs);
   try {
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=uk|en`;
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(source)}|${encodeURIComponent(target)}`;
     const resp = await fetch(url, {
       method: "GET",
       headers: { "Accept": "application/json" },
@@ -271,7 +276,7 @@ async function translateViaMyMemory(text: string, timeoutMs: number): Promise<st
   }
 }
 
-async function translateViaMyMemoryChunked(text: string, timeoutMs: number): Promise<string> {
+async function translateViaMyMemoryChunked(text: string, timeoutMs: number, source: string, target: string): Promise<string> {
   // MyMemory is GET-only and has URL length constraints (can 414 on big inputs).
   // Chunk conservatively; URL encoding can easily expand the query.
   const MAX_CHARS = 250;
@@ -283,15 +288,15 @@ async function translateViaMyMemoryChunked(text: string, timeoutMs: number): Pro
       out += c;
       continue;
     }
-    const translatedCore = await translateViaMyMemory(core, timeoutMs);
+    const translatedCore = await translateViaMyMemory(core, timeoutMs, source, target);
     out += `${prefix}${translatedCore}${suffix}`;
   }
   return out;
 }
 
-export async function translateTextUkToEn(text: string): Promise<string> {
+export async function translateTextBetweenLanguages(text: string, source: string, target: string): Promise<string> {
   const raw = String(text ?? "");
-  if (!raw.trim()) return raw;
+  if (!raw.trim() || source === target) return raw;
 
   const timeoutMs = env.__translateUkEnTimeoutMs;
   const hasConfiguredUrl = Boolean(env.__translateUkEnUrl);
@@ -313,7 +318,7 @@ export async function translateTextUkToEn(text: string): Promise<string> {
       const { prefix, core, suffix } = splitLeadingTrailingWhitespace(raw);
       if (!core.trim()) return raw;
       // Always go through chunked path for stability against per-instance limits.
-      const translatedCore = await translateViaLibreTranslateChunked(core, timeoutMs);
+      const translatedCore = await translateViaLibreTranslateChunked(core, timeoutMs, source, target);
       return `${prefix}${translatedCore}${suffix}`;
     } catch (err: unknown) {
       logger.warn("[translate] configured translator failed", {
@@ -325,14 +330,14 @@ export async function translateTextUkToEn(text: string): Promise<string> {
 
   // Public MyMemory fallback is gated behind an explicit opt-in.
   if (allowPublicFallback) {
-    return await translateViaMyMemoryChunked(raw, timeoutMs);
+    return await translateViaMyMemoryChunked(raw, timeoutMs, source, target);
   }
   return raw;
 }
 
-export async function translateMarkdownUkToEn(markdown: string): Promise<string> {
+export async function translateMarkdownBetweenLanguages(markdown: string, source: string, target: string): Promise<string> {
   const raw = String(markdown ?? "");
-  if (!raw.trim()) return raw;
+  if (!raw.trim() || source === target) return raw;
 
   const masked = maskAll(raw);
   const chunks = splitIntoChunks(masked.text, env.__translateUkEnMaxChunkChars);
@@ -346,10 +351,13 @@ export async function translateMarkdownUkToEn(markdown: string): Promise<string>
       continue;
     }
 
-    const translated = await translateTextUkToEn(c);
+    const translated = await translateTextBetweenLanguages(c, source, target);
     translatedChunks.push(translated);
   }
 
   const joined = translatedChunks.join("");
   return masked.restore(joined);
 }
+
+export const translateTextUkToEn = (text: string) => translateTextBetweenLanguages(text, "uk", "en");
+export const translateMarkdownUkToEn = (markdown: string) => translateMarkdownBetweenLanguages(markdown, "uk", "en");
