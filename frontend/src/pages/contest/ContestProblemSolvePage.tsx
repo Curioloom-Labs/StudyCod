@@ -535,7 +535,7 @@ export const ContestProblemSolvePage: React.FC = () => {
 
         const savedInput = localStorage.getItem(`${storageBase}:runInput`);
         setRunInput(
-          savedInput ?? (isDevPreviewActive() ? "5\n12 7 7 18 9" : ""),
+          savedInput ?? (isDevPreviewActive() ? examplesFromStatement(stmt.task.description)[0]?.input ?? "" : ""),
         );
       } catch {
         // ignore
@@ -1385,45 +1385,43 @@ export const ContestProblemSolvePage: React.FC = () => {
         resultCards={
           submissions.length ? (
             <section
-              className="mt-3 border-t border-[var(--ide-border)] pt-3"
+              className="ide-submissions"
               aria-label={copy("Останні надсилання", "Recent submissions")}
             >
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <h3 className="text-xs font-medium text-[var(--ide-secondary)]">
-                  {copy("Останні надсилання", "Recent submissions")}
-                </h3>
-                <span className="text-[11px] text-[var(--ide-muted)]">
+              <div className="ide-submissions-heading">
+                <h3>{copy("Останні надсилання", "Recent submissions")}</h3>
+                <span>
                   {submissions.length}
                   {submissions.length === 30 ? "+" : ""}
                 </span>
               </div>
-              <div className="space-y-1.5">
-                {submissions.slice(0, 4).map((submission) => (
-                  <div
-                    key={submission.id}
-                    className="flex min-w-0 items-center justify-between gap-3 border-b border-[var(--ide-border)] px-1 py-2 text-xs"
+              {submissions.slice(0, 4).map((submission) => (
+                <div key={submission.id} className="ide-submission-row">
+                  <span
+                    className="ide-submission-verdict"
+                    data-state={
+                      String(submission.verdict ?? "").toUpperCase() === "AC"
+                        ? "accepted"
+                        : submission.verdict
+                          ? "failed"
+                          : "waiting"
+                    }
                   >
-                    <div className="min-w-0">
-                      <span
-                        className={`font-bold ${String(submission.verdict ?? "").toUpperCase() === "AC" ? "text-[var(--ide-accent)]" : "text-[var(--ide-warning)]"}`}
-                      >
-                        {submission.verdict || copy("В черзі", "Queued")}
-                      </span>
-                      <span className="ml-2 text-[var(--ide-muted)]">
-                        {submission.createdAt
-                          ? new Date(submission.createdAt).toLocaleTimeString(
-                              en ? "en-US" : "uk-UA",
-                              { hour: "2-digit", minute: "2-digit" },
-                            )
-                          : copy("Щойно", "Just now")}
-                      </span>
-                    </div>
-                    <span className="shrink-0 tabular-nums text-[var(--ide-text)]">
-                      {submission.score ?? 0}/{submission.maxScore ?? 0}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                    {submission.verdict || copy("В черзі", "Queued")}
+                  </span>
+                  <time dateTime={submission.createdAt ?? undefined}>
+                    {submission.createdAt
+                      ? new Date(submission.createdAt).toLocaleTimeString(
+                          en ? "en-US" : "uk-UA",
+                          { hour: "2-digit", minute: "2-digit" },
+                        )
+                      : copy("Щойно", "Just now")}
+                  </time>
+                  <span className="ide-submission-score">
+                    {submission.score ?? 0} / {submission.maxScore ?? 0}
+                  </span>
+                </div>
+              ))}
             </section>
           ) : null
         }

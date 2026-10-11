@@ -10,6 +10,7 @@ import {
   ClockIcon as Clock3,
   CopyIcon as Copy,
   DownloadSimpleIcon as Download,
+  EraserIcon as Eraser,
   CodeIcon as Code2,
   FileCodeIcon as FileCode2,
   FileTextIcon as FileText,
@@ -1340,19 +1341,19 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             );
       if (!props.runResult && !props.running)
         return (
-          <div className="ide-empty-context p-5">
-            <h3>
-              {tr(
-                "Тут з’явиться вивід програми",
-                "Your program output appears here",
-              )}
-            </h3>
-            <p>
-              {tr(
-                "Вибери приклад або введи свої дані та натисни «Запустити».",
-                "Choose an example or enter your own input, then press Run.",
-              )}
-            </p>
+          <div className="ide-runner-empty">
+            <span className="ide-runner-empty-icon">
+              <SquareTerminal />
+            </span>
+            <div>
+              <h3>{tr("Вивід програми", "Program output")}</h3>
+              <p>
+                {tr(
+                  "Натисни «Запустити», щоб побачити результат для свого вводу.",
+                  "Press Run to see the result for your input.",
+                )}
+              </p>
+            </div>
           </div>
         );
       return (
@@ -1465,27 +1466,29 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       );
     }
     return (
-      <div className="h-full overflow-auto p-4 text-xs text-[var(--ide-text)]">
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          {props.checkResult ? (
-            <span
-              className={`rounded-md px-2.5 py-1 font-semibold ${verdictIsAccepted(props.checkResult.verdict) ? "bg-[var(--ide-accent-wash)] text-[var(--ide-accent)]" : "bg-[var(--ide-error-wash)] text-[var(--ide-error)]"}`}
-            >
-              {props.checkResult.verdict || "—"}
-            </span>
-          ) : null}
-          {props.checkResult ? (
-            <span>
-              {tr("Тести", "Tests")}: {props.checkResult.testsPassed}/
-              {props.checkResult.testsTotal}
-            </span>
-          ) : null}
-          {props.runResult ? (
-            <span>
-              {tr("Код завершення", "Exit code")}: {props.runResult.exitCode}
-            </span>
-          ) : null}
-        </div>
+      <div className="ide-test-results">
+        {props.checkResult || props.runResult ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            {props.checkResult ? (
+              <span
+                className={`rounded-md px-2.5 py-1 font-semibold ${verdictIsAccepted(props.checkResult.verdict) ? "bg-[var(--ide-accent-wash)] text-[var(--ide-accent)]" : "bg-[var(--ide-error-wash)] text-[var(--ide-error)]"}`}
+              >
+                {props.checkResult.verdict || "—"}
+              </span>
+            ) : null}
+            {props.checkResult ? (
+              <span>
+                {tr("Тести", "Tests")}: {props.checkResult.testsPassed}/
+                {props.checkResult.testsTotal}
+              </span>
+            ) : null}
+            {props.runResult ? (
+              <span>
+                {tr("Код завершення", "Exit code")}: {props.runResult.exitCode}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {props.checkResult?.groupScores?.length ? (
           <div className="mb-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-3">
             <div className="mb-2 text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--ide-muted)]">
@@ -1498,7 +1501,9 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   className="rounded-lg bg-white/[.06] px-2.5 py-1.5 text-[11px] text-[var(--ide-text)]"
                 >
                   {group.group}: {group.score}/{group.maxScore}
-                  {group.status === "SKIPPED" ? " (пропущено)" : ""}
+                  {group.status === "SKIPPED"
+                    ? tr(" (пропущено)", " (skipped)")
+                    : ""}
                 </span>
               ))}
             </div>
@@ -1658,7 +1663,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 <div className="grid gap-2 md:grid-cols-3">
                   <div>
                     <div className="mb-1 text-[11px] text-[var(--ide-muted)]">
-                      Input
+                      {tr("Ввід", "Input")}
                     </div>
                     <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-2 font-mono text-[11px] text-[var(--ide-text)]">
                       {expandedPublicTest.input || "—"}
@@ -1666,7 +1671,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   </div>
                   <div>
                     <div className="mb-1 text-[11px] text-[var(--ide-muted)]">
-                      Expected output
+                      {tr("Очікуваний вивід", "Expected output")}
                     </div>
                     <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-2 font-mono text-[11px] text-[var(--ide-accent)]">
                       {expandedPublicTest.expectedOutput ||
@@ -1678,7 +1683,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   </div>
                   <div>
                     <div className="mb-1 text-[11px] text-[var(--ide-muted)]">
-                      Actual output
+                      {tr("Твій вивід", "Actual output")}
                     </div>
                     <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-2 font-mono text-[11px] text-[var(--ide-error)]">
                       {expandedPublicTest.actualOutput || "—"}
@@ -1689,36 +1694,35 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             ) : null}
           </div>
         ) : (
-          <div className="ide-empty-context">
-            <h3>
-              {props.checkResult
-                ? allTestsPassed
-                  ? tr("Розв’язок прийнято", "Solution accepted")
-                  : tr(
-                      "Переглянь результат перевірки",
-                      "Review the check result",
-                    )
-                : tr(
-                    "Готовий перевірити розв’язок?",
-                    "Ready to check your solution?",
-                  )}
-            </h3>
-            <p>
-              {props.checkResult
-                ? tr(
-                    "Деталі окремих тестів для цієї задачі не публікуються.",
-                    "Individual test details are not published for this problem.",
-                  )
-                : props.submitMode
+          <div className="ide-runner-empty ide-runner-empty-compact">
+            <span className="ide-runner-empty-icon">
+              {allTestsPassed ? <CheckCircle2 /> : <TestTube2 />}
+            </span>
+            <div>
+              <h3>
+                {props.checkResult
+                  ? allTestsPassed
+                    ? tr("Розв’язок прийнято", "Solution accepted")
+                    : tr("Результат перевірки", "Check result")
+                  : tr("Перевірка на всіх тестах", "Check all tests")}
+              </h3>
+              <p>
+                {props.checkResult
                   ? tr(
-                      "Натисни «Надіслати», щоб перевірити всі тести контесту.",
-                      "Press Submit to check all contest tests.",
+                      "Деталі окремих тестів для цієї задачі не публікуються.",
+                      "Individual test details are not published for this problem.",
                     )
-                  : tr(
-                      "Натисни «Перевірити», щоб отримати результат на всіх тестах.",
-                      "Press Check to see the result on all tests.",
-                    )}
-            </p>
+                  : props.submitMode
+                    ? tr(
+                        "Надішли розв’язок, щоб отримати оцінку.",
+                        "Submit your solution to receive a score.",
+                      )
+                    : tr(
+                        "Натисни «Перевірити», щоб побачити результат.",
+                        "Press Check to see the result.",
+                      )}
+              </p>
+            </div>
           </div>
         )}
         {firstFailedPublicTest ? (
@@ -1742,7 +1746,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             <div className="grid gap-3 md:grid-cols-3">
               <div>
                 <div className="mb-1 text-[11px] uppercase tracking-[.12em] text-[var(--ide-accent)]">
-                  Expected output
+                  {tr("Очікуваний вивід", "Expected output")}
                 </div>
                 <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-3 font-mono text-xs text-[var(--ide-accent)]">
                   {showWhitespace
@@ -1763,7 +1767,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               </div>
               <div>
                 <div className="mb-1 text-[11px] uppercase tracking-[.12em] text-[var(--ide-error)]">
-                  Actual output
+                  {tr("Твій вивід", "Actual output")}
                 </div>
                 <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-3 font-mono text-xs text-[var(--ide-error)]">
                   {showWhitespace
@@ -1775,7 +1779,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               </div>
               <div>
                 <div className="mb-1 text-[11px] uppercase tracking-[.12em] text-[var(--ide-muted)]">
-                  Input
+                  {tr("Ввід", "Input")}
                 </div>
                 <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-3 font-mono text-xs text-[var(--ide-text)]">
                   {firstFailedPublicTest.input || "—"}
@@ -1814,7 +1818,6 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           >
             <ChevronRight className="rotate-180" />
           </button>
-          <span className="ide-brand">StudyCod</span>
           <span className="ide-header-title">
             {tr("Теорія перед практикою", "Theory before practice")}
           </span>
@@ -2084,118 +2087,98 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         ) : null}
       </>
     );
+  const inputTools = !props.isWebTask ? (
+    <div className="ide-input-tools">
+      {props.publicExamples?.length || props.firstExampleInput ? (
+        <select
+          className="ide-example-select"
+          aria-label={tr("Автовставка прикладу", "Autofill an example")}
+          title={tr(
+            "Вибери приклад для автоматичного заповнення вводу",
+            "Choose an example to fill the input automatically",
+          )}
+          value={selectedExample ? String(selectedExample.testId) : ""}
+          onChange={(event) => {
+            const example = props.publicExamples?.find(
+              (item) => String(item.testId) === event.target.value,
+            );
+            if (example) props.onStdinChange(example.input);
+            else if (event.target.value === "first")
+              props.onStdinChange(props.firstExampleInput ?? "");
+          }}
+        >
+          <option value="" disabled>
+            {tr("Вставити приклад", "Insert example")}
+          </option>
+          {props.publicExamples?.length ? (
+            props.publicExamples.map((example, index) => (
+              <option key={example.testId} value={String(example.testId)}>
+                {tr(`Приклад ${index + 1}`, `Example ${index + 1}`)}
+              </option>
+            ))
+          ) : (
+            <option value="first">{tr("Приклад 1", "Example 1")}</option>
+          )}
+        </select>
+      ) : null}
+      {!simpleMode && stdinHistory.length ? (
+        <select
+          value=""
+          aria-label={tr("Останні вводи", "Recent inputs")}
+          className="ide-example-select"
+          onChange={(event) => props.onStdinChange(event.target.value)}
+        >
+          <option value="">{tr("Історія вводу", "Input history")}</option>
+          {stdinHistory.map((value, index) => (
+            <option key={index} value={value}>
+              {value.replace(/\s+/g, " ").slice(0, 40)}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      <button
+        type="button"
+        className="ide-icon-btn"
+        onClick={() => props.onStdinChange("")}
+        disabled={!props.stdin}
+        aria-label={tr("Очистити ввід", "Clear input")}
+        title={tr("Очистити ввід", "Clear input")}
+      >
+        <Eraser />
+      </button>
+    </div>
+  ) : null;
   const renderInput = () =>
     props.isWebTask ? (
-      <div className="ide-empty-context p-5">
-        <h3>
-          {tr(
-            "Результат оновлюється поруч із кодом",
-            "Your preview updates beside the code",
-          )}
-        </h3>
-        <p>
-          {tr(
-            "Для вебзадач введення даних не потрібне.",
-            "Web tasks do not need standard input.",
-          )}
-        </p>
+      <div className="ide-runner-empty">
+        <span className="ide-runner-empty-icon">
+          <Code2 />
+        </span>
+        <div>
+          <h3>{tr("Перегляд поруч із кодом", "Preview beside your code")}</h3>
+          <p>
+            {tr(
+              "Для вебзадач введення даних не потрібне.",
+              "Web tasks do not need standard input.",
+            )}
+          </p>
+        </div>
       </div>
     ) : (
       <div className="ide-input">
-        <div
-          className="ide-example-picker"
-          aria-label={tr("Приклади для запуску", "Examples to run")}
-        >
-          {!props.publicExamples?.length && props.firstExampleInput ? (
-            <button
-              type="button"
-              onClick={() => props.onStdinChange(props.firstExampleInput!)}
-            >
-              {tr("Приклад", "Example")}
-            </button>
-          ) : null}
-          {props.publicExamples?.map((example, index) => (
-            <button
-              key={example.testId}
-              type="button"
-              onClick={() => props.onStdinChange(example.input)}
-              aria-pressed={selectedExample?.testId === example.testId}
-            >
-              {tr(`Приклад ${index + 1}`, `Example ${index + 1}`)}
-            </button>
-          ))}
-          <button
-            type="button"
-            aria-pressed={!selectedExample}
-            onClick={() => props.onStdinChange("")}
-          >
-            {tr("Власний ввід", "Custom input")}
-          </button>
-          <button
-            type="button"
-            className="ml-auto"
-            onClick={() => props.onStdinChange("")}
-            disabled={!props.stdin}
-          >
-            {tr("Очистити", "Clear")}
-          </button>
-          {!simpleMode && stdinHistory.length ? (
-            <select
-              value=""
-              aria-label={tr("Останні вводи", "Recent inputs")}
-              className="ide-language-select"
-              onChange={(event) => props.onStdinChange(event.target.value)}
-            >
-              <option value="">{tr("Історія вводу", "Input history")}</option>
-              {stdinHistory.map((value, index) => (
-                <option key={index} value={value}>
-                  {value.replace(/\s+/g, " ").slice(0, 40)}
-                </option>
-              ))}
-            </select>
-          ) : null}
-        </div>
-        <div className="ide-input-grid" data-custom={!selectedExample}>
-          <div>
-            <label htmlFor="ide-run-input">
-              <span>{tr("Вхідні дані", "Input")}</span>
-              <span className="font-mono text-[var(--ide-muted)]">stdin</span>
-            </label>
-            <textarea
-              id="ide-run-input"
-              name="runInput"
-              value={props.stdin}
-              onChange={(event) => props.onStdinChange(event.target.value)}
-              disabled={isEmptyTask}
-              spellCheck={false}
-              placeholder={tr(
-                "Встав дані, які має прочитати програма…",
-                "Enter the data your program should read…",
-              )}
-            />
-          </div>
-          {selectedExample ? (
-            <div>
-              <label>{tr("Очікуваний результат", "Expected output")}</label>
-              <pre>{selectedExample.expectedOutput}</pre>
-            </div>
-          ) : null}
-        </div>
-        <p className="ide-input-note">
-          {tr(
-            "«Запустити» перевіряє код із цим вводом.",
-            "Run executes your code with this input.",
-          )}{" "}
-          {props.submitMode
-            ? tr(
-                "«Надіслати» оцінює розв’язок на всіх тестах контесту.",
-                "Submit evaluates your solution on all contest tests.",
-              )
-            : tr(
-                "«Перевірити» запускає всі тести задачі.",
-                "Check runs every test for this problem.",
-              )}
-        </p>
+        <textarea
+          id="ide-run-input"
+          name="runInput"
+          value={props.stdin}
+          onChange={(event) => props.onStdinChange(event.target.value)}
+          disabled={isEmptyTask}
+          spellCheck={false}
+          aria-label={tr("Вхідні дані", "Input")}
+          placeholder={tr(
+            "Введи дані або вибери приклад справа…",
+            "Enter input or choose an example on the right…",
+          )}
+        />
       </div>
     );
 
@@ -2224,12 +2207,6 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             <ChevronRight className="rotate-180" />
           </button>
         ) : null}
-        <div className="ide-brand">
-          <span className="ide-brand-mark">
-            <Code2 className="size-5" weight="bold" />
-          </span>
-          <span>StudyCod</span>
-        </div>
         <div
           className="ide-header-title"
           title={props.task.section || props.task.title}
@@ -2943,58 +2920,64 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                     id="mobile-ide-panel-result"
                     aria-label={tr("Запуск та перевірка", "Run and check")}
                   >
-                    <div
-                      className="ide-panel-bar"
-                      role="tablist"
-                      onKeyDown={handlePanelTabKeyDown}
-                      aria-label={tr("Ввід та результати", "Input and results")}
-                    >
-                      <BottomTabButton
-                        active={bottomTab === "input"}
-                        onClick={() => setBottomTab("input")}
-                        icon={<Braces />}
-                        label={tr("Ввід", "Input")}
-                      />
-                      <BottomTabButton
-                        active={bottomTab === "terminal"}
-                        onClick={() => setBottomTab("terminal")}
-                        icon={<SquareTerminal />}
-                        label={tr("Результат", "Output")}
-                      />
-                      <BottomTabButton
-                        active={bottomTab === "tests"}
-                        onClick={() => setBottomTab("tests")}
-                        icon={<TestTube2 />}
-                        label={tr("Перевірка", "Tests")}
-                      />
-                      {!simpleMode ? (
-                        <>
-                          <BottomTabButton
-                            active={bottomTab === "history"}
-                            onClick={() => setBottomTab("history")}
-                            icon={<History />}
-                            label={tr("Історія", "History")}
-                          />
-                          {props.onTrace ? (
+                    <div className="ide-panel-bar ide-runner-bar">
+                      <div
+                        className="ide-runner-tabs"
+                        role="tablist"
+                        onKeyDown={handlePanelTabKeyDown}
+                        aria-label={tr(
+                          "Ввід та результати",
+                          "Input and results",
+                        )}
+                      >
+                        <BottomTabButton
+                          active={bottomTab === "input"}
+                          onClick={() => setBottomTab("input")}
+                          icon={<Braces />}
+                          label={tr("Ввід", "Input")}
+                        />
+                        <BottomTabButton
+                          active={bottomTab === "terminal"}
+                          onClick={() => setBottomTab("terminal")}
+                          icon={<SquareTerminal />}
+                          label={tr("Вивід", "Output")}
+                        />
+                        <BottomTabButton
+                          active={bottomTab === "tests"}
+                          onClick={() => setBottomTab("tests")}
+                          icon={<TestTube2 />}
+                          label={tr("Тести", "Tests")}
+                        />
+                        {!simpleMode ? (
+                          <>
                             <BottomTabButton
-                              active={bottomTab === "debugger"}
-                              onClick={() => {
-                                setMode("debug");
-                                setBottomTab("debugger");
-                                props.onTrace?.();
-                              }}
-                              icon={<Gauge />}
-                              label={tr("Налагодження", "Debugger")}
+                              active={bottomTab === "history"}
+                              onClick={() => setBottomTab("history")}
+                              icon={<History />}
+                              label={tr("Історія", "History")}
                             />
-                          ) : null}
-                          <BottomTabButton
-                            active={bottomTab === "console"}
-                            onClick={() => setBottomTab("console")}
-                            icon={<Code2 />}
-                            label={tr("Консоль", "Console")}
-                          />
-                        </>
-                      ) : null}
+                            {props.onTrace ? (
+                              <BottomTabButton
+                                active={bottomTab === "debugger"}
+                                onClick={() => {
+                                  setMode("debug");
+                                  setBottomTab("debugger");
+                                  props.onTrace?.();
+                                }}
+                                icon={<Gauge />}
+                                label={tr("Налагодження", "Debugger")}
+                              />
+                            ) : null}
+                            <BottomTabButton
+                              active={bottomTab === "console"}
+                              onClick={() => setBottomTab("console")}
+                              icon={<Code2 />}
+                              label={tr("Консоль", "Console")}
+                            />
+                          </>
+                        ) : null}
+                      </div>
+                      {bottomTab === "input" ? inputTools : null}
                       <button
                         type="button"
                         className="ide-icon-btn ide-desktop-control"
