@@ -2,7 +2,6 @@ import React, { useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { getCachedMeUser, getMe } from "../../lib/api/profile";
-import { api } from "../../lib/api/client";
 import type { User } from "../../types";
 import { getCurrentTheme, applyTheme, type AppTheme } from "../../theme";
 import { PageLoader } from "../ui/PageLoadingTransition";
@@ -10,6 +9,7 @@ import { PersonalLearningProvider } from "../learning/PersonalLearningProvider";
 import { PremiumWorkspaceShell } from "./PremiumWorkspaceShell";
 import { PersonalWorkspaceContext } from "./PersonalWorkspaceContext";
 import { getDevPreviewUser, isDevPreviewActive, withDevPreview } from "../../lib/devPreview";
+import { logoutAndReload } from "../../lib/authSession";
 
 export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "learning" | "lab"; courseTab?: "overview" | "path" | "practice" | "progress" }> = ({ children, area = "learning", courseTab = "overview" }) => {
   const sharedWorkspace = useContext(PersonalWorkspaceContext);
@@ -58,5 +58,12 @@ export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "l
     else if (page === "admin") navigateWithPreview("/?app=admin");
     else if (page === "profile") navigateWithPreview("/?app=profile");
   };
-  return <PersonalLearningProvider><PremiumWorkspaceShell user={user} page={area === "lab" ? "tasks" : "home"} area={area} courseTab={courseTab} theme={theme} onNavigate={go} onLibrary={() => navigateWithPreview("/lab/library")} onCourses={() => navigateWithPreview("/learning/catalog")} onPlayground={() => navigateWithPreview("/lab/playground")} onToggleTheme={() => setTheme((prev) => { const next = prev === "dark" ? "light" : "dark"; applyTheme(next); return next; })} onToggleLanguage={() => void i18n.changeLanguage(i18n.language.startsWith("en") ? "uk" : "en")} onSupport={() => navigateWithPreview("/support")} onSupportDesk={() => navigateWithPreview("/support/desk")} onLogout={() => { if (import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true") { navigate("/", { replace: true }); return; } void api.post("/auth/logout").finally(() => navigate("/")); }}>{children}</PremiumWorkspaceShell></PersonalLearningProvider>;
+  const logout = () => {
+    if (import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true") {
+      navigate("/", { replace: true });
+      return;
+    }
+    void logoutAndReload("/");
+  };
+  return <PersonalLearningProvider><PremiumWorkspaceShell user={user} page={area === "lab" ? "tasks" : "home"} area={area} courseTab={courseTab} theme={theme} onNavigate={go} onLibrary={() => navigateWithPreview("/lab/library")} onCourses={() => navigateWithPreview("/learning/catalog")} onPlayground={() => navigateWithPreview("/lab/playground")} onToggleTheme={() => setTheme((prev) => { const next = prev === "dark" ? "light" : "dark"; applyTheme(next); return next; })} onToggleLanguage={() => void i18n.changeLanguage(i18n.language.startsWith("en") ? "uk" : "en")} onSupport={() => navigateWithPreview("/support")} onSupportDesk={() => navigateWithPreview("/support/desk")} onLogout={logout}>{children}</PremiumWorkspaceShell></PersonalLearningProvider>;
 };

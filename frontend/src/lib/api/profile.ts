@@ -4,6 +4,7 @@ import type { User, CourseLanguage, PublicProfile, PublicProfilePrivacy, IadDeta
 const GET_ME_CACHE_TTL_MS = 60000;
 const GET_ME_STALE_FALLBACK_MS = 5 * 60 * 1000;
 const GET_ME_SNAPSHOT_STORAGE_KEY = "studycod.userSnapshot";
+const SESSION_CHANGED_ERROR = "SESSION_CHANGED_DURING_PROFILE_REQUEST";
 
 type CachedUser = {
   session: "cookie";
@@ -20,6 +21,7 @@ type GetMeOptions = {
 let cachedGetMeUser: CachedUser | null = null;
 let inFlightGetMeRequest: Promise<User> | null = null;
 let inFlightGetMeToken: string | null = null;
+let profileCacheGeneration = 0;
 
 const currentSession = (): "cookie" => "cookie";
 
@@ -117,6 +119,7 @@ const getStaleFallbackUser = (session: "cookie"): User | null => {
 };
 
 export function clearGetMeCache(options?: { clearSnapshot?: boolean }): void {
+  profileCacheGeneration += 1;
   cachedGetMeUser = null;
   inFlightGetMeRequest = null;
   inFlightGetMeToken = null;
@@ -125,7 +128,16 @@ export function clearGetMeCache(options?: { clearSnapshot?: boolean }): void {
   }
 }
 
+export function isGetMeSessionChanged(error: unknown): boolean {
+  return error instanceof Error && error.message === SESSION_CHANGED_ERROR;
+}
+
 export function primeGetMeCache(user: User): void {
+  // A successful login supersedes any profile probe that started before the
+  // new cookie was issued. Its eventual response must not overwrite this user.
+  profileCacheGeneration += 1;
+  inFlightGetMeRequest = null;
+  inFlightGetMeToken = null;
   rememberUser(user);
 }
 
@@ -159,9 +171,16 @@ export async function getMe(options?: GetMeOptions): Promise<User> {
     return inFlightGetMeRequest;
   }
 
+  const requestGeneration = profileCacheGeneration;
   const request = api.get("/profile/me", options?.suppressAuthRedirect ? { headers: { "X-Skip-Auth-Redirect": "1" } } : undefined)
-    .then((res) => rememberUser(res.data as User))
+    .then((res) => {
+      if (requestGeneration !== profileCacheGeneration) {
+        throw new Error(SESSION_CHANGED_ERROR);
+      }
+      return rememberUser(res.data as User);
+    })
     .catch((error: unknown) => {
+      if (requestGeneration !== profileCacheGeneration) throw new Error(SESSION_CHANGED_ERROR);
       const status = getErrorStatus(error);
 
       if (status === 401 || status === 403) {
@@ -200,8 +219,11 @@ export async function updateProfile(data: {
   };
   publicProfilePrivacy?: PublicProfilePrivacy;
 }): Promise<User> {
+  const requestGeneration = profileCacheGeneration;
   const res = await api.put("/profile/me", data);
-  return rememberUser(res.data as User);
+  const user = res.data as User;
+  if (requestGeneration === profileCacheGeneration) rememberUser(user);
+  return user;
 }
 
 export async function completePlacement(data: {
@@ -211,8 +233,11 @@ export async function completePlacement(data: {
   lang?: CourseLanguage;
   masteredUntilTopicIndex?: number | null;
 }): Promise<User> {
+  const requestGeneration = profileCacheGeneration;
   const res = await api.put("/profile/placement", data);
-  return rememberUser(res.data as User);
+  const user = res.data as User;
+  if (requestGeneration === profileCacheGeneration) rememberUser(user);
+  return user;
 }
 
 export type PlacementCodingChallenge = {

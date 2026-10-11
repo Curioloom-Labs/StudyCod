@@ -2,7 +2,7 @@ import React, { useEffect, useState, Suspense, useCallback, useMemo, useRef, use
 import { Routes, Route, useLocation, useNavigate, useSearchParams, useParams, Navigate, type Location } from "react-router-dom";
 import { enforceSubdomain, getHostContext } from "./lib/subdomain";
 import { AnimatePresence } from "framer-motion";
-import { clearGetMeCache, getCachedMeUser, getMe } from "./lib/api/profile";
+import { getCachedMeUser, getMe, isGetMeSessionChanged } from "./lib/api/profile";
 import type { User } from "./types";
 import { useTranslation } from "react-i18next";
 import { AnimatedPage, PageMotionScope } from "./components/layout/AnimatedPage";
@@ -24,7 +24,6 @@ import { getStoredLanguagePreference, isUkraineCountry, setDetectedCountry } fro
 import type { GeoBlockedPayload } from "./pages/system/GeoBlockedPage";
 import { exchangeGoogleCode, exchangeGoogleCookie } from "./lib/api/auth";
 import { getControlWorkStatus } from "./lib/api/edu";
-import { api } from "./lib/api/client";
 import { TheoryModalProvider } from "./components/theory/TheoryModalProvider";
 import { ToastViewport } from "./components/ui/ToastViewport";
 import { getErrorMessageFromUnknown } from "./lib/safeError";
@@ -32,6 +31,7 @@ import { clearControlExamSession, getControlExamSession, isPathAllowedInControlE
 import { setActiveEduStudentId } from "./lib/eduContext";
 import { applySeo } from "./lib/seo";
 import { getDevPreviewUser, isDevPreviewActive, withDevPreview } from "./lib/devPreview";
+import { logoutAndReload } from "./lib/authSession";
 import { MascotCompanion } from "./components/MascotCompanion";
 import { Button } from "./components/ui/Button";
 import { GlobalQuickSearch } from "./components/ui/GlobalQuickSearch";
@@ -288,6 +288,7 @@ const getCurrentUserWithRetry = async (maxAttempts = 3, force = false): Promise<
       const status = getHttpStatusFromError(error);
       const shouldRetry = status === null || status === 429 || status >= 500;
       const isLastAttempt = attempt >= maxAttempts - 1;
+      if (isGetMeSessionChanged(error)) throw error;
       if (!shouldRetry || isLastAttempt) {
         throw error;
       }
@@ -746,21 +747,13 @@ const AppContent: React.FC = React.memo(() => {
       navigate("/", { replace: true });
       return;
     }
-    // Best-effort server logout clears the httpOnly cookie and revokes the
-    // current JWT. Local state is cleared immediately so a slow API cannot
-    // keep the UI in an authenticated state.
-    void api.post("/auth/logout", undefined, {
-      headers: { "X-Skip-Auth-Redirect": "1" }
-    }).catch(() => undefined);
-    clearControlExamSession();
+    void logoutAndReload("/");
     startTransition(() => {
       setUser(null);
       setPage("home");
     });
-    // Leave any product route (/edu, /contest) — otherwise logout just flips
-    // `page` state that those routes don't render, leaving the user stuck on a
-    // now-unauthed EDU/contest page. Landing on "/" shows the shared login.
-    navigate("/");
+    // Reload after the server confirms logout so route-local user state cannot
+    // restore the previous account during the transition.
   }, [location.search, navigate]);
   const handleSetPage = useCallback((newPage: Page) => {
       if (user?.userMode !== "EDUCATIONAL") {
@@ -948,6 +941,7 @@ const PersonalWorkspaceFrame: React.FC<React.PropsWithChildren<{ routeLocation: 
   const navigate = useNavigate();
   const { i18n } = useTranslation();
   const [user, setUser] = useState<User | null>(() => getCachedMeUser() ?? (isDevPreviewActive(routeLocation.search) ? getDevPreviewUser(routeLocation.search) : null));
+  const [loggingOut, setLoggingOut] = useState(false);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const path = routeLocation.pathname;
   const isPersonalPath = isPersonalWorkspacePath(path);
@@ -979,12 +973,16 @@ const PersonalWorkspaceFrame: React.FC<React.PropsWithChildren<{ routeLocation: 
     return next;
   });
   const logout = () => {
-    setUser(null);
-    clearGetMeCache({ clearSnapshot: true });
-    clearControlExamSession();
-    void api.post("/auth/logout", undefined, { headers: { "X-Skip-Auth-Redirect": "1" } }).catch(() => undefined);
-    navigate("/");
+    if (loggingOut) return;
+    if (isDevPreviewActive(routeLocation.search)) {
+      window.location.replace("/");
+      return;
+    }
+    setLoggingOut(true);
+    void logoutAndReload("/");
   };
+
+  if (loggingOut) return <PageLoader />;
 
   return <PersonalWorkspaceContext.Provider value={context}>
     <PersonalLearningProvider>
@@ -1475,6 +1473,7 @@ const ContestRoutes: React.FC = React.memo(() => {
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [user, setUser] = useState<User | null>(() => getCachedMeUser() ?? (isDevPreviewActive(location.search) ? getDevPreviewUser(location.search, "contest") : null));
   const [ready, setReady] = useState(() => Boolean(getCachedMeUser()) || isDevPreviewActive(location.search));
+  const [loggingOut, setLoggingOut] = useState(false);
   const isDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
 
   useEffect(() => {
@@ -1504,7 +1503,7 @@ const ContestRoutes: React.FC = React.memo(() => {
     });
   }, []);
 
-  if (!ready) return <PageLoader />;
+  if (!ready || loggingOut) return <PageLoader />;
 
   if (!user) {
     return <Suspense fallback={<PageLoader />}>
@@ -1522,10 +1521,9 @@ const ContestRoutes: React.FC = React.memo(() => {
 
   const goTo = (target: string) => navigate(withDevPreview(target, location.search));
   const logout = () => {
-    void api.post("/auth/logout", undefined, { headers: { "X-Skip-Auth-Redirect": "1" } }).catch(() => undefined);
-    clearControlExamSession();
-    navigate("/contest", { replace: true });
-    window.location.reload();
+    if (loggingOut) return;
+    setLoggingOut(true);
+    void logoutAndReload("/contest");
   };
   const content = <main id="main-content" tabIndex={-1} className="relative min-w-0 overflow-x-clip outline-none">
         <Suspense fallback={<ContestRouteFallback />}>
@@ -1606,6 +1604,7 @@ const EduRoutes: React.FC = React.memo(() => {
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const authGenerationRef = useRef(0);
   const [controlExamSession, setControlExamSession] = useState(() => getControlExamSession());
   useEffect(() => {
     const unsubscribe = subscribeControlExamSession(() => {
@@ -1695,10 +1694,11 @@ const EduRoutes: React.FC = React.memo(() => {
       return;
     }
     let cancelled = false;
+    const requestGeneration = authGenerationRef.current;
     const run = async () => {
       try {
         let u = await getCurrentUserWithRetry(6, true);
-        if (cancelled) return;
+        if (cancelled || requestGeneration !== authGenerationRef.current) return;
 
         const hasStaffContext = u.eduContexts?.organizations?.some((org) => ["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(org.role)) ?? false;
         if (u.userMode !== "EDUCATIONAL" && u.role !== "SYSTEM_ADMIN" && !hasStaffContext) {
@@ -1714,10 +1714,11 @@ const EduRoutes: React.FC = React.memo(() => {
         if (!u.studentId && !hasStaffContext && firstStudent) {
           setActiveEduStudentId(firstStudent.studentId);
           u = await getMe({ force: true, suppressAuthRedirect: true });
+          if (cancelled || requestGeneration !== authGenerationRef.current) return;
         }
         setUser(u);
       } catch (error: unknown) {
-        if (cancelled) return;
+        if (cancelled || requestGeneration !== authGenerationRef.current) return;
 
         const status = getHttpStatusFromError(error);
         if (import.meta.env.DEV) {
@@ -1725,7 +1726,7 @@ const EduRoutes: React.FC = React.memo(() => {
         }
         if (isAuthErrorStatus(status)) setUser(null);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && requestGeneration === authGenerationRef.current) setLoading(false);
       }
     };
 
@@ -1736,8 +1737,17 @@ const EduRoutes: React.FC = React.memo(() => {
     };
   }, [navigate, isEduDevPreview, eduPreviewStudent]);
   const handleAuth = useCallback((u: User) => {
+    authGenerationRef.current += 1;
+    const hasStaffContext = u.eduContexts?.organizations?.some((org) => ["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(org.role)) ?? false;
+    if (u.userMode !== "EDUCATIONAL" && u.role !== "SYSTEM_ADMIN" && !hasStaffContext) {
+      setUser(null);
+      setLoading(false);
+      navigate("/", { replace: true });
+      return;
+    }
     setUser(u);
-  }, []);
+    setLoading(false);
+  }, [navigate]);
   const handleEduContextChange = useCallback(async (studentId: number | null) => {
     setActiveEduStudentId(studentId);
     try {
@@ -1761,26 +1771,11 @@ const EduRoutes: React.FC = React.memo(() => {
   }, []);
   const handleLogout = useCallback(async () => {
     if (loggingOut) return;
+    authGenerationRef.current += 1;
     setLoggingOut(true);
     setUser(null);
-    setActiveEduStudentId(null);
-    clearControlExamSession();
-    // Clear both memory and the persisted snapshot before leaving EDU so the
-    // root route cannot immediately restore the old educational session.
-    clearGetMeCache({ clearSnapshot: true });
-    try {
-      await api.post("/auth/logout", undefined, {
-        headers: { "X-Skip-Auth-Redirect": "1" },
-      });
-    } catch {
-      // Local cleanup still guarantees that the user can leave EDU offline.
-    } finally {
-      // An in-flight profile request may have completed while logout was in
-      // progress. Clear again so it cannot repopulate the session cache.
-      clearGetMeCache({ clearSnapshot: true });
-      navigate("/", { replace: true });
-    }
-  }, [loggingOut, navigate]);
+    void logoutAndReload("/");
+  }, [loggingOut]);
   const isControlExamActive = !!controlExamSession;
   if (loggingOut) {
     return <PageLoader />;
@@ -1790,7 +1785,7 @@ const EduRoutes: React.FC = React.memo(() => {
   }
   if (!user) {
     return <Suspense fallback={<PageLoader />}>
-      <AuthPage onAuth={handleAuth} />
+      <AuthPage initialUserMode="EDUCATIONAL" onAuth={handleAuth} />
     </Suspense>;
   }
 

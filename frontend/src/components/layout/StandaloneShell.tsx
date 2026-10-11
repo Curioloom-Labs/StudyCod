@@ -20,9 +20,7 @@ import {
 } from "lucide-react";
 import type { User } from "../../types";
 import { getMe } from "../../lib/api/profile";
-import { api } from "../../lib/api/client";
-import { clearGetMeCache } from "../../lib/api/profile";
-import { clearControlExamSession } from "../../lib/controlExamSession";
+import { logoutAndReload } from "../../lib/authSession";
 import { applyTheme, getCurrentTheme, type AppTheme } from "../../theme";
 import { Logo } from "../Logo";
 import { PageLoader } from "../ui/PageLoadingTransition";
@@ -38,14 +36,8 @@ type Props = {
 let cachedSession: User | null = null;
 
 async function signOutEverywhere(): Promise<void> {
-  try {
-    await api.post("/auth/logout");
-  } catch {
-    // Local cleanup must still happen when the network is unavailable.
-  }
-  clearControlExamSession();
-  clearGetMeCache({ clearSnapshot: true });
   cachedSession = null;
+  await logoutAndReload("/");
 }
 
 export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
@@ -230,7 +222,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
                     <HelpCircle className="size-4" />
                     {ukrainian ? "Підтримка" : "Support"}
                   </button>
-                  <button type="button" onClick={() => { void signOutEverywhere().finally(() => navigateTo("/")); }} className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-accent-error transition hover:bg-bg-hover dark:text-accent-error dark:hover:bg-accent-error/10" role="menuitem">
+                  <button type="button" onClick={() => { void signOutEverywhere(); }} className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-accent-error transition hover:bg-bg-hover dark:text-accent-error dark:hover:bg-accent-error/10" role="menuitem">
                     <LogOut className="size-4" />
                     {ukrainian ? "Вийти" : "Sign out"}
                   </button>
@@ -262,7 +254,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
               ))}
             </nav>
             <div className="mt-auto border-t border-border/8 pt-4 dark:border-white/[.08]">
-              <button type="button" onClick={() => { void signOutEverywhere().finally(() => navigateTo("/")); }} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-base font-semibold text-accent-error dark:text-accent-error">
+              <button type="button" onClick={() => { void signOutEverywhere(); }} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-base font-semibold text-accent-error dark:text-accent-error">
                 <LogOut className="size-5" />
                 {ukrainian ? "Вийти" : "Sign out"}
               </button>
