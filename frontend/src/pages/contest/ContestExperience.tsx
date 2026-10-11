@@ -45,6 +45,7 @@ import { ContestSetupDialog } from "./ContestSetupDialog";
 import { CONTEST_BANNER_THEMES, contestTheme } from "./contestBranding";
 import { withDevPreview } from "../../lib/devPreview";
 import { previewStandings } from "./contestPreviewData";
+import { tr } from "../../i18n";
 
 const isPreview = () =>
   import.meta.env.DEV &&
@@ -702,6 +703,45 @@ export const ContestDetailPage: React.FC = () => {
   React.useEffect(() => {
     if (!hasLegacySection) void load();
   }, [hasLegacySection, load]);
+  React.useEffect(() => {
+    if (!data || data.access.canManage || !data.contest.startsAt) return;
+
+    const startsAtMs = Date.parse(data.contest.startsAt);
+    if (!Number.isFinite(startsAtMs)) return;
+    const hiddenProblemsRemain = () =>
+      data.problems.some((problem) => problem.title === "(hidden until start)");
+    if (!hiddenProblemsRemain()) return;
+
+    let retryTimer: number | undefined;
+    let refreshInFlight = false;
+    let cancelled = false;
+    const refreshProblems = async () => {
+      if (cancelled || refreshInFlight) return;
+      refreshInFlight = true;
+      try {
+        const latest = await getContestDetails(contestId);
+        if (!cancelled) setData(latest);
+      } catch {
+        // Keep the hidden state and retry while the contest is live.
+      } finally {
+        refreshInFlight = false;
+      }
+    };
+    const startDelay = Math.max(0, startsAtMs - (Date.now() + clockOffset));
+    const startTimer = window.setTimeout(() => {
+      void refreshProblems();
+      retryTimer = window.setInterval(() => {
+        if (!hiddenProblemsRemain()) return;
+        void refreshProblems();
+      }, 5000);
+    }, startDelay);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(startTimer);
+      if (retryTimer != null) window.clearInterval(retryTimer);
+    };
+  }, [clockOffset, contestId, data]);
   const join = async () => {
     setJoining(true);
     setError(null);
@@ -741,6 +781,7 @@ export const ContestDetailPage: React.FC = () => {
   const access = data.access.canAccessContent;
   const startMs = data.contest.startsAt ? Date.parse(data.contest.startsAt) : null;
   const startsIn = startMs == null ? null : startMs - (clockNow + clockOffset);
+  const canOpenProblems = access && (canManage || startsIn == null || startsIn <= 0);
   const endMs = data.contest.endsAt ? Date.parse(data.contest.endsAt) : null;
   const endsIn = endMs == null ? null : endMs - (clockNow + clockOffset);
   const progressByProblem = new Map(myProgress.map((item) => [item.problemId, item]));
@@ -895,27 +936,26 @@ export const ContestDetailPage: React.FC = () => {
               const solved = Boolean(progress && scorePercent >= 100);
               return <button type="button"
                 key={problem.id}
-                disabled={!access}
+                disabled={!canOpenProblems}
                 onClick={() =>
                   navigate(
                     `/contest/contests/${contestId}/problems/${problem.id}`,
                   )
                 }
-                className="group flex w-full items-center gap-3 rounded-2xl border border-[#17271c]/[.08] bg-[#f8faf8] px-3 py-3.5 text-left transition duration-200 hover:-translate-y-px hover:border-primary-strong/25 hover:bg-[#f1f7f2] hover:shadow-[0_12px_26px_-22px_rgba(15,64,34,.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-55 dark:border-white/[.08] dark:bg-white/[.025] dark:hover:border-primary/25 dark:hover:bg-white/[.05]"
+                className="group flex w-full items-center gap-3 rounded-2xl border border-[#17271c]/[.08] bg-[#f8faf8] px-3 py-3.5 text-left transition duration-200 hover:-translate-y-px hover:border-primary-strong/25 hover:bg-[#f1f7f2] hover:shadow-[0_12px_26px_-22px_rgba(15,64,34,.55)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 disabled:hover:border-[#17271c]/[.08] disabled:hover:bg-[#f8faf8] disabled:hover:shadow-none dark:border-white/[.08] dark:bg-white/[.025] dark:hover:border-primary/25 dark:hover:bg-white/[.05] dark:disabled:hover:border-white/[.08] dark:disabled:hover:bg-white/[.025]"
               >
                 <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-primary-strong/10 bg-[#e8f5ec] font-[family-name:var(--font-display)] text-base font-black text-primary-strong shadow-sm dark:border-primary/15 dark:bg-primary/10 dark:text-primary-soft">
                   {problem.label}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block break-words font-bold leading-5 text-[#1a271e] dark:text-text-primary">
-                    {problem.title}
+                    {problem.title === "(hidden until start)" ? tr("(приховано до початку)", "(hidden until start)") : problem.title}
                   </span>
                   <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-[#637368] dark:text-[#aab8ae]">
                     {progress ? <><span className="tabular-nums">Найкращий результат: <strong className="font-bold text-[#263b2d] dark:text-[#e4eee7]">{score}{progress.maxScore != null ? ` / ${progress.maxScore}` : ""}</strong></span>{maxScore > 0 && <span aria-hidden="true" className="h-1.5 w-16 overflow-hidden rounded-full bg-[#dfe8e1] dark:bg-white/10"><span className="block h-full rounded-full bg-primary" style={{ width: `${scorePercent}%` }} /></span>}</> : <span>До {problem.points ?? 100} балів</span>}
                   </span>
                 </span>
-                {hasCompletedContest && data.contest.allowUpsolve ? <span className="shrink-0 rounded-lg border border-[#ffb454]/20 bg-[#fff4df] px-2.5 py-1.5 text-xs font-bold text-[#895000] dark:bg-[#ffb454]/10 dark:text-[#ffca7e]">Дорішати</span> : solved ? <span className="hidden shrink-0 items-center gap-1.5 rounded-lg bg-[#e7f7ed] px-2.5 py-1.5 text-xs font-bold text-primary-strong sm:inline-flex dark:bg-primary/10 dark:text-primary-soft"><Check className="size-3.5" aria-hidden="true" />Готово</span> : <span className="hidden shrink-0 rounded-lg bg-[#edf1ed] px-2.5 py-1.5 text-xs font-bold text-text-muted sm:inline-flex dark:bg-white/[.06] dark:text-[#aab8ae]">Відкрити</span>}
-                <ChevronRight className="size-5 shrink-0 text-[#9aa79e] transition-transform group-hover:translate-x-0.5 group-hover:text-primary-strong dark:group-hover:text-primary-soft" aria-hidden="true" />
+                {canOpenProblems ? <>{hasCompletedContest && data.contest.allowUpsolve ? <span className="shrink-0 rounded-lg border border-[#ffb454]/20 bg-[#fff4df] px-2.5 py-1.5 text-xs font-bold text-[#895000] dark:bg-[#ffb454]/10 dark:text-[#ffca7e]">Дорішати</span> : solved ? <span className="hidden shrink-0 items-center gap-1.5 rounded-lg bg-[#e7f7ed] px-2.5 py-1.5 text-xs font-bold text-primary-strong sm:inline-flex dark:bg-primary/10 dark:text-primary-soft"><Check className="size-3.5" aria-hidden="true" />Готово</span> : <span className="hidden shrink-0 rounded-lg bg-[#edf1ed] px-2.5 py-1.5 text-xs font-bold text-text-muted sm:inline-flex dark:bg-white/[.06] dark:text-[#aab8ae]">Відкрити</span>}<ChevronRight className="size-5 shrink-0 text-[#9aa79e] transition-transform group-hover:translate-x-0.5 group-hover:text-primary-strong dark:group-hover:text-primary-soft" aria-hidden="true" /></> : null}
               </button>;
             })}
             {data.problems.length === 0 && <p className="rounded-xl border border-dashed border-[#17271c]/15 px-4 py-6 text-center text-sm text-[#708075] dark:border-white/10 dark:text-[#a5b3a8]">Задачі ще не додано.</p>}
