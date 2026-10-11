@@ -243,7 +243,13 @@ export function localizeCourseItem<T extends { contentKey?: string | null; title
 
 export function localizedModuleTitle(contentKey: string | null | undefined, locale: CurriculumLocale, fallback: string): string {
   if (locale === "uk") return fallback;
-  if (String(contentKey || "").endsWith(".projects")) return "Projects and final work";
-  if (String(contentKey || "").endsWith(".main")) return "Course roadmap";
+  const key = String(contentKey || "");
+  if (key.endsWith(".projects")) return "Projects and final work";
+  if (key.endsWith(".main")) return "Course roadmap";
+  const topicMatch = key.match(/^([a-z0-9-]+)\.topic\.([a-z0-9-]+)$/i);
+  if (topicMatch) {
+    const topic = getLocalizedCurriculum(locale).topics.get(`${topicMatch[1]}.${topicMatch[2]}`);
+    if (topic) return topic.title;
+  }
   return fallback;
 }
