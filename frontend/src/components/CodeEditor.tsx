@@ -32,7 +32,7 @@ export const ensureStudyCodMonacoThemes = (monaco: MonacoApi) => {
       inherit: true,
       rules: [],
       colors: {
-        "editor.background": "#111612",
+        "editor.background": "#171b19",
         "editor.foreground": "#e8eee7",
         "editorLineNumber.foreground": "#758278",
         "editorLineNumber.activeForeground": "#e8eee7",
@@ -52,7 +52,7 @@ export const ensureStudyCodMonacoThemes = (monaco: MonacoApi) => {
       inherit: true,
       rules: [],
       colors: {
-        "editor.background": "#e9ece6",
+        "editor.background": "#ffffff",
         "editor.foreground": "#1b2720",
         "editorLineNumber.foreground": "#748178",
         "editorLineNumber.activeForeground": "#1b2720",
@@ -1014,6 +1014,7 @@ interface Props {
   height?: string | number;
   fontSize?: number;
   wordWrap?: boolean;
+  minimap?: boolean;
   /** Connect this model to the server-side semantic language server. */
   enableSemanticLsp?: boolean;
   /** Workspace-relative file name used by the language server. */
@@ -1035,12 +1036,12 @@ const toMonacoLanguage = (language: Props["language"]) => {
   if (normalized === "html" || normalized === "css" || normalized === "javascript") return normalized;
   return JUDGE_MONACO_LANG[normalized as JudgeLanguage] ?? "plaintext";
 };
-const createEditorOptions = (readOnly: boolean, fontSize = 14, wordWrap = false) => ({
+const createEditorOptions = (readOnly: boolean, fontSize = 14, wordWrap = false, minimap = true) => ({
   fontSize,
   fontFamily: "ui-monospace, SFMono-Regular, 'Cascadia Code', 'Fira Code', Consolas, Monaco, 'Courier New', monospace",
   fontLigatures: true,
   minimap: {
-    enabled: true,
+    enabled: minimap,
     renderCharacters: false,
     maxColumn: 120,
     showSlider: "mouseover" as const
@@ -1127,6 +1128,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   height,
   fontSize,
   wordWrap,
+  minimap,
   enableSemanticLsp = true,
   filePath,
   onEditorMount,
@@ -1138,7 +1140,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   const monacoLang = useMemo(() => toMonacoLanguage(language), [language]);
-  const editorOptions = useMemo(() => createEditorOptions(readOnly, fontSize, wordWrap), [readOnly, fontSize, wordWrap]);
+  const editorOptions = useMemo(() => createEditorOptions(readOnly, fontSize, wordWrap, minimap), [readOnly, fontSize, wordWrap, minimap]);
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [didMount, setDidMount] = useState(false);

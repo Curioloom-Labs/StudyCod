@@ -1,54 +1,57 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import {
-  BookOpen,
-  Bot,
-  Braces,
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Clock3,
-  Copy,
-  Download,
-  Code2,
-  FileCode2,
-  FileText,
-  FolderCode,
-  Gauge,
-  GitCompareArrows,
-  History,
-  Lightbulb,
-  LockKeyhole,
-  Loader2,
-  Maximize2,
-  Minimize2,
-  Rocket,
-  Play,
-  Plus,
-  RotateCcw,
-  Save,
-  Sparkles,
-  SquareTerminal,
-  TestTube2,
-} from "lucide-react";
+  RobotIcon as Bot,
+  BracketsCurlyIcon as Braces,
+  CheckIcon as Check,
+  CheckCircleIcon as CheckCircle2,
+  CaretDownIcon as ChevronDown,
+  CaretRightIcon as ChevronRight,
+  ClockIcon as Clock3,
+  CopyIcon as Copy,
+  DownloadSimpleIcon as Download,
+  CodeIcon as Code2,
+  FileCodeIcon as FileCode2,
+  FileTextIcon as FileText,
+  GaugeIcon as Gauge,
+  GitDiffIcon as GitCompareArrows,
+  ClockCounterClockwiseIcon as History,
+  LightbulbIcon as Lightbulb,
+  CircleNotchIcon as Loader2,
+  ArrowsOutIcon as Maximize2,
+  ArrowsInIcon as Minimize2,
+  PlayIcon as Play,
+  PlusIcon as Plus,
+  ArrowCounterClockwiseIcon as RotateCcw,
+  FloppyDiskIcon as Save,
+  TerminalWindowIcon as SquareTerminal,
+  TestTubeIcon as TestTube2,
+  GearSixIcon as Settings,
+  ArrowsLeftRightIcon as SwapPanels,
+} from "@phosphor-icons/react";
+import "./StudyCodWorkbench.css";
 import { CodeEditor } from "../CodeEditor";
 import { MultiFileEditor } from "../MultiFileEditor";
 import { DebugMentorChat } from "../DebugMentorChat";
 import { ErrorExplainButton } from "../ErrorExplainButton";
 import { MarkdownView } from "../MarkdownView";
 import { WebPreviewPane } from "../WebPreviewPane";
-import { SelectMenu } from "../ui/SelectMenu";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
-import { getIdeSaveStatusLabel, reconcileMobilePaneAfterResult } from "./editorFeedback";
+import {
+  getIdeSaveStatusLabel,
+  reconcileMobilePaneAfterResult,
+} from "./editorFeedback";
 import type {
   CodeFile,
   JudgeLanguage,
   LibraryTaskProjectSpec,
   WebTaskFile,
 } from "../../lib/api/library";
-import { IDE_THEORY_COMPLETION_KEY, scopedStorageKey } from "../../lib/storageScope";
+import {
+  IDE_THEORY_COMPLETION_KEY,
+  scopedStorageKey,
+} from "../../lib/storageScope";
 import {
   JUDGE_LANGUAGE_LABELS,
   JUDGE_FILE_EXTENSIONS,
@@ -57,7 +60,13 @@ import {
 
 type IdeMode = "theory" | "practice" | "debug";
 type AssistantTab = "task" | "hints" | "mentor";
-type BottomTab = "terminal" | "tests" | "debugger" | "console" | "history";
+type BottomTab =
+  | "input"
+  | "terminal"
+  | "tests"
+  | "debugger"
+  | "console"
+  | "history";
 type MobilePaneTab = "condition" | "code" | "result";
 
 export type StudyCodIdeTask = {
@@ -86,7 +95,12 @@ export type StudyCodIdeCheckResult = {
   testsTotal: number;
   score?: number;
   maxScore?: number;
-  groupScores?: Array<{ group: string; score: number; maxScore: number; status?: "PASSED" | "PARTIAL" | "FAILED" | "SKIPPED" }> | null;
+  groupScores?: Array<{
+    group: string;
+    score: number;
+    maxScore: number;
+    status?: "PASSED" | "PARTIAL" | "FAILED" | "SKIPPED";
+  }> | null;
   compileError?: string | null;
   publicTestResults?: Array<{
     testId: number;
@@ -136,7 +150,11 @@ type Props = {
   onStdinChange: (next: string) => void;
   firstExampleInput?: string;
   onUseExampleInput: () => void;
-  publicExamples?: Array<{ testId: number; input: string; expectedOutput: string }>;
+  publicExamples?: Array<{
+    testId: number;
+    input: string;
+    expectedOutput: string;
+  }>;
   hasUnsavedChanges?: boolean;
   running: boolean;
   checking: boolean;
@@ -187,15 +205,12 @@ type Props = {
   isWebTask?: boolean;
 };
 
-const LAYOUT_KEY = "studycod:ide:layout:v4";
+const LAYOUT_KEY = "studycod:ide:layout:v5";
 const SIMPLE_MODE_KEY = "studycod:ide:simple-mode:v1";
 const HISTORY_KEY = "studycod:ide:history:v1";
 const MINI_PROJECT_TIMER_KEY = "studycod:ide:mini-project-start:v1";
 const ACTIVE_FILE_KEY = "studycod:ide:active-file:v1";
 const STDIN_HISTORY_KEY = "studycod:ide:stdin-history:v1";
-
-const rubberband = (overshoot: number, dimension: number, constant = 0.55) =>
-  (overshoot * dimension * constant) / (dimension + constant * Math.abs(overshoot));
 
 type LayoutState = {
   left: number;
@@ -208,8 +223,8 @@ type LayoutState = {
 
 const DEFAULT_LAYOUT: LayoutState = {
   left: 224,
-  right: 390,
-  bottom: 300,
+  right: 480,
+  bottom: 240,
   leftCollapsed: false,
   rightCollapsed: false,
   bottomCollapsed: false,
@@ -254,13 +269,19 @@ function formatMiniProjectCountdown(totalSeconds: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
-function formatIdeTimestamp(iso: string | null | undefined, locale: string): string {
+function formatIdeTimestamp(
+  iso: string | null | undefined,
+  locale: string,
+): string {
   const value = String(iso ?? "").trim();
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   try {
-    return new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(date);
+    return new Intl.DateTimeFormat(locale, {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(date);
   } catch {
     return date.toLocaleString();
   }
@@ -285,11 +306,18 @@ function removeRepeatedTaskTitle(description: string, title: string): string {
     .replace(/[*_`]/g, "")
     .trim()
     .toLowerCase();
-  const normalizedTitle = String(title ?? "").replace(/[*_`]/g, "").trim().toLowerCase();
+  const normalizedTitle = String(title ?? "")
+    .replace(/[*_`]/g, "")
+    .trim()
+    .toLowerCase();
   if (!firstLine || !normalizedTitle) return source;
-  if (firstLine !== normalizedTitle && !normalizedTitle.startsWith(firstLine)) return source;
+  if (firstLine !== normalizedTitle && !normalizedTitle.startsWith(firstLine))
+    return source;
 
-  return lines.slice(firstContentLine + 1).join("\n").replace(/^\n+/, "");
+  return lines
+    .slice(firstContentLine + 1)
+    .join("\n")
+    .replace(/^\n+/, "");
 }
 
 type PracticeCodeEditorProps = {
@@ -308,30 +336,49 @@ type PracticeCodeEditorProps = {
 // Keep Monaco's draft isolated from the large IDE workspace. The workspace
 // contains task markdown, test panels and mentor UI; re-rendering all of that
 // for every keystroke makes the editor feel frozen on slower devices.
-const PracticeCodeEditor = React.memo<PracticeCodeEditorProps>(({ taskId, value, language, readOnly, fontSize, wordWrap, isWebTask, focusLine = null, onChange, enableSemanticLsp }) => {
-  const [draft, setDraft] = React.useState(value);
+const PracticeCodeEditor = React.memo<PracticeCodeEditorProps>(
+  ({
+    taskId,
+    value,
+    language,
+    readOnly,
+    fontSize,
+    wordWrap,
+    isWebTask,
+    focusLine = null,
+    onChange,
+    enableSemanticLsp,
+  }) => {
+    const [draft, setDraft] = React.useState(value);
 
-  React.useEffect(() => {
-    setDraft(value);
-  }, [taskId, value]);
+    React.useEffect(() => {
+      setDraft(value);
+    }, [taskId, value]);
 
-  const handleChange = React.useCallback((nextCode: string) => {
-    setDraft(nextCode);
-    onChange(nextCode);
-  }, [onChange]);
+    const handleChange = React.useCallback(
+      (nextCode: string) => {
+        setDraft(nextCode);
+        onChange(nextCode);
+      },
+      [onChange],
+    );
 
-  return <CodeEditor
-    enableSemanticLsp={enableSemanticLsp}
-    height="100%"
-    language={isWebTask ? "html" : language}
-    value={draft}
-    onChange={readOnly ? undefined : handleChange}
-    readOnly={readOnly}
-    fontSize={fontSize}
-    wordWrap={wordWrap}
-    focusLine={focusLine}
-  />;
-});
+    return (
+      <CodeEditor
+        enableSemanticLsp={enableSemanticLsp}
+        height="100%"
+        language={isWebTask ? "html" : language}
+        value={draft}
+        onChange={readOnly ? undefined : handleChange}
+        readOnly={readOnly}
+        fontSize={fontSize}
+        wordWrap={wordWrap}
+        minimap={false}
+        focusLine={focusLine}
+      />
+    );
+  },
+);
 
 export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const { i18n } = useTranslation();
@@ -339,22 +386,28 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   React.useEffect(() => {
     draftCodeRef.current = props.code;
   }, [props.task.id, props.code]);
-  const handleCodeChange = React.useCallback((nextCode: string) => {
-    draftCodeRef.current = nextCode;
-    props.onCodeChange(nextCode);
-  }, [props.onCodeChange]);
+  const handleCodeChange = React.useCallback(
+    (nextCode: string) => {
+      draftCodeRef.current = nextCode;
+      props.onCodeChange(nextCode);
+    },
+    [props.onCodeChange],
+  );
   const tr = (uk: string, en: string) => {
-    return i18n.language?.toLowerCase().startsWith("en")
-      ? en
-      : uk;
+    return i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   };
-  const taskTheoryKey = scopedStorageKey(IDE_THEORY_COMPLETION_KEY, props.task.id);
+  const taskTheoryKey = scopedStorageKey(
+    IDE_THEORY_COMPLETION_KEY,
+    props.task.id,
+  );
   const isEmptyTask = String(props.task.id) === "empty";
   const taskBody = React.useMemo(
     () => removeRepeatedTaskTitle(props.task.description, props.task.title),
     [props.task.description, props.task.title],
   );
-  const languageOptions = props.languageOptions ?? (Object.keys(JUDGE_LANGUAGE_LABELS) as JudgeLanguage[]);
+  const languageOptions =
+    props.languageOptions ??
+    (Object.keys(JUDGE_LANGUAGE_LABELS) as JudgeLanguage[]);
   const [mode, setMode] = React.useState<IdeMode>(() => {
     if (!props.theory) return "practice";
     try {
@@ -375,10 +428,14 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   });
   const [assistantTab, setAssistantTab] = React.useState<AssistantTab>("task");
   const [openHintIndex, setOpenHintIndex] = React.useState<number | null>(null);
-  const [bottomTab, setBottomTab] = React.useState<BottomTab>("tests");
+  const [bottomTab, setBottomTab] = React.useState<BottomTab>("input");
   const [activeFile, setActiveFile] = React.useState(() => {
     try {
-      return localStorage.getItem(scopedStorageKey(ACTIVE_FILE_KEY, props.task.id)) || props.entryFile;
+      return (
+        localStorage.getItem(
+          scopedStorageKey(ACTIVE_FILE_KEY, props.task.id),
+        ) || props.entryFile
+      );
     } catch {
       return props.entryFile;
     }
@@ -387,14 +444,75 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const [fontSize, setFontSize] = React.useState(14);
   const [wordWrap, setWordWrap] = React.useState(false);
   const [focusMode, setFocusMode] = React.useState(false);
-  const [mobileContextOpen, setMobileContextOpen] = React.useState(true);
-  const [mobilePane, setMobilePaneState] = React.useState<MobilePaneTab>("condition");
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [statementOnRight, setStatementOnRight] = React.useState(() => {
+    try {
+      return localStorage.getItem("studycod:ide:statement-side:v1") === "right";
+    } catch {
+      return false;
+    }
+  });
+  const settingsRef = React.useRef<HTMLDivElement>(null);
+  const bodyRef = React.useRef<HTMLDivElement>(null);
+  const [bodySize, setBodySize] = React.useState({ width: 1200, height: 680 });
+  React.useEffect(() => {
+    const body = bodyRef.current;
+    if (!body) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry)
+        setBodySize({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
+    });
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, [mode]);
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(
+        "studycod:ide:statement-side:v1",
+        statementOnRight ? "right" : "left",
+      );
+    } catch {
+      /* optional preference */
+    }
+  }, [statementOnRight]);
+  React.useEffect(() => {
+    if (!settingsOpen) return;
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!settingsRef.current?.contains(event.target as Node))
+        setSettingsOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setSettingsOpen(false);
+      settingsRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    };
+    document.addEventListener("pointerdown", closeOnOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [settingsOpen]);
+  const [mobilePane, setMobilePaneState] =
+    React.useState<MobilePaneTab>("condition");
   const [mobileResultUnread, setMobileResultUnread] = React.useState(false);
   const mobilePaneRef = React.useRef<MobilePaneTab>("condition");
-  const pendingMobileResultRef = React.useRef<{ result: StudyCodIdeRunResult | null; recovery: Props["actionRecovery"]; observedBusy: boolean } | null>(null);
+  const pendingMobileResultRef = React.useRef<{
+    result: StudyCodIdeRunResult | null;
+    recovery: Props["actionRecovery"];
+    observedBusy: boolean;
+  } | null>(null);
   const setMobilePane = React.useCallback((next: MobilePaneTab) => {
     mobilePaneRef.current = next;
     setMobilePaneState(next);
+    setFocusMode(false);
+    if (next === "condition")
+      setLayout((current) => ({ ...current, rightCollapsed: false }));
+    if (next === "result")
+      setLayout((current) => ({ ...current, bottomCollapsed: false }));
     if (next === "result") setMobileResultUnread(false);
   }, []);
   const [notice, setNotice] = React.useState<string | null>(null);
@@ -403,27 +521,39 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const [copiedLabel, setCopiedLabel] = React.useState<string | null>(null);
   const [stdinHistory, setStdinHistory] = React.useState<string[]>(() => {
     try {
-      const raw = JSON.parse(localStorage.getItem(scopedStorageKey(STDIN_HISTORY_KEY, props.task.id)) || "[]");
-      return Array.isArray(raw) ? raw.filter((value) => typeof value === "string" && value.trim()).slice(0, 6) : [];
+      const raw = JSON.parse(
+        localStorage.getItem(
+          scopedStorageKey(STDIN_HISTORY_KEY, props.task.id),
+        ) || "[]",
+      );
+      return Array.isArray(raw)
+        ? raw
+            .filter((value) => typeof value === "string" && value.trim())
+            .slice(0, 6)
+        : [];
     } catch {
       return [];
     }
   });
   const [showFailedOnly, setShowFailedOnly] = React.useState(false);
   const [showWhitespace, setShowWhitespace] = React.useState(false);
-  const [expandedTestId, setExpandedTestId] = React.useState<number | null>(null);
+  const [expandedTestId, setExpandedTestId] = React.useState<number | null>(
+    null,
+  );
   const [traceStep, setTraceStep] = React.useState(0);
   const [miniProjectTimer, setMiniProjectTimer] = React.useState<{
     taskId: string;
     endsAt: number;
   } | null>(null);
-  const [miniProjectRemainingSeconds, setMiniProjectRemainingSeconds] = React.useState<number | null>(null);
+  const [miniProjectRemainingSeconds, setMiniProjectRemainingSeconds] =
+    React.useState<number | null>(null);
   const [history, setHistory] = React.useState<
     Array<{ at: string; code: string }>
   >(() => {
     try {
       const raw = JSON.parse(
-        localStorage.getItem(scopedStorageKey(HISTORY_KEY, props.task.id)) || "[]",
+        localStorage.getItem(scopedStorageKey(HISTORY_KEY, props.task.id)) ||
+          "[]",
       );
       return Array.isArray(raw)
         ? raw
@@ -454,7 +584,12 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     }
   }, [simpleMode]);
   React.useEffect(() => {
-    if (simpleMode && bottomTab !== "terminal" && bottomTab !== "tests") {
+    if (
+      simpleMode &&
+      bottomTab !== "input" &&
+      bottomTab !== "terminal" &&
+      bottomTab !== "tests"
+    ) {
       setBottomTab("tests");
     }
   }, [bottomTab, simpleMode]);
@@ -470,20 +605,34 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     setMode(nextMode);
     setAssistantTab("task");
     setOpenHintIndex(null);
-    setBottomTab("tests");
+    setBottomTab("input");
     setFocusMode(false);
     setTraceStep(0);
     setShowFailedOnly(false);
     setShowWhitespace(false);
     setExpandedTestId(null);
     try {
-      const raw = JSON.parse(localStorage.getItem(scopedStorageKey(STDIN_HISTORY_KEY, props.task.id)) || "[]");
-      setStdinHistory(Array.isArray(raw) ? raw.filter((value) => typeof value === "string" && value.trim()).slice(0, 6) : []);
+      const raw = JSON.parse(
+        localStorage.getItem(
+          scopedStorageKey(STDIN_HISTORY_KEY, props.task.id),
+        ) || "[]",
+      );
+      setStdinHistory(
+        Array.isArray(raw)
+          ? raw
+              .filter((value) => typeof value === "string" && value.trim())
+              .slice(0, 6)
+          : [],
+      );
     } catch {
       setStdinHistory([]);
     }
     try {
-      setActiveFile(localStorage.getItem(scopedStorageKey(ACTIVE_FILE_KEY, props.task.id)) || props.entryFile);
+      setActiveFile(
+        localStorage.getItem(
+          scopedStorageKey(ACTIVE_FILE_KEY, props.task.id),
+        ) || props.entryFile,
+      );
     } catch {
       setActiveFile(props.entryFile);
     }
@@ -493,7 +642,6 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   }, [props.disableAiAssistance]);
   React.useEffect(() => {
     setMobilePane("condition");
-    setMobileContextOpen(true);
     setMobileResultUnread(false);
     pendingMobileResultRef.current = null;
   }, [props.task.id, setMobilePane]);
@@ -505,16 +653,27 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       pending.observedBusy = true;
       return;
     }
-    const resultChanged = props.runResult !== pending.result || props.actionRecovery !== pending.recovery;
+    const resultChanged =
+      props.runResult !== pending.result ||
+      props.actionRecovery !== pending.recovery;
     if (!pending.observedBusy && !resultChanged) return;
     pendingMobileResultRef.current = null;
     const nextView = reconcileMobilePaneAfterResult(mobilePaneRef.current);
     if (nextView.pane !== mobilePaneRef.current) setMobilePane(nextView.pane);
     setMobileResultUnread(nextView.unread);
-  }, [props.actionRecovery, props.checking, props.runResult, props.running, setMobilePane]);
+  }, [
+    props.actionRecovery,
+    props.checking,
+    props.runResult,
+    props.running,
+    setMobilePane,
+  ]);
   React.useEffect(() => {
     try {
-      localStorage.setItem(scopedStorageKey(ACTIVE_FILE_KEY, props.task.id), activeFile);
+      localStorage.setItem(
+        scopedStorageKey(ACTIVE_FILE_KEY, props.task.id),
+        activeFile,
+      );
     } catch {
       // ignore
     }
@@ -522,10 +681,13 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   React.useEffect(() => {
     try {
       const raw = JSON.parse(
-        localStorage.getItem(scopedStorageKey(HISTORY_KEY, props.task.id)) || "[]",
+        localStorage.getItem(scopedStorageKey(HISTORY_KEY, props.task.id)) ||
+          "[]",
       );
       const next = Array.isArray(raw)
-        ? raw.filter((item) => item && typeof item.code === "string").slice(0, 20)
+        ? raw
+            .filter((item) => item && typeof item.code === "string")
+            .slice(0, 20)
         : [];
       setHistory(next);
     } catch {
@@ -586,7 +748,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     });
   }, [props.task.id, props.task.projectSpec?.estimatedMinutes]);
   React.useEffect(() => {
-    if (!miniProjectTimer || miniProjectTimer.taskId !== String(props.task.id)) return;
+    if (!miniProjectTimer || miniProjectTimer.taskId !== String(props.task.id))
+      return;
 
     const updateRemaining = () => {
       setMiniProjectRemainingSeconds(
@@ -611,91 +774,97 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const updateLayout = (patch: Partial<LayoutState>) =>
     setLayout((current) => ({ ...current, ...patch }));
 
-  const beginResize = (
-    axis: "left" | "right" | "bottom",
-    event: React.PointerEvent,
-  ) => {
+  const getResizeBounds = (axis: "right" | "bottom") => {
+    const rect = bodyRef.current?.getBoundingClientRect();
+    return axis === "right"
+      ? {
+          min: 280,
+          max: Math.max(
+            280,
+            Math.min(
+              (rect?.width ?? bodySize.width) - 368,
+              (rect?.width ?? bodySize.width) * 0.7,
+            ),
+          ),
+        }
+      : {
+          min: 100,
+          max: Math.max(100, (rect?.height ?? bodySize.height) - 160),
+        };
+  };
+  const resizeCleanupRef = React.useRef<(() => void) | null>(null);
+  React.useEffect(() => () => resizeCleanupRef.current?.(), []);
+  const beginResize = (axis: "right" | "bottom", event: React.PointerEvent) => {
     if (event.button !== 0) return;
     event.preventDefault();
-    const min = axis === "bottom" ? 150 : axis === "right" ? 220 : 170;
-    const max = axis === "bottom"
-      ? 620
-      : axis === "right"
-        ? Math.max(340, Math.min(920, window.innerWidth - layout.left - 400))
-        : 520;
-    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeCleanupRef.current?.();
+    const { min, max } = getResizeBounds(axis);
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    const value = Math.min(max, Math.max(min, layout[axis]));
     resizeRef.current = {
       axis,
       start: axis === "bottom" ? event.clientY : event.clientX,
-      value: layout[axis],
+      value,
       pointerId: event.pointerId,
       min,
       max,
-      last: layout[axis],
+      last: value,
     };
     const move = (moveEvent: PointerEvent) => {
       const current = resizeRef.current;
       if (!current || moveEvent.pointerId !== current.pointerId) return;
       const delta =
         moveEvent[axis === "bottom" ? "clientY" : "clientX"] - current.start;
-      const direction = axis === "right" || axis === "bottom" ? -1 : 1;
-      const raw = current.value + delta * direction;
-      const dimension = current.max - current.min;
-      const overshoot = raw < current.min
-        ? -rubberband(current.min - raw, dimension)
-        : raw > current.max
-          ? rubberband(raw - current.max, dimension)
-          : 0;
-      const next = Math.min(current.max + 64, Math.max(current.min - 64, raw + overshoot));
-      current.last = next;
-      updateLayout({ [axis]: next });
+      const direction = axis === "bottom" || statementOnRight ? -1 : 1;
+      current.last = Math.min(
+        max,
+        Math.max(min, current.value + delta * direction),
+      );
+      updateLayout({ [axis]: current.last });
     };
     const stop = () => {
-      const current = resizeRef.current;
-      if (current) {
-        updateLayout({ [current.axis]: Math.min(current.max, Math.max(current.min, current.last)) });
-      }
       resizeRef.current = null;
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
+      if (target.hasPointerCapture(event.pointerId))
+        target.releasePointerCapture(event.pointerId);
+      resizeCleanupRef.current = null;
     };
+    resizeCleanupRef.current = stop;
     window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", stop, { once: true });
-    window.addEventListener("pointercancel", stop, { once: true });
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
   };
-
   const handleResizeKeyDown = (
-    axis: "left" | "right" | "bottom",
+    axis: "right" | "bottom",
     event: React.KeyboardEvent<HTMLDivElement>,
   ) => {
-    const min = axis === "bottom" ? 150 : axis === "right" ? 220 : 170;
-    const max = axis === "bottom"
-      ? 620
-      : axis === "right"
-        ? Math.max(340, Math.min(920, window.innerWidth - layout.left - 400))
-        : 520;
+    const { min, max } = getResizeBounds(axis);
     const step = event.shiftKey ? 48 : 16;
-    let delta = 0;
-    if (axis === "left" && event.key === "ArrowRight") delta = step;
-    if (axis === "left" && event.key === "ArrowLeft") delta = -step;
-    if (axis === "right" && event.key === "ArrowLeft") delta = step;
-    if (axis === "right" && event.key === "ArrowRight") delta = -step;
-    if (axis === "bottom" && event.key === "ArrowUp") delta = step;
-    if (axis === "bottom" && event.key === "ArrowDown") delta = -step;
-    if (event.key === "Home") delta = min - layout[axis];
-    if (event.key === "End") delta = max - layout[axis];
-    if (!delta) return;
+    const current = Math.min(max, Math.max(min, layout[axis]));
+    let next = current;
+    if (axis === "right" && event.key === "ArrowRight")
+      next += statementOnRight ? -step : step;
+    if (axis === "right" && event.key === "ArrowLeft")
+      next += statementOnRight ? step : -step;
+    if (axis === "bottom" && event.key === "ArrowUp") next += step;
+    if (axis === "bottom" && event.key === "ArrowDown") next -= step;
+    if (event.key === "Home") next = min;
+    if (event.key === "End") next = max;
+    if (next === current) return;
     event.preventDefault();
-    updateLayout({ [axis]: Math.min(max, Math.max(min, layout[axis] + delta)) });
+    updateLayout({ [axis]: Math.min(max, Math.max(min, next)) });
   };
 
   const resultVerdict =
     props.checkResult?.verdict || (props.runResult?.success ? "OK" : null);
   const allTestsPassed = Boolean(
     props.checkResult &&
-    props.checkResult.testsTotal > 0 &&
-    props.checkResult.testsPassed >= props.checkResult.testsTotal,
+      verdictIsAccepted(props.checkResult.verdict) &&
+      props.checkResult.testsTotal > 0 &&
+      props.checkResult.testsPassed >= props.checkResult.testsTotal,
   );
   React.useEffect(() => {
     if (props.hints?.length && (!props.checkResult || !allTestsPassed)) {
@@ -704,7 +873,12 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         current !== null && current < props.hints!.length ? current : 0,
       );
     }
-  }, [allTestsPassed, props.checkResult?.verdict, props.checkResult?.testsPassed, props.hints?.length]);
+  }, [
+    allTestsPassed,
+    props.checkResult?.verdict,
+    props.checkResult?.testsPassed,
+    props.hints?.length,
+  ]);
   React.useEffect(() => {
     if (!diffOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -718,43 +892,124 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     ? props.files
     : [{ path: props.entryFile, content: draftCodeRef.current }];
 
+  const [lastRunInput, setLastRunInput] = React.useState<string | null>(null);
+  React.useEffect(() => setLastRunInput(null), [props.task.id]);
   const runWithTab = () => {
-    if (props.readOnly || props.running || props.checking) return;
+    if (props.readOnly || props.running || props.checking || isEmptyTask)
+      return;
+    setLastRunInput(props.stdin);
     rememberStdinHistory();
+    updateLayout({ bottomCollapsed: false });
+    setFocusMode(false);
     setBottomTab("terminal");
-    pendingMobileResultRef.current = { result: props.runResult, recovery: props.actionRecovery, observedBusy: false };
+    pendingMobileResultRef.current = {
+      result: props.runResult,
+      recovery: props.actionRecovery,
+      observedBusy: false,
+    };
     props.onRun();
   };
   const checkWithTab = () => {
-    if (props.readOnly || props.running || props.checking) return;
+    if (props.readOnly || props.running || props.checking || isEmptyTask)
+      return;
+    updateLayout({ bottomCollapsed: false });
+    setFocusMode(false);
     setBottomTab("tests");
-    pendingMobileResultRef.current = { result: props.runResult, recovery: props.actionRecovery, observedBusy: false };
+    pendingMobileResultRef.current = {
+      result: props.runResult,
+      recovery: props.actionRecovery,
+      observedBusy: false,
+    };
     props.onCheck();
   };
+  React.useEffect(() => {
+    const onShortcut = (event: KeyboardEvent) => {
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.key !== "Enter" ||
+        event.repeat ||
+        event.isComposing
+      )
+        return;
+      if (
+        settingsOpen ||
+        resetConfirmOpen ||
+        diffOpen ||
+        document.querySelector('[role="dialog"]')
+      )
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.shiftKey) checkWithTab();
+      else runWithTab();
+    };
+    window.addEventListener("keydown", onShortcut, true);
+    return () => window.removeEventListener("keydown", onShortcut, true);
+  });
   const mobileTabs = [
     { id: "condition" as const, label: tr("Умова", "Task"), Icon: FileText },
     { id: "code" as const, label: tr("Код", "Code"), Icon: Code2 },
-    { id: "result" as const, label: tr("Результат", "Result"), Icon: SquareTerminal },
+    {
+      id: "result" as const,
+      label: tr("Результат", "Result"),
+      Icon: SquareTerminal,
+    },
   ];
   const handleMobileTabKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
     const index = mobileTabs.findIndex((tab) => tab.id === mobilePane);
-    const nextIndex = event.key === "ArrowRight" ? (index + 1) % mobileTabs.length
-      : event.key === "ArrowLeft" ? (index - 1 + mobileTabs.length) % mobileTabs.length
-        : event.key === "Home" ? 0
-          : event.key === "End" ? mobileTabs.length - 1
-            : -1;
+    const nextIndex =
+      event.key === "ArrowRight"
+        ? (index + 1) % mobileTabs.length
+        : event.key === "ArrowLeft"
+          ? (index - 1 + mobileTabs.length) % mobileTabs.length
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? mobileTabs.length - 1
+              : -1;
     if (nextIndex < 0) return;
     event.preventDefault();
     const next = mobileTabs[nextIndex];
     setMobilePane(next.id);
     document.getElementById(`mobile-ide-tab-${next.id}`)?.focus();
   };
+  const handlePanelTabKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (
+      !(event.target instanceof HTMLElement) ||
+      event.target.getAttribute("role") !== "tab"
+    )
+      return;
+    const tabs = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'),
+    );
+    const index = tabs.indexOf(event.target as HTMLButtonElement);
+    const next =
+      event.key === "ArrowRight"
+        ? (index + 1) % tabs.length
+        : event.key === "ArrowLeft"
+          ? (index - 1 + tabs.length) % tabs.length
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? tabs.length - 1
+              : -1;
+    if (next < 0 || !tabs.length) return;
+    event.preventDefault();
+    tabs[next].click();
+    tabs[next].focus();
+  };
   const downloadCurrentCode = () => {
-    const blob = new Blob([draftCodeRef.current || ""], { type: "text/plain;charset=utf-8" });
+    const blob = new Blob([draftCodeRef.current || ""], {
+      type: "text/plain;charset=utf-8",
+    });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${String(props.task.title || "solution").replace(/[^a-z0-9а-яёіїєґ_-]+/gi, "-").replace(/^-+|-+$/g, "") || "solution"}.${props.isWebTask ? "html" : JUDGE_FILE_EXTENSIONS[props.language]}`;
+    anchor.download = `${
+      String(props.task.title || "solution")
+        .replace(/[^a-z0-9а-яёіїєґ_-]+/gi, "-")
+        .replace(/^-+|-+$/g, "") || "solution"
+    }.${props.isWebTask ? "html" : JUDGE_FILE_EXTENSIONS[props.language]}`;
     anchor.rel = "noopener";
     document.body.appendChild(anchor);
     anchor.click();
@@ -765,7 +1020,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     try {
       await navigator.clipboard.writeText(value);
       setCopiedLabel(label);
-      window.setTimeout(() => setCopiedLabel((current) => current === label ? null : current), 1200);
+      window.setTimeout(
+        () => setCopiedLabel((current) => (current === label ? null : current)),
+        1200,
+      );
     } catch {
       setNotice(tr("Не вдалося скопіювати текст", "Could not copy text"));
     }
@@ -773,10 +1031,16 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const rememberStdinHistory = () => {
     const value = String(props.stdin ?? "").trim();
     if (!value || props.isWebTask || isEmptyTask) return;
-    const next = [value, ...stdinHistory.filter((item) => item !== value)].slice(0, 6);
+    const next = [
+      value,
+      ...stdinHistory.filter((item) => item !== value),
+    ].slice(0, 6);
     setStdinHistory(next);
     try {
-      localStorage.setItem(scopedStorageKey(STDIN_HISTORY_KEY, props.task.id), JSON.stringify(next));
+      localStorage.setItem(
+        scopedStorageKey(STDIN_HISTORY_KEY, props.task.id),
+        JSON.stringify(next),
+      );
     } catch {
       // Local history is optional and must not block running code.
     }
@@ -792,24 +1056,43 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
   const comparisonLines = React.useMemo(() => {
     const before = comparisonCode.split("\n");
     const after = (draftCodeRef.current || "").split("\n");
-    const rows: Array<{ kind: "same" | "removed" | "added"; line: string; number: number }> = [];
+    const rows: Array<{
+      kind: "same" | "removed" | "added";
+      line: string;
+      number: number;
+    }> = [];
     const count = Math.max(before.length, after.length);
     for (let index = 0; index < count; index += 1) {
-      if (before[index] === after[index]) rows.push({ kind: "same", line: after[index] ?? "", number: index + 1 });
+      if (before[index] === after[index])
+        rows.push({
+          kind: "same",
+          line: after[index] ?? "",
+          number: index + 1,
+        });
       else {
-        if (before[index] !== undefined) rows.push({ kind: "removed", line: before[index], number: index + 1 });
-        if (after[index] !== undefined) rows.push({ kind: "added", line: after[index], number: index + 1 });
+        if (before[index] !== undefined)
+          rows.push({
+            kind: "removed",
+            line: before[index],
+            number: index + 1,
+          });
+        if (after[index] !== undefined)
+          rows.push({ kind: "added", line: after[index], number: index + 1 });
       }
     }
     return rows;
   }, [comparisonCode, props.code]);
-  const firstFailedPublicTestId = props.checkResult?.publicTestResults?.find((test) => !test.passed)?.testId ?? null;
+  const firstFailedPublicTestId =
+    props.checkResult?.publicTestResults?.find((test) => !test.passed)
+      ?.testId ?? null;
   const publicTestResults = props.checkResult?.publicTestResults ?? [];
   const visiblePublicTestResults = showFailedOnly
     ? publicTestResults.filter((test) => !test.passed)
     : publicTestResults;
-  const firstFailedPublicTest = publicTestResults.find((test) => !test.passed) ?? null;
-  const expandedPublicTest = publicTestResults.find((test) => test.testId === expandedTestId) ?? null;
+  const firstFailedPublicTest =
+    publicTestResults.find((test) => !test.passed) ?? null;
+  const expandedPublicTest =
+    publicTestResults.find((test) => test.testId === expandedTestId) ?? null;
   const renderBottom = () => {
     if (bottomTab === "debugger") {
       const step =
@@ -824,18 +1107,20 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           ? step.stack
           : [{ func: "<module>", line: step.line, locals: step.locals }];
         return (
-          <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-auto p-4 text-xs text-[#b9c9bd] lg:grid-cols-[1.2fr_.8fr]">
-            <div className="rounded-xl border border-white/10 bg-white/[.03] p-3">
+          <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-auto p-4 text-xs text-[var(--ide-secondary)] lg:grid-cols-[1.2fr_.8fr]">
+            <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div className="font-semibold text-white">
+                <div className="font-semibold text-[var(--ide-text)]">
                   {tr("Покрокове виконання", "Step execution")}
                 </div>
-                <span className="text-primary-soft">
+                <span className="text-[var(--ide-accent)]">
                   {tr("Крок", "Step")} {traceStep + 1}/
                   {props.trace.steps.length}
                 </span>
               </div>
-              <label htmlFor="ide-trace-step" className="sr-only">{tr("Крок трасування", "Trace step")}</label>
+              <label htmlFor="ide-trace-step" className="sr-only">
+                {tr("Крок трасування", "Trace step")}
+              </label>
               <input
                 id="ide-trace-step"
                 name="traceStep"
@@ -850,36 +1135,40 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 className="w-full accent-primary"
               />
               <div className="mt-3 rounded-lg border border-primary/20 bg-primary/[.06] p-3">
-                <div className="text-[10px] uppercase tracking-[.12em] text-[#82968a]">
+                <div className="text-[11px] uppercase tracking-[.12em] text-[var(--ide-muted)]">
                   {tr("Поточний рядок", "Current line")}
                 </div>
-                <div className="mt-1 font-mono text-primary-soft">
+                <div className="mt-1 font-mono text-[var(--ide-accent)]">
                   Line {step.line} · {step.event || "line"}
                 </div>
               </div>
-              <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-3 font-mono text-[11px] text-[#c8d6cc]">
+              <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-3 font-mono text-[11px] text-[var(--ide-text)]">
                 {props.trace.programOutput || ""}
               </pre>
             </div>
             <div className="space-y-3">
-              <div className="rounded-xl border border-white/10 bg-white/[.03] p-3">
-                <div className="mb-2 flex items-center gap-2 font-semibold text-white">
-                  <Gauge className="size-4 text-primary-soft" />
+              <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
+                <div className="mb-2 flex items-center gap-2 font-semibold text-[var(--ide-text)]">
+                  <Gauge className="size-4 text-[var(--ide-accent)]" />
                   Variables
                 </div>
-                <pre className="max-h-44 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-[#c8d6cc]">
+                <pre className="max-h-44 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-[var(--ide-text)]">
                   {JSON.stringify(step.locals || {}, null, 2)}
                 </pre>
               </div>
-              <div className="rounded-xl border border-white/10 bg-white/[.03] p-3">
-                <div className="mb-2 font-semibold text-white">Call stack</div>
+              <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
+                <div className="mb-2 font-semibold text-[var(--ide-text)]">
+                  Call stack
+                </div>
                 {stack.map((frame, index) => (
                   <div
                     key={`${frame.func}-${index}`}
                     className="flex items-center justify-between border-b border-white/5 py-1.5 text-[11px]"
                   >
-                    <span className="text-[#c8d6cc]">{frame.func}</span>
-                    <span className="text-[#82968a]">L{frame.line}</span>
+                    <span className="text-[var(--ide-text)]">{frame.func}</span>
+                    <span className="text-[var(--ide-muted)]">
+                      L{frame.line}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -888,10 +1177,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         );
       }
       return (
-        <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-auto p-4 text-xs text-[#b9c9bd] md:grid-cols-3">
-          <div className="rounded-xl border border-white/10 bg-white/[.03] p-3">
-            <div className="mb-2 flex items-center gap-2 font-semibold text-white">
-              <Gauge className="size-4 text-primary-soft" />
+        <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-auto p-4 text-xs text-[var(--ide-secondary)] md:grid-cols-3">
+          <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
+            <div className="mb-2 flex items-center gap-2 font-semibold text-[var(--ide-text)]">
+              <Gauge className="size-4 text-[var(--ide-accent)]" />
               Variables
             </div>
             <p>
@@ -910,14 +1199,16 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 type="button"
                 onClick={props.onTrace}
                 disabled={props.tracing}
-                className="mt-3 rounded-lg bg-primary px-3 py-2 text-[11px] font-bold text-[#062211] disabled:opacity-50"
+                className="mt-3 rounded-lg bg-primary px-3 py-2 text-[11px] font-bold text-[var(--ide-action-text)] disabled:opacity-50"
               >
                 {props.tracing ? tr("Трасуємо…", "Tracing…") : "Trace"}
               </button>
             ) : null}
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/[.03] p-3">
-            <div className="mb-2 font-semibold text-white">Call stack</div>
+          <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
+            <div className="mb-2 font-semibold text-[var(--ide-text)]">
+              Call stack
+            </div>
             <p>
               {tr(
                 "Покроковий trace підключиться до debug runner для цієї задачі.",
@@ -925,8 +1216,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               )}
             </p>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/[.03] p-3">
-            <div className="mb-2 font-semibold text-white">Watch</div>
+          <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
+            <div className="mb-2 font-semibold text-[var(--ide-text)]">
+              Watch
+            </div>
             <p>
               {tr(
                 "Додай вирази для спостереження у наступному кроці.",
@@ -939,19 +1232,33 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     }
     if (bottomTab === "history") {
       return (
-        <div className="h-full overflow-auto p-4 text-xs text-[#b9c9bd]">
-          <div className="rounded-xl border border-white/10 bg-white/[.03] p-3">
+        <div className="h-full overflow-auto p-4 text-xs text-[var(--ide-secondary)]">
+          <div className="rounded-xl border border-[var(--ide-border)] bg-white/[.03] p-3">
             <div className="flex items-center justify-between gap-2">
-              <div className="font-semibold text-white">
+              <div className="font-semibold text-[var(--ide-text)]">
                 {tr("Локальна історія", "Local history")}
               </div>
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1 text-primary-soft">
+                <div className="flex items-center gap-1 text-[var(--ide-accent)]">
                   <Check className="size-4" />
                   Autosave
                 </div>
-                <button type="button" onClick={() => setDiffOpen(true)} disabled={!history.length} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2 py-1 text-[10px] font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40" aria-label={tr("Порівняти з останнім знімком", "Compare with latest snapshot")} title={tr("Порівняти з останнім знімком", "Compare with latest snapshot")}>
-                  <GitCompareArrows className="size-3.5" />{tr("Порівняти", "Compare")}
+                <button
+                  type="button"
+                  onClick={() => setDiffOpen(true)}
+                  disabled={!history.length}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ide-border)] px-2 py-1 text-[11px] font-semibold text-[var(--ide-text)] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40"
+                  aria-label={tr(
+                    "Порівняти з останнім знімком",
+                    "Compare with latest snapshot",
+                  )}
+                  title={tr(
+                    "Порівняти з останнім знімком",
+                    "Compare with latest snapshot",
+                  )}
+                >
+                  <GitCompareArrows className="size-3.5" />
+                  {tr("Порівняти", "Compare")}
                 </button>
               </div>
             </div>
@@ -966,20 +1273,23 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 {history.map((entry, index) => (
                   <div
                     key={`${entry.at}-${index}`}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 p-2"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-2"
                   >
                     <div className="min-w-0">
-                      <div className="text-[10px] text-[#82968a]">
-                        {new Intl.DateTimeFormat(i18n.language || "uk", { dateStyle: "short", timeStyle: "short" }).format(new Date(entry.at))}
+                      <div className="text-[11px] text-[var(--ide-muted)]">
+                        {new Intl.DateTimeFormat(i18n.language || "uk", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        }).format(new Date(entry.at))}
                       </div>
-                      <pre className="mt-1 max-h-8 overflow-hidden whitespace-pre-wrap font-mono text-[10px] text-[#c8d6cc]">
+                      <pre className="mt-1 max-h-8 overflow-hidden whitespace-pre-wrap font-mono text-[11px] text-[var(--ide-text)]">
                         {entry.code}
                       </pre>
                     </div>
                     <button
                       type="button"
                       onClick={() => props.onCodeChange(entry.code)}
-                      className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[10px] font-semibold text-primary-soft hover:bg-white/[.07]"
+                      className="shrink-0 rounded-md border border-[var(--ide-border)] px-2 py-1 text-[11px] font-semibold text-[var(--ide-accent)] hover:bg-white/[.07]"
                     >
                       {tr("Відновити", "Restore")}
                     </button>
@@ -987,7 +1297,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                 ))}
               </div>
             ) : (
-              <p className="mt-3 text-[#82968a]">
+              <p className="mt-3 text-[var(--ide-muted)]">
                 {tr(
                   "Перші версії з’являться після редагування коду.",
                   "Snapshots will appear after you edit the code.",
@@ -1000,7 +1310,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     }
     if (bottomTab === "console") {
       return (
-        <pre className="h-full overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-6 text-[#c8d6cc]">
+        <pre className="h-full overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-6 text-[var(--ide-text)]">
           {props.runResult?.stdout ||
             props.runResult?.stderr ||
             tr(
@@ -1011,93 +1321,144 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       );
     }
     if (bottomTab === "terminal") {
+      const example =
+        lastRunInput === null
+          ? undefined
+          : props.publicExamples?.find(
+              (item) => item.input.trim() === lastRunInput.trim(),
+            );
+      if (!props.runResult && !props.running)
+        return (
+          <div className="ide-empty-context p-5">
+            <h3>
+              {tr(
+                "Тут з’явиться вивід програми",
+                "Your program output appears here",
+              )}
+            </h3>
+            <p>
+              {tr(
+                "Вибери приклад або введи свої дані та натисни «Запустити».",
+                "Choose an example or enter your own input, then press Run.",
+              )}
+            </p>
+          </div>
+        );
       return (
-        <div className="h-full min-h-0 overflow-auto p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#82968a]">{tr("Останній запуск", "Last run")}</span>
-              {props.lastRunDurationMs != null ? <span className="inline-flex items-center gap-1 text-[10px] tabular-nums text-[#a7b5aa]"><Clock3 className="size-3" />{props.lastRunDurationMs} ms</span> : null}
-            </div>
-            <button type="button" onClick={runWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:opacity-40" aria-label={tr("Запустити код знову", "Run code again")} title={tr("Запустити код знову", "Run code again")}>
-              <Play className="size-3" />{tr("Запустити знову", "Run again")}
-            </button>
+        <div
+          className="ide-run-output"
+          aria-live="polite"
+          aria-busy={props.running}
+        >
+          <div
+            className="ide-output-status"
+            data-error={!props.running && !props.runResult?.success}
+          >
+            {props.running ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : props.runResult?.success ? (
+              <CheckCircle2 className="size-4" />
+            ) : (
+              <SquareTerminal className="size-4" />
+            )}
+            <span>
+              {props.running
+                ? tr("Програма виконується…", "Running your program…")
+                : props.runResult?.success
+                  ? tr("Запуск завершено", "Run finished")
+                  : tr(
+                      "Програма завершилася з помилкою",
+                      "The program finished with an error",
+                    )}
+            </span>
+            {!props.running && props.lastRunDurationMs != null ? (
+              <small>{props.lastRunDurationMs} ms</small>
+            ) : null}
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[.14em] text-[#82968a]">
-                <span>stdout</span>
-                <button type="button" onClick={() => void copyText(props.runResult?.stdout || "", "stdout")} disabled={!props.runResult?.stdout} className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] normal-case tracking-normal text-[#c8d6cc] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40" aria-label={tr("Скопіювати stdout", "Copy stdout")} title={tr("Скопіювати stdout", "Copy stdout")}>
-                  {copiedLabel === "stdout" ? <Check className="size-3" /> : <Copy className="size-3" />}
-                  {copiedLabel === "stdout" ? tr("Скопійовано", "Copied") : tr("Копіювати", "Copy")}
-                </button>
+          {!props.running ? (
+            <>
+              <div className="ide-output-grid" data-custom={!example}>
+                <div>
+                  <div className="ide-output-label">
+                    <span>{tr("Твій вивід", "Your output")}</span>
+                    <button
+                      type="button"
+                      className="ide-icon-btn"
+                      onClick={() =>
+                        void copyText(props.runResult?.stdout || "", "stdout")
+                      }
+                      disabled={!props.runResult?.stdout}
+                      aria-label={tr("Скопіювати вивід", "Copy output")}
+                    >
+                      {copiedLabel === "stdout" ? <Check /> : <Copy />}
+                    </button>
+                  </div>
+                  <pre>
+                    {props.runResult?.stdout ||
+                      tr(
+                        "Програма нічого не вивела",
+                        "The program produced no output",
+                      )}
+                  </pre>
+                </div>
+                {example ? (
+                  <div>
+                    <div className="ide-output-label">
+                      {tr(
+                        "Очікуваний вивід прикладу",
+                        "Expected example output",
+                      )}
+                    </div>
+                    <pre>{example.expectedOutput}</pre>
+                  </div>
+                ) : null}
               </div>
-              <pre className="min-h-24 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs leading-5 text-[#dce7df]">{props.runResult?.stdout || "—"}</pre>
-            </div>
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[.14em] text-[#82968a]">
-                <span>stderr</span>
-                <button type="button" onClick={() => void copyText(props.runResult?.stderr || "", "stderr")} disabled={!props.runResult?.stderr} className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[10px] normal-case tracking-normal text-[#c8d6cc] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40" aria-label={tr("Скопіювати stderr", "Copy stderr")} title={tr("Скопіювати stderr", "Copy stderr")}>
-                  {copiedLabel === "stderr" ? <Check className="size-3" /> : <Copy className="size-3" />}
-                  {copiedLabel === "stderr" ? tr("Скопійовано", "Copied") : tr("Копіювати", "Copy")}
-                </button>
-              </div>
-              <pre className="min-h-24 whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs leading-5 text-[#ff9aba]">{props.runResult?.stderr || "—"}</pre>
-            </div>
-          </div>
+              {props.runResult?.stderr ? (
+                <div className="ide-output-error">
+                  <div className="ide-output-label">
+                    {tr("Повідомлення програми", "Program messages")}
+                  </div>
+                  <pre>{props.runResult.stderr}</pre>
+                </div>
+              ) : null}
+              <p className="ide-input-note mt-3">
+                {tr(
+                  "Це запуск на вибраних даних. Щоб перевірити всі тести, надішли розв’язок.",
+                  "This run uses the selected input. Submit your solution to check all tests.",
+                )}
+              </p>
+            </>
+          ) : null}
         </div>
       );
     }
     if (props.checking) {
       return (
         <div
-          className="flex h-full min-h-0 items-center justify-center overflow-auto p-4"
+          className="ide-empty-context p-5"
           role="status"
           aria-live="polite"
           aria-busy="true"
         >
-          <div className="w-full max-w-xl rounded-2xl border border-primary/30 bg-[linear-gradient(145deg,rgba(0,217,120,.11),rgba(255,255,255,.025))] p-5 shadow-[0_18px_42px_-30px_rgba(0,217,120,.8)]">
-            <div className="flex items-start gap-3">
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary-soft">
-                <Loader2 className="size-5 animate-spin" />
-              </span>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-bold text-white">
-                    {tr("Система тестує твоє рішення", "The system is testing your solution")}
-                  </h3>
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary-soft">
-                    judge
-                  </span>
-                </div>
-                <p className="mt-1.5 text-xs leading-5 text-[#a7b5aa]">
-                  {tr(
-                    "Компілюємо код і проганяємо публічні та приховані тести. Результати з’являться тут одразу після завершення перевірки.",
-                    "Compiling the code and running public and hidden tests. Results will appear here as soon as the check finishes.",
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[.09]">
-              <div className="h-full w-2/5 rounded-full bg-primary/70" />
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-2 text-[10px] font-semibold text-[#82968a]">
-              {[tr("Компіляція", "Compile"), tr("Публічні кейси", "Public cases"), tr("Приховані кейси", "Hidden cases")].map((label) => (
-                <div key={label} className="flex items-center gap-1.5 rounded-lg bg-black/15 px-2.5 py-2">
-                  <span className="size-1.5 rounded-full bg-primary-soft" />
-                  {label}
-                </div>
-              ))}
-            </div>
-          </div>
+          <h3 className="flex items-center gap-2">
+            <Loader2 className="size-4 animate-spin" />
+            {tr("Перевіряємо розв’язок…", "Checking your solution…")}
+          </h3>
+          <p>
+            {tr(
+              "Компілюємо програму та запускаємо всі тести. Результат з’явиться тут.",
+              "Compiling your program and running all tests. The result will appear here.",
+            )}
+          </p>
         </div>
       );
     }
     return (
-      <div className="h-full overflow-auto p-4 text-xs text-[#c8d6cc]">
+      <div className="h-full overflow-auto p-4 text-xs text-[var(--ide-text)]">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           {props.checkResult ? (
             <span
-              className={`rounded-full px-2.5 py-1 font-bold ${verdictIsAccepted(props.checkResult.verdict) ? "bg-primary/10 text-primary-soft" : "bg-[#ff6b9d]/10 text-[#ff9aba]"}`}
+              className={`rounded-md px-2.5 py-1 font-semibold ${verdictIsAccepted(props.checkResult.verdict) ? "bg-[var(--ide-accent-wash)] text-[var(--ide-accent)]" : "bg-[var(--ide-error-wash)] text-[var(--ide-error)]"}`}
             >
               {props.checkResult.verdict || "—"}
             </span>
@@ -1115,14 +1476,18 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           ) : null}
         </div>
         {props.checkResult?.groupScores?.length ? (
-          <div className="mb-3 rounded-xl border border-white/10 bg-black/15 p-3">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[.12em] text-[#82968a]">
+          <div className="mb-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-3">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--ide-muted)]">
               {tr("Сабтаски", "Subtasks")}
             </div>
             <div className="flex flex-wrap gap-2">
               {props.checkResult.groupScores.slice(0, 24).map((group) => (
-                <span key={group.group} className="rounded-lg bg-white/[.06] px-2.5 py-1.5 text-[11px] text-[#c8d6cc]">
-                  {group.group}: {group.score}/{group.maxScore}{group.status === "SKIPPED" ? " (пропущено)" : ""}
+                <span
+                  key={group.group}
+                  className="rounded-lg bg-white/[.06] px-2.5 py-1.5 text-[11px] text-[var(--ide-text)]"
+                >
+                  {group.group}: {group.score}/{group.maxScore}
+                  {group.status === "SKIPPED" ? " (пропущено)" : ""}
                 </span>
               ))}
             </div>
@@ -1130,113 +1495,288 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         ) : null}
         {props.checkResult?.compileError ? (
           <div className="mb-3 rounded-xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/5 p-3">
-            <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[.12em] text-[#ff9aba]">
+            <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--ide-error)]">
               <span>{tr("Помилка компіляції", "Compiler error")}</span>
-              <button type="button" onClick={() => void copyText(props.checkResult?.compileError || "", "compile-error")} className="inline-flex items-center gap-1 rounded-md border border-[#ff6b9d]/25 px-2 py-1 text-[10px] normal-case tracking-normal text-[#ffb2c9] hover:bg-[#ff6b9d]/10" aria-label={tr("Скопіювати помилку компіляції", "Copy compiler error")} title={tr("Скопіювати помилку компіляції", "Copy compiler error")}>
-                {copiedLabel === "compile-error" ? <Check className="size-3" /> : <Copy className="size-3" />}
-                {copiedLabel === "compile-error" ? tr("Скопійовано", "Copied") : tr("Копіювати", "Copy")}
+              <button
+                type="button"
+                onClick={() =>
+                  void copyText(
+                    props.checkResult?.compileError || "",
+                    "compile-error",
+                  )
+                }
+                className="inline-flex items-center gap-1 rounded-md border border-[#ff6b9d]/25 px-2 py-1 text-[11px] normal-case tracking-normal text-[var(--ide-error)] hover:bg-[var(--ide-error-wash)]"
+                aria-label={tr(
+                  "Скопіювати помилку компіляції",
+                  "Copy compiler error",
+                )}
+                title={tr(
+                  "Скопіювати помилку компіляції",
+                  "Copy compiler error",
+                )}
+              >
+                {copiedLabel === "compile-error" ? (
+                  <Check className="size-3" />
+                ) : (
+                  <Copy className="size-3" />
+                )}
+                {copiedLabel === "compile-error"
+                  ? tr("Скопійовано", "Copied")
+                  : tr("Копіювати", "Copy")}
               </button>
             </div>
-            <pre className="whitespace-pre-wrap font-mono text-[#ff9aba]">{props.checkResult.compileError}</pre>
+            <pre className="whitespace-pre-wrap font-mono text-[var(--ide-error)]">
+              {props.checkResult.compileError}
+            </pre>
           </div>
         ) : null}
         {props.checkResult?.publicTestResults?.length ? (
           <div>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#82968a]">{tr("Публічні тести", "Public tests")} · {publicTestResults.length}</span>
-              <button type="button" onClick={() => setShowFailedOnly((value) => !value)} className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${showFailedOnly ? "border-[#ff6b9d]/35 bg-[#ff6b9d]/10 text-[#ffb2c9]" : "border-white/10 text-[#82968a] hover:bg-white/[.06] hover:text-white"}`} aria-pressed={showFailedOnly}>
-                {showFailedOnly ? tr("Усі тести", "All tests") : tr("Лише невдалі", "Failed only")}
+              <span className="text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--ide-muted)]">
+                {tr("Публічні тести", "Public tests")} ·{" "}
+                {publicTestResults.length}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowFailedOnly((value) => !value)}
+                className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${showFailedOnly ? "border-[#ff6b9d]/35 bg-[var(--ide-error-wash)] text-[var(--ide-error)]" : "border-[var(--ide-border)] text-[var(--ide-muted)] hover:bg-white/[.06] hover:text-[var(--ide-text)]"}`}
+                aria-pressed={showFailedOnly}
+              >
+                {showFailedOnly
+                  ? tr("Усі тести", "All tests")
+                  : tr("Лише невдалі", "Failed only")}
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-            {visiblePublicTestResults.map((test, index) => (
-              <div key={test.testId} className="space-y-1">
-                <button
-                  type="button"
-                  onClick={() => setExpandedTestId((current) => current === test.testId ? null : test.testId)}
-                  className={`w-full rounded-lg border p-2 text-center transition hover:brightness-125 ${test.testId === firstFailedPublicTestId ? "ring-2 ring-[#ff9aba]/70 ring-offset-1 ring-offset-[#0b120e]" : ""} ${test.skipped ? "border-[#f0c674]/30 bg-[#f0c674]/10 text-[#f0c674]" : test.passed ? "border-primary/30 bg-primary/10 text-primary-soft" : "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]"}`}
-                  aria-label={`${tr("Тест", "Test")} #${test.testId}${test.testId === firstFailedPublicTestId ? ` · ${tr("перший невдалий", "first failed")}` : ""}`}
-                >
-                  <span className="block font-bold">
-                    {test.passed ? "✓" : "×"} {index + 1}
-                  </span>
-                  <span className="mt-1 block text-[10px] opacity-70">
-                    {test.verdict || (test.passed ? "AC" : "WA")}
-                  </span>
-                </button>
-                {(() => {
-                  const example = props.publicExamples?.find((item) => item.testId === test.testId);
-                  if (!example) return null;
-                  const inputLabel = `public-input:${test.testId}`;
-                  const outputLabel = `public-output:${test.testId}`;
-                  return (
-                    <div className="flex justify-center gap-1">
-                      <button type="button" onClick={() => void copyText(example.input, inputLabel)} disabled={!example.input} className="rounded border border-white/10 p-1 text-[#82968a] hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40" aria-label={tr(`Скопіювати input тесту ${index + 1}`, `Copy test ${index + 1} input`)} title={tr("Скопіювати input", "Copy input")}>
-                        {copiedLabel === inputLabel ? <Check className="size-3" /> : <Copy className="size-3" />}
-                      </button>
-                      <button type="button" onClick={() => void copyText(example.expectedOutput, outputLabel)} disabled={!example.expectedOutput} className="rounded border border-white/10 p-1 text-[#82968a] hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40" aria-label={tr(`Скопіювати очікуваний output тесту ${index + 1}`, `Copy test ${index + 1} expected output`)} title={tr("Скопіювати expected output", "Copy expected output")}>
-                        {copiedLabel === outputLabel ? <Check className="size-3" /> : <Copy className="size-3" />}
-                      </button>
-                    </div>
-                  );
-                })()}
-              </div>
-            ))}
+              {visiblePublicTestResults.map((test, index) => (
+                <div key={test.testId} className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedTestId((current) =>
+                        current === test.testId ? null : test.testId,
+                      )
+                    }
+                    className={`w-full rounded-lg border p-2 text-center transition hover:brightness-125 ${test.testId === firstFailedPublicTestId ? "ring-2 ring-[#ff9aba]/70 ring-offset-1 ring-offset-[#0b120e]" : ""} ${test.skipped ? "border-[#f0c674]/30 bg-[#f0c674]/10 text-[#f0c674]" : test.passed ? "border-primary/30 bg-[var(--ide-accent-wash)] text-[var(--ide-accent)]" : "border-[#ff6b9d]/30 bg-[var(--ide-error-wash)] text-[var(--ide-error)]"}`}
+                    aria-label={`${tr("Тест", "Test")} #${test.testId}${test.testId === firstFailedPublicTestId ? ` · ${tr("перший невдалий", "first failed")}` : ""}`}
+                  >
+                    <span className="block font-bold">
+                      {test.passed ? "✓" : "×"} {index + 1}
+                    </span>
+                    <span className="mt-1 block text-[11px] opacity-70">
+                      {test.verdict || (test.passed ? "AC" : "WA")}
+                    </span>
+                  </button>
+                  {(() => {
+                    const example = props.publicExamples?.find(
+                      (item) => item.testId === test.testId,
+                    );
+                    if (!example) return null;
+                    const inputLabel = `public-input:${test.testId}`;
+                    const outputLabel = `public-output:${test.testId}`;
+                    return (
+                      <div className="flex justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void copyText(example.input, inputLabel)
+                          }
+                          disabled={!example.input}
+                          className="rounded border border-[var(--ide-border)] p-1 text-[var(--ide-muted)] hover:bg-white/[.06] hover:text-[var(--ide-text)] disabled:pointer-events-none disabled:opacity-40"
+                          aria-label={tr(
+                            `Скопіювати input тесту ${index + 1}`,
+                            `Copy test ${index + 1} input`,
+                          )}
+                          title={tr("Скопіювати input", "Copy input")}
+                        >
+                          {copiedLabel === inputLabel ? (
+                            <Check className="size-3" />
+                          ) : (
+                            <Copy className="size-3" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void copyText(example.expectedOutput, outputLabel)
+                          }
+                          disabled={!example.expectedOutput}
+                          className="rounded border border-[var(--ide-border)] p-1 text-[var(--ide-muted)] hover:bg-white/[.06] hover:text-[var(--ide-text)] disabled:pointer-events-none disabled:opacity-40"
+                          aria-label={tr(
+                            `Скопіювати очікуваний output тесту ${index + 1}`,
+                            `Copy test ${index + 1} expected output`,
+                          )}
+                          title={tr(
+                            "Скопіювати expected output",
+                            "Copy expected output",
+                          )}
+                        >
+                          {copiedLabel === outputLabel ? (
+                            <Check className="size-3" />
+                          ) : (
+                            <Copy className="size-3" />
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ))}
             </div>
-            {!visiblePublicTestResults.length ? <div className="rounded-lg border border-white/10 bg-white/[.03] px-3 py-2 text-xs text-[#82968a]">{tr("Невдалих тестів немає.", "There are no failed tests.")}</div> : null}
+            {!visiblePublicTestResults.length ? (
+              <div className="rounded-lg border border-[var(--ide-border)] bg-white/[.03] px-3 py-2 text-xs text-[var(--ide-muted)]">
+                {tr("Невдалих тестів немає.", "There are no failed tests.")}
+              </div>
+            ) : null}
             {expandedPublicTest ? (
-              <div className="mt-3 rounded-xl border border-white/10 bg-black/15 p-3">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[.12em] text-[#82968a]">
-                  <span>{tr("Деталі тесту", "Test details")} #{expandedPublicTest.testId}</span>
-                  <button type="button" onClick={() => setExpandedTestId(null)} className="rounded-md px-2 py-1 normal-case tracking-normal hover:bg-white/[.06] hover:text-white">{tr("Закрити", "Close")}</button>
+              <div className="mt-3 rounded-xl border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-3">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--ide-muted)]">
+                  <span>
+                    {tr("Деталі тесту", "Test details")} #
+                    {expandedPublicTest.testId}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedTestId(null)}
+                    className="rounded-md px-2 py-1 normal-case tracking-normal hover:bg-white/[.06] hover:text-[var(--ide-text)]"
+                  >
+                    {tr("Закрити", "Close")}
+                  </button>
                 </div>
                 <div className="grid gap-2 md:grid-cols-3">
-                  <div><div className="mb-1 text-[10px] text-[#82968a]">Input</div><pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[11px] text-[#c8d6cc]">{expandedPublicTest.input || "—"}</pre></div>
-                  <div><div className="mb-1 text-[10px] text-[#82968a]">Expected output</div><pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[11px] text-primary-soft">{expandedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === expandedPublicTest.testId)?.expectedOutput || "—"}</pre></div>
-                  <div><div className="mb-1 text-[10px] text-[#82968a]">Actual output</div><pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[11px] text-[#ffb2c9]">{expandedPublicTest.actualOutput || "—"}</pre></div>
+                  <div>
+                    <div className="mb-1 text-[11px] text-[var(--ide-muted)]">
+                      Input
+                    </div>
+                    <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-2 font-mono text-[11px] text-[var(--ide-text)]">
+                      {expandedPublicTest.input || "—"}
+                    </pre>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[11px] text-[var(--ide-muted)]">
+                      Expected output
+                    </div>
+                    <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-2 font-mono text-[11px] text-[var(--ide-accent)]">
+                      {expandedPublicTest.expectedOutput ||
+                        props.publicExamples?.find(
+                          (item) => item.testId === expandedPublicTest.testId,
+                        )?.expectedOutput ||
+                        "—"}
+                    </pre>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[11px] text-[var(--ide-muted)]">
+                      Actual output
+                    </div>
+                    <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-2 font-mono text-[11px] text-[var(--ide-error)]">
+                      {expandedPublicTest.actualOutput || "—"}
+                    </pre>
+                  </div>
                 </div>
               </div>
             ) : null}
           </div>
         ) : (
-          <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[#294333] bg-[#0c1510] px-5 py-8 text-center">
-            <div className="max-w-sm">
-              <span className="mx-auto grid size-10 place-items-center rounded-xl border border-primary/20 bg-primary/10 text-primary-soft">
-                <TestTube2 className="size-4" />
-              </span>
-              <p className="mt-3 text-sm font-semibold text-[#dce8df]">
-                {tr("Результати з’являться після запуску", "Results will appear after you run the code")}
-              </p>
-              <p className="mt-1.5 text-xs leading-5 text-[#82968a]">
-                {tr(
-                  "Запусти код для швидкого перегляду або натисни Test для повної перевірки.",
-                  "Run the code for a quick preview or press Test for a full check.",
-                )}
-              </p>
-            </div>
+          <div className="ide-empty-context">
+            <h3>
+              {props.checkResult
+                ? allTestsPassed
+                  ? tr("Розв’язок прийнято", "Solution accepted")
+                  : tr(
+                      "Переглянь результат перевірки",
+                      "Review the check result",
+                    )
+                : tr(
+                    "Готовий перевірити розв’язок?",
+                    "Ready to check your solution?",
+                  )}
+            </h3>
+            <p>
+              {props.checkResult
+                ? tr(
+                    "Деталі окремих тестів для цієї задачі не публікуються.",
+                    "Individual test details are not published for this problem.",
+                  )
+                : props.submitMode
+                  ? tr(
+                      "Натисни «Надіслати», щоб перевірити всі тести контесту.",
+                      "Press Submit to check all contest tests.",
+                    )
+                  : tr(
+                      "Натисни «Перевірити», щоб отримати результат на всіх тестах.",
+                      "Press Check to see the result on all tests.",
+                    )}
+            </p>
           </div>
         )}
         {firstFailedPublicTest ? (
           <div className="mt-4 rounded-xl border border-[#ff6b9d]/25 bg-[#ff6b9d]/[.04] p-3">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[.12em] text-[#ff9aba]">{tr("Перший невдалий тест", "First failed test")} #{firstFailedPublicTest.testId}</span>
-              <button type="button" onClick={() => setShowWhitespace((value) => !value)} aria-pressed={showWhitespace} className={`rounded-md border px-2 py-1 text-[10px] font-semibold ${showWhitespace ? "border-[#ffb454]/35 bg-[#ffb454]/10 text-[#ffca7e]" : "border-white/10 text-[#82968a] hover:bg-white/[.06] hover:text-white"}`}>
-                {showWhitespace ? tr("Звичайний вигляд", "Normal output") : tr("Показати пробіли", "Show whitespace")}
+              <span className="text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--ide-error)]">
+                {tr("Перший невдалий тест", "First failed test")} #
+                {firstFailedPublicTest.testId}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowWhitespace((value) => !value)}
+                aria-pressed={showWhitespace}
+                className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${showWhitespace ? "border-[#ffb454]/35 bg-[#ffb454]/10 text-[var(--ide-warning)]" : "border-[var(--ide-border)] text-[var(--ide-muted)] hover:bg-white/[.06] hover:text-[var(--ide-text)]"}`}
+              >
+                {showWhitespace
+                  ? tr("Звичайний вигляд", "Normal output")
+                  : tr("Показати пробіли", "Show whitespace")}
               </button>
             </div>
             <div className="grid gap-3 md:grid-cols-3">
               <div>
-                <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-primary-soft">Expected output</div>
-                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-primary-soft">{showWhitespace ? visualizeWhitespace(firstFailedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === firstFailedPublicTest.testId)?.expectedOutput || "") || "—" : firstFailedPublicTest.expectedOutput || props.publicExamples?.find((item) => item.testId === firstFailedPublicTest.testId)?.expectedOutput || "—"}</pre>
+                <div className="mb-1 text-[11px] uppercase tracking-[.12em] text-[var(--ide-accent)]">
+                  Expected output
+                </div>
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-3 font-mono text-xs text-[var(--ide-accent)]">
+                  {showWhitespace
+                    ? visualizeWhitespace(
+                        firstFailedPublicTest.expectedOutput ||
+                          props.publicExamples?.find(
+                            (item) =>
+                              item.testId === firstFailedPublicTest.testId,
+                          )?.expectedOutput ||
+                          "",
+                      ) || "—"
+                    : firstFailedPublicTest.expectedOutput ||
+                      props.publicExamples?.find(
+                        (item) => item.testId === firstFailedPublicTest.testId,
+                      )?.expectedOutput ||
+                      "—"}
+                </pre>
               </div>
               <div>
-                <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-[#ff9aba]">Actual output</div>
-                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-[#ffb2c9]">{showWhitespace ? visualizeWhitespace(firstFailedPublicTest.actualOutput || "") || "—" : firstFailedPublicTest.actualOutput || "—"}</pre>
+                <div className="mb-1 text-[11px] uppercase tracking-[.12em] text-[var(--ide-error)]">
+                  Actual output
+                </div>
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-3 font-mono text-xs text-[var(--ide-error)]">
+                  {showWhitespace
+                    ? visualizeWhitespace(
+                        firstFailedPublicTest.actualOutput || "",
+                      ) || "—"
+                    : firstFailedPublicTest.actualOutput || "—"}
+                </pre>
               </div>
               <div>
-                <div className="mb-1 text-[10px] uppercase tracking-[.12em] text-[#82968a]">Input</div>
-                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-[#c8d6cc]">{firstFailedPublicTest.input || "—"}</pre>
-                <button type="button" onClick={() => props.onStdinChange(firstFailedPublicTest.input || "")} disabled={!firstFailedPublicTest.input || props.isWebTask} className="mt-2 rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] font-semibold text-primary-soft hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40">
+                <div className="mb-1 text-[11px] uppercase tracking-[.12em] text-[var(--ide-muted)]">
+                  Input
+                </div>
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-[var(--ide-border)] bg-[var(--ide-canvas)] p-3 font-mono text-xs text-[var(--ide-text)]">
+                  {firstFailedPublicTest.input || "—"}
+                </pre>
+                <button
+                  type="button"
+                  onClick={() =>
+                    props.onStdinChange(firstFailedPublicTest.input || "")
+                  }
+                  disabled={!firstFailedPublicTest.input || props.isWebTask}
+                  className="mt-2 rounded-lg border border-[var(--ide-border)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--ide-accent)] hover:bg-white/[.06] disabled:pointer-events-none disabled:opacity-40"
+                >
                   {tr("Використати як stdin", "Use as stdin")}
                 </button>
               </div>
@@ -1250,57 +1790,55 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
 
   if (mode === "theory") {
     return (
-      <div className="min-h-[760px] rounded-[28px] border border-border/10 bg-white shadow-[0_22px_55px_-44px_rgba(17,43,25,.55)] dark:border-white/10 dark:bg-bg-surface">
-        <div className="flex items-center justify-between border-b border-border/10 px-5 py-4 dark:border-white/10">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[.16em] text-[#e87d00]">
-              {tr("Теорія перед практикою", "Theory before practice")}
-            </div>
-            <h1 className="mt-1 text-2xl font-bold text-text-primary dark:text-text-primary">
-              {props.task.title}
-            </h1>
-          </div>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary-strong dark:text-primary-soft">
-            1 / 2
+      <div className="studycod-workbench ide-theory">
+        <header className="ide-header">
+          <button
+            type="button"
+            className="ide-icon-btn"
+            onClick={props.onBack}
+            aria-label={tr("Назад", "Back")}
+          >
+            <ChevronRight className="rotate-180" />
+          </button>
+          <span className="ide-brand">StudyCod</span>
+          <span className="ide-header-title">
+            {tr("Теорія перед практикою", "Theory before practice")}
           </span>
-        </div>
-        <div className="mx-auto max-w-4xl px-5 py-8 md:px-12 md:py-12">
-          <div className="mb-8 flex items-center gap-3 text-sm text-text-muted dark:text-[#a7b5aa]">
-            <span className="grid size-8 place-items-center rounded-full bg-primary font-bold text-[#062211]">
-              1
-            </span>
-            <span className="h-px flex-1 bg-primary/30" />
-            <span className="grid size-8 place-items-center rounded-full border border-[#617066]/30">
-              2
-            </span>
-            <span>{tr("Практика в IDE", "Practice in IDE")}</span>
+        </header>
+        <div className="ide-theory-content">
+          <div className="ide-task-meta">
+            {tr(
+              "Крок 1 · Ознайомся з матеріалом",
+              "Step 1 · Read the material",
+            )}
           </div>
+          <h1 className="ide-task-title">{props.task.title}</h1>
           {props.theory ? (
-            <article className="prose prose-sm max-w-none dark:prose-invert">
-              <MarkdownView content={props.theory} />
+            <article className="ide-task-document">
+              <MarkdownView content={props.theory} variant="task" />
             </article>
           ) : (
-            <div className="rounded-2xl bg-primary/10 p-5 text-sm text-text-secondary dark:text-text-secondary">
+            <p className="ide-input-note">
               {tr(
-                "Для цієї задачі немає окремого теоретичного блоку. Переходь до практики.",
-                "This task has no separate theory block. Continue to practice.",
+                "Для цієї задачі немає окремої теорії. Можна переходити до практики.",
+                "This task has no separate theory. You can start practicing.",
               )}
-            </div>
+            </p>
           )}
-          <div className="mt-10 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-xs text-[#718075]">
+          <div className="ide-theory-next">
+            <p className="ide-input-note">
               {tr(
-                "Теорію можна відкрити знову у вкладці Завдання.",
-                "You can reopen theory from the Task tab.",
+                "Матеріал залишиться доступним поруч з умовою задачі.",
+                "This material stays available beside the problem statement.",
               )}
-            </span>
+            </p>
             <button
               type="button"
+              className="ide-btn ide-btn-primary"
               onClick={markTheoryComplete}
-              className="inline-flex h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-[#062211] transition hover:bg-[#25e88d]"
             >
-              <Code2 className="size-4" />
-              {tr("Перейти до практики", "Go to practice")}
+              {tr("Перейти до практики", "Start practicing")}
+              <ChevronRight />
             </button>
           </div>
         </div>
@@ -1308,17 +1846,25 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     );
   }
 
-  const showLeft = !focusMode && !layout.leftCollapsed && (!simpleMode || fileList.length > 1);
-  const showRight = !focusMode && !layout.rightCollapsed;
-  const showBottom = !focusMode && !layout.bottomCollapsed;
-  const rightPanelMax = typeof window === "undefined"
-    ? 520
-    : Math.max(340, Math.min(920, window.innerWidth - layout.left - 400));
+  const showStatement = !focusMode && !layout.rightCollapsed;
+  const showRunner = !focusMode && !layout.bottomCollapsed;
+  const statementBounds = getResizeBounds("right");
+  const runnerBounds = getResizeBounds("bottom");
+  const statementWidth = Math.max(
+    statementBounds.min,
+    Math.min(layout.right, statementBounds.max),
+  );
+  const runnerHeight = Math.max(
+    runnerBounds.min,
+    Math.min(layout.bottom, runnerBounds.max),
+  );
+  const selectedExample = props.publicExamples?.find(
+    (item) => item.input.trim() === props.stdin.trim(),
+  );
   const activeMiniProjectRemainingSeconds =
     miniProjectTimer?.taskId === String(props.task.id)
       ? miniProjectRemainingSeconds
       : null;
-  const miniProjectTimerExpired = activeMiniProjectRemainingSeconds === 0;
   const saveStatusLabel = getIdeSaveStatusLabel(
     props.saveStatus,
     props.lastSavedAt,
@@ -1330,466 +1876,875 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     },
     (timestamp) => formatIdeTimestamp(timestamp, i18n.language || "uk"),
   );
-
-  return (
-    <div className="studycod-ide-workspace relative flex h-[calc(100dvh-var(--workspace-header-height,64px)-env(safe-area-inset-bottom))] min-h-0 flex-col overflow-hidden rounded-none border-x-0 border-y border-[#203428] bg-[#0b110d] font-[family-name:var(--font-sans)] text-[#e8f1ea] shadow-none sm:rounded-xl sm:border-x lg:h-[min(1100px,calc(100dvh-var(--workspace-header-height,64px)))] lg:min-h-[560px] lg:rounded-2xl lg:shadow-[0_24px_70px_-56px_rgba(0,217,120,.35)]">
-      <header className="flex min-h-[72px] items-center gap-2 border-b border-[#203428] bg-[#111b14] px-3 py-2 sm:px-5 lg:gap-2.5">
-        {props.onBack ? (
-          <button
-            type="button"
-            onClick={props.onBack}
-            className="grid size-11 shrink-0 place-items-center rounded-xl border border-[#294333] bg-[#0d1710] text-[#a7b5aa] transition hover:border-primary/50 hover:bg-primary/10 hover:text-white lg:size-9"
-            title={tr("Назад", "Back")}
-          >
-            <ChevronRight className="size-4 rotate-180" />
-          </button>
-        ) : null}
-        <div className="mr-auto flex min-w-0 items-center gap-2.5">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-primary/25 bg-primary/10 text-primary-soft">
-            <FolderCode className="size-4" />
-          </span>
-          <div className="min-w-0">
-            <div className="truncate text-[13px] font-bold tracking-[-.02em] text-[#edf5ee] sm:text-sm">
-              {props.task.title}
-            </div>
-            <div className="mt-1 flex items-center gap-2 truncate text-[10px] font-semibold uppercase tracking-[.13em] text-[#82968a]">
-              <span>{props.task.section || tr("Практична задача", "Practice task")}</span>
-              <span className="size-1 rounded-full bg-primary/70" />
-              <span className="text-primary-soft">{languageLabel(props.language)}</span>
-            </div>
-          </div>
-        </div>
-        {props.contextToolbar ? <div className="hidden shrink-0 items-center gap-2 lg:flex">{props.contextToolbar}</div> : null}
-        {props.toolbarStatus && !simpleMode ? <div className="hidden min-w-0 items-center gap-1 rounded-xl border border-white/[.07] bg-black/10 p-1 xl:flex">{props.toolbarStatus}</div> : null}
-        {props.saveStatus ? (
-          <span className={`hidden items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[10px] font-semibold lg:inline-flex ${props.saveStatus === "error" ? "border-[#ff6b9d]/30 bg-[#ff6b9d]/10 text-[#ff9aba]" : props.saveStatus === "saving" || props.saveStatus === "dirty" ? "border-[#ffb454]/30 bg-[#ffb454]/10 text-[#ffca7e]" : "border-primary/25 bg-primary/10 text-primary-soft"}`} role={props.saveStatus === "error" ? "alert" : "status"} aria-live={props.saveStatus === "error" ? "assertive" : "polite"}>
-            {saveStatusLabel}
-          </span>
-        ) : null}
-        {saveStatusLabel ? <span className={`max-w-[92px] truncate text-[10px] font-semibold lg:hidden ${props.saveStatus === "error" ? "text-[#ff9aba]" : props.saveStatus === "saving" || props.saveStatus === "dirty" ? "text-[#ffca7e]" : "text-primary-soft"}`} title={saveStatusLabel} role={props.saveStatus === "error" ? "alert" : "status"} aria-live={props.saveStatus === "error" ? "assertive" : "polite"}>{saveStatusLabel}</span> : null}
-        {props.attemptsUsed != null ? (
-          <span className={`rounded-lg border border-white/10 bg-white/[.04] px-2.5 py-1.5 text-[10px] font-semibold text-[#a7b5aa] ${simpleMode ? "hidden" : "lg:inline-flex"}`} title={tr("Використані спроби", "Attempts used")}>
-            {tr("Спроби", "Attempts")}: {props.attemptsUsed}{props.maxAttempts && props.maxAttempts > 0 ? `/${props.maxAttempts}` : ""}
-          </span>
-        ) : null}
-        {activeMiniProjectRemainingSeconds !== null ? (
-          <div
-            className={`hidden h-9 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold tabular-nums lg:inline-flex ${miniProjectTimerExpired ? "border-[#ff6b9d]/45 bg-[#ff6b9d]/10 text-[#ff9aba]" : activeMiniProjectRemainingSeconds <= 300 ? "border-[#ffb454]/45 bg-[#ffb454]/10 text-[#ffca7e]" : "border-white/10 bg-white/[.04] text-[#c8d6cc]"}`}
-            title={tr("Залишок часу мініпроєкту", "Mini-project time remaining")}
-            aria-live="polite"
-          >
-            <Clock3 className="size-3.5" />
-            {miniProjectTimerExpired
-              ? tr("Час вийшов", "Time is up")
-              : formatMiniProjectCountdown(activeMiniProjectRemainingSeconds)}
-          </div>
-        ) : null}
-        <details className="relative z-30 hidden shrink-0 lg:block">
-          <summary className="flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-white/10 px-3 text-xs font-semibold text-[#c8d6cc] transition hover:bg-white/[.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-            {tr("Ще", "More")}
-            <ChevronDown className="size-3.5" aria-hidden="true" />
-          </summary>
-          <div className="absolute right-0 top-full z-50 mt-2 grid w-64 gap-2 rounded-2xl border border-[#294333] bg-[#101a13] p-3 shadow-xl" role="group" aria-label={tr("Додаткові дії редактора", "Additional editor controls")}>
-            <button type="button" onClick={() => setSimpleMode((current) => !current)} className="flex h-10 items-center justify-between rounded-lg border border-primary/20 bg-primary/[.06] px-3 text-left text-xs font-semibold text-primary-soft hover:bg-primary/[.12]">
-              <span>{simpleMode ? tr("Повний інтерфейс", "Full interface") : tr("Спрощений інтерфейс", "Simple interface")}</span>
-              <span className="text-[10px] text-[#82968a]">{simpleMode ? tr("Усі інструменти", "All tools") : tr("Менше кнопок", "Fewer controls")}</span>
-            </button>
-            {!props.isWebTask && languageOptions.length > 1 && !props.disableLanguageChange ? <SelectMenu
-              value={props.language}
-              options={languageOptions.map((language) => ({ value: language, label: languageLabel(language as JudgeLanguage) }))}
-              disabled={props.disableLanguageChange}
-              onChange={(value) => props.onLanguageChange(value as JudgeLanguage)}
-              ariaLabel={tr("Мова виконання", "Execution language")}
-              menuMinWidth={180}
-              className="!h-10 w-full rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white"
-            /> : null}
-            {!props.isWebTask && compilersForFamily(props.language).length > 1 ? <SelectMenu
-              value={props.compiler}
-              options={compilersForFamily(props.language).map((compiler) => ({ value: compiler.id, label: compiler.label }))}
-              onChange={props.onCompilerChange}
-              ariaLabel={tr("Версія компілятора", "Compiler version")}
-              menuMinWidth={220}
-              className="!h-10 w-full rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white"
-            /> : null}
-            <button type="button" onClick={props.onSave} disabled={props.readOnly} className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:opacity-40"><Save className="size-3.5" />{tr("Зберегти", "Save")}</button>
-            <button type="button" onClick={downloadCurrentCode} className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]"><Download className="size-3.5" />{tr("Завантажити код", "Download code")}</button>
-            <button type="button" onClick={() => setResetConfirmOpen(true)} className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]"><RotateCcw className="size-3.5" />{tr("Відновити шаблон", "Restore starter code")}</button>
-            <button type="button" onClick={() => setFocusMode((current) => !current)} className="flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]"><Maximize2 className="size-3.5" />{focusMode ? tr("Вийти з режиму фокусу", "Exit focus mode") : tr("Режим фокусу", "Focus mode")}</button>
-            {props.toolbar ? <div className="grid gap-2 border-t border-white/10 pt-2">{props.toolbar}</div> : null}
-          </div>
-        </details>
-        <button
-          type="button"
-          onClick={runWithTab}
-          disabled={props.readOnly || props.running || props.checking}
-          title={tr("Запустити (Ctrl+Enter)", "Run (Ctrl+Enter)")}
-          className="hidden h-9 items-center gap-1.5 rounded-lg bg-white/[.08] px-3 text-xs font-semibold text-white hover:bg-white/[.14] disabled:opacity-50 lg:inline-flex"
-        >
-          <Play className="size-3.5" />
-          {props.running ? "…" : tr("Run", "Run")}
-        </button>
-        <button
-          type="button"
-          onClick={checkWithTab}
-          disabled={props.readOnly || props.running || props.checking}
-          title={props.submitMode ? tr("Надіслати на перевірку (Ctrl+Shift+Enter)", "Submit for judging (Ctrl+Shift+Enter)") : tr("Перевірити (Ctrl+Shift+Enter)", "Test (Ctrl+Shift+Enter)")}
-          className="hidden h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-[#062211] hover:bg-[#25e88d] disabled:opacity-50 lg:inline-flex"
-        >
-          {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : props.submitMode ? <Rocket className="size-3.5" /> : <TestTube2 className="size-3.5" />}
-          {props.checking ? (props.submitMode ? tr("Надсилаємо…", "Submitting…") : tr("Тестуємо…", "Testing…")) : props.submitMode ? tr("Надіслати", "Submit") : tr("Test", "Test")}
-        </button>
-      </header>
-
-      <div className="flex shrink-0 items-stretch border-b border-[#203428] bg-[#0e1711] lg:hidden">
-      <div className="flex min-w-0 flex-1" role="tablist" aria-label={tr("Частини редактора", "Editor sections")} onKeyDown={(event) => {
-        handleMobileTabKeyDown(event);
-      }}>
-        {mobileTabs.map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            id={`mobile-ide-tab-${id}`}
-            type="button"
-            role="tab"
-            aria-selected={mobilePane === id}
-            aria-controls={`mobile-ide-panel-${id}`}
-            tabIndex={mobilePane === id ? 0 : -1}
-            onClick={() => setMobilePane(id)}
-            className={`flex min-h-11 flex-1 items-center justify-center gap-2 border-b-2 px-2 text-xs font-semibold transition-colors ${mobilePane === id ? "border-primary text-primary-soft" : "border-transparent text-[#82968a] hover:text-[#dce8df]"}`}
-          >
-            <Icon className="size-4" aria-hidden="true" />
-            <span>{label}</span>
-            {id === "result" && mobileResultUnread ? <span className="size-1.5 rounded-full bg-primary" aria-label={tr("Є новий результат", "New result")} /> : null}
-          </button>
-        ))}
-      </div>
-      <details className="relative z-30 shrink-0 border-l border-[#203428] px-1.5">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center px-2 text-[11px] font-semibold text-[#b9c9bd] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
-          {tr("Ще", "More")}
-        </summary>
-        <div className="absolute right-1 top-full z-50 grid max-h-[min(70dvh,30rem)] w-[min(18rem,calc(100vw-1rem))] gap-3 overflow-auto rounded-2xl border border-[#294333] bg-[#101a13] p-3 shadow-xl" role="group" aria-label={tr("Додаткові дії редактора", "Additional editor controls")}>
-          <button type="button" onClick={() => setSimpleMode((current) => !current)} className="flex min-h-11 items-center justify-between rounded-lg border border-primary/20 bg-primary/[.06] px-3 text-left text-xs font-semibold text-primary-soft hover:bg-primary/[.12]">
-            <span>{simpleMode ? tr("Повний інтерфейс", "Full interface") : tr("Спрощений інтерфейс", "Simple interface")}</span>
-            <span className="text-[10px] text-[#82968a]">{simpleMode ? tr("Усі інструменти", "All tools") : tr("Менше кнопок", "Fewer controls")}</span>
-          </button>
-          {!props.isWebTask && languageOptions.length > 1 && !props.disableLanguageChange ? <SelectMenu
-            value={props.language}
-            options={languageOptions.map((language) => ({ value: language, label: languageLabel(language as JudgeLanguage) }))}
-            disabled={props.disableLanguageChange}
-            onChange={(value) => props.onLanguageChange(value as JudgeLanguage)}
-            ariaLabel={tr("Мова виконання", "Execution language")}
-            menuMinWidth={180}
-            className="!h-11 w-full rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white"
-          /> : null}
-          {!props.isWebTask && compilersForFamily(props.language).length > 1 ? <SelectMenu
-            value={props.compiler}
-            options={compilersForFamily(props.language).map((compiler) => ({ value: compiler.id, label: compiler.label }))}
-            onChange={props.onCompilerChange}
-            ariaLabel={tr("Версія компілятора", "Compiler version")}
-            menuMinWidth={220}
-            className="!h-11 w-full rounded-lg border-white/10 bg-white/[.06] px-2 text-xs text-white"
-          /> : null}
-          <button type="button" onClick={props.onSave} disabled={props.readOnly} className="min-h-11 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06] disabled:opacity-40">{tr("Зберегти", "Save")}</button>
-          <button type="button" onClick={downloadCurrentCode} className="min-h-11 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]">{tr("Завантажити код", "Download code")}</button>
-          <button type="button" onClick={() => setResetConfirmOpen(true)} className="min-h-11 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]">{tr("Відновити шаблон", "Restore starter code")}</button>
-          <button type="button" onClick={() => setFocusMode((current) => !current)} className="min-h-11 rounded-lg border border-white/10 px-3 text-left text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]">{focusMode ? tr("Вийти з режиму фокусу", "Exit focus mode") : tr("Режим фокусу", "Focus mode")}</button>
-          {props.contextToolbar ? <div className="grid gap-2 border-t border-white/10 pt-2 [&>button]:min-h-11 [&>button]:px-3 [&>a]:min-h-11 [&>a]:min-w-11">{props.contextToolbar}</div> : null}
-          {props.toolbarStatus ? <div className="flex flex-wrap items-center gap-1 border-t border-white/10 pt-2" role="status" aria-label={tr("Статус редактора", "Editor status")}>{props.toolbarStatus}</div> : null}
-          {props.toolbar ? <div className="flex flex-wrap gap-2 border-t border-white/10 pt-2 [&>button]:min-h-11 [&>button]:px-3 [&>a]:min-h-11 [&>a]:min-w-11">{props.toolbar}</div> : null}
-        </div>
-      </details>
-      </div>
-
-      <section id="mobile-ide-panel-condition" role="tabpanel" aria-labelledby="mobile-ide-tab-condition" tabIndex={0} className={`flex min-h-0 shrink-0 flex-col border-b border-[#203428] bg-[#0f1812] lg:hidden ${mobilePane === "condition" ? "flex-1" : "hidden"}`}>
-        <button
-          type="button"
-          onClick={() => setMobileContextOpen((open) => !open)}
-          aria-expanded={mobileContextOpen}
-          aria-controls="mobile-ide-context"
-          className="flex min-h-11 w-full items-center gap-2 px-3 text-left"
-        >
-          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary-soft"><FileText className="size-3.5" /></span>
-          <span className="min-w-0 flex-1 truncate text-xs font-semibold text-[#dce8df]">
-            {props.disableAiAssistance ? tr("Умова задачі", "Task statement") : tr("Умова задачі та підказки", "Task context and hints")}
-          </span>
-          <ChevronDown className={`size-4 shrink-0 text-[#82968a] transition-transform ${mobileContextOpen ? "rotate-180" : ""}`} />
-        </button>
-        {mobileContextOpen ? (
-          <div id="mobile-ide-context" className="max-h-[min(16rem,calc(100dvh-15rem))] flex-1 overflow-y-auto border-t border-[#203428] px-3 py-3">
-            <div className="rounded-xl border border-[#203428] bg-[#111b14] p-3">
-              <MarkdownView content={taskBody} variant="task" />
-            </div>
-            {!props.disableAiAssistance && props.hints?.length ? (
-              <div className="mt-3 space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">{tr("Підказки", "Hints")}</p>
-                {props.hints.map((hint, index) => {
-                  const open = openHintIndex === index;
-                  return (
-                    <div key={`mobile-hint-${index}`} className="overflow-hidden rounded-xl border border-white/10 bg-white/[.03]">
-                      <button
-                        type="button"
-                        onClick={() => setOpenHintIndex(open ? null : index)}
-                        aria-expanded={open}
-                        className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-[11px] font-semibold text-[#c8d6cc]"
-                      >
-                        <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary-soft">{index + 1}</span>
-                        <span className="flex-1">{tr(`Підказка ${index + 1}`, `Hint ${index + 1}`)}</span>
-                        <ChevronDown className={`size-3.5 text-[#82968a] transition-transform ${open ? "rotate-180" : ""}`} />
-                      </button>
-                      {open ? <p className="border-t border-white/10 px-3 py-2 text-[11px] leading-5 text-[#b9c9bd]">{hint}</p> : null}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
-
-      <div id="mobile-ide-panel-code" role="tabpanel" aria-labelledby="mobile-ide-tab-code" tabIndex={0} className={`flex h-full min-h-0 flex-1 ${mobilePane === "code" ? "" : "max-lg:hidden"}`}>
-        {showLeft ? (
-          <aside
-            style={{ width: layout.left }}
-            className="hidden shrink-0 flex-col border-r border-[#203428] bg-[#0f1812] lg:flex"
-          >
-            <div className="flex h-12 items-center justify-between border-b border-[#203428] px-3">
-              <div>
-                <span className="block text-[10px] font-bold uppercase tracking-[.16em] text-[#82968a]">
-                  {tr("Робоча область", "Workspace")}
-                </span>
-                <span className="mt-0.5 block text-[10px] text-[#5f7767]">{fileList.length} {tr("файл", "file")}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => updateLayout({ leftCollapsed: true })}
-                className="text-[#82968a] hover:text-white"
-                title={tr("Згорнути", "Collapse")}
-              >
-                <Minimize2 className="size-3.5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto p-2">
-              {fileList.map((file) => (
-                <button
-                  key={file.path}
-                  type="button"
-                  onClick={() => setActiveFile(file.path)}
-                  className={`flex w-full items-center gap-2 rounded-xl border px-2.5 py-2.5 text-left text-xs transition ${activeFile === file.path ? "border-primary/25 bg-primary/10 font-semibold text-primary-soft" : "border-transparent text-[#a7b5aa] hover:border-[#294333] hover:bg-white/[.04] hover:text-white"}`}
-                >
-                  <FileCode2 className="size-3.5" />
-                  {file.path}
-                </button>
-              ))}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!props.useFiles) {
-                      props.onEnableFiles();
-                      return;
-                    }
-                    setFileAddRequestToken((value) => value + 1);
-                  }}
-                  className="mt-3 flex w-full items-center gap-2 rounded-xl border border-dashed border-[#294333] px-2.5 py-2.5 text-xs text-[#82968a] transition hover:border-primary-soft/50 hover:bg-primary/[.04] hover:text-primary-soft"
-                >
-                  {props.useFiles ? <Plus className="size-3.5" /> : <Braces className="size-3.5" />}
-                  {tr("Додати файл", "Add file")}
-                </button>
-            </div>
-            <div className="border-t border-[#203428] p-3 text-[10px] text-[#718075]">
-              {fileList.length} {tr("файл(ів) підключено", "file(s) connected")}
-            </div>
-          </aside>
+  const busy = props.running || props.checking;
+  const runActions = (
+    <>
+      <button
+        type="button"
+        className="ide-btn"
+        onClick={runWithTab}
+        disabled={Boolean(props.readOnly) || busy || isEmptyTask}
+        title={tr("Запустити · Ctrl+Enter", "Run · Ctrl+Enter")}
+      >
+        {props.running ? (
+          <Loader2 className="animate-spin" />
         ) : (
-          <button
-            type="button"
-            onClick={() => { setSimpleMode(false); updateLayout({ leftCollapsed: false }); }}
-            className="hidden w-10 shrink-0 place-items-center border-r border-white/10 text-[#82968a] hover:text-white lg:grid"
-            title={tr("Показати файли", "Show files")}
-          >
-            <ChevronRight className="size-4" />
-          </button>
+          <Play weight="fill" />
         )}
-        {showLeft ? (
-          <div
-            onPointerDown={(event) => beginResize("left", event)}
-            onKeyDown={(event) => handleResizeKeyDown("left", event)}
-            role="separator"
-            tabIndex={0}
-            aria-orientation="vertical"
-            aria-label={tr("Змінити ширину файлової панелі", "Resize file panel")}
-            aria-valuemin={170}
-            aria-valuemax={520}
-            aria-valuenow={Math.round(layout.left)}
-            className="hidden w-1 shrink-0 cursor-col-resize touch-none bg-transparent hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none lg:block"
-          />
-        ) : null}
-
-        <section aria-label={tr("Редактор коду", "Code editor")} className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-          <details className="shrink-0 border-b border-[#203428] bg-[#0d1610] px-3 py-2 lg:hidden">
-            <summary className="flex min-h-8 cursor-pointer list-none items-center gap-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a8b7ab]">
-              {tr("Ввід для запуску", "Run input")}
-              <span className="rounded-md border border-[#294333] bg-[#111f15] px-1.5 py-0.5 font-mono text-[9px] normal-case tracking-normal text-[#6f8877]">stdin</span>
-              <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-[#718075]">{tr("Змінити", "Edit")}</span>
+        {props.running ? tr("Запуск…", "Running…") : tr("Запустити", "Run")}
+        <kbd>Ctrl ↵</kbd>
+      </button>
+      <button
+        type="button"
+        className="ide-btn ide-btn-primary"
+        onClick={checkWithTab}
+        disabled={Boolean(props.readOnly) || busy || isEmptyTask}
+        title={tr("Перевірити · Ctrl+Shift+Enter", "Check · Ctrl+Shift+Enter")}
+      >
+        {props.checking ? (
+          <Loader2 className="animate-spin" />
+        ) : (
+          <CheckCircle2 weight="bold" />
+        )}
+        {props.checking
+          ? tr("Перевіряємо…", "Checking…")
+          : props.submitMode
+            ? tr("Надіслати", "Submit")
+            : tr("Перевірити", "Check")}
+      </button>
+    </>
+  );
+  const contextContent =
+    assistantTab === "task" ? (
+      <>
+        <div className="ide-task-meta">
+          <span>{tr("Задача", "Problem")}</span>
+          {props.task.difficulty ? (
+            <span className="ide-difficulty">
+              {props.task.difficulty === "EASY"
+                ? tr("Легка", "Easy")
+                : props.task.difficulty === "MEDIUM"
+                  ? tr("Середня", "Medium")
+                  : props.task.difficulty === "HARD"
+                    ? tr("Складна", "Hard")
+                    : props.task.difficulty}
+            </span>
+          ) : null}
+          {props.task.tags?.slice(0, 3).map((tag) => (
+            <span key={tag}>{tag}</span>
+          ))}
+          {allTestsPassed ? (
+            <span className="ide-difficulty">{tr("Розв’язано", "Solved")}</span>
+          ) : null}
+        </div>
+        <h1 className="ide-task-title">{props.task.title}</h1>
+        <article className="ide-task-document">
+          <MarkdownView content={taskBody} variant="task" />
+        </article>
+        {props.task.projectSpec ? (
+          <details className="ide-context-details" open>
+            <summary>
+              {tr("План мініпроєкту", "Mini-project plan")} ·{" "}
+              {props.task.projectSpec.estimatedMinutes} {tr("хв", "min")}
             </summary>
-            <label htmlFor="ide-run-input-mobile" className="sr-only">{tr("Ввід для запуску", "Run input")}</label>
-            <textarea
-              id="ide-run-input-mobile"
-              name="runInputMobile"
-              value={props.stdin}
-              onChange={(event) => props.onStdinChange(event.target.value)}
-              disabled={props.isWebTask || isEmptyTask}
-              rows={3}
-              aria-label={tr("Ввід для запуску", "Run input")}
-              spellCheck={false}
-              placeholder={props.isWebTask ? tr("WEB без stdin", "WEB has no stdin") : tr("Власний input для Run", "Custom input for Run")}
-              className="mt-2 min-h-16 max-h-24 w-full resize-y overflow-auto rounded-lg border border-[#294333] bg-[#101b13] px-3 py-2 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] focus:border-primary/60"
-            />
-            <div className="mt-2 flex items-center justify-between gap-2">
-              {props.publicExamples?.length ? <div className="flex items-center gap-1.5"><span className="text-[10px] text-[#82968a]">{tr("Приклад", "Example")}</span>{props.publicExamples.map((example, index) => <button key={example.testId} type="button" onClick={() => props.onStdinChange(example.input)} disabled={props.isWebTask || isEmptyTask} className="min-h-8 rounded-md border border-[#294333] px-2 text-[10px] font-semibold text-primary-soft disabled:opacity-40" aria-label={tr(`Вставити відкритий приклад ${index + 1}`, `Use public example ${index + 1}`)}>#{index + 1}</button>)}</div> : <span />}
-              <button type="button" onClick={() => props.onStdinChange("")} disabled={!props.stdin || props.isWebTask || isEmptyTask} className="min-h-8 rounded-md px-2 text-[10px] font-semibold text-[#82968a] disabled:opacity-40">{tr("Очистити ввід", "Clear input")}</button>
+            <p>{props.task.projectSpec.skills.join(" · ")}</p>
+            <ol className="ide-project-list">
+              {props.task.projectSpec.milestones.map((milestone, index) => (
+                <li key={milestone.id}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <div>
+                    <strong>{milestone.title}</strong>
+                    <p>{milestone.description}</p>
+                    {milestone.required === false ? (
+                      <small>
+                        {tr("Додатковий етап", "Optional milestone")}
+                      </small>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ol>
+            {props.task.projectSpec.inputFormat ? (
+              <p>
+                <strong>{tr("Ввід", "Input")}: </strong>
+                {props.task.projectSpec.inputFormat}
+              </p>
+            ) : null}
+            {props.task.projectSpec.outputFormat ? (
+              <p>
+                <strong>{tr("Вивід", "Output")}: </strong>
+                {props.task.projectSpec.outputFormat}
+              </p>
+            ) : null}
+            {props.task.projectSpec.extensions?.length ? (
+              <p>{props.task.projectSpec.extensions.join(" · ")}</p>
+            ) : null}
+          </details>
+        ) : null}
+        {props.theory ? (
+          <details className="ide-context-details">
+            <summary>
+              {tr("Теорія до задачі", "Theory for this problem")}
+            </summary>
+            <div className="ide-task-document mt-4">
+              <MarkdownView content={props.theory} variant="task" />
             </div>
           </details>
-          <div className="hidden shrink-0 grid-cols-[1fr_auto] items-center gap-x-2 gap-y-2 border-b border-[#203428] bg-[#0d1610] px-3 py-2.5 lg:grid">
-            <div className="col-start-1 row-start-1 flex items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-[.15em] text-[#82968a]">
-                {tr("Ввід для запуску", "Run input")}
-              </span>
-              <span className="rounded-md border border-[#294333] bg-[#111f15] px-1.5 py-0.5 font-mono text-[9px] text-[#6f8877]">stdin</span>
-            </div>
+        ) : null}
+      </>
+    ) : assistantTab === "hints" ? (
+      <>
+        {props.hints?.length ? (
+          props.hints.map((hint, index) => (
+            <section className="ide-hint" key={index}>
+              <button
+                type="button"
+                onClick={() =>
+                  setOpenHintIndex(openHintIndex === index ? null : index)
+                }
+                aria-expanded={openHintIndex === index}
+                aria-controls={`ide-hint-${index}`}
+              >
+                <Lightbulb className="size-4 text-[var(--ide-accent)]" />
+                <span>{tr(`Підказка ${index + 1}`, `Hint ${index + 1}`)}</span>
+                <ChevronDown className="size-4" />
+              </button>
+              {openHintIndex === index ? (
+                <p id={`ide-hint-${index}`}>{hint}</p>
+              ) : null}
+            </section>
+          ))
+        ) : (
+          <div className="ide-empty-context">
+            <h3>
+              {props.hintsStatus === "UNAVAILABLE"
+                ? tr(
+                    "Підказки тимчасово недоступні",
+                    "Hints are temporarily unavailable",
+                  )
+                : tr("Спробуй розв’язати самостійно", "Give it a try first")}
+            </h3>
+            <p>
+              {tr(
+                "Після першої перевірки тут з’являться підказки до твого рішення.",
+                "After your first check, hints for your solution will appear here.",
+              )}
+            </p>
+          </div>
+        )}
+      </>
+    ) : (
+      <>
+        <p className="ide-input-note mb-4">
+          {tr(
+            "Ментор допоможе знайти наступний крок через навідні питання.",
+            "The mentor helps you find the next step with guiding questions.",
+          )}
+        </p>
+        <DebugMentorChat
+          language={props.language}
+          code={draftCodeRef.current}
+          verdict={resultVerdict}
+          stderr={props.runResult?.stderr || props.checkResult?.compileError}
+          taskTitle={props.task.title}
+          taskText={props.task.description}
+        />
+        {props.checkResult && !verdictIsAccepted(props.checkResult.verdict) ? (
+          <ErrorExplainButton
+            language={props.language}
+            code={draftCodeRef.current}
+            verdict={props.checkResult.verdict}
+            stderr={props.checkResult.compileError || props.runResult?.stderr}
+            taskTitle={props.task.title}
+            taskText={props.task.description}
+          />
+        ) : null}
+      </>
+    );
+  const renderInput = () =>
+    props.isWebTask ? (
+      <div className="ide-empty-context p-5">
+        <h3>
+          {tr(
+            "Результат оновлюється поруч із кодом",
+            "Your preview updates beside the code",
+          )}
+        </h3>
+        <p>
+          {tr(
+            "Для вебзадач введення даних не потрібне.",
+            "Web tasks do not need standard input.",
+          )}
+        </p>
+      </div>
+    ) : (
+      <div className="ide-input">
+        <div
+          className="ide-example-picker"
+          aria-label={tr("Приклади для запуску", "Examples to run")}
+        >
+          {!props.publicExamples?.length && props.firstExampleInput ? (
+            <button
+              type="button"
+              onClick={() => props.onStdinChange(props.firstExampleInput!)}
+            >
+              {tr("Приклад", "Example")}
+            </button>
+          ) : null}
+          {props.publicExamples?.map((example, index) => (
+            <button
+              key={example.testId}
+              type="button"
+              onClick={() => props.onStdinChange(example.input)}
+              aria-pressed={selectedExample?.testId === example.testId}
+            >
+              {tr(`Приклад ${index + 1}`, `Example ${index + 1}`)}
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-pressed={!selectedExample}
+            onClick={() => props.onStdinChange("")}
+          >
+            {tr("Власний ввід", "Custom input")}
+          </button>
+          <button
+            type="button"
+            className="ml-auto"
+            onClick={() => props.onStdinChange("")}
+            disabled={!props.stdin}
+          >
+            {tr("Очистити", "Clear")}
+          </button>
+          {!simpleMode && stdinHistory.length ? (
+            <select
+              value=""
+              aria-label={tr("Останні вводи", "Recent inputs")}
+              className="ide-language-select"
+              onChange={(event) => props.onStdinChange(event.target.value)}
+            >
+              <option value="">{tr("Історія вводу", "Input history")}</option>
+              {stdinHistory.map((value, index) => (
+                <option key={index} value={value}>
+                  {value.replace(/\s+/g, " ").slice(0, 40)}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </div>
+        <div className="ide-input-grid" data-custom={!selectedExample}>
+          <div>
+            <label htmlFor="ide-run-input">
+              <span>{tr("Вхідні дані", "Input")}</span>
+              <span className="font-mono text-[var(--ide-muted)]">stdin</span>
+            </label>
             <textarea
               id="ide-run-input"
               name="runInput"
               value={props.stdin}
               onChange={(event) => props.onStdinChange(event.target.value)}
-              disabled={props.isWebTask || isEmptyTask}
-              rows={4}
-              aria-label={tr("Ввід для запуску", "Run input")}
+              disabled={isEmptyTask}
               spellCheck={false}
-              placeholder={
-                props.isWebTask
-                  ? tr("WEB без stdin", "WEB has no stdin")
-                  : tr("Власний input для Run", "Custom input for Run")
-              }
-              className="col-span-2 row-start-2 min-h-28 max-h-48 min-w-0 w-full resize-y overflow-auto rounded-xl border border-[#294333] bg-[#101b13] px-3 py-2.5 font-mono text-[12px] leading-5 text-[#dce7df] outline-none placeholder:text-[#718075] transition focus:border-primary/60 focus:bg-[#122117] disabled:opacity-50 max-lg:min-h-16 max-lg:max-h-28 lg:min-h-16"
+              placeholder={tr(
+                "Встав дані, які має прочитати програма…",
+                "Enter the data your program should read…",
+              )}
             />
-            {stdinHistory.length ? (
-              <div className="col-span-2 row-start-4 flex min-w-0 items-center gap-2">
-                <label htmlFor="ide-stdin-history" className="shrink-0 text-[10px] font-semibold text-[#82968a]">{tr("Останні вводи", "Recent input")}</label>
-                <select id="ide-stdin-history" name="stdinHistory" value="" onChange={(event) => { if (event.target.value) props.onStdinChange(event.target.value); }} className="min-w-0 flex-1 rounded-lg border border-[#294333] bg-[#101b13] px-2 py-1.5 text-[10px] text-[#c8d6cc] outline-none focus:border-primary/60">
-                  <option value="">{tr("Обрати з історії…", "Choose from history…")}</option>
-                  {stdinHistory.map((value, index) => <option key={`${index}-${value}`} value={value}>{`${index + 1}. ${value.replace(/\s+/g, " ").slice(0, 64)}`}</option>)}
-                </select>
-                <button type="button" onClick={() => { setStdinHistory([]); try { localStorage.removeItem(scopedStorageKey(STDIN_HISTORY_KEY, props.task.id)); } catch { /* optional */ } }} className="shrink-0 rounded-md px-2 py-1.5 text-[10px] font-semibold text-[#82968a] hover:bg-white/[.06] hover:text-white" aria-label={tr("Очистити історію вводу", "Clear input history")}>
-                  {tr("Очистити", "Clear")}
-                </button>
-              </div>
-            ) : null}
-            {props.task.projectSpec?.inputFormat ? <div className="col-span-2 row-start-5 text-[10px] leading-4 text-[#82968a]">{tr("Формат вводу", "Input format")}: <span className="text-[#b9c9bd]">{props.task.projectSpec.inputFormat}</span></div> : null}
-            {props.publicExamples?.length ? (
-              <div className="col-span-2 row-start-3 flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 text-[10px] font-semibold text-[#82968a]">{tr("Швидкий приклад", "Quick example")}</span>
-                {props.publicExamples.map((example, index) => (
-                  <button
-                    key={example.testId}
-                    type="button"
-                    onClick={() => props.onStdinChange(example.input)}
-                    disabled={props.isWebTask || isEmptyTask}
-                    className="rounded-md border border-[#294333] px-2 py-1 text-[10px] font-semibold text-primary-soft hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40"
-                    aria-label={tr(`Вставити відкритий приклад ${index + 1}`, `Use public example ${index + 1}`)}
-                  >
-                    #{index + 1}
-                  </button>
-                ))}
-              </div>
-            ) : props.firstExampleInput ? (
-              <button
-                type="button"
-                onClick={props.onUseExampleInput}
-                className="col-start-2 row-start-1 shrink-0 text-[10px] font-semibold text-primary-soft hover:text-white"
-              >
-                {tr("Приклад", "Example")}
-              </button>
-            ) : null}
+          </div>
+          {selectedExample ? (
+            <div>
+              <label>{tr("Очікуваний результат", "Expected output")}</label>
+              <pre>{selectedExample.expectedOutput}</pre>
+            </div>
+          ) : null}
+        </div>
+        <p className="ide-input-note">
+          {tr(
+            "«Запустити» перевіряє код із цим вводом.",
+            "Run executes your code with this input.",
+          )}{" "}
+          {props.submitMode
+            ? tr(
+                "«Надіслати» оцінює розв’язок на всіх тестах контесту.",
+                "Submit evaluates your solution on all contest tests.",
+              )
+            : tr(
+                "«Перевірити» запускає всі тести задачі.",
+                "Check runs every test for this problem.",
+              )}
+        </p>
+      </div>
+    );
+
+  return (
+    <div
+      className="studycod-workbench"
+      style={
+        {
+          "--ide-statement-width": `${statementWidth}px`,
+          "--ide-runner-height": `${runnerHeight}px`,
+        } as React.CSSProperties
+      }
+    >
+      <header className="ide-header">
+        {props.onBack ? (
+          <button
+            type="button"
+            className="ide-icon-btn"
+            onClick={props.onBack}
+            aria-label={tr("Назад до задач", "Back to problems")}
+            title={tr("Назад до задач", "Back to problems")}
+          >
+            <ChevronRight className="rotate-180" />
+          </button>
+        ) : null}
+        <div className="ide-brand">
+          <span className="ide-brand-mark">
+            <Code2 className="size-5" weight="bold" />
+          </span>
+          <span>StudyCod</span>
+        </div>
+        <div
+          className="ide-header-title"
+          title={props.task.section || props.task.title}
+        >
+          {props.task.section || props.task.title}
+        </div>
+        <div className="ide-actions">
+          {props.saveStatus ? (
+            <span
+              className="ide-save"
+              data-state={props.saveStatus}
+              title={saveStatusLabel || undefined}
+              role="status"
+              aria-live="polite"
+            >
+              {props.saveStatus === "saved"
+                ? tr("Збережено", "Saved")
+                : saveStatusLabel}
+            </span>
+          ) : null}
+          {activeMiniProjectRemainingSeconds !== null ? (
+            <span className="ide-contest-clock">
+              <Clock3 className="size-4" />
+              {formatMiniProjectCountdown(activeMiniProjectRemainingSeconds)}
+            </span>
+          ) : null}
+          <div ref={settingsRef} className="ide-settings-anchor">
             <button
               type="button"
-              onClick={() => props.onStdinChange("")}
-              disabled={!props.stdin || props.isWebTask || isEmptyTask}
-              className="col-start-1 row-start-1 justify-self-end rounded-md px-2 py-1 text-[10px] font-semibold text-[#82968a] hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40"
-              aria-label={tr("Очистити ввід", "Clear run input")}
-              title={tr("Очистити ввід", "Clear run input")}
+              className="ide-icon-btn"
+              onClick={() => setSettingsOpen((open) => !open)}
+              aria-expanded={settingsOpen}
+              aria-controls="ide-settings"
+              aria-label={tr("Налаштування редактора", "Editor settings")}
+              title={tr("Налаштування редактора", "Editor settings")}
             >
-              {tr("Очистити", "Clear")}
+              <Settings />
+            </button>
+            {settingsOpen ? (
+              <div
+                id="ide-settings"
+                className="ide-settings"
+                role="group"
+                aria-label={tr("Налаштування редактора", "Editor settings")}
+              >
+                <h2 className="ide-settings-title">
+                  {tr("Редактор", "Editor")}
+                </h2>
+                <div className="ide-setting-row">
+                  <span>{tr("Розмір тексту", "Text size")}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="ide-icon-btn"
+                      onClick={() =>
+                        setFontSize((size) => Math.max(11, size - 1))
+                      }
+                      aria-label={tr(
+                        "Зменшити розмір шрифту",
+                        "Decrease font size",
+                      )}
+                    >
+                      A−
+                    </button>
+                    <span className="tabular-nums">{fontSize}</span>
+                    <button
+                      type="button"
+                      className="ide-icon-btn"
+                      onClick={() =>
+                        setFontSize((size) => Math.min(22, size + 1))
+                      }
+                      aria-label={tr(
+                        "Збільшити розмір шрифту",
+                        "Increase font size",
+                      )}
+                    >
+                      A+
+                    </button>
+                  </div>
+                </div>
+                <label className="ide-setting-row">
+                  <span>{tr("Переносити довгі рядки", "Wrap long lines")}</span>
+                  <input
+                    type="checkbox"
+                    checked={wordWrap}
+                    onChange={(event) => setWordWrap(event.target.checked)}
+                  />
+                </label>
+                <label className="ide-setting-row">
+                  <span>{tr("Додаткові інструменти", "Advanced tools")}</span>
+                  <input
+                    type="checkbox"
+                    checked={!simpleMode}
+                    onChange={(event) => setSimpleMode(!event.target.checked)}
+                  />
+                </label>
+                {!props.isWebTask &&
+                compilersForFamily(props.language).length > 1 ? (
+                  <label className="ide-setting-row">
+                    <span>{tr("Компілятор", "Compiler")}</span>
+                    <select
+                      className="ide-language-select"
+                      value={props.compiler}
+                      onChange={(event) =>
+                        props.onCompilerChange(event.target.value)
+                      }
+                      aria-label={tr("Версія компілятора", "Compiler version")}
+                    >
+                      {compilersForFamily(props.language).map((compiler) => (
+                        <option key={compiler.id} value={compiler.id}>
+                          {compiler.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+                <div className="ide-settings-divider" />
+                <h2 className="ide-settings-title">
+                  {tr("Робоча область", "Workspace")}
+                </h2>
+                <button
+                  type="button"
+                  className="ide-settings-action"
+                  onClick={() => {
+                    setStatementOnRight((current) => !current);
+                    setSettingsOpen(false);
+                  }}
+                >
+                  <SwapPanels />
+                  {statementOnRight
+                    ? tr("Умова ліворуч", "Statement on the left")
+                    : tr("Умова праворуч", "Statement on the right")}
+                </button>
+                <button
+                  type="button"
+                  className="ide-settings-action"
+                  onClick={() => {
+                    setFocusMode((current) => !current);
+                    setSettingsOpen(false);
+                  }}
+                >
+                  <Maximize2 />
+                  {focusMode
+                    ? tr("Показати всі панелі", "Show all panels")
+                    : tr("Лише редактор", "Focus on code")}
+                </button>
+                <button
+                  type="button"
+                  className="ide-settings-action"
+                  onClick={() => {
+                    updateLayout({
+                      right: bodySize.width * 0.42,
+                      bottom: 240,
+                      rightCollapsed: false,
+                      bottomCollapsed: false,
+                    });
+                    setFocusMode(false);
+                    setSettingsOpen(false);
+                  }}
+                >
+                  <RotateCcw />
+                  {tr("Відновити розташування", "Reset layout")}
+                </button>
+                <div className="ide-settings-divider" />
+                <button
+                  type="button"
+                  className="ide-settings-action"
+                  onClick={props.onSave}
+                  disabled={props.readOnly}
+                >
+                  <Save />
+                  {tr("Зберегти зараз", "Save now")}
+                </button>
+                <button
+                  type="button"
+                  className="ide-settings-action"
+                  onClick={downloadCurrentCode}
+                >
+                  <Download />
+                  {tr("Завантажити код", "Download code")}
+                </button>
+                <button
+                  type="button"
+                  className="ide-settings-action"
+                  data-destructive="true"
+                  onClick={() => {
+                    setResetConfirmOpen(true);
+                    setSettingsOpen(false);
+                  }}
+                  disabled={props.readOnly}
+                >
+                  <RotateCcw />
+                  {tr("Відновити початковий код", "Restore starter code")}
+                </button>
+                {!props.contextToolbar && !props.toolbarStatus ? props.toolbar : null}
+                {props.attemptsUsed != null ? (
+                  <p className="ide-input-note mt-3">
+                    {tr("Надсилання", "Submissions")}: {props.attemptsUsed}
+                    {props.maxAttempts ? ` / ${props.maxAttempts}` : ""}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="ide-actions ide-run-actions">{runActions}</div>
+        </div>
+      </header>
+      {props.contextToolbar || props.toolbarStatus ? (
+        <nav
+          className="ide-context-bar"
+          aria-label={tr("Навігація задачами", "Problem navigation")}
+        >
+          <div>{props.contextToolbar}</div>
+          <div className="ide-context-status">
+            {props.toolbarStatus}
+            {props.toolbar}
+          </div>
+        </nav>
+      ) : null}
+      <div
+        className="ide-mobile-tabs"
+        role="tablist"
+        aria-label={tr("Панелі редактора", "Editor panels")}
+        onKeyDown={handleMobileTabKeyDown}
+      >
+        {mobileTabs.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            id={`mobile-ide-tab-${id}`}
+            type="button"
+            className="ide-tab"
+            role="tab"
+            aria-selected={mobilePane === id}
+            aria-controls={`mobile-ide-panel-${id}`}
+            tabIndex={mobilePane === id ? 0 : -1}
+            onClick={() => setMobilePane(id)}
+          >
+            <Icon />
+            <span>{label}</span>
+            {id === "result" && mobileResultUnread ? (
+              <span
+                className="ide-tab-count"
+                aria-label={tr("Новий результат", "New result")}
+              >
+                1
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+      <div
+        ref={bodyRef}
+        className="ide-body"
+        data-statement-side={statementOnRight ? "right" : "left"}
+        data-mobile-pane={mobilePane}
+      >
+        {showStatement ? (
+          <aside
+            id="mobile-ide-panel-condition"
+            className="ide-statement"
+            data-assistance={!props.disableAiAssistance}
+            aria-label={tr("Умова задачі", "Problem statement")}
+          >
+            <div
+              className="ide-panel-bar"
+              role="tablist"
+              onKeyDown={handlePanelTabKeyDown}
+              aria-label={tr("Задача та допомога", "Problem and assistance")}
+            >
+              <button
+                type="button"
+                className="ide-tab"
+                role="tab"
+                id="ide-context-tab-task"
+                aria-selected={assistantTab === "task"}
+                tabIndex={assistantTab === "task" ? 0 : -1}
+                aria-controls="ide-context-panel"
+                onClick={() => setAssistantTab("task")}
+              >
+                <FileText />
+                {tr("Умова", "Description")}
+              </button>
+              {!props.disableAiAssistance ? (
+                <>
+                  <button
+                    type="button"
+                    className="ide-tab"
+                    role="tab"
+                    id="ide-context-tab-hints"
+                    aria-selected={assistantTab === "hints"}
+                    tabIndex={assistantTab === "hints" ? 0 : -1}
+                    aria-controls="ide-context-panel"
+                    onClick={() => setAssistantTab("hints")}
+                  >
+                    <Lightbulb />
+                    {tr("Підказки", "Hints")}
+                    {props.hints?.length ? (
+                      <span className="ide-tab-count">
+                        {props.hints.length}
+                      </span>
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    className="ide-tab"
+                    role="tab"
+                    id="ide-context-tab-mentor"
+                    aria-selected={assistantTab === "mentor"}
+                    tabIndex={assistantTab === "mentor" ? 0 : -1}
+                    aria-controls="ide-context-panel"
+                    onClick={() => setAssistantTab("mentor")}
+                  >
+                    <Bot />
+                    {tr("Ментор", "Mentor")}
+                  </button>
+                </>
+              ) : null}
+              <button
+                type="button"
+                className="ide-icon-btn ide-expand-statement ide-desktop-control"
+                onClick={() =>
+                  updateLayout({
+                    right:
+                      statementWidth > bodySize.width * 0.5
+                        ? bodySize.width * 0.42
+                        : statementBounds.max,
+                  })
+                }
+                aria-label={tr(
+                  "Розширити або звузити умову",
+                  "Expand or narrow the statement",
+                )}
+                title={tr("Розширити умову", "Expand statement")}
+              >
+                <Maximize2 />
+              </button>
+              <button
+                type="button"
+                className="ide-icon-btn ide-desktop-control"
+                onClick={() => updateLayout({ rightCollapsed: true })}
+                aria-label={tr("Згорнути умову", "Collapse statement")}
+                title={tr("Згорнути умову", "Collapse statement")}
+              >
+                <Minimize2 />
+              </button>
+            </div>
+            <div
+              className="ide-context-content"
+              id="ide-context-panel"
+              role="tabpanel"
+              aria-labelledby={`ide-context-tab-${assistantTab}`}
+            >
+              {contextContent}
+            </div>
+          </aside>
+        ) : (
+          <button
+            type="button"
+            className="ide-statement-rail"
+            onClick={() => {
+              setFocusMode(false);
+              updateLayout({ rightCollapsed: false });
+            }}
+            aria-label={tr("Показати умову", "Show statement")}
+          >
+            <FileText className="size-4" />
+            <span>{tr("Умова", "Statement")}</span>
+          </button>
+        )}
+        {showStatement ? (
+          <div
+            className="ide-resize ide-resize-vertical"
+            onPointerDown={(event) => beginResize("right", event)}
+            onKeyDown={(event) => handleResizeKeyDown("right", event)}
+            onDoubleClick={() => updateLayout({ right: bodySize.width * 0.42 })}
+            role="separator"
+            tabIndex={0}
+            aria-orientation="vertical"
+            aria-label={tr(
+              "Змінити ширину умови задачі",
+              "Resize task statement",
+            )}
+            aria-valuemin={statementBounds.min}
+            aria-valuemax={Math.round(statementBounds.max)}
+            aria-valuenow={Math.round(statementWidth)}
+            title={tr(
+              "Перетягни, щоб змінити ширину. Подвійний клік — відновити.",
+              "Drag to resize. Double-click to reset.",
+            )}
+          />
+        ) : null}
+        <section
+          id="mobile-ide-panel-code"
+          className="ide-solution"
+          aria-label={tr("Рішення", "Solution")}
+        >
+          <div className="ide-panel-bar ide-editor-bar">
+            <span className="ide-code-label">
+              <Code2 className="size-4" />
+              {tr("Код", "Code")}
+            </span>
+            {!props.isWebTask ? (
+              <select
+                className="ide-language-select"
+                value={props.language}
+                onChange={(event) =>
+                  props.onLanguageChange(event.target.value as JudgeLanguage)
+                }
+                disabled={
+                  props.disableLanguageChange ||
+                  props.readOnly ||
+                  busy ||
+                  languageOptions.length < 2
+                }
+                aria-label={tr("Мова програмування", "Programming language")}
+              >
+                {languageOptions.map((language) => (
+                  <option key={language} value={language}>
+                    {languageLabel(language)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="ide-code-label">HTML / CSS / JS</span>
+            )}
+            {props.readOnly ? (
+              <span className="ide-input-note">
+                {tr("Лише перегляд", "Read only")}
+              </span>
+            ) : null}
+            <span className="ml-auto ide-code-label hidden sm:flex">
+              {!props.useFiles
+                ? activeFile
+                : tr(`Файлів: ${fileList.length}`, `Files: ${fileList.length}`)}
+            </span>
+            <button
+              type="button"
+              className="ide-icon-btn"
+              onClick={() => setFocusMode((current) => !current)}
+              aria-label={
+                focusMode
+                  ? tr("Показати панелі", "Show panels")
+                  : tr("Розгорнути редактор", "Expand editor")
+              }
+              title={tr("Розгорнути редактор", "Expand editor")}
+            >
+              {focusMode ? <Minimize2 /> : <Maximize2 />}
             </button>
           </div>
-          <div className="flex min-h-11 items-center gap-2 overflow-x-auto border-b border-[#203428] bg-[#111a14] px-3">
-            <div className="flex items-center gap-2 rounded-lg border border-[#294333] bg-[#0d1610] px-2.5 py-1.5 text-[10px] text-[#c8d6cc]">
-              <FileCode2 className="size-3.5 text-primary-soft" />
-              <span>{activeFile}</span>
-              <span className="text-[#557061]">·</span>
-              <span className="text-[#82968a]">{tr("Редактор", "Editor")}</span>
+          {props.localRecovery ? (
+            <div className="ide-recovery" role="status">
+              <span>
+                {tr(
+                  "Знайдено незбережену локальну версію",
+                  "A local unsaved version was found",
+                )}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="ide-btn"
+                  onClick={props.localRecovery.onRecover}
+                >
+                  {tr("Відновити", "Recover")}
+                </button>
+                <button
+                  type="button"
+                  className="ide-btn ide-btn-quiet"
+                  onClick={props.localRecovery.onDismiss}
+                >
+                  {tr("Ігнорувати", "Dismiss")}
+                </button>
+              </div>
             </div>
-            <div className={`ml-auto items-center gap-1 ${simpleMode ? "hidden" : "flex"}`}>
+          ) : null}
+          {props.actionRecovery ? (
+            <div
+              className="ide-recovery"
+              data-error={props.actionRecovery.tone === "error"}
+              role="alert"
+            >
+              <span>{props.actionRecovery.message}</span>
               <button
                 type="button"
-                onClick={() => setFontSize((size) => Math.max(11, size - 1))}
-                className="grid size-7 max-lg:size-11 place-items-center rounded-lg text-xs text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
-                aria-label={tr("Зменшити розмір шрифту", "Decrease font size")}
-                title={tr("Зменшити розмір шрифту", "Decrease font size")}
+                className="ide-btn"
+                onClick={props.actionRecovery.onRetry}
+                disabled={busy}
               >
-                A−
-              </button>
-              <button
-                type="button"
-                onClick={() => setFontSize((size) => Math.min(22, size + 1))}
-                className="grid size-7 max-lg:size-11 place-items-center rounded-lg text-xs text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
-                aria-label={tr("Збільшити розмір шрифту", "Increase font size")}
-                title={tr("Збільшити розмір шрифту", "Increase font size")}
-              >
-                A+
-              </button>
-              <button
-                type="button"
-                onClick={() => setWordWrap((value) => !value)}
-                className={`grid size-7 max-lg:size-11 place-items-center rounded-lg text-xs transition ${wordWrap ? "bg-primary/10 text-primary-soft" : "text-[#82968a] hover:bg-white/[.07] hover:text-white"}`}
-                aria-pressed={wordWrap}
-                aria-label={tr("Перенесення рядків", "Word wrap")}
-                title="Word wrap"
-              >
-                ↪
-              </button>
-              <button
-                type="button"
-                onClick={() => setResetConfirmOpen(true)}
-                className="grid size-7 max-lg:size-11 place-items-center rounded-lg text-[#82968a] transition hover:bg-white/[.07] hover:text-white"
-                aria-label={tr("Скинути шаблон", "Reset template")}
-                title={tr("Скинути шаблон", "Reset template")}
-              >
-                <RotateCcw className="size-3.5" />
+                {props.actionRecovery.retryLabel}
               </button>
             </div>
-          </div>
-          <div
-            className={`h-full min-h-[220px] flex-1 overflow-hidden max-lg:min-h-0 lg:min-h-0 ${props.isWebTask ? "grid lg:grid-cols-2" : ""}`}
-          >
-            <div className="h-full min-h-0 min-w-0 overflow-hidden">
+          ) : null}
+          {props.useFiles || !simpleMode ? (
+            <div
+              className="ide-file-tabs"
+              role="tablist"
+              aria-label={tr("Файли рішення", "Solution files")}
+            >
+              {fileList.map((file) => (
+                <button
+                  key={file.path}
+                  type="button"
+                  className="ide-file-tab"
+                  role="tab"
+                  aria-selected={activeFile === file.path}
+                  onClick={() => setActiveFile(file.path)}
+                >
+                  <FileCode2 className="size-3.5" />
+                  {file.path}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="ide-icon-btn"
+                disabled={props.readOnly || props.submitMode}
+                onClick={() => {
+                  if (!props.useFiles) props.onEnableFiles();
+                  setFileAddRequestToken((value) => value + 1);
+                }}
+                aria-label={tr("Додати файл", "Add file")}
+                title={tr("Додати файл", "Add file")}
+              >
+                <Plus />
+              </button>
+            </div>
+          ) : null}
+          <div className="ide-editor" data-web={Boolean(props.isWebTask)}>
+            <div className="ide-code-surface">
               {isEmptyTask ? (
-                <div className="flex h-full min-h-[220px] items-center justify-center bg-[#0b110d] px-6 py-12 text-center">
-                  <div className="max-w-sm">
-                    <div className="mx-auto grid size-12 place-items-center rounded-2xl border border-primary/20 bg-primary/10 text-primary-soft">
-                      <FolderCode className="size-5" />
-                    </div>
-                    <h2 className="mt-4 text-base font-bold text-[#edf5ee]">
-                      {tr("Завдання ще не готове", "The task is not ready yet")}
-                    </h2>
-                    <p className="mt-2 text-sm leading-6 text-[#8fa196]">
-                      {tr("Відкрий активний вузол у маршруті — тут з’явиться редактор, щойно завдання завантажиться.", "Open an active node in the route. The editor will appear here when the task is ready.")}
-                    </p>
-                    {props.emptyStateMessage ? (
-                      <p className="mt-3 whitespace-pre-wrap rounded-xl border border-[#ffb86b]/20 bg-[#ffb86b]/[.08] px-3 py-2 text-left text-xs leading-5 text-[#ffd5a6]">
-                        {props.emptyStateMessage}
-                      </p>
-                    ) : null}
-                    {props.emptyStateAction ? <div className="mt-5">{props.emptyStateAction}</div> : null}
-                  </div>
+                <div className="ide-empty-editor">
+                  <h2>
+                    {tr("Завдання ще не готове", "The task is not ready yet")}
+                  </h2>
+                  <p>
+                    {props.emptyStateMessage ||
+                      tr(
+                        "Вибери активну задачу, щоб почати писати код.",
+                        "Choose an active problem to start coding.",
+                      )}
+                  </p>
+                  {props.emptyStateAction}
                 </div>
               ) : props.useFiles ? (
                 <MultiFileEditor
@@ -1801,9 +2756,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   readOnly={props.readOnly}
                   fontSize={fontSize}
                   wordWrap={wordWrap}
+                  minimap={false}
                   activePath={activeFile}
                   onActivePathChange={setActiveFile}
-                  hideTabsOnDesktop
+                  hideTabs
                   hasUnsavedChanges={props.hasUnsavedChanges}
                   focusLine={compilerErrorLine}
                   requestAddToken={fileAddRequestToken}
@@ -1824,564 +2780,228 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               )}
             </div>
             {props.isWebTask && props.webPreviewFiles ? (
-              <div className="min-h-0 overflow-hidden border-t border-white/10 lg:border-l lg:border-t-0">
+              <div className="ide-code-surface border-l border-[var(--ide-border)]">
                 <WebPreviewPane
                   files={props.webPreviewFiles}
-                  title={tr("Живий результат", "Live result")}
+                  title={tr("Перегляд сторінки", "Page preview")}
                 />
               </div>
             ) : null}
           </div>
-        </section>
-
-        {showRight ? (
-          <div
-            onPointerDown={(event) => beginResize("right", event)}
-            onKeyDown={(event) => handleResizeKeyDown("right", event)}
-            role="separator"
-            tabIndex={0}
-            aria-orientation="vertical"
-            aria-label={props.disableAiAssistance ? tr("Змінити ширину умови задачі", "Resize task statement") : tr("Змінити ширину панелі помічника", "Resize assistant panel")}
-            aria-valuemin={220}
-            aria-valuemax={rightPanelMax}
-            aria-valuenow={Math.round(Math.max(220, Math.min(layout.right, rightPanelMax)))}
-            className="group relative z-10 hidden w-3 shrink-0 -mx-1.5 cursor-col-resize touch-none bg-transparent focus-visible:outline-none lg:flex lg:items-stretch lg:justify-center"
-          >
-            <span className="w-px bg-[#203428] transition-colors group-hover:bg-primary/70 group-focus-visible:bg-primary" aria-hidden="true" />
-          </div>
-        ) : null}
-        {showRight ? (
-          <aside
-            style={{ width: Math.max(220, Math.min(layout.right, rightPanelMax)) }}
-            className="hidden shrink-0 flex-col border-l border-[#203428] bg-[#0f1812] lg:flex"
-          >
-            <div className="flex min-h-14 items-center gap-1 border-b border-[#203428] bg-[#111b14] px-2.5">
-              <button
-                type="button"
-                onClick={() => setAssistantTab("task")}
-                className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "task" ? "border-primary/25 bg-primary/10 text-[#edf5ee]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
+          {showRunner ? (
+            <>
+              <div
+                className="ide-resize ide-resize-horizontal"
+                onPointerDown={(event) => beginResize("bottom", event)}
+                onKeyDown={(event) => handleResizeKeyDown("bottom", event)}
+                onDoubleClick={() => updateLayout({ bottom: 240 })}
+                role="separator"
+                tabIndex={0}
+                aria-orientation="horizontal"
+                aria-label={tr("Змінити висоту результатів", "Resize results")}
+                aria-valuemin={runnerBounds.min}
+                aria-valuemax={Math.round(runnerBounds.max)}
+                aria-valuenow={Math.round(runnerHeight)}
+              />
+              <section
+                className="ide-runner"
+                id="mobile-ide-panel-result"
+                aria-label={tr("Запуск та перевірка", "Run and check")}
               >
-                <FileText className="size-3.5" />
-                {tr("Завдання", "Task")}
-              </button>
-              {!props.disableAiAssistance ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setAssistantTab("hints")}
-                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "hints" ? "border-primary/25 bg-primary/10 text-primary-soft" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
-                  >
-                    <Lightbulb className="size-3.5" />
-                    {tr("Підказки", "Hints")}
-                    {props.hints?.length ? ` (${props.hints.length})` : ""}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAssistantTab("mentor")}
-                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition ${assistantTab === "mentor" ? "border-[#6ca8ff]/25 bg-[#6ca8ff]/10 text-[#9bc5ff]" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
-                  >
-                    <Bot className="size-3.5" />
-                    {tr("Ментор", "Mentor")}
-                  </button>
-                </>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => updateLayout({ rightCollapsed: true })}
-                className="ml-auto text-[#82968a] hover:text-white"
-                title={tr("Згорнути", "Collapse")}
-              >
-                <Minimize2 className="size-3.5" />
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-auto p-3.5">
-              {assistantTab === "task" ? (
-                <div className="space-y-3.5">
-                  <div className="rounded-2xl border border-[#294333] bg-[#111d15] p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.16em] text-primary-soft">
-                        <span className="grid size-7 place-items-center rounded-lg bg-primary/10"><FileText className="size-3.5" /></span>
-                        {tr("Умова", "Brief")}
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {props.task.difficulty ? (
-                          <span className="rounded-md border border-[#294333] bg-[#0d1710] px-2 py-1 text-[10px] font-semibold text-[#a7b5aa]">
-                            {props.task.difficulty}
-                          </span>
-                        ) : null}
-                        <button type="button" onClick={() => void copyText(taskBody, "task-statement")} className="rounded-md border border-[#294333] p-1.5 text-[#82968a] hover:bg-white/[.06] hover:text-white" aria-label={tr("Скопіювати умову задачі", "Copy task statement")} title={tr("Скопіювати умову", "Copy statement")}>
-                          {copiedLabel === "task-statement" ? <Check className="size-3" /> : <Copy className="size-3" />}
-                        </button>
-                        <button type="button" onClick={() => void copyText(draftCodeRef.current || "", "starter-code")} disabled={!draftCodeRef.current} className="rounded-md border border-[#294333] p-1.5 text-[#82968a] hover:bg-white/[.06] hover:text-white disabled:pointer-events-none disabled:opacity-40" aria-label={tr("Скопіювати стартовий код", "Copy starter code")} title={tr("Скопіювати стартовий код", "Copy starter code")}>
-                          {copiedLabel === "starter-code" ? <Check className="size-3" /> : <Copy className="size-3" />}
-                        </button>
-                      </div>
-                    </div>
-                    <h2 className="mt-3 text-[17px] font-bold leading-6 tracking-[-.025em] text-[#f0f7f1]">
-                      {props.task.title}
-                    </h2>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#294333] bg-[#0d1710] px-2 py-1.5 text-[10px] font-semibold text-[#a7b5aa]">
-                        <Code2 className="size-3 text-primary-soft" /> {languageLabel(props.language)}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#294333] bg-[#0d1710] px-2 py-1.5 text-[10px] font-semibold text-[#a7b5aa]">
-                        <TestTube2 className="size-3 text-primary-soft" /> {tr("Практика", "Practice")}
-                      </span>
-                      {props.task.tags?.slice(0, 2).map((tag) => (
-                        <span key={tag} className="rounded-lg border border-[#294333] bg-[#0d1710] px-2 py-1.5 text-[10px] text-[#82968a]">{tag}</span>
-                      ))}
-                    </div>
-                  </div>
-                  {props.task.projectSpec ? (
-                    <div className="overflow-hidden rounded-2xl border border-[#ffb454]/20 bg-[#19190f]">
-                      <div className="flex items-start gap-3 border-b border-white/[.08] p-3.5">
-                        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#ffb454]/15 text-[#ffca7e]">
-                          <Rocket className="size-4.5" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-bold text-[#edf5ee]">
-                              {tr("Мініпроєкт", "Mini-project")}
-                            </p>
-                            <span className="inline-flex items-center gap-1 rounded-full bg-white/[.08] px-2 py-0.5 text-[10px] font-semibold text-[#b9c9bd]">
-                              <Clock3 className="size-3" />
-                              {props.task.projectSpec.estimatedMinutes} {tr("хв", "min")}
-                            </span>
-                          </div>
-                          <p className="mt-1 text-[11px] leading-5 text-[#a7b5aa]">
-                            {tr("Збери маленький продукт і покажи, що навичка працює в реальному сценарії.", "Build a small product and prove the skill in a real scenario.")}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="space-y-3 p-3.5">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">
-                            {tr("Навички", "Skills")}
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {props.task.projectSpec.skills.map((skill) => (
-                              <span key={skill} className="rounded-lg bg-primary/10 px-2 py-1 text-[10px] font-semibold text-primary-soft">
-                                {skill}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        {props.task.projectSpec.inputFormat || props.task.projectSpec.outputFormat ? (
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            {props.task.projectSpec.inputFormat ? (
-                              <div className="rounded-xl border border-[#294333] bg-[#0d1710] p-3">
-                                <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">{tr("Вхідні дані", "Input")}</p>
-                                <p className="mt-1.5 text-[11px] leading-5 text-[#b9c9bd]">{props.task.projectSpec.inputFormat}</p>
-                              </div>
-                            ) : null}
-                            {props.task.projectSpec.outputFormat ? (
-                              <div className="rounded-xl border border-[#294333] bg-[#0d1710] p-3">
-                                <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">{tr("Вихідні дані", "Output")}</p>
-                                <p className="mt-1.5 text-[11px] leading-5 text-[#b9c9bd]">{props.task.projectSpec.outputFormat}</p>
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">
-                            {tr("Етапи", "Milestones")}
-                          </p>
-                          <div className="mt-2 space-y-2">
-                            {props.task.projectSpec.milestones.map((milestone, index) => (
-                              <div key={milestone.id} className="flex gap-2.5">
-                                <span className="grid size-5 shrink-0 place-items-center rounded-full border border-white/[.14] text-[10px] font-bold text-[#a7b5aa]">
-                                  {index + 1}
-                                </span>
-                                <div className="min-w-0">
-                                  <p className="text-[11px] font-semibold text-[#d6e3d9]">
-                                    {milestone.title}
-                                    {milestone.required === false ? <span className="ml-1.5 text-[10px] font-normal text-[#82968a]">{tr("додатково", "optional")}</span> : null}
-                                  </p>
-                                  <p className="mt-0.5 text-[10px] leading-5 text-[#8fa696]">{milestone.description}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        {props.task.projectSpec.extensions?.length ? (
-                          <div className="rounded-xl bg-black/15 px-3 py-2 text-[10px] leading-5 text-[#8fa696]">
-                            <span className="font-bold text-[#b9c9bd]">{tr("Для наступного рівня:", "For the next level:")}</span>{" "}
-                            {props.task.projectSpec.extensions.join(" · ")}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                  <div className="rounded-2xl border border-[#203428] bg-[#0c1510] p-4">
-                    <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.15em] text-[#82968a]">
-                      <span className="h-px w-5 bg-primary/60" />
-                      {tr("Що потрібно зробити", "What to build")}
-                    </div>
-                    <MarkdownView content={taskBody} variant="task" />
-                  </div>
-                  {props.theory ? (
-                    <details className="group rounded-2xl border border-[#294333] bg-[#111b14] p-3.5">
-                      <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-[#c8d6cc] marker:hidden">
-                        <span className="grid size-7 place-items-center rounded-lg bg-primary/10 text-primary-soft"><BookOpen className="size-3.5" /></span>
-                        <span className="flex-1">{tr("Відкрити теорію", "Open theory")}</span>
-                        <ChevronDown className="size-4 text-[#82968a] transition-transform group-open:rotate-180" />
-                      </summary>
-                      <div className="mt-3 border-t border-[#203428] pt-3 text-xs leading-6 text-[#b9c9bd]">
-                        <MarkdownView content={props.theory} variant="task" />
-                      </div>
-                    </details>
-                  ) : null}
-                  <div className="rounded-2xl border border-[#203428] bg-[#111b14] p-3.5 text-xs text-[#a7b5aa]">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <div className="font-semibold text-[#edf5ee]">{tr("Стан задачі", "Task status")}</div>
-                      <span className={`rounded-md px-2 py-1 text-[10px] font-bold ${allTestsPassed ? "bg-primary/10 text-primary-soft" : "bg-white/[.06] text-[#82968a]"}`}>
-                        {allTestsPassed ? tr("Готово", "Ready") : tr("У роботі", "In progress")}
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2.5">
-                        <span className="grid size-5 place-items-center rounded-full bg-primary/10"><CheckCircle2 className="size-3 text-primary-soft" /></span>
-                        <span>{tr("Теорія переглянута", "Theory reviewed")}</span>
-                      </div>
-                      <div className="flex items-center gap-2.5">
-                        {draftCodeRef.current.trim() ? (
-                          <span className="grid size-5 place-items-center rounded-full bg-primary/10"><CheckCircle2 className="size-3 text-primary-soft" /></span>
-                        ) : (
-                          <span className="size-5 rounded-full border border-[#294333]" />
-                        )}
-                        <span>{tr("Є рішення", "Solution started")}</span>
-                      </div>
-                      <div className="flex items-center gap-2.5">
-                        {allTestsPassed ? (
-                          <span className="grid size-5 place-items-center rounded-full bg-primary/10"><CheckCircle2 className="size-3 text-primary-soft" /></span>
-                        ) : (
-                          <span className="size-5 rounded-full border border-[#294333]" />
-                        )}
-                        <span>{tr("Усі тести проходять", "All tests passing")}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-              {assistantTab === "hints" ? (
-                <div className="space-y-3">
-                  <div className="rounded-2xl border border-[#ffb454]/20 bg-[linear-gradient(145deg,rgba(255,180,84,.11),rgba(0,217,120,.045))] p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#ffb454]/15 text-[#ffca7e]">
-                        <Lightbulb className="size-4.5" />
-                      </span>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-bold text-[#edf5ee]">
-                            {tr("Виконуй підказки по черзі", "Follow the hints in order")}
-                          </p>
-                          {props.hints?.length ? (
-                            <span className="rounded-full bg-white/[.08] px-2 py-0.5 text-[10px] font-bold text-[#b9c9bd]">
-                              {props.hints.length} {tr("рівні", "levels")}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-1.5 text-[11px] leading-5 text-[#a7b5aa]">
-                          {tr(
-                            "Почни з першої підказки. Наступна відкриває трохи більше деталей, але не готове рішення.",
-                            "Start with the first hint. Each next level adds detail without giving away the solution.",
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    {props.hints?.length ? (
-                      <div className="mt-4 flex gap-1.5" aria-label={tr("Прогрес підказок", "Hint progress")}>
-                        {props.hints.map((_, index) => (
-                          <span
-                            key={`hint-progress-${index}`}
-                            className={`h-1.5 flex-1 rounded-full transition-colors ${openHintIndex !== null && index <= openHintIndex ? "bg-primary" : "bg-white/[.12]"}`}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {(props.hints || []).map((hint, index) => {
-                    const isOpen = openHintIndex === index;
-                    const isLast = index === (props.hints?.length || 1) - 1;
-                    return (
-                      <div
-                        key={`${index}-${hint}`}
-                        className={`overflow-hidden rounded-2xl border transition ${isOpen ? "border-primary/35 bg-[#102017] shadow-[0_12px_28px_-22px_rgba(0,217,120,.8)]" : "border-white/[.09] bg-white/[.025] hover:border-white/[.16]"}`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setOpenHintIndex(isOpen ? null : index)}
-                          className="flex w-full items-center gap-3 px-3.5 py-3 text-left"
-                          aria-expanded={isOpen}
-                          aria-controls={`ide-hint-${index}`}
-                        >
-                          <span className={`grid size-8 shrink-0 place-items-center rounded-xl text-xs font-extrabold ${isOpen ? "bg-primary text-[#062211]" : "bg-white/[.08] text-[#a7b5aa]"}`}>
-                            {index + 1}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className={`block text-[11px] font-bold ${isOpen ? "text-primary-soft" : "text-[#c8d6cc]"}`}>
-                              {tr(`Підказка ${index + 1}`, `Hint ${index + 1}`)}
-                            </span>
-                            <span className="mt-0.5 block text-[10px] text-[#82968a]">
-                              {index === 0
-                                ? tr("Напрямок", "Direction")
-                                : isLast
-                                  ? tr("Останній крок", "Final step")
-                                  : tr("Трохи більше деталей", "More detail")}
-                            </span>
-                          </span>
-                          <ChevronDown className={`size-4 shrink-0 text-[#82968a] transition-transform ${isOpen ? "rotate-180 text-primary-soft" : ""}`} />
-                        </button>
-                        {isOpen ? (
-                          <div id={`ide-hint-${index}`} className="border-t border-white/[.08] px-3.5 pb-3.5 pt-3">
-                            <div className="flex gap-2.5">
-                              <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-[#ffb454]" />
-                              <p className="text-xs leading-6 text-[#d4e1d7]">{hint}</p>
-                            </div>
-                            <p className="mt-3 rounded-xl bg-black/15 px-3 py-2 text-[10px] leading-5 text-[#8fa696]">
-                              <LockKeyhole className="mr-1.5 inline size-3" />
-                              {tr("Спробуй застосувати це самостійно перед наступною підказкою.", "Try applying this yourself before opening the next hint.")}
-                            </p>
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-
-                  {!props.hints?.length ? (
-                    <div className="rounded-2xl border border-dashed border-white/[.14] bg-white/[.02] px-4 py-8 text-center">
-                      {props.hintsStatus === "UNAVAILABLE" ? (
-                        <p className="mb-2 rounded-lg bg-[#ffb454]/10 px-2 py-1 text-[10px] font-semibold text-[#ffca7e]">
-                          {tr("Підказки тимчасово недоступні — повтори перевірку.", "Hints are temporarily unavailable — try checking again.")}
-                        </p>
-                      ) : null}
-                      <span className="mx-auto grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary-soft">
-                        <Sparkles className="size-5" />
-                      </span>
-                      <p className="mt-3 text-sm font-bold text-[#c8d6cc]">
-                        {tr("Підказки ще готуються", "Hints are not ready yet")}
-                      </p>
-                      <p className="mx-auto mt-1.5 max-w-[220px] text-[11px] leading-5 text-[#82968a]">
-                        {tr(
-                          "Зроби першу спробу — після перевірки тут з’явиться наступний крок.",
-                          "Make a first attempt. After checking, your next step will appear here.",
-                        )}
-                      </p>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              {assistantTab === "mentor" ? (
-                <div className="space-y-3">
-                  <div className="rounded-xl border border-primary/20 bg-primary/[.06] p-3 text-xs text-[#b9c9bd]">
-                    <Sparkles className="mr-2 inline size-4 text-primary-soft" />
-                    {tr(
-                      "Ментор ставить навідні питання й не показує готове рішення одразу.",
-                      "The mentor asks guiding questions instead of revealing the full solution immediately.",
-                    )}
-                  </div>
-                  <DebugMentorChat
-                    language={props.language}
-                    code={draftCodeRef.current}
-                    verdict={resultVerdict}
-                    stderr={
-                      props.runResult?.stderr || props.checkResult?.compileError
-                    }
-                    taskTitle={props.task.title}
-                    taskText={props.task.description}
-                    className="!border-white/10"
+                <div
+                  className="ide-panel-bar"
+                  role="tablist"
+                  onKeyDown={handlePanelTabKeyDown}
+                  aria-label={tr("Ввід та результати", "Input and results")}
+                >
+                  <BottomTabButton
+                    active={bottomTab === "input"}
+                    onClick={() => setBottomTab("input")}
+                    icon={<Braces />}
+                    label={tr("Ввід", "Input")}
                   />
-                  {props.checkResult &&
-                  !verdictIsAccepted(props.checkResult.verdict) ? (
-                    <ErrorExplainButton
-                      language={props.language}
-                      code={draftCodeRef.current}
-                      verdict={props.checkResult.verdict}
-                      stderr={
-                        props.checkResult.compileError ||
-                        props.runResult?.stderr
-                      }
-                      taskTitle={props.task.title}
-                      taskText={props.task.description}
-                    />
+                  <BottomTabButton
+                    active={bottomTab === "terminal"}
+                    onClick={() => setBottomTab("terminal")}
+                    icon={<SquareTerminal />}
+                    label={tr("Результат", "Output")}
+                  />
+                  <BottomTabButton
+                    active={bottomTab === "tests"}
+                    onClick={() => setBottomTab("tests")}
+                    icon={<TestTube2 />}
+                    label={tr("Перевірка", "Tests")}
+                  />
+                  {!simpleMode ? (
+                    <>
+                      <BottomTabButton
+                        active={bottomTab === "history"}
+                        onClick={() => setBottomTab("history")}
+                        icon={<History />}
+                        label={tr("Історія", "History")}
+                      />
+                      {props.onTrace ? (
+                        <BottomTabButton
+                          active={bottomTab === "debugger"}
+                          onClick={() => {
+                            setMode("debug");
+                            setBottomTab("debugger");
+                            props.onTrace?.();
+                          }}
+                          icon={<Gauge />}
+                          label={tr("Налагодження", "Debugger")}
+                        />
+                      ) : null}
+                      <BottomTabButton
+                        active={bottomTab === "console"}
+                        onClick={() => setBottomTab("console")}
+                        icon={<Code2 />}
+                        label={tr("Консоль", "Console")}
+                      />
+                    </>
                   ) : null}
+                  <button
+                    type="button"
+                    className="ide-icon-btn ide-desktop-control"
+                    onClick={() => updateLayout({ bottomCollapsed: true })}
+                    aria-label={tr("Згорнути результати", "Collapse results")}
+                    title={tr("Згорнути результати", "Collapse results")}
+                  >
+                    <ChevronDown />
+                  </button>
                 </div>
-              ) : null}
-            </div>
-          </aside>
-        ) : (
-          <button
-            type="button"
-            onClick={() => updateLayout({ rightCollapsed: false })}
-            className="hidden w-10 shrink-0 place-items-center border-l border-white/10 text-[#82968a] hover:text-white lg:grid"
-            title={tr("Показати помічника", "Show assistant")}
-          >
-            <ChevronRight className="size-4 rotate-180" />
-          </button>
-        )}
-      </div>
-
-      {showBottom ? (
-        <div
-          onPointerDown={(event) => beginResize("bottom", event)}
-          onKeyDown={(event) => handleResizeKeyDown("bottom", event)}
-          role="separator"
-          tabIndex={0}
-          aria-orientation="horizontal"
-          aria-label={tr("Змінити висоту нижньої панелі", "Resize bottom panel")}
-          aria-valuemin={150}
-          aria-valuemax={620}
-          aria-valuenow={Math.round(layout.bottom)}
-          className="hidden h-1 shrink-0 cursor-row-resize touch-none bg-transparent hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none lg:block"
-        />
-      ) : null}
-      {showBottom ? (
-        <section
-          id="mobile-ide-panel-result"
-          role="tabpanel"
-          aria-labelledby="mobile-ide-tab-result"
-          tabIndex={0}
-          style={{ "--ide-bottom-height": `${layout.bottom}px` } as React.CSSProperties}
-          className={`h-[var(--ide-bottom-height)] shrink-0 border-t border-[#203428] bg-[#0f1812] max-lg:min-h-0 ${mobilePane === "result" ? "max-lg:h-auto max-lg:flex-1" : "max-lg:hidden"} lg:h-[var(--ide-bottom-height)]`}
-        >
-          <div className="flex h-11 items-center gap-1 overflow-x-auto border-b border-[#203428] bg-[#111b14] px-2">
-            <BottomTabButton
-              active={bottomTab === "terminal"}
-              onClick={() => setBottomTab("terminal")}
-              icon={<SquareTerminal className="size-3.5" />}
-              label="Terminal"
-            />
-            <BottomTabButton
-              active={bottomTab === "tests"}
-              onClick={() => setBottomTab("tests")}
-              icon={<TestTube2 className="size-3.5" />}
-              label={tr("Результати тестів", "Tests")}
-            />
-            {!simpleMode ? <BottomTabButton
-              active={bottomTab === "debugger"}
-              onClick={() => {
-                setMode("debug");
-                setBottomTab("debugger");
-                props.onTrace?.();
-              }}
-              icon={<Gauge className="size-3.5" />}
-              label={props.tracing ? "Tracing…" : "Debugger"}
-            /> : null}
-            {!simpleMode ? <BottomTabButton
-              active={bottomTab === "console"}
-              onClick={() => setBottomTab("console")}
-              icon={<Code2 className="size-3.5" />}
-              label="Console"
-            /> : null}
-            {!simpleMode ? <BottomTabButton
-              active={bottomTab === "history"}
-              onClick={() => setBottomTab("history")}
-              icon={<History className="size-3.5" />}
-              label={tr("Історія", "History")}
-            /> : null}
+                <div id="ide-runner-panel" className="ide-runner-body">
+                  {bottomTab === "input" ? renderInput() : renderBottom()}
+                </div>
+              </section>
+            </>
+          ) : (
             <button
               type="button"
-              onClick={() => updateLayout({ bottomCollapsed: true })}
-              className="ml-auto grid size-7 shrink-0 place-items-center rounded-lg text-[#82968a] hover:bg-white/[.06]"
-              title={tr("Згорнути", "Collapse")}
+              className="ide-btn ide-btn-quiet rounded-none"
+              onClick={() => {
+                setFocusMode(false);
+                updateLayout({ bottomCollapsed: false });
+              }}
+              aria-label={tr(
+                "Показати ввід та результати",
+                "Show input and results",
+              )}
             >
-              <ChevronDown className="size-3.5" />
+              <ChevronDown className="rotate-180" />
+              {tr("Ввід та результати", "Input and results")}
             </button>
-          </div>
-          <div className="flex min-h-0 flex-col" style={{ height: "calc(100% - 2.5rem)" }}>
-            {props.localRecovery ? (
-              <div className="shrink-0 border-b border-[#ffb454]/25 bg-[#19190f] px-3 py-2.5 text-[10px] text-[#ffca7e]" role="status" aria-live="polite">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span>{tr("Знайдено локальну версію коду", "A local code version was found")} · {formatIdeTimestamp(props.localRecovery.updatedAt, i18n.language || "uk")}</span>
-                  <div className="flex items-center gap-1.5">
-                    <button type="button" onClick={props.localRecovery.onRecover} className="rounded-md border border-[#ffb454]/35 px-2 py-1 font-semibold hover:bg-[#ffb454]/10">{tr("Відновити", "Recover")}</button>
-                    <button type="button" onClick={props.localRecovery.onDismiss} className="rounded-md px-2 py-1 font-semibold text-[#b9c9bd] hover:bg-white/[.06]">{tr("Ігнорувати", "Dismiss")}</button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            {props.actionRecovery ? (
-              <div className={`shrink-0 border-b px-3 py-2.5 text-[10px] ${props.actionRecovery.tone === "error" ? "border-[#ff6b9d]/25 bg-[#ff6b9d]/[.06] text-[#ffb2c9]" : "border-[#ffb454]/25 bg-[#19190f] text-[#ffca7e]"}`} role="alert" aria-live="polite">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="min-w-0 flex-1">{props.actionRecovery.message}</span>
-                  <button type="button" onClick={props.actionRecovery.onRetry} disabled={props.running || props.checking} className="shrink-0 rounded-md border border-current/40 px-2 py-1 font-semibold hover:bg-white/[.06] disabled:opacity-40">{props.actionRecovery.retryLabel}</button>
-                </div>
-              </div>
-            ) : null}
-            <div className="min-h-0 flex-1">{renderBottom()}</div>
-          </div>
+          )}
         </section>
-      ) : (
-        <button
-          type="button"
-          onClick={() => updateLayout({ bottomCollapsed: false })}
-          className={`flex min-h-11 shrink-0 items-center justify-center border-t border-[#203428] text-[#82968a] hover:text-white lg:h-9 ${mobilePane === "result" ? "" : "max-lg:hidden"}`}
-          aria-label={tr("Показати результати", "Show results")}
-        >
-          <ChevronDown className="size-4 rotate-180" />
-        </button>
-      )}
-      <div className="z-40 flex shrink-0 gap-2 border-t border-[#203428] bg-[#111b14] p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] lg:hidden">
-        <button type="button" onClick={runWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[.08] px-3 text-xs font-semibold text-white disabled:opacity-50">
-          <Play className="size-3.5" />{props.running ? "…" : tr("Запустити", "Run")}
-        </button>
-        <button type="button" onClick={checkWithTab} disabled={props.readOnly || props.running || props.checking} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-3 text-xs font-bold text-[#062211] disabled:opacity-50">
-          {props.checking ? <Loader2 className="size-3.5 animate-spin" /> : props.submitMode ? <Rocket className="size-3.5" /> : <TestTube2 className="size-3.5" />}{props.checking ? (props.submitMode ? tr("Надсилаємо…", "Submitting…") : tr("Тестуємо…", "Testing…")) : props.submitMode ? tr("Надіслати", "Submit") : tr("Перевірити", "Test")}
-        </button>
       </div>
+      <div className="ide-mobile-actions">{runActions}</div>
+      <footer className="ide-footer">
+        <span>{tr(`Рядків: ${lineCount}`, `${lineCount} lines`)}</span>
+        <span>UTF-8</span>
+        <span>
+          {tr("Код зберігається автоматично", "Code saves automatically")}
+        </span>
+        <span>
+          {props.checkResult
+            ? allTestsPassed
+              ? tr("Розв’язок прийнято", "Solution accepted")
+              : tr("Переглянь результат перевірки", "Review the check result")
+            : tr("Пиши, запускай, перевіряй", "Write, run, check")}
+        </span>
+      </footer>
       {diffOpen ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-3" role="dialog" aria-modal="true" aria-label={tr("Порівняння коду", "Code comparison")}>
-          <div className="flex max-h-[min(760px,calc(100dvh-1.5rem))] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[#294333] bg-[#101a13] shadow-2xl">
-            <div className="flex items-center justify-between gap-3 border-b border-[#294333] px-4 py-3">
-              <div><h2 className="text-sm font-bold text-white">{tr("Поточний код і останній знімок", "Current code vs latest snapshot")}</h2><p className="mt-1 text-[10px] text-[#82968a]">{tr("Рядки зі знаком − видалені, зі знаком + додані.", "Lines marked − were removed; lines marked + were added.")}</p></div>
-              <button type="button" onClick={() => setDiffOpen(false)} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-[#c8d6cc] hover:bg-white/[.06]" aria-label={tr("Закрити порівняння", "Close comparison")}>{tr("Закрити", "Close")}</button>
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={tr("Порівняння коду", "Code comparison")}
+        >
+          <div className="flex max-h-[80dvh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-[var(--ide-border)] bg-[var(--ide-surface)]">
+            <div className="ide-panel-bar">
+              <h2>
+                {tr(
+                  "Поточний код і останній знімок",
+                  "Current code and latest snapshot",
+                )}
+              </h2>
+              <button
+                type="button"
+                className="ide-btn ml-auto"
+                onClick={() => setDiffOpen(false)}
+              >
+                {tr("Закрити", "Close")}
+              </button>
             </div>
-            <div className="min-h-0 overflow-auto p-3 font-mono text-[11px] leading-5">
-              {comparisonLines.slice(0, 500).map((row, index) => <div key={index} className={row.kind === "removed" ? "bg-[#ff6b9d]/10 text-[#ff9aba]" : row.kind === "added" ? "bg-primary/10 text-primary-soft" : "text-[#82968a]"}><span className="mr-2 inline-block w-4 select-none text-right opacity-70">{row.kind === "removed" ? "−" : row.kind === "added" ? "+" : " "}</span><span className="mr-3 inline-block w-8 select-none text-right opacity-50">{row.number}</span>{row.line || " "}</div>)}
-              {!comparisonLines.length ? <div className="px-3 py-8 text-center text-[#82968a]">{tr("Немає знімка для порівняння.", "No snapshot is available for comparison.")}</div> : null}
+            <div className="overflow-auto p-4 font-mono text-xs leading-6">
+              {comparisonLines.slice(0, 500).map((row, index) => (
+                <div
+                  key={index}
+                  className={
+                    row.kind === "removed"
+                      ? "text-[var(--ide-error)]"
+                      : row.kind === "added"
+                        ? "text-[var(--ide-accent)]"
+                        : "text-[var(--ide-muted)]"
+                  }
+                >
+                  <span className="mr-3 inline-block w-4">
+                    {row.kind === "removed"
+                      ? "−"
+                      : row.kind === "added"
+                        ? "+"
+                        : " "}
+                  </span>
+                  {row.line || " "}
+                </div>
+              ))}
+              {!comparisonLines.length
+                ? tr(
+                    "Немає знімка для порівняння.",
+                    "No snapshot is available for comparison.",
+                  )
+                : null}
             </div>
           </div>
         </div>
       ) : null}
       {notice ? (
-        <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-primary/30 bg-[#132018] px-4 py-2 text-xs font-semibold text-primary-soft shadow-2xl">
+        <div className="ide-notice" role="status" aria-live="polite">
           {notice}
         </div>
       ) : null}
       <Modal
         open={resetConfirmOpen}
         onClose={() => setResetConfirmOpen(false)}
-        title={tr("Скинути код до шаблону?", "Reset code to the starter template?")}
-        description={tr("Поточні незбережені зміни буде втрачено.", "Your current unsaved changes will be lost.")}
+        title={tr("Відновити початковий код?", "Restore starter code?")}
+        description={tr(
+          "Поточні незбережені зміни буде втрачено.",
+          "Your current unsaved changes will be lost.",
+        )}
         showCloseButton={false}
         panelClassName="max-w-md"
       >
         <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="ghost" size="touch" onClick={() => setResetConfirmOpen(false)}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="touch"
+            onClick={() => setResetConfirmOpen(false)}
+          >
             {tr("Скасувати", "Cancel")}
           </Button>
-          <Button type="button" variant="destructive" size="touch" onClick={() => { setResetConfirmOpen(false); props.onReset(); }}>
-            {tr("Скинути код", "Reset code")}
+          <Button
+            type="button"
+            variant="destructive"
+            size="touch"
+            onClick={() => {
+              setResetConfirmOpen(false);
+              props.onReset();
+            }}
+          >
+            {tr("Відновити код", "Restore code")}
           </Button>
         </div>
       </Modal>
-      <footer className="hidden h-8 items-center gap-4 border-t border-[#203428] bg-[#09100b] px-3 text-[10px] text-[#718075] sm:flex">
-        <span>Ln {lineCount}, Col 1</span>
-        <span>{props.language}</span>
-        <span>UTF-8</span>
-        <span>Spaces: 2</span>
-        <span className="ml-auto flex items-center gap-1 text-primary-soft">
-          {props.checking ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
-          {props.checking
-            ? tr("Перевіряємо", "Testing")
-            : props.checkResult
-              ? allTestsPassed
-                ? tr("Прийнято", "Accepted")
-                : tr("Потрібні зміни", "Needs attention")
-              : tr("Автозбереження", "Autosave")}
-        </span>
-      </footer>
     </div>
   );
 });
@@ -2395,8 +3015,12 @@ const BottomTabButton: React.FC<{
 }> = ({ active, onClick, icon, label }) => (
   <button
     type="button"
+    role="tab"
+    aria-selected={active}
+    tabIndex={active ? 0 : -1}
+    aria-controls="ide-runner-panel"
+    className="ide-tab"
     onClick={onClick}
-    className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[10px] font-semibold transition ${active ? "border-primary/25 bg-primary/10 text-primary-soft" : "border-transparent text-[#82968a] hover:border-[#294333] hover:bg-white/[.04] hover:text-[#c8d6cc]"}`}
   >
     {icon}
     {label}

@@ -1,9 +1,24 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { hasPendingContestJob, resumeContestJob, type ContestJobStatus } from "../../lib/api/contestJobs";
-import type { ContestCheckResult, ContestRunResult } from "../../lib/api/contests";
+import {
+  hasPendingContestJob,
+  resumeContestJob,
+  type ContestJobStatus,
+} from "../../lib/api/contestJobs";
+import type {
+  ContestCheckResult,
+  ContestRunResult,
+} from "../../lib/api/contests";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowRight, MessageSquareText, Radio, Trophy, X } from "lucide-react";
+import {
+  ArrowLeftIcon as ArrowLeft,
+  ArrowRightIcon as ArrowRight,
+  ChatCircleTextIcon as MessageSquareText,
+  BroadcastIcon as Radio,
+  TrophyIcon as Trophy,
+  XIcon as X,
+  ClockIcon as ContestClock,
+} from "@phosphor-icons/react";
 import {
   checkContestProblem,
   getContestCommunity,
@@ -19,12 +34,21 @@ import {
   type ContestSubmissionListItem,
   type JudgeLanguage,
 } from "../../lib/api/contests";
-import { JUDGE_ENTRY_FILES, enabledJudgeLanguages, defaultCompilerForFamily, templateForJudgeLanguage } from "../../lib/judgeLanguages";
+import {
+  JUDGE_ENTRY_FILES,
+  enabledJudgeLanguages,
+  defaultCompilerForFamily,
+  templateForJudgeLanguage,
+} from "../../lib/judgeLanguages";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Modal } from "../../components/ui/Modal";
 import { Skeleton } from "../../components/ui/Skeleton";
-import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
+import {
+  StudyCodIDEWorkspace,
+  type StudyCodIdeCheckResult,
+  type StudyCodIdeRunResult,
+} from "../../components/ide/StudyCodIDEWorkspace";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { tracePlayground, type TraceResult } from "../../lib/api/playground";
 import { getCachedMeUser } from "../../lib/api/profile";
@@ -41,7 +65,10 @@ type TurnstileRenderOptions = {
 type TurnstileWidgetId = string | number;
 
 type TurnstileApi = {
-  render: (container: HTMLElement, options: TurnstileRenderOptions) => TurnstileWidgetId;
+  render: (
+    container: HTMLElement,
+    options: TurnstileRenderOptions,
+  ) => TurnstileWidgetId;
   reset: (widgetId?: TurnstileWidgetId) => void;
   remove?: (widgetId?: TurnstileWidgetId) => void;
 };
@@ -68,19 +95,34 @@ function getErrorMessage(error: unknown): string {
   return getErrorMessageFromUnknown(error, "");
 }
 
-function examplesFromStatement(markdown: string): Array<{ testId: number; input: string; expectedOutput: string }> {
-  const blocks = Array.from(String(markdown ?? "").matchAll(/```(?:[\w+-]*)\n([\s\S]*?)```/g))
-    .map((match) => String(match[1] ?? "").trim());
-  const examples: Array<{ testId: number; input: string; expectedOutput: string }> = [];
+function examplesFromStatement(
+  markdown: string,
+): Array<{ testId: number; input: string; expectedOutput: string }> {
+  const blocks = Array.from(
+    String(markdown ?? "").matchAll(/```(?:[\w+-]*)\n([\s\S]*?)```/g),
+  ).map((match) => String(match[1] ?? "").trim());
+  const examples: Array<{
+    testId: number;
+    input: string;
+    expectedOutput: string;
+  }> = [];
   for (let index = 0; index < blocks.length; index += 2) {
     const input = blocks[index] ?? "";
     const expectedOutput = blocks[index + 1] ?? "";
-    if (input || expectedOutput) examples.push({ testId: examples.length + 1, input, expectedOutput });
+    if (input || expectedOutput)
+      examples.push({ testId: examples.length + 1, input, expectedOutput });
   }
   return examples;
 }
 
-function templateForLanguage(task: { template: string; templatesByLanguage: Record<string, string> | null; defaultLanguage?: JudgeLanguage }, lang: JudgeLanguage) {
+function templateForLanguage(
+  task: {
+    template: string;
+    templatesByLanguage: Record<string, string> | null;
+    defaultLanguage?: JudgeLanguage;
+  },
+  lang: JudgeLanguage,
+) {
   return templateForJudgeLanguage(lang, {
     templatesByLanguage: task.templatesByLanguage,
     fallback: task.template,
@@ -104,7 +146,10 @@ function draftScopeFromUser(user: ReturnType<typeof getCachedMeUser>): string {
 }
 
 function apiHttpBase(): string {
-  const raw = String(import.meta.env.VITE_API_URL || (typeof window !== "undefined" ? window.location.origin : "")).trim();
+  const raw = String(
+    import.meta.env.VITE_API_URL ||
+      (typeof window !== "undefined" ? window.location.origin : ""),
+  ).trim();
   const base = raw.replace(/\/+$/, "").replace(/\/api\/?$/i, "");
   return `${base}/api`;
 }
@@ -115,33 +160,63 @@ function normalizeVerdict(v: string | null | undefined): string | null {
 }
 
 const previewContestProblems = (en: boolean): ContestProblemListItem[] => [
-  { id: 501, order: 1, label: "A", points: 100, title: en ? "Quiet permutation" : "Тиха перестановка", libraryTaskId: 41 },
-  { id: 502, order: 2, label: "B", points: 150, title: en ? "Message queue" : "Черга повідомлень", libraryTaskId: 42 },
-  { id: 503, order: 3, label: "C", points: 200, title: en ? "Reachable route" : "Доступний маршрут", libraryTaskId: 43 },
+  {
+    id: 501,
+    order: 1,
+    label: "A",
+    points: 100,
+    title: en ? "Quiet permutation" : "Тиха перестановка",
+    libraryTaskId: 41,
+  },
+  {
+    id: 502,
+    order: 2,
+    label: "B",
+    points: 150,
+    title: en ? "Message queue" : "Черга повідомлень",
+    libraryTaskId: 42,
+  },
+  {
+    id: 503,
+    order: 3,
+    label: "C",
+    points: 200,
+    title: en ? "Reachable route" : "Доступний маршрут",
+    libraryTaskId: 43,
+  },
 ];
 
-const previewContestStatement = (problemId: number, en: boolean): ContestProblemStatement => {
-  const problem = previewContestProblems(en).find((item) => item.id === problemId) ?? previewContestProblems(en)[0]!;
-  const taskDemo = problem.label === "B"
-    ? {
-        description: en
-          ? "Count the positive numbers in the sequence.\n\nInput\n```text\n5\n-1 4 0 8 -3\n```\nOutput\n```text\n2\n```"
-          : "Порахуй додатні числа у послідовності.\n\nВхідні дані\n```text\n5\n-1 4 0 8 -3\n```\nВихідні дані\n```text\n2\n```",
-        template: "values = list(map(int, input().split()))\nprint(sum(value > 0 for value in values))\n",
-      }
-    : problem.label === "C"
+const previewContestStatement = (
+  problemId: number,
+  en: boolean,
+): ContestProblemStatement => {
+  const problem =
+    previewContestProblems(en).find((item) => item.id === problemId) ??
+    previewContestProblems(en)[0]!;
+  const taskDemo =
+    problem.label === "B"
       ? {
           description: en
-            ? "Find the sum of the numbers in the sequence.\n\nInput\n```text\n4\n3 7 2 1\n```\nOutput\n```text\n13\n```"
-            : "Знайди суму чисел у послідовності.\n\nВхідні дані\n```text\n4\n3 7 2 1\n```\nВихідні дані\n```text\n13\n```",
-          template: "values = list(map(int, input().split()))\nprint(sum(values))\n",
+            ? "Count the positive numbers in the sequence.\n\nInput\n```text\n5\n-1 4 0 8 -3\n```\nOutput\n```text\n2\n```"
+            : "Порахуй додатні числа у послідовності.\n\nВхідні дані\n```text\n5\n-1 4 0 8 -3\n```\nВихідні дані\n```text\n2\n```",
+          template:
+            "values = list(map(int, input().split()))\nprint(sum(value > 0 for value in values))\n",
         }
-      : {
-          description: en
-            ? "Find the smallest value and its position in the sequence.\n\nInput\n```text\n5\n12 7 7 18 9\n```\nOutput\n```text\n2 7\n```"
-            : "Знайди найменше значення та його номер у послідовності.\n\nВхідні дані\n```text\n5\n12 7 7 18 9\n```\nВихідні дані\n```text\n2 7\n```",
-          template: "values = list(map(int, input().split()))\nindex = min(range(len(values)), key=values.__getitem__)\nprint(index + 1, values[index])\n",
-        };
+      : problem.label === "C"
+        ? {
+            description: en
+              ? "Find the sum of the numbers in the sequence.\n\nInput\n```text\n4\n3 7 2 1\n```\nOutput\n```text\n13\n```"
+              : "Знайди суму чисел у послідовності.\n\nВхідні дані\n```text\n4\n3 7 2 1\n```\nВихідні дані\n```text\n13\n```",
+            template:
+              "values = list(map(int, input().split()))\nprint(sum(values))\n",
+          }
+        : {
+            description: en
+              ? "Find the smallest value and its position in the sequence.\n\nInput\n```text\n5\n12 7 7 18 9\n```\nOutput\n```text\n2 7\n```"
+              : "Знайди найменше значення та його номер у послідовності.\n\nВхідні дані\n```text\n5\n12 7 7 18 9\n```\nВихідні дані\n```text\n2 7\n```",
+            template:
+              "values = list(map(int, input().split()))\nindex = min(range(len(values)), key=values.__getitem__)\nprint(index + 1, values[index])\n",
+          };
   return {
     problem: { id: problemId, order: problem.order, label: problem.label },
     task: {
@@ -160,10 +235,44 @@ const previewContestStatement = (problemId: number, en: boolean): ContestProblem
   };
 };
 
+const ContestWorkspaceTimer: React.FC<{ endsAt: string; en: boolean }> = ({
+  endsAt,
+  en,
+}) => {
+  const [now, setNow] = React.useState(Date.now);
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const ends = new Date(endsAt).getTime();
+  if (!Number.isFinite(ends)) return null;
+  const seconds = Math.max(0, Math.ceil((ends - now) / 1000));
+  const countdown = [
+    Math.floor(seconds / 3600),
+    Math.floor(seconds / 60) % 60,
+    seconds % 60,
+  ]
+    .map((value) => String(value).padStart(2, "0"))
+    .join(":");
+  return (
+    <div
+      className="ide-contest-clock"
+      data-urgent={seconds < 300}
+      title={`${en ? "Contest ends at" : "Контест завершується о"} ${new Date(endsAt).toLocaleTimeString(en ? "en-US" : "uk-UA")}`}
+    >
+      <ContestClock className="size-4" />
+      <span>{en ? "Time left" : "Залишилось"}</span>
+      <time dateTime={`PT${seconds}S`}>
+        {seconds === 0 ? (en ? "Finished" : "Завершено") : countdown}
+      </time>
+    </div>
+  );
+};
+
 export const ContestProblemSolvePage: React.FC = () => {
   const { i18n } = useTranslation();
   const en = i18n.language?.toLowerCase().startsWith("en") ?? false;
-  const copy = (uk: string, english: string) => en ? english : uk;
+  const copy = (uk: string, english: string) => (en ? english : uk);
   const navigate = useNavigate();
   const params = useParams<{ id?: string; problemId?: string }>();
 
@@ -180,56 +289,93 @@ export const ContestProblemSolvePage: React.FC = () => {
   const hasToken = true;
   const isPreview = isDevPreviewActive();
   const sessionUser = getCachedMeUser();
-  const turnstileSiteKey = React.useMemo(() => String(import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "").trim(), []);
+  const turnstileSiteKey = React.useMemo(
+    () => String(import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "").trim(),
+    [],
+  );
   // Live updates (SSE) are on by default; can be disabled explicitly.
   const liveUpdatesEnabled = React.useMemo(() => {
-    const raw = String(import.meta.env.VITE_ENABLE_CONTEST_WS ?? "").trim().toLowerCase();
+    const raw = String(import.meta.env.VITE_ENABLE_CONTEST_WS ?? "")
+      .trim()
+      .toLowerCase();
     return !(raw === "0" || raw === "false" || raw === "no" || raw === "off");
   }, []);
   const turnstileEnabled = React.useMemo(() => {
-    const raw = String(import.meta.env.VITE_ENABLE_CONTEST_SUBMIT_TURNSTILE ?? "").trim().toLowerCase();
-    const enabled = raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+    const raw = String(
+      import.meta.env.VITE_ENABLE_CONTEST_SUBMIT_TURNSTILE ?? "",
+    )
+      .trim()
+      .toLowerCase();
+    const enabled =
+      raw === "1" || raw === "true" || raw === "yes" || raw === "on";
     return enabled && turnstileSiteKey.length > 0;
   }, [turnstileSiteKey]);
   const turnstileContainerRef = React.useRef<HTMLDivElement | null>(null);
   const turnstileWidgetIdRef = React.useRef<TurnstileWidgetId | null>(null);
   const [turnstileScriptReady, setTurnstileScriptReady] = React.useState(false);
   const [turnstileLoadFailed, setTurnstileLoadFailed] = React.useState(false);
-  const [turnstileToken, setTurnstileToken] = React.useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = React.useState<string | null>(
+    null,
+  );
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [statement, setStatement] = React.useState<ContestProblemStatement | null>(null);
-  const [contestMeta, setContestMeta] = React.useState<ContestMeta>({ title: "Contest", endsAt: null });
-  const [contestProblems, setContestProblems] = React.useState<ContestProblemListItem[]>([]);
+  const [statement, setStatement] =
+    React.useState<ContestProblemStatement | null>(null);
+  const [contestMeta, setContestMeta] = React.useState<ContestMeta>({
+    title: "Contest",
+    endsAt: null,
+  });
+  const [contestProblems, setContestProblems] = React.useState<
+    ContestProblemListItem[]
+  >([]);
 
-  const [judgeLanguage, setJudgeLanguage] = React.useState<JudgeLanguage>("java");
-  const [judgeCompiler, setJudgeCompiler] = React.useState<string>(defaultCompilerForFamily("java"));
+  const [judgeLanguage, setJudgeLanguage] =
+    React.useState<JudgeLanguage>("java");
+  const [judgeCompiler, setJudgeCompiler] = React.useState<string>(
+    defaultCompilerForFamily("java"),
+  );
   // Reset compiler to the family default whenever the language changes.
-  React.useEffect(() => { setJudgeCompiler(defaultCompilerForFamily(judgeLanguage)); }, [judgeLanguage]);
+  React.useEffect(() => {
+    setJudgeCompiler(defaultCompilerForFamily(judgeLanguage));
+  }, [judgeLanguage]);
   const [code, setCode] = React.useState("");
   const [runInput, setRunInput] = React.useState("");
   const [running, setRunning] = React.useState(false);
-  const [jobStatus, setJobStatus] = React.useState<ContestJobStatus | null>(null);
+  const [jobStatus, setJobStatus] = React.useState<ContestJobStatus | null>(
+    null,
+  );
   const [checking, setChecking] = React.useState(false);
-  const [runResult, setRunResult] = React.useState<StudyCodIdeRunResult | null>(null);
-  const [checkResult, setCheckResult] = React.useState<StudyCodIdeCheckResult | null>(null);
+  const [runResult, setRunResult] = React.useState<StudyCodIdeRunResult | null>(
+    null,
+  );
+  const [checkResult, setCheckResult] =
+    React.useState<StudyCodIdeCheckResult | null>(null);
   const [trace, setTrace] = React.useState<TraceResult | null>(null);
   const [tracing, setTracing] = React.useState(false);
 
   const [subsLoading, setSubsLoading] = React.useState(false);
-  const [submissions, setSubmissions] = React.useState<ContestSubmissionListItem[]>([]);
+  const [submissions, setSubmissions] = React.useState<
+    ContestSubmissionListItem[]
+  >([]);
 
-  const [wsStatus, setWsStatus] = React.useState<"connecting" | "connected" | "offline">("offline");
+  const [wsStatus, setWsStatus] = React.useState<
+    "connecting" | "connected" | "offline"
+  >("offline");
   const [latestVerdict, setLatestVerdict] = React.useState<string | null>(null);
   const [latestVerdictAt, setLatestVerdictAt] = React.useState(0);
 
-  const [announcements, setAnnouncements] = React.useState<ContestCommunityAnnouncement[]>([]);
-  const [dismissedAnnouncementId, setDismissedAnnouncementId] = React.useState<number | null>(null);
+  const [announcements, setAnnouncements] = React.useState<
+    ContestCommunityAnnouncement[]
+  >([]);
+  const [dismissedAnnouncementId, setDismissedAnnouncementId] = React.useState<
+    number | null
+  >(null);
   const [draftSavedAt, setDraftSavedAt] = React.useState<string | null>(null);
   const [organizerDialogOpen, setOrganizerDialogOpen] = React.useState(false);
   const [organizerQuestion, setOrganizerQuestion] = React.useState("");
   const [askingOrganizer, setAskingOrganizer] = React.useState(false);
-  const [organizerQuestionSent, setOrganizerQuestionSent] = React.useState(false);
+  const [organizerQuestionSent, setOrganizerQuestionSent] =
+    React.useState(false);
   const liveSyncInFlightRef = React.useRef(false);
   const liveSyncLastAtRef = React.useRef(0);
 
@@ -238,68 +384,106 @@ export const ContestProblemSolvePage: React.FC = () => {
     return `contest:${contestId}:problem:${problemId}:${draftScopeFromUser(sessionUser)}`;
   }, [contestId, problemId, sessionUser]);
 
-  const loadSubmissions = React.useCallback(async (opts?: { silent?: boolean }) => {
-    if (!contestId || !problemId || !hasToken) return;
-    const silent = !!opts?.silent;
-    if (!silent) setSubsLoading(true);
-    try {
-      if (isDevPreviewActive()) {
-        setSubmissions([{ id: 1, createdAt: new Date().toISOString(), phase: "CONTEST", language: "python", verdict: "AC", score: 100, maxScore: 100, testsPassed: 3, testsTotal: 3, compileErrorKind: null }]);
-        setLatestVerdict("AC");
-        return;
+  const loadSubmissions = React.useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (!contestId || !problemId || !hasToken) return;
+      const silent = !!opts?.silent;
+      if (!silent) setSubsLoading(true);
+      try {
+        if (isDevPreviewActive()) {
+          setSubmissions([
+            {
+              id: 1,
+              createdAt: new Date().toISOString(),
+              phase: "CONTEST",
+              language: "python",
+              verdict: "AC",
+              score: 100,
+              maxScore: 100,
+              testsPassed: 3,
+              testsTotal: 3,
+              compileErrorKind: null,
+            },
+          ]);
+          setLatestVerdict("AC");
+          return;
+        }
+        const res = await getContestProblemSubmissions(
+          contestId,
+          problemId,
+          30,
+        );
+        const rows = Array.isArray(res.submissions) ? res.submissions : [];
+        setSubmissions(rows);
+        const topVerdict = normalizeVerdict(rows[0]?.verdict);
+        if (topVerdict) {
+          setLatestVerdict(topVerdict);
+        }
+      } catch {
+        setSubmissions([]);
+      } finally {
+        if (!silent) setSubsLoading(false);
       }
-      const res = await getContestProblemSubmissions(contestId, problemId, 30);
-      const rows = Array.isArray(res.submissions) ? res.submissions : [];
-      setSubmissions(rows);
-      const topVerdict = normalizeVerdict(rows[0]?.verdict);
-      if (topVerdict) {
-        setLatestVerdict(topVerdict);
-      }
-    } catch {
-      setSubmissions([]);
-    } finally {
-      if (!silent) setSubsLoading(false);
-    }
-  }, [contestId, problemId, hasToken]);
+    },
+    [contestId, problemId, hasToken],
+  );
 
-  const syncLiveData = React.useCallback(async (force = false) => {
-    const now = Date.now();
-    if (!force && now - liveSyncLastAtRef.current < 5000) return;
-    if (liveSyncInFlightRef.current) return;
-    liveSyncInFlightRef.current = true;
-    liveSyncLastAtRef.current = now;
-    try {
-      await loadSubmissions({ silent: true });
-    } finally {
-      liveSyncInFlightRef.current = false;
-    }
-  }, [loadSubmissions]);
+  const syncLiveData = React.useCallback(
+    async (force = false) => {
+      const now = Date.now();
+      if (!force && now - liveSyncLastAtRef.current < 5000) return;
+      if (liveSyncInFlightRef.current) return;
+      liveSyncInFlightRef.current = true;
+      liveSyncLastAtRef.current = now;
+      try {
+        await loadSubmissions({ silent: true });
+      } finally {
+        liveSyncInFlightRef.current = false;
+      }
+    },
+    [loadSubmissions],
+  );
 
   const hydrateDraft = React.useCallback(
     (stmt: ContestProblemStatement) => {
       if (!storageBase) return;
       // The real contest editor can use every judge language. The local design
       // preview stays on its own seeded Python example and never submits to the judge.
-      const allowed = isDevPreviewActive() ? stmt.task.allowedLanguages : enabledJudgeLanguages();
+      const allowed = isDevPreviewActive()
+        ? stmt.task.allowedLanguages
+        : enabledJudgeLanguages();
       const fallbackLang = (allowed[0] ?? "java") as JudgeLanguage;
 
       try {
-        const savedLang = localStorage.getItem(`${storageBase}:lang`) as JudgeLanguage | null;
-        const nextLang = savedLang && allowed.includes(savedLang) ? savedLang : fallbackLang;
+        const savedLang = localStorage.getItem(
+          `${storageBase}:lang`,
+        ) as JudgeLanguage | null;
+        const nextLang =
+          savedLang && allowed.includes(savedLang) ? savedLang : fallbackLang;
         setJudgeLanguage(nextLang);
 
-        const savedCode = localStorage.getItem(`${storageBase}:draft:${nextLang}:code`);
-      const tpl = templateForLanguage({ template: stmt.task.template, templatesByLanguage: stmt.task.templatesByLanguage, defaultLanguage: stmt.task.defaultLanguage }, nextLang);
+        const savedCode = localStorage.getItem(
+          `${storageBase}:draft:${nextLang}:code`,
+        );
+        const tpl = templateForLanguage(
+          {
+            template: stmt.task.template,
+            templatesByLanguage: stmt.task.templatesByLanguage,
+            defaultLanguage: stmt.task.defaultLanguage,
+          },
+          nextLang,
+        );
         setCode(savedCode != null ? savedCode : tpl);
 
         const savedInput = localStorage.getItem(`${storageBase}:runInput`);
-        setRunInput(savedInput ?? (isDevPreviewActive() ? "5\n12 7 7 18 9" : ""));
-
+        setRunInput(
+          savedInput ?? (isDevPreviewActive() ? "5\n12 7 7 18 9" : ""),
+        );
       } catch {
         // ignore
       }
     },
-    [storageBase]
+    [storageBase],
   );
 
   const load = React.useCallback(async () => {
@@ -313,11 +497,17 @@ export const ContestProblemSolvePage: React.FC = () => {
         const stmt = previewContestStatement(problemId, en);
         setContestProblems(previewContestProblems(en));
         setStatement(stmt);
-        setContestMeta({ title: en ? "Algorithm Saturday" : "Алгоритмічна субота", endsAt: new Date(Date.now() + 60 * 60_000).toISOString() });
+        setContestMeta({
+          title: en ? "Algorithm Saturday" : "Алгоритмічна субота",
+          endsAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+        });
         hydrateDraft(stmt);
         return;
       }
-      const [stmt, contest] = await Promise.all([getContestProblemStatement(contestId, problemId), getContestDetails(contestId)]);
+      const [stmt, contest] = await Promise.all([
+        getContestProblemStatement(contestId, problemId),
+        getContestDetails(contestId),
+      ]);
       setStatement(stmt);
       setContestProblems(contest.problems);
       setContestMeta({
@@ -346,7 +536,9 @@ export const ContestProblemSolvePage: React.FC = () => {
     if (!turnstileEnabled) return;
     if (isPreview) return;
 
-    const existing = document.querySelector<HTMLScriptElement>('script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]');
+    const existing = document.querySelector<HTMLScriptElement>(
+      'script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]',
+    );
     if (window.turnstile) {
       setTurnstileLoadFailed(false);
       setTurnstileScriptReady(true);
@@ -356,7 +548,9 @@ export const ContestProblemSolvePage: React.FC = () => {
       const onLoad = () => setTurnstileScriptReady(true);
       const onError = () => {
         setTurnstileLoadFailed(true);
-        setError("Human verification widget failed to load. Submission will continue via server-side check.");
+        setError(
+          "Human verification widget failed to load. Submission will continue via server-side check.",
+        );
       };
       existing.addEventListener("load", onLoad);
       existing.addEventListener("error", onError);
@@ -376,7 +570,9 @@ export const ContestProblemSolvePage: React.FC = () => {
     };
     script.onerror = () => {
       setTurnstileLoadFailed(true);
-      setError("Failed to load human verification widget. Submission will continue via server-side check.");
+      setError(
+        "Failed to load human verification widget. Submission will continue via server-side check.",
+      );
     };
     document.head.appendChild(script);
 
@@ -403,13 +599,18 @@ export const ContestProblemSolvePage: React.FC = () => {
         turnstileWidgetIdRef.current = widgetId;
       } catch {
         setTurnstileLoadFailed(true);
-        setError("Human verification widget failed to initialize. Submission will continue via server-side check.");
+        setError(
+          "Human verification widget failed to initialize. Submission will continue via server-side check.",
+        );
       }
     }
 
     return () => {
       if (!window.turnstile) return;
-      if (turnstileWidgetIdRef.current != null && typeof window.turnstile.remove === "function") {
+      if (
+        turnstileWidgetIdRef.current != null &&
+        typeof window.turnstile.remove === "function"
+      ) {
         window.turnstile.remove(turnstileWidgetIdRef.current);
       }
       turnstileWidgetIdRef.current = null;
@@ -432,15 +633,24 @@ export const ContestProblemSolvePage: React.FC = () => {
   const switchLanguage = (nextLanguage: JudgeLanguage) => {
     if (!statement || nextLanguage === judgeLanguage) return;
     const template = templateForLanguage(
-      { template: statement.task.template, templatesByLanguage: statement.task.templatesByLanguage, defaultLanguage: statement.task.defaultLanguage },
+      {
+        template: statement.task.template,
+        templatesByLanguage: statement.task.templatesByLanguage,
+        defaultLanguage: statement.task.defaultLanguage,
+      },
       nextLanguage,
     );
     let nextCode = template;
     try {
       if (storageBase) {
         localStorage.setItem(`${storageBase}:lang`, judgeLanguage);
-        localStorage.setItem(`${storageBase}:draft:${judgeLanguage}:code`, code);
-        nextCode = localStorage.getItem(`${storageBase}:draft:${nextLanguage}:code`) ?? template;
+        localStorage.setItem(
+          `${storageBase}:draft:${judgeLanguage}:code`,
+          code,
+        );
+        nextCode =
+          localStorage.getItem(`${storageBase}:draft:${nextLanguage}:code`) ??
+          template;
       }
     } catch {
       // Use the language template when browser storage is unavailable.
@@ -466,8 +676,17 @@ export const ContestProblemSolvePage: React.FC = () => {
   };
 
   React.useEffect(() => {
-    if (isPreview) { setWsStatus("offline"); return; }
-    if (!liveUpdatesEnabled || !contestId || !hasToken || typeof window === "undefined" || typeof EventSource === "undefined") {
+    if (isPreview) {
+      setWsStatus("offline");
+      return;
+    }
+    if (
+      !liveUpdatesEnabled ||
+      !contestId ||
+      !hasToken ||
+      typeof window === "undefined" ||
+      typeof EventSource === "undefined"
+    ) {
       setWsStatus("offline");
       return;
     }
@@ -485,14 +704,24 @@ export const ContestProblemSolvePage: React.FC = () => {
       if (!closed) setWsStatus("connected");
     };
     es.addEventListener("job", (event: MessageEvent) => {
-      try { window.dispatchEvent(new CustomEvent("studycod:contest-job", { detail: JSON.parse(event.data) })); } catch { /* malformed event */ }
+      try {
+        window.dispatchEvent(
+          new CustomEvent("studycod:contest-job", {
+            detail: JSON.parse(event.data),
+          }),
+        );
+      } catch {
+        /* malformed event */
+      }
     });
     es.addEventListener("scoreboard", () => {
       if (!closed) syncLiveData(false);
     });
     es.addEventListener("announcement", (event) => {
       if (closed) return;
-      const payload = safeJsonParse<ContestAnnouncementEvent>(String((event as MessageEvent).data ?? ""));
+      const payload = safeJsonParse<ContestAnnouncementEvent>(
+        String((event as MessageEvent).data ?? ""),
+      );
       if (payload && Number.isFinite(Number(payload.id))) {
         setAnnouncements((prev) => {
           if (prev.some((a) => a.id === payload.id)) return prev;
@@ -510,7 +739,10 @@ export const ContestProblemSolvePage: React.FC = () => {
     });
     es.onerror = () => {
       // EventSource auto-reconnects; reflect the transient state.
-      if (!closed) setWsStatus(es.readyState === EventSource.CLOSED ? "offline" : "connecting");
+      if (!closed)
+        setWsStatus(
+          es.readyState === EventSource.CLOSED ? "offline" : "connecting",
+        );
     };
 
     return () => {
@@ -525,21 +757,40 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   React.useEffect(() => {
     if (isPreview) return;
-    const id = window.setInterval(() => {
-      syncLiveData(false);
-    }, wsStatus === "connected" ? 20000 : 5000 + Math.random() * 1000);
+    const id = window.setInterval(
+      () => {
+        syncLiveData(false);
+      },
+      wsStatus === "connected" ? 20000 : 5000 + Math.random() * 1000,
+    );
     return () => window.clearInterval(id);
   }, [isPreview, wsStatus, syncLiveData]);
 
   // Poll organizer announcements so participants see them without leaving the workspace.
   React.useEffect(() => {
-    if (isPreview) { setAnnouncements([{ id: 1, author: "StudyCod", text: copy("Зосередься на коректному виборі найменшого елемента.", "Focus on choosing the smallest element correctly."), createdAt: new Date().toISOString() }]); return; }
+    if (isPreview) {
+      setAnnouncements([
+        {
+          id: 1,
+          author: "StudyCod",
+          text: copy(
+            "Зосередься на коректному виборі найменшого елемента.",
+            "Focus on choosing the smallest element correctly.",
+          ),
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      return;
+    }
     if (!contestId || !hasToken) return;
     let cancelled = false;
     const tick = async () => {
       try {
         const data = await getContestCommunity(contestId);
-        if (!cancelled) setAnnouncements(Array.isArray(data.announcements) ? data.announcements : []);
+        if (!cancelled)
+          setAnnouncements(
+            Array.isArray(data.announcements) ? data.announcements : [],
+          );
       } catch {
         // ignore (access/network)
       }
@@ -578,25 +829,30 @@ export const ContestProblemSolvePage: React.FC = () => {
   }, [isPreview, contestId, hasToken]);
 
   const applyCheckResult = React.useCallback((res: ContestCheckResult) => {
-      const firstPublicFailure = res.firstFailure && !res.firstFailure.hidden ? res.firstFailure : null;
-      setCheckResult({
-        verdict: res.verdict,
-        testsPassed: res.testsPassed,
-        testsTotal: res.testsTotal,
-        score: res.score,
-        maxScore: res.maxScore,
-        compileError: res.compileError,
-        groupScores: res.groupScores,
-        publicTestResults: firstPublicFailure ? [{
-          testId: firstPublicFailure.index,
-          input: firstPublicFailure.input,
-          expectedOutput: firstPublicFailure.expected,
-          actualOutput: firstPublicFailure.actual,
-          passed: false,
-          verdict: firstPublicFailure.verdict,
-          stderr: firstPublicFailure.stderr,
-        }] : [],
-      });
+    const firstPublicFailure =
+      res.firstFailure && !res.firstFailure.hidden ? res.firstFailure : null;
+    setCheckResult({
+      verdict: res.verdict,
+      testsPassed: res.testsPassed,
+      testsTotal: res.testsTotal,
+      score: res.score,
+      maxScore: res.maxScore,
+      compileError: res.compileError,
+      groupScores: res.groupScores,
+      publicTestResults: firstPublicFailure
+        ? [
+            {
+              testId: firstPublicFailure.index,
+              input: firstPublicFailure.input,
+              expectedOutput: firstPublicFailure.expected,
+              actualOutput: firstPublicFailure.actual,
+              passed: false,
+              verdict: firstPublicFailure.verdict,
+              stderr: firstPublicFailure.stderr,
+            },
+          ]
+        : [],
+    });
   }, []);
   React.useEffect(() => {
     if (isPreview) return;
@@ -604,21 +860,41 @@ export const ContestProblemSolvePage: React.FC = () => {
     let cancelled = false;
     const restore = async (kind: "check" | "run") => {
       if (!hasPendingContestJob(contestId, problemId, kind)) return;
-      if (kind === "check") setChecking(true); else setRunning(true);
+      if (kind === "check") setChecking(true);
+      else setRunning(true);
       try {
-        const result = await resumeContestJob<ContestCheckResult | ContestRunResult>(contestId, problemId, kind,
-          status => { if (!cancelled) setJobStatus(status); });
+        const result = await resumeContestJob<
+          ContestCheckResult | ContestRunResult
+        >(contestId, problemId, kind, (status) => {
+          if (!cancelled) setJobStatus(status);
+        });
         if (!cancelled && result) {
           if (kind === "check") applyCheckResult(result as ContestCheckResult);
           else setRunResult(result as ContestRunResult);
           void syncLiveData(true);
         }
-      } catch (error) { if (!cancelled) setError(getErrorMessage(error)); }
-      finally { if (!cancelled) { if (kind === "check") setChecking(false); else setRunning(false); } }
+      } catch (error) {
+        if (!cancelled) setError(getErrorMessage(error));
+      } finally {
+        if (!cancelled) {
+          if (kind === "check") setChecking(false);
+          else setRunning(false);
+        }
+      }
     };
-    void restore("check"); void restore("run");
-    return () => { cancelled = true; };
-  }, [isPreview, contestId, problemId, hasToken, applyCheckResult, syncLiveData]);
+    void restore("check");
+    void restore("run");
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isPreview,
+    contestId,
+    problemId,
+    hasToken,
+    applyCheckResult,
+    syncLiveData,
+  ]);
 
   const doRun = async () => {
     if (!contestId || !problemId || !statement) return;
@@ -631,22 +907,27 @@ export const ContestProblemSolvePage: React.FC = () => {
     setRunResult(null);
     setRunning(true);
     try {
-      const res = isPreview ? {
-        stdout: runInput.trim() ? "2 7" : "2 7",
-        stderr: "",
-        exitCode: 0,
-        success: true,
-        verdict: "OK",
-        timeMs: 1,
-        memoryKb: 128,
-      } : await runContestProblem({
-        contestId,
-        problemId,
-        language: judgeLanguage,
-        compiler: judgeCompiler,
-        input: runInput,
-        code,
-      }, setJobStatus);
+      const res = isPreview
+        ? {
+            stdout: runInput.trim() ? "2 7" : "2 7",
+            stderr: "",
+            exitCode: 0,
+            success: true,
+            verdict: "OK",
+            timeMs: 1,
+            memoryKb: 128,
+          }
+        : await runContestProblem(
+            {
+              contestId,
+              problemId,
+              language: judgeLanguage,
+              compiler: judgeCompiler,
+              input: runInput,
+              code,
+            },
+            setJobStatus,
+          );
       setRunResult(res);
       setError(null);
     } catch (e: unknown) {
@@ -660,10 +941,17 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   const doTrace = async () => {
     if (!statement || tracing || !code.trim()) return;
-    if (isPreview) { setError(null); return; }
+    if (isPreview) {
+      setError(null);
+      return;
+    }
     setTracing(true);
     try {
-      const result = await tracePlayground({ language: judgeLanguage, code, stdin: runInput || undefined });
+      const result = await tracePlayground({
+        language: judgeLanguage,
+        code,
+        stdin: runInput || undefined,
+      });
       setTrace(result);
     } catch (e: unknown) {
       setError(getErrorMessage(e) || "Trace failed");
@@ -684,35 +972,76 @@ export const ContestProblemSolvePage: React.FC = () => {
     setCheckResult(null);
     setChecking(true);
     try {
-      const res: ContestCheckResult = isPreview ? {
-        submissionId: Date.now(), phase: "CONTEST", verdict: "AC", testsPassed: 3, testsTotal: 3,
-        score: 100, maxScore: 100, compileError: null, compileErrorKind: null,
-        groupScores: [{ group: copy("Основні тести", "Main tests"), score: 100, maxScore: 100 }],
-      } : await checkContestProblem({
-        contestId,
-        problemId,
-        language: judgeLanguage,
-        compiler: judgeCompiler,
-        code,
-        turnstileToken: tokenForSubmit,
-      }, setJobStatus);
+      const res: ContestCheckResult = isPreview
+        ? {
+            submissionId: Date.now(),
+            phase: "CONTEST",
+            verdict: "AC",
+            testsPassed: 3,
+            testsTotal: 3,
+            score: 100,
+            maxScore: 100,
+            compileError: null,
+            compileErrorKind: null,
+            groupScores: [
+              {
+                group: copy("Основні тести", "Main tests"),
+                score: 100,
+                maxScore: 100,
+              },
+            ],
+          }
+        : await checkContestProblem(
+            {
+              contestId,
+              problemId,
+              language: judgeLanguage,
+              compiler: judgeCompiler,
+              code,
+              turnstileToken: tokenForSubmit,
+            },
+            setJobStatus,
+          );
       applyCheckResult(res);
       setError(null);
       setLatestVerdict(normalizeVerdict(res.verdict));
       setLatestVerdictAt(Date.now());
-      if (isPreview) setSubmissions((current) => [{ id: res.submissionId, createdAt: new Date().toISOString(), phase: "CONTEST", language: judgeLanguage, verdict: res.verdict, score: res.score, maxScore: res.maxScore, testsPassed: res.testsPassed, testsTotal: res.testsTotal, compileErrorKind: res.compileErrorKind }, ...current]);
+      if (isPreview)
+        setSubmissions((current) => [
+          {
+            id: res.submissionId,
+            createdAt: new Date().toISOString(),
+            phase: "CONTEST",
+            language: judgeLanguage,
+            verdict: res.verdict,
+            score: res.score,
+            maxScore: res.maxScore,
+            testsPassed: res.testsPassed,
+            testsTotal: res.testsTotal,
+            compileErrorKind: res.compileErrorKind,
+          },
+          ...current,
+        ]);
       else syncLiveData(true);
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
       if (msg === "TURNSTILE_REQUIRED") {
-        setError("Human verification is required by server. Complete verification and submit again.");
+        setError(
+          "Human verification is required by server. Complete verification and submit again.",
+        );
       } else if (msg === "TURNSTILE_FAILED") {
-        setError("Human verification failed. Try again, and disable ad blockers/privacy shields for this page.");
+        setError(
+          "Human verification failed. Try again, and disable ad blockers/privacy shields for this page.",
+        );
       } else {
         setError(msg || "Submission failed");
       }
     } finally {
-      if (turnstileEnabled && window.turnstile && turnstileWidgetIdRef.current != null) {
+      if (
+        turnstileEnabled &&
+        window.turnstile &&
+        turnstileWidgetIdRef.current != null
+      ) {
         window.turnstile.reset(turnstileWidgetIdRef.current);
       }
       if (turnstileEnabled) setTurnstileToken(null);
@@ -721,7 +1050,15 @@ export const ContestProblemSolvePage: React.FC = () => {
   };
 
   const askOrganizer = async (question: string) => {
-    if (!contestId || !problemId || !hasToken || !statement || askingOrganizer || !question.trim()) return;
+    if (
+      !contestId ||
+      !problemId ||
+      !hasToken ||
+      !statement ||
+      askingOrganizer ||
+      !question.trim()
+    )
+      return;
     const message = [
       `${copy("Питання щодо задачі", "Question about problem")} ${statement.problem.label}: ${statement.task.title}`,
       "",
@@ -731,7 +1068,15 @@ export const ContestProblemSolvePage: React.FC = () => {
     setAskingOrganizer(true);
     try {
       if (isPreview) {
-        setAnnouncements((current) => [{ id: Date.now(), author: en ? "Olena · demo" : "Оксана · демо", text: question.trim(), createdAt: new Date().toISOString() }, ...current]);
+        setAnnouncements((current) => [
+          {
+            id: Date.now(),
+            author: en ? "Olena · demo" : "Оксана · демо",
+            text: question.trim(),
+            createdAt: new Date().toISOString(),
+          },
+          ...current,
+        ]);
         setOrganizerDialogOpen(false);
         setOrganizerQuestion("");
         setOrganizerQuestionSent(true);
@@ -766,8 +1111,18 @@ export const ContestProblemSolvePage: React.FC = () => {
     return (
       <div className="p-3 sm:p-4 md:p-6">
         <Card className="p-4">
-          <div role="alert" aria-live="assertive" className="text-sm text-accent-error">{error}</div>
-          <Button variant="secondary" onClick={() => void load()} className="mt-4 h-10 px-4">
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="text-sm text-accent-error"
+          >
+            {error}
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => void load()}
+            className="mt-4 h-10 px-4"
+          >
             Try again
           </Button>
         </Card>
@@ -779,24 +1134,43 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   const entryFile = JUDGE_ENTRY_FILES[judgeLanguage];
   const publicExamples = examplesFromStatement(statement.task.description);
-  const orderedContestProblems = [...contestProblems].sort((a, b) => a.order - b.order);
-  const currentProblemIndex = orderedContestProblems.findIndex((problem) => problem.id === problemId);
+  const orderedContestProblems = [...contestProblems].sort(
+    (a, b) => a.order - b.order,
+  );
+  const currentProblemIndex = orderedContestProblems.findIndex(
+    (problem) => problem.id === problemId,
+  );
   const openContestProblem = (target: ContestProblemListItem) => {
-    navigate(withDevPreview(`/contest/contests/${contestId}/problems/${target.id}`));
+    navigate(
+      withDevPreview(`/contest/contests/${contestId}/problems/${target.id}`),
+    );
   };
   const latestAnnouncement = announcements[0] ?? null;
-  const showAnnouncement = latestAnnouncement && latestAnnouncement.id !== dismissedAnnouncementId;
+  const showAnnouncement =
+    latestAnnouncement && latestAnnouncement.id !== dismissedAnnouncementId;
 
   return (
-    <div className="contest-problem-solve min-h-full space-y-2 bg-bg-base p-2 text-text-primary pb-[calc(0.5rem+env(safe-area-inset-bottom))] dark:bg-[#0b120e] dark:text-[#edf3ef] sm:space-y-3 sm:p-4">
+    <div className="contest-problem-solve ide-contest-page bg-bg-base text-text-primary">
       {showAnnouncement ? (
-        <aside className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 sm:items-center dark:bg-[#0d1b13]" aria-live="polite">
-          <Radio className="mt-0.5 size-4 shrink-0 text-primary-strong dark:text-primary-soft sm:mt-0" />
+        <aside
+          className="flex items-start gap-3 rounded-lg border border-border px-4 py-2 sm:items-center"
+          aria-live="polite"
+        >
+          <Radio className="mt-0.5 size-4 shrink-0 text-primary-strong dark:text-[var(--ide-accent)] sm:mt-0" />
           <div className="min-w-0 flex-1">
-            <div className="text-[10px] font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{copy("Оголошення організатора", "Organizer announcement")}</div>
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-text-primary dark:text-[#dce8df]">{latestAnnouncement.text}</p>
+            <div className="text-xs font-semibold text-text-secondary">
+              {copy("Оголошення організатора", "Organizer announcement")}
+            </div>
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-5 text-text-primary dark:text-[#dce8df]">
+              {latestAnnouncement.text}
+            </p>
           </div>
-          <button type="button" onClick={() => setDismissedAnnouncementId(latestAnnouncement.id)} className="grid size-8 shrink-0 place-items-center rounded-lg text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-[#82968a] dark:hover:bg-white/[.06] dark:hover:text-white" aria-label={copy("Закрити оголошення", "Close announcement")}>
+          <button
+            type="button"
+            onClick={() => setDismissedAnnouncementId(latestAnnouncement.id)}
+            className="grid size-8 shrink-0 place-items-center rounded-lg text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-[var(--ide-muted)] dark:hover:bg-white/[.06] dark:hover:text-white"
+            aria-label={copy("Закрити оголошення", "Close announcement")}
+          >
             <X className="size-4" />
           </button>
         </aside>
@@ -804,30 +1178,89 @@ export const ContestProblemSolvePage: React.FC = () => {
 
       {turnstileEnabled && !isPreview ? (
         <Card className="flex flex-wrap items-center gap-3 border-border/80 p-3 dark:border-white/10 dark:bg-[#0d1510]">
-            <div className="min-w-0 flex-1 text-xs text-text-muted dark:text-[#a7b5aa]">
-              {turnstileLoadFailed
-                ? "Human verification widget is unavailable in browser. Submit still works if server does not require verification."
-                : "Human verification is required before submission."}
-            </div>
-            <div ref={turnstileContainerRef} />
+          <div className="min-w-0 flex-1 text-xs text-text-muted dark:text-[#a7b5aa]">
+            {turnstileLoadFailed
+              ? copy(
+                  "Перевірка людини не завантажилась. Спробуй оновити сторінку перед надсиланням.",
+                  "Human verification did not load. Refresh the page before submitting.",
+                )
+              : copy(
+                  "Перед надсиланням підтвердь, що ти людина.",
+                  "Complete human verification before submitting.",
+                )}
+          </div>
+          <div ref={turnstileContainerRef} />
         </Card>
       ) : null}
 
       {error ? (
-        <div role="alert" aria-live="assertive" className="flex items-start gap-3 rounded-xl border border-[#ff6b9d]/30 bg-[#ff6b9d]/10 px-3 py-2.5 text-sm text-[#ffb2c9]">
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="flex items-start gap-3 rounded-xl border border-[#ff6b9d]/30 bg-[#ff6b9d]/10 px-3 py-2.5 text-sm text-[#ffb2c9]"
+        >
           <span className="min-w-0 flex-1">{error}</span>
-          <button type="button" onClick={() => setError(null)} className="shrink-0 rounded-md p-1 hover:bg-white/[.08]" aria-label={copy("Закрити повідомлення про помилку", "Close error message")}><X className="size-4" /></button>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            className="shrink-0 rounded-md p-1 hover:bg-white/[.08]"
+            aria-label={copy(
+              "Закрити повідомлення про помилку",
+              "Close error message",
+            )}
+          >
+            <X className="size-4" />
+          </button>
         </div>
       ) : null}
       {organizerQuestionSent ? (
-        <div role="status" aria-live="polite" className="rounded-xl border border-primary/25 bg-primary/[.08] px-3 py-2.5 text-sm text-primary-strong dark:text-[#9cf2c2]">
-          {copy("Питання надіслано організатору. Відповідь з’явиться у вкладці «Ком’юніті».", "Your question was sent to the organizer. The reply will appear in the Community tab.")}
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/[.08] px-3 py-2.5 text-sm text-primary-strong dark:text-[#9cf2c2]"
+        >
+          <span>
+            {copy(
+              "Питання надіслано. Відповідь з’явиться у ком’юніті контесту.",
+              "Question sent. The reply will appear in the contest community.",
+            )}{" "}
+            <Link
+              className="underline underline-offset-4"
+              to={withDevPreview(
+                `/contest/contests/${contestId}?tab=community`,
+              )}
+            >
+              {copy("Перейти до відповідей", "View replies")}
+            </Link>
+          </span>
+          <button
+            type="button"
+            onClick={() => setOrganizerQuestionSent(false)}
+            className="shrink-0 p-1"
+            aria-label={copy("Закрити повідомлення", "Dismiss message")}
+          >
+            <X className="size-4" />
+          </button>
         </div>
       ) : null}
 
-      {jobStatus && <div role="status" className="px-4 py-2 text-sm text-primary-strong dark:text-emerald-200">
-        {jobStatus === "queued" ? copy("У черзі", "Queued") : jobStatus === "running" ? copy("Перевіряється", "Checking") : jobStatus === "completed" ? copy("Готово", "Done") : copy("Помилка судді — відправку збережено", "Judge error — submission saved")}
-      </div>}
+      {jobStatus && (
+        <div
+          role="status"
+          className="px-4 py-2 text-sm text-primary-strong dark:text-emerald-200"
+        >
+          {jobStatus === "queued"
+            ? copy("У черзі", "Queued")
+            : jobStatus === "running"
+              ? copy("Перевіряється", "Checking")
+              : jobStatus === "completed"
+                ? copy("Готово", "Done")
+                : copy(
+                    "Помилка судді — відправку збережено",
+                    "Judge error — submission saved",
+                  )}
+        </div>
+      )}
       <StudyCodIDEWorkspace
         enableSemanticLsp={false}
         task={{
@@ -845,7 +1278,13 @@ export const ContestProblemSolvePage: React.FC = () => {
         code={code}
         onCodeChange={setCode}
         files={[{ path: entryFile, content: code }]}
-        onFilesChange={(nextFiles) => setCode(nextFiles.find((file) => file.path === entryFile)?.content ?? nextFiles[0]?.content ?? "")}
+        onFilesChange={(nextFiles) =>
+          setCode(
+            nextFiles.find((file) => file.path === entryFile)?.content ??
+              nextFiles[0]?.content ??
+              "",
+          )
+        }
         useFiles={false}
         onEnableFiles={() => undefined}
         entryFile={entryFile}
@@ -860,33 +1299,70 @@ export const ContestProblemSolvePage: React.FC = () => {
         onCheck={() => void doSubmit()}
         onSave={saveDraft}
         onReset={() => {
-          setCode(templateForLanguage({ template: statement.task.template, templatesByLanguage: statement.task.templatesByLanguage, defaultLanguage: statement.task.defaultLanguage }, judgeLanguage));
+          setCode(
+            templateForLanguage(
+              {
+                template: statement.task.template,
+                templatesByLanguage: statement.task.templatesByLanguage,
+                defaultLanguage: statement.task.defaultLanguage,
+              },
+              judgeLanguage,
+            ),
+          );
           setRunResult(null);
           setCheckResult(null);
         }}
-        onBack={() => navigate(withDevPreview(`/contest/contests/${contestId ?? ""}`))}
+        onBack={() =>
+          navigate(withDevPreview(`/contest/contests/${contestId ?? ""}`))
+        }
         runResult={runResult}
         checkResult={checkResult}
         attemptsUsed={submissions.length}
-        resultCards={submissions.length ? (
-          <section className="mt-3 rounded-xl border border-white/10 bg-white/[.025] p-3" aria-label={copy("Останні надсилання", "Recent submissions")}>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className="text-[10px] font-bold uppercase tracking-[.12em] text-[#82968a]">{copy("Останні надсилання", "Recent submissions")}</h3>
-              <span className="text-[10px] text-[#82968a]">{submissions.length}{submissions.length === 30 ? "+" : ""}</span>
-            </div>
-            <div className="space-y-1.5">
-              {submissions.slice(0, 4).map((submission) => (
-                <div key={submission.id} className="flex min-w-0 items-center justify-between gap-3 rounded-lg bg-black/15 px-2.5 py-2 text-[11px]">
-                  <div className="min-w-0">
-                    <span className={`font-bold ${String(submission.verdict ?? "").toUpperCase() === "AC" ? "text-primary-soft" : "text-[#ffca7e]"}`}>{submission.verdict || copy("В черзі", "Queued")}</span>
-                    <span className="ml-2 text-[#82968a]">{submission.createdAt ? new Date(submission.createdAt).toLocaleTimeString(en ? "en-US" : "uk-UA", { hour: "2-digit", minute: "2-digit" }) : copy("Щойно", "Just now")}</span>
+        resultCards={
+          submissions.length ? (
+            <section
+              className="mt-3 border-t border-[var(--ide-border)] pt-3"
+              aria-label={copy("Останні надсилання", "Recent submissions")}
+            >
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-xs font-medium text-[var(--ide-secondary)]">
+                  {copy("Останні надсилання", "Recent submissions")}
+                </h3>
+                <span className="text-[11px] text-[var(--ide-muted)]">
+                  {submissions.length}
+                  {submissions.length === 30 ? "+" : ""}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {submissions.slice(0, 4).map((submission) => (
+                  <div
+                    key={submission.id}
+                    className="flex min-w-0 items-center justify-between gap-3 border-b border-[var(--ide-border)] px-1 py-2 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <span
+                        className={`font-bold ${String(submission.verdict ?? "").toUpperCase() === "AC" ? "text-[var(--ide-accent)]" : "text-[var(--ide-warning)]"}`}
+                      >
+                        {submission.verdict || copy("В черзі", "Queued")}
+                      </span>
+                      <span className="ml-2 text-[var(--ide-muted)]">
+                        {submission.createdAt
+                          ? new Date(submission.createdAt).toLocaleTimeString(
+                              en ? "en-US" : "uk-UA",
+                              { hour: "2-digit", minute: "2-digit" },
+                            )
+                          : copy("Щойно", "Just now")}
+                      </span>
+                    </div>
+                    <span className="shrink-0 tabular-nums text-[var(--ide-text)]">
+                      {submission.score ?? 0}/{submission.maxScore ?? 0}
+                    </span>
                   </div>
-                  <span className="shrink-0 tabular-nums text-[#c8d6cc]">{submission.score ?? 0}/{submission.maxScore ?? 0}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
+                ))}
+              </div>
+            </section>
+          ) : null
+        }
         disableAiAssistance
         submitMode
         saveStatus={draftSavedAt ? "saved" : "dirty"}
@@ -894,84 +1370,173 @@ export const ContestProblemSolvePage: React.FC = () => {
         trace={trace}
         tracing={tracing}
         onTrace={doTrace}
-        contextToolbar={(
-          <div className="flex items-center gap-1.5">
-            {orderedContestProblems.length > 1 ? (
-              <div className="flex h-9 items-center gap-1 rounded-lg border border-white/10 bg-white/[.035] p-0.5">
+        contextToolbar={
+          <div className="ide-contest-nav">
+            <span className="ide-nav-label">{copy("Задачі", "Problems")}</span>
+            <div className="ide-problem-list">
+              <button
+                type="button"
+                className="ide-icon-btn"
+                onClick={() => {
+                  const previous =
+                    orderedContestProblems[currentProblemIndex - 1];
+                  if (previous) openContestProblem(previous);
+                }}
+                disabled={currentProblemIndex <= 0}
+                aria-label={copy("Попередня задача", "Previous problem")}
+                title={copy("Попередня задача", "Previous problem")}
+              >
+                <ArrowLeft />
+              </button>
+              {orderedContestProblems.map((problem) => (
                 <button
                   type="button"
-                  onClick={() => { const previous = orderedContestProblems[currentProblemIndex - 1]; if (previous) openContestProblem(previous); }}
-                  disabled={currentProblemIndex <= 0}
-                  className="grid size-8 place-items-center rounded-md text-[#c8d6cc] transition hover:bg-white/[.08] disabled:pointer-events-none disabled:opacity-35"
-                  aria-label={copy("Попередня задача", "Previous problem")}
-                  title={copy("Попередня задача", "Previous problem")}
+                  key={problem.id}
+                  className="ide-problem-tab"
+                  aria-current={problem.id === problemId ? "page" : undefined}
+                  onClick={() => openContestProblem(problem)}
+                  aria-label={`${problem.label}. ${problem.title}`}
+                  title={`${problem.label}. ${problem.title} · ${problem.points} ${copy("балів", "points")}`}
                 >
-                  <ArrowLeft className="size-3.5" />
+                  <span>{problem.label}</span>
+                  {problem.id === problemId ? (
+                    <small>{problem.title}</small>
+                  ) : null}
                 </button>
-                <select
-                  aria-label={copy("Перейти до задачі", "Switch problem")}
-                  value={String(problemId)}
-                  onChange={(event) => { const target = orderedContestProblems.find((problem) => problem.id === Number(event.target.value)); if (target) openContestProblem(target); }}
-                  className="h-8 max-w-[150px] cursor-pointer rounded-md border-0 bg-transparent px-1.5 text-[11px] font-semibold text-[#dce8df] outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                >
-                  {orderedContestProblems.map((problem) => (
-                    <option key={problem.id} value={problem.id} className="bg-[#101a13] text-[#e8f1ea]">
-                      {problem.label} · {problem.title}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => { const next = orderedContestProblems[currentProblemIndex + 1]; if (next) openContestProblem(next); }}
-                  disabled={currentProblemIndex < 0 || currentProblemIndex >= orderedContestProblems.length - 1}
-                  className="grid size-8 place-items-center rounded-md text-[#c8d6cc] transition hover:bg-white/[.08] disabled:pointer-events-none disabled:opacity-35"
-                  aria-label={copy("Наступна задача", "Next problem")}
-                  title={copy("Наступна задача", "Next problem")}
-                >
-                  <ArrowRight className="size-3.5" />
-                </button>
-              </div>
-            ) : null}
+              ))}
+              <button
+                type="button"
+                className="ide-icon-btn"
+                onClick={() => {
+                  const next = orderedContestProblems[currentProblemIndex + 1];
+                  if (next) openContestProblem(next);
+                }}
+                disabled={
+                  currentProblemIndex < 0 ||
+                  currentProblemIndex >= orderedContestProblems.length - 1
+                }
+                aria-label={copy("Наступна задача", "Next problem")}
+                title={copy("Наступна задача", "Next problem")}
+              >
+                <ArrowRight />
+              </button>
+            </div>
             {hasToken ? (
               <button
                 type="button"
-                onClick={() => { setOrganizerQuestionSent(false); setOrganizerDialogOpen(true); }}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-[11px] font-semibold text-[#c8d6cc] transition hover:bg-white/[.06]"
-                title={copy("Поставити питання організатору", "Ask the organizer a question")}
+                onClick={() => {
+                  setOrganizerQuestionSent(false);
+                  setOrganizerDialogOpen(true);
+                }}
+                className="ide-btn ide-btn-quiet ide-organizer-btn"
+                data-short-label={copy("Питання", "Ask")}
+                aria-label={copy(
+                  "Поставити питання організатору",
+                  "Ask the organizer a question",
+                )}
+                title={copy(
+                  "Поставити питання організатору",
+                  "Ask the organizer a question",
+                )}
               >
-                <MessageSquareText className="size-3.5" />
-                <span>{copy("Організатор", "Organizer")}</span>
+                <MessageSquareText />
+                <span className="ide-organizer-label">
+                  {copy("Питання організатору", "Ask organizer")}
+                </span>
               </button>
             ) : null}
           </div>
-        )}
-        toolbarStatus={(
+        }
+        toolbarStatus={
           <>
-            <span className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-[10px] font-semibold text-[#a7b5aa]" title={wsStatus === "connected" ? copy("Оновлення підключено", "Live updates connected") : copy("Перепідключення відбувається автоматично", "Reconnecting automatically")}>
-              <span className={`size-1.5 rounded-full ${wsStatus === "connected" ? "bg-primary" : wsStatus === "connecting" ? "bg-[#ffb454]" : "bg-[#82968a]"}`} />
-              {wsStatus === "connected" ? copy("НА ЗВ’ЯЗКУ", "CONNECTED") : wsStatus === "connecting" ? copy("СИНХРОНІЗАЦІЯ", "SYNCING") : "OFFLINE"}
-            </span>
-            {contestMeta.endsAt ? <span className="hidden h-8 items-center rounded-lg border border-white/10 px-2 text-[10px] font-semibold text-[#a7b5aa] xl:inline-flex" title={copy("Час завершення контесту", "Contest end time")}>{copy("До", "Until")} {new Date(contestMeta.endsAt).toLocaleTimeString(en ? "en-US" : "uk-UA", { hour: "2-digit", minute: "2-digit" })}</span> : null}
-            {latestVerdict ? <span className="inline-flex h-8 max-w-28 items-center truncate rounded-lg border border-white/10 px-2 text-[10px] font-bold text-[#c8d6cc]" title={latestVerdictAt ? `${copy("Оновлено", "Updated")} ${new Date(latestVerdictAt).toLocaleTimeString(en ? "en-US" : "uk-UA")}` : copy("Останній результат", "Latest result")}>{latestVerdict}</span> : null}
-            {subsLoading ? <span className="hidden text-[10px] text-[#82968a] xl:inline">{copy("Синхронізація…", "Syncing…")}</span> : null}
+            {!isPreview ? (
+              <span
+                className="ide-connection inline-flex items-center gap-1.5 text-[11px]"
+                title={copy("Стан живих оновлень", "Live update status")}
+              >
+                <span
+                  className={`size-1.5 rounded-full ${wsStatus === "connected" ? "bg-[var(--ide-accent)]" : "bg-[var(--ide-muted)]"}`}
+                />
+                {wsStatus === "connected"
+                  ? copy("На зв’язку", "Connected")
+                  : wsStatus === "connecting"
+                    ? copy("Синхронізація", "Syncing")
+                    : copy("Офлайн", "Offline")}
+              </span>
+            ) : null}
+            {contestMeta.endsAt ? (
+              <ContestWorkspaceTimer endsAt={contestMeta.endsAt} en={en} />
+            ) : null}
+            {latestVerdict ? (
+              <span
+                className="ide-connection text-[11px] font-semibold"
+                title={copy("Останній результат", "Latest result")}
+              >
+                {latestVerdict}
+              </span>
+            ) : null}
           </>
-        )}
-        toolbar={(
-          <>
-            <Link to={`/contest/contests/${contestId}/scoreboard`} className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-white/10 text-[#c8d6cc] transition hover:border-[#ffb454]/30 hover:bg-[#ffb454]/10 hover:text-[#ffca7e]" aria-label={copy("Таблиця контесту", "Contest scoreboard")} title={copy("Таблиця контесту", "Contest scoreboard")}>
-              <Trophy className="size-3.5" />
-            </Link>
-          </>
-        )}
+        }
+        toolbar={
+          <Link
+            to={withDevPreview(`/contest/contests/${contestId}/scoreboard`)}
+            className="ide-icon-btn"
+            aria-label={copy("Таблиця контесту", "Contest scoreboard")}
+            title={copy("Таблиця контесту", "Contest scoreboard")}
+          >
+            <Trophy />
+          </Link>
+        }
       />
 
-      <Modal open={organizerDialogOpen} onClose={() => setOrganizerDialogOpen(false)} title={copy("Питання організатору", "Ask the organizer")} description={copy("Питання побачить організатор цього контесту. Відповідь буде у вкладці «Ком’юніті».", "The contest organizer will see your question. Their reply will appear in the Community tab.")} panelClassName="max-w-[620px]">
-        <form onSubmit={(event) => { event.preventDefault(); void askOrganizer(organizerQuestion); }} className="space-y-4">
-          <label className="block text-sm font-semibold text-text-primary" htmlFor="contest-organizer-question">{copy("Твоє питання", "Your question")}</label>
-          <textarea id="contest-organizer-question" value={organizerQuestion} onChange={(event) => setOrganizerQuestion(event.target.value)} rows={5} maxLength={4000} required placeholder={copy("Опиши проблему з умовою, доступом або проведенням контесту…", "Describe an issue with the problem, access, or contest…")} className="w-full resize-y rounded-xl border border-border bg-bg-base px-3 py-2.5 text-sm leading-6 text-text-primary outline-none transition placeholder:text-text-muted focus:border-primary/50 focus:ring-2 focus:ring-primary/15" />
+      <Modal
+        open={organizerDialogOpen}
+        onClose={() => setOrganizerDialogOpen(false)}
+        title={copy("Питання організатору", "Ask the organizer")}
+        description={copy(
+          "Питання побачить організатор цього контесту. Відповідь буде у вкладці «Ком’юніті».",
+          "The contest organizer will see your question. Their reply will appear in the Community tab.",
+        )}
+        panelClassName="max-w-[620px]"
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void askOrganizer(organizerQuestion);
+          }}
+          className="space-y-4"
+        >
+          <label
+            className="block text-sm font-semibold text-text-primary"
+            htmlFor="contest-organizer-question"
+          >
+            {copy("Твоє питання", "Your question")}
+          </label>
+          <textarea
+            id="contest-organizer-question"
+            value={organizerQuestion}
+            onChange={(event) => setOrganizerQuestion(event.target.value)}
+            rows={5}
+            maxLength={4000}
+            required
+            placeholder={copy(
+              "Опиши проблему з умовою, доступом або проведенням контесту…",
+              "Describe an issue with the problem, access, or contest…",
+            )}
+            className="w-full resize-y rounded-xl border border-border bg-bg-base px-3 py-2.5 text-sm leading-6 text-text-primary outline-none transition placeholder:text-text-muted focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
+          />
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-text-muted">{organizerQuestion.length}/4000</span>
-            <Button type="submit" disabled={askingOrganizer || !organizerQuestion.trim()}>{askingOrganizer ? copy("Надсилаємо…", "Sending…") : copy("Надіслати питання", "Send question")}</Button>
+            <span className="text-xs text-text-muted">
+              {organizerQuestion.length}/4000
+            </span>
+            <Button
+              type="submit"
+              disabled={askingOrganizer || !organizerQuestion.trim()}
+            >
+              {askingOrganizer
+                ? copy("Надсилаємо…", "Sending…")
+                : copy("Надіслати питання", "Send question")}
+            </Button>
           </div>
         </form>
       </Modal>

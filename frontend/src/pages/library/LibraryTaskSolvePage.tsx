@@ -1160,13 +1160,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-full bg-bg-base px-4 py-6 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-10 lg:py-9">
-      <div className="mx-auto max-w-[1680px]">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <button type="button" onClick={goBackToLibrary} className="inline-flex items-center gap-2 text-sm font-semibold text-text-muted transition hover:text-primary-strong dark:text-[#a7b5aa] dark:hover:text-primary-soft"><ArrowLeft className="size-4" />{tr("До бібліотеки", "Back to library")}</button>
-          <div className="flex items-center gap-2"><div className="hidden items-center gap-2 text-xs text-[#718075] sm:flex"><span>{task.difficulty === "HARD" ? tr("Складна", "Hard") : task.difficulty === "MEDIUM" ? tr("Середня", "Medium") : tr("Легка", "Easy")}</span><span>·</span><span>{task.tags?.slice(0, 3).join(" · ")}</span></div><button type="button" onClick={reportTaskIssue} className="inline-flex items-center gap-1.5 rounded-lg border border-border/10 bg-white px-2.5 py-2 text-xs font-semibold text-text-muted transition hover:border-primary/40 hover:text-primary-strong dark:border-white/10 dark:bg-white/[.04] dark:text-[#a7b5aa] dark:hover:text-primary-soft" aria-label={tr("Повідомити про проблему із задачею", "Report a task issue")} title={tr("Повідомити про проблему", "Report an issue")}><CircleHelp className="size-3.5" />{tr("Проблема", "Report issue")}</button></div>
-        </div>
+    <div className="ide-page bg-bg-base text-text-primary">
+      <div className="ide-library-container">
         <StudyCodIDEWorkspace
+          onBack={goBackToLibrary}
+          toolbar={<button type="button" onClick={reportTaskIssue} className="ide-btn ide-btn-quiet" aria-label={tr("Повідомити про проблему із задачею", "Report a task issue")}><CircleHelp />{tr("Повідомити про проблему", "Report issue")}</button>}
           task={task}
           theory={theory}
           language={judgeLanguage}

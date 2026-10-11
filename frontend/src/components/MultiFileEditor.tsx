@@ -43,10 +43,12 @@ export interface MultiFileEditorProps {
   height?: string;
   fontSize?: number;
   wordWrap?: boolean;
+  minimap?: boolean;
   enableSemanticLsp?: boolean;
   activePath?: string;
   onActivePathChange?: (path: string) => void;
   hideTabsOnDesktop?: boolean;
+  hideTabs?: boolean;
   hasUnsavedChanges?: boolean;
   focusLine?: number | null;
   /**
@@ -65,10 +67,12 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   height,
   fontSize,
   wordWrap,
+  minimap,
   enableSemanticLsp = true,
   activePath: controlledActivePath,
   onActivePathChange,
   hideTabsOnDesktop = false,
+  hideTabs = false,
   hasUnsavedChanges = false,
   focusLine = null,
   requestAddToken,
@@ -162,7 +166,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
   return (
     <div className={`studycod-multi-file-editor flex h-full min-h-0 flex-col ${hideTabsOnDesktop ? "studycod-hide-tabs-desktop" : ""}`}>
       {hideTabsOnDesktop ? <style>{`@media (min-width: 1024px) { .studycod-hide-tabs-desktop > [role="tablist"] { display: none; } }`}</style> : null}
-      <div className="flex min-h-12 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-white/10 bg-[#151d17] px-3 py-1.5" role="tablist" aria-label={tr("Файли редактора", "Editor files")}>
+      <div className="flex min-h-12 flex-shrink-0 items-center gap-1 overflow-x-auto border-b border-white/10 bg-[#151d17] px-3 py-1.5" style={hideTabs ? { display: "none" } : undefined} role="tablist" aria-label={tr("Файли редактора", "Editor files")}>
         {normalized
           .slice()
           .sort((a, b) => (a.path === entryFile ? -1 : b.path === entryFile ? 1 : a.path.localeCompare(b.path)))
@@ -213,7 +217,7 @@ export const MultiFileEditor: React.FC<MultiFileEditorProps> = ({
 
       <div className="flex h-full min-h-0 flex-1" id={`${panelAriaId}-panel`} role="tabpanel" aria-labelledby={active ? tabIdForPath(active.path) : undefined}>
         <div className="h-full min-h-0 w-full" style={height ? { height } : undefined}>
-          <CodeEditor key={active?.path || entryFile} language={language} value={active?.content ?? ""} onChange={readOnly ? undefined : setActiveContent} readOnly={readOnly} fontSize={fontSize} wordWrap={wordWrap} enableSemanticLsp={enableSemanticLsp} filePath={active?.path || entryFile} focusLine={focusLine} />
+          <CodeEditor key={active?.path || entryFile} language={language} value={active?.content ?? ""} onChange={readOnly ? undefined : setActiveContent} readOnly={readOnly} fontSize={fontSize} wordWrap={wordWrap} minimap={minimap} enableSemanticLsp={enableSemanticLsp} filePath={active?.path || entryFile} focusLine={focusLine} />
         </div>
       </div>
 
