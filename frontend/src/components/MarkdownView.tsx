@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import { CopyIcon, CheckIcon } from "@phosphor-icons/react";
+import "./MarkdownView.css";
 import type { Components } from "react-markdown";
 import type { Pluggable, PluggableList } from "unified";
 import remarkGfm from "remark-gfm";
@@ -89,6 +90,101 @@ type HastNode = {
   properties?: Record<string, unknown>;
   children?: unknown[];
 };
+
+// Normalize legacy and generated statements at presentation time. Only labels
+// immediately followed by sample blocks are removed; format descriptions stay.
+function taskSamplesPlugin({ en }: { en: boolean }) {
+  return (tree: HastNode) => {
+    const nodes = (tree.children ?? []) as HastNode[];
+    const meaningful = nodes.filter(
+      (node) => node.type !== "text" || String(node.value ?? "").trim(),
+    );
+    const text = (node?: HastNode) => getTextFromHast(node ?? null).trim();
+    const role = (node?: HastNode): "input" | "output" | null => {
+      if (!node || !/^h[1-6]$|^p$/.test(node.tagName ?? "")) return null;
+      const label = text(node).replace(/[:：]\s*$/, "");
+      if (/^(?:input|sample input|вхідні дані|вхід|ввід|ввод)$/i.test(label))
+        return "input";
+      if (
+        /^(?:output|sample output|вихідні дані|вихід|вивід|вивод)$/i.test(label)
+      )
+        return "output";
+      return null;
+    };
+    const exampleHeading = (node?: HastNode) =>
+      Boolean(
+        node &&
+          /^h[1-6]$|^p$/.test(node.tagName ?? "") &&
+          /^(?:приклад|example|sample)\s*\d*\s*[:.]?$/i.test(text(node)),
+      );
+    const result: HastNode[] = [];
+    let count = 0;
+    for (let i = 0; i < meaningful.length; i++) {
+      let start = i;
+      if (exampleHeading(meaningful[start])) start++;
+      let input: HastNode | undefined;
+      let output: HastNode | undefined;
+      let end = start;
+      if (
+        role(meaningful[start]) === "input" &&
+        meaningful[start + 1]?.tagName === "pre" &&
+        role(meaningful[start + 2]) === "output" &&
+        meaningful[start + 3]?.tagName === "pre"
+      ) {
+        input = meaningful[start + 1];
+        output = meaningful[start + 3];
+        end = start + 4;
+      } else if (
+        start > i &&
+        meaningful[start]?.tagName === "pre" &&
+        meaningful[start + 1]?.tagName === "pre"
+      ) {
+        input = meaningful[start];
+        output = meaningful[start + 1];
+        end = start + 2;
+      }
+      if (input && output) {
+        count++;
+        input.properties = { ...input.properties, sampleRole: "input" };
+        output.properties = { ...output.properties, sampleRole: "output" };
+        result.push({
+          type: "element",
+          tagName: "section",
+          properties: { className: ["markdown-example"] },
+          children: [
+            {
+              type: "element",
+              tagName: "h4",
+              properties: {},
+              children: [
+                {
+                  type: "text",
+                  value: `${en ? "Example" : "Приклад"} ${count}`,
+                },
+              ],
+            },
+            {
+              type: "element",
+              tagName: "div",
+              properties: { className: ["markdown-example-grid", "not-prose"] },
+              children: [input, output],
+            },
+          ],
+        });
+        i = end - 1;
+      } else {
+        // An unpaired sample still gets a localized label inside its toolbar.
+        if (role(meaningful[i]) && meaningful[i + 1]?.tagName === "pre") {
+          meaningful[i + 1].properties = {
+            ...meaningful[i + 1].properties,
+            sampleRole: role(meaningful[i]),
+          };
+        } else result.push(meaningful[i]);
+      }
+    }
+    tree.children = result;
+  };
+}
 
 // Course pages can contain server-generated <video>/<track> markup. Parse raw
 // HTML only with a narrow allowlist so author content cannot turn this markdown
@@ -467,7 +563,7 @@ type MathPluginBundle = {
   rehypeKatex: Pluggable | null;
 };
 
-const PlainCodeBlock: React.FC<{ code: string; copyable?: boolean }> = ({ code, copyable = false }) => {
+const PlainCodeBlock: React.FC<{ code: string; copyable?: boolean; sampleRole?: "input" | "output" }> = ({ code, copyable = false, sampleRole }) => {
   const { i18n } = useTranslation();
   const en = i18n.language?.startsWith("en");
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "error">("idle");
@@ -484,9 +580,10 @@ const PlainCodeBlock: React.FC<{ code: string; copyable?: boolean }> = ({ code, 
     resetTimer.current = setTimeout(() => setCopyStatus("idle"), 2000);
   };
   return <div className="markdown-code-block not-prose my-4 min-w-0 overflow-hidden rounded-lg border border-border bg-bg-code text-text-primary">
-      {copyable ? <div className="flex justify-end px-2 pt-1.5">
+      {copyable ? <div className="markdown-code-toolbar flex items-center justify-between gap-2 px-2 pt-1.5">
+        <span className="px-2 text-xs font-medium text-text-muted">{sampleRole === "input" ? (en ? "Input" : "Ввід") : sampleRole === "output" ? (en ? "Output" : "Вивід") : ""}</span>
         <button type="button" onClick={() => void copy()} className="markdown-code-copy inline-flex min-h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
-          aria-label={en ? "Copy example" : "Копіювати приклад"}>
+          aria-label={sampleRole === "input" ? (en ? "Copy input" : "Копіювати ввід") : sampleRole === "output" ? (en ? "Copy output" : "Копіювати вивід") : (en ? "Copy block" : "Копіювати блок")}>
           {copyStatus === "copied" ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
           <span aria-live="polite">{copyStatus === "copied" ? (en ? "Copied" : "Скопійовано") : copyStatus === "error" ? (en ? "Try again" : "Спробуй ще раз") : (en ? "Copy" : "Копіювати")}</span>
         </button>
@@ -501,6 +598,8 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
   content,
   variant = "default"
 }) => {
+  const { i18n } = useTranslation();
+  const en = i18n.language?.startsWith("en") ?? false;
   const [SyntaxHighlighter, setSyntaxHighlighter] = useState<SyntaxHighlighterComponent>(null);
   const [syntaxStyle, setSyntaxStyle] = useState<SyntaxHighlighterStyle>(null);
   const [mathPlugins, setMathPlugins] = useState<MathPluginBundle>({
@@ -602,9 +701,10 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     // KaTeX tree strips its accessibility/display classes and exposes both the
     // MathML and visual representations as duplicated text.
     const plugins: PluggableList = [rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]];
+    if (variant === "task") plugins.push([taskSamplesPlugin, { en }]);
     if (mathPlugins.rehypeKatex) plugins.push(mathPlugins.rehypeKatex);
     return plugins;
-  }, [mathPlugins.rehypeKatex]);
+  }, [mathPlugins.rehypeKatex, variant, en]);
 
   const codeComponents = useMemo<Pick<Components, "code" | "a" | "img" | "p" | "pre">>(() => ({
     code({
@@ -663,6 +763,10 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
     // Custom code blocks already include their own container. Removing the
     // default wrapper prevents invalid <pre><pre> nesting and excess spacing.
     pre({ children, node }) {
+      const sampleRole = (node as HastNode | undefined)?.properties?.sampleRole;
+      if (sampleRole === "input" || sampleRole === "output") {
+        return <PlainCodeBlock code={decodeEscapedInputText(getTextFromHast(node as HastNode).replace(/\n$/, ""))} copyable sampleRole={sampleRole} />;
+      }
       const codeNode = (node as HastNode | undefined)?.children?.[0] as HastNode | undefined;
       const classes = codeNode?.properties?.className;
       const hasLanguage = Array.isArray(classes) && classes.some((value) => String(value).startsWith("language-"));

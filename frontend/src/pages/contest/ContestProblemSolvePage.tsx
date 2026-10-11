@@ -27,6 +27,7 @@ import {
   recordContestIntegrityEvent,
   runContestProblem,
   type ContestCommunityAnnouncement,
+  type ContestCommunityQuestion,
   type ContestProblemListItem,
   type ContestProblemStatement,
   type ContestSubmissionListItem,
@@ -374,6 +375,65 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [askingOrganizer, setAskingOrganizer] = React.useState(false);
   const [organizerQuestionSent, setOrganizerQuestionSent] =
     React.useState(false);
+  const [organizerQuestions, setOrganizerQuestions] = React.useState<
+    ContestCommunityQuestion[]
+  >([]);
+  const [organizerFeedLoading, setOrganizerFeedLoading] = React.useState(false);
+  const [organizerFeedError, setOrganizerFeedError] = React.useState<
+    string | null
+  >(null);
+  const organizerReadKey = `contest:${contestId}:${draftScopeFromUser(sessionUser)}:read-answers`;
+  const [readOrganizerState, setReadOrganizerState] = React.useState<{
+    key: string;
+    answers: Record<string, string>;
+  }>({ key: "", answers: {} });
+  const readOrganizerAnswers =
+    readOrganizerState.key === organizerReadKey
+      ? readOrganizerState.answers
+      : {};
+  React.useEffect(() => {
+    try {
+      setReadOrganizerState({
+        key: organizerReadKey,
+        answers:
+          safeJsonParse<Record<string, string>>(
+            localStorage.getItem(organizerReadKey),
+          ) ?? {},
+      });
+    } catch {
+      setReadOrganizerState({ key: organizerReadKey, answers: {} });
+    }
+    setOrganizerQuestions([]);
+  }, [organizerReadKey]);
+  const unreadOrganizerAnswers = organizerQuestions.filter(
+    (question) =>
+      question.answer &&
+      readOrganizerAnswers[question.id] !==
+        `${question.answeredAt ?? ""}:${question.answer}`,
+  );
+  React.useEffect(() => {
+    if (
+      !organizerDialogOpen ||
+      readOrganizerState.key !== organizerReadKey ||
+      !unreadOrganizerAnswers.length
+    )
+      return;
+    const updated = { ...readOrganizerAnswers };
+    for (const question of unreadOrganizerAnswers)
+      updated[question.id] = `${question.answeredAt ?? ""}:${question.answer}`;
+    setReadOrganizerState({ key: organizerReadKey, answers: updated });
+    try {
+      localStorage.setItem(organizerReadKey, JSON.stringify(updated));
+    } catch {
+      /* Keep read state for this session. */
+    }
+  }, [
+    organizerDialogOpen,
+    organizerQuestions,
+    readOrganizerAnswers,
+    organizerReadKey,
+    readOrganizerState.key,
+  ]);
   const liveSyncInFlightRef = React.useRef(false);
   const liveSyncLastAtRef = React.useRef(0);
 
@@ -764,7 +824,7 @@ export const ContestProblemSolvePage: React.FC = () => {
     return () => window.clearInterval(id);
   }, [isPreview, wsStatus, syncLiveData]);
 
-  // Poll organizer announcements so participants see them without leaving the workspace.
+  // Keep private answers and announcements available inside the workspace.
   React.useEffect(() => {
     if (isPreview) {
       setAnnouncements([
@@ -778,19 +838,54 @@ export const ContestProblemSolvePage: React.FC = () => {
           createdAt: new Date().toISOString(),
         },
       ]);
+      setOrganizerQuestions((current) =>
+        current.length
+          ? current
+          : [
+              {
+                id: 1,
+                author: copy("Ти", "You"),
+                text: copy(
+                  "Чи можуть числа повторюватися?",
+                  "Can numbers repeat?",
+                ),
+                createdAt: "2026-10-11T09:00:00Z",
+                answeredAt: "2026-10-11T09:05:00Z",
+                answer: copy(
+                  "Так, числа можуть повторюватися. Обирай найменший елемент серед тих, що залишилися.",
+                  "Yes, numbers can repeat. Choose the smallest element among those remaining.",
+                ),
+                status: "ANSWERED",
+              },
+            ],
+      );
       return;
     }
     if (!contestId || !hasToken) return;
     let cancelled = false;
     const tick = async () => {
+      if (organizerDialogOpen) setOrganizerFeedLoading(true);
       try {
         const data = await getContestCommunity(contestId);
-        if (!cancelled)
+        if (!cancelled) {
           setAnnouncements(
             Array.isArray(data.announcements) ? data.announcements : [],
           );
+          setOrganizerQuestions(
+            Array.isArray(data.questions) ? data.questions : [],
+          );
+          setOrganizerFeedError(null);
+        }
       } catch {
-        // ignore (access/network)
+        if (!cancelled)
+          setOrganizerFeedError(
+            copy(
+              "Не вдалося оновити відповіді. Спробуємо ще раз автоматично.",
+              "Could not refresh replies. We will retry automatically.",
+            ),
+          );
+      } finally {
+        if (!cancelled) setOrganizerFeedLoading(false);
       }
     };
     void tick();
@@ -799,7 +894,7 @@ export const ContestProblemSolvePage: React.FC = () => {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [isPreview, contestId, hasToken, en]);
+  }, [isPreview, contestId, hasToken, en, organizerDialogOpen]);
 
   // Integrity signals: report tab/focus loss and large pastes to the organizer.
   React.useEffect(() => {
@@ -1066,27 +1161,32 @@ export const ContestProblemSolvePage: React.FC = () => {
     setAskingOrganizer(true);
     try {
       if (isPreview) {
-        setAnnouncements((current) => [
+        setOrganizerQuestions((current) => [
           {
             id: Date.now(),
-            author: en ? "Olena · demo" : "Оксана · демо",
-            text: question.trim(),
+            author: copy("Ти", "You"),
+            text: message,
             createdAt: new Date().toISOString(),
+            answer: null,
+            answeredAt: null,
+            status: "OPEN",
           },
           ...current,
         ]);
-        setOrganizerDialogOpen(false);
         setOrganizerQuestion("");
         setOrganizerQuestionSent(true);
         return;
       }
-      await postContestCommunityQuestion(contestId, message);
-      setOrganizerDialogOpen(false);
+      const result = await postContestCommunityQuestion(contestId, message);
+      setOrganizerQuestions((current) => [...current, result.question]);
       setOrganizerQuestion("");
       setOrganizerQuestionSent(true);
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
-      setError(msg || "Failed to create support conversation");
+      setOrganizerFeedError(
+        msg ||
+          copy("Не вдалося надіслати питання.", "Could not send the question."),
+      );
     } finally {
       setAskingOrganizer(false);
     }
@@ -1208,37 +1308,6 @@ export const ContestProblemSolvePage: React.FC = () => {
           </button>
         </div>
       ) : null}
-      {organizerQuestionSent ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="flex items-center justify-between gap-3 rounded-lg border border-primary/25 bg-primary/[.08] px-3 py-2.5 text-sm text-primary-strong dark:text-primary-strong"
-        >
-          <span>
-            {copy(
-              "Питання надіслано. Відповідь з’явиться у ком’юніті контесту.",
-              "Question sent. The reply will appear in the contest community.",
-            )}{" "}
-            <Link
-              className="underline underline-offset-4"
-              to={withDevPreview(
-                `/contest/contests/${contestId}?tab=community`,
-              )}
-            >
-              {copy("Перейти до відповідей", "View replies")}
-            </Link>
-          </span>
-          <button
-            type="button"
-            onClick={() => setOrganizerQuestionSent(false)}
-            className="shrink-0 p-1"
-            aria-label={copy("Закрити повідомлення", "Dismiss message")}
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-      ) : null}
-
       {jobStatus && (
         <div
           role="status"
@@ -1375,14 +1444,42 @@ export const ContestProblemSolvePage: React.FC = () => {
             if (target) openContestProblem(target);
           },
           footer: (
-            <Link
-              to={withDevPreview(`/contest/contests/${contestId}/scoreboard`)}
-              className="ide-icon-btn"
-              aria-label={copy("Таблиця контесту", "Contest scoreboard")}
-              title={copy("Таблиця контесту", "Contest scoreboard")}
-            >
-              <Trophy />
-            </Link>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setOrganizerQuestionSent(false);
+                  setOrganizerDialogOpen(true);
+                }}
+                className="ide-icon-btn ide-organizer-rail-button"
+                aria-label={
+                  unreadOrganizerAnswers.length
+                    ? copy(
+                        "Питання організатору: є нова відповідь",
+                        "Ask organizer: new reply",
+                      )
+                    : copy("Питання організатору", "Ask organizer")
+                }
+                title={
+                  unreadOrganizerAnswers.length
+                    ? copy("Нова відповідь організатора", "New organizer reply")
+                    : copy("Питання організатору", "Ask organizer")
+                }
+              >
+                <MessageSquareText />
+                {unreadOrganizerAnswers.length ? (
+                  <span className="ide-unread-dot" aria-hidden="true" />
+                ) : null}
+              </button>
+              <Link
+                to={withDevPreview(`/contest/contests/${contestId}/scoreboard`)}
+                className="ide-icon-btn"
+                aria-label={copy("Таблиця контесту", "Contest scoreboard")}
+                title={copy("Таблиця контесту", "Contest scoreboard")}
+              >
+                <Trophy />
+              </Link>
+            </>
           ),
         }}
         toolbarStatus={
@@ -1415,32 +1512,6 @@ export const ContestProblemSolvePage: React.FC = () => {
             ) : null}
           </>
         }
-        toolbar={
-          hasToken ? (
-            <button
-              type="button"
-              onClick={() => {
-                setOrganizerQuestionSent(false);
-                setOrganizerDialogOpen(true);
-              }}
-              className="ide-btn ide-btn-quiet ide-organizer-btn"
-              data-short-label={copy("Питання", "Ask")}
-              aria-label={copy(
-                "Поставити питання організатору",
-                "Ask the organizer a question",
-              )}
-              title={copy(
-                "Поставити питання організатору",
-                "Ask the organizer a question",
-              )}
-            >
-              <MessageSquareText />
-              <span className="ide-organizer-label">
-                {copy("Питання організатору", "Ask organizer")}
-              </span>
-            </button>
-          ) : null
-        }
       />
 
       <Modal
@@ -1448,11 +1519,75 @@ export const ContestProblemSolvePage: React.FC = () => {
         onClose={() => setOrganizerDialogOpen(false)}
         title={copy("Питання організатору", "Ask the organizer")}
         description={copy(
-          "Питання побачить організатор цього контесту. Відповідь буде у вкладці «Ком’юніті».",
-          "The contest organizer will see your question. Their reply will appear in the Community tab.",
+          "Постав питання щодо контесту. Відповідь організатора з’явиться тут.",
+          "Ask a question about the contest. The organizer’s reply will appear here.",
         )}
-        panelClassName="max-w-[620px]"
+        panelClassName="max-w-[620px]!"
       >
+        <section
+          className="mb-5 space-y-3"
+          aria-label={copy(
+            "Твої питання та відповіді",
+            "Your questions and replies",
+          )}
+        >
+          {organizerFeedLoading ? (
+            <p role="status" className="text-xs text-text-muted">
+              {copy("Оновлюємо відповіді…", "Refreshing replies…")}
+            </p>
+          ) : null}
+          {organizerFeedError ? (
+            <p role="alert" className="text-sm text-accent-error">
+              {organizerFeedError}
+            </p>
+          ) : null}
+          {!organizerQuestions.length && !organizerFeedLoading ? (
+            <p className="text-sm text-text-muted">
+              {copy(
+                "Тут зберігатимуться твої питання та відповіді організатора.",
+                "Your questions and the organizer’s replies will be saved here.",
+              )}
+            </p>
+          ) : null}
+          {[...organizerQuestions]
+            .sort((a, b) => b.id - a.id)
+            .map((question) => (
+              <article
+                key={question.id}
+                className="rounded-lg border border-border p-3"
+              >
+                <div className="mb-2 flex items-center justify-between gap-3 text-xs text-text-muted">
+                  <span>{copy("Твоє питання", "Your question")}</span>
+                  <span>
+                    {question.answer
+                      ? copy("Є відповідь", "Answered")
+                      : copy("Очікує відповіді", "Waiting for a reply")}
+                  </span>
+                </div>
+                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-text-primary">
+                  {question.text}
+                </p>
+                {question.answer ? (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <h3 className="mb-1 text-xs font-semibold text-primary-strong">
+                      {copy("Відповідь організатора", "Organizer reply")}
+                    </h3>
+                    <p className="whitespace-pre-wrap break-words text-sm leading-6 text-text-primary">
+                      {question.answer}
+                    </p>
+                  </div>
+                ) : null}
+              </article>
+            ))}
+        </section>
+        {organizerQuestionSent ? (
+          <p role="status" className="mb-4 text-sm text-primary-strong">
+            {copy(
+              "Питання надіслано. Повідомимо, коли організатор відповість.",
+              "Question sent. We will let you know when the organizer replies.",
+            )}
+          </p>
+        ) : null}
         <form
           onSubmit={(event) => {
             event.preventDefault();

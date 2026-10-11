@@ -1,0 +1,40 @@
+.task-markdown {
+  container-type: inline-size;
+}
+
+.task-markdown .markdown-example-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin: 12px 0 20px;
+}
+
+.task-markdown .markdown-example-grid .markdown-code-block {
+  margin: 0;
+}
+
+@container (min-width: 440px) {
+  .task-markdown .markdown-example-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.task-markdown .markdown-code-block pre {
+  max-height: min(360px, 45vh);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+.task-markdown .markdown-code-block pre,
+.task-markdown .markdown-code-block pre code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.task-markdown .markdown-code-block pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-weight: 400;
+}
