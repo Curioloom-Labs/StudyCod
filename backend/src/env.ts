@@ -114,7 +114,6 @@ const EnvSchema = z.object({
   AI_SERVICE_TIMEOUT: z.string().optional(),
   TURNSTILE_SECRET_KEY: z.string().optional(),
   TURNSTILE_VERIFY_URL: z.string().optional(),
-  TURNSTILE_ENFORCE_CONTEST_SUBMIT: z.string().optional(),
   TURNSTILE_ENFORCE_AUTH: z.string().optional(),
   // Secret for scheduled maintenance endpoints. It is deliberately validated
   // here instead of reading process.env inside individual routes so production
@@ -398,7 +397,6 @@ const EnvSchema = z.object({
       return raw.endsWith(":") ? raw : `${raw}:`;
     })(),
     __judgeWorkerEntry: (env.JUDGE_WORKER_ENTRY ?? "").trim(),
-    __turnstileEnforceContestSubmit: parseBoolEnv(env.TURNSTILE_ENFORCE_CONTEST_SUBMIT),
     __turnstileEnforceAuth: parseBoolEnv(env.TURNSTILE_ENFORCE_AUTH),
     __eduRbacEnforce: parseBoolEnv(env.EDU_RBAC_ENFORCE),
 

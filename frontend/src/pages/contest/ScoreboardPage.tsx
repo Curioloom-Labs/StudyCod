@@ -181,7 +181,7 @@ export const ScoreboardPage: React.FC = () => {
     tr("Учасник", "Participant"),
     ...problems.map((p) => `${tr("Задача", "Problem")} ${p.label}`),
     mode === "ICPC" ? tr("Розв'язано", "Solved") : tr("Сума балів", "Total score"),
-    tr("Штраф", "Penalty"),
+    ...(mode === "ICPC" ? [tr("Штраф", "Penalty")] : []),
   ];
 
   const exportRows = filteredRows.map((row) => [
@@ -197,7 +197,7 @@ export const ScoreboardPage: React.FC = () => {
       return attempts ? `−${attempts}` : "—";
     }),
     mode === "ICPC" ? (row.solved ?? 0) : row.totalScore,
-    row.penalty ?? 0,
+    ...(mode === "ICPC" ? [row.penalty ?? 0] : []),
   ]);
 
   const closeExportMenu = () => {
@@ -220,7 +220,7 @@ export const ScoreboardPage: React.FC = () => {
         { wch: 30 },
         ...problems.map(() => ({ wch: 18 })),
         { wch: 14 },
-        { wch: 12 },
+        ...(mode === "ICPC" ? [{ wch: 12 }] : []),
       ];
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, tr("Результати", "Results"));
@@ -366,7 +366,7 @@ export const ScoreboardPage: React.FC = () => {
                         </th>
                       ))}
                       <th scope="col" className="border-b border-border/80 px-4 py-4 text-center">{mode === "ICPC" ? tr("Розв.", "Solved") : "Σ"}</th>
-                      <th scope="col" className="border-b border-border/80 px-4 py-4 text-center">{tr("Штраф", "Pen.")}</th>
+                      {mode === "ICPC" ? <th scope="col" className="border-b border-border/80 px-4 py-4 text-center">{tr("Штраф", "Pen.")}</th> : null}
                     </tr>
                     {/* Per-problem solve stats */}
                     <tr className="bg-bg-code text-[11px] text-text-muted">
@@ -381,7 +381,7 @@ export const ScoreboardPage: React.FC = () => {
                         );
                       })}
                       <th scope="col" className="border-b border-border/80 px-4 py-2" />
-                      <th scope="col" className="border-b border-border/80 px-4 py-2" />
+                      {mode === "ICPC" ? <th scope="col" className="border-b border-border/80 px-4 py-2" /> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -440,13 +440,13 @@ export const ScoreboardPage: React.FC = () => {
                           <td className="border-b border-border/70 px-4 py-3 text-center font-bold tabular-nums text-text-primary">
                             {mode === "ICPC" ? (r.solved ?? 0) : r.totalScore}
                           </td>
-                          <td className="border-b border-border/70 px-4 py-3 text-center tabular-nums text-text-secondary">{r.penalty ?? 0}</td>
+                          {mode === "ICPC" ? <td className="border-b border-border/70 px-4 py-3 text-center tabular-nums text-text-secondary">{r.penalty ?? 0}</td> : null}
                         </tr>
                       );
                     })}
                     {filteredRows.length === 0 && (
                       <tr>
-                        <td colSpan={problems.length + 4} className="border-b border-border px-4 py-10 text-center text-text-secondary">
+                        <td colSpan={problems.length + (mode === "ICPC" ? 4 : 3)} className="border-b border-border px-4 py-10 text-center text-text-secondary">
                           {query.trim()
                             ? tr("Нічого не знайдено.", "No matches.")
                             : tr("У таблиці поки немає учасників.", "No participants are on the table yet.")}

@@ -146,49 +146,6 @@ const DEFAULT_LIMITS_BY_LANG: Record<JudgeLanguage, { time_limit_ms: number; mem
   swift: { ...NATIVE_LIMITS },
 };
 type JudgeLanguage = (typeof ALL_JUDGE_LANGS)[number];
-const TURNSTILE_SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-
-function getClientIp(req: AuthRequest): string | null {
-  const fromCf = String(req.headers["cf-connecting-ip"] ?? "").trim();
-  if (fromCf) return fromCf;
-  const fromXffRaw = req.headers["x-forwarded-for"];
-  const fromXff = Array.isArray(fromXffRaw)
-    ? String(fromXffRaw[0] ?? "").split(",")[0]?.trim()
-    : String(fromXffRaw ?? "").split(",")[0]?.trim();
-  if (fromXff) return fromXff;
-  const fromReqIp = String(req.ip ?? "").trim();
-  return fromReqIp || null;
-}
-
-async function verifyTurnstileToken(params: {
-  secretKey: string;
-  token: string;
-  remoteIp?: string | null;
-}): Promise<{ success: boolean; errorCodes: string[] }> {
-  const verifyUrl = String(env.TURNSTILE_VERIFY_URL ?? "").trim() || TURNSTILE_SITEVERIFY_URL;
-  const body = new URLSearchParams();
-  body.set("secret", params.secretKey);
-  body.set("response", params.token);
-  if (params.remoteIp) body.set("remoteip", params.remoteIp);
-
-  try {
-    const response = await fetch(verifyUrl, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-    });
-    if (!response.ok) return { success: false, errorCodes: [`HTTP_${response.status}`] };
-    const data = await response.json() as unknown;
-    const errorCodesRaw = readProperty(data, "error-codes");
-    const errorCodes = Array.isArray(errorCodesRaw)
-      ? errorCodesRaw.map((x: unknown) => String(x ?? "").trim()).filter(Boolean)
-      : [];
-    return { success: readProperty(data, "success") === true, errorCodes };
-  } catch {
-    return { success: false, errorCodes: ["VERIFY_REQUEST_FAILED"] };
-  }
-}
-
 function normalizeJudgeLanguage(raw: unknown): JudgeLanguage | null {
   const s = String(raw ?? "").trim().toLowerCase();
   if (!s) return null;
@@ -3839,7 +3796,6 @@ contestsRouter.post(
           files: z.array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) })).max(64).optional(),
           language: z.string().optional(),
           compiler: z.string().max(32).optional(),
-          turnstileToken: z.string().min(1).max(4096).optional(),
         })
         .refine((v) => (typeof v.code === "string" && v.code.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
           message: "code or files required",
@@ -3847,25 +3803,6 @@ contestsRouter.post(
       const validated = schema.safeParse(req.body);
       if (!validated.success) {
         return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
-      }
-
-      const turnstileSecretKey = String(env.TURNSTILE_SECRET_KEY ?? "").trim();
-      const enforceTurnstileOnContestSubmit = Boolean(env.__turnstileEnforceContestSubmit);
-      // Human verification is enforced for regular participants.
-      // Privileged users (SYSTEM_ADMIN / contest managers) are allowed to submit without Turnstile token.
-      if (enforceTurnstileOnContestSubmit && turnstileSecretKey && !isPrivileged) {
-        const token = String(validated.data.turnstileToken ?? "").trim();
-        if (!token) {
-          return res.status(400).json({ message: "TURNSTILE_REQUIRED" });
-        }
-        const verification = await verifyTurnstileToken({
-          secretKey: turnstileSecretKey,
-          token,
-          remoteIp: getClientIp(req),
-        });
-        if (!verification.success) {
-          return res.status(403).json({ message: "TURNSTILE_FAILED", errorCodes: verification.errorCodes });
-        }
       }
 
       const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } }, relations: ["libraryTask"] });

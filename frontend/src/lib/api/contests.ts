@@ -440,14 +440,12 @@ export async function checkContestProblem(params: {
   compiler?: string;
   code?: string;
   files?: CodeFile[];
-  turnstileToken?: string;
 }, onStatus?: JobUpdate): Promise<ContestCheckResult> {
   return submitContestJob<ContestCheckResult>(params.contestId, params.problemId, "check", {
     language: params.language,
     compiler: params.compiler,
     code: params.code,
     files: params.files,
-    turnstileToken: params.turnstileToken,
   }, onStatus);
 }
 

@@ -53,31 +53,6 @@ import { tracePlayground, type TraceResult } from "../../lib/api/playground";
 import { getCachedMeUser } from "../../lib/api/profile";
 import { isDevPreviewActive, withDevPreview } from "../../lib/devPreview";
 
-type TurnstileRenderOptions = {
-  sitekey: string;
-  theme?: "light" | "dark" | "auto";
-  callback?: (token: string) => void;
-  "expired-callback"?: () => void;
-  "error-callback"?: () => void;
-};
-
-type TurnstileWidgetId = string | number;
-
-type TurnstileApi = {
-  render: (
-    container: HTMLElement,
-    options: TurnstileRenderOptions,
-  ) => TurnstileWidgetId;
-  reset: (widgetId?: TurnstileWidgetId) => void;
-  remove?: (widgetId?: TurnstileWidgetId) => void;
-};
-
-declare global {
-  interface Window {
-    turnstile?: TurnstileApi;
-  }
-}
-
 type ContestMeta = {
   title: string;
   endsAt: string | null;
@@ -288,10 +263,6 @@ export const ContestProblemSolvePage: React.FC = () => {
   const hasToken = true;
   const isPreview = isDevPreviewActive();
   const sessionUser = getCachedMeUser();
-  const turnstileSiteKey = React.useMemo(
-    () => String(import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "").trim(),
-    [],
-  );
   // Live updates (SSE) are on by default; can be disabled explicitly.
   const liveUpdatesEnabled = React.useMemo(() => {
     const raw = String(import.meta.env.VITE_ENABLE_CONTEST_WS ?? "")
@@ -299,23 +270,6 @@ export const ContestProblemSolvePage: React.FC = () => {
       .toLowerCase();
     return !(raw === "0" || raw === "false" || raw === "no" || raw === "off");
   }, []);
-  const turnstileEnabled = React.useMemo(() => {
-    const raw = String(
-      import.meta.env.VITE_ENABLE_CONTEST_SUBMIT_TURNSTILE ?? "",
-    )
-      .trim()
-      .toLowerCase();
-    const enabled =
-      raw === "1" || raw === "true" || raw === "yes" || raw === "on";
-    return enabled && turnstileSiteKey.length > 0;
-  }, [turnstileSiteKey]);
-  const turnstileContainerRef = React.useRef<HTMLDivElement | null>(null);
-  const turnstileWidgetIdRef = React.useRef<TurnstileWidgetId | null>(null);
-  const [turnstileScriptReady, setTurnstileScriptReady] = React.useState(false);
-  const [turnstileLoadFailed, setTurnstileLoadFailed] = React.useState(false);
-  const [turnstileToken, setTurnstileToken] = React.useState<string | null>(
-    null,
-  );
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [statement, setStatement] =
@@ -609,92 +563,6 @@ export const ContestProblemSolvePage: React.FC = () => {
   React.useEffect(() => {
     loadSubmissions();
   }, [loadSubmissions]);
-
-  React.useEffect(() => {
-    if (!turnstileEnabled) return;
-    if (isPreview) return;
-
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]',
-    );
-    if (window.turnstile) {
-      setTurnstileLoadFailed(false);
-      setTurnstileScriptReady(true);
-      return;
-    }
-    if (existing) {
-      const onLoad = () => setTurnstileScriptReady(true);
-      const onError = () => {
-        setTurnstileLoadFailed(true);
-        setError(
-          "Human verification widget failed to load. Submission will continue via server-side check.",
-        );
-      };
-      existing.addEventListener("load", onLoad);
-      existing.addEventListener("error", onError);
-      return () => {
-        existing.removeEventListener("load", onLoad);
-        existing.removeEventListener("error", onError);
-      };
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      setTurnstileLoadFailed(false);
-      setTurnstileScriptReady(true);
-    };
-    script.onerror = () => {
-      setTurnstileLoadFailed(true);
-      setError(
-        "Failed to load human verification widget. Submission will continue via server-side check.",
-      );
-    };
-    document.head.appendChild(script);
-
-    return () => {
-      // Keep shared script in document for other pages.
-    };
-  }, [isPreview, turnstileEnabled]);
-
-  React.useEffect(() => {
-    if (!turnstileEnabled || !turnstileScriptReady) return;
-    if (isPreview) return;
-    const container = turnstileContainerRef.current;
-    if (!container || !window.turnstile) return;
-
-    if (turnstileWidgetIdRef.current == null) {
-      try {
-        const widgetId = window.turnstile.render(container, {
-          sitekey: turnstileSiteKey,
-          theme: "auto",
-          callback: (value) => setTurnstileToken(String(value ?? "") || null),
-          "expired-callback": () => setTurnstileToken(null),
-          "error-callback": () => setTurnstileToken(null),
-        });
-        turnstileWidgetIdRef.current = widgetId;
-      } catch {
-        setTurnstileLoadFailed(true);
-        setError(
-          "Human verification widget failed to initialize. Submission will continue via server-side check.",
-        );
-      }
-    }
-
-    return () => {
-      if (!window.turnstile) return;
-      if (
-        turnstileWidgetIdRef.current != null &&
-        typeof window.turnstile.remove === "function"
-      ) {
-        window.turnstile.remove(turnstileWidgetIdRef.current);
-      }
-      turnstileWidgetIdRef.current = null;
-      setTurnstileToken(null);
-    };
-  }, [isPreview, turnstileEnabled, turnstileScriptReady, turnstileSiteKey]);
 
   React.useEffect(() => {
     if (!statement || !storageBase) return;
@@ -1080,8 +948,6 @@ export const ContestProblemSolvePage: React.FC = () => {
       setError("Please log in to submit.");
       return;
     }
-    const tokenForSubmit = turnstileToken ?? undefined;
-
     setCheckResult(null);
     setChecking(true);
     try {
@@ -1111,7 +977,6 @@ export const ContestProblemSolvePage: React.FC = () => {
               language: judgeLanguage,
               compiler: judgeCompiler,
               code,
-              turnstileToken: tokenForSubmit,
             },
             setJobStatus,
           );
@@ -1138,26 +1003,8 @@ export const ContestProblemSolvePage: React.FC = () => {
       else syncLiveData(true);
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
-      if (msg === "TURNSTILE_REQUIRED") {
-        setError(
-          "Human verification is required by server. Complete verification and submit again.",
-        );
-      } else if (msg === "TURNSTILE_FAILED") {
-        setError(
-          "Human verification failed. Try again, and disable ad blockers/privacy shields for this page.",
-        );
-      } else {
-        setError(msg || "Submission failed");
-      }
+      setError(msg || "Submission failed");
     } finally {
-      if (
-        turnstileEnabled &&
-        window.turnstile &&
-        turnstileWidgetIdRef.current != null
-      ) {
-        window.turnstile.reset(turnstileWidgetIdRef.current);
-      }
-      if (turnstileEnabled) setTurnstileToken(null);
       setChecking(false);
     }
   };
@@ -1289,23 +1136,6 @@ export const ContestProblemSolvePage: React.FC = () => {
             <X className="size-4" />
           </button>
         </aside>
-      ) : null}
-
-      {turnstileEnabled && !isPreview ? (
-        <Card className="flex flex-wrap items-center gap-3 border-border/80 p-3 dark:border-white/10 dark:bg-bg-code">
-          <div className="min-w-0 flex-1 text-xs text-text-muted dark:text-text-secondary">
-            {turnstileLoadFailed
-              ? copy(
-                  "Перевірка людини не завантажилась. Спробуй оновити сторінку перед надсиланням.",
-                  "Human verification did not load. Refresh the page before submitting.",
-                )
-              : copy(
-                  "Перед надсиланням підтвердь, що ти людина.",
-                  "Complete human verification before submitting.",
-                )}
-          </div>
-          <div ref={turnstileContainerRef} />
-        </Card>
       ) : null}
 
       {error ? (
