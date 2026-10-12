@@ -949,7 +949,6 @@ authRouter.get("/turnstile-health", async (_req: AuthRequest, res: Response) => 
     return res.json({
       ok: true,
       turnstileAuthEnforced: Boolean(env.__turnstileEnforceAuth),
-      turnstileContestSubmitEnforced: Boolean(env.__turnstileEnforceContestSubmit),
       turnstileSecretConfigured: turnstileSecretKey.length > 0,
       verifyUrl,
       now: new Date().toISOString(),
