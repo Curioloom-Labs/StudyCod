@@ -679,6 +679,7 @@ export async function sendContestAccountsEmails(
     recipients: ContestAccountRecipient[];
     includeContestInfo?: boolean;
     customMessage?: string;
+    locale?: "uk" | "en";
   },
   attachments: File[] = []
 ): Promise<{ contestId: number; total: number; sentCount: number; failedCount: number; failed: Array<{ email: string; reason: string }> }> {

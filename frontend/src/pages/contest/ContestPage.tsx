@@ -2885,6 +2885,7 @@ export const ContestPage: React.FC = () => {
         recipients,
         includeContestInfo: true,
         customMessage: accountMailCustomMessage.trim() || undefined,
+        locale: i18n.language.toLowerCase().startsWith("en") ? "en" : "uk",
       }, accountMailAttachments);
 
       setAccountMailResult(

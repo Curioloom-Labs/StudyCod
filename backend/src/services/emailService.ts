@@ -7,6 +7,7 @@ import { BACKEND_PUBLIC_URL, JWT_SECRET } from "../config";
 import { DEFAULT_GRADING_SYSTEM, type GradingSystem } from "../types/GradingSystem";
 import { formatGradeForSystem as formatGradeForGradingSystem, gradingSystemDisplayLabel, normalizeScaleMode, type GradeScaleMode } from "../utils/gradingScale";
 import { env } from "../env";
+import { buildContestInvitationEmail, type ContestInvitation } from "./emailTemplates/contestInvitation";
 
 /**
  * Production Email Service
@@ -250,6 +251,20 @@ class EmailService {
       subject: opts.subject,
       html,
       text
+    });
+  }
+
+  async sendContestInvitation(opts: ContestInvitation & {
+    to: string;
+    attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
+  }): Promise<void> {
+    const invitation = buildContestInvitationEmail(opts);
+    await this.sendEmail({
+      to: opts.to,
+      ...invitation,
+      fromOverride: this.notificationsFromEmail,
+      headers: { "X-StudyCod-Category": "notification" },
+      attachments: opts.attachments,
     });
   }
 
