@@ -1482,3 +1482,106 @@
 .ide-context-tabs .ide-tab {
   flex-shrink: 0;
 }
+.ide-check-progress {
+  width: min(100%, 680px);
+  padding: 24px;
+  color: var(--ide-secondary);
+}
+.ide-check-progress-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ide-check-progress-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--ide-accent-wash);
+  color: var(--ide-accent);
+}
+.ide-check-progress-copy {
+  min-width: 0;
+  flex: 1;
+}
+.ide-check-progress-copy h3 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 650;
+  color: var(--ide-text);
+  overflow-wrap: anywhere;
+}
+.ide-check-progress-copy p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ide-check-progress-position {
+  padding: 5px 8px;
+  border: 1px solid var(--ide-border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ide-check-progress-track {
+  height: 4px;
+  margin-top: 20px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--ide-raised);
+}
+.ide-check-progress-track > span {
+  display: block;
+  height: 100%;
+  background: var(--ide-accent);
+  transition: width 250ms ease;
+}
+.ide-check-progress-track.is-pending > span {
+  width: 28%;
+  animation: ide-check-pending 1.6s ease-in-out infinite alternate;
+}
+.ide-check-progress-footer {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  color: var(--ide-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes ide-check-pending {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(257%);
+  }
+}
+@container ide-runner (max-width: 460px) {
+  .ide-check-progress {
+    padding: 18px 16px;
+  }
+  .ide-check-progress-heading {
+    flex-wrap: wrap;
+  }
+  .ide-check-progress-copy {
+    flex-basis: calc(100% - 52px);
+  }
+  .ide-check-progress-position {
+    margin-left: 52px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ide-check-progress-track > span {
+    transition: none;
+  }
+  .ide-check-progress-track.is-pending > span {
+    animation: none;
+  }
+}

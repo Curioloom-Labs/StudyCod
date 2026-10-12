@@ -1,4 +1,5 @@
 import React from "react";
+import type { JudgeProgress } from "../../../../shared/judgeProgress";
 import { useTranslation } from "react-i18next";
 import {
   RobotIcon as Bot,
@@ -159,6 +160,8 @@ type Props = {
   hasUnsavedChanges?: boolean;
   running: boolean;
   checking: boolean;
+  checkProgress?: JudgeProgress | null;
+  checkStatus?: "queued" | "running" | "completed" | "system_error";
   onRun: () => void;
   onCheck: () => void;
   onSave: () => void;
@@ -926,6 +929,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     updateLayout({ bottomCollapsed: false });
     setFocusMode(false);
     setBottomTab("tests");
+    setMobilePane("result");
     pendingMobileResultRef.current = {
       result: props.runResult,
       recovery: props.actionRecovery,
@@ -1294,24 +1298,121 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       );
     }
     if (props.checking) {
+      const progress = props.checkProgress;
+      const phase =
+        props.checkStatus === "queued"
+          ? "queued"
+          : (progress?.phase ?? "preparing");
+      const testing = phase === "testing" && progress?.groupIndex != null;
+      const percent =
+        progress && progress.testsTotal > 0
+          ? Math.round((progress.testsCompleted / progress.testsTotal) * 100)
+          : 0;
+      const plainGroup =
+        progress?.group === "public" || progress?.group === "hidden";
+      const groupName =
+        progress?.group?.replace(/^subtask[_ -]?(\d+)$/i, "$1") ??
+        String(progress?.groupIndex ?? "");
+      const title =
+        phase === "queued"
+          ? tr("Розв’язок у черзі", "Solution queued")
+          : phase === "compiling"
+            ? tr("Компілюємо програму", "Compiling your program")
+            : phase === "finishing"
+              ? tr("Готуємо результат", "Preparing your result")
+              : testing
+                ? plainGroup
+                  ? progress.group === "public"
+                    ? tr("Відкриті тести", "Public tests")
+                    : tr("Приховані тести", "Hidden tests")
+                  : `${tr("Підзадача", "Subtask")} ${groupName}`
+                : tr("Готуємо перевірку", "Preparing your check");
+      const detail = testing
+        ? `${tr("Тест", "Test")} ${progress.groupTest} ${tr("із", "of")} ${progress.groupTestsTotal}`
+        : phase === "queued"
+          ? tr(
+              "Перевірка почнеться, щойно звільниться суддя.",
+              "Checking starts when a judge becomes available.",
+            )
+          : phase === "compiling"
+            ? tr(
+                "Після компіляції почнеться перевірка тестів.",
+                "Tests will start after compilation.",
+              )
+            : phase === "finishing"
+              ? tr(
+                  "Зберігаємо оцінку та результати перевірки.",
+                  "Saving your score and check results.",
+                )
+              : tr(
+                  "Підготовлюємо програму та тести до запуску.",
+                  "Preparing your program and tests to run.",
+                );
       return (
-        <div
-          className="ide-empty-context p-5"
-          role="status"
-          aria-live="polite"
+        <section
+          className="ide-check-progress"
           aria-busy="true"
+          aria-label={tr("Перебіг перевірки", "Check progress")}
         >
-          <h3 className="flex items-center gap-2">
-            <Loader2 className="size-4 animate-spin" />
-            {tr("Перевіряємо розв’язок…", "Checking your solution…")}
-          </h3>
-          <p>
-            {tr(
-              "Компілюємо програму та запускаємо всі тести. Результат з’явиться тут.",
-              "Compiling your program and running all tests. The result will appear here.",
+          <div className="ide-check-progress-heading">
+            <span className="ide-check-progress-icon" aria-hidden="true">
+              {phase === "queued" ? (
+                <Clock3 size={20} />
+              ) : (
+                <Loader2 size={20} className="animate-spin" />
+              )}
+            </span>
+            <div
+              className="ide-check-progress-copy"
+              role="status"
+              aria-live="polite"
+            >
+              <h3>{title}</h3>
+              <p>{detail}</p>
+            </div>
+            {testing && (
+              <span className="ide-check-progress-position">
+                {plainGroup ? tr("Група", "Group") : tr("Підзадача", "Subtask")}{" "}
+                {progress.groupIndex} / {progress.groupsTotal}
+              </span>
             )}
-          </p>
-        </div>
+          </div>
+          <div
+            className={`ide-check-progress-track ${testing || phase === "finishing" ? "" : "is-pending"}`}
+            role="progressbar"
+            aria-label={tr("Перевірено тестів", "Tests checked")}
+            aria-valuemin={0}
+            aria-valuemax={progress?.testsTotal || 100}
+            aria-valuenow={
+              testing || phase === "finishing"
+                ? (progress?.testsCompleted ?? 0)
+                : undefined
+            }
+            aria-valuetext={
+              progress
+                ? `${progress.testsCompleted} / ${progress.testsTotal}`
+                : undefined
+            }
+          >
+            <span
+              style={
+                testing || phase === "finishing"
+                  ? { width: `${percent}%` }
+                  : undefined
+              }
+            />
+          </div>
+          <div className="ide-check-progress-footer">
+            <span>
+              {progress && (testing || phase === "finishing")
+                ? `${tr("Перевірено тестів", "Tests checked")}: ${progress.testsCompleted} / ${progress.testsTotal}`
+                : tr("Перевіряємо розв’язок", "Checking your solution")}
+            </span>
+            <span>
+              {tr("Результат з’явиться тут", "Your result will appear here")}
+            </span>
+          </div>
+        </section>
       );
     }
     return (

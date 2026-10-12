@@ -303,7 +303,10 @@ async function main() {
     chrootByLanguage,
     cwd
   });
-  const res = await runner.run(req);
+  const res = await runner.run(req, req.emit_progress === true ? progress => {
+    // Keep stdout exclusively for the final response consumed by JudgeClient.
+    process.stderr.write(`__SC_JUDGE_PROGRESS__${JSON.stringify(progress)}\n`);
+  } : undefined);
   writeJson(res);
 }
 function writeJson(obj: JudgeResponse | { error: string } | Record<string, unknown>) {

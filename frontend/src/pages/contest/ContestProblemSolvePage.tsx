@@ -4,6 +4,7 @@ import {
   hasPendingContestJob,
   resumeContestJob,
   type ContestJobStatus,
+  type JudgeProgress,
 } from "../../lib/api/contestJobs";
 import type {
   ContestCheckResult,
@@ -297,6 +298,16 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [jobStatus, setJobStatus] = React.useState<ContestJobStatus | null>(
     null,
   );
+  const activeProblemKey = `${contestId}:${problemId}`;
+  const activeProblemRef = React.useRef(activeProblemKey);
+  activeProblemRef.current = activeProblemKey;
+  React.useEffect(() => {
+    setChecking(false);
+    setCheckProgress(null);
+    setJobStatus(null);
+  }, [activeProblemKey]);
+  const [checkProgress, setCheckProgress] =
+    React.useState<JudgeProgress | null>(null);
   const [checking, setChecking] = React.useState(false);
   const [runResult, setRunResult] = React.useState<StudyCodIdeRunResult | null>(
     null,
@@ -846,8 +857,11 @@ export const ContestProblemSolvePage: React.FC = () => {
       try {
         const result = await resumeContestJob<
           ContestCheckResult | ContestRunResult
-        >(contestId, problemId, kind, (status) => {
-          if (!cancelled) setJobStatus(status);
+        >(contestId, problemId, kind, (status, progress) => {
+          if (!cancelled) {
+            setJobStatus(status);
+            if (kind === "check") setCheckProgress(progress ?? null);
+          }
         });
         if (!cancelled && result) {
           if (kind === "check") applyCheckResult(result as ContestCheckResult);
@@ -948,9 +962,51 @@ export const ContestProblemSolvePage: React.FC = () => {
       setError("Please log in to submit.");
       return;
     }
+    const submittedProblemKey = activeProblemKey;
+    const isCurrentProblem = () =>
+      activeProblemRef.current === submittedProblemKey;
     setCheckResult(null);
+    setCheckProgress(null);
+    setJobStatus("queued");
     setChecking(true);
     try {
+      // This fixture only runs in the development preview; live progress comes from the judge.
+      if (isPreview) {
+        setJobStatus("running");
+        const previewProgress: JudgeProgress = {
+          phase: "compiling",
+          testsTotal: 3,
+          testsCompleted: 0,
+          groupsTotal: 3,
+          groupIndex: null,
+          group: null,
+          groupTest: null,
+          groupTestsTotal: null,
+        };
+        setCheckProgress(previewProgress);
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        for (let group = 1; group <= 3; group++) {
+          if (!isCurrentProblem()) return;
+          setCheckProgress({
+            ...previewProgress,
+            phase: "testing",
+            group: String(group),
+            groupIndex: group,
+            testsCompleted: group - 1,
+            groupTest: 1,
+            groupTestsTotal: 1,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 1100));
+        }
+        if (!isCurrentProblem()) return;
+        setCheckProgress({
+          ...previewProgress,
+          phase: "finishing",
+          testsCompleted: 3,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        setJobStatus("completed");
+      }
       const res: ContestCheckResult = isPreview
         ? {
             submissionId: Date.now(),
@@ -963,11 +1019,9 @@ export const ContestProblemSolvePage: React.FC = () => {
             compileError: null,
             compileErrorKind: null,
             groupScores: [
-              {
-                group: copy("Основні тести", "Main tests"),
-                score: 100,
-                maxScore: 100,
-              },
+              { group: "1", score: 30, maxScore: 30 },
+              { group: "2", score: 30, maxScore: 30 },
+              { group: "3", score: 40, maxScore: 40 },
             ],
           }
         : await checkContestProblem(
@@ -978,8 +1032,14 @@ export const ContestProblemSolvePage: React.FC = () => {
               compiler: judgeCompiler,
               code,
             },
-            setJobStatus,
+            (status, progress) => {
+              if (isCurrentProblem()) {
+                setJobStatus(status);
+                setCheckProgress(progress ?? null);
+              }
+            },
           );
+      if (!isCurrentProblem()) return;
       applyCheckResult(res);
       setError(null);
       setLatestVerdict(normalizeVerdict(res.verdict));
@@ -1003,9 +1063,9 @@ export const ContestProblemSolvePage: React.FC = () => {
       else syncLiveData(true);
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
-      setError(msg || "Submission failed");
+      if (isCurrentProblem()) setError(msg || "Submission failed");
     } finally {
-      setChecking(false);
+      if (isCurrentProblem()) setChecking(false);
     }
   };
 
@@ -1158,7 +1218,7 @@ export const ContestProblemSolvePage: React.FC = () => {
           </button>
         </div>
       ) : null}
-      {jobStatus && (
+      {jobStatus && !checking && (
         <div
           role="status"
           className="px-4 py-2 text-sm text-primary-strong dark:text-emerald-200"
@@ -1213,6 +1273,8 @@ export const ContestProblemSolvePage: React.FC = () => {
         publicExamples={publicExamples}
         running={running}
         checking={checking}
+        checkProgress={checkProgress}
+        checkStatus={jobStatus ?? undefined}
         onRun={() => void doRun()}
         onCheck={() => void doSubmit()}
         onSave={saveDraft}

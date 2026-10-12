@@ -1,4 +1,7 @@
 import { estimateJudgeExecutionTimeoutMs } from "./executionTimeout";
+import { StringDecoder } from "string_decoder";
+import { JUDGE_PROGRESS_PREFIX, isJudgeProgress } from "../../../../shared/judgeProgress";
+import { writeJudgeProgress } from "./progress";
 import { spawn } from "child_process";
 import type { JudgeRequest, JudgeResponse } from "./types";
 import { resolveJudgeSandboxConfig, resolveJudgeWorkerEntry } from "./workerPaths";
@@ -194,6 +197,8 @@ export class JudgeClient {
       }
       stdoutChunks.push(buf);
     });
+    const progressDecoder = new StringDecoder("utf8");
+    let progressBuffer = "";
     child.stderr?.on("data", (buf: Buffer) => {
       if (stderrTruncated) return;
       errSize += buf.length;
@@ -203,6 +208,20 @@ export class JudgeClient {
         return;
       }
       stderrChunks.push(buf);
+      if (request.emit_progress === true && request.progress_id) {
+        progressBuffer += progressDecoder.write(buf);
+        let newline: number;
+        while ((newline = progressBuffer.indexOf("\n")) >= 0) {
+          const line = progressBuffer.slice(0, newline);
+          progressBuffer = progressBuffer.slice(newline + 1);
+          if (!line.startsWith(JUDGE_PROGRESS_PREFIX) || line.length > 4096) continue;
+          try {
+            const value: unknown = JSON.parse(line.slice(JUDGE_PROGRESS_PREFIX.length));
+            if (isJudgeProgress(value)) void writeJudgeProgress(request.progress_id, value).catch(() => {});
+          } catch { /* A diagnostic line must never interrupt judging. */ }
+        }
+        if (progressBuffer.length > 4096) progressBuffer = "";
+      }
     });
     if (child.stdin) {
       child.stdin.write(payload, "utf8", () => {

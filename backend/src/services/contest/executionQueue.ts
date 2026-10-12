@@ -3,6 +3,7 @@ import type { EntityManager } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { ContestSubmission } from "../../entities/ContestSubmission";
 import type { JudgeRequest, JudgeResponse } from "../judgeWorker/types";
+import { contestProgressId } from "../judgeWorker/progress";
 import { judgeWithSemaphore } from "../judgeWorker";
 import { executionScheduler } from "../execution/executionSchedulerSingleton";
 import { HttpError } from "../../utils/httpError";
@@ -160,6 +161,8 @@ async function run(job: ContestJob): Promise<void> {
   heartbeat.unref();
   try {
     const payload = JSON.parse(job.payload) as ContestJobPayload;
+    payload.request.emit_progress = job.kind === "check";
+    payload.request.progress_id = job.kind === "check" ? contestProgressId(job.job_id, job.attempt) : undefined;
     const response = await judgeWithSemaphore(payload.request, { signal: controller.signal });
     let committed = false;
     await AppDataSource.transaction(async manager => {

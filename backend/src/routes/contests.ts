@@ -18,6 +18,7 @@ import { LibraryTask } from "../entities/LibraryTask";
 import { TestData } from "../entities/TestData";
 import { cachedStandings, invalidateStandings } from "../services/contest/standingsCache";
 import { findContestJobByKey, enqueueContestJob, getContestJob, jobReceipt, registerContestJobProcessor, requestHash, waitContestJob, type ContestJobPayload } from "../services/contest/executionQueue";
+import { contestProgressId, readJudgeProgress } from "../services/judgeWorker/progress";
 import { sharedContestRead } from "../services/contest/sharedRead";
 import { readUserContestParticipant, userContestParticipantId, userOwnsContestParticipant } from "../services/contest/participantReads";
 import { normalizeJudgeMemoryMb } from "../services/judgeWorker/limits";
@@ -3553,8 +3554,11 @@ contestsRouter.get("/:id/jobs/:jobId", authRequired, async (req: AuthRequest, re
     const contest = await readContestAccessRecord(job.contest_id);
     if (!contest || !(contest.isPublished !== false && isContestOnlyUser(req) && req.userId
       ? true : await canAccessContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const progress = job.kind === "check" && job.state === "running"
+      ? await readJudgeProgress(contestProgressId(job.job_id, job.attempt)) : null;
     res.set("Cache-Control", "no-store");
     return res.json({ ...jobReceipt(job),
+      ...(progress ? { progress } : {}),
       ...(job.state === "completed" ? { result: JSON.parse(job.result!) } : {}),
       ...(job.state === "system_error" ? { message: "CONTEST_EXECUTION_FAILED" } : {}),
     });

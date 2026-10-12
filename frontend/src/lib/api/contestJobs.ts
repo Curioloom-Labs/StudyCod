@@ -1,10 +1,12 @@
+import type { JudgeProgress } from "../../../../shared/judgeProgress";
+export type { JudgeProgress } from "../../../../shared/judgeProgress";
 import { api } from "./client";
 import { getCachedMeUser } from "./profile";
 
 export type ContestJobStatus = "queued" | "running" | "completed" | "system_error";
-type Receipt = { jobId: string; status: ContestJobStatus; statusUrl: string; result?: unknown };
+type Receipt = { jobId: string; status: ContestJobStatus; statusUrl: string; result?: unknown; progress?: JudgeProgress };
 type Pending = { key: string; fingerprint: string; receipt?: Receipt; body: Record<string, unknown> };
-export type JobUpdate = (status: ContestJobStatus) => void;
+export type JobUpdate = (status: ContestJobStatus, progress?: JudgeProgress) => void;
 function storageKey(contestId: number, problemId: number, kind: string): string {
   const user = getCachedMeUser();
   return `studycod:contest-job:${user?.studentId != null ? `student-${user.studentId}` : `user-${user?.id}`}:${contestId}:${problemId}:${kind}`;
@@ -18,7 +20,7 @@ function save(key: string, value: Pending): void {
 async function poll<T>(receipt: Receipt, onStatus?: JobUpdate): Promise<T> {
   let current = receipt;
   while (true) {
-    onStatus?.(current.status);
+    onStatus?.(current.status, current.progress);
     if (current.status === "completed") return current.result as T;
     if (current.status === "system_error") throw new Error("Не вдалося завершити перевірку через помилку судді. Відправку збережено.");
     await new Promise<void>(resolve => {
@@ -26,7 +28,7 @@ async function poll<T>(receipt: Receipt, onStatus?: JobUpdate): Promise<T> {
         if ((event as CustomEvent<{ jobId: string }>).detail?.jobId === receipt.jobId) done();
       };
       const done = () => { clearTimeout(timer); window.removeEventListener("studycod:contest-job", listener); resolve(); };
-      const timer = setTimeout(done, 5000 + Math.random() * 1000);
+      const timer = setTimeout(done, (current.status === "running" ? 1000 : 4000) + Math.random() * 500);
       window.addEventListener("studycod:contest-job", listener);
     });
     try { current = (await api.get<Receipt>(receipt.statusUrl)).data; }

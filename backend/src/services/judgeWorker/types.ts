@@ -41,6 +41,9 @@ export interface JudgeFile {
 }
 export interface JudgeRequest {
   submission_id: string;
+  /** Internal worker progress channel, enabled for contest submissions. */
+  emit_progress?: boolean;
+  progress_id?: string;
   /** Server assigned participant scope for the private compilation cache. */
   cache_owner?: string;
   language: JudgeLanguage;

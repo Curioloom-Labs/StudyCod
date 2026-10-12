@@ -5,7 +5,7 @@ import { NsJailExecutor } from "./executor";
 import { compilationCacheKey, restoreCompilation, storeCompilation } from "./compilationCache";
 import { Compiler, mapRuntimeToVerdict } from "./compiler";
 import { validateAndResolveLimits } from "./limits";
-import { CheckerSpec, CompileResult, GroupScore, JudgeRequest, JudgeResponse, TestRunResult, Verdict } from "./result";
+import { CheckerSpec, CompileResult, GroupScore, JudgeProgress, JudgeRequest, JudgeResponse, TestRunResult, Verdict } from "./result";
 import { cleanPythonRuntimeError, filterNsJailStderr } from "./stderr";
 import { buildUserFacingStderr } from "./userFacingErrors";
 import { checkExact } from "../checkers/exact";
@@ -440,8 +440,30 @@ export class Runner {
   private exec = new NsJailExecutor();
   private compiler = new Compiler(this.exec);
   constructor(private cfg: RunnerConfig) {}
-  async run(req: JudgeRequest): Promise<JudgeResponse> {
+  async run(req: JudgeRequest, onProgress?: (progress: JudgeProgress) => void): Promise<JudgeResponse> {
     validateRequest(req);
+    const progressGroups = Array.from(new Set(req.tests.map(t => normalizeGroup(t.group, t.hidden))));
+    const groupTotals = new Map<string, number>();
+    for (const test of req.tests) {
+      const group = normalizeGroup(test.group, test.hidden);
+      groupTotals.set(group, (groupTotals.get(group) ?? 0) + 1);
+    }
+    let progress: JudgeProgress = { phase: "preparing", testsTotal: req.tests.length,
+      testsCompleted: 0, groupsTotal: progressGroups.length, groupIndex: null, group: null,
+      groupTest: null, groupTestsTotal: null };
+    let lastProgressAt = 0;
+    let completedTests = 0;
+    const report = (update: Partial<JudgeProgress>, force = false) => {
+      const previous = progress;
+      progress = { ...progress, ...update };
+      if (!onProgress) return;
+      const now = Date.now();
+      if (!force && previous.phase === progress.phase && previous.groupIndex === progress.groupIndex &&
+        previous.groupTest === progress.groupTest && now - lastProgressAt < 250) return;
+      lastProgressAt = now;
+      try { onProgress(progress); } catch { /* Progress must never change a verdict. */ }
+    };
+    report({}, true);
     await validateTestRefs(req);
     const adapter = getLanguage(req.language);
     // Optional compiler/version selection. Falls back to the family default.
@@ -546,6 +568,7 @@ export class Runner {
       const compileAddressSpaceBytes = Infinity;
       let successfulCompile: CompileResult | undefined;
       if (compilePlan) {
+        report({ phase: "compiling" });
         const cacheKey = await compilationCacheKey(req, compilePlan.argv, chroot);
         const cacheHit = await restoreCompilation(cacheKey, workDir);
         if (!cacheHit) {
@@ -601,6 +624,7 @@ export class Runner {
       let failedGroupIndex = -1;
 
       const runPlan = traceRunPlan ?? (profile.run ? profile.run() : adapter.getRunPlan());
+      const groupPositions = new Map<string, number>();
       for (let i = 0; i < req.tests.length; i++) {
         const test = req.tests[i];
         const group = normalizeGroup(test.group, test.hidden);
@@ -611,6 +635,10 @@ export class Runner {
         if (stopOnGroupFailure && failedGroupIndex >= 0 && groupIndex > failedGroupIndex) {
           break;
         }
+        const groupTest = (groupPositions.get(group) ?? 0) + 1;
+        groupPositions.set(group, groupTest);
+        report({ phase: "testing", testsCompleted: completedTests, groupIndex: groupIndex + 1,
+          group: group.slice(0, 96), groupTest, groupTestsTotal: groupTotals.get(group) ?? 0 });
         const weight = normalizeWeight(test.weight);
         const useRefInput = testHasRefInput(test);
         const useRefOutput = testHasRefOutput(test);
@@ -722,6 +750,7 @@ export class Runner {
               base.stderr = truncate(stderrForUser, 2048);
             }
             tests.push(base);
+            completedTests = tests.length;
             finalVerdict = worsen(finalVerdict, "WA");
             if (binaryGroupScoring) {
               groupFailed[group] = true;
@@ -744,6 +773,7 @@ export class Runner {
             base.actual = truncate(r.stdout, 2048);
           }
           tests.push(base);
+          completedTests = tests.length;
           continue;
         }
         base.message = runtimeVerdict === "TLE" ? "Time limit exceeded" : runtimeVerdict === "MLE" ? "Memory limit exceeded" : r.outputLimitExceeded ? "Output limit exceeded" : runtimeVerdict === "CE" ? "Compilation error" : "Runtime error";
@@ -764,6 +794,7 @@ export class Runner {
           base.stderr = truncate(stderrForUser, 4096);
         }
         tests.push(base);
+        completedTests = tests.length;
         finalVerdict = worsen(finalVerdict, runtimeVerdict);
         if (!runAll) return finalize(req.submission_id, finalVerdict, totalTime, peakMemKb, tests, score, scoringPlan.maxScore, groupAgg);
       }
@@ -790,6 +821,7 @@ export class Runner {
         stopOnGroupFailure
       ), compile: successfulCompile };
     } finally {
+      report({ phase: "finishing", testsCompleted: completedTests }, true);
       await safeRm(workDir);
     }
   }

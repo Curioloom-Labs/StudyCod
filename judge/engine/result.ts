@@ -1,4 +1,14 @@
 import type { LanguageId } from "../languages/types";
+export interface JudgeProgress {
+  phase: "preparing" | "compiling" | "testing" | "finishing";
+  testsTotal: number;
+  testsCompleted: number;
+  groupsTotal: number;
+  groupIndex: number | null;
+  group: string | null;
+  groupTest: number | null;
+  groupTestsTotal: number | null;
+}
 export type Verdict = "AC" | "WA" | "TLE" | "MLE" | "RE" | "CE";
 export interface JudgeLimits {
   time_limit_ms: number;
@@ -43,6 +53,9 @@ export interface JudgeFile {
 }
 export interface JudgeRequest {
   submission_id: string;
+  /** Internal worker progress channel, enabled for contest submissions. */
+  emit_progress?: boolean;
+  progress_id?: string;
   cache_owner?: string;
   language: LanguageId;
   /**
