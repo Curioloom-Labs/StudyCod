@@ -20,7 +20,7 @@ export function educationalUserContextSql(): string {
     OR EXISTS (SELECT 1 FROM classes c WHERE c.teacher_id = user.id)
     OR EXISTS (SELECT 1 FROM class_teachers ct WHERE ct.teacher_id = user.id)
     OR EXISTS (SELECT 1 FROM parent_links p WHERE p.parent_user_id = user.id)
-    OR EXISTS (SELECT 1 FROM org_invitations pending_invite WHERE pending_invite.email = user.email AND pending_invite.status = 'PENDING')))`;
+    OR EXISTS (SELECT 1 FROM org_invitations pending_invite WHERE pending_invite.email = CONVERT(user.email USING utf8mb4) COLLATE utf8mb4_unicode_ci AND pending_invite.status = 'PENDING')))`;
 }
 
 /** Preserve password changes committed after an EDU account was read. */

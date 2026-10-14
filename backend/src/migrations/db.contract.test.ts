@@ -3,8 +3,42 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { createConnection, type RowDataPacket } from "mysql2/promise";
+import { educationalUserContextSql } from "../services/edu/accountMetadata";
 
 const databaseUrl = String(process.env.DB_CONTRACT_DATABASE_URL ?? "").trim();
+
+test("EDU account security queries support mixed legacy email collations", {
+  skip: process.env.RUN_DB_CONTRACT_TEST !== "1",
+}, async () => {
+  const connection = await createConnection(databaseUrl);
+  try {
+    await connection.query(`CREATE TEMPORARY TABLE users (id INT, email VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci,
+      user_mode VARCHAR(20), role VARCHAR(20), edu_session_version INT, edu_account_setup_required INT)`);
+    await connection.query(`CREATE TEMPORARY TABLE org_invitations (email VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci, status VARCHAR(20))`);
+    await connection.query("CREATE TEMPORARY TABLE students (user_id INT, user_account_managed INT)");
+    await connection.query("CREATE TEMPORARY TABLE memberships (user_id INT, role VARCHAR(20))");
+    await connection.query("CREATE TEMPORARY TABLE classes (teacher_id INT)");
+    await connection.query("CREATE TEMPORARY TABLE class_teachers (teacher_id INT)");
+    await connection.query("CREATE TEMPORARY TABLE parent_links (parent_user_id INT)");
+    await connection.query(`INSERT INTO users VALUES
+      (1,'Invited@example.test','PERSONAL','USER',0,0),
+      (2,'other@example.test','PERSONAL','USER',0,0),
+      (3,'invited@example.test','CONTEST','USER',0,0),
+      (4,'staff@example.test','EDUCATIONAL','SYSTEM_ADMIN',0,0)`);
+    await connection.query("INSERT INTO org_invitations VALUES ('invited@example.test','PENDING')");
+    const verify = async () => {
+      const [rows] = await connection.query<RowDataPacket[]>(`SELECT user.id
+        FROM users user WHERE ${educationalUserContextSql()} ORDER BY user.id`);
+      assert.deepEqual(rows.map(row => row.id), [1, 4]);
+    };
+    await verify();
+    await connection.query("ALTER TABLE users MODIFY email VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+    await connection.query("ALTER TABLE org_invitations MODIFY email VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci");
+    await verify();
+  } finally {
+    await connection.end();
+  }
+});
 
 type ColumnRow = RowDataPacket & {
   Field: string;

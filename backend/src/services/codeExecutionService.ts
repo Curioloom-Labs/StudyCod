@@ -3,6 +3,7 @@ import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeLanguage, JudgeRequest, JudgeResponse, CheckerSpec } from "./judgeWorker/types";
 import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
+import { checkExact, checkWhitespace, checkFloat, checkNonEmpty } from "../../../judge/checkers/common";
 
 function truncateText(s: string, max: number): string {
   const v = String(s ?? "");
@@ -299,14 +300,14 @@ export interface CompareOutputOptions {
   /**
    * How tolerant the comparison is. Defaults to "lenient" — the historical
    * behaviour — so existing callers are byte-for-byte unaffected.
-   *  - exact:      normalized line equality only (no space/comma fuzzing).
-   *  - whitespace: ignore all whitespace differences.
+   *  - exact:      sandbox normalization; leading/internal whitespace is significant.
+   *  - whitespace: ignore layout whitespace while preserving token boundaries.
    *  - nonempty:   pass if the program produced any non-empty output.
-   *  - float:      token-wise numeric comparison within `epsilon`.
+   *  - float:      sandbox numeric syntax with absolute/relative `epsilon` tolerance.
    *  - lenient:    exact OR whitespace-insensitive OR comma-spacing-insensitive.
    */
   mode?: OutputCompareMode;
-  /** Absolute tolerance for "float" mode. */
+  /** Absolute/relative tolerance for "float" mode, matching the sandbox worker. */
   epsilon?: number;
 }
 
@@ -327,25 +328,19 @@ export function compareOutputWithChecker(actual: string, expected: string, check
   return compareOutput(actual, expected, compareModeFromChecker(checker));
 }
 
-function compareFloatTokens(actual: string, expected: string, epsilon: number): boolean {
-  const a = actual.split(/\s+/).filter(Boolean);
-  const e = expected.split(/\s+/).filter(Boolean);
-  if (a.length !== e.length) return false;
-  for (let i = 0; i < e.length; i++) {
-    const an = Number(a[i]);
-    const en = Number(e[i]);
-    const bothNumeric = Number.isFinite(an) && Number.isFinite(en);
-    if (bothNumeric) {
-      if (Math.abs(an - en) > epsilon) return false;
-    } else if (a[i] !== e[i]) {
-      // Non-numeric tokens (labels, words) must match exactly.
-      return false;
+export function compareOutput(actual: string, expected: string, options?: CompareOutputOptions): boolean {
+  // Explicit task checkers must agree with the real sandbox worker. Preserve the
+  // historical lenient default only for callers without an explicit checker.
+  switch (options?.mode) {
+    case "exact": return checkExact(actual, expected);
+    case "whitespace": return checkWhitespace(actual, expected);
+    case "nonempty": return checkNonEmpty(actual);
+    case "float": {
+      const requested = options.epsilon ?? 1e-6;
+      const epsilon = Number.isFinite(requested) && requested > 0 && requested <= 1 ? requested : 1e-6;
+      return checkFloat(actual, expected, epsilon);
     }
   }
-  return true;
-}
-
-export function compareOutput(actual: string, expected: string, options?: CompareOutputOptions): boolean {
   const hasCyrillic = (s: string) => /[\u0400-\u04FF]/.test(s);
   const safeNfc = (s: string) => {
     try {
@@ -479,32 +474,14 @@ export function compareOutput(actual: string, expected: string, options?: Compar
     const lines = normalized.split("\n").map(l => l.trim()).filter(l => l.length > 0);
     return lines.join("\n");
   };
-  const mode: OutputCompareMode = options?.mode ?? "lenient";
-
   const normalizedActual = normalize(actual);
   const normalizedExpected = normalize(expected);
-
-  // "nonempty": the only requirement is that the program produced output.
-  if (mode === "nonempty") return normalizedActual.length > 0;
-
-  // "float": token-wise numeric comparison within epsilon.
-  if (mode === "float") {
-    if (normalizedActual === normalizedExpected) return true;
-    return compareFloatTokens(normalizedActual, normalizedExpected, options?.epsilon ?? 1e-6);
-  }
-
-  // Exact (post-normalization) equality is accepted by every mode.
+  // Remaining callers use the historical lenient comparison.
   if (normalizedActual === normalizedExpected) return true;
-
-  // "exact": no further fuzzing — a real exact checker must reject here.
-  if (mode === "exact") return false;
 
   const noSpacesActual = normalizedActual.replace(/\s+/g, "");
   const noSpacesExpected = normalizedExpected.replace(/\s+/g, "");
   if (noSpacesActual === noSpacesExpected) return true;
-
-  // "whitespace": whitespace-insensitive only; stop before comma fuzzing.
-  if (mode === "whitespace") return false;
 
   // "lenient" (default, historical behaviour): also ignore comma spacing.
   const normalizeCommas = (str: string) => str.replace(/,\s+/g, ",").replace(/\s+,/g, ",");

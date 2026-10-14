@@ -18,11 +18,35 @@ test("exact mode rejects whitespace/comma fuzzing", () => {
 
 test("whitespace mode ignores spaces but not comma insertion", () => {
   assert.equal(compareOutput("5  6", "5 6", { mode: "whitespace" }), true);
-  // comma-spacing leniency is lenient-only; whitespace removal still makes these equal.
-  assert.equal(compareOutput("1, 2", "1,2", { mode: "whitespace" }), true);
+  // Changing a token boundary must agree with the sandbox's whitespace checker.
+  assert.equal(compareOutput("1, 2", "1,2", { mode: "whitespace" }), false);
   // a genuinely different token must fail.
   assert.equal(compareOutput("1 2 4", "1 2 3", { mode: "whitespace" }), false);
   assert.equal(compareOutputWithChecker("5.0", "5", { type: "whitespace" }), false);
+});
+
+test("explicit whitespace checker preserves separate numeric tokens", () => {
+  assert.equal(compareOutputWithChecker("1 2", "12", { type: "whitespace" }), false);
+  assert.equal(compareOutputWithChecker("1\t2\n", "1 2", { type: "whitespace" }), true);
+});
+
+test("explicit exact checker preserves leading spaces and internal blank lines", () => {
+  assert.equal(compareOutputWithChecker(" 42", "42", { type: "exact" }), false);
+  assert.equal(compareOutputWithChecker("a\n\nb", "a\nb", { type: "exact" }), false);
+  assert.equal(compareOutputWithChecker("a\r\nb\n", "a\nb", { type: "exact" }), true);
+});
+
+test("float checker applies relative tolerance and decimal numeric syntax", () => {
+  assert.equal(compareOutputWithChecker("1000000.5", "1000000", { type: "float", epsilon: 1e-6 }), true);
+  assert.equal(compareOutputWithChecker("1000002", "1000000", { type: "float", epsilon: 1e-6 }), false);
+  assert.equal(compareOutputWithChecker("0x10", "16", { type: "float", epsilon: 1e-6 }), false);
+  assert.equal(compareOutputWithChecker("1e3", "1000", { type: "float", epsilon: 1e-6 }), true);
+});
+
+test("invalid float tolerances use the sandbox fallback", () => {
+  for (const epsilon of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 2]) {
+    assert.equal(compareOutputWithChecker("1.01", "1", { type: "float", epsilon }), false);
+  }
 });
 
 test("nonempty mode only checks that output exists", () => {
