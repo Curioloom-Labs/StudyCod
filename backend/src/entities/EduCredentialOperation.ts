@@ -23,5 +23,5 @@ export class EduCredentialOperation {
   @Column({ name: "student_ids", type: "json" }) studentIds!: number[];
   @Column({ name: "response_cipher", type: "mediumtext", nullable: true }) responseCipher!: string | null;
   @Column({ name: "expires_at", type: "datetime", precision: 3 }) expiresAt!: Date;
-  @CreateDateColumn({ name: "created_at", type: "datetime", precision: 3 }) createdAt!: Date;
+  @CreateDateColumn({ name: "created_at", type: "datetime", precision: 3, default: () => "CURRENT_TIMESTAMP(3)" }) createdAt!: Date;
 }
