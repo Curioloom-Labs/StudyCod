@@ -6,7 +6,7 @@ import { PageHero } from "../../components/ui/PageHero";
 import { api } from "../../lib/api/client";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 
 type ItemKind = "THEORY" | "PAGE" | "CODE_TASK" | "WEB_TASK" | "QUIZ" | "MANUAL";
 interface Item { id: number; kind: ItemKind; title: string; }

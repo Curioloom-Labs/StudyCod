@@ -1,6 +1,8 @@
 import { AppDataSource } from "../../data-source";
 import { EduTask } from "../../entities/EduTask";
 import { ControlWork } from "../../entities/ControlWork";
+import { TopicTask } from "../../entities/TopicTask";
+import { isAssignedToStudent } from "../../utils/assignmentVisibility";
 
 /**
  * Deadline agenda (Tier 1 calendar) — a derived view over existing deadlines
@@ -66,7 +68,7 @@ const controlRepo = () => AppDataSource.getRepository(ControlWork);
  * Aggregate task + control-work deadlines for the given classes within a window.
  * Closed tasks are excluded. Returns raw (unclassified) items.
  */
-export async function getDeadlinesForClasses(classIds: number[], from: Date, to: Date): Promise<AgendaItem[]> {
+export async function getDeadlinesForClasses(classIds: number[], from: Date, to: Date, studentId?: number): Promise<AgendaItem[]> {
   if (!classIds.length) return [];
 
   const taskRows = await taskRepo()
@@ -97,6 +99,25 @@ export async function getDeadlinesForClasses(classIds: number[], from: Date, to:
     .addSelect("w.title", "title")
     .addSelect("w.deadline", "deadline")
     .addSelect("tp.id", "topicId")
+    .addSelect("w.assignedStudentIds", "assignedStudentIds")
+    .addSelect("c.id", "classId")
+    .addSelect("c.name", "className")
+    .getRawMany();
+
+  const topicTaskRows = await AppDataSource.getRepository(TopicTask)
+    .createQueryBuilder("t")
+    .innerJoin("t.topic", "tp")
+    .innerJoin("tp.class", "c")
+    .where("c.id IN (:...ids)", { ids: classIds })
+    .andWhere("t.type = :type", { type: "PRACTICE" })
+    .andWhere("t.isAssigned = 1")
+    .andWhere("t.isClosed = 0")
+    .andWhere("t.deadline BETWEEN :from AND :to", { from, to })
+    .select("t.id", "id")
+    .addSelect("t.title", "title")
+    .addSelect("t.deadline", "deadline")
+    .addSelect("t.assignedStudentIds", "assignedStudentIds")
+    .addSelect("tp.id", "topicId")
     .addSelect("c.id", "classId")
     .addSelect("c.name", "className")
     .getRawMany();
@@ -114,6 +135,7 @@ export async function getDeadlinesForClasses(classIds: number[], from: Date, to:
     });
   }
   for (const r of controlRows) {
+    if (studentId && !isAssignedToStudent(true, r.assignedStudentIds, studentId)) continue;
     items.push({
       kind: "CONTROL",
       id: Number(r.id),
@@ -123,6 +145,12 @@ export async function getDeadlinesForClasses(classIds: number[], from: Date, to:
       className: String(r.className ?? ""),
       topicId: Number(r.topicId)
     });
+  }
+  for (const r of topicTaskRows) {
+    if (studentId && !isAssignedToStudent(true, r.assignedStudentIds, studentId)) continue;
+    items.push({ kind: "TASK", id: Number(r.id), title: String(r.title ?? "Task"),
+      deadline: new Date(r.deadline).toISOString(), classId: Number(r.classId),
+      className: String(r.className ?? ""), topicId: Number(r.topicId) });
   }
   return items;
 }

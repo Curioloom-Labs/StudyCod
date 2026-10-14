@@ -9,11 +9,14 @@ import { systemAdminGuard } from "../middleware/rolesGuard";
 import { emailService } from "../services/emailService";
 import { logger } from "../utils/logger";
 import { In } from "typeorm";
+import { studentMarketingEnabled } from "../services/edu/studentMarketingConsent";
 
 const router = Router();
 
 const userRepo = () => AppDataSource.getRepository(User);
 const studentRepo = () => AppDataSource.getRepository(Student);
+const studentConsentSelect = { id: true, email: true, marketingEmailsEnabled: true,
+  user: { id: true, email: true, marketingEmailsEnabled: true } } as const;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -143,13 +146,14 @@ router.post("/broadcast", authRequired, systemAdminGuard, async (req: AuthReques
 
       if (audience === "STUDENTS" || audience === "ALL") {
         const students = await studentRepo().find({
+          select: studentConsentSelect, relations: ["user"],
           take: limit ?? undefined,
           order: { id: "ASC" }
         });
         for (const s of students) {
           const email = String(s.email || "").trim();
           if (!email) continue;
-          if (shouldRespectSubscription && !s.marketingEmailsEnabled) continue;
+          if (shouldRespectSubscription && !studentMarketingEnabled(s)) continue;
           toSend.push({ kind: "student", id: s.id, email });
         }
       }
@@ -189,24 +193,26 @@ router.post("/broadcast", authRequired, systemAdminGuard, async (req: AuthReques
 
       if (studentIds.length) {
         const students = await studentRepo().find({
+          select: studentConsentSelect, relations: ["user"],
           where: { id: In(studentIds) }
         });
         for (const s of students) {
           const email = String(s.email || "").trim();
           if (!email) continue;
-          if (shouldRespectSubscription && !s.marketingEmailsEnabled) continue;
+          if (shouldRespectSubscription && !studentMarketingEnabled(s)) continue;
           toSend.push({ kind: "student", id: s.id, email });
         }
       }
 
       if (classIds.length) {
         const students = await studentRepo().find({
+          select: studentConsentSelect, relations: ["user"],
           where: { class: { id: In(classIds) } }
         });
         for (const s of students) {
           const email = String(s.email || "").trim();
           if (!email) continue;
-          if (shouldRespectSubscription && !s.marketingEmailsEnabled) continue;
+          if (shouldRespectSubscription && !studentMarketingEnabled(s)) continue;
           toSend.push({ kind: "student", id: s.id, email });
         }
       }
@@ -224,11 +230,11 @@ router.post("/broadcast", authRequired, systemAdminGuard, async (req: AuthReques
             }
             continue;
           }
-          const s = await studentRepo().findOne({ where: { email: e } });
+          const s = await studentRepo().findOne({ where: { email: e }, select: studentConsentSelect, relations: ["user"] });
           if (s) {
             const email = String(s.email || "").trim();
             if (email) {
-              if (!shouldRespectSubscription || s.marketingEmailsEnabled) {
+              if (!shouldRespectSubscription || studentMarketingEnabled(s)) {
                 toSend.push({ kind: "student", id: s.id, email });
               }
             }

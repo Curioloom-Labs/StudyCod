@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { isAxiosError } from "axios";
 import { UserPlus, X, Building2, Link2 } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageHero } from "../../components/ui/PageHero";
 import { api } from "../../lib/api/client";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
-import { getMe } from "../../lib/api/profile";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
+import { SchoolAccountActivation } from "./SchoolAccountActivation";
+import { getMe, clearGetMeCache } from "../../lib/api/profile";
 
 interface Org { orgId: number; role: string; name: string | null; }
-interface Member { userId: number; role: string; username: string | null; name: string | null; email: string | null; }
+interface Member { userId: number; role: string; username: string | null; name: string | null; email: string | null; accountSetupRequired?: boolean; canSetActivationEmail?: boolean; hasParentAccess?: boolean; }
 interface Invite { id: number; email: string; role: string; status: string; token?: string; }
 interface ClassSummary { id: number; name: string; studentsCount: number; teacherName: string | null; }
 interface Overview { totals: { classes: number; students: number; teachers: number }; classes: ClassSummary[]; }
@@ -34,6 +36,8 @@ const roleLabel = (r: string): string => {
 
 export const OrgMembersPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedOrg = Number(searchParams.get("org"));
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [activeOrg, setActiveOrg] = useState<number | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -45,6 +49,18 @@ export const OrgMembersPage: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [orgNameDraft, setOrgNameDraft] = useState("");
   const [selfUserId, setSelfUserId] = useState<number | null>(null);
+  const [memberBusy, setMemberBusy] = useState(false);
+  const memberPending = React.useRef(false);
+  const [pendingRemoval, setPendingRemoval] = useState<Member | null>(null);
+  const [memberError, setMemberError] = useState<string | null>(null);
+  const [transferClasses, setTransferClasses] = useState<Array<{ id: number; name: string }>>([]);
+  const memberAlertRef = React.useRef<HTMLDivElement>(null);
+  const removalRef = React.useRef<HTMLDivElement>(null);
+  const membersHeadingRef = React.useRef<HTMLHeadingElement>(null);
+  const activeOrgRef = React.useRef(activeOrg); activeOrgRef.current = activeOrg;
+  const loadGeneration = React.useRef(0);
+  useEffect(() => { if (memberError) memberAlertRef.current?.focus(); }, [memberError]);
+  useEffect(() => { if (pendingRemoval) removalRef.current?.focus(); }, [pendingRemoval]);
 
   useEffect(() => {
     getMe().then(me => setSelfUserId(me.id)).catch(() => {});
@@ -53,28 +69,33 @@ export const OrgMembersPage: React.FC = () => {
       .then(({ data }) => {
         const list: Org[] = (data?.orgs ?? []).filter((o: Org) => o.role === "ORG_ADMIN");
         setOrgs(list);
-        if (list.length) setActiveOrg(list[0].orgId);
+        if (list.length) setActiveOrg(list.find(org => org.orgId === requestedOrg)?.orgId ?? list[0].orgId);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   const loadOrg = async (orgId: number) => {
+    const generation = ++loadGeneration.current;
     try {
       const [m, i, o] = await Promise.all([
         api.get(`/edu/orgs/${orgId}/members`),
         api.get(`/edu/orgs/${orgId}/invites`),
         api.get(`/edu/orgs/${orgId}/overview`).catch(() => ({ data: null }))
       ]);
+      if (generation !== loadGeneration.current || activeOrgRef.current !== orgId) return;
       setMembers(m.data?.members ?? []);
       setInvites(i.data?.invites ?? []);
       setOverview(o.data ?? null);
     } catch (error) {
+      if (generation !== loadGeneration.current || activeOrgRef.current !== orgId) return;
       showToast({ message: getErrorMessageFromUnknown(error, tr("Помилка", "Error")), type: "error" });
     }
   };
 
   useEffect(() => {
+    setPendingRemoval(null); setMemberError(null); setTransferClasses([]);
+    setMembers([]); setInvites([]); setOverview(null);
     if (activeOrg != null) loadOrg(activeOrg);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOrg]);
@@ -132,28 +153,39 @@ export const OrgMembersPage: React.FC = () => {
   };
 
   const changeRole = async (userId: number, newRole: string) => {
-    if (activeOrg == null) return;
+    if (activeOrg == null || memberPending.current) return;
+    memberPending.current = true; setMemberBusy(true); setMemberError(null); setTransferClasses([]);
     try {
       await api.patch(`/edu/orgs/${activeOrg}/members/${userId}/role`, { role: newRole });
+      if (userId === selfUserId) { clearGetMeCache({ clearSnapshot: true }); window.location.reload(); return; }
       setMembers(prev => prev.map(m => (m.userId === userId ? { ...m, role: newRole } : m)));
       showToast({ message: tr("Роль оновлено", "Role updated"), type: "success" });
     } catch (error) {
       // Resync on failure (e.g. refusing to demote the last admin).
-      showToast({ message: getErrorMessageFromUnknown(error, tr("Не вдалося змінити роль", "Couldn't change role")), type: "error" });
+      showMemberError(error, tr("Не вдалося змінити роль", "Couldn't change role"));
       await loadOrg(activeOrg);
-    }
+    } finally { memberPending.current = false; setMemberBusy(false); }
   };
 
-  const removeMember = async (userId: number, name: string) => {
-    if (activeOrg == null) return;
-    if (!confirm(tr(`Видалити "${name}" з організації?`, `Remove "${name}" from the organization?`))) return;
+  const showMemberError = (error: unknown, fallback: string) => {
+    const classes = isAxiosError(error) && error.response?.data?.message === "CLASS_TRANSFER_REQUIRED" ? error.response.data.classes : null;
+    setTransferClasses(Array.isArray(classes) ? classes.filter(item => Number.isSafeInteger(item.id) && typeof item.name === "string") : []);
+    setMemberError(getErrorMessageFromUnknown(error, fallback));
+  };
+
+  const removeMember = async () => {
+    if (activeOrg == null || !pendingRemoval || memberPending.current) return;
+    const userId = pendingRemoval.userId;
+    memberPending.current = true; setMemberBusy(true); setMemberError(null); setTransferClasses([]);
     try {
       await api.delete(`/edu/orgs/${activeOrg}/members/${userId}`);
       setMembers(prev => prev.filter(m => m.userId !== userId));
+      setPendingRemoval(null);
+      membersHeadingRef.current?.focus();
       showToast({ message: tr("Учасника видалено", "Member removed"), type: "success" });
     } catch (error) {
-      showToast({ message: getErrorMessageFromUnknown(error, tr("Не вдалося видалити", "Couldn't remove")), type: "error" });
-    }
+      showMemberError(error, tr("Не вдалося видалити", "Couldn't remove"));
+    } finally { memberPending.current = false; setMemberBusy(false); }
   };
 
   if (loading) return <div role="status" aria-live="polite" className="max-w-3xl mx-auto px-4 py-10 font-mono text-text-muted">{tr("Завантаження…", "Loading…")}</div>;
@@ -176,8 +208,8 @@ export const OrgMembersPage: React.FC = () => {
   // join via class join-codes / parent invites and have their own dedicated
   // views (class roster, parent dashboard), so they're summarized, not listed,
   // to keep this list usable as a class roster grows.
-  const staffMembers = members.filter(m => (ROLES as readonly string[]).includes(m.role));
-  const nonStaffCount = members.length - staffMembers.length;
+  const visibleMembers = members.filter(m => (ROLES as readonly string[]).includes(m.role) || m.role === "PARENT" || m.hasParentAccess);
+  const nonStaffCount = members.length - visibleMembers.length;
 
   return (
     <div className="max-w-3xl mx-auto px-4 pb-12">
@@ -188,7 +220,7 @@ export const OrgMembersPage: React.FC = () => {
       />
 
       {orgs.length > 1 && (
-        <select value={activeOrg ?? ""} onChange={e => setActiveOrg(Number(e.target.value))} className={controlClass + " mt-4"}>
+        <select aria-label={tr("Навчальний заклад", "Organization")} disabled={memberBusy} value={activeOrg ?? ""} onChange={e => setActiveOrg(Number(e.target.value))} className={controlClass + " mt-4 min-h-11"}>
           {orgs.map(o => (
             <option key={o.orgId} value={o.orgId}>{o.name ?? `Org ${o.orgId}`}</option>
           ))}
@@ -263,39 +295,51 @@ export const OrgMembersPage: React.FC = () => {
         </Button>
       </div>
 
-      <h3 className="mt-7 mb-2 text-sm font-mono uppercase tracking-[0.08em] text-text-muted leading-none">{tr("Учасники", "Members")}</h3>
+      <h3 ref={membersHeadingRef} tabIndex={-1} className="mt-7 mb-2 text-sm font-mono uppercase tracking-[0.08em] text-text-muted leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Учасники", "Members")}</h3>
+      {memberError && <div ref={memberAlertRef} tabIndex={-1} role="alert" className="mb-3 rounded-xl border border-accent-error/30 bg-accent-error/5 p-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-error">
+        <p>{memberError}</p>
+        {transferClasses.length > 0 && <ul className="mt-2 grid gap-1">{transferClasses.map(cls => <li key={cls.id}><button type="button" onClick={() => navigate(`/edu/classes/${cls.id}/manage?tab=settings&return=members`)} className="min-h-11 rounded-lg px-2 text-left font-semibold text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Передати клас", "Transfer class")}: {cls.name}</button></li>)}</ul>}
+      </div>}
+      {pendingRemoval && <div ref={removalRef} tabIndex={-1} role="region" aria-label={tr("Підтвердження видалення учасника", "Confirm member removal")} className="mb-3 rounded-xl border border-border bg-bg-surface p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <p className="font-semibold">{tr("Відкликати доступ", "Revoke access")}: {pendingRemoval.name || pendingRemoval.username || `#${pendingRemoval.userId}`}?</p>
+        <p className="mt-2 text-sm text-text-secondary">{tr("Буде відкликано доступ до класів і дітей цього закладу та чинні запрошення. Власні учнівські профілі учасника в цьому закладі архівуються; роботи й оцінки збережуться. Доступ до інших закладів залишиться.", "Class and child access and pending invitations in this organization will be revoked. The member’s own student profiles here will be archived; work and grades will be retained. Access to other organizations will remain.")}</p>
+        <div className="mt-3 flex flex-wrap gap-2"><Button variant="secondary" disabled={memberBusy} onClick={() => { setPendingRemoval(null); setMemberError(null); setTransferClasses([]); membersHeadingRef.current?.focus(); }}>{tr("Скасувати", "Cancel")}</Button><Button disabled={memberBusy} onClick={() => void removeMember()}>{memberBusy ? tr("Відкликаємо…", "Revoking…") : tr("Відкликати доступ", "Revoke access")}</Button></div>
+      </div>}
       <div className="flex flex-col gap-1.5">
-        {staffMembers.map(m => (
-          <div key={m.userId} className="flex items-center gap-2.5 px-3 py-2 rounded-[var(--ui-card-radius)] border border-border bg-bg-surface">
+        {visibleMembers.map(m => (
+          <div key={m.userId} className="flex flex-wrap items-center gap-2.5 px-3 py-2 rounded-[var(--ui-card-radius)] border border-border bg-bg-surface">
             <strong className="font-mono text-text-primary">{m.name || m.username || `#${m.userId}`}</strong>
             {m.email && <span className="text-xs text-text-muted truncate">{m.email}</span>}
-            <select
+            {(ROLES as readonly string[]).includes(m.role) ? <select
               value={m.role}
               onChange={e => changeRole(m.userId, e.target.value)}
-              className={controlClass + " ml-auto !py-1 !px-2 text-xs"}
+              disabled={memberBusy}
+              className={controlClass + " ml-auto min-h-11 !px-2 text-xs"}
               aria-label={tr("Роль", "Role")}
             >
               {ROLES.map(r => (
                 <option key={r} value={r}>{roleLabel(r)}</option>
               ))}
-            </select>
+            </select> : <span className="ml-auto text-xs text-text-secondary">{roleLabel(m.role)}</span>}
+            {m.hasParentAccess && m.role !== "PARENT" && <span className="text-xs text-text-muted">{tr("Доступ до дітей", "Child access")}</span>}
             <Button
               variant="ghost"
               className="text-xs"
-              disabled={m.userId === selfUserId}
+              disabled={memberBusy || m.userId === selfUserId}
               title={m.userId === selfUserId ? tr("Не можна видалити себе", "Can't remove yourself") : undefined}
-              onClick={() => removeMember(m.userId, m.name || m.username || `#${m.userId}`)}
+              onClick={() => { setMemberError(null); setTransferClasses([]); setPendingRemoval(m); }}
               aria-label={tr("Видалити", "Remove")}
             >
               <X className="w-3.5 h-3.5" />
             </Button>
+            <SchoolAccountActivation orgId={activeOrg!} userId={m.userId} email={m.email} required={m.accountSetupRequired} canSetEmail={m.canSetActivationEmail} disabled={busy || memberBusy} onUpdated={() => loadOrg(activeOrg!)} />
           </div>
         ))}
         {nonStaffCount > 0 && (
           <p className="text-xs text-text-muted mt-1">
             {tr(
-              `+ ${nonStaffCount} учнів/батьків (керуються через клас і запрошення батьків)`,
-              `+ ${nonStaffCount} students/parents (managed via the class roster and parent invites)`
+              `+ ${nonStaffCount} учнів (керуються через список учнів класу)`,
+              `+ ${nonStaffCount} students (managed via the class roster)`
             )}
           </p>
         )}

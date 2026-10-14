@@ -7,6 +7,7 @@ import { Student } from "../../entities/Student";
 import { Membership } from "../../entities/Membership";
 import { getDeadlinesForClasses, classifyAgenda, summarizeAgenda } from "../../services/edu/agenda";
 import { roleCan } from "../../services/edu/rbac";
+import { authorizeClassForReq } from "../../middleware/orgContext";
 import { logger } from "../../utils/logger";
 
 /**
@@ -61,10 +62,13 @@ router.get("/agenda", authRequired, async (req: AuthRequest, res: Response) => {
         const allClasses = await classRepo().find({ select: ["id"] });
         for (const c of allClasses) ids.add(c.id);
       }
-      classIds = Array.from(ids);
+      // Org membership supplies candidate classes; the central authorizer
+      // restricts teachers and assistants to their assigned classes.
+      const access = await Promise.all(Array.from(ids).map(async id => ({ id, allowed: (await authorizeClassForReq(req, id, "CLASS_VIEW"))?.allowed })));
+      classIds = access.filter(item => item.allowed).map(item => item.id);
     }
 
-    const raw = await getDeadlinesForClasses(classIds, from, to);
+    const raw = await getDeadlinesForClasses(classIds, from, to, req.studentId);
     const items = classifyAgenda(raw, now);
     return res.json({ items, summary: summarizeAgenda(items) });
   } catch (error: unknown) {

@@ -77,10 +77,15 @@ function normStr(s: unknown, caseSensitive: boolean): string {
 function setsEqual(a: number[], b: number[]): boolean {
   if (a.length !== b.length) return false;
   const sa = new Set(a);
-  return b.every((x) => sa.has(x));
+  return sa.size === a.length && new Set(b).size === b.length && b.every((x) => sa.has(x));
+}
+
+function isChoiceIndex(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
 function gradeShortAnswer(q: QuizQuestion, answer: unknown): boolean {
+  if (typeof answer !== "string" || !answer.trim()) return false;
   const cs = Boolean(q.caseSensitive);
   if (typeof q.pattern === "string" && q.pattern) {
     try {
@@ -115,7 +120,7 @@ function gradeMatching(q: QuizQuestion, answer: unknown): number {
   const provided = Array.isArray(answer) ? answer : [];
   let correctCount = 0;
   for (let i = 0; i < correct.length; i++) {
-    if (Number(provided[i]) === Number(correct[i])) correctCount++;
+    if (isChoiceIndex(provided[i]) && isChoiceIndex(correct[i]) && provided[i] === correct[i]) correctCount++;
   }
   return correctCount / correct.length;
 }
@@ -124,14 +129,16 @@ function gradeMatching(q: QuizQuestion, answer: unknown): number {
 function gradeQuestionFraction(q: QuizQuestion, answer: unknown): number | null {
   switch (q.type) {
     case "SINGLE_CHOICE":
-      return Number(answer) === Number(q.correctIndex) ? 1 : 0;
+      return isChoiceIndex(answer) && isChoiceIndex(q.correctIndex) && answer === q.correctIndex ? 1 : 0;
     case "MULTIPLE_CHOICE": {
-      const sel = Array.isArray(answer) ? answer.map(Number) : [];
-      const correct = Array.isArray(q.correctIndexes) ? q.correctIndexes.map(Number) : [];
+      if (!Array.isArray(answer) || !answer.every(isChoiceIndex)
+        || !Array.isArray(q.correctIndexes) || !q.correctIndexes.length || !q.correctIndexes.every(isChoiceIndex)) return 0;
+      const sel = answer;
+      const correct = q.correctIndexes;
       return setsEqual(sel, correct) ? 1 : 0; // all-or-nothing
     }
     case "TRUE_FALSE":
-      return Boolean(answer) === Boolean(q.correct) ? 1 : 0;
+      return typeof answer === "boolean" && typeof q.correct === "boolean" && answer === q.correct ? 1 : 0;
     case "SHORT_ANSWER":
       return gradeShortAnswer(q, answer) ? 1 : 0;
     case "FILL_BLANK":

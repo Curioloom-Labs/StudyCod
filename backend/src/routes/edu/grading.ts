@@ -1,3 +1,4 @@
+import { gradeReviewRevision, summaryReviewRevision, emptyReviewRevision, requireReviewRevision } from "../../services/edu/reviewRevision";
 import { Router, Response } from "express";
 import { z } from "zod";
 import { AppDataSource } from "../../data-source";
@@ -10,7 +11,7 @@ import { Student } from "../../entities/Student";
 import { TopicTask } from "../../entities/TopicTask";
 import { EduTask } from "../../entities/EduTask";
 import { EduGrade } from "../../entities/EduGrade";
-import { normalizeRubric, computeRubricTotal } from "../../services/edu/rubric";
+import { normalizeRubric, computeRubricTotal, validateRubricDefinition, validateRubricScores } from "../../services/edu/rubric";
 import { reviewCode } from "../../services/edu/aiCodeReview";
 import { SummaryGrade } from "../../entities/SummaryGrade";
 import { ControlWork } from "../../entities/ControlWork";
@@ -22,6 +23,12 @@ import { logger } from "../../utils/logger";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
 import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
 import { normalizeScaleMode } from "../../utils/gradingScale";
+
+import { HttpError } from "../../utils/httpError";
+import { withGradeWrite, withStudentGradeWrite, requireGradebookId, requireRawGrade } from "../../services/edu/gradebookWrites";
+import { lockClassActor } from "../../services/edu/lifecycleAccess";
+import { ManualSubmission } from "../../entities/ManualSubmission";
+import { LessonAttempt } from "../../entities/LessonAttempt";
 
 const router = Router();
 
@@ -52,19 +59,24 @@ const aiDetectLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 10, mes
 
 const manualTaskGradeBodySchema = z.object({
   total: z.number().finite().min(0).max(100),
-  feedback: z.string().max(20_000).optional()
+  feedback: z.string().max(20_000).optional(),
+  expectedRevision: z.unknown().optional()
 });
 
 const controlWorkGradeBodySchema = z.object({
-  grade: z.number().finite().min(0).max(100)
-});
+  grade: z.number().finite().min(0).max(100).optional(),
+  useCalculated: z.boolean().optional(),
+  expectedRevision: z.unknown().optional()
+}).refine(value => value.useCalculated === true ? value.grade === undefined : value.grade !== undefined);
 
 const updateGradeBodySchema = z
   .object({
     total: z.number().finite().min(0).max(100).optional(),
-    feedback: z.string().max(20_000).optional()
+    feedback: z.string().max(20_000).optional(),
+    expectedRevision: z.unknown().optional(),
+    latestOnly: z.boolean().optional()
   })
-  .strict();
+  .strict().refine(value => value.total !== undefined || value.feedback !== undefined);
 
 function messageForGradeBodyError(err: z.ZodError, missingMessage: string, invalidMessage: string): string {
   for (const issue of err.issues) {
@@ -95,6 +107,21 @@ function disableCache(res: Response) {
   res.set("Expires", "0");
 }
 
+
+async function recalculateControl(manager: import("typeorm").EntityManager, grade: EduGrade) {
+  const controlWorkId = grade.topicTask?.type === "CONTROL" ? grade.topicTask.controlWork?.id : null;
+  if (!controlWorkId) return;
+  await saveControlSummaryGradeForNewSystemWithManager(manager, controlWorkId, grade.student.id, null);
+  await markControlWorkAttemptCompletedIfReadyWithManager(manager, controlWorkId, grade.student.id);
+}
+
+async function markManualArtifactGraded(manager: import("typeorm").EntityManager, grade: EduGrade) {
+  if (grade.task?.taskMode !== "MANUAL") return;
+  const repo = manager.getRepository(ManualSubmission);
+  const artifact = await repo.findOneBy({ task: { id: grade.task.id }, student: { id: grade.student.id } });
+  if (artifact) await repo.update(artifact.id, { status: "GRADED" });
+}
+
 router.post("/tasks/:taskId/grades/:studentId", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (req.userType === "STUDENT" || req.studentId) {
@@ -105,8 +132,8 @@ router.post("/tasks/:taskId/grades/:studentId", authRequired, async (req: AuthRe
       return res.status(401).json({ message: "UNAUTHORIZED" });
     }
 
-    const taskId = parseInt(req.params.taskId, 10);
-    const studentId = parseInt(req.params.studentId, 10);
+    const taskId = requireGradebookId(req.params.taskId);
+    const studentId = requireGradebookId(req.params.studentId);
     if (isNaN(taskId) || isNaN(studentId)) {
       return res.status(400).json({ message: "INVALID_ID" });
     }
@@ -121,7 +148,7 @@ router.post("/tasks/:taskId/grades/:studentId", authRequired, async (req: AuthRe
 
     const normalizedTotal = clampGradeToInt(total);
 
-    const task = await topicTaskRepo()
+    let task = await topicTaskRepo()
       .createQueryBuilder("task")
       .leftJoinAndSelect("task.topic", "topic")
       .leftJoinAndSelect("topic.class", "class")
@@ -141,43 +168,26 @@ router.post("/tasks/:taskId/grades/:studentId", authRequired, async (req: AuthRe
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    const student = await studentRepo().findOne({ where: { id: studentId }, relations: ["class"] });
-    if (!student) {
-      return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
-    }
-
-    if (!task.topic.class || student.class.id !== task.topic.class.id) {
-      return res.status(403).json({ message: "STUDENT_NOT_IN_CLASS" });
-    }
-
-    let grade = await gradeRepo()
-      .createQueryBuilder("grade")
-      .where("grade.student_id = :studentId", { studentId })
-      .andWhere("grade.topic_task_id = :taskId", { taskId })
-      .orderBy("grade.created_at", "DESC")
-      .getOne();
-
-    const wasExistingGrade = Boolean(grade);
-
-    if (grade) {
-      grade.total = normalizedTotal;
-      grade.feedback = feedback || null;
-      grade.isManuallyGraded = true;
-      grade.isCompleted = true;
-      await gradeRepo().save(grade);
-    } else {
-      grade = gradeRepo().create({
-        student,
-        topicTask: task,
-        total: normalizedTotal,
-        feedback: feedback || null,
-        isManuallyGraded: true,
-        isCompleted: true,
-        testsPassed: 0,
-        testsTotal: 0
-      });
-      await gradeRepo().save(grade);
-    }
+    const classId = task.topic.class!.id;
+    const { grade, student, wasExistingGrade, currentTask } = await withStudentGradeWrite(studentId, classId, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async (manager, student) => {
+      const currentTask = await manager.getRepository(TopicTask).findOne({ where: { id: taskId, topic: { class: { id: classId } } }, relations: ["topic", "topic.class", "controlWork"] });
+      if (!currentTask) throw new HttpError(409, "TASK_CHANGED");
+      const repo = manager.getRepository(EduGrade);
+      let grade = await repo.createQueryBuilder("grade").where("grade.student_id = :studentId", { studentId })
+        .andWhere("grade.topic_task_id = :taskId", { taskId }).orderBy("grade.created_at", "DESC").addOrderBy("grade.id", "DESC").setLock("pessimistic_write").getOne();
+      requireReviewRevision(parsedBody.data.expectedRevision, grade ? gradeReviewRevision(grade) : emptyReviewRevision("task", studentId, taskId));
+      const wasExistingGrade = Boolean(grade);
+      if (grade) {
+        const patch = { total: normalizedTotal, isManuallyGraded: true, isCompleted: true, rubricScores: null, score: null, maxScore: null, ...(feedback !== undefined ? { feedback: feedback || null } : {}) };
+        await repo.update(grade.id, patch); Object.assign(grade, patch);
+      } else {
+        grade = await repo.save(repo.create({ student, topicTask: currentTask, total: normalizedTotal, feedback: feedback || null, isManuallyGraded: true, isCompleted: true, testsPassed: 0, testsTotal: 0 }));
+      }
+      grade.student = student; grade.topicTask = currentTask;
+      await recalculateControl(manager, grade);
+      return { grade, student, wasExistingGrade, currentTask };
+    });
+    task = currentTask;
 
     res.json({
       message: "GRADE_SAVED",
@@ -202,7 +212,7 @@ router.post("/tasks/:taskId/grades/:studentId", authRequired, async (req: AuthRe
       event: wasExistingGrade ? "updated" : "created",
       itemTitle: task.title,
       grade: normalizedTotal,
-      feedback: feedback || null,
+      feedback: grade.feedback || null,
       className: task.topic.class?.name ?? null,
       gradingSystem: task.topic.class?.gradingSystem ?? null,
       gradeScaleMode: normalizeScaleMode(task.topic.class?.gradeScaleMode),
@@ -210,17 +220,8 @@ router.post("/tasks/:taskId/grades/:studentId", authRequired, async (req: AuthRe
       requestId: req.requestId
     });
 
-    if (task.controlWork && task.controlWork.id) {
-      try {
-        await AppDataSource.transaction("SERIALIZABLE", async manager => {
-          await saveControlSummaryGradeForNewSystemWithManager(manager, task.controlWork!.id, studentId, null);
-          await markControlWorkAttemptCompletedIfReadyWithManager(manager, task.controlWork!.id, studentId);
-        });
-      } catch (e: unknown) {
-        logger.error("Failed to recalculate control work grade after manual grading", { requestId: req.requestId, err: e });
-      }
-    }
   } catch (error: unknown) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     logger.error("Error creating/updating grade", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -234,8 +235,8 @@ router.delete("/tasks/:taskId/grades/:studentId", authRequired, async (req: Auth
 
     if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
 
-    const taskId = parseInt(req.params.taskId, 10);
-    const studentId = parseInt(req.params.studentId, 10);
+    const taskId = requireGradebookId(req.params.taskId);
+    const studentId = requireGradebookId(req.params.studentId);
     if (isNaN(taskId) || isNaN(studentId)) {
       return res.status(400).json({ message: "INVALID_ID" });
     }
@@ -245,6 +246,7 @@ router.delete("/tasks/:taskId/grades/:studentId", authRequired, async (req: Auth
       .leftJoinAndSelect("task.topic", "topic")
       .leftJoinAndSelect("topic.class", "class")
       .leftJoinAndSelect("class.teacher", "teacher")
+      .leftJoinAndSelect("task.controlWork", "controlWork")
       .where("task.id = :taskId", { taskId })
       .getOne();
 
@@ -257,20 +259,18 @@ router.delete("/tasks/:taskId/grades/:studentId", authRequired, async (req: Auth
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    const existing = await gradeRepo()
-      .createQueryBuilder("grade")
-      .where("grade.student_id = :studentId", { studentId })
-      .andWhere("grade.topic_task_id = :taskId", { taskId })
-      .getMany();
-
-    if (existing.length === 0) {
-      return res.json({ message: "NO_GRADES_TO_DELETE", deleted: 0 });
-    }
-
-    await gradeRepo().remove(existing);
-
-    return res.json({ message: "GRADE_DELETED", deleted: existing.length });
+    const deleted = await withStudentGradeWrite(studentId, task.topic.class!.id, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async (manager, student) => {
+      const currentTask = await manager.getRepository(TopicTask).findOne({ where: { id: taskId, topic: { class: { id: student.class.id } } }, relations: ["controlWork"] });
+      if (!currentTask) throw new HttpError(409, "TASK_CHANGED");
+      const repo = manager.getRepository(EduGrade);
+      const existing = await repo.findBy({ student: { id: studentId }, topicTask: { id: taskId } });
+      if (existing.length) await repo.delete(existing.map(grade => grade.id));
+      await recalculateControl(manager, { student, topicTask: currentTask } as EduGrade);
+      return existing.length;
+    });
+    return res.json({ message: deleted ? "GRADE_DELETED" : "NO_GRADES_TO_DELETE", deleted });
   } catch (error: unknown) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     logger.error("Error deleting task grades", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -383,8 +383,8 @@ router.put("/control-works/:controlWorkId/students/:studentId/grade", authRequir
       return res.status(401).json({ message: "UNAUTHORIZED" });
     }
 
-    const controlWorkId = parseInt(req.params.controlWorkId, 10);
-    const studentId = parseInt(req.params.studentId, 10);
+    const controlWorkId = requireGradebookId(req.params.controlWorkId);
+    const studentId = requireGradebookId(req.params.studentId);
     if (isNaN(controlWorkId) || isNaN(studentId)) {
       return res.status(400).json({ message: "INVALID_ID" });
     }
@@ -395,7 +395,7 @@ router.put("/control-works/:controlWorkId/students/:studentId/grade", authRequir
       return res.status(400).json({ message: msg });
     }
 
-    const normalizedGrade = clampGradeToInt(parsedBody.data.grade);
+    const normalizedGrade = parsedBody.data.useCalculated === true ? null : clampGradeToInt(parsedBody.data.grade);
 
     const controlWork = await controlWorkRepo()
       .createQueryBuilder("controlWork")
@@ -417,50 +417,29 @@ router.put("/control-works/:controlWorkId/students/:studentId/grade", authRequir
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    const student = await studentRepo().findOne({ where: { id: studentId }, relations: ["class"] });
-    if (!student) {
-      return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
-    }
-
-    if (student.class.id !== controlWork.topic.class.id) {
-      return res.status(403).json({ message: "STUDENT_NOT_IN_CLASS" });
-    }
-
-    let summaryGrade = await summaryGradeRepo()
-      .createQueryBuilder("summaryGrade")
-      .leftJoinAndSelect("summaryGrade.controlWork", "cw")
-      .where("summaryGrade.student_id = :studentId", { studentId })
-      .andWhere("summaryGrade.control_work_id = :controlWorkId", { controlWorkId })
-      .getOne();
-
-    const wasExistingSummaryGrade = Boolean(summaryGrade);
-
-    if (summaryGrade) {
-      summaryGrade.grade = normalizedGrade;
-      summaryGrade.controlWork = controlWork;
-      summaryGrade.topic = controlWork.topic;
-      summaryGrade.class = controlWork.topic.class;
-      summaryGrade.assessmentType = AssessmentType.CONTROL;
-      if (!summaryGrade.name) {
-        summaryGrade.name = controlWork.title || `Контрольна робота #${controlWork.id}`;
+    const { student, summaryGrade, wasExistingSummaryGrade } = await withStudentGradeWrite(studentId, controlWork.topic.class.id, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async (manager, student) => {
+      const currentControl = await manager.getRepository(ControlWork).findOne({ where: { id: controlWorkId, topic: { class: { id: student.class.id } } }, relations: ["topic"] });
+      if (!currentControl) throw new HttpError(409, "TASK_CHANGED");
+      const repo = manager.getRepository(SummaryGrade);
+      let summaryGrade = await repo.findOne({ where: { student: { id: studentId }, controlWork: { id: controlWorkId } }, order: { createdAt: "DESC", id: "DESC" } });
+      requireReviewRevision(parsedBody.data.expectedRevision, summaryGrade ? summaryReviewRevision(summaryGrade) : emptyReviewRevision("control", studentId, controlWorkId));
+      const wasExistingSummaryGrade = Boolean(summaryGrade);
+      if (normalizedGrade === null) {
+        if (summaryGrade) await repo.update(summaryGrade.id, { manualOverrideGrade: null });
+        await saveControlSummaryGradeForNewSystemWithManager(manager, controlWorkId, student.id, null);
+      } else {
+        await saveControlSummaryGradeForNewSystemWithManager(manager, controlWorkId, student.id, null);
+        summaryGrade = await repo.findOne({ where: { student: { id: studentId }, controlWork: { id: controlWorkId } }, order: { createdAt: "DESC", id: "DESC" } });
+        if (summaryGrade) await repo.update(summaryGrade.id, { grade: normalizedGrade, manualOverrideGrade: normalizedGrade });
+        else await repo.save(repo.create({ student, class: student.class, topic: currentControl.topic, controlWork: currentControl, grade: normalizedGrade, manualOverrideGrade: normalizedGrade, calculatedGrade: null, assessmentType: AssessmentType.CONTROL, name: currentControl.title || 'Control #' + controlWorkId }));
       }
-      await summaryGradeRepo().save(summaryGrade);
-    } else {
-      summaryGrade = summaryGradeRepo().create({
-        student,
-        class: controlWork.topic.class,
-        controlWork,
-        topic: controlWork.topic,
-        grade: normalizedGrade,
-        assessmentType: AssessmentType.CONTROL,
-        name: controlWork.title || `Контрольна робота #${controlWork.id}`
-      });
-      await summaryGradeRepo().save(summaryGrade);
-    }
+      summaryGrade = await repo.findOne({ where: { student: { id: studentId }, controlWork: { id: controlWorkId } }, order: { createdAt: "DESC", id: "DESC" } });
+      return { student, summaryGrade, wasExistingSummaryGrade };
+    });
 
-    res.json({ message: "GRADE_SAVED", summaryGrade: { id: summaryGrade.id, grade: summaryGrade.grade } });
+    res.json({ message: "GRADE_SAVED", summaryGrade: summaryGrade ? { id: summaryGrade.id, grade: summaryGrade.grade, manualOverrideGrade: summaryGrade.manualOverrideGrade, calculatedGrade: summaryGrade.calculatedGrade } : null });
 
-    void notifyStudentGradeChange({
+    if (summaryGrade) void notifyStudentGradeChange({
       student: {
         id: student.id,
         email: student.email,
@@ -472,7 +451,7 @@ router.put("/control-works/:controlWorkId/students/:studentId/grade", authRequir
       kind: "control",
       event: wasExistingSummaryGrade ? "updated" : "created",
       itemTitle: controlWork.title || `Контрольна робота #${controlWork.id}`,
-      grade: normalizedGrade,
+      grade: Number(summaryGrade.grade),
       className: controlWork.topic.class?.name ?? null,
       gradingSystem: controlWork.topic.class?.gradingSystem ?? null,
       gradeScaleMode: normalizeScaleMode(controlWork.topic.class?.gradeScaleMode),
@@ -480,6 +459,7 @@ router.put("/control-works/:controlWorkId/students/:studentId/grade", authRequir
       requestId: req.requestId
     });
   } catch (error: unknown) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     logger.error("Error updating control work grade", { requestId: req.requestId, err: error });
     res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -823,14 +803,23 @@ router.get("/control-works/:controlWorkId/students/:studentId/work", authRequire
   }
 });
 
+router.get("/grades/:gradeId/review", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.userType === "STUDENT" || req.studentId || !req.userId) return res.status(403).json({ message: "ONLY_TEACHERS_CAN_UPDATE_GRADES" });
+    const grade = await withGradeWrite(requireGradebookId(req.params.gradeId), { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async (_manager, grade) => grade);
+    res.set("Cache-Control", "no-store");
+    return res.json({ grade: { id: grade.id, total: grade.total, feedback: grade.feedback, revision: gradeReviewRevision(grade) } });
+  } catch (error) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const user = await userRepo().findOne({ where: { id: req.userId } });
-    if (!user || user.userMode !== "EDUCATIONAL") {
-      return res.status(403).json({ message: "ONLY_TEACHERS_CAN_UPDATE_GRADES" });
-    }
+    if (req.userType === "STUDENT" || req.studentId || !req.userId) return res.status(403).json({ message: "ONLY_TEACHERS_CAN_UPDATE_GRADES" });
 
-    const gradeId = parseInt(req.params.gradeId, 10);
+    const gradeId = requireGradebookId(req.params.gradeId);
     if (isNaN(gradeId)) {
       return res.status(400).json({ message: "INVALID_GRADE_ID" });
     }
@@ -842,46 +831,17 @@ router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Respo
     }
     const { total, feedback } = parsedBody.data;
 
-    const updated = await AppDataSource.transaction("SERIALIZABLE", async manager => {
-      const grade = await manager.getRepository(EduGrade).findOne({
-        where: { id: gradeId },
-        relations: ["student", "student.class", "student.class.teacher", "task", "topicTask", "topicTask.controlWork"]
-      });
-
-      if (!grade) {
-        throw new Error("GRADE_NOT_FOUND");
+    const updated = await withGradeWrite(gradeId, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async (manager, grade) => {
+      requireReviewRevision(parsedBody.data.expectedRevision, gradeReviewRevision(grade));
+      if (parsedBody.data.latestOnly && (grade.topicTask || grade.task)) {
+        const latest = await manager.getRepository(EduGrade).findOne({ where: { student: { id: grade.student.id }, ...(grade.topicTask ? { topicTask: { id: grade.topicTask.id } } : { task: { id: grade.task!.id } }) }, order: { createdAt: "DESC", id: "DESC" } });
+        if (latest?.id !== grade.id) throw new HttpError(409, "GRADE_CHANGED");
       }
-
-      const access = grade.student.class
-        ? await authorizeClassAction(req.userId as number, grade.student.class.id, "GRADE_EDIT", {
-            manager,
-            isSystemAdmin: req.userRole === "SYSTEM_ADMIN"
-          })
-        : null;
-      if (!access || !access.allowed) {
-        throw new Error("ACCESS_DENIED");
-      }
-
-      if (total !== undefined) {
-        if (total < 0 || total > 100) {
-          throw new Error("INVALID_GRADE_VALUE");
-        }
-        grade.total = total;
-      }
-
-      if (feedback !== undefined) {
-        grade.feedback = feedback || null;
-      }
-
-      grade.isManuallyGraded = true;
-      await manager.getRepository(EduGrade).save(grade);
-
-      const controlWorkId = grade.topicTask?.type === "CONTROL" ? grade.topicTask?.controlWork?.id : null;
-      if (controlWorkId) {
-        await saveControlSummaryGradeForNewSystemWithManager(manager, controlWorkId, grade.student.id, null);
-        await markControlWorkAttemptCompletedIfReadyWithManager(manager, controlWorkId, grade.student.id);
-      }
-
+      const patch: Partial<Pick<EduGrade, "total" | "feedback" | "isManuallyGraded" | "isCompleted" | "rubricScores" | "score" | "maxScore">> = {};
+      if (total !== undefined) Object.assign(patch, { total: requireRawGrade(total), isManuallyGraded: true, isCompleted: true, rubricScores: null, score: null, maxScore: null });
+      if (feedback !== undefined) patch.feedback = feedback || null;
+      await manager.getRepository(EduGrade).update(grade.id, patch); Object.assign(grade, patch);
+      if (total !== undefined) { await markManualArtifactGraded(manager, grade); await recalculateControl(manager, grade); }
       return grade;
     });
 
@@ -890,7 +850,7 @@ router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Respo
       grade: { id: updated.id, total: updated.total!, feedback: updated.feedback || undefined, isManuallyGraded: updated.isManuallyGraded }
     });
 
-    void notifyStudentGradeChange({
+    if (updated.total !== null) void notifyStudentGradeChange({
       student: {
         id: updated.student.id,
         email: updated.student.email,
@@ -902,7 +862,7 @@ router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Respo
       kind: "task",
       event: "updated",
       itemTitle: updated.topicTask?.title || updated.task?.title || `Task #${updated.id}`,
-      grade: updated.total ?? 0,
+      grade: updated.total!,
       feedback: updated.feedback || null,
       className: updated.student.class?.name ?? null,
       gradingSystem: updated.student.class?.gradingSystem ?? null,
@@ -911,6 +871,7 @@ router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Respo
       requestId: req.requestId
     });
   } catch (error: unknown) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     if (errorMessage(error) === "GRADE_NOT_FOUND") {
       return res.status(404).json({ message: "GRADE_NOT_FOUND" });
     }
@@ -928,7 +889,7 @@ router.put("/grades/:gradeId", authRequired, async (req: AuthRequest, res: Respo
 
 // --- Rubric grading (Tier 1) ---
 
-async function ownedEduTaskOr403(req: AuthRequest, res: Response): Promise<EduTask | null> {
+async function ownedEduTaskOr403(req: AuthRequest, res: Response, capability: "CONTENT_AUTHOR" | "GRADE_EDIT" = "CONTENT_AUTHOR"): Promise<EduTask | null> {
   if (req.userType === "STUDENT" || req.studentId || !req.userId) {
     res.status(403).json({ message: "ONLY_TEACHERS" });
     return null;
@@ -950,7 +911,7 @@ async function ownedEduTaskOr403(req: AuthRequest, res: Response): Promise<EduTa
     return null;
   }
   const access = task.lesson?.class
-    ? await authorizeClassForReq(req, task.lesson.class.id, "CONTENT_AUTHOR")
+    ? await authorizeClassForReq(req, task.lesson.class.id, capability)
     : null;
   if (!access || !access.allowed) {
     res.status(403).json({ message: "ACCESS_DENIED" });
@@ -960,11 +921,18 @@ async function ownedEduTaskOr403(req: AuthRequest, res: Response): Promise<EduTa
 }
 
 // Read a task's rubric (teacher).
+async function rubricHasWork(manager: import("typeorm").EntityManager, task: EduTask): Promise<boolean> {
+  return Boolean(await manager.getRepository(EduGrade).countBy({ task: { id: task.id } })
+    || await manager.getRepository(ManualSubmission).countBy({ task: { id: task.id } })
+    || (task.lesson.type === "CONTROL" && await manager.getRepository(LessonAttempt).countBy({ lesson: { id: task.lesson.id } })));
+}
+
 router.get("/tasks/:taskId/rubric", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const task = await ownedEduTaskOr403(req, res);
+    const task = await ownedEduTaskOr403(req, res, "GRADE_EDIT");
     if (!task) return;
-    return res.json({ rubric: normalizeRubric(task.rubric) });
+    const editAccess = await authorizeClassForReq(req, task.lesson.class.id, "CONTENT_AUTHOR");
+    return res.json({ rubric: normalizeRubric(task.rubric), locked: await rubricHasWork(AppDataSource.manager, task), canEdit: Boolean(editAccess?.allowed) });
   } catch (error: unknown) {
     logger.error("[edu/rubric] get failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -976,13 +944,22 @@ router.put("/tasks/:taskId/rubric", authRequired, async (req: AuthRequest, res: 
   try {
     const task = await ownedEduTaskOr403(req, res);
     if (!task) return;
-    const parsed = z.object({ rubric: z.array(z.unknown()) }).safeParse(req.body ?? {});
-    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
-    const rubric = normalizeRubric(parsed.data.rubric);
-    task.rubric = rubric.length ? rubric : null;
-    await eduTaskRepo().save(task);
+    const rubric = validateRubricDefinition(req.body?.rubric);
+    if (rubric === null) throw new HttpError(400, "INVALID_RUBRIC");
+    await AppDataSource.transaction("READ COMMITTED", async manager => {
+      await lockClassActor(manager, task.lesson.class.id, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, "CONTENT_AUTHOR");
+      const repo = manager.getRepository(EduTask);
+      const current = await repo.findOne({ where: { id: task.id }, lock: { mode: "pessimistic_write" } });
+      if (!current) throw new HttpError(404, "TASK_NOT_FOUND");
+      const currentTask = await repo.findOne({ where: { id: task.id, lesson: { class: { id: task.lesson.class.id } } }, relations: ["lesson"] });
+      if (!currentTask) throw new HttpError(409, "TASK_CHANGED");
+      if (JSON.stringify(normalizeRubric(current.rubric)) === JSON.stringify(rubric)) return;
+      if (await rubricHasWork(manager, currentTask)) throw new HttpError(409, "RUBRIC_LOCKED");
+      await repo.update(task.id, { rubric: rubric.length ? rubric : null });
+    });
     return res.json({ rubric });
   } catch (error: unknown) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     logger.error("[edu/rubric] put failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -991,39 +968,29 @@ router.put("/tasks/:taskId/rubric", authRequired, async (req: AuthRequest, res: 
 // Grade a submission by rubric: total is derived from per-criterion scores.
 router.post("/grades/:gradeId/rubric", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const user = await userRepo().findOne({ where: { id: req.userId } });
-    if (!user || user.userMode !== "EDUCATIONAL") {
-      return res.status(403).json({ message: "ONLY_TEACHERS_CAN_UPDATE_GRADES" });
-    }
-    const gradeId = parseInt(req.params.gradeId, 10);
+    if (req.userType === "STUDENT" || req.studentId || !req.userId) return res.status(403).json({ message: "ONLY_TEACHERS_CAN_UPDATE_GRADES" });
+    const gradeId = requireGradebookId(req.params.gradeId);
     if (isNaN(gradeId)) return res.status(400).json({ message: "INVALID_GRADE_ID" });
 
     const parsed = z.object({
-      scores: z.record(z.string(), z.number()),
-      feedback: z.string().optional()
+      scores: z.record(z.string(), z.number().finite()),
+      feedback: z.string().max(20_000).optional(),
+      expectedRevision: z.unknown().optional()
     }).safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
 
-    const grade = await gradeRepo().findOne({
-      where: { id: gradeId },
-      relations: ["student", "student.class", "student.class.teacher", "task", "topicTask"]
+    const { grade, result } = await withGradeWrite(gradeId, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async (manager, grade) => {
+      requireReviewRevision(parsed.data.expectedRevision, gradeReviewRevision(grade));
+      const rubric = normalizeRubric(grade.task?.rubric);
+      if (!rubric.length) throw new HttpError(400, "NO_RUBRIC");
+      if (!validateRubricScores(rubric, parsed.data.scores)) throw new HttpError(400, "INVALID_RUBRIC_SCORES");
+      const result = computeRubricTotal(rubric, parsed.data.scores);
+      const patch = { total: result.percent, rubricScores: JSON.stringify(parsed.data.scores), isManuallyGraded: true, isCompleted: true, score: null, maxScore: null, ...(parsed.data.feedback !== undefined ? { feedback: parsed.data.feedback || null } : {}) };
+      await manager.getRepository(EduGrade).update(grade.id, patch); Object.assign(grade, patch);
+      await markManualArtifactGraded(manager, grade);
+      await recalculateControl(manager, grade);
+      return { grade, result };
     });
-    if (!grade) return res.status(404).json({ message: "GRADE_NOT_FOUND" });
-    const rubricGradeAccess = grade.student.class
-      ? await authorizeClassForReq(req, grade.student.class.id, "GRADE_EDIT")
-      : null;
-    if (!rubricGradeAccess || !rubricGradeAccess.allowed) {
-      return res.status(403).json({ message: "ACCESS_DENIED" });
-    }
-    const rubric = normalizeRubric(grade.task?.rubric);
-    if (!rubric.length) return res.status(400).json({ message: "NO_RUBRIC" });
-
-    const result = computeRubricTotal(rubric, parsed.data.scores);
-    grade.total = result.percent;
-    grade.rubricScores = JSON.stringify(parsed.data.scores);
-    if (parsed.data.feedback !== undefined) grade.feedback = parsed.data.feedback || null;
-    grade.isManuallyGraded = true;
-    await gradeRepo().save(grade);
 
     res.json({
       message: "GRADE_UPDATED",
@@ -1051,6 +1018,7 @@ router.post("/grades/:gradeId/rubric", authRequired, async (req: AuthRequest, re
       requestId: req.requestId
     });
   } catch (error: unknown) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     logger.error("[edu/rubric] grade failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

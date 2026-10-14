@@ -9,6 +9,8 @@ import type { CachedUser } from "../services/auth/userCache";
 
 const cache = require("../services/auth/userCache") as typeof import("../services/auth/userCache");
 const revocation = require("../services/auth/jwtRevocation") as typeof import("../services/auth/jwtRevocation");
+const schoolPassword = require("../services/edu/studentCredentialVersion") as typeof import("../services/edu/studentCredentialVersion");
+const schoolSessions = require("../services/edu/userSessions") as typeof import("../services/edu/userSessions");
 
 for (const scenario of [
   { mode: "CONTEST", enrollmentId: null, reads: 0, runtime: "PYTHON" },
@@ -21,10 +23,14 @@ for (const scenario of [
       currentCourseEnrollmentId: scenario.enrollmentId }) as CachedUser);
     t.mock.method(revocation, "isJtiRevoked", async () => false);
     t.mock.method(revocation, "wasTokenIssuedBeforeRevocation", async () => false);
+    const issuedPassword = t.mock.method(schoolPassword, "readClassIssuedPasswordState", async () => null);
+    const sessionState = t.mock.method(schoolSessions, "readEducationalUserSessionState", async () =>
+      scenario.mode === "EDUCATIONAL" ? ({ id: 7, role: "USER", userMode: scenario.mode,
+        currentCourseEnrollmentId: scenario.enrollmentId, eduSessionVersion: 0 } as any) : null);
     const repository = t.mock.method(AppDataSource, "getRepository", (() => ({
       findOne: async () => ({ variant: { runtime: "CPP" } }),
     })) as unknown as typeof AppDataSource.getRepository);
-    const token = jwt.sign({ userId: 7, jti: "test-jti" }, JWT_SECRET, { expiresIn: "1h" });
+    const token = jwt.sign({ userId: 7, userMode: scenario.mode, jti: "test-jti" }, JWT_SECRET, { expiresIn: "1h" });
     const req = { headers: { authorization: `Bearer ${token}` } } as AuthRequest;
     const res = { status: () => { throw new Error("Unexpected authentication failure"); } } as unknown as Response;
     let next = 0;
@@ -32,5 +38,7 @@ for (const scenario of [
     assert.equal(next, 1);assert.equal(req.userId, 7);assert.equal(req.userType, "USER");
     assert.equal(req.userMode, scenario.mode);assert.equal(req.learningRuntime, scenario.runtime);
     assert.equal(repository.mock.callCount(), scenario.reads);
+    assert.equal(issuedPassword.mock.callCount(), scenario.mode === "EDUCATIONAL" ? 1 : 0);
+    assert.equal(sessionState.mock.callCount(), scenario.mode === "CONTEST" ? 0 : 1);
   });
 }

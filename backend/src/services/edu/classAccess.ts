@@ -4,7 +4,7 @@ import { Class } from "../../entities/Class";
 import { Student } from "../../entities/Student";
 import { Membership } from "../../entities/Membership";
 import { Organization } from "../../entities/Organization";
-import { higherRole, type OrgRole } from "../../types/OrgRole";
+import type { OrgRole } from "../../types/OrgRole";
 import { roleCan, type Capability } from "./rbac";
 
 /**
@@ -16,9 +16,8 @@ import { roleCan, type Capability } from "./rbac";
  *  3. Org RBAC — the caller's {@link OrgRole} in the class's organization.
  *
  * The combination is deliberate and backward-compatible:
- *  - The owning teacher is **grandfathered** to TEACHER in their own class, so
- *    enabling enforcement can never lock out a teacher who created a class —
- *    even one with `org_id = null` (pre-backfill) or no membership row.
+ *  - A historical owner without a membership retains TEACHER access. Once a
+ *    membership exists, its current role limits powers, including assistants.
  *  - ORG_ADMIN is the organization-wide exception. Teachers and assistants are
  *    restricted to classes they own or are explicitly assigned to.
  *  - Everyone else (no ownership, no org role) is denied.
@@ -31,19 +30,19 @@ import { roleCan, type Capability } from "./rbac";
 export interface ClassAccessFacts {
   /** Caller owns or is assigned to the class. */
   isOwner: boolean;
+  /** Actual primary ownership; assignments alone cannot grant legacy rights. */
+  legacyOwnership?: boolean;
   /** Caller's role in the class's organization, or null (not a member / no org). */
   orgRole: OrgRole | null;
 }
 
 /**
- * The role the caller effectively holds for this class: the higher of their
- * org membership role and the owner grandfather (TEACHER for the owner).
+ * Current membership limits assigned staff powers. The owner grandfather is
+ * used only for historical owners with no membership, never to undo a demotion.
  * `null` means the caller has no relationship to the class.
  */
 export function effectiveClassRole(facts: ClassAccessFacts): OrgRole | null {
-  const ownerRole: OrgRole | null = facts.isOwner ? "TEACHER" : null;
-  if (ownerRole && facts.orgRole) return higherRole(ownerRole, facts.orgRole);
-  return ownerRole ?? facts.orgRole;
+  return facts.orgRole ?? ((facts.legacyOwnership ?? facts.isOwner) ? "TEACHER" : null);
 }
 
 /** Pure access decision: can this caller perform `capability` on the class? */
@@ -151,7 +150,7 @@ export async function authorizeClassAction(
   // The organization administrator can manage all classes; teaching staff need
   // to own or be explicitly assigned to the class.
   const scopedOrgRole = isSystemAdmin || orgRole === "ORG_ADMIN" || isOwner ? orgRole : null;
-  const facts: ClassAccessFacts = { isOwner, orgRole: scopedOrgRole };
+  const facts: ClassAccessFacts = { isOwner, orgRole: scopedOrgRole, legacyOwnership: cls.teacher?.id === userId };
   // SYSTEM_ADMIN is a platform-wide super-admin (User.role), orthogonal to the
   // org model; it is the one place global role legitimately overrides org RBAC.
   const allowed = isSystemAdmin || decideClassAccess(facts, capability);

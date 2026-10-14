@@ -32,7 +32,9 @@ function resolveTaskMaxAttempts(task: Pick<TopicTask, "type" | "maxAttempts">): 
 async function calculateControlGradeForNewSystemWithManager(
   manager: EntityManager,
   controlWorkId: number,
-  studentId: number
+  studentId: number,
+  summaryGrade: SummaryGrade | null,
+  suppliedTheoryGrade: number | null
 ): Promise<{
   finalGrade: number;
   theoryGrade: number | null;
@@ -67,12 +69,12 @@ async function calculateControlGradeForNewSystemWithManager(
       .createQueryBuilder(EduGrade, "g")
       .setLock("pessimistic_read")
       .leftJoin("g.student", "student")
-      .leftJoin("g.topicTask", "topicTask")
+      .leftJoinAndSelect("g.topicTask", "topicTask")
       .where("student.id = :studentId", { studentId })
       .andWhere("topicTask.id IN (:...taskIds)", { taskIds })
       .andWhere("(g.type IS NULL OR g.type = 'PRACTICE')")
-      .andWhere("g.total IS NOT NULL")
       .orderBy("g.created_at", "DESC")
+      .addOrderBy("g.id", "DESC")
       .getMany();
 
     const latestByTaskId = new Map<number, EduGrade>();
@@ -96,15 +98,9 @@ async function calculateControlGradeForNewSystemWithManager(
     averageTaskGrade = practiceGradedCount > 0 ? sum / practiceGradedCount : 0;
   }
 
-  const summaryGrade = await manager
-    .createQueryBuilder(SummaryGrade, "sg")
-    .setLock("pessimistic_read")
-    .where("sg.student.id = :studentId", { studentId })
-    .andWhere("sg.controlWork.id = :controlWorkId", { controlWorkId })
-    .getOne();
-
   let theoryGrade: number | null = null;
-  if (summaryGrade && summaryGrade.theoryGrade !== null) {
+  if (suppliedTheoryGrade !== null) theoryGrade = clampGradeToInt(suppliedTheoryGrade);
+  else if (summaryGrade && summaryGrade.theoryGrade !== null) {
     theoryGrade = clampGradeToInt(Number(summaryGrade.theoryGrade));
   }
 
@@ -169,33 +165,27 @@ export async function saveControlSummaryGradeForNewSystemWithManager(
     return;
   }
 
-  const gradeData = await calculateControlGradeForNewSystemWithManager(manager, controlWorkId, studentId);
+  const summaryGradeRepoManager = manager.getRepository(SummaryGrade);
+  let summaryGrade = await manager.createQueryBuilder(SummaryGrade, "sg").setLock("pessimistic_write")
+    .where("sg.student.id = :studentId", { studentId }).andWhere("sg.controlWork.id = :controlWorkId", { controlWorkId })
+    .orderBy("sg.created_at", "DESC").addOrderBy("sg.id", "DESC").getOne();
+  const gradeData = await calculateControlGradeForNewSystemWithManager(manager, controlWorkId, studentId, summaryGrade, theoryGrade);
 
   if (!gradeData) {
-    const existingSummaryGrade = await manager
-      .createQueryBuilder(SummaryGrade, "sg")
-      .setLock("pessimistic_write")
-      .where("sg.student.id = :studentId", { studentId })
-      .andWhere("sg.controlWork.id = :controlWorkId", { controlWorkId })
-      .getOne();
-
-    if (existingSummaryGrade) {
-      await manager.remove(SummaryGrade, existingSummaryGrade);
+    if (summaryGrade) {
+      if (summaryGrade.manualOverrideGrade != null) {
+        summaryGrade.grade = summaryGrade.manualOverrideGrade;
+        summaryGrade.calculatedGrade = null;
+        summaryGrade.formulaSnapshot = null;
+        summaryGrade.calculatedAt = new Date();
+        await summaryGradeRepoManager.update(summaryGrade.id, { grade: summaryGrade.grade, calculatedGrade: null, formulaSnapshot: null, calculatedAt: summaryGrade.calculatedAt });
+      } else await manager.remove(SummaryGrade, summaryGrade);
     }
 
     return;
   }
 
   const calculatedAt = new Date();
-  const summaryGradeRepoManager = manager.getRepository(SummaryGrade);
-
-  let summaryGrade = await manager
-    .createQueryBuilder(SummaryGrade, "sg")
-    .setLock("pessimistic_write")
-    .where("sg.student.id = :studentId", { studentId })
-    .andWhere("sg.controlWork.id = :controlWorkId", { controlWorkId })
-    .getOne();
-
   if (summaryGrade) {
     summaryGrade.controlWork = controlWork;
     summaryGrade.topic = controlWork.topic;
@@ -206,7 +196,8 @@ export async function saveControlSummaryGradeForNewSystemWithManager(
     if (!summaryGrade.name) {
       summaryGrade.name = controlWork.title || `Контрольна робота #${controlWorkId}`;
     }
-    summaryGrade.grade = gradeData.finalGrade;
+    summaryGrade.calculatedGrade = gradeData.finalGrade;
+    summaryGrade.grade = summaryGrade.manualOverrideGrade ?? gradeData.finalGrade;
     if (theoryGrade !== null) {
       summaryGrade.theoryGrade = theoryGrade;
     }
@@ -227,6 +218,7 @@ export async function saveControlSummaryGradeForNewSystemWithManager(
       name: controlWork.title || `Контрольна робота #${controlWorkId}`,
       assessmentType: AssessmentType.CONTROL,
       grade: gradeData.finalGrade,
+      calculatedGrade: gradeData.finalGrade,
       theoryGrade: theoryGrade,
       formulaSnapshot: gradeData.formulaSnapshot,
       calculatedAt: calculatedAt
@@ -285,6 +277,7 @@ export async function markControlWorkAttemptCompletedIfReadyWithManager(
         .where("g.student_id = :studentId", { studentId })
         .andWhere("g.topic_task_id IN (:...taskIds)", { taskIds })
         .orderBy("g.created_at", "DESC")
+        .addOrderBy("g.id", "DESC")
         .getMany();
 
       const latestByTaskId = new Map<number, EduGrade>();
@@ -331,6 +324,7 @@ export async function markControlWorkAttemptCompletedIfReadyWithManager(
   if (attempt) {
     attempt.status = "COMPLETED";
     attempt.finishedAt = new Date();
+    attempt.isFinished = true;
     await manager.save(LessonAttempt, attempt);
   }
 }

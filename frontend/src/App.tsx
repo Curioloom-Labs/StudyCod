@@ -29,6 +29,7 @@ import { ToastViewport } from "./components/ui/ToastViewport";
 import { getErrorMessageFromUnknown } from "./lib/safeError";
 import { clearControlExamSession, getControlExamSession, isPathAllowedInControlExam, subscribeControlExamSession } from "./lib/controlExamSession";
 import { setActiveEduStudentId } from "./lib/eduContext";
+import { chooseEducationalContext, selectEducationalContext } from "./lib/eduSession";
 import { applySeo } from "./lib/seo";
 import { getDevPreviewUser, isDevPreviewActive, withDevPreview } from "./lib/devPreview";
 import { logoutAndReload } from "./lib/authSession";
@@ -101,6 +102,8 @@ const TutorPage = React.lazy(() => import("./pages/edu/StudyCompanionPage").then
 const CourseDetailPage = React.lazy(() => import("./pages/edu/CourseStudioPages").then(mod => ({ default: mod.CourseStudioDetailPage })));
 const LessonQuizPage = React.lazy(() => import("./pages/edu/QuizCanvasPage").then(mod => ({ default: mod.QuizCanvasPage })));
 const TeacherQuizReviewPage = React.lazy(() => import("./pages/edu/TeacherQuizReviewPage").then(mod => ({ default: mod.TeacherQuizReviewPage })));
+const CourseTaskTestsPage = React.lazy(() => import("./pages/edu/CourseTaskTestsPage").then(mod => ({ default: mod.CourseTaskTestsPage })));
+const CourseControlReviewPage = React.lazy(() => import("./pages/edu/CourseControlReviewPage").then(mod => ({ default: mod.CourseControlReviewPage })));
 const ManualTaskPage = React.lazy(() => import("./pages/edu/ManualReviewPages").then(mod => ({ default: mod.ManualSubmissionCanvas })));
 const ManualTaskSubmissionsPage = React.lazy(() => import("./pages/edu/ManualTeacherReviewPage").then(mod => ({ default: mod.ManualTeacherReviewPage })));
 const OrgMembersPage = React.lazy(() => import("./pages/edu/OrgWorkspacePage").then(mod => ({ default: mod.OrgWorkspacePage })));
@@ -397,6 +400,11 @@ const AppContent: React.FC = React.memo(() => {
   const previewPersona = searchParams.get("persona");
   const resolvedPage = useMemo(() => {
     if (!user) return page;
+    // Honor an explicit EDU profile/admin destination before page state commits;
+    // otherwise URL synchronization can erase it during the first render.
+    if (user.userMode === "EDUCATIONAL" && location.pathname === "/" && requestedAppPage) {
+      return resolvePageForUser(requestedAppPage, user);
+    }
     // The personal workspace navigation is URL driven. Reading the destination
     // directly prevents a stale admin page from rendering under the Home tab.
     if (user.userMode !== "EDUCATIONAL" && location.pathname === "/") {
@@ -823,11 +831,13 @@ const AppContent: React.FC = React.memo(() => {
       <AuthPage initialMode={authIntent === "register" ? "register" : "login"} initialUserMode={audienceIntent === "teacher" ? "EDUCATIONAL" : undefined} showBackToLanding={location.pathname === "/"} onAuth={(u: User) => {
         setUser(u);
         setBootResumeHandled(true);
-        sessionStorage.setItem("fromAuth", "true");
         if (nextAfterAuth) {
+          sessionStorage.removeItem("fromAuth");
           navigate(nextAfterAuth, {
             replace: true
           });
+        } else {
+          sessionStorage.setItem("fromAuth", "true");
         }
       }} />
       </Suspense></PublicPageWithFooter>;
@@ -846,7 +856,7 @@ const AppContent: React.FC = React.memo(() => {
   if (user.userMode === "EDUCATIONAL"
     && requestedAppPage !== "profile" && requestedAppPage !== "admin"
     && resolvedPage !== "profile" && resolvedPage !== "admin") {
-    return <Navigate to="/edu" replace />;
+    return <Navigate to={getSafeNextAfterAuth(searchParams) ?? "/edu"} replace />;
   }
   const content = <Suspense fallback={<PageLoader />}>
       {(() => {
@@ -928,7 +938,7 @@ const AppContent: React.FC = React.memo(() => {
       <PlacementEntry user={user} onUserChange={setUser} />
     </Suspense>
     <Suspense fallback={null}>
-      <OnboardingEntry />
+      {user.userMode !== "EDUCATIONAL" && <OnboardingEntry />}
     </Suspense>
   </PremiumModuleShell>;
 });
@@ -1700,8 +1710,7 @@ const EduRoutes: React.FC = React.memo(() => {
         let u = await getCurrentUserWithRetry(6, true);
         if (cancelled || requestGeneration !== authGenerationRef.current) return;
 
-        const hasStaffContext = u.eduContexts?.organizations?.some((org) => ["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(org.role)) ?? false;
-        if (u.userMode !== "EDUCATIONAL" && u.role !== "SYSTEM_ADMIN" && !hasStaffContext) {
+        if (!chooseEducationalContext(u).allowed) {
           navigate("/", {
             replace: true
           });
@@ -1710,10 +1719,8 @@ const EduRoutes: React.FC = React.memo(() => {
         // A User-backed account with only student memberships should enter its
         // linked Student context automatically. Accounts that also teach stay
         // in the staff context until the user explicitly switches context.
-        const firstStudent = u.eduContexts?.students?.[0];
-        if (!u.studentId && !hasStaffContext && firstStudent) {
-          setActiveEduStudentId(firstStudent.studentId);
-          u = await getMe({ force: true, suppressAuthRedirect: true });
+        if (chooseEducationalContext(u).studentId != null) {
+          u = await selectEducationalContext(u);
           if (cancelled || requestGeneration !== authGenerationRef.current) return;
         }
         setUser(u);
@@ -1738,8 +1745,7 @@ const EduRoutes: React.FC = React.memo(() => {
   }, [navigate, isEduDevPreview, eduPreviewStudent]);
   const handleAuth = useCallback((u: User) => {
     authGenerationRef.current += 1;
-    const hasStaffContext = u.eduContexts?.organizations?.some((org) => ["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(org.role)) ?? false;
-    if (u.userMode !== "EDUCATIONAL" && u.role !== "SYSTEM_ADMIN" && !hasStaffContext) {
+    if (!chooseEducationalContext(u).allowed) {
       setUser(null);
       setLoading(false);
       navigate("/", { replace: true });
@@ -1808,6 +1814,9 @@ const EduRoutes: React.FC = React.memo(() => {
   }
 
   const isOrgAdmin = user.eduContexts?.organizations?.some((org) => org.role === "ORG_ADMIN") ?? false;
+  const hasParentAccess = user.eduContexts?.hasParentAccess || user.eduContexts?.organizations?.some(org => org.role === "PARENT");
+  const hasStaffRole = user.role === "SYSTEM_ADMIN" || user.eduContexts?.organizations?.some(org => ["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(org.role));
+  if (!user.studentId && hasParentAccess && !hasStaffRole && location.pathname === "/edu") return <Navigate to="/edu/parent" replace />;
   if (!user.studentId && isOrgAdmin && location.pathname === "/edu") {
     return <Navigate to="/edu/organization" replace />;
   }
@@ -1821,7 +1830,7 @@ const EduRoutes: React.FC = React.memo(() => {
   const eduMain = <div id="main-content" role={eduRouteOwnsMainLandmark(location.pathname) ? undefined : "main"} tabIndex={-1} className={`relative flex-1 min-h-0 flex flex-col outline-none ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
         <PageMotionScope.Provider value={false}>
-        <AnimatePresence mode="sync" initial={false}>
+        {/* EDU navigation releases page portals immediately; entry motion stays scoped to the new page. */}
           <AnimatedPage key={location.pathname} className="w-full">
           <PageMotionScope.Provider value={true}>
           <Routes location={location}>
@@ -1830,7 +1839,7 @@ const EduRoutes: React.FC = React.memo(() => {
                     <TeacherDashboardPage />
                   </AnimatedPage>} />
             <Route path="classes/:classId" element={teacherOnly(<AnimatedPage><ClassHubPage /></AnimatedPage>)} />
-            <Route path="classes/:classId/manage" element={teacherOnly(<AnimatedPage><ClassManagementPage /></AnimatedPage>)} />
+            <Route path="classes/:classId/manage" element={teacherOnly(<AnimatedPage><ClassManagementPage user={user} /></AnimatedPage>)} />
             <Route path="classes/:classId/lessons/new" element={teacherOnly(<AnimatedPage><CreateLessonPage /></AnimatedPage>)} />
             <Route path="classes/:classId/topics/new" element={teacherOnly(<AnimatedPage><CreateTopicPage /></AnimatedPage>)} />
             <Route path="topics/:topicId" element={teacherOnly(<AnimatedPage><TopicDetailsPage /></AnimatedPage>)} />
@@ -1848,9 +1857,11 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="tutor" element={<AnimatedPage><TutorPage /></AnimatedPage>} />
             <Route path="parent" element={<AnimatedPage><ParentDashboardPage /></AnimatedPage>} />
             <Route path="courses/:courseId" element={teacherOnly(<AnimatedPage><CourseDetailPage /></AnimatedPage>)} />
-            <Route path="lessons/:lessonId/quiz" element={studentOnly(<AnimatedPage><LessonQuizPage /></AnimatedPage>)} />
+            <Route path="lessons/:lessonId/quiz" element={studentOnly(<AnimatedPage><LessonQuizPage user={user} /></AnimatedPage>)} />
+            <Route path="course-tasks/:taskId/tests" element={teacherOnly(<AnimatedPage><CourseTaskTestsPage /></AnimatedPage>)} />
+            <Route path="lessons/:lessonId/results" element={teacherOnly(<AnimatedPage><CourseControlReviewPage /></AnimatedPage>)} />
             <Route path="lessons/:lessonId/quiz/review" element={teacherOnly(<AnimatedPage><TeacherQuizReviewPage /></AnimatedPage>)} />
-            <Route path="manual-tasks/:taskId" element={studentOnly(<AnimatedPage><ManualTaskPage /></AnimatedPage>)} />
+            <Route path="manual-tasks/:taskId" element={studentOnly(<AnimatedPage><ManualTaskPage user={user} /></AnimatedPage>)} />
             <Route path="manual-tasks/:taskId/submissions" element={teacherOnly(<AnimatedPage><ManualTaskSubmissionsPage /></AnimatedPage>)} />
             <Route path="organization" element={orgAdminOnly(<AnimatedPage><OrgMembersPage /></AnimatedPage>)} />
             <Route path="profile" element={<Navigate to="/profile" replace />} />
@@ -1869,7 +1880,6 @@ const EduRoutes: React.FC = React.memo(() => {
           </Routes>
           </PageMotionScope.Provider>
           </AnimatedPage>
-        </AnimatePresence>
         </PageMotionScope.Provider>
       </Suspense>
   </div>;

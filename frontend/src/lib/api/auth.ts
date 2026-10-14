@@ -79,16 +79,17 @@ export async function resendVerificationEmail(email: string): Promise<void> {
     email
   });
 }
-export async function requestPasswordReset(email: string): Promise<void> {
+export async function requestPasswordReset(email: string, next?: string): Promise<void> {
   await api.post("/auth/forgot-password", {
-    email
+    email, ...(next ? { next } : {})
   });
 }
-export async function resetPassword(token: string, newPassword: string): Promise<void> {
-  await api.post("/auth/reset-password", {
+export async function resetPassword(token: string, newPassword: string): Promise<{ userMode?: "EDUCATIONAL" }> {
+  const response = await api.post("/auth/reset-password", {
     token,
     newPassword
   });
+  return response.data;
 }
 export async function linkGoogleAccount(token: string): Promise<User> {
   const res = await api.post("/auth/google/link", {

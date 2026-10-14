@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeRubric, computeRubricTotal } from "./rubric";
+import { normalizeRubric, computeRubricTotal, validateRubricDefinition, validateRubricScores } from "./rubric";
 
 test("normalizeRubric keeps valid criteria, drops junk and dupes", () => {
   const r = normalizeRubric([
@@ -20,6 +20,20 @@ test("normalizeRubric keeps valid criteria, drops junk and dupes", () => {
 test("normalizeRubric on non-array → []", () => {
   assert.deepEqual(normalizeRubric(null), []);
   assert.deepEqual(normalizeRubric("x"), []);
+});
+
+test("rubric write rejects malformed, duplicate, excessive and reserved criteria without dropping them", () => {
+  const valid = { id: "a", label: "A", maxPoints: 10 };
+  for (const raw of [null, {}, [valid, { ...valid }], [valid, { id: "b", label: "", maxPoints: 10 }], [{ ...valid, maxPoints: 1.5 }], [{ ...valid, maxPoints: "10" }], [{ ...valid, id: "__proto__" }], Array.from({ length: 31 }, (_, i) => ({ ...valid, id: String(i) }))]) assert.equal(validateRubricDefinition(raw), null);
+  assert.deepEqual(validateRubricDefinition([{ ...valid, label: " A " }]), [valid]);
+  assert.deepEqual(validateRubricDefinition([]), []);
+});
+
+test("rubric write requires exactly every criterion and finite scores within its individual limit", () => {
+  const rubric = [{ id: "a", label: "A", maxPoints: 10 }, { id: "b", label: "B", maxPoints: 20 }];
+  for (const scores of [{}, { a: 5 }, { a: 5, b: 10, other: 1 }, { a: 11, b: 10 }, { a: -1, b: 10 }, { a: NaN, b: 10 }, { a: Infinity, b: 10 }, { a: "5", b: 10 }]) assert.equal(validateRubricScores(rubric, scores), false);
+  assert.equal(validateRubricScores(rubric, { a: 0, b: 0 }), true);
+  assert.equal(validateRubricScores(rubric, { a: 0.5, b: 20 }), true);
 });
 
 test("computeRubricTotal clamps per criterion and returns percent of max", () => {

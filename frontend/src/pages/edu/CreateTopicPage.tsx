@@ -9,7 +9,7 @@ import { api } from "../../lib/api/client";
 import { enabledJudgeLanguages, JUDGE_LANGUAGE_LABELS } from "../../lib/judgeLanguages";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 export const CreateTopicPage: React.FC = () => {
   const {
     i18n

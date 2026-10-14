@@ -40,6 +40,7 @@ export interface User {
   middleName?: string;
   email?: string;
   marketingEmailsEnabled?: boolean;
+  accountSettingsScope?: "ACCOUNT" | "CLASS";
   placementDone?: boolean;
   placementLevel?: "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | null;
   placementScore?: number | null;
@@ -51,6 +52,7 @@ export interface User {
   placementCodingScore?: number | null;
   placementCodingDoneAt?: string | null;
   eduContexts?: {
+    hasParentAccess?: boolean;
     students: Array<{
       studentId: number;
       classId: number;

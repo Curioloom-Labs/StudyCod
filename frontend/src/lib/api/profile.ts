@@ -363,9 +363,9 @@ export async function submitPlacementAssessment(data: {
   return res.data as PlacementAssessmentSubmitResult;
 }
 
-export async function getEmailSubscription(): Promise<{ enabled: boolean; email: string | null }> {
+export async function getEmailSubscription(): Promise<{ enabled: boolean; email: string | null; scope: "ACCOUNT" | "CLASS" }> {
   const res = await api.get("/profile/email-subscription");
-  return res.data as { enabled: boolean; email: string | null };
+  return res.data as { enabled: boolean; email: string | null; scope: "ACCOUNT" | "CLASS" };
 }
 
 export async function updateEmailSubscription(enabled: boolean): Promise<{ enabled: boolean }> {

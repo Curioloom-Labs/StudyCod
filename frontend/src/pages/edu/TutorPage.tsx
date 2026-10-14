@@ -5,7 +5,7 @@ import { Button } from "../../components/ui/Button";
 import { PageHero } from "../../components/ui/PageHero";
 import { askAiTutor, type TutorAnswerDto } from "../../lib/api/edu";
 import { showToast } from "../../lib/toast";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 
 const SUGGESTIONS_UK = ["Поясни мою останню помилку простими словами", "Дай схожу легшу задачу для тренування", "Як підійти до рекурсії?"];
 const SUGGESTIONS_EN = ["Explain my last mistake in simple terms", "Give me an easier similar task to practice", "How do I approach recursion?"];

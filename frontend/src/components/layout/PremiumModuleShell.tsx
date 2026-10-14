@@ -336,7 +336,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
                     {product === "EDU" &&
                     onEduContextChange &&
                     (user.eduContexts?.students?.length ||
-                      user.eduContexts?.organizations?.length) ? (
+                      user.eduContexts?.organizations?.length || user.eduContexts?.hasParentAccess) ? (
                       <div className="border-y border-border/10 px-2 py-2 dark:border-white/10">
                         <div className="px-1 pb-1 text-[10px] font-bold uppercase tracking-[.12em] text-text-muted dark:text-text-secondary">
                           {uk ? "Контекст EDU" : "EDU context"}
@@ -357,6 +357,13 @@ export const PremiumModuleShell: React.FC<Props> = ({
                           >
                             <GraduationCap className="size-4" />
                             {uk ? "Викладач / команда" : "Teacher / staff"}
+                          </button>
+                        )}
+                        {user.eduContexts?.hasParentAccess && (
+                          <button type="button" role="menuitem" onClick={async () => {
+                            setAccountOpen(false); await onEduContextChange(null); onNavigate("/edu/parent");
+                          }} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-semibold text-text-secondary hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                            <GraduationCap className="size-4" />{uk ? "Прогрес дітей" : "Children's progress"}
                           </button>
                         )}
                         {user.eduContexts?.students?.map((student) => (

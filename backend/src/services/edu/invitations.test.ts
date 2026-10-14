@@ -5,6 +5,9 @@ import { OrgInvitation } from "../../entities/OrgInvitation";
 import { Membership } from "../../entities/Membership";
 import { ParentLink } from "../../entities/ParentLink";
 import { User } from "../../entities/User";
+import { Organization } from "../../entities/Organization";
+import { Student } from "../../entities/Student";
+import { Class } from "../../entities/Class";
 import { isInvitationUsable, normalizeEmail, acceptInvitation, createInvitation } from "./invitations";
 
 const future = () => new Date(Date.now() + 60_000);
@@ -31,23 +34,31 @@ async function withRepos<T>(
   fn: () => Promise<T>
 ): Promise<T> {
   const orig = AppDataSource.getRepository.bind(AppDataSource);
+  const origTransaction = AppDataSource.transaction.bind(AppDataSource);
+  const ownershipQuery: any = { where: () => ownershipQuery, andWhere: () => ownershipQuery, getExists: async () => false };
   (AppDataSource as any).getRepository = (entity: unknown) => {
     if (entity === OrgInvitation) return fakes.invite;
-    if (entity === Membership) return fakes.membership;
-    if (entity === ParentLink) return fakes.parentLink ?? { findOne: async () => null, create: (o: any) => o, save: async (o: any) => o };
-    if (entity === User) return fakes.user ?? { update: async () => ({ affected: 0 }) };
+    if (entity === Membership) return { ...fakes.membership, findOneBy: fakes.membership.findOneBy ?? fakes.membership.findOne };
+    if (entity === ParentLink) return { existsBy: async () => false, ...(fakes.parentLink ?? { create: (o: any) => o, save: async (o: any) => o }) };
+    if (entity === User) return { findOne: async () => ({ id: 42, role: "SYSTEM_ADMIN", email: "p@x.com", emailVerified: true, userMode: "PERSONAL", eduSessionVersion: 0 }), createQueryBuilder: () => ownershipQuery, update: async () => ({ affected: 1 }), ...fakes.user };
+    if (entity === Organization) return { findOne: async () => ({ id: 9 }) };
+    if (entity === Student) return { findOne: async () => ({ id: 77, class: { id: 2 } }) };
+    if (entity === Class) return { findOne: async () => ({ id: 2 }) };
     throw new Error("unexpected entity");
   };
+  (AppDataSource as any).transaction = async (_isolation: unknown, fn: any) => fn({ getRepository: AppDataSource.getRepository.bind(AppDataSource) });
   try {
     return await fn();
   } finally {
     (AppDataSource as any).getRepository = orig;
+    (AppDataSource as any).transaction = origTransaction;
   }
 }
 
 test("acceptInvitation creates membership and marks the invite accepted", async () => {
   const invite: any = {
     organizationId: 9,
+    id: 1, email: "p@x.com",
     role: "TEACHER",
     status: "PENDING",
     expiresAt: future()
@@ -73,7 +84,7 @@ test("acceptInvitation creates membership and marks the invite accepted", async 
   };
 
   const result = await withRepos(fakes, () => acceptInvitation("tok", 42));
-  assert.deepEqual(result, { orgId: 9, role: "TEACHER", studentId: null });
+  assert.deepEqual(result, { orgId: 9, role: "TEACHER", studentId: null, sessionVersion: 1 });
   assert.equal(savedInvite.status, "ACCEPTED");
   assert.equal(savedInvite.acceptedByUserId, 42);
   assert.equal(createdMembership.role, "TEACHER");
@@ -82,6 +93,7 @@ test("acceptInvitation creates membership and marks the invite accepted", async 
 test("acceptInvitation for a PARENT invite creates the parent↔student link and routes a personal user into EDU", async () => {
   const invite: any = {
     organizationId: 3,
+    id: 2, email: "p@x.com",
     role: "PARENT",
     studentId: 77,
     status: "PENDING",
@@ -111,22 +123,13 @@ test("acceptInvitation for a PARENT invite creates the parent↔student link and
   assert.equal(result.studentId, 77);
   assert.equal(createdLink.parent.id, 42);
   assert.equal(createdLink.student.id, 77);
-  // Conditional WHERE (userMode: PERSONAL) so teacher/contest accounts are untouched.
-  assert.deepEqual(userUpdateCall.where, { id: 42, userMode: "PERSONAL" });
-  assert.deepEqual(userUpdateCall.patch, { userMode: "EDUCATIONAL" });
+  assert.equal(userUpdateCall.where, 42);
+  assert.equal(userUpdateCall.patch.userMode, "EDUCATIONAL");
+  assert.equal(userUpdateCall.patch.eduSessionVersion(), "edu_session_version + 1");
 });
 
 async function withInviteRepo<T>(repo: any, fn: () => Promise<T>): Promise<T> {
-  const orig = AppDataSource.getRepository.bind(AppDataSource);
-  (AppDataSource as any).getRepository = (entity: unknown) => {
-    if (entity === OrgInvitation) return repo;
-    throw new Error("unexpected entity");
-  };
-  try {
-    return await fn();
-  } finally {
-    (AppDataSource as any).getRepository = orig;
-  }
+  return withRepos({ invite: repo, membership: {} }, fn);
 }
 
 test("createInvitation reuses an existing PENDING invite for the same org/email/role/student", async () => {

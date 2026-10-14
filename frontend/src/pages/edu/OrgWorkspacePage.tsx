@@ -1,8 +1,13 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import "./eduWorkspace.css";
+import { Modal } from "../../components/ui/Modal";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { isAxiosError } from "axios";
 import {
   Building2,
   Check,
+  Copy,
+  Download,
   KeyRound,
   MoreHorizontal,
   Pencil,
@@ -12,7 +17,9 @@ import {
   UsersRound,
 } from "lucide-react";
 import { api } from "../../lib/api/client";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getMe, clearGetMeCache } from "../../lib/api/profile";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
+import { SchoolAccountActivation } from "./SchoolAccountActivation";
 import { createClass } from "../../lib/api/edu";
 import type { ClassGradingSystem } from "../../lib/gradingSystems";
 import { useTranslation } from "react-i18next";
@@ -25,6 +32,9 @@ type Member = {
   username: string | null;
   name: string | null;
   email: string | null;
+  accountSetupRequired?: boolean;
+  canSetActivationEmail?: boolean;
+  hasParentAccess?: boolean;
 };
 type Overview = {
   totals: { classes: number; students: number; teachers: number };
@@ -46,7 +56,7 @@ type Credentials = {
 const roles = ["TEACHER", "ASSISTANT", "ORG_ADMIN"] as const;
 const accountRoles = ["TEACHER", "ASSISTANT"] as const;
 const roleName = (role: string) =>
-  role === "ORG_ADMIN"
+  role === "STUDENT" ? tr("Учень", "Student") : role === "PARENT" ? tr("Батьки", "Parent") : role === "ORG_ADMIN"
     ? tr("Адміністратор", "Administrator")
     : role === "ASSISTANT"
       ? tr("Асистент", "Assistant")
@@ -66,14 +76,18 @@ const badge = (name: string) =>
     .join("")
     .toUpperCase() || "SC";
 const fieldClass =
-  "mt-2 w-full rounded-xl border border-border/12 bg-white px-4 py-3 outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-base";
+  "mt-2 w-full rounded-xl border border-border bg-bg-base px-4 py-3 outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-base";
 
 export const OrgWorkspacePage: React.FC = () => {
   useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedOrgId = React.useRef(Number(searchParams.get("org")));
   const [orgs, setOrgs] = React.useState<Org[]>([]);
   const [activeId, setActiveId] = React.useState<number | null>(null);
   const [members, setMembers] = React.useState<Member[]>([]);
+  const [selfUserId, setSelfUserId] = React.useState<number | null>(null);
+  React.useEffect(() => { getMe().then(me => setSelfUserId(me.id)).catch(() => {}); }, []);
   const [overview, setOverview] = React.useState<Overview | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -81,6 +95,9 @@ export const OrgWorkspacePage: React.FC = () => {
   const [showCreateClass, setShowCreateClass] = React.useState(false);
   const [createdCredentials, setCreatedCredentials] =
     React.useState<Credentials | null>(null);
+  const [credentialsStatus, setCredentialsStatus] = React.useState<string | null>(null);
+  const [credentialsError, setCredentialsError] = React.useState<string | null>(null);
+  const [copyingCredentials, setCopyingCredentials] = React.useState(false);
   const [accountDraft, setAccountDraft] = React.useState({
     firstName: "",
     lastName: "",
@@ -100,15 +117,36 @@ export const OrgWorkspacePage: React.FC = () => {
   const [editingName, setEditingName] = React.useState(false);
   const [openActions, setOpenActions] = React.useState<number | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const loadGeneration = React.useRef(0);
+  const [workspaceLoading, setWorkspaceLoading] = React.useState(false);
+  const [pendingRemoval, setPendingRemoval] = React.useState<Member | null>(null);
+  const [memberError, setMemberError] = React.useState<string | null>(null);
+  const [transferClasses, setTransferClasses] = React.useState<Array<{ id: number; name: string }>>([]);
+  const memberPending = React.useRef(false);
+  const memberAlertRef = React.useRef<HTMLDivElement>(null);
+  const removalRef = React.useRef<HTMLDivElement>(null);
+  const membersHeadingRef = React.useRef<HTMLHeadingElement>(null);
+  React.useEffect(() => { if (memberError) memberAlertRef.current?.focus(); }, [memberError]);
+  React.useEffect(() => { if (pendingRemoval) removalRef.current?.focus(); }, [pendingRemoval]);
   const active = orgs.find((org) => org.orgId === activeId) ?? null;
 
   const loadWorkspace = React.useCallback(async (orgId: number) => {
+    const generation = ++loadGeneration.current;
+    setWorkspaceLoading(true);
+    try {
     const [memberRes, overviewRes] = await Promise.all([
       api.get(`/edu/orgs/${orgId}/members`),
-      api.get(`/edu/orgs/${orgId}/overview`).catch(() => ({ data: null })),
+      api.get(`/edu/orgs/${orgId}/overview`),
     ]);
+    if (generation !== loadGeneration.current) return;
     setMembers(memberRes.data?.members ?? []);
     setOverview(overviewRes.data ?? null);
+    } catch (caught) {
+      if (generation !== loadGeneration.current) return;
+      throw caught;
+    } finally {
+      if (generation === loadGeneration.current) setWorkspaceLoading(false);
+    }
   }, []);
 
   React.useEffect(() => {
@@ -122,9 +160,10 @@ export const OrgWorkspacePage: React.FC = () => {
         if (!mounted) return;
         setOrgs(items);
         if (items[0]) {
-          setActiveId(items[0].orgId);
-          setNameDraft(items[0].name ?? "");
-          await loadWorkspace(items[0].orgId);
+          const selected = items.find(org => org.orgId === requestedOrgId.current) ?? items[0];
+          setActiveId(selected.orgId);
+          setNameDraft(selected.name ?? "");
+          await loadWorkspace(selected.orgId);
         }
       } catch (caught) {
         if (mounted)
@@ -140,13 +179,23 @@ export const OrgWorkspacePage: React.FC = () => {
     })();
     return () => {
       mounted = false;
+      ++loadGeneration.current;
     };
   }, [loadWorkspace]);
 
   const switchOrg = async (org: Org) => {
+    if (busy) return;
     setActiveId(org.orgId);
+    const nextParams = new URLSearchParams(searchParams); nextParams.set("org", String(org.orgId)); setSearchParams(nextParams, { replace: true });
+    setPendingRemoval(null); setMemberError(null); setTransferClasses([]);
     setNameDraft(org.name ?? "");
     setError(null);
+    setMembers([]);
+    setOverview(null);
+    setOpenActions(null);
+    setEditingName(false);
+    setShowCreateAccount(false);
+    setShowCreateClass(false);
     try {
       await loadWorkspace(org.orgId);
     } catch (caught) {
@@ -160,8 +209,9 @@ export const OrgWorkspacePage: React.FC = () => {
   };
 
   const updateName = async () => {
-    if (!activeId || !nameDraft.trim()) return;
+    if (busy || !activeId || !nameDraft.trim()) return;
     setBusy(true);
+    setError(null);
     try {
       await api.patch(`/edu/orgs/${activeId}`, { name: nameDraft.trim() });
       setOrgs((old) =>
@@ -177,20 +227,58 @@ export const OrgWorkspacePage: React.FC = () => {
     }
   };
 
+  React.useEffect(() => {
+    if (!createdCredentials) return;
+    const preventLostCredentials = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", preventLostCredentials);
+    return () => window.removeEventListener("beforeunload", preventLostCredentials);
+  }, [createdCredentials]);
+
+  const credentialsText = () => createdCredentials ? [
+    "StudyCod EDU", `${tr("Логін", "Username")}: ${createdCredentials.username}`,
+    ...(createdCredentials.email ? [`Email: ${createdCredentials.email}`] : []),
+    `${tr("Пароль", "Password")}: ${createdCredentials.password}`,
+    `${tr("Роль", "Role")}: ${roleName(createdCredentials.role)}`,
+    tr("Активуйте акаунт через «Забули пароль?» на сторінці входу EDU. Встановіть особистий пароль, відмінний від тимчасового.", "Activate the account through Forgot password on the EDU sign-in page. Set a personal password different from the temporary one."),
+  ].join("\n") : "";
+  const copyCredentials = async () => {
+    if (!createdCredentials || copyingCredentials) return;
+    setCopyingCredentials(true); setCredentialsError(null); setCredentialsStatus(null);
+    try {
+      await navigator.clipboard.writeText(credentialsText());
+      setCredentialsStatus(tr("Дані скопійовано.", "Credentials copied."));
+    } catch {
+      setCredentialsError(tr("Не вдалося скопіювати. Завантажте файл або виділіть дані вручну.", "Could not copy. Download the file or select the credentials manually."));
+    } finally { setCopyingCredentials(false); }
+  };
+  const downloadCredentials = () => {
+    if (!createdCredentials) return;
+    const url = URL.createObjectURL(new Blob([credentialsText()], { type: "text/plain;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `studycod-${createdCredentials.username.replace(/[^a-zA-Z0-9_-]/g, "_")}-credentials.txt`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setCredentialsError(null);
+    setCredentialsStatus(tr("Завантаження даних розпочато.", "Credentials download started."));
+  };
+
   const createAccount = async (event: React.FormEvent) => {
     event.preventDefault();
     if (
-      !activeId ||
+      busy || !activeId ||
       !accountDraft.username.trim() ||
       !accountDraft.password.trim()
     )
       return;
     setBusy(true);
+    setError(null);
     try {
       const { data } = await api.post(
         `/edu/orgs/${activeId}/users`,
         accountDraft,
       );
+      setCredentialsStatus(null); setCredentialsError(null);
       setCreatedCredentials(data.credentials);
       setAccountDraft({
         firstName: "",
@@ -201,7 +289,8 @@ export const OrgWorkspacePage: React.FC = () => {
         role: "TEACHER",
       });
       setShowCreateAccount(false);
-      await loadWorkspace(activeId);
+      await loadWorkspace(activeId).catch(caught => setError(getErrorMessageFromUnknown(caught,
+        tr("Обліковий запис створено, але список учасників не оновився. Оновіть сторінку після збереження даних.", "Account created, but the member list could not refresh. Reload after saving the credentials."))));
     } catch (caught) {
       setError(
         getErrorMessageFromUnknown(caught, tr("Обліковий запис не створено.", "Account was not created.")),
@@ -213,12 +302,15 @@ export const OrgWorkspacePage: React.FC = () => {
 
   const createOrganizationClass = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!classDraft.name.trim()) return;
+    if (busy || !activeId || !classDraft.name.trim()) return;
     setBusy(true);
+    setError(null);
     try {
       await createClass(
         classDraft.name.trim(),
         classDraft.gradingSystem,
+        undefined,
+        activeId || undefined,
       );
       setClassDraft({
         name: "",
@@ -234,12 +326,16 @@ export const OrgWorkspacePage: React.FC = () => {
   };
 
   const setRole = async (member: Member, nextRole: string) => {
-    if (!activeId || member.role === nextRole) return;
+    if (busy || memberPending.current || !activeId || member.role === nextRole) return;
+    memberPending.current = true;
+    setMemberError(null); setTransferClasses([]);
     setBusy(true);
+    setError(null);
     try {
       await api.patch(`/edu/orgs/${activeId}/members/${member.userId}/role`, {
         role: nextRole,
       });
+      if (member.userId === selfUserId) { clearGetMeCache({ clearSnapshot: true }); window.location.reload(); return; }
       setMembers((old) =>
         old.map((item) =>
           item.userId === member.userId ? { ...item, role: nextRole } : item,
@@ -247,61 +343,70 @@ export const OrgWorkspacePage: React.FC = () => {
       );
       setOpenActions(null);
     } catch (caught) {
-      setError(getErrorMessageFromUnknown(caught, tr("Роль не змінено.", "Role was not updated.")));
+      setOpenActions(null);
+      showMemberError(caught, tr("Роль не змінено.", "Role was not updated."));
     } finally {
+      memberPending.current = false;
       setBusy(false);
     }
   };
 
-  const removeMember = async (member: Member) => {
-    if (
-      !activeId ||
-      !window.confirm(
-        tr(`Прибрати ${member.name || member.username || "учасника"} з організації?`, `Remove ${member.name || member.username || "this member"} from the organization?`),
-      )
-    )
-      return;
+  const showMemberError = (caught: unknown, fallback: string) => {
+    const list = isAxiosError(caught) && caught.response?.data?.message === "CLASS_TRANSFER_REQUIRED" ? caught.response.data.classes : null;
+    setTransferClasses(Array.isArray(list) ? list.filter(cls => Number.isSafeInteger(cls.id) && typeof cls.name === "string") : []);
+    setMemberError(getErrorMessageFromUnknown(caught, fallback));
+  };
+
+  const removeMember = async () => {
+    const member = pendingRemoval;
+    if (busy || memberPending.current || !activeId || !member || member.userId === selfUserId) return;
+    memberPending.current = true;
+    setMemberError(null); setTransferClasses([]);
     setBusy(true);
+    setError(null);
     try {
       await api.delete(`/edu/orgs/${activeId}/members/${member.userId}`);
       setMembers((old) => old.filter((item) => item.userId !== member.userId));
+      setPendingRemoval(null); membersHeadingRef.current?.focus();
       setOpenActions(null);
     } catch (caught) {
-      setError(
-        getErrorMessageFromUnknown(caught, tr("Учасника не вдалося прибрати.", "Could not remove the member.")),
-      );
+      showMemberError(caught, tr("Учасника не вдалося прибрати.", "Could not remove the member."));
     } finally {
+      memberPending.current = false;
       setBusy(false);
     }
   };
 
   if (loading)
     return (
-      <div className="mx-auto max-w-[1280px] px-4 py-10 sm:px-6 lg:px-10">
+      <div className="edu-workspace mx-auto max-w-[1280px] px-4 py-10 sm:px-6 lg:px-10">
         <div className="h-[600px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" />
       </div>
     );
 
   return (
     <>
-      <div className="mx-auto max-w-[1280px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+      <div aria-busy={workspaceLoading} className="edu-workspace mx-auto w-full min-w-0 max-w-[1280px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+        {workspaceLoading && <p role="status" className="mb-4 text-sm text-text-secondary">{tr("Завантажуємо організацію…", "Loading organization…")}</p>}
         <header className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
               {tr("EDU / керування навчальним закладом", "EDU / organization management")}
             </p>
             {editingName ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 <input
+                  aria-label={tr("Назва закладу", "Organization name")}
+                  autoFocus maxLength={200} disabled={busy}
                   value={nameDraft}
                   onChange={(event) => setNameDraft(event.target.value)}
-                  className="rounded-xl border border-border/12 bg-white px-4 py-2 text-2xl font-bold tracking-[-.04em] outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-surface dark:text-white"
+                  className="w-full min-w-0 rounded-xl border border-border/12 bg-white px-4 py-2 text-2xl font-bold tracking-[-.04em] outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-surface dark:text-white"
                 />
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => void updateName()}
-                  className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
+                  className="min-h-11 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground"
                 >
                   {tr("Зберегти", "Save")}
                 </button>
@@ -311,18 +416,19 @@ export const OrgWorkspacePage: React.FC = () => {
                     setEditingName(false);
                     setNameDraft(active?.name ?? "");
                   }}
-                  className="rounded-xl px-3 text-sm font-bold text-text-muted"
+                  className="min-h-11 rounded-xl px-3 text-sm font-bold text-text-muted"
                 >
                   {tr("Скасувати", "Cancel")}
                 </button>
               </div>
             ) : (
-              <h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] text-text-primary dark:text-text-primary sm:text-5xl">
+              <h1 className="mt-3 break-words font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] text-text-primary dark:text-text-primary sm:text-5xl">
                 {active?.name || tr("Керування навчальним закладом", "Organization management")}
                 <button
                   type="button"
                   onClick={() => setEditingName(true)}
-                  className="ml-3 inline-grid h-8 w-8 translate-y-[-3px] place-items-center rounded-lg text-text-muted transition hover:bg-bg-hover dark:hover:bg-white/[.07]"
+                  aria-label={tr("Змінити назву закладу", "Edit organization name")}
+                  className="ml-3 inline-grid h-11 w-11 place-items-center rounded-lg text-text-muted transition-colors hover:bg-bg-hover dark:hover:bg-white/[.07]"
                 >
                   <Pencil className="h-4 w-4" />
                 </button>
@@ -334,8 +440,8 @@ export const OrgWorkspacePage: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={() => setShowCreateAccount(true)}
-            className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-[0_12px_28px_rgba(20,67,40,.18)] transition hover:-translate-y-0.5 dark:bg-primary dark:text-primary-foreground"
+            disabled={busy || !activeId} onClick={() => { setError(null); setShowCreateAccount(true); }}
+            className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-[0_12px_28px_rgba(20,67,40,.18)] transition  dark:bg-primary dark:text-primary-foreground"
           >
             <UserRound className="mr-2 inline h-4 w-4" />
             {tr("Створити обліковий запис викладача", "Create teacher account")}
@@ -372,6 +478,8 @@ export const OrgWorkspacePage: React.FC = () => {
                 <button
                   type="button"
                   key={org.orgId}
+                  disabled={busy}
+                  aria-pressed={activeId === org.orgId}
                   onClick={() => void switchOrg(org)}
                   className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${activeId === org.orgId ? "bg-bg-base text-text-primary dark:bg-bg-hover dark:text-text-primary" : "bg-bg-hover text-text-muted dark:bg-white/[.06] dark:text-text-secondary"}`}
                 >
@@ -414,26 +522,36 @@ export const OrgWorkspacePage: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
+            <div className="mt-6 grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,.8fr)]">
               <section className="rounded-[28px] border border-border/10 bg-white p-5 dark:border-white/[.09] dark:bg-bg-surface sm:p-6">
                 <div className="mb-5 flex items-center justify-between">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">
                       {tr("Облікові записи", "Accounts")}
                     </p>
-                    <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">
-                      {tr("Викладачі організації", "Organization teachers")}
+                    <h2 ref={membersHeadingRef} tabIndex={-1} className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                      {tr("Учасники організації", "Organization members")}
                     </h2>
                   </div>
                   <span className="rounded-full bg-bg-hover px-3 py-1.5 text-xs font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
                     {members.length}
                   </span>
                 </div>
+                {memberError && <div ref={memberAlertRef} tabIndex={-1} role="alert" className="mb-4 rounded-xl border border-accent-error/30 bg-accent-error/5 p-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-error">
+                  <p>{memberError}</p>
+                  {transferClasses.length > 0 && <ul className="mt-2 grid gap-1">{transferClasses.map(cls => <li key={cls.id}><button type="button" onClick={() => navigate(`/edu/classes/${cls.id}/manage?tab=settings&return=members`)} className="min-h-11 rounded-lg px-2 text-left font-semibold text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Передати клас", "Transfer class")}: {cls.name}</button></li>)}</ul>}
+                </div>}
+                {pendingRemoval && <div ref={removalRef} tabIndex={-1} role="region" aria-label={tr("Підтвердження видалення учасника", "Confirm member removal")} className="mb-4 rounded-xl border border-border bg-bg-surface p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                  <p className="font-semibold">{tr("Відкликати доступ", "Revoke access")}: {pendingRemoval.name || pendingRemoval.username || `#${pendingRemoval.userId}`}?</p>
+                  <p className="mt-2 text-sm leading-6 text-text-secondary">{tr("Буде відкликано доступ до класів і дітей цього закладу та чинні запрошення. Власні учнівські профілі учасника в цьому закладі архівуються; роботи й оцінки збережуться. Доступ до інших закладів залишиться.", "Class and child access and pending invitations in this organization will be revoked. The member’s own student profiles here will be archived; work and grades will be retained. Access to other organizations will remain.")}</p>
+                  <div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={busy} onClick={() => { setPendingRemoval(null); setMemberError(null); setTransferClasses([]); membersHeadingRef.current?.focus(); }} className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Скасувати", "Cancel")}</button><button type="button" disabled={busy} onClick={() => void removeMember()} className="min-h-11 rounded-lg bg-accent-error px-4 text-sm font-semibold text-white disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-error">{busy ? tr("Відкликаємо…", "Revoking…") : tr("Відкликати доступ", "Revoke access")}</button></div>
+                </div>}
                 <div className="space-y-2">
                   {members.map((member) => (
                     <div
                       key={member.userId}
-                      className="relative flex items-center gap-3 rounded-2xl p-3 transition hover:bg-bg-hover dark:hover:bg-white/[.04]"
+                      data-member-id={member.userId}
+                      className="relative flex flex-wrap items-center gap-3 rounded-2xl p-3 transition hover:bg-bg-hover dark:hover:bg-white/[.04]"
                     >
                       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-bg-hover text-xs font-extrabold text-text-primary dark:bg-white/[.08] dark:text-text-primary">
                         {badge(member.name || member.username || "")}
@@ -446,14 +564,16 @@ export const OrgWorkspacePage: React.FC = () => {
                           @{member.username}
                           {member.email ? ` · ${member.email}` : ""}
                         </span>
+                        {member.hasParentAccess && member.role !== "PARENT" && <span className="mt-1 block text-xs font-medium text-text-secondary">{tr("Доступ до дітей", "Child access")}</span>}
                       </span>
                       <span
-                        className={`hidden rounded-full px-2.5 py-1 text-[11px] font-bold sm:block ${roleTone(member.role)}`}
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${roleTone(member.role)}`}
                       >
                         {roleName(member.role)}
                       </span>
                       <button
                         type="button"
+                        disabled={busy}
                         onClick={() =>
                           setOpenActions(
                             openActions === member.userId
@@ -462,20 +582,20 @@ export const OrgWorkspacePage: React.FC = () => {
                           )
                         }
                         aria-label={tr(`Відкрити дії для ${member.username || member.userId}`, `Open actions for ${member.username || member.userId}`)}
-                        className="grid h-8 w-8 place-items-center rounded-lg text-text-muted hover:bg-bg-hover dark:hover:bg-white/[.08]"
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-text-muted hover:bg-bg-hover dark:hover:bg-white/[.08]"
                       >
                         <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
                       </button>
                       {openActions === member.userId && (
                         <div className="absolute right-2 top-12 z-20 w-48 rounded-xl border border-border/10 bg-white p-1 shadow-xl dark:border-white/10 dark:bg-bg-base">
                           <div>
-                            {roles.map((item) => (
+                            {((roles as readonly string[]).includes(member.role) ? roles : []).map((item) => (
                               <button
                                 type="button"
                                 key={item}
                                 disabled={busy}
                                 onClick={() => void setRole(member, item)}
-                                className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium hover:bg-bg-hover dark:hover:bg-white/[.07]"
+                                className="flex min-h-11 w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-medium hover:bg-bg-hover dark:hover:bg-white/[.07]"
                               >
                                 <span>{roleName(item)}</span>
                                 {member.role === item && (
@@ -486,15 +606,18 @@ export const OrgWorkspacePage: React.FC = () => {
                           </div>
                           <button
                             type="button"
-                            disabled={busy}
-                            onClick={() => void removeMember(member)}
-                            className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-accent-error hover:bg-accent-error/[.08] dark:text-accent-error"
+                            disabled={busy || member.userId === selfUserId}
+                            onClick={() => { setMemberError(null); setTransferClasses([]); setOpenActions(null); setPendingRemoval(member); }}
+                            aria-disabled={member.userId === selfUserId}
+                            title={member.userId === selfUserId ? tr("Не можна видалити себе", "Can't remove yourself") : undefined}
+                            className="mt-1 flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-accent-error hover:bg-accent-error/[.08] dark:text-accent-error"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                             {tr("Прибрати", "Remove")}
                           </button>
                         </div>
                       )}
+                      <SchoolAccountActivation orgId={activeId!} userId={member.userId} email={member.email} required={member.accountSetupRequired} canSetEmail={member.canSetActivationEmail} disabled={busy} onUpdated={() => loadWorkspace(activeId!)} />
                     </div>
                   ))}
                 </div>
@@ -509,7 +632,7 @@ export const OrgWorkspacePage: React.FC = () => {
                   </h2>
                   <div className="mt-5 space-y-3 text-sm leading-6 text-text-primary">
                     <p>
-                      {tr("Адміністратор сам створює обліковий запис і передає викладачу логін та пароль.", "The administrator creates the account and gives the teacher a username and password.")}
+                      {tr("Адміністратор створює акаунт і передає викладачу логін. Власник активує акаунт через свою пошту та встановлює особистий пароль.", "The administrator creates the account and shares the username. The owner activates it through their email and sets a personal password.")}
                     </p>
                     <p>
                       {tr("Після створення призначай одного або кількох викладачів відповідному класу.", "After creating a class, assign one or more teachers to it.")}
@@ -527,7 +650,7 @@ export const OrgWorkspacePage: React.FC = () => {
                     </p>
                     <button
                       type="button"
-                      onClick={() => setShowCreateClass(true)}
+                      disabled={busy || !activeId} onClick={() => { setError(null); setShowCreateClass(true); }}
                       className="rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground dark:bg-primary dark:text-primary-foreground"
                     >
                       {tr("Створити клас", "Create class")}
@@ -539,7 +662,7 @@ export const OrgWorkspacePage: React.FC = () => {
                         type="button"
                         onClick={() => navigate(`/edu/classes/${group.id}`)}
                         key={group.id}
-                        className="flex w-full items-center gap-3 rounded-xl bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 dark:bg-white/[.05] dark:shadow-none"
+                        className="flex w-full items-center gap-3 rounded-xl bg-white p-3 text-left shadow-sm transition  dark:bg-white/[.05] dark:shadow-none"
                       >
                         <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-bg-hover text-[10px] font-extrabold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
                           {tr("К", "C")}
@@ -570,31 +693,25 @@ export const OrgWorkspacePage: React.FC = () => {
         )}
       </div>
       {showCreateAccount && (
-        <div data-material="org-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-bg-code/45 px-4 backdrop-blur-sm" role="presentation">
+        <Modal open={Boolean(showCreateAccount)} title={tr("Створити обліковий запис викладача", "Create teacher account")} onClose={() => setShowCreateAccount(false)} closable={!busy} showCloseButton={false} panelClassName="!max-w-[520px] edu-workspace">
           <form
             onSubmit={createAccount}
-            role="dialog"
-            aria-modal="true"
-            aria-label={tr("Створення акаунта", "Create account")}
-            tabIndex={-1}
-            className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-bg-surface p-6 shadow-2xl dark:border-white/10 dark:bg-bg-base"
+            className="space-y-3"
           >
+            {error && <p role="alert" className="rounded-xl bg-accent-error/10 p-3 text-sm text-accent-error">{error}</p>}
+            <fieldset disabled={busy} className="contents">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">
-                  {tr("Керування навчальним закладом", "Organization management")}
-                </p>
-                <h2 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em]">
-                  {tr("Створити обліковий запис викладача", "Create teacher account")}
-                </h2>
+
+
                 <p className="mt-2 text-sm leading-5 text-text-muted dark:text-text-secondary">
-                  {tr("Дані для входу з'являться після створення. Запрошення та email-підтвердження не потрібні.", "Sign-in details will appear after creation. No invitation or email verification is required.")}
+                  {tr("Після створення передайте тимчасові дані викладачу. Він активує особистий акаунт через пошту й установлює власний пароль.", "Share the temporary credentials after creation. The teacher activates their personal account through email and sets their own password.")}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowCreateAccount(false)}
-                className="rounded-lg px-2 text-xl text-text-muted"
+                aria-label={tr("Закрити", "Close")} className="rounded-lg px-2 text-xl text-text-muted"
               >
                 ×
               </button>
@@ -644,6 +761,7 @@ export const OrgWorkspacePage: React.FC = () => {
               <label className="text-sm font-bold">
                 Email
                 <input
+                  required
                   type="email"
                   value={accountDraft.email}
                   onChange={(event) =>
@@ -684,25 +802,22 @@ export const OrgWorkspacePage: React.FC = () => {
               <KeyRound className="h-4 w-4" />
               {tr("Створити й показати дані", "Create and show credentials")}
             </button>
+          </fieldset>
           </form>
-        </div>
+        </Modal>
       )}
       {showCreateClass && (
-        <div data-material="org-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-bg-code/45 px-4 backdrop-blur-sm" role="presentation">
+        <Modal open={Boolean(showCreateClass)} title={tr("Створення класу", "Create class")} onClose={() => setShowCreateClass(false)} closable={!busy} showCloseButton={false} panelClassName="!max-w-[520px] edu-workspace">
           <form
             onSubmit={createOrganizationClass}
-            role="dialog"
-            aria-modal="true"
-            aria-label={tr("Створення класу", "Create class")}
-            tabIndex={-1}
-            className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-bg-surface p-6 shadow-2xl dark:border-white/10 dark:bg-bg-base"
+            className="space-y-3"
           >
+            {error && <p role="alert" className="rounded-xl bg-accent-error/10 p-3 text-sm text-accent-error">{error}</p>}
+            <fieldset disabled={busy} className="contents">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">
-                  {tr("Керування навчальним закладом", "Organization management")}
-                </p>
-                <h2 className="mt-2 text-2xl font-bold">{tr("Створити клас", "Create class")}</h2>
+
+
                 <p className="mt-2 text-sm leading-5 text-text-muted dark:text-text-secondary">
                   {tr("Після створення клас можна призначити одному або кільком викладачам та наповнити обліковими записами учнів.", "After creation, you can assign one or more teachers to the class and add student accounts.")}
                 </p>
@@ -710,7 +825,7 @@ export const OrgWorkspacePage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowCreateClass(false)}
-                className="rounded-lg px-2 text-xl text-text-muted"
+                aria-label={tr("Закрити", "Close")} className="rounded-lg px-2 text-xl text-text-muted"
               >
                 ×
               </button>
@@ -719,7 +834,7 @@ export const OrgWorkspacePage: React.FC = () => {
               {tr("Назва класу", "Class name")}
               <input
                 required
-                value={classDraft.name}
+                maxLength={100} value={classDraft.name}
                 onChange={(event) =>
                   setClassDraft((old) => ({ ...old, name: event.target.value }))
                 }
@@ -755,92 +870,21 @@ export const OrgWorkspacePage: React.FC = () => {
             >
               {tr("Створити клас", "Create class")}
             </button>
+          </fieldset>
           </form>
-        </div>
-      )}
-      {false && (
-        <div data-material="org-dialog-scrim" className="fixed inset-0 z-[80] grid place-items-center bg-bg-code/45 px-4 backdrop-blur-sm" role="presentation">
-          <form
-            onSubmit={createOrganizationClass}
-            role="dialog"
-            aria-modal="true"
-            aria-label={tr("Створення класу", "Create class")}
-            tabIndex={-1}
-            className="w-full max-w-[520px] rounded-[26px] border border-white/60 bg-bg-surface p-6 shadow-2xl dark:border-white/10 dark:bg-bg-base"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">
-                  {tr("Керування навчальним закладом", "Organization management")}
-                </p>
-                <h2 className="mt-2 text-2xl font-bold">{tr("Створити клас", "Create class")}</h2>
-                <p className="mt-2 text-sm leading-5 text-text-muted dark:text-text-secondary">
-                  {tr("Після створення клас можна призначити одному або кільком викладачам та наповнити обліковими записами учнів.", "After creation, you can assign one or more teachers to the class and add student accounts.")}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCreateClass(false)}
-                className="rounded-lg px-2 text-xl text-text-muted"
-              >
-                ×
-              </button>
-            </div>
-            <label className="mt-5 block text-sm font-bold">
-              {tr("Назва класу", "Class name")}
-              <input
-                required
-                value={classDraft.name}
-                onChange={(event) =>
-                  setClassDraft((old) => ({ ...old, name: event.target.value }))
-                }
-                className={fieldClass}
-                placeholder={tr("11-А", "Class 11-A")}
-              />
-            </label>
-            <div className="mt-4">
-              <label className="text-sm font-bold">
-                {tr("Система оцінювання", "Grading system")}
-                <select
-                  value={classDraft.gradingSystem}
-                  onChange={(event) =>
-                    setClassDraft((old) => ({
-                      ...old,
-                      gradingSystem: event.target.value as ClassGradingSystem,
-                    }))
-                  }
-                  className={fieldClass}
-                >
-                  <option value="POINTS_12">{tr("12-бальна (МОН)", "12-point (Ministry of Education)")}</option>
-                  <option value="PERCENT_100">{tr("100-бальна", "100-point")}</option>
-                  <option value="POINTS_10">{tr("10-бальна", "10-point")}</option>
-                  <option value="LETTER_AF">{tr("Літерна A–F", "Letter grades A–F")}</option>
-                  <option value="ECTS_AF">ECTS A–F</option>
-                  <option value="GPA_4">GPA 4.0</option>
-                </select>
-              </label>
-            </div>
-            <button
-              type="submit"
-              disabled={busy || !classDraft.name.trim()}
-              className="mt-6 w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-primary-foreground disabled:opacity-60"
-            >
-              {tr("Створити клас", "Create class")}
-            </button>
-          </form>
-        </div>
+        </Modal>
       )}
       {createdCredentials && (
-        <div data-material="org-dialog-scrim" className="fixed inset-0 z-[90] grid place-items-center bg-bg-code/55 px-4 backdrop-blur-sm" role="presentation">
-          <section role="dialog" aria-modal="true" aria-label={tr("Обліковий запис створено", "Account created")} tabIndex={-1} className="w-full max-w-[460px] rounded-[26px] border border-white/60 bg-bg-surface p-6 shadow-2xl dark:border-white/10 dark:bg-bg-base">
+        <Modal open={Boolean(createdCredentials)} title={tr("Обліковий запис створено", "Account created")} onClose={() => {}} closable={false} showCloseButton={false} panelClassName="!max-w-[520px] edu-workspace">
+          <section className="w-full max-w-[460px] rounded-[26px] border border-white/60 bg-bg-surface p-6 shadow-2xl dark:border-white/10 dark:bg-bg-base">
             <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">
               {tr("Обліковий запис створено", "Account created")}
             </p>
-            <h2 className="mt-2 text-2xl font-bold">{tr("Дані для викладача", "Teacher credentials")}</h2>
+            <h2 className="mt-2 text-2xl font-bold">{tr("Дані для входу", "Sign-in credentials")}</h2>
             <p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
-              {tr("Збережи їх зараз: пароль більше ніде не показуватиметься.", "Save these now; the password won't be shown again.")}
+              {tr("Передайте ці тимчасові дані викладачу. Для доступу до класів він має отримати посилання через «Забули пароль?» і встановити власний пароль.", "Share these temporary credentials with the teacher. To access classes, they must request a link through Forgot password and set their own password.")}
             </p>
-            <div className="mt-5 space-y-3 rounded-2xl bg-bg-hover p-4 text-sm dark:bg-white/[.06]">
+            <div className="mt-5 select-text space-y-3 break-words rounded-2xl bg-bg-hover p-4 text-sm dark:bg-white/[.06]">
               <p>
                 <span className="text-text-muted">{tr("Логін:", "Username:")}</span>{" "}
                 <strong>{createdCredentials.username}</strong>
@@ -860,15 +904,22 @@ export const OrgWorkspacePage: React.FC = () => {
                 <strong>{roleName(createdCredentials.role)}</strong>
               </p>
             </div>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <button type="button" disabled={copyingCredentials} onClick={() => void copyCredentials()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold disabled:opacity-50"><Copy className="size-4" />{tr("Скопіювати дані", "Copy credentials")}</button>
+              <button type="button" onClick={downloadCredentials} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold"><Download className="size-4" />{tr("Завантажити файл", "Download file")}</button>
+            </div>
+            {credentialsStatus && <p role="status" className="mt-3 text-sm text-primary-strong">{credentialsStatus}</p>}
+            {credentialsError && <p role="alert" className="mt-3 text-sm text-accent-error">{credentialsError}</p>}
             <button
               type="button"
+              disabled={copyingCredentials}
               onClick={() => setCreatedCredentials(null)}
               className="mt-6 w-full rounded-xl bg-primary px-4 py-3.5 text-sm font-bold text-primary-foreground dark:bg-primary dark:text-primary-foreground"
             >
-              {tr("Готово", "Done")}
+              {tr("Дані збережено — закрити", "Credentials saved — close")}
             </button>
           </section>
-        </div>
+        </Modal>
       )}
     </>
   );

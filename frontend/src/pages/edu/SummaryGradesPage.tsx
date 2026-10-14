@@ -9,7 +9,7 @@ import { ArrowLeft, Plus, FileText, Trash2 } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 
 const CountUp: React.FC<{ value: number }> = ({ value }) => {
   return <>{value}</>;

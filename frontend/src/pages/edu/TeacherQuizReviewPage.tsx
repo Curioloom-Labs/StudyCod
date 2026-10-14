@@ -6,7 +6,9 @@ import { PageHero } from "../../components/ui/PageHero";
 import { api } from "../../lib/api/client";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
+import { useTranslation } from "react-i18next";
+import "./eduWorkspace.css";
 
 interface Attempt {
   studentId: number;
@@ -14,11 +16,13 @@ interface Attempt {
   autoScore: number;
   maxScore: number;
   autoPercent: number;
+  finalPercent?: number | null;
   status: "AUTO_GRADED" | "NEEDS_MANUAL" | "MANUAL_GRADED";
 }
 interface OpenQuestion { id: string; prompt: string | null; points: number; answer: string; }
 
 export const TeacherQuizReviewPage: React.FC = () => {
+  useTranslation();
   const { lessonId } = useParams<{ lessonId: string }>();
   const navigate = useNavigate();
   const [attempts, setAttempts] = useState<Attempt[]>([]);
@@ -28,44 +32,67 @@ export const TeacherQuizReviewPage: React.FC = () => {
   const [scores, setScores] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingAnswers, setLoadingAnswers] = useState(false);
+  const detailGeneration = React.useRef(0);
+  const listGeneration = React.useRef(0);
 
   const loadAttempts = async () => {
+    const generation = ++listGeneration.current;
     setError(null);
-    const { data } = await api.get(`/edu/lessons/${lessonId}/quiz/attempts`);
-    setAttempts(data?.attempts ?? []);
+    try {
+      const { data } = await api.get(`/edu/lessons/${lessonId}/quiz/attempts`);
+      if (generation === listGeneration.current) setAttempts(data?.attempts ?? []);
+    } catch (cause) {
+      if (generation === listGeneration.current) setError(getErrorMessageFromUnknown(cause, tr("Не вдалося завантажити спроби.", "Could not load attempts.")));
+    }
   };
 
   useEffect(() => {
+    detailGeneration.current += 1;
+    setOpenFor(null);
+    setQuestions([]);
+    setScores({});
+    setLoading(true);
+    setLoadingAnswers(false);
+    let active = true;
     (async () => {
       try {
         await loadAttempts();
       } catch (error) {
-        setError("Failed to load attempts.");
+        setError(tr("Не вдалося завантажити спроби.", "Could not load attempts."));
         showToast({ message: getErrorMessageFromUnknown(error, tr("Помилка", "Error")), type: "error" });
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     })();
+    return () => { active = false; detailGeneration.current += 1; listGeneration.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId]);
 
   const expand = async (studentId: number) => {
+    if (busy || loadingAnswers) return;
+    const generation = ++detailGeneration.current;
     if (openFor === studentId) {
       setOpenFor(null);
       return;
     }
     try {
+      setLoadingAnswers(true);
+      setError(null);
       const { data } = await api.get(`/edu/lessons/${lessonId}/quiz/attempts/${studentId}`);
+      if (generation !== detailGeneration.current) return;
       setQuestions(data?.openQuestions ?? []);
       setScores({});
       setOpenFor(studentId);
     } catch (error) {
-      setError("Failed to load answers.");
+      if (generation !== detailGeneration.current) return;
+      setError(tr("Не вдалося завантажити відповіді.", "Could not load answers."));
       showToast({ message: getErrorMessageFromUnknown(error, tr("Помилка", "Error")), type: "error" });
-    }
+    } finally { if (generation === detailGeneration.current) setLoadingAnswers(false); }
   };
 
   const grade = async (studentId: number) => {
+    if (busy || questions.some(q => scores[q.id] == null || !scores[q.id].trim() || !Number.isFinite(Number(scores[q.id])) || Number(scores[q.id]) < 0 || Number(scores[q.id]) > q.points)) return;
     setBusy(true);
     try {
       const manualScores: Record<string, number> = {};
@@ -78,7 +105,7 @@ export const TeacherQuizReviewPage: React.FC = () => {
       setOpenFor(null);
       await loadAttempts();
     } catch (error) {
-      setError("Failed to save grade.");
+      setError(tr("Не вдалося зберегти оцінку.", "Could not save grade."));
       showToast({ message: getErrorMessageFromUnknown(error, tr("Помилка", "Error")), type: "error" });
     } finally {
       setBusy(false);
@@ -88,7 +115,7 @@ export const TeacherQuizReviewPage: React.FC = () => {
   if (loading) return <div role="status" aria-live="polite" style={{ padding: 24 }}>{tr("Завантаження…", "Loading…")}</div>;
 
   return (
-    <div style={{ maxWidth: 760, margin: "0 auto", padding: "0 16px 48px" }}>
+    <div className="edu-workspace mx-auto max-w-[860px] px-4 pb-12 sm:px-6">
       <Button variant="ghost" onClick={() => navigate(-1)} style={{ marginTop: 16 }}>
         <ArrowLeft size={16} /> {tr("Назад", "Back")}
       </Button>
@@ -112,7 +139,7 @@ export const TeacherQuizReviewPage: React.FC = () => {
           <div key={a.studentId} style={{ border: "1px solid rgba(128,128,128,0.25)", borderRadius: 8, padding: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <strong>{a.studentName || `#${a.studentId}`}</strong>
-              <span style={{ fontSize: 13, opacity: 0.7 }}>{a.autoPercent}%</span>
+              <span className="text-sm tabular-nums text-text-secondary">{a.finalPercent ?? a.autoPercent}%</span>
               <span
                 style={{
                   fontSize: 11,
@@ -129,7 +156,7 @@ export const TeacherQuizReviewPage: React.FC = () => {
                   : tr("Авто", "Auto")}
               </span>
               {a.status !== "AUTO_GRADED" && (
-                <Button variant="ghost" className="text-xs" onClick={() => expand(a.studentId)} style={{ marginLeft: "auto" }}>
+                <Button variant="ghost" disabled={busy || loadingAnswers} aria-expanded={openFor === a.studentId} className="text-xs" onClick={() => expand(a.studentId)} style={{ marginLeft: "auto" }}>
                   {openFor === a.studentId ? tr("Сховати", "Hide") : tr("Оцінити", "Grade")}
                 </Button>
               )}
@@ -148,6 +175,8 @@ export const TeacherQuizReviewPage: React.FC = () => {
                         type="number"
                         min={0}
                         max={q.points}
+                        step="0.01"
+                        disabled={busy}
                         value={scores[q.id] ?? ""}
                         onChange={e => setScores(prev => ({ ...prev, [q.id]: e.target.value }))}
                         style={{ width: 70, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)" }}
@@ -155,7 +184,7 @@ export const TeacherQuizReviewPage: React.FC = () => {
                     </label>
                   </div>
                 ))}
-                <Button onClick={() => grade(a.studentId)} disabled={busy}>
+                <Button onClick={() => grade(a.studentId)} disabled={busy || !questions.length || questions.some(q => scores[q.id] == null || !scores[q.id].trim() || !Number.isFinite(Number(scores[q.id])) || Number(scores[q.id]) < 0 || Number(scores[q.id]) > q.points)}>
                   <Check size={16} /> {tr("Зберегти оцінку", "Save grade")}
                 </Button>
               </div>

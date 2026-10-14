@@ -20,9 +20,16 @@ import { generateJti, revokeJti, revokeUserTokensBeforeTime } from "../services/
 import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { AUTH_COOKIE_NAME, clearSharedAuthCookie, setSharedAuthCookie } from "../utils/authCookie";
 import { EduRegistrationIntent } from "../entities/EduRegistrationIntent";
-import { Organization } from "../entities/Organization";
-import { Membership } from "../entities/Membership";
-import { slugifyBase } from "../services/edu/membership";
+import { hasClassIssuedUserLogin, hasUnmanagedClassLogin } from "../services/edu/classIssuedAccount";
+import { eduUserPasswordVersion } from "../services/edu/studentCredentialVersion";
+import { hasEducationalAccountContext, saveEducationalAccountMetadata } from "../services/edu/accountMetadata";
+import { verifyEducationalAccountEmail } from "../services/edu/verifyAccountEmail";
+import { HttpError } from "../utils/httpError";
+import { readEducationalUserSessionState, resetEducationalUserPassword, revokeEducationalUserSessions, revokeEducationalStudentSessions } from "../services/edu/userSessions";
+import { Student } from "../entities/Student";
+import { OrgInvitation } from "../entities/OrgInvitation";
+import { signAccountUserToken } from "../services/auth/accountToken";
+import { invalidateCachedUser } from "../services/auth/userCache";
 export const authRouter = Router();
 
 // Pre-computed bcrypt hash used when the user does not exist, so bcrypt.compare
@@ -334,11 +341,13 @@ export const __authGoogleExchangeTestOnly = {
   _pendingCodeCount: () => pendingGoogleExchangeCodesFallback.size
 };
 
-function signUserToken(user: User): string {
+function signUserToken(user: User, classIssued = false, eduSessionVersion?: number): string {
   return jwt.sign({
     userId: user.id,
     role: user.role,
     userMode: user.userMode,
+    ...(classIssued ? { eduPasswordVersion: eduUserPasswordVersion(user.password) } : {}),
+    ...(eduSessionVersion !== undefined ? { eduSessionVersion } : {}),
     jti: generateJti()
   }, JWT_SECRET, {
     expiresIn: "7d"
@@ -357,12 +366,18 @@ authRouter.post("/logout", async (req: Request, res: Response) => {
   const token = getAuthToken(req);
   if (token) {
     try {
-      const payload = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as { jti?: string; userId?: number; iat?: number; exp?: number };
+      const payload = jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as { jti?: string; userId?: number; studentId?: number; type?: string; iat?: number; exp?: number; eduSessionVersion?: unknown; credentialVersion?: unknown };
       if (payload.jti) {
         const ttl = payload.exp && payload.iat ? Math.max(1, payload.exp - Math.floor(Date.now() / 1000)) : 7 * 24 * 60 * 60;
         await revokeJti(payload.jti, ttl);
       }
-      if (payload.userId) await revokeUserTokensBeforeTime(payload.userId, Date.now());
+      if (payload.type === "STUDENT" && payload.studentId) {
+        await revokeEducationalStudentSessions(payload.studentId, payload.credentialVersion);
+      } else if (payload.userId) {
+        const educational = await revokeEducationalUserSessions(payload.userId, payload.eduSessionVersion);
+        if (educational) await invalidateCachedUser(payload.userId);
+        else await revokeUserTokensBeforeTime(payload.userId, Date.now());
+      }
     } catch {
       // Logout is idempotent: an invalid/expired token must not prevent cookie cleanup.
     }
@@ -473,7 +488,8 @@ const googleCompleteSchema = z.object({
   birthMonth: z.number().int().min(1).max(12)
 });
 const forgotPasswordSchema = z.object({
-  email: z.string().email()
+  email: z.string().email(),
+  next: z.string().regex(/^\/invite\/[A-Za-z0-9_-]{1,80}$/).optional()
 });
 const resetPasswordSchema = z.object({
   token: z.string().min(1),
@@ -590,10 +606,18 @@ authRouter.post("/login", loginLimiter, async (req: AuthRequest, res: Response) 
         message: "CONTEST_ACCOUNT_REQUIRES_CONTEST_LOGIN"
       });
     }
-    if (!user.emailVerified) {
+    const classIssued = await hasClassIssuedUserLogin(user);
+    const securityState = await readEducationalUserSessionState(user.id);
+    if (securityState?.requiresPrivateSetup) return res.status(403).json({
+      message: "EDU_ACCOUNT_SETUP_REQUIRED", recoveryEmail: user.email || null,
+      classLoginAvailable: await AppDataSource.getRepository(Student).existsBy({ user: { id: user.id }, generatedUsername: username })
+    });
+    if (!user.emailVerified && !classIssued) {
+      const classLoginAvailable = await hasUnmanagedClassLogin(user, username);
       return res.status(403).json({
         message: "EMAIL_NOT_VERIFIED",
-        requiresEmailVerification: true
+        requiresEmailVerification: true,
+        ...(classLoginAvailable ? { classLoginAvailable: true } : {})
       });
     }
 
@@ -608,13 +632,14 @@ authRouter.post("/login", loginLimiter, async (req: AuthRequest, res: Response) 
       });
     }
 
-    const token = signUserToken(user);
+    const token = await signAccountUserToken(user);
     setSharedAuthCookie(res, token);
     return res.json({
       user: buildUserDto(user)
     });
   } catch (err) {
     logger.error("[auth] Login error", { requestId: req.requestId, err });
+    if (err instanceof HttpError) return res.status(err.statusCode).json({ message: err.message });
     return res.status(500).json({
       message: "INTERNAL_ERROR"
     });
@@ -792,12 +817,13 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
         return redirectToGoogleError(res, "GOOGLE_ACCOUNT_ALREADY_LINKED");
       }
 
-      currentUser.googleId = linkedGoogleId;
-      if (!currentUser.email && user.email) currentUser.email = user.email;
-      if (!currentUser.avatarUrl && user.avatarUrl) currentUser.avatarUrl = user.avatarUrl;
-      await userRepo().save(currentUser);
+      const linkFields = { googleId: linkedGoogleId,
+        ...(!currentUser.email && user.email ? { email: user.email } : {}),
+        ...(!currentUser.avatarUrl && user.avatarUrl ? { avatarUrl: user.avatarUrl } : {}) };
+      Object.assign(currentUser, linkFields);
+      const savedUser = await saveEducationalAccountMetadata(currentUser, linkFields);
 
-      const token = signUserToken(currentUser);
+      const token = await signAccountUserToken(savedUser);
       const code = await issueGoogleExchangeCode("success", token);
       setGoogleExchangeCookie(res, code);
       return res.redirect(`${FRONTEND_URL}/auth/google/success?code=${encodeURIComponent(code)}`);
@@ -825,7 +851,7 @@ authRouter.get("/google/callback", (req: Request, res: Response, next) => {
     // One Google identity is valid across Personal, EDU and Contest. The
     // selected mode controls the destination UI; it must not reject an
     // already-linked account or force duplicate credentials.
-    const token = signUserToken(user);
+    const token = await signAccountUserToken(user);
     const code = await issueGoogleExchangeCode("success", token);
     setGoogleExchangeCookie(res, code);
 
@@ -1012,7 +1038,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       }
     });
     if (existingByGoogle) {
-      const jwtToken = signUserToken(existingByGoogle);
+      const jwtToken = await signAccountUserToken(existingByGoogle);
       setSharedAuthCookie(res, jwtToken);
       return res.json({ user: buildUserDto(existingByGoogle) });
     }
@@ -1024,12 +1050,12 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
     if (existingByEmail) {
       // Google has already verified this email. Link it to the existing
       // StudyCod identity instead of failing when the selected mode differs.
-      existingByEmail.googleId = googleId;
-      if (!existingByEmail.avatarUrl && avatarUrl) existingByEmail.avatarUrl = avatarUrl;
-      await userRepo().save(existingByEmail);
-      const jwtToken = signUserToken(existingByEmail);
+      const linkFields = { googleId, ...(!existingByEmail.avatarUrl && avatarUrl ? { avatarUrl } : {}) };
+      Object.assign(existingByEmail, linkFields);
+      const savedUser = await saveEducationalAccountMetadata(existingByEmail, linkFields);
+      const jwtToken = await signAccountUserToken(savedUser);
       setSharedAuthCookie(res, jwtToken);
-      return res.json({ user: buildUserDto(existingByEmail) });
+      return res.json({ user: buildUserDto(savedUser) });
     }
     const existingByUsername = await userRepo().findOne({
       where: {
@@ -1068,7 +1094,7 @@ authRouter.post("/google/complete", async (req: AuthRequest, res: Response) => {
       userMode: requestedUserMode
     });
     await userRepo().save(user);
-    const jwtToken = signUserToken(user);
+    const jwtToken = await signAccountUserToken(user);
     setSharedAuthCookie(res, jwtToken);
     return res.json({ user: buildUserDto(user) });
   } catch (err) {
@@ -1108,47 +1134,28 @@ authRouter.get("/verify-email", async (req: AuthRequest, res: Response) => {
     const pendingEduRegistration = await intentRepo.findOne({
       where: { userId: user.id }
     });
+    if (pendingEduRegistration || await hasEducationalAccountContext(user)) {
+      const verified = await verifyEducationalAccountEmail(user.id, token);
+      if (!verified) return res.status(400).json({ message: "INVALID_TOKEN" });
+      const jwtToken = await signAccountUserToken(verified);
+      setSharedAuthCookie(res, jwtToken);
+      return res.json({ user: buildUserDto(verified) });
+    }
     await AppDataSource.transaction(async (manager) => {
       user.emailVerified = true;
       user.emailVerificationToken = null;
       user.emailVerificationExpires = null;
       await manager.getRepository(User).save(user);
 
-      if (pendingEduRegistration && pendingEduRegistration.expiresAt.getTime() > Date.now()) {
-        const baseSlug = slugifyBase(pendingEduRegistration.organizationName);
-        let slug = baseSlug;
-        let slugResolved = false;
-        for (let attempt = 0; attempt < 6; attempt += 1) {
-          const candidate = attempt === 0 ? baseSlug : `${baseSlug}-${crypto.randomBytes(3).toString("hex")}`;
-          const exists = await manager.getRepository(Organization).findOne({ where: { slug: candidate } });
-          if (!exists) {
-            slug = candidate;
-            slugResolved = true;
-            break;
-          }
-        }
-        if (!slugResolved) slug = `${baseSlug}-${crypto.randomBytes(6).toString("hex")}`;
-        const organization = manager.getRepository(Organization).create({
-          name: pendingEduRegistration.organizationName,
-          institutionType: pendingEduRegistration.institutionType,
-          slug
-        });
-        await manager.getRepository(Organization).save(organization);
-        await manager.getRepository(Membership).save(manager.getRepository(Membership).create({
-          user,
-          organization,
-          role: "ORG_ADMIN"
-        }));
-        await manager.getRepository(EduRegistrationIntent).remove(pendingEduRegistration);
-      }
     });
-    const jwtToken = signUserToken(user);
+    const jwtToken = await signAccountUserToken(user);
     setSharedAuthCookie(res, jwtToken);
     return res.json({
       user: buildUserDto(user)
     });
   } catch (err) {
     logger.error("[auth] Verify email error", { requestId: req.requestId, err });
+    if (err instanceof HttpError) return res.status(err.statusCode).json({ message: err.message });
     return res.status(500).json({
       message: "INTERNAL_ERROR"
     });
@@ -1183,7 +1190,7 @@ authRouter.post("/resend-verification", emailActionLimiter, async (req: AuthRequ
     const verificationToken = crypto.randomBytes(32).toString("hex");
     user.emailVerificationToken = verificationToken;
     user.emailVerificationExpires = new Date(Date.now() + EMAIL_VERIFICATION_TTL_MS);
-    await userRepo().save(user);
+    await saveEducationalAccountMetadata(user, { emailVerificationToken: user.emailVerificationToken, emailVerificationExpires: user.emailVerificationExpires });
     const locale = resolveRequestLocale(req);
     emailService.sendVerificationEmail(user.email!, verificationToken, user.username, locale).catch(err => {
       logger.error("[auth] sendVerificationEmail failed", { requestId: req.requestId, email: user.email, username: user.username, err });
@@ -1193,6 +1200,7 @@ authRouter.post("/resend-verification", emailActionLimiter, async (req: AuthRequ
     });
   } catch (err) {
     logger.error("[auth] Resend verification error", { requestId: req.requestId, err });
+    if (err instanceof HttpError) return res.status(err.statusCode).json({ message: err.message });
     return res.status(500).json({
       message: "INTERNAL_ERROR"
     });
@@ -1222,9 +1230,15 @@ authRouter.post("/forgot-password", emailActionLimiter, async (req: AuthRequest,
     const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
     user.passwordResetToken = tokenHash;
     user.passwordResetExpires = new Date(Date.now() + 60 * 60 * 1000);
-    await userRepo().save(user);
+    await saveEducationalAccountMetadata(user, { passwordResetToken: user.passwordResetToken, passwordResetExpires: user.passwordResetExpires });
     const locale = resolveRequestLocale(req);
-    emailService.sendPasswordResetEmail(user.email, rawToken, user.username, locale).catch(err => {
+    const educational = await hasEducationalAccountContext(user);
+    let invitationPath: string | undefined;
+    if (validated.data.next) {
+      const invite = await AppDataSource.getRepository(OrgInvitation).findOneBy({ token: validated.data.next.slice("/invite/".length), status: "PENDING" });
+      if (invite && invite.email.trim().toLowerCase() === user.email.trim().toLowerCase() && invite.expiresAt > new Date()) invitationPath = validated.data.next;
+    }
+    emailService.sendPasswordResetEmail(user.email, rawToken, user.username, locale, educational ? "EDUCATIONAL" : undefined, invitationPath).catch(err => {
       logger.error("[auth] sendPasswordResetEmail failed", { requestId: req.requestId, email: user.email, username: user.username, err });
     });
     return res.json({
@@ -1232,6 +1246,7 @@ authRouter.post("/forgot-password", emailActionLimiter, async (req: AuthRequest,
     });
   } catch (err) {
     logger.error("[auth] Forgot password error", { requestId: req.requestId, err });
+    if (err instanceof HttpError && err.message === "ACCOUNT_CONTACT_CHANGED") return res.json({ message: "RESET_EMAIL_SENT" });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -1260,17 +1275,33 @@ authRouter.post("/reset-password", async (req: AuthRequest, res: Response) => {
       });
     }
 
-    user.password = await bcrypt.hash(newPassword, 10);
-    user.passwordResetToken = null;
-    user.passwordResetExpires = null;
-    await userRepo().save(user);
-    await revokeUserTokensBeforeTime(user.id, Date.now());
+    const educational = await hasEducationalAccountContext(user);
+    if (educational && Buffer.byteLength(newPassword, "utf8") > 72) return res.status(400).json({ message: "PASSWORD_TOO_LONG" });
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    if (educational) {
+      if (!(await resetEducationalUserPassword(user.id, tokenHash, passwordHash, newPassword))) return res.status(400).json({ message: "INVALID_OR_EXPIRED_TOKEN" });
+    } else {
+      user.password = passwordHash;
+      user.passwordResetToken = null;
+      user.passwordResetExpires = null;
+      await userRepo().save(user);
+    }
+    if (educational) {
+      await invalidateCachedUser(user.id);
+      // The recovery browser must sign in with the new private User secret,
+      // even when it previously held a still-valid class-only Student cookie.
+      // Clear this browser's cookie without revoking independent class sessions.
+      clearSharedAuthCookie(res);
+    } else await revokeUserTokensBeforeTime(user.id, Date.now());
 
     return res.json({
-      message: "PASSWORD_UPDATED"
+      message: "PASSWORD_UPDATED",
+      ...(educational ? { userMode: "EDUCATIONAL" } : {})
     });
   } catch (err) {
     logger.error("[auth] Reset password error", { requestId: req.requestId, err });
+    if (err instanceof HttpError) return res.status(err.statusCode).json({ message: err.message });
+    if ((err as { statusCode?: number }).statusCode === 409) return res.status(409).json({ message: "PASSWORD_STATE_CHANGED" });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });

@@ -1,9 +1,11 @@
 import React from "react";
+import { withDevPreview } from "../../lib/devPreview";
+import "./eduWorkspace.css";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, ArrowRight, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock3 } from "lucide-react";
 import { getAgenda, type AgendaItemDto } from "../../lib/api/edu";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const pad = (value: number) => String(value).padStart(2, "0");
@@ -34,6 +36,7 @@ export const AgendaWorkspacePage: React.FC = () => {
     let alive = true;
     void (async () => {
       setLoading(true);
+      setError(null);
       try {
         const response = await getAgenda();
         if (alive) setItems(response.items || []);
@@ -66,13 +69,13 @@ export const AgendaWorkspacePage: React.FC = () => {
   const month = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(cursor);
   const shortDays = en ? ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] : ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
   const open = (item: AgendaItemDto) => item.kind === "CONTROL"
-    ? navigate(`/edu/lessons/${item.id}?type=CONTROL`)
-    : item.lessonId ? navigate(`/edu/lessons/${item.lessonId}?type=LESSON`) : undefined;
+    ? navigate(withDevPreview(`/edu/lessons/${item.id}?type=CONTROL`))
+    : item.lessonId ? navigate(withDevPreview(`/edu/lessons/${item.lessonId}?type=LESSON`)) : item.topicId ? navigate(withDevPreview(`/edu/lessons/${item.topicId}?type=TOPIC`)) : undefined;
 
-  if (loading) return <div className="mx-auto max-w-[1280px] px-4 py-10 sm:px-6 lg:px-10"><div className="h-[620px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" role="status" aria-label={copy("Завантаження календаря", "Loading calendar")} /></div>;
+  if (loading) return <div className="edu-workspace mx-auto max-w-[1280px] px-4 py-10 sm:px-6 lg:px-10"><div className="h-[620px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" role="status" aria-label={copy("Завантаження календаря", "Loading calendar")} /></div>;
 
   return (
-    <div className="mx-auto max-w-[1280px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+    <div className="edu-workspace mx-auto max-w-[1280px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
       <header className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">EDU / {copy("ритм навчання", "learning schedule")}</p>
@@ -99,7 +102,7 @@ export const AgendaWorkspacePage: React.FC = () => {
               const selectedDay = cellKey === chosen;
               return <button type="button" key={cellKey} aria-label={`${new Intl.DateTimeFormat(locale, { dateStyle: "full" }).format(cell)}, ${events.length} ${copy("подій", "events")}`} aria-pressed={selectedDay} onClick={() => setChosen(cellKey)} className={`min-h-[76px] rounded-xl border p-2 text-left transition sm:min-h-[104px] ${selectedDay ? "border-primary-strong bg-bg-hover shadow-[inset_0_0_0_1px_rgba(22,131,77,.16)] dark:border-primary/50 dark:bg-primary/[.07]" : inMonth ? "border-border/8 hover:border-primary-strong/35 hover:bg-bg-hover dark:border-white/[.07] dark:hover:bg-white/[.04]" : "border-transparent opacity-40"}`}>
                 <span className={`text-xs font-bold ${isToday(cell) ? "text-primary-strong dark:text-primary-soft" : "text-text-muted dark:text-text-secondary"}`}>{cell.getDate()}</span>
-                <div className="mt-1.5 space-y-1">{events.slice(0, 2).map((item) => <span key={`${item.kind}-${item.id}`} className={`block truncate rounded-md px-1.5 py-1 text-[10px] font-bold ${item.kind === "CONTROL" ? "bg-bg-hover text-accent-warn dark:bg-accent-warn/15 dark:text-accent-warn" : "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"}`}>{item.title}</span>)}{events.length > 2 && <span className="block text-[10px] font-bold text-text-muted">+{events.length - 2}</span>}</div>
+                <div className="mt-1.5 space-y-1">{events.slice(0, 2).map((item) => <span key={`${item.kind}-${item.lessonId ?? item.topicId}-${item.id}`} className={`block truncate rounded-md px-1.5 py-1 text-[10px] font-bold ${item.kind === "CONTROL" ? "bg-bg-hover text-accent-warn dark:bg-accent-warn/15 dark:text-accent-warn" : "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"}`}>{item.title}</span>)}{events.length > 2 && <span className="block text-[10px] font-bold text-text-muted">+{events.length - 2}</span>}</div>
               </button>;
             })}
           </div>
@@ -108,10 +111,10 @@ export const AgendaWorkspacePage: React.FC = () => {
         <aside className="space-y-4">
           <section className="rounded-[28px] border border-border/10 bg-bg-hover p-5 dark:border-white/[.09] dark:bg-bg-code">
             <div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-2xl bg-primary text-primary-soft"><CalendarDays className="h-5 w-5" /></span><div><p className="text-xs font-bold uppercase tracking-[.13em] text-text-muted dark:text-text-secondary">{copy("Обраний день", "Selected day")}</p><h2 className="font-[family-name:var(--font-display)] text-xl font-bold tracking-[-.03em]">{new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", weekday: "long" }).format(new Date(`${chosen}T12:00:00`))}</h2></div></div>
-            <div className="mt-5 space-y-2">{selected.length ? selected.map((item) => <button type="button" key={`${item.kind}-${item.id}`} onClick={() => open(item)} className="group flex w-full items-start gap-3 rounded-2xl bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 dark:bg-white/[.05] dark:shadow-none"><span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl ${item.kind === "CONTROL" ? "bg-bg-hover text-accent-warn dark:bg-accent-warn/15 dark:text-accent-warn" : "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"}`}>{item.kind === "CONTROL" ? <ClipboardList className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{item.title}</span><span className="mt-1 block text-xs font-medium text-text-muted dark:text-text-secondary">{item.className} · {formatDate(item.deadline, { hour: "2-digit", minute: "2-digit" }, en)}</span></span><ArrowRight className="mt-2 h-4 w-4 text-text-secondary transition group-hover:translate-x-0.5" /></button>) : <p className="rounded-2xl border border-dashed border-border/12 px-4 py-8 text-center text-sm leading-6 text-text-muted dark:border-white/10 dark:text-text-secondary">{copy("На цей день нічого не заплановано.", "Nothing is scheduled for this day.")}</p>}</div>
+            <div className="mt-5 space-y-2">{selected.length ? selected.map((item) => <button type="button" key={`${item.kind}-${item.lessonId ?? item.topicId}-${item.id}`} onClick={() => open(item)} className="group flex w-full items-start gap-3 rounded-2xl bg-white p-3 text-left shadow-sm transition edu-hover-lift dark:bg-white/[.05] dark:shadow-none"><span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-xl ${item.kind === "CONTROL" ? "bg-bg-hover text-accent-warn dark:bg-accent-warn/15 dark:text-accent-warn" : "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"}`}>{item.kind === "CONTROL" ? <ClipboardList className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{item.title}</span><span className="mt-1 block text-xs font-medium text-text-muted dark:text-text-secondary">{item.className} · {formatDate(item.deadline, { hour: "2-digit", minute: "2-digit" }, en)}</span></span><ArrowRight className="mt-2 h-4 w-4 text-text-secondary transition " /></button>) : <p className="rounded-2xl border border-dashed border-border/12 px-4 py-8 text-center text-sm leading-6 text-text-muted dark:border-white/10 dark:text-text-secondary">{copy("На цей день нічого не заплановано.", "Nothing is scheduled for this day.")}</p>}</div>
           </section>
           {overdue.length > 0 && <button type="button" onClick={() => { const first = new Date(overdue[0].deadline); setCursor(new Date(first.getFullYear(), first.getMonth(), 1)); setChosen(key(first)); }} className="flex w-full items-center gap-3 rounded-2xl border border-accent-error/25 bg-accent-error/[.08] p-4 text-left text-accent-error transition hover:bg-accent-error/[.12] dark:text-accent-error"><AlertTriangle className="h-5 w-5 shrink-0" /><span><span className="block text-sm font-bold">{copy("Є прострочені роботи", "Overdue work")}</span><span className="block text-xs font-medium opacity-80">{copy(`Відкрити першу з ${overdue.length}`, `Open the first of ${overdue.length}`)}</span></span></button>}
-          <section className="rounded-2xl border border-border/10 p-4 dark:border-white/[.09]"><div className="flex items-center gap-2 text-sm font-bold"><Clock3 className="h-4 w-4 text-accent-warn" />{copy("Найближче", "Coming up")}</div><div className="mt-3 space-y-2">{items.filter((item) => item.bucket === "today" || item.bucket === "soon").slice(0, 3).map((item) => <div key={`${item.kind}-${item.id}`} className="flex justify-between gap-3 text-sm"><span className="truncate text-text-muted dark:text-text-secondary">{item.title}</span><span className="shrink-0 font-bold text-text-primary dark:text-text-primary">{formatDate(item.deadline, { day: "numeric", month: "short" }, en)}</span></div>)}</div></section>
+          <section className="rounded-2xl border border-border/10 p-4 dark:border-white/[.09]"><div className="flex items-center gap-2 text-sm font-bold"><Clock3 className="h-4 w-4 text-accent-warn" />{copy("Найближче", "Coming up")}</div><div className="mt-3 space-y-2">{items.filter((item) => item.bucket === "today" || item.bucket === "soon").slice(0, 3).map((item) => <div key={`${item.kind}-${item.lessonId ?? item.topicId}-${item.id}`} className="flex justify-between gap-3 text-sm"><span className="truncate text-text-muted dark:text-text-secondary">{item.title}</span><span className="shrink-0 font-bold text-text-primary dark:text-text-primary">{formatDate(item.deadline, { day: "numeric", month: "short" }, en)}</span></div>)}</div></section>
         </aside>
       </div>
     </div>

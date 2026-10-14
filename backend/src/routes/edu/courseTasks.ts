@@ -1,10 +1,14 @@
 import { Router, NextFunction, Response } from "express";
 import { z } from "zod";
+import { randomUUID } from "crypto";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { EduTask } from "../../entities/EduTask";
 import { EduGrade } from "../../entities/EduGrade";
 import { Student } from "../../entities/Student";
+import { EduLesson } from "../../entities/EduLesson";
+import { judgeWithSemaphore } from "../../services/judgeWorker";
+import { courseTestsRevision, courseJudgeGrade } from "../../services/edu/courseTaskTests";
 import { TestData } from "../../entities/TestData";
 import { executeCodeWithInput } from "../../services/codeExecutionService";
 import {
@@ -15,6 +19,7 @@ import {
 } from "../../services/webTaskValidationService";
 import { encodeWebTaskPayload } from "../../utils/webTaskPayload";
 import { generateAlgorithmicHints } from "../../services/ai/failureHints";
+import { assertCoursePracticeActive } from "../../services/edu/courseLessonAttempt";
 
 /** Student-facing handlers for materialised course EduTasks.
  * The legacy router below serves TopicTask. Keeping this router first makes the
@@ -55,12 +60,8 @@ function uiLanguageFor(req: AuthRequest): "uk" | "en" {
   return String(req.headers["accept-language"] ?? "").toLowerCase().startsWith("en") ? "en" : "uk";
 }
 
-function normalizedOutput(value: unknown): string {
-  return String(value ?? "").replace(/\r\n/g, "\n").trim();
-}
-
 async function latestGrade(taskId: number, studentId: number): Promise<EduGrade | null> {
-  return gradeRepo().findOne({ where: { task: { id: taskId }, student: { id: studentId } }, order: { createdAt: "DESC" } });
+  return gradeRepo().findOne({ where: { task: { id: taskId }, student: { id: studentId } }, order: { createdAt: "DESC", id: "DESC" } });
 }
 
 /**
@@ -69,8 +70,7 @@ async function latestGrade(taskId: number, studentId: number): Promise<EduGrade 
  * authorization boundary that prevents two concurrent requests from both
  * consuming the final allowed attempt.
  */
-async function saveCourseGradeWithinAttemptLimit(task: EduTask, student: Student, draft: Partial<EduGrade>): Promise<EduGrade> {
-  const maxAttempts = Math.max(1, Number(task.maxAttempts) || 1);
+async function saveCourseGradeWithinAttemptLimit(task: EduTask, student: Student, draft: Partial<EduGrade>, expectedTestsRevision?: string): Promise<EduGrade> {
   return AppDataSource.transaction("SERIALIZABLE", async manager => {
     await manager
       .createQueryBuilder(Student, "student")
@@ -78,7 +78,19 @@ async function saveCourseGradeWithinAttemptLimit(task: EduTask, student: Student
       .where("student.id = :studentId", { studentId: student.id })
       .getOne();
 
+    await manager.getRepository(EduLesson).findOne({ where: { id: task.lesson.id }, lock: { mode: "pessimistic_write" } });
+    const current = await manager.getRepository(EduTask).findOne({ where: { id: task.id }, lock: { mode: "pessimistic_write" } });
+    if (!current) throw Object.assign(new Error("TASK_NOT_FOUND"), { statusCode: 404 });
+    if (current.isClosed || current.deadline && new Date() > current.deadline) throw Object.assign(new Error("TASK_NOT_ACCEPTING_SUBMISSIONS"), { statusCode: 403 });
+    const maxAttempts = Math.max(1, Number(current.maxAttempts) || 1);
+    if (expectedTestsRevision) {
+      const currentTests = await manager.getRepository(TestData).find({ where: { task: { id: task.id } }, order: { id: "ASC" } });
+      if (courseTestsRevision(currentTests, 0) !== expectedTestsRevision) throw Object.assign(new Error("TESTS_CHANGED"), { statusCode: 409 });
+    }
     const gradeRepoM = manager.getRepository(EduGrade);
+    await assertCoursePracticeActive(task.lesson, student.id, manager);
+    const prior = await gradeRepoM.findOne({ where: { task: { id: task.id }, student: { id: student.id } }, order: { createdAt: "DESC", id: "DESC" } });
+    if (prior?.isCompleted || prior?.isManuallyGraded) throw Object.assign(new Error("TASK_ALREADY_COMPLETED"), { statusCode: 409 });
     const used = await gradeRepoM.count({ where: { task: { id: task.id }, student: { id: student.id } } });
     if (used >= maxAttempts) {
       throw Object.assign(new Error("MAX_ATTEMPTS_REACHED"), { statusCode: 403 });
@@ -91,10 +103,11 @@ async function saveCourseGradeWithinAttemptLimit(task: EduTask, student: Student
 }
 
 async function handleIfCourseTask(req: AuthRequest, res: Response, next: NextFunction, fn: (ctx: { task: EduTask; student: Student }) => Promise<unknown>) {
+  if (req.query.source === "legacy") return next();
   const taskId = Number(req.params.taskId);
   if (!Number.isInteger(taskId)) return next();
   const task = await loadTask(taskId);
-  if (!task) return next();
+  if (!task) return req.query.source === "course" ? res.status(404).json({ message: "TASK_NOT_FOUND" }) : next();
   const ctx = await visibleTask(req, taskId);
   // Without an explicit course source marker, let the legacy TopicTask router
   // handle a colliding numeric id that belongs to the student's class.
@@ -102,6 +115,9 @@ async function handleIfCourseTask(req: AuthRequest, res: Response, next: NextFun
     ? res.status(403).json({ message: "ACCESS_DENIED" })
     : next();
   try {
+    if (req.method !== "GET") {
+      await assertCoursePracticeActive(ctx.task.lesson, ctx.student.id);
+    }
     await fn(ctx);
   } catch (error: unknown) {
     const errorRecord = error && typeof error === "object" ? error as Record<string, unknown> : {};
@@ -113,6 +129,10 @@ async function handleIfCourseTask(req: AuthRequest, res: Response, next: NextFun
 
 router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Response, next: NextFunction) => {
   await handleIfCourseTask(req, res, next, async ({ task, student }) => {
+    let submissionAllowed = true;
+    let submissionBlockedReason: string | null = null;
+    try { await assertCoursePracticeActive(task.lesson, student.id); }
+    catch (error) { submissionAllowed = false; submissionBlockedReason = (error as Error).message; }
     const grade = await latestGrade(task.id, student.id);
     const attemptsUsed = await gradeRepo().count({ where: { task: { id: task.id }, student: { id: student.id } } });
     const tests = await testRepo().count({ where: { task: { id: task.id } } });
@@ -131,10 +151,12 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       maxAttempts: task.maxAttempts,
       attemptsUsed,
       deadline: task.deadline ?? null,
-      isClosed: task.isClosed,
+      isClosed: task.isClosed || !submissionAllowed || task.taskMode === "CODE" && tests === 0 || Boolean(grade?.isCompleted || grade?.isManuallyGraded) || attemptsUsed >= task.maxAttempts,
+      submissionAllowed, submissionBlockedReason,
       lesson: { id: task.lesson.id, title: task.lesson.title, type: task.lesson.type, hasTheory: task.lesson.hasTheory },
       hasGrade: Boolean(grade),
-      grade: grade ? { id: grade.id, total: grade.total, testsPassed: grade.testsPassed, testsTotal: grade.testsTotal, isCompleted: grade.isCompleted, isManuallyGraded: grade.isManuallyGraded, feedback: grade.feedback } : null,
+      grade: grade ? { id: grade.id, total: grade.total, testsPassed: grade.testsPassed, testsTotal: grade.testsTotal, isCompleted: grade.isCompleted, isManuallyGraded: grade.isManuallyGraded, feedback: grade.feedback, score: grade.score, maxScore: grade.maxScore,
+        testResults: grade.testResults ? (() => { try { return JSON.parse(grade.testResults); } catch { return []; } })() : [] } : null,
     }});
   });
 });
@@ -156,48 +178,34 @@ router.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, res:
     if (task.deadline && new Date() > new Date(task.deadline)) return res.status(403).json({ message: "DEADLINE_PASSED" });
     const code = z.string().min(1).max(200_000).safeParse(req.body?.code);
     if (!code.success) return res.status(400).json({ message: "CODE_REQUIRED" });
+    const prior = await latestGrade(task.id, student.id);
+    if (prior?.isCompleted || prior?.isManuallyGraded) return res.status(409).json({ message: "TASK_ALREADY_COMPLETED" });
     const used = await gradeRepo().count({ where: { task: { id: task.id }, student: { id: student.id } } });
     if (used >= Math.max(1, task.maxAttempts)) return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
     const tests = await testRepo().find({ where: { task: { id: task.id } }, order: { id: "ASC" } });
-    if (!tests.length) {
-      const execution = await executeCodeWithInput(code.data, languageFor(task), "", 10000);
-      const passed = execution.success;
-      const result = [{ testId: 0, passed, verdict: passed ? "AC" : "RE" }];
-      const grade = await saveCourseGradeWithinAttemptLimit(task, student, { total: passed ? 100 : 0, score: passed ? 100 : 0, maxScore: 100, testsPassed: passed ? 1 : 0, testsTotal: 1, submittedCode: code.data, testResults: JSON.stringify(result), isCompleted: passed, isManuallyGraded: false, feedback: "No authored tests; submission was executed successfully." });
-      const hints = passed ? [] : await generateAlgorithmicHints({
-        taskTitle: task.title,
-        taskText: task.description,
-        language: languageFor(task),
-        code: code.data,
-        failures: [{ testId: 0, input: "", expected: "успішне виконання", actual: execution.stdout || "", verdict: execution.success ? "WA" : "RE", stderr: execution.stderr || null }],
-        maxHints: 4,
-        uiLanguage: uiLanguageFor(req)
-      }).catch(() => []);
-      return res.json({ grade: { id: grade.id, total: grade.total, testsPassed: grade.testsPassed, testsTotal: grade.testsTotal, isManuallyGraded: false, isCompleted: grade.isCompleted }, testResults: result, hints, scoring: { score: grade.score ?? 0, maxScore: 100 } });
-    }
-    const results: Array<{ testId: number; passed: boolean; verdict: string }> = [];
-    for (const test of tests) {
-      const execution = await executeCodeWithInput(code.data, languageFor(task), test.input, 10000);
-      const passed = execution.success && normalizedOutput(execution.stdout) === normalizedOutput(test.expectedOutput);
-      results.push({ testId: test.id, passed, verdict: passed ? "AC" : execution.success ? "WA" : "RE" });
-    }
-    const passed = results.filter((item) => item.passed).length;
-    const total = Math.round((passed / results.length) * 100);
-    const saved = await saveCourseGradeWithinAttemptLimit(task, student, { total, score: total, maxScore: 100, testsPassed: passed, testsTotal: results.length, submittedCode: code.data, testResults: JSON.stringify(results), isCompleted: passed === results.length, isManuallyGraded: false, feedback: null });
-    const failures = results.filter((item) => !item.passed).map((item) => {
-      const test = tests.find((candidate) => candidate.id === item.testId);
-      return { testId: item.testId, input: test?.input || "", expected: test?.expectedOutput || "", actual: "", verdict: item.verdict };
+    if (!tests.length) return res.status(409).json({ message: "NO_TESTS_CONFIGURED" });
+    const hasSubtasks = tests.some(test => Boolean(test.subtask));
+    const workerResult = await judgeWithSemaphore({
+      submission_id: `edu_course_${student.id}_${task.id}_${randomUUID()}`, cache_owner: `edu-student:${student.id}`,
+      language: "python", source: code.data, run_all: true, debug: false,
+      group_scoring_mode: hasSubtasks ? "BINARY_ALL_OR_NOT" : "SUM",
+      tests: tests.map(test => ({ id: test.id, input: test.input, output: test.expectedOutput, hidden: test.isHidden,
+        weight: test.points || 1, group: hasSubtasks ? test.subtask || `unassigned_${test.id}` : test.isHidden ? "hidden" : "public" })),
+      checker: { type: "whitespace" }, limits: { time_limit_ms: 2000, memory_limit_mb: 256, output_limit_kb: 256 },
     });
-    const hints = failures.length ? await generateAlgorithmicHints({
-      taskTitle: task.title,
-      taskText: task.description,
-      language: languageFor(task),
-      code: code.data,
-      failures,
-      maxHints: 4,
-      uiLanguage: uiLanguageFor(req)
-    }).catch(() => []) : [];
-    return res.json({ grade: { id: saved.id, total: saved.total, testsPassed: saved.testsPassed, testsTotal: saved.testsTotal, isManuallyGraded: false, isCompleted: saved.isCompleted }, testResults: results, hints, scoring: { score: total, maxScore: 100 } });
+    const result = courseJudgeGrade(tests, workerResult);
+    const saved = await saveCourseGradeWithinAttemptLimit(task, student, { total: result.total, score: result.score,
+      maxScore: result.maxScore, testsPassed: result.testsPassed, testsTotal: result.testsTotal, submittedCode: code.data,
+      testResults: JSON.stringify(result.testResults), groupScores: JSON.stringify(result.groupScores),
+      isCompleted: result.isCompleted, isManuallyGraded: false, feedback: null }, courseTestsRevision(tests, 0));
+    // Hidden inputs and expected outputs never leave the judge boundary through AI hints.
+    const failures = result.testResults.filter(test => !test.passed);
+    const hints = failures.length ? await generateAlgorithmicHints({ taskTitle: task.title, taskText: task.description,
+      language: languageFor(task), code: code.data, failures, maxHints: 4, uiLanguage: uiLanguageFor(req) }).catch(() => [])
+      : result.testsPassed < result.testsTotal ? [uiLanguageFor(req) === "en" ? "Public examples passed. Check boundary cases and input constraints." : "Відкриті приклади пройдено. Перевірте граничні випадки й обмеження вхідних даних."] : [];
+    return res.json({ grade: { id: saved.id, total: saved.total, testsPassed: saved.testsPassed, testsTotal: saved.testsTotal,
+      isManuallyGraded: false, isCompleted: saved.isCompleted }, testResults: result.testResults, hints,
+      scoring: { score: result.score, maxScore: result.maxScore, groupScores: result.groupScores } });
   });
 });
 

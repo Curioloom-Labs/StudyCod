@@ -6,7 +6,7 @@ import { PageHero } from "../../components/ui/PageHero";
 import { api } from "../../lib/api/client";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 
 interface Submission { text: string | null; hasFile: boolean; fileName: string | null; status: string; updatedAt: string; }
 

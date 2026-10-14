@@ -1,3 +1,4 @@
+import { gradeReviewRevision, summaryReviewRevision, emptyReviewRevision, requireReviewRevision } from "../../services/edu/reviewRevision";
 import { Router, Response } from "express";
 import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
@@ -17,6 +18,9 @@ import type { Capability } from "../../services/edu/rbac";
 import { resolveUiLocaleFromHeaders } from "../../utils/uiLocale";
 import { isAssignedToStudent } from "../../utils/assignmentVisibility";
 import { logger } from "../../utils/logger";
+import { updateClassConfiguration } from "../../services/edu/classStaff";
+import { withGradebookWrite, requireRawGrade, requireGradebookId } from "../../services/edu/gradebookWrites";
+import { HttpError } from "../../utils/httpError";
 import { buildLiveSnapshot, type LiveAttempt, type LiveStudent } from "../../services/edu/liveMonitor";
 import { buildSkillTree, type SkillTopicInput } from "../../services/learning/skillTree";
 import { buildProgressReportModel, renderProgressReportHtml } from "../../services/reports/progressReport";
@@ -253,6 +257,8 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
         .leftJoinAndSelect("summaryGrade.controlWork", "controlWork")
         .leftJoinAndSelect("summaryGrade.topic", "topic")
         .where("summaryGrade.student_id IN (:...studentIds)", { studentIds })
+        .orderBy("summaryGrade.createdAt", "DESC")
+        .addOrderBy("summaryGrade.id", "DESC")
         .getMany();
       for (const sg of allSummaryForClass) {
         const sid = sg.student?.id;
@@ -280,6 +286,9 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
             grade: summaryGrade ? clampGradeToInt(summaryGrade.grade) : null,
             createdAt: summaryGrade ? summaryGrade.createdAt.toISOString() : null,
             isControlWork: true,
+            manualOverrideGrade: summaryGrade?.manualOverrideGrade ?? null,
+            calculatedGrade: summaryGrade?.calculatedGrade ?? null,
+            revision: summaryGrade ? summaryReviewRevision(summaryGrade) : emptyReviewRevision("control", student.id, lesson.id),
             gradeId: summaryGrade ? summaryGrade.id : null
           });
         } else if (lesson.type === "SUMMARY") {
@@ -293,6 +302,7 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
             lessonType: "SUMMARY",
             grade: thematic ? clampGradeToInt(thematic.grade) : null,
             createdAt: thematic ? thematic.createdAt.toISOString() : null,
+            revision: thematic ? summaryReviewRevision(thematic) : undefined,
             gradeId: thematic ? thematic.id : null,
             isSummaryGrade: true
           });
@@ -306,6 +316,7 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
             lessonType: "SEMESTER",
             grade: semesterGrade ? clampGradeToInt(semesterGrade.grade) : null,
             createdAt: semesterGrade ? semesterGrade.createdAt.toISOString() : null,
+            revision: semesterGrade ? summaryReviewRevision(semesterGrade) : undefined,
             gradeId: semesterGrade ? semesterGrade.id : null,
             isSemesterGrade: true
           });
@@ -318,7 +329,7 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
             // the most recent attempt. Previously this showed the BEST attempt's
             // total while reporting the latest attempt's id/date — so a teacher
             // could see a grade a student did not, and vice versa.
-            const latestGrade = grades.length > 0 ? [...grades].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0] : null;
+            const latestGrade = grades.length > 0 ? [...grades].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id - a.id)[0] : null;
             flatGrades.push({
               taskId: task.id,
               taskTitle: task.title,
@@ -327,6 +338,7 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
               lessonType: lesson.type,
               grade: latestGrade ? latestGrade.total : null,
               createdAt: latestGrade ? latestGrade.createdAt.toISOString() : null,
+              revision: latestGrade ? gradeReviewRevision(latestGrade) : emptyReviewRevision("task", student.id, task.id),
               gradeId: latestGrade ? latestGrade.id : null
             });
           }
@@ -382,8 +394,9 @@ router.get("/classes/:classId/summary-grades", authRequired, async (req: AuthReq
       studentName: string;
       grade: number;
       createdAt: string;
+      revision: string;
     }>> = {};
-    allSummaryGrades.forEach(sg => {
+    allSummaryGrades.filter(sg => Boolean(sg.student)).forEach(sg => {
       const canonicalName = canonicalizeSummaryGradeName(sg.name);
       const displayName = canonicalName === THEMATIC_CANONICAL_NAME ? thematicLabel : String(sg.name || "").trim();
       if (!groups[displayName]) groups[displayName] = [];
@@ -392,7 +405,8 @@ router.get("/classes/:classId/summary-grades", authRequired, async (req: AuthReq
         studentId: sg.student.id,
         studentName: `${sg.student.lastName} ${sg.student.firstName} ${sg.student.middleName || ""}`.trim(),
         grade: sg.grade,
-        createdAt: sg.createdAt.toISOString()
+        createdAt: sg.createdAt.toISOString(),
+        revision: summaryReviewRevision(sg)
       });
     });
 
@@ -415,190 +429,194 @@ router.get("/classes/:classId/summary-grades", authRequired, async (req: AuthReq
 
 router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
+    const classId = requireGradebookId(req.params.classId);
     const authorized = await loadTeacherClassForConfig(req, res, classId, "GRADE_EDIT");
     if (!authorized) return;
-    const cls = await classRepo().findOne({
-      where: { id: classId },
-      relations: ["students"]
-    });
-    if (!cls) {
-      return res.status(404).json({
-        message: "CLASS_NOT_FOUND"
-      });
-    }
+    const { cls, results, pendingNotifications, normalizedName } = await withGradebookWrite(classId, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async (manager, cls) => {
+      const topicRepo = () => manager.getRepository(TopicNew);
+      const summaryGradeRepo = () => manager.getRepository(SummaryGrade);
+      const gradeRepo = () => manager.getRepository(EduGrade);
+      cls.students = await manager.getRepository(Student).findBy({ class: { id: classId } });
+      const { name, topicId, studentGrades } = req.body ?? {};
+      if (typeof name !== "string" || name.trim().length > 255) throw new HttpError(400, "INVALID_SUMMARY_NAME");
+      const normalizedName = canonicalizeSummaryGradeName(name);
 
-    const { name, topicId, studentGrades } = req.body;
-    const normalizedName = canonicalizeSummaryGradeName(name);
-
-    if (!normalizedName) {
-      return res.status(400).json({
-        message: "NAME_REQUIRED"
-      });
-    }
-
-    if (!topicId) {
-      return res.status(400).json({
-        message: "TOPIC_ID_REQUIRED"
-      });
-    }
-
-    const topicIdNumber = Number.parseInt(String(topicId), 10);
-    if (!Number.isFinite(topicIdNumber)) {
-      return res.status(400).json({ message: "INVALID_TOPIC_ID" });
-    }
-
-    const topic = await topicRepo().findOne({
-      where: {
-        id: topicIdNumber,
-        class: {
-          id: classId
-        }
+      if (!normalizedName) {
+        throw new HttpError(400, "NAME_REQUIRED");
       }
-    });
 
-    if (!topic) {
-      return res.status(404).json({
-        message: "TOPIC_NOT_FOUND"
+      if (!topicId) {
+        throw new HttpError(400, "TOPIC_ID_REQUIRED");
+      }
+
+      const topicIdNumber = requireGradebookId(topicId, "INVALID_TOPIC_ID");
+      if (!Number.isFinite(topicIdNumber)) {
+        throw new HttpError(400, "INVALID_TOPIC_ID");
+      }
+
+      if (studentGrades !== undefined && !Array.isArray(studentGrades)) throw new HttpError(400, "INVALID_STUDENT_GRADES");
+      const manualGrades: Array<{ studentId: number; grade: number }> = (studentGrades ?? []).map((item: unknown) => {
+        if (!item || typeof item !== "object") throw new HttpError(400, "INVALID_STUDENT_GRADES");
+        const value = item as { studentId?: unknown; grade?: unknown };
+        return { studentId: requireGradebookId(value.studentId, "INVALID_STUDENT_ID"), grade: requireRawGrade(value.grade) };
       });
-    }
+      const touchedStudentIds = new Set(manualGrades.length ? manualGrades.map(item => item.studentId) : cls.students.map(student => student.id));
+      if (touchedStudentIds.size !== (manualGrades.length || cls.students.length)) throw new HttpError(400, "DUPLICATE_STUDENT_GRADE");
+      const activeStudentIds = new Set(cls.students.map(student => student.id));
+      if ([...touchedStudentIds].some(id => !activeStudentIds.has(id))) throw new HttpError(400, "STUDENT_NOT_IN_CLASS");
 
-    const existingBeforeBuilder = summaryGradeRepo()
-      .createQueryBuilder("sg")
-      .leftJoinAndSelect("sg.student", "student")
-      .where("sg.class_id = :classId", { classId })
-      .andWhere("sg.topic_id = :topicId", { topicId: topic.id })
-      .andWhere("sg.assessment_type = :assessmentType", { assessmentType: AssessmentType.INTERMEDIATE })
-      .andWhere("sg.control_work_id IS NULL");
-
-    if (normalizedName === THEMATIC_CANONICAL_NAME) {
-      existingBeforeBuilder.andWhere("LOWER(TRIM(sg.name)) IN (:...legacyNames)", {
-        legacyNames: ["thematic", "тематична"]
+      const topic = await topicRepo().findOne({
+        where: {
+          id: topicIdNumber,
+          class: {
+            id: classId
+          }
+        }
       });
-    } else {
-      existingBeforeBuilder.andWhere("sg.name = :name", { name: normalizedName });
-    }
 
-    const existingBefore = await existingBeforeBuilder
-      .orderBy("sg.createdAt", "ASC")
-      .getMany();
-    const existingByStudentId = new Map<number, SummaryGrade>();
-    for (const row of existingBefore) {
-      if (row.student?.id != null) existingByStudentId.set(row.student.id, row);
-    }
+      if (!topic) {
+        throw new HttpError(404, "TOPIC_NOT_FOUND");
+      }
 
-    const results: SummaryGrade[] = [];
-    const pendingNotifications: Array<{ student: Student; grade: number; event: "created" | "updated" }> = [];
-    const saveGradeForStudent = async (student: Student, grade: number) => {
-      let sg = existingByStudentId.get(student.id);
-      const event = sg ? "updated" : "created";
-      if (!sg) {
-        sg = summaryGradeRepo().create({
-          class: cls,
-          student,
-          name: normalizedName,
-          grade,
-          topic,
-          assessmentType: AssessmentType.INTERMEDIATE,
-          controlWork: null
+      const existingBeforeBuilder = summaryGradeRepo()
+        .createQueryBuilder("sg")
+        .leftJoinAndSelect("sg.student", "student")
+        .where("sg.class_id = :classId", { classId })
+        .andWhere("sg.topic_id = :topicId", { topicId: topic.id })
+        .andWhere("sg.assessment_type = :assessmentType", { assessmentType: AssessmentType.INTERMEDIATE })
+        .andWhere("sg.control_work_id IS NULL");
+
+      if (normalizedName === THEMATIC_CANONICAL_NAME) {
+        existingBeforeBuilder.andWhere("LOWER(TRIM(sg.name)) IN (:...legacyNames)", {
+          legacyNames: ["thematic", "тематична"]
         });
       } else {
-        sg.class = cls;
-        sg.student = student;
-        sg.name = normalizedName;
-        sg.grade = grade;
-        sg.topic = topic;
-        sg.assessmentType = AssessmentType.INTERMEDIATE;
-        sg.controlWork = null;
+        existingBeforeBuilder.andWhere("sg.name = :name", { name: normalizedName });
       }
 
-      validateAssessmentType(AssessmentType.INTERMEDIATE, null, "grade");
-      await summaryGradeRepo().save(sg);
-      results.push(sg);
-      pendingNotifications.push({ student, grade: sg.grade, event });
-    };
-
-    if (studentGrades && Array.isArray(studentGrades) && studentGrades.length > 0) {
-      for (const item of studentGrades) {
-        const student = cls.students.find(s => s.id === item.studentId);
-        if (!student) continue;
-        await saveGradeForStudent(student, clampGradeToInt(item.grade));
+      const existingBefore = await existingBeforeBuilder
+        .orderBy("sg.createdAt", "ASC")
+        .addOrderBy("sg.id", "ASC")
+        .getMany();
+      const existingByStudentId = new Map<number, SummaryGrade>();
+      for (const row of existingBefore) {
+        if (row.student?.id != null) existingByStudentId.set(row.student.id, row);
       }
-    } else {
-      // Effective formula: per-topic override > class default > built-in smart default.
-      const thematicFormula = resolveThematicFormula(topic.thematicFormula, cls.thematicFormula);
 
-      for (const student of cls.students) {
-        const classGrades = await gradeRepo()
-          .createQueryBuilder("grade")
-          .leftJoinAndSelect("grade.topicTask", "topicTask")
-          .leftJoinAndSelect("topicTask.topic", "topic")
-          .where("grade.student_id = :studentId", {
-            studentId: student.id
-          })
-          .andWhere("topic.id = :topicId", {
-            topicId: topic.id
-          })
-          .getMany();
-
-        // Use the latest attempt per practice task, exactly like the visible
-        // gradebook and student views. A newer unfinished attempt must not
-        // resurrect an older score, so only its latest row can contribute.
-        const latestPracticeGrades = new Map<string, EduGrade>();
-        for (const gradeRow of [...classGrades].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())) {
-          if (!gradeRow.topicTask || gradeRow.topicTask.type !== "PRACTICE") continue;
-          const taskKey = `topicTask:${gradeRow.topicTask.id}`;
-          if (!latestPracticeGrades.has(taskKey)) latestPracticeGrades.set(taskKey, gradeRow);
+      const results: SummaryGrade[] = [];
+      const pendingNotifications: Array<{ student: Student; grade: number; event: "created" | "updated" }> = [];
+      const saveGradeForStudent = async (student: Student, grade: number) => {
+        let sg = existingByStudentId.get(student.id);
+        const event = sg ? "updated" : "created";
+        if (!sg) {
+          sg = summaryGradeRepo().create({
+            class: cls,
+            student,
+            name: normalizedName,
+            grade,
+            topic,
+            assessmentType: AssessmentType.INTERMEDIATE,
+            controlWork: null
+          });
+        } else {
+          sg.class = cls;
+          sg.student = student;
+          sg.name = normalizedName;
+          sg.grade = grade;
+          sg.topic = topic;
+          sg.assessmentType = AssessmentType.INTERMEDIATE;
+          sg.controlWork = null;
         }
-        const practiceScores = Array.from(latestPracticeGrades.values())
-          .map(gradeRow => gradeRow.total === null ? null : Number(gradeRow.total))
-          .filter((value): value is number => value !== null && Number.isFinite(value));
 
-        // Control-work grades live in SummaryGrade, independent of practice
-        // grades — gather them unconditionally so a topic with only a control
-        // work still produces a real thematic grade.
-        const controlSummaryGrades = await summaryGradeRepo()
-          .createQueryBuilder("sg")
-          .leftJoinAndSelect("sg.controlWork", "cw")
-          .where("sg.student_id = :studentId", {
-            studentId: student.id
-          })
-          .andWhere("sg.assessment_type = :type", {
-            type: AssessmentType.CONTROL
-          })
-          .andWhere("sg.topic_id = :topicId", {
-            topicId: topic.id
-          })
-          .getMany();
-        // There should be one control summary per student/work. Deduplicate
-        // defensively so legacy duplicate rows cannot distort the average.
-        const latestControlGrades = new Map<number, SummaryGrade>();
-        for (const summaryGrade of [...controlSummaryGrades].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())) {
-          const controlWorkId = summaryGrade.controlWork?.id;
-          if (controlWorkId == null || latestControlGrades.has(controlWorkId)) continue;
-          latestControlGrades.set(controlWorkId, summaryGrade);
+        validateAssessmentType(AssessmentType.INTERMEDIATE, null, "grade");
+        if (event === "created") await summaryGradeRepo().save(sg);
+        else await summaryGradeRepo().update(sg.id, { name: normalizedName, grade });
+        results.push(sg);
+        pendingNotifications.push({ student, grade: sg.grade, event });
+      };
+
+      if (manualGrades.length > 0) {
+        for (const item of manualGrades) {
+          const student = cls.students.find(s => s.id === item.studentId)!;
+          await saveGradeForStudent(student, item.grade);
         }
-        const controlScores = Array.from(latestControlGrades.values())
-          .map(summaryGrade => Number(summaryGrade.grade))
-          .filter(value => Number.isFinite(value));
+      } else {
+        // Effective formula: per-topic override > class default > built-in smart default.
+        const thematicFormula = resolveThematicFormula(topic.thematicFormula, cls.thematicFormula);
 
-        const hasPractice = practiceScores.length > 0;
-        const hasControl = controlScores.length > 0;
-        const practiceAvg = hasPractice ? practiceScores.reduce((s, v) => s + v, 0) / practiceScores.length : 0;
-        const controlAvg = hasControl ? controlScores.reduce((s, v) => s + v, 0) / controlScores.length : 0;
+        for (const student of cls.students) {
+          const classGrades = await gradeRepo()
+            .createQueryBuilder("grade")
+            .leftJoinAndSelect("grade.topicTask", "topicTask")
+            .leftJoinAndSelect("topicTask.topic", "topic")
+            .where("grade.student_id = :studentId", {
+              studentId: student.id
+            })
+            .andWhere("topic.id = :topicId", {
+              topicId: topic.id
+            })
+            .getMany();
 
-        const grade = computeThematicGrade(
-          { practice: practiceAvg, control: controlAvg, hasPractice, hasControl },
-          thematicFormula
-        );
+          // Use the latest attempt per practice task, exactly like the visible
+          // gradebook and student views. A newer unfinished attempt must not
+          // resurrect an older score, so only its latest row can contribute.
+          const latestPracticeGrades = new Map<string, EduGrade>();
+          for (const gradeRow of [...classGrades].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())) {
+            if (!gradeRow.topicTask || gradeRow.topicTask.type !== "PRACTICE") continue;
+            const taskKey = `topicTask:${gradeRow.topicTask.id}`;
+            if (!latestPracticeGrades.has(taskKey)) latestPracticeGrades.set(taskKey, gradeRow);
+          }
+          const practiceScores = Array.from(latestPracticeGrades.values())
+            .map(gradeRow => gradeRow.total === null ? null : Number(gradeRow.total))
+            .filter((value): value is number => value !== null && Number.isFinite(value));
 
-        await saveGradeForStudent(student, grade);
+          // Control-work grades live in SummaryGrade, independent of practice
+          // grades — gather them unconditionally so a topic with only a control
+          // work still produces a real thematic grade.
+          const controlSummaryGrades = await summaryGradeRepo()
+            .createQueryBuilder("sg")
+            .leftJoinAndSelect("sg.controlWork", "cw")
+            .where("sg.student_id = :studentId", {
+              studentId: student.id
+            })
+            .andWhere("sg.assessment_type = :type", {
+              type: AssessmentType.CONTROL
+            })
+            .andWhere("sg.topic_id = :topicId", {
+              topicId: topic.id
+            })
+            .getMany();
+          // There should be one control summary per student/work. Deduplicate
+          // defensively so legacy duplicate rows cannot distort the average.
+          const latestControlGrades = new Map<number, SummaryGrade>();
+          for (const summaryGrade of [...controlSummaryGrades].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())) {
+            const controlWorkId = summaryGrade.controlWork?.id;
+            if (controlWorkId == null || latestControlGrades.has(controlWorkId)) continue;
+            latestControlGrades.set(controlWorkId, summaryGrade);
+          }
+          const controlScores = Array.from(latestControlGrades.values())
+            .map(summaryGrade => Number(summaryGrade.grade))
+            .filter(value => Number.isFinite(value));
+
+          const hasPractice = practiceScores.length > 0;
+          const hasControl = controlScores.length > 0;
+          const practiceAvg = hasPractice ? practiceScores.reduce((s, v) => s + v, 0) / practiceScores.length : 0;
+          const controlAvg = hasControl ? controlScores.reduce((s, v) => s + v, 0) / controlScores.length : 0;
+
+          const grade = computeThematicGrade(
+            { practice: practiceAvg, control: controlAvg, hasPractice, hasControl },
+            thematicFormula
+          );
+
+          await saveGradeForStudent(student, grade);
+        }
       }
-    }
 
-    const retainedIds = new Set(results.map(row => row.id));
-    const obsoleteRows = existingBefore.filter(row => !retainedIds.has(row.id));
-    if (obsoleteRows.length > 0) await summaryGradeRepo().remove(obsoleteRows);
+      const retainedIds = new Set(results.map(row => row.id));
+      const obsoleteRows = existingBefore.filter(row => row.student && touchedStudentIds.has(row.student.id) && !retainedIds.has(row.id));
+      if (obsoleteRows.length > 0) await summaryGradeRepo().delete(obsoleteRows.map(row => row.id));
+      return { cls, results, pendingNotifications, normalizedName };
+    });
 
     res.status(201).json({
       count: results.length,
@@ -629,6 +647,7 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
     }
   } catch (error) {
     logger.error("[edu/gradebook] Error creating summary grades", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -637,37 +656,23 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
 
 router.put("/classes/:classId/summary-grades/:id", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    const summaryGradeId = parseInt(req.params.id, 10);
+    const classId = requireGradebookId(req.params.classId);
+    const summaryGradeId = requireGradebookId(req.params.id);
 
     const authorized = await loadTeacherClassForConfig(req, res, classId, "GRADE_EDIT");
     if (!authorized) return;
 
-    const sg = await summaryGradeRepo().findOne({
-      where: {
-        id: summaryGradeId,
-        class: {
-          id: classId
-        }
-      },
-      relations: ["class", "class.teacher", "student", "topic", "controlWork"]
+    const grade = requireRawGrade(req.body?.grade);
+    const sg = await withGradebookWrite(classId, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async manager => {
+      const repo = manager.getRepository(SummaryGrade);
+      const sg = await repo.findOne({ where: { id: summaryGradeId, class: { id: classId } }, relations: ["class", "student", "topic", "controlWork"] });
+      if (!sg) throw new HttpError(404, "SUMMARY_GRADE_NOT_FOUND");
+      if (!sg.student) throw new HttpError(409, "STUDENT_ARCHIVED");
+      requireReviewRevision(req.body?.expectedRevision, summaryReviewRevision(sg));
+      await repo.update(sg.id, { grade, ...(sg.controlWork ? { manualOverrideGrade: grade } : {}) });
+      sg.grade = grade;
+      return sg;
     });
-
-    if (!sg) {
-      return res.status(404).json({
-        message: "SUMMARY_GRADE_NOT_FOUND"
-      });
-    }
-
-    const { grade } = req.body;
-    if (grade === undefined) {
-      return res.status(400).json({
-        message: "GRADE_REQUIRED"
-      });
-    }
-
-    sg.grade = clampGradeToInt(grade);
-    await summaryGradeRepo().save(sg);
 
     res.json({
       summaryGrade: sg
@@ -694,6 +699,7 @@ router.put("/classes/:classId/summary-grades/:id", authRequired, async (req: Aut
     });
   } catch (error) {
     logger.error("[edu/gradebook] Error updating summary grade", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -702,34 +708,25 @@ router.put("/classes/:classId/summary-grades/:id", authRequired, async (req: Aut
 
 router.delete("/classes/:classId/summary-grades/:id", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    const summaryGradeId = parseInt(req.params.id, 10);
+    const classId = requireGradebookId(req.params.classId);
+    const summaryGradeId = requireGradebookId(req.params.id);
 
     const authorized = await loadTeacherClassForConfig(req, res, classId, "GRADE_EDIT");
     if (!authorized) return;
 
-    const sg = await summaryGradeRepo().findOne({
-      where: {
-        id: summaryGradeId,
-        class: {
-          id: classId
-        }
-      },
-      relations: ["class", "class.teacher"]
+    await withGradebookWrite(classId, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async manager => {
+      const repo = manager.getRepository(SummaryGrade);
+      const sg = await repo.findOne({ where: { id: summaryGradeId, class: { id: classId } }, relations: ["student"] });
+      if (!sg) throw new HttpError(404, "SUMMARY_GRADE_NOT_FOUND");
+      if (!sg.student) throw new HttpError(409, "STUDENT_ARCHIVED");
+      await repo.delete(sg.id);
     });
-
-    if (!sg) {
-      return res.status(404).json({
-        message: "SUMMARY_GRADE_NOT_FOUND"
-      });
-    }
-
-    await summaryGradeRepo().remove(sg);
     return res.json({
       message: "SUMMARY_GRADE_DELETED"
     });
   } catch (error) {
     logger.error("[edu/gradebook] Error deleting summary grade", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -738,8 +735,8 @@ router.delete("/classes/:classId/summary-grades/:id", authRequired, async (req: 
 
 router.delete("/classes/:classId/topics/:topicId/thematic", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    const topicId = parseInt(req.params.topicId, 10);
+    const classId = requireGradebookId(req.params.classId);
+    const topicId = requireGradebookId(req.params.topicId);
     if (isNaN(classId) || isNaN(topicId)) {
       return res.status(400).json({
         message: "INVALID_ID"
@@ -749,39 +746,18 @@ router.delete("/classes/:classId/topics/:topicId/thematic", authRequired, async 
     const cls = await loadTeacherClassForConfig(req, res, classId, "GRADE_EDIT");
     if (!cls) return;
 
-    const topic = await topicRepo().findOne({
-      where: {
-        id: topicId,
-        class: {
-          id: classId
-        }
-      }
+    const result = await withGradebookWrite(classId, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async manager => {
+      const topic = await manager.getRepository(TopicNew).findOneBy({ id: topicId, class: { id: classId } });
+      if (!topic) throw new HttpError(404, "TOPIC_NOT_FOUND");
+      const activeStudents = await manager.getRepository(Student).findBy({ class: { id: classId } });
+      if (!activeStudents.length) return { affected: 0 };
+      return manager.getRepository(SummaryGrade).createQueryBuilder().delete().from(SummaryGrade)
+        .where("class_id = :classId", { classId }).andWhere("topic_id = :topicId", { topicId })
+        .andWhere("student_id IN (:...studentIds)", { studentIds: activeStudents.map(student => student.id) })
+        .andWhere("assessment_type = :type", { type: AssessmentType.INTERMEDIATE })
+        .andWhere("control_work_id IS NULL")
+        .andWhere("LOWER(TRIM(name)) IN (:...names)", { names: ["thematic", "тематична"] }).execute();
     });
-
-    if (!topic) {
-      return res.status(404).json({
-        message: "TOPIC_NOT_FOUND"
-      });
-    }
-
-    const result = await summaryGradeRepo()
-      .createQueryBuilder()
-      .delete()
-      .from(SummaryGrade)
-      .where("class_id = :classId", {
-        classId
-      })
-      .andWhere("topic_id = :topicId", {
-        topicId
-      })
-      .andWhere("assessment_type = :type", {
-        type: AssessmentType.INTERMEDIATE
-      })
-      .andWhere("control_work_id IS NULL")
-      .andWhere("LOWER(TRIM(name)) IN (:...legacyNames)", {
-        legacyNames: ["thematic", "тематична"]
-      })
-      .execute();
 
     return res.json({
       message: "THEMATIC_DELETED",
@@ -789,6 +765,7 @@ router.delete("/classes/:classId/topics/:topicId/thematic", authRequired, async 
     });
   } catch (error: unknown) {
     logger.error("[edu/gradebook] Error deleting thematic", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -797,7 +774,8 @@ router.delete("/classes/:classId/topics/:topicId/thematic", authRequired, async 
 
 // Normalize a teacher-entered formula: trim, empty -> null (= use default).
 function normalizeFormulaInput(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
+  if (raw === null) return null;
+  if (typeof raw !== "string" || raw.length > 255) throw new HttpError(400, "INVALID_FORMULA");
   const trimmed = raw.trim();
   return trimmed === "" ? null : trimmed;
 }
@@ -877,11 +855,11 @@ router.put("/classes/:classId/thematic-formula", authRequired, async (req: AuthR
     const cls = await loadTeacherClassForConfig(req, res, classId);
     if (!cls) return;
 
-    cls.thematicFormula = formula;
-    await classRepo().save(cls);
-    return res.json({ message: "FORMULA_UPDATED", classFormula: cls.thematicFormula ?? null });
+    await updateClassConfiguration(cls.id, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, "GRADE_EDIT", { thematicFormula: formula });
+    return res.json({ message: "FORMULA_UPDATED", classFormula: formula ?? null });
   } catch (error) {
     logger.error("[edu/gradebook] Error updating class thematic formula", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -889,8 +867,8 @@ router.put("/classes/:classId/thematic-formula", authRequired, async (req: AuthR
 // Set a per-topic thematic formula override. Empty -> inherit the class formula.
 router.put("/classes/:classId/topics/:topicId/thematic-formula", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    const topicId = parseInt(req.params.topicId, 10);
+    const classId = requireGradebookId(req.params.classId);
+    const topicId = requireGradebookId(req.params.topicId);
     if (isNaN(classId) || isNaN(topicId)) {
       return res.status(400).json({ message: "INVALID_ID" });
     }
@@ -901,51 +879,44 @@ router.put("/classes/:classId/topics/:topicId/thematic-formula", authRequired, a
     const cls = await loadTeacherClassForConfig(req, res, classId);
     if (!cls) return;
 
-    const topic = await topicRepo().findOne({ where: { id: topicId, class: { id: classId } } });
-    if (!topic) {
-      return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
-    }
-
-    topic.thematicFormula = formula;
-    await topicRepo().save(topic);
-    return res.json({ message: "FORMULA_UPDATED", topicId, thematicFormula: topic.thematicFormula ?? null });
+    await withGradebookWrite(classId, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async manager => {
+      const repo = manager.getRepository(TopicNew);
+      const topic = await repo.findOneBy({ id: topicId, class: { id: classId } });
+      if (!topic) throw new HttpError(404, "TOPIC_NOT_FOUND");
+      await repo.update(topicId, { thematicFormula: formula });
+    });
+    return res.json({ message: "FORMULA_UPDATED", topicId, thematicFormula: formula });
   } catch (error) {
     logger.error("[edu/gradebook] Error updating topic thematic formula", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 
-// Assign a topic to a semester (1, 2, …). null/empty clears the assignment
+// Assign a topic to a semester (1, 2, …). Explicit null clears the assignment
 // (topic falls back to semester 1 when aggregating).
 router.put("/classes/:classId/topics/:topicId/semester", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    const topicId = parseInt(req.params.topicId, 10);
+    const classId = requireGradebookId(req.params.classId);
+    const topicId = requireGradebookId(req.params.topicId);
     if (isNaN(classId) || isNaN(topicId)) {
       return res.status(400).json({ message: "INVALID_ID" });
     }
     const cls = await loadTeacherClassForConfig(req, res, classId);
     if (!cls) return;
 
-    const topic = await topicRepo().findOne({ where: { id: topicId, class: { id: classId } } });
-    if (!topic) {
-      return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
-    }
-
-    const raw = req.body?.semester;
-    if (raw === null || raw === undefined || raw === "") {
-      topic.semester = null;
-    } else {
-      const n = Number(raw);
-      if (!Number.isFinite(n) || n < 1 || n > 12) {
-        return res.status(400).json({ message: "INVALID_SEMESTER" });
-      }
-      topic.semester = Math.floor(n);
-    }
-    await topicRepo().save(topic);
-    return res.json({ message: "SEMESTER_UPDATED", topicId, semester: topic.semester ?? null });
+    const semester = req.body?.semester;
+    if (semester !== null && (typeof semester !== "number" || !Number.isInteger(semester) || semester < 1 || semester > 12)) throw new HttpError(400, "INVALID_SEMESTER");
+    await withGradebookWrite(classId, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async manager => {
+      const repo = manager.getRepository(TopicNew);
+      const topic = await repo.findOneBy({ id: topicId, class: { id: classId } });
+      if (!topic) throw new HttpError(404, "TOPIC_NOT_FOUND");
+      await repo.update(topicId, { semester });
+    });
+    return res.json({ message: "SEMESTER_UPDATED", topicId, semester: semester });
   } catch (error) {
     logger.error("[edu/gradebook] Error updating topic semester", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -954,17 +925,18 @@ router.put("/classes/:classId/topics/:topicId/semester", authRequired, async (re
 // per semester per student).
 router.post("/classes/:classId/semester-grades/recompute", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
+    const classId = requireGradebookId(req.params.classId);
     if (isNaN(classId)) {
       return res.status(400).json({ message: "INVALID_ID" });
     }
     const cls = await loadTeacherClassForConfig(req, res, classId);
     if (!cls) return;
 
-    const result = await recomputeSemesterGrades(classId);
+    const result = await recomputeSemesterGrades(classId, { userId: req.userId!, sessionVersion: req.eduSessionVersion });
     return res.json({ message: "SEMESTER_GRADES_RECOMPUTED", ...result });
   } catch (error) {
     logger.error("[edu/gradebook] Error recomputing semester grades", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -992,7 +964,8 @@ router.get("/classes/:classId/semester-grades", authRequired, async (req: AuthRe
         gradeId: sg.id,
         studentId: sg.student?.id ?? null,
         semester: sg.semester ?? null,
-        grade: clampGradeToInt(sg.grade)
+        grade: clampGradeToInt(sg.grade),
+        revision: summaryReviewRevision(sg)
       }))
     });
   } catch (error) {
@@ -1004,30 +977,27 @@ router.get("/classes/:classId/semester-grades", authRequired, async (req: AuthRe
 // Manually override a single semester aggregate grade.
 router.put("/classes/:classId/semester-grades/:gradeId", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const classId = parseInt(req.params.classId, 10);
-    const gradeId = parseInt(req.params.gradeId, 10);
+    const classId = requireGradebookId(req.params.classId);
+    const gradeId = requireGradebookId(req.params.gradeId);
     if (isNaN(classId) || isNaN(gradeId)) {
       return res.status(400).json({ message: "INVALID_ID" });
     }
     const cls = await loadTeacherClassForConfig(req, res, classId);
     if (!cls) return;
 
-    const row = await summaryGradeRepo()
-      .createQueryBuilder("sg")
-      .where("sg.id = :gradeId", { gradeId })
-      .andWhere("sg.class_id = :classId", { classId })
-      .andWhere("sg.assessment_type = :type", { type: AssessmentType.SEMESTER })
-      .getOne();
-    if (!row) {
-      return res.status(404).json({ message: "SEMESTER_GRADE_NOT_FOUND" });
-    }
-
-    const grade = clampGradeToInt(req.body?.grade);
-    row.grade = grade;
-    await summaryGradeRepo().save(row);
-    return res.json({ message: "SEMESTER_GRADE_UPDATED", gradeId, grade: clampGradeToInt(row.grade) });
+    const grade = requireRawGrade(req.body?.grade);
+    await withGradebookWrite(classId, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, async manager => {
+      const repo = manager.getRepository(SummaryGrade);
+      const row = await repo.findOne({ where: { id: gradeId, class: { id: classId }, assessmentType: AssessmentType.SEMESTER }, relations: ["student"] });
+      if (!row) throw new HttpError(404, "SEMESTER_GRADE_NOT_FOUND");
+      if (!row.student) throw new HttpError(409, "STUDENT_ARCHIVED");
+      requireReviewRevision(req.body?.expectedRevision, summaryReviewRevision(row));
+      await repo.update(gradeId, { grade });
+    });
+    return res.json({ message: "SEMESTER_GRADE_UPDATED", gradeId, grade: grade });
   } catch (error) {
     logger.error("[edu/gradebook] Error updating semester grade", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

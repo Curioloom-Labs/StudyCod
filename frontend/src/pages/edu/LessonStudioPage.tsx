@@ -1,9 +1,11 @@
 import React from "react";
 import {
+  Link,
   useLocation,
   useNavigate,
   useParams,
   useSearchParams,
+  Navigate,
 } from "react-router-dom";
 import {
   ArrowLeft,
@@ -23,13 +25,20 @@ import {
   getLesson,
   saveQuiz,
   startLessonAttempt,
+  finishCourseLesson,
   submitQuizAnswers,
   type Lesson,
   type Task,
 } from "../../lib/api/edu";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { tr } from "../../i18n";
 import { useTranslation } from "react-i18next";
+import { withDevPreview } from "../../lib/devPreview";
+import "./eduWorkspace.css";
+import { CourseTaskTestFields, emptyCourseTest, validCourseTests } from "./CourseTaskTestFields";
+import type { CourseTestInput } from "../../lib/api/edu";
+import { Modal } from "../../components/ui/Modal";
+import { eduLessonPath } from "../../lib/eduNavigation";
 
 type Quiz = {
   question: string;
@@ -78,7 +87,7 @@ const parseProjectSpec = (raw: string): MiniProjectSpec | null => {
 const preview = () =>
   import.meta.env.DEV &&
   new URLSearchParams(window.location.search).get("preview") === "true";
-const shell = "mx-auto max-w-[1260px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10";
+const shell = "edu-workspace mx-auto max-w-[1260px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10";
 const exampleLesson: Lesson & { tasks: Task[] } = {
   id: 41,
   type: "LESSON",
@@ -191,12 +200,16 @@ const LessonTeacherStudio: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [modal, setModal] = React.useState<"task" | "quiz" | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [selectedTask, setSelectedTask] = React.useState<{ id: number; title: string; description?: string; template?: string; taskMode?: string; testDataCount?: number } | null>(null);
   const [task, setTask] = React.useState<{
     title: string;
     description: string;
     template: string;
     projectSpecJson?: string;
   }>({ title: "", description: "", template: "", projectSpecJson: "" });
+  const [taskTests, setTaskTests] = React.useState<CourseTestInput[]>([emptyCourseTest()]);
+  const [taskMaxAttempts, setTaskMaxAttempts] = React.useState(3);
+  const createPending = React.useRef(false);
   const [quiz, setQuiz] = React.useState<Quiz[]>([]);
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
   const [quizState, setQuizState] = React.useState<"idle" | "done">("idle");
@@ -213,7 +226,7 @@ const LessonTeacherStudio: React.FC = () => {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      setLesson(await getLesson(id, lessonType || undefined));
+      setLesson(await getLesson(id, lessonType || undefined, params.get("source") === "course" ? "course" : undefined));
       setError(null);
     } catch (caught) {
       if (preview()) setLesson(exampleLesson);
@@ -224,7 +237,7 @@ const LessonTeacherStudio: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, lessonType]);
+  }, [id, lessonType, params]);
   React.useEffect(() => {
     void load();
   }, [load]);
@@ -238,15 +251,18 @@ const LessonTeacherStudio: React.FC = () => {
     }
   }, [lesson?.quizJson]);
   const create = async () => {
-    if (!task.title.trim()) return;
-    setBusy(true);
+    if (createPending.current || !task.title.trim() || !task.description.trim() || lesson?.source === "course" && (!taskTests.length || !validCourseTests(taskTests))) return;
+    createPending.current = true;
+    setBusy(true); setError(null);
     try {
       await createTask(id, {
         title: task.title.trim(),
         description: task.description.trim(),
         template: task.template,
+        ...(lesson?.source === "course" ? { testData: taskTests, maxAttempts: taskMaxAttempts } : {}),
       });
       setTask({ title: "", description: "", template: "" });
+      setTaskTests([emptyCourseTest()]); setTaskMaxAttempts(3);
       setModal(null);
       await load();
     } catch (caught) {
@@ -254,6 +270,7 @@ const LessonTeacherStudio: React.FC = () => {
         getErrorMessageFromUnknown(caught, tr("Не вдалося додати практику.", "Could not add the practice task.")),
       );
     } finally {
+      createPending.current = false;
       setBusy(false);
     }
   };
@@ -276,7 +293,7 @@ const LessonTeacherStudio: React.FC = () => {
   const begin = async () => {
     // Teachers do not create student attempts. Keep this action useful by
     // taking the editor straight to the first practice block.
-    document.getElementById("lesson-practice")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("lesson-practice")?.scrollIntoView({ behavior: "auto", block: "start" });
   };
   const submit = async () => {
     if (!quiz.length) return;
@@ -298,6 +315,9 @@ const LessonTeacherStudio: React.FC = () => {
     );
   if (!lesson)
     return <div className={shell}>{error || tr("Урок не знайдено.", "Lesson not found.")}</div>;
+  if (lesson.source !== "course" && (lesson.type === "TOPIC" || lesson.parentTopicId)) {
+    return <Navigate replace to={withDevPreview(`/edu/topics/${lesson.parentTopicId || lesson.id}`)} />;
+  }
   const title = lesson.title || tr("Навчальний блок", "Learning module");
   const tasks = lesson.tasks || [];
   const isControl =
@@ -330,6 +350,8 @@ const LessonTeacherStudio: React.FC = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {lesson.source === "course" && lesson.type === "CONTROL" && <button type="button" onClick={() => navigate(`/edu/lessons/${id}/results`)} className="min-h-11 rounded-xl border border-border px-4 py-3 text-sm font-semibold">{tr("Результати контрольної", "Assessment results")}</button>}
+            {lesson.quizJson && <button type="button" onClick={() => navigate(withDevPreview(`/edu/lessons/${id}/quiz/review`))} className="min-h-11 rounded-xl border border-border px-4 py-3 text-sm font-semibold">{tr("Перевірити відповіді учнів", "Review student answers")}</button>}
             <button type="button"
               onClick={() => void begin()}
               className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground dark:bg-primary dark:text-primary-foreground"
@@ -424,9 +446,7 @@ const LessonTeacherStudio: React.FC = () => {
             <button type="button"
               onClick={() =>
                 tasks[0] &&
-                navigate(`/edu/tasks/${tasks[0].id}`, {
-                  state: { from: location.pathname },
-                })
+                (tasks[0].taskMode === "MANUAL" ? navigate(withDevPreview(`/edu/manual-tasks/${tasks[0].id}/submissions`)) : setSelectedTask(tasks[0]))
               }
               disabled={!tasks.length}
               className="mt-5 w-full rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-40"
@@ -450,7 +470,7 @@ const LessonTeacherStudio: React.FC = () => {
                 onClick={() =>
                   document
                     .getElementById("lesson-quiz")
-                    ?.scrollIntoView({ behavior: "smooth" })
+                    ?.scrollIntoView({ behavior: "auto" })
                 }
                 className="mt-4 text-sm font-bold text-primary-strong dark:text-primary-soft"
               >
@@ -468,6 +488,7 @@ const LessonTeacherStudio: React.FC = () => {
         </aside>
       </main>
       <section id="lesson-practice" className="mt-8">
+        {lesson.source === "course" && tasks.some(entry => entry.taskMode === "CODE" && entry.testDataCount === 0) && <p role="status" className="mb-4 rounded-xl border border-accent-warn/30 bg-accent-warn/10 p-4 text-sm">{tr("Для деяких завдань ще немає тестів. Відкрийте завдання й оберіть «Тести та спроби», щоб налаштувати перевірку. До цього автоматична здача й початок контрольної недоступні.", "Some tasks have no tests yet. Open a task and choose ‘Tests and attempts’ to configure grading. Automatic submission and assessment start remain unavailable until then.")}</p>}
         <div className="flex items-end justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">
@@ -489,11 +510,9 @@ const LessonTeacherStudio: React.FC = () => {
             <button type="button"
               key={entry.id}
               onClick={() =>
-                navigate(`/edu/tasks/${entry.id}`, {
-                  state: { from: location.pathname },
-                })
+                (entry.taskMode === "MANUAL" ? navigate(withDevPreview(`/edu/manual-tasks/${entry.id}/submissions`)) : setSelectedTask(entry))
               }
-              className="group rounded-[24px] border border-border/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg dark:border-white/[.09] dark:bg-bg-surface"
+              className="group rounded-[24px] border border-border/10 bg-white p-5 text-left transition  hover:shadow-lg dark:border-white/[.09] dark:bg-bg-surface"
             >
               <div className="flex gap-4">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-bg-hover text-sm font-extrabold text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn">
@@ -583,21 +602,30 @@ const LessonTeacherStudio: React.FC = () => {
           </button>
         </section>
       )}
+      <Modal open={Boolean(selectedTask)} title={selectedTask?.title || tr("Завдання", "Task")} onClose={() => setSelectedTask(null)} panelClassName="edu-workspace">
+        <p className="whitespace-pre-wrap text-sm leading-7">{selectedTask?.description || tr("Опис ще не додано.", "No description has been added yet.")}</p>
+        {selectedTask?.template && <pre className="mt-5 overflow-auto rounded-xl bg-bg-code p-4 text-sm text-text-primary"><code>{selectedTask.template}</code></pre>}
+        {lesson.source === "course" && selectedTask && selectedTask.taskMode !== "MANUAL" && selectedTask.taskMode !== "WEB" && <Link to={`/edu/course-tasks/${selectedTask.id}/tests`} className="mt-5 inline-flex min-h-11 items-center rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground">{tr("Тести та спроби", "Tests and attempts")}</Link>}
+      </Modal>
       {modal === "task" && (
         <Overlay
           title={tr("Нова практика", "New practice task")}
           sub={tr("Нехай задача продовжує логіку уроку, а не дублює теорію.", "Let the task extend the lesson instead of repeating its theory.")}
-          onClose={() => setModal(null)}
+          onClose={() => !busy && setModal(null)}
         >
           <div className="space-y-4">
+            {error && <p role="alert" className="rounded-xl bg-accent-error/10 p-3 text-sm text-accent-error">{error}</p>}
+            <fieldset disabled={busy} className="min-w-0 space-y-4">
+            <label className="block text-sm font-semibold">{tr("Назва завдання", "Task title")}
             <input
               value={task.title}
               onChange={(event) =>
                 setTask({ ...task, title: event.target.value })
               }
               placeholder={tr("Назва завдання", "Task title")}
-              className="w-full rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-bg-code"
-            />
+              className="mt-2 w-full rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-bg-code"
+            /></label>
+            <label className="block text-sm font-semibold">{tr("Умова", "Problem statement")}
             <textarea
               value={task.description}
               onChange={(event) =>
@@ -605,8 +633,9 @@ const LessonTeacherStudio: React.FC = () => {
               }
               placeholder={tr("Умова", "Problem statement")}
               rows={5}
-              className="w-full resize-none rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-bg-code"
-            />
+              className="mt-2 w-full resize-none rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-bg-code"
+            /></label>
+            <label className="block text-sm font-semibold">{tr("Стартовий код (за потреби)", "Starter code (optional)")}
             <textarea
               value={task.template}
               onChange={(event) =>
@@ -614,8 +643,8 @@ const LessonTeacherStudio: React.FC = () => {
               }
               placeholder={tr("Стартовий код (за потреби)", "Starter code (optional)")}
               rows={4}
-              className="w-full resize-none rounded-xl border border-border/10 bg-white px-4 py-3 font-mono text-sm dark:border-white/10 dark:bg-bg-code"
-            />
+              className="mt-2 w-full resize-none rounded-xl border border-border/10 bg-white px-4 py-3 font-mono text-sm dark:border-white/10 dark:bg-bg-code"
+            /></label>
             <textarea
               value={task.projectSpecJson || ""}
               onChange={(event) =>
@@ -626,13 +655,15 @@ const LessonTeacherStudio: React.FC = () => {
               spellCheck={false}
               className="w-full resize-none rounded-xl border border-primary-strong/25 bg-bg-hover px-4 py-3 font-mono text-xs dark:border-primary/25 dark:bg-bg-code"
             />
+            {lesson.source === "course" && <><CourseTaskTestFields tests={taskTests} onChange={setTaskTests} disabled={busy} /><label className="block max-w-xs text-sm font-semibold">{tr("Спроб на учня", "Attempts per student")}<input type="number" min={1} max={100} step={1} value={taskMaxAttempts} onChange={event => setTaskMaxAttempts(Number(event.target.value))} className="mt-2 min-h-11 w-full rounded-xl border border-border bg-bg-base px-4 py-3" /></label></>}
             <button type="button"
-              disabled={busy || !task.title.trim()}
+              disabled={busy || !task.title.trim() || !task.description.trim() || lesson.source === "course" && (!taskTests.length || !validCourseTests(taskTests) || !Number.isSafeInteger(taskMaxAttempts) || taskMaxAttempts < 1 || taskMaxAttempts > 100)}
               onClick={() => void create()}
               className="w-full rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground"
             >
               {busy ? tr("Створюємо…", "Creating…") : tr("Додати практику", "Add practice")}
             </button>
+            </fieldset>
           </div>
         </Overlay>
       )}
@@ -640,7 +671,7 @@ const LessonTeacherStudio: React.FC = () => {
         <Overlay
           title={tr("Створити квіз", "Create a quiz")}
           sub={tr("Квіз генерується на основі теми уроку та одразу зберігається у ньому.", "The quiz is generated from the lesson topic and saved to the lesson.")}
-          onClose={() => setModal(null)}
+          onClose={() => !busy && setModal(null)}
         >
           <div className="rounded-2xl bg-bg-hover p-5 dark:bg-white/[.045]">
             <LockKeyhole className="h-5 w-5 text-accent-warn" />
@@ -667,12 +698,21 @@ const StudentLessonWorkspace: React.FC = () => {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const id = Number(lessonId);
-  const isControl = params.get("type") === "CONTROL";
+  const requestedType = params.get("type") as Lesson["type"] | null;
+  const source = params.get("source") === "course" ? "course" : undefined;
+  const isControl = requestedType === "CONTROL" && source !== "course";
   const [lesson, setLesson] = React.useState<
     (Lesson & { tasks: Task[] }) | null
   >(null);
   const [loading, setLoading] = React.useState(true);
   const [started, setStarted] = React.useState(false);
+  const [attemptCompleted, setAttemptCompleted] = React.useState(false);
+  const [remainingSeconds, setRemainingSeconds] = React.useState<number | null>(null);
+  const [finishOpen, setFinishOpen] = React.useState(false);
+  const [finishBusy, setFinishBusy] = React.useState(false);
+  const finishPending = React.useRef(false);
+  const currentLessonId = React.useRef(id);
+  currentLessonId.current = id;
   const [startBusy, setStartBusy] = React.useState(false);
   const [quizAnswers, setQuizAnswers] = React.useState<Record<number, string>>({});
   const [quizSubmitted, setQuizSubmitted] = React.useState(false);
@@ -689,12 +729,22 @@ const StudentLessonWorkspace: React.FC = () => {
   }, [id, isControl]);
   React.useEffect(() => {
     let active = true;
-    getLesson(id, isControl ? "CONTROL" : undefined)
+    setFinishOpen(false);
+    setLesson(null);
+    setLoading(true);
+    setError(null);
+    setStarted(false);
+    setAttemptCompleted(false);
+    setQuizSubmitted(false);
+    setQuizAnswers({});
+    getLesson(id, requestedType || undefined, source)
       .then((value) => {
         if (!active) return;
         const next = value as Lesson & { tasks: Task[] };
         setLesson(next);
         setQuizSubmitted(next.quizSubmitted === true);
+        setStarted(next.courseAttempt?.status === "IN_PROGRESS");
+        setAttemptCompleted(next.courseAttempt?.status === "COMPLETED");
       })
       .catch((caught) => {
         if (!active) return;
@@ -711,7 +761,32 @@ const StudentLessonWorkspace: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [id, isControl]);
+  }, [id, requestedType, source]);
+  React.useEffect(() => {
+    const attempt = lesson?.courseAttempt;
+    const limit = attempt?.timeLimitMinutes ?? lesson?.timeLimitMinutes;
+    if (!started || !attempt?.startedAt || !limit) { setRemainingSeconds(null); return; }
+    const end = new Date(attempt.startedAt).getTime() + limit * 60_000;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+      setRemainingSeconds(remaining);
+      if (remaining === 0) setAttemptCompleted(true);
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [lesson?.courseAttempt?.startedAt, lesson?.courseAttempt?.timeLimitMinutes, lesson?.timeLimitMinutes, started]);
+  React.useEffect(() => {
+    if (!attemptCompleted || lesson?.source !== "course" || lesson.type !== "CONTROL" || lesson.courseAttempt?.status === "COMPLETED") return;
+    let active = true;
+    getLesson(id, requestedType || undefined, source).then(next => {
+      if (!active) return;
+      setLesson(next as Lesson & { tasks: Task[] });
+      setStarted(false);
+      setRemainingSeconds(null);
+    }).catch(caught => { if (active) setError(getErrorMessageFromUnknown(caught, tr("Не вдалося оновити результат.", "Could not refresh the result."))); });
+    return () => { active = false; };
+  }, [attemptCompleted, id, requestedType, source, lesson?.courseAttempt?.status, lesson?.source, lesson?.type]);
   if (loading)
     return (
       <div className={shell}>
@@ -727,7 +802,8 @@ const StudentLessonWorkspace: React.FC = () => {
         </p>
       </div>
     );
-  const tasks = lesson.tasks || [];
+  const courseControl = lesson.source === "course" && lesson.type === "CONTROL";
+  const tasks = courseControl && lesson.controlHasPractice === false ? [] : lesson.tasks || [];
   let quiz: Quiz[] = [];
   if (isControl && lesson.quizJson) {
     try {
@@ -737,10 +813,11 @@ const StudentLessonWorkspace: React.FC = () => {
       quiz = [];
     }
   }
-  const quizRequired = isControl && lesson.controlHasTheory === true;
+  const quizRequired = (isControl || courseControl) && lesson.controlHasTheory === true;
+  const courseSetupPending = courseControl && !started && !attemptCompleted && (quizRequired && !lesson.quizJson || lesson.controlHasPractice !== false && (!tasks.length || tasks.some(task => task.taskMode === "CODE" && task.testDataCount === 0)));
   const quizGatePassed = !quizRequired || quizSubmitted;
   const submitStudentQuiz = async () => {
-    if (!quiz.length || Object.keys(quizAnswers).length < quiz.length) return;
+    if (quizBusy || !quiz.length || Object.keys(quizAnswers).length < quiz.length) return;
     setQuizBusy(true);
     setError(null);
     try {
@@ -754,6 +831,18 @@ const StudentLessonWorkspace: React.FC = () => {
     } finally {
       setQuizBusy(false);
     }
+  };
+  const finish = async () => {
+    if (finishPending.current || !started || attemptCompleted) return;
+    finishPending.current = true; setFinishBusy(true); setError(null);
+    try {
+      const result = await finishCourseLesson(id);
+      if (currentLessonId.current !== id) return;
+      setLesson(current => current ? { ...current, courseAttempt: result.attempt, courseReport: result.report, reportOnly: true } : current);
+      setAttemptCompleted(true); setStarted(false); setRemainingSeconds(null); setFinishOpen(false);
+    } catch (caught) {
+      if (currentLessonId.current === id) setError(getErrorMessageFromUnknown(caught, tr("Не вдалося завершити контрольну. Спробуйте ще раз.", "Could not finish the assessment. Please retry.")));
+    } finally { finishPending.current = false; setFinishBusy(false); }
   };
   return (
     <div className={shell}>
@@ -770,41 +859,50 @@ const StudentLessonWorkspace: React.FC = () => {
       <header className="overflow-hidden rounded-[34px] bg-bg-surface p-7 text-text-primary sm:p-10">
         <div className="max-w-3xl">
           <p className="text-xs font-bold uppercase tracking-[.16em] text-primary-strong">
-            {tr("Призначений урок", "Assigned lesson")} · {lesson.parentTopicTitle || tr("Навчальний модуль", "Learning module")}
+            {courseControl ? tr("Контрольна робота", "Assessment") : tr("Призначений урок", "Assigned lesson")} · {lesson.parentTopicTitle || tr("Навчальний модуль", "Learning module")}
           </p>
           <h1 className="mt-4 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.06em] sm:text-6xl">
             {lesson.title}
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-7 text-text-secondary">
-            {tr("Пройди матеріал, виконай призначену практику й заверши короткою самоперевіркою. Створювати чи змінювати урок не потрібно.", "Work through the material, complete the assigned practice, and finish with a short self-check. You don't need to create or edit the lesson.")}
+            {courseControl ? quizRequired ? tr("Почніть контрольну, здайте квіз, а потім виконайте практичні завдання. Коли всі відповіді надіслано, завершіть контрольну.", "Start the assessment, submit the quiz, then complete the practice tasks. Finish the assessment once all your answers have been submitted.") : tr("Почніть контрольну й надішліть відповіді на завдання. Коли все готово, завершіть контрольну.", "Start the assessment and submit your task answers. Finish the assessment when you are ready.") : tr("Ознайомтеся з матеріалом, пройдіть квіз і виконайте призначені завдання.", "Review the material, take the quiz, and complete the assigned tasks.")}
           </p>
           <button
             type="button"
-            disabled={startBusy || started}
+            disabled={startBusy || started || attemptCompleted || courseSetupPending}
             onClick={() => void (async () => {
               setStartBusy(true);
               setError(null);
               try {
-                if (!preview()) await startLessonAttempt(id);
-                setStarted(true);
+                if (!preview() && (isControl || courseControl)) {
+                  const attempt = await startLessonAttempt(id, courseControl ? "course" : undefined);
+                  if (currentLessonId.current !== id) return;
+                  if (courseControl) setLesson(current => current ? { ...current, courseAttempt: { status: "IN_PROGRESS", startedAt: attempt.startedAt, remainingSeconds: attempt.remainingSeconds, timeLimitMinutes: attempt.timeLimitMinutes } } : current);
+                }
+                if (currentLessonId.current === id) setStarted(true);
               } catch (caught) {
-                setError(getErrorMessageFromUnknown(caught, tr("Не вдалося розпочати урок. Спробуйте ще раз.", "Could not start the lesson. Please try again.")));
+                if (currentLessonId.current === id) setError(getErrorMessageFromUnknown(caught, tr("Не вдалося розпочати урок. Спробуйте ще раз.", "Could not start the lesson. Please try again.")));
               } finally {
                 setStartBusy(false);
               }
             })()}
             className="mt-7 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground"
           >
-            {startBusy ? tr("Запускаємо…", "Starting…") : started ? tr("Урок розпочато", "Lesson started") : tr("Почати урок", "Start lesson")}
+            {attemptCompleted ? lesson.courseAttempt?.reason === "FINISHED" ? tr("Контрольну здано", "Assessment submitted") : tr("Час контрольної завершено", "Assessment time has ended") : startBusy ? tr("Запускаємо…", "Starting…") : started ? tr("Урок розпочато", "Lesson started") : tr("Почати урок", "Start lesson")}
           </button>
+          {courseSetupPending && <div role="status" className="mt-4 max-w-2xl rounded-xl border border-accent-warn/30 bg-accent-warn/10 p-4 text-sm"><p>{tr("Викладач ще готує контрольну. Вашу спробу й таймер не запущено. Оновіть дані після налаштування квізу та перевірки завдань.", "Your teacher is still preparing this assessment. Your attempt and timer have not started. Refresh after the quiz and task grading are configured.")}</p><button type="button" onClick={() => void getLesson(id, requestedType || undefined, source).then(next => { if (currentLessonId.current === id) { setLesson(next as Lesson & { tasks: Task[] }); setError(null); } }).catch(caught => { if (currentLessonId.current === id) setError(getErrorMessageFromUnknown(caught, tr("Не вдалося оновити урок.", "Could not refresh the lesson."))); })} className="mt-3 min-h-11 rounded-xl border border-border px-4 font-semibold">{tr("Оновити готовність", "Refresh readiness")}</button></div>}
+          {remainingSeconds !== null && <p className="mt-3 text-sm tabular-nums text-text-secondary">{tr("Залишилось часу", "Time remaining")}: {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}</p>}
         </div>
       </header>
+      {!isControl && lesson.quizJson && <button type="button" disabled={courseControl && !started && !attemptCompleted} onClick={() => navigate(withDevPreview(`/edu/lessons/${id}/quiz?source=course`))} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm font-semibold text-primary-strong"><ClipboardCheck className="size-4" aria-hidden="true" />{tr("Відкрити квіз уроку", "Open lesson quiz")}</button>}
+      {courseControl && started && !attemptCompleted && <section className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-bg-surface p-5"><div><p className="font-semibold">{tr("Завершення контрольної", "Finish assessment")}</p><p className="mt-1 text-sm text-text-secondary">{lesson.courseReport?.submittedTasks ?? 0}/{lesson.courseReport?.totalTasks ?? tasks.length} {tr("практичних робіт надіслано", "practice submissions saved")}</p></div><button type="button" onClick={() => setFinishOpen(true)} className="min-h-11 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground">{tr("Завершити контрольну", "Finish assessment")}</button></section>}
+      {courseControl && attemptCompleted && <section role="status" className="mt-5 rounded-2xl border border-border bg-bg-surface p-6"><h2 className="text-xl font-bold">{tr("Результат контрольної", "Assessment result")}</h2><p className="mt-4 text-3xl font-bold tabular-nums">{lesson.courseReport?.finalPercent != null ? `${lesson.courseReport.finalPercent}%` : "—"}</p>{Boolean(lesson.courseReport?.pendingReview) ? <p className="mt-3 text-sm text-text-secondary">{tr("Роботи очікують перевірки вчителя. Підсумкова оцінка з’явиться після перевірки.", "Work awaits teacher review. The final grade will appear after review.")}</p> : <p className="mt-3 text-sm text-text-secondary">{tr("Здачу завершено. Відкрийте квіз або завдання нижче, щоб переглянути збережені відповіді.", "Submission is complete. Open the quiz or tasks below to review your saved work.")}</p>}{lesson.courseReport && <div className="mt-4 flex flex-wrap gap-4 text-sm text-text-secondary">{lesson.courseReport.quizRequired && <span>{tr("Квіз:", "Quiz:")} {lesson.courseReport.theoryPercent == null ? tr("На перевірці", "Pending review") : `${lesson.courseReport.theoryPercent}%`}</span>}{lesson.courseReport.totalTasks > 0 && <span>{tr("Практика:", "Practice:")} {lesson.courseReport.practicePercent == null ? tr("На перевірці", "Pending review") : `${lesson.courseReport.practicePercent}%`}</span>}</div>}{lesson.courseReport?.quizRequired && lesson.courseReport.totalTasks > 0 && <p className="mt-2 text-xs text-text-muted">{tr("Підсумок — середнє результатів квізу й практики. Практика — середнє всіх завдань.", "The final score averages the quiz and practice scores. Practice averages all tasks.")}</p>}{lesson.courseReport?.tasks.map(task => <div key={task.id} className="mt-3 flex justify-between gap-4 border-t border-border pt-3 text-sm"><span className="min-w-0 break-words">{task.title}{!task.submitted && <span className="mt-1 block text-xs text-text-muted">{tr("Не здано", "Not submitted")}</span>}</span><span className="shrink-0 font-semibold">{task.pendingReview ? tr("На перевірці", "Pending review") : task.percent == null ? "—" : `${task.percent}%`}</span></div>)}<button type="button" onClick={() => void getLesson(id, requestedType || undefined, source).then(next => { if (currentLessonId.current === id) setLesson(next as Lesson & { tasks: Task[] }); }).catch(caught => { if (currentLessonId.current === id) setError(getErrorMessageFromUnknown(caught, tr("Не вдалося оновити результат.", "Could not refresh the result."))); })} className="mt-5 min-h-11 rounded-xl border border-border px-4 text-sm font-semibold">{tr("Оновити результат", "Refresh result")}</button></section>}
       {error && (
         <div role="alert" className="mt-5 rounded-2xl border border-accent-error/25 bg-accent-error/[.08] px-4 py-3 text-sm text-accent-error dark:text-accent-error">
           {error}
         </div>
       )}
-      <main className="mt-7 grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px]">
+      {(!courseControl || lesson.theory) && <main className="mt-7 grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px]">
         <article className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-9">
           <div className="flex items-center gap-3">
             <span className="grid size-10 place-items-center rounded-2xl bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
@@ -846,7 +944,7 @@ const StudentLessonWorkspace: React.FC = () => {
             </li>
           </ol>
         </aside>
-      </main>
+      </main>}
       {isControl && quizRequired && (
         <section className="mt-8 rounded-[30px] border border-accent-warn/30 bg-white p-6 dark:border-accent-warn/30 dark:bg-bg-surface sm:p-9">
           <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn dark:text-accent-warn">{tr("Теоретична частина", "Theory section")}</p>
@@ -877,7 +975,7 @@ const StudentLessonWorkspace: React.FC = () => {
           )}
         </section>
       )}
-      <section className="mt-8">
+      {(!courseControl || lesson.controlHasPractice !== false) && <section className="mt-8">
         <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">
           {tr("Призначена практика", "Assigned practice")}
         </p>
@@ -889,13 +987,14 @@ const StudentLessonWorkspace: React.FC = () => {
             <button
               type="button"
               key={task.id}
-              disabled={!quizGatePassed}
+              disabled={courseControl ? !attemptCompleted && (!started || !quizGatePassed || task.taskMode === "CODE" && task.testDataCount === 0) : !quizGatePassed || lesson.source === "course" && task.taskMode === "CODE" && task.testDataCount === 0}
               onClick={() =>
                 navigate(
-                  `/edu/tasks/${task.id}${preview() ? "?preview=true" : ""}`,
+                  withDevPreview(task.taskMode === "MANUAL" && lesson.source === "course" ? `/edu/manual-tasks/${task.id}` : `/edu/tasks/${task.id}?source=${lesson.source || "legacy"}`),
+                  { state: { from: withDevPreview(eduLessonPath(lesson)) } },
                 )
               }
-              className="group rounded-[24px] border border-border/10 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[.09] dark:bg-bg-surface"
+              className="group rounded-[24px] border border-border/10 bg-white p-5 text-left transition  hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[.09] dark:bg-bg-surface"
             >
               <span className="grid size-10 place-items-center rounded-2xl bg-bg-hover text-sm font-extrabold text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn">
                 {String(index + 1).padStart(2, "0")}
@@ -907,7 +1006,7 @@ const StudentLessonWorkspace: React.FC = () => {
                 {task.description}
               </p>
               <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-primary-strong dark:text-primary-soft">
-                {tr("Відкрити", "Open")} <ArrowRight className="size-4" />
+                {attemptCompleted ? tr("Переглянути", "Review") : lesson.source === "course" && task.taskMode === "CODE" && task.testDataCount === 0 ? tr("Викладач налаштовує перевірку", "Teacher is configuring grading") : tr("Відкрити", "Open")} <ArrowRight className="size-4" />
               </span>
             </button>
           ))}
@@ -918,7 +1017,12 @@ const StudentLessonWorkspace: React.FC = () => {
             </div>
           )}
         </div>
-      </section>
+      </section>}
+      <Modal open={finishOpen} title={tr("Завершити контрольну?", "Finish the assessment?")} onClose={() => !finishBusy && setFinishOpen(false)} closable={!finishBusy} panelClassName="edu-workspace">
+        <p className="text-sm leading-6">{tr("Після завершення змінювати або надсилати відповіді не можна. Збережені роботи залишаться доступними для перегляду.", "After finishing, you cannot change or submit answers. Saved work remains available to review.")}</p>
+        {Boolean(lesson.courseReport?.missingTaskIds.length || (quizRequired && !quizSubmitted)) && <p className="mt-4 rounded-xl bg-accent-warn/10 p-4 text-sm">{tr("Є нездані частини. Вони будуть враховані як 0 балів. Роботи, що очікують ручної перевірки, перевірить учитель.", "Some sections have not been submitted and will count as zero. Your teacher will review any pending work.")}</p>}
+        <div className="mt-6 flex flex-wrap gap-3"><button type="button" disabled={finishBusy} onClick={() => setFinishOpen(false)} className="min-h-11 rounded-xl border border-border px-4 font-semibold">{tr("Продовжити роботу", "Continue working")}</button><button type="button" disabled={finishBusy} onClick={() => void finish()} className="min-h-11 rounded-xl bg-primary px-4 font-semibold text-primary-foreground">{finishBusy ? tr("Завершуємо…", "Finishing…") : tr("Здати контрольну", "Submit assessment")}</button></div>
+      </Modal>
     </div>
   );
 };

@@ -7,7 +7,7 @@ import { createLesson, generateTheoryPreview, generateInteractiveLesson, type Cr
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { LessonBlocksEditor } from "../../components/lesson/LessonBlocksEditor";
 import { normalizeInteractiveLesson, type InteractiveLesson } from "../../lib/lessonBlocks";
 import type { EduLanguage } from "../../lib/api/edu";

@@ -839,10 +839,12 @@ ${url}
     email: string,
     token: string,
     username: string,
-    locale?: "uk" | "en"
+    locale?: "uk" | "en",
+    userMode?: "EDUCATIONAL",
+    invitationPath?: string
   ) {
     const lng = this.normalizeLocale(locale);
-    const url = `${this.getFrontendUrl()}/auth/reset-password?token=${token}`;
+    const url = `${this.getFrontendUrl()}/auth/reset-password?token=${token}${userMode === "EDUCATIONAL" ? "&mode=edu" : ""}${invitationPath ? `&next=${encodeURIComponent(invitationPath)}` : ""}`;
 
     const html = this.buildBaseEmail({
       title: this.t(lng, "Відновлення паролю", "Password reset"),

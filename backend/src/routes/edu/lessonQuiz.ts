@@ -3,12 +3,13 @@ import { AppDataSource } from "../../data-source";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
 import { authorizeClassForReq } from "../../middleware/orgContext";
 import { EduLesson } from "../../entities/EduLesson";
-import { User } from "../../entities/User";
 import { Student } from "../../entities/Student";
 import { QuizAttempt } from "../../entities/QuizAttempt";
 import { gradeQuiz, stripQuizForStudent, manualPointsAwarded, type Quiz } from "../../services/edu/quizGrader";
 import { logger } from "../../utils/logger";
 import { safeAICall } from "../../services/ai/safeAICall";
+import { quizAnswersBodySchema, manualQuizGradeBodySchema } from "./lessonContracts";
+import { assertCourseLessonActive } from "../../services/edu/courseLessonAttempt";
 
 /**
  * Lesson quizzes using the new quiz engine (P2.5). Operates on EduLesson.quizJson
@@ -19,7 +20,27 @@ const router = Router();
 const lessonRepo = () => AppDataSource.getRepository(EduLesson);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const attemptRepo = () => AppDataSource.getRepository(QuizAttempt);
-const userRepo = () => AppDataSource.getRepository(User);
+async function saveUnsubmittedQuiz(lessonId: number, quizJson: string) {
+  return AppDataSource.transaction(async manager => {
+    const repo = manager.getRepository(EduLesson);
+    const lesson = await repo.findOne({ where: { id: lessonId }, lock: { mode: "pessimistic_write" } });
+    if (!lesson) throw new Error("LESSON_NOT_FOUND");
+    if (await manager.getRepository(QuizAttempt).count({ where: { lesson: { id: lessonId } } })) throw new Error("QUIZ_HAS_SUBMISSIONS");
+    lesson.quizJson = quizJson;
+    lesson.hasTheory = true;
+    await repo.save(lesson);
+  });
+}
+
+for (const name of ["lessonId", "studentId"]) {
+  router.param(name, (req, res, next, value) => {
+    if (!Number.isSafeInteger(Number(value)) || Number(value) <= 0) {
+      res.status(400).json({ message: "INVALID_ID" });
+      return;
+    }
+    next();
+  });
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -57,10 +78,9 @@ function normalizeLegacyQuiz(raw: unknown): Array<{ question: string; options: R
 
 async function loadTeacherLesson(req: AuthRequest, lessonId: number): Promise<EduLesson | null> {
   if (!req.userId || req.userType === "STUDENT") return null;
-  const user = await userRepo().findOne({ where: { id: req.userId }, select: ["id", "userMode"] });
-  if (!user || user.userMode !== "EDUCATIONAL") return null;
   const lesson = await lessonRepo().findOne({ where: { id: lessonId }, relations: ["class", "class.teacher"] });
-  return lesson && lesson.class?.teacher?.id === req.userId ? lesson : null;
+  const access = lesson?.class?.id ? await authorizeClassForReq(req, lesson.class.id, "CONTENT_AUTHOR") : null;
+  return access?.allowed ? lesson : null;
 }
 
 // Teacher Studio uses a legacy, editor-friendly quiz shape. Keep this route
@@ -71,6 +91,7 @@ router.post("/lessons/:lessonId/generate-quiz", authRequired, async (req: AuthRe
     if (!Number.isInteger(lessonId) || lessonId <= 0) return res.status(400).json({ message: "INVALID_LESSON_ID" });
     const lesson = await loadTeacherLesson(req, lessonId);
     if (!lesson) return res.status(403).json({ message: "ONLY_LESSON_TEACHER" });
+    if (await attemptRepo().count({ where: { lesson: { id: lessonId } } })) return res.status(409).json({ message: "QUIZ_HAS_SUBMISSIONS" });
     const count = Math.min(30, Math.max(1, Math.floor(Number(req.body?.count) || 8)));
     const result = await safeAICall("generateQuiz", {
       // Legacy lesson quizzes do not belong to a TopicNew yet. Do not infer
@@ -83,11 +104,11 @@ router.post("/lessons/:lessonId/generate-quiz", authRequired, async (req: AuthRe
     if (!result.success) return res.status(502).json({ message: "AI_GENERATION_FAILED" });
     const quiz = normalizeLegacyQuiz(JSON.parse(result.data.quizJson));
     if (!quiz.length) return res.status(502).json({ message: "EMPTY_QUIZ_GENERATED" });
-    lesson.quizJson = JSON.stringify(quiz);
-    lesson.hasTheory = true;
-    await lessonRepo().save(lesson);
-    return res.json({ count: quiz.length, quiz, quizJson: lesson.quizJson });
+    const quizJson = JSON.stringify(quiz);
+    await saveUnsubmittedQuiz(lessonId, quizJson);
+    return res.json({ count: quiz.length, quiz, quizJson });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "QUIZ_HAS_SUBMISSIONS") return res.status(409).json({ message: error.message });
     logger.error("[edu/lessonQuiz] generate quiz failed", { requestId: req.requestId, err: error });
     return res.status(502).json({ message: "AI_GENERATION_FAILED" });
   }
@@ -99,13 +120,13 @@ router.put("/lessons/:lessonId/quiz", authRequired, async (req: AuthRequest, res
     if (!Number.isInteger(lessonId) || lessonId <= 0) return res.status(400).json({ message: "INVALID_LESSON_ID" });
     const lesson = await loadTeacherLesson(req, lessonId);
     if (!lesson) return res.status(403).json({ message: "ONLY_LESSON_TEACHER" });
+    if (await attemptRepo().count({ where: { lesson: { id: lessonId } } })) return res.status(409).json({ message: "QUIZ_HAS_SUBMISSIONS" });
     const quiz = normalizeLegacyQuiz(req.body?.quiz);
     if (!quiz.length || quiz.length > 100) return res.status(400).json({ message: "INVALID_QUIZ" });
-    lesson.quizJson = JSON.stringify(quiz);
-    lesson.hasTheory = true;
-    await lessonRepo().save(lesson);
+    await saveUnsubmittedQuiz(lessonId, JSON.stringify(quiz));
     return res.status(204).send();
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "QUIZ_HAS_SUBMISSIONS") return res.status(409).json({ message: error.message });
     logger.error("[edu/lessonQuiz] save quiz failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -144,7 +165,7 @@ function parseQuiz(raw: string | null | undefined): Quiz | null {
 }
 
 async function loadLessonWithClass(lessonId: number): Promise<EduLesson | null> {
-  if (!Number.isFinite(lessonId)) return null;
+  if (!Number.isSafeInteger(lessonId) || lessonId <= 0) return null;
   return await lessonRepo().findOne({
     where: { id: lessonId },
     relations: ["class", "class.teacher"]
@@ -167,11 +188,27 @@ router.get("/lessons/:lessonId/quiz", authRequired, async (req: AuthRequest, res
     const quiz = parseQuiz(lesson.quizJson);
     if (!quiz) return res.json({ quiz: null });
 
+    let submissionAllowed = true;
+    let submissionBlockedReason: string | null = null;
+    try { await assertCourseLessonActive(lesson, req.studentId); }
+    catch (error) { submissionAllowed = false; submissionBlockedReason = (error as Error).message; }
     const attempt = await attemptRepo().findOne({ where: { lesson: { id: lessonId }, student: { id: req.studentId } } });
+    let submittedAnswers: Record<string, unknown> | null = null;
+    if (attempt) {
+      submittedAnswers = {};
+      try {
+        const stored: unknown = JSON.parse(attempt.answersJson || "{}");
+        if (isRecord(stored) && !Array.isArray(stored)) submittedAnswers = Object.fromEntries(
+          quiz.questions.filter(question => Object.prototype.hasOwnProperty.call(stored, question.id)).map(question => [question.id, stored[question.id]])
+        );
+      } catch { /* A malformed historic answer must not prevent access to the result. */ }
+    }
     return res.json({
       quiz: stripQuizForStudent(quiz),
+      submittedAnswers,
+      submissionAllowed, submissionBlockedReason,
       attempt: attempt
-        ? { status: attempt.status, autoScore: Number(attempt.autoScore), maxScore: Number(attempt.maxScore), autoPercent: attempt.autoPercent }
+        ? { status: attempt.status, autoScore: Number(attempt.autoScore), manualScore: Number(attempt.manualScore), maxScore: Number(attempt.maxScore), autoPercent: attempt.autoPercent, finalPercent: attempt.finalPercent ?? null, needsManual: attempt.status === "NEEDS_MANUAL" }
         : null
     });
   } catch (error: unknown) {
@@ -199,10 +236,21 @@ router.post("/lessons/:lessonId/quiz/submit", authRequired, async (req: AuthRequ
     const existing = await attemptRepo().findOne({ where: { lesson: { id: lessonId }, student: { id: req.studentId } } });
     if (existing) return res.status(409).json({ message: "QUIZ_ALREADY_SUBMITTED" });
 
-    const answers = (req.body?.answers ?? {}) as Record<string, unknown>;
-    const result = gradeQuiz(quiz, answers);
+    await assertCourseLessonActive(lesson, req.studentId);
 
-    const attempt = attemptRepo().create({
+    const parsedBody = quizAnswersBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ message: "INVALID_ANSWERS" });
+    const answers = parsedBody.data.answers;
+    const result = await AppDataSource.transaction(async manager => {
+      await manager.createQueryBuilder(Student, "student").setLock("pessimistic_write").where("student.id = :studentId", { studentId: req.studentId }).getOne();
+      const current = await manager.getRepository(EduLesson).findOne({ where: { id: lessonId }, lock: { mode: "pessimistic_write" } });
+      const currentQuiz = parseQuiz(current?.quizJson);
+      if (!currentQuiz || !current) throw new Error("NO_QUIZ");
+      const repo = manager.getRepository(QuizAttempt);
+      if (await repo.findOne({ where: { lesson: { id: lessonId }, student: { id: req.studentId } } })) throw new Error("QUIZ_ALREADY_SUBMITTED");
+      await assertCourseLessonActive(current, req.studentId!, manager);
+      const result = gradeQuiz(currentQuiz, answers);
+      const attempt = repo.create({
       lesson: { id: lessonId } as EduLesson,
       student: { id: req.studentId } as Student,
       answersJson: JSON.stringify(answers),
@@ -211,7 +259,9 @@ router.post("/lessons/:lessonId/quiz/submit", authRequired, async (req: AuthRequ
       autoPercent: result.autoPercent,
       status: result.needsManual ? "NEEDS_MANUAL" : "AUTO_GRADED"
     });
-    await attemptRepo().save(attempt);
+      await repo.save(attempt);
+      return result;
+    });
 
     return res.status(201).json({
       result: {
@@ -223,8 +273,11 @@ router.post("/lessons/:lessonId/quiz/submit", authRequired, async (req: AuthRequ
       }
     });
   } catch (error: unknown) {
-    if (isQuizAttemptDuplicateError(error)) {
+    if (isQuizAttemptDuplicateError(error) || (error instanceof Error && error.message === "QUIZ_ALREADY_SUBMITTED")) {
       return res.status(409).json({ message: "QUIZ_ALREADY_SUBMITTED" });
+    }
+    if (error instanceof Error && ["ATTEMPT_NOT_STARTED", "CONTROL_WORK_COMPLETED"].includes(error.message)) {
+      return res.status(403).json({ message: error.message });
     }
     logger.error("[edu/lessonQuiz] submit failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -255,6 +308,7 @@ router.get("/lessons/:lessonId/quiz/attempts", authRequired, async (req: AuthReq
         autoScore: Number(a.autoScore),
         maxScore: Number(a.maxScore),
         autoPercent: a.autoPercent,
+        finalPercent: a.finalPercent ?? null,
         status: a.status,
         updatedAt: a.updatedAt
       }))
@@ -334,8 +388,19 @@ router.post("/lessons/:lessonId/quiz/attempts/:studentId/grade-manual", authRequ
     const quiz = parseQuiz(lesson.quizJson);
     if (!quiz) return res.status(400).json({ message: "NO_QUIZ" });
 
-    const manualScores = (req.body?.manualScores ?? {}) as Record<string, unknown>;
+    const parsedBody = manualQuizGradeBodySchema.safeParse(req.body);
+    if (!parsedBody.success) return res.status(400).json({ message: "INVALID_MANUAL_SCORES" });
+    const manualScores = parsedBody.data.manualScores;
+    const openQuestions = quiz.questions.filter(question => question.type === "OPEN_TEXT");
+    if (!openQuestions.length || openQuestions.some(question => !Object.prototype.hasOwnProperty.call(manualScores, question.id))) {
+      return res.status(400).json({ message: "MANUAL_SCORES_REQUIRED" });
+    }
     const manual = manualPointsAwarded(quiz, manualScores);
+    if (manual.invalidIds.length || openQuestions.some(question => {
+      const points = Number(question.points);
+      const max = Number.isFinite(points) && points > 0 ? points : 1;
+      return manualScores[question.id] > max;
+    })) return res.status(400).json({ message: "INVALID_MANUAL_SCORES" });
 
     const finalScore = Number(attempt.autoScore) + manual.manualAwarded;
     const maxScore = Number(attempt.maxScore);

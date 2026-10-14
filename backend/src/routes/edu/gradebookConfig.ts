@@ -11,6 +11,8 @@ import { computeWeightedGrade, mapGradesToCategoryGrades, normalizeGradebookConf
 import { formatGradeForSystem, normalizeScaleMode } from "../../utils/gradingScale";
 import { DEFAULT_GRADING_SYSTEM } from "../../types/GradingSystem";
 import { logger } from "../../utils/logger";
+import { updateClassConfiguration } from "../../services/edu/classStaff";
+import { HttpError } from "../../utils/httpError";
 
 /**
  * Weighted-category gradebook per class (P2.6). Setting a config opts the class
@@ -67,18 +69,17 @@ router.put("/classes/:classId/gradebook-config", authRequired, async (req: AuthR
 
     // null/empty clears the config (revert to thematic/semester model).
     if (req.body?.config == null) {
-      cls.gradebookConfig = null;
-      await classRepo().save(cls);
+      await updateClassConfiguration(cls.id, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, "GRADE_EDIT", { gradebookConfig: null });
       return res.json({ config: null });
     }
 
     const normalized = normalizeGradebookConfig(req.body.config);
     if (!normalized) return res.status(400).json({ message: "INVALID_CONFIG" });
-    cls.gradebookConfig = normalized;
-    await classRepo().save(cls);
+    await updateClassConfiguration(cls.id, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, "GRADE_EDIT", { gradebookConfig: normalized });
     return res.json({ config: normalized });
   } catch (error: unknown) {
     logger.error("[edu/gradebookConfig] put failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

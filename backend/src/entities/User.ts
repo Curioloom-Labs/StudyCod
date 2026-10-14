@@ -80,6 +80,15 @@ export class User {
   passwordResetExpires?: Date | null;
   @Column({ type: "varchar" })
   password!: string;
+  // Excluded from ordinary entity loads so stale metadata saves cannot roll
+  // back revocation. Only the EDU authentication service reads this counter.
+  @Column({ type: "int", unsigned: true, default: 0, select: false, name: "edu_session_version" })
+  eduSessionVersion!: number;
+  @Column({ type: "boolean", default: false, select: false, name: "edu_account_setup_required" })
+  eduAccountSetupRequired!: boolean;
+  // Kept after activation as provenance, not permission to edit a private account.
+  @Column({ type: "int", nullable: true, select: false, name: "edu_issuer_org_id" })
+  eduIssuerOrgId?: number | null;
   @Column({
     type: "enum",
     enum: ["PERSONAL", "EDUCATIONAL", "CONTEST"],

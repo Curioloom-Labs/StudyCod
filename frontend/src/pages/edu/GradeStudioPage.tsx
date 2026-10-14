@@ -6,7 +6,7 @@ import {
   updateGrade,
   type UpdateGradeRequest,
 } from "../../lib/api/edu";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
 

@@ -1,10 +1,11 @@
+import { eduLessonPath, eduLessonKey } from "../../lib/eduNavigation";
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, BookOpen, CheckCircle2, Clock3, GraduationCap, NotebookTabs, RefreshCw, Target } from "lucide-react";
-import { getStudentGrades, getStudentLessons, type Grade, type Lesson } from "../../lib/api/edu";
+import { getStudentGrades, getStudentLessons, type Grade, type Lesson, type StudentGradesResponse } from "../../lib/api/edu";
 import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, gradingSystemLabel, normalizeGradingSystem, normalizeScaleMode, type ClassGradingSystem, type GradeScaleMode } from "../../lib/gradingSystems";
 import type { User } from "../../types";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { withDevPreview } from "../../lib/devPreview";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
@@ -16,6 +17,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
   const isPreview = import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
+  const [quizGrades, setQuizGrades] = useState<NonNullable<StudentGradesResponse["quizGrades"]>>([]);
   const [summaryGrades, setSummaryGrades] = useState<Array<{ id: number; name: string; grade: number; topicTitle?: string | null }>>([]);
   const [gradingSystem, setGradingSystem] = useState<ClassGradingSystem>(DEFAULT_GRADING_SYSTEM);
   const [scaleMode, setScaleMode] = useState<GradeScaleMode | undefined>(undefined);
@@ -51,6 +53,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
       if (gradesResult.status === "fulfilled") {
         const nextGrades = gradesResult.value;
         setGrades(nextGrades.grades || []);
+        setQuizGrades("quizGrades" in nextGrades ? nextGrades.quizGrades || [] : []);
         setSummaryGrades((nextGrades.summaryGrades || []) as typeof summaryGrades);
         setGradingSystem(normalizeGradingSystem(nextGrades.gradingSystem || DEFAULT_GRADING_SYSTEM));
         setScaleMode(normalizeScaleMode(nextGrades.gradeScaleMode));
@@ -90,8 +93,8 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
     const tasks = lesson.tasks || [];
     if (tasks.length) return tasks.some((task) => !task.progressCompleted && !task.hasGrade && !task.grade?.isCompleted);
     return lesson.controlWorks?.some((work) => work.studentStatus !== "COMPLETED") ?? true;
-  }) || lessons.find((lesson) => !lesson.reportOnly) || lessons[0];
-  const displayAverage = average ? formatGradeForSystem(average, normalizedSystem, normalizedScale) : "—";
+  }) || lessons.find((lesson) => !lesson.reportOnly);
+  const displayAverage = graded.length ? formatGradeForSystem(average, normalizedSystem, normalizedScale) : "—";
   const recentGrades = [...grades].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 8);
 
   return (
@@ -116,7 +119,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
           <section className="rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface">
             <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{tr("Наступний крок", "Next step")}</div>
             {loading ? <div className="mt-5 h-44 animate-pulse rounded-2xl bg-bg-hover dark:bg-white/[.045]" /> : next ? (
-              <button type="button" onClick={() => navigate(withDevPreview(`/edu/lessons/${next.id}`))} className="mt-4 block w-full rounded-xl border border-border bg-bg-subtle p-5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 dark:border-white/10 dark:bg-white/[.035]">
+              <button type="button" onClick={() => navigate(withDevPreview(eduLessonPath(next)))} className="mt-4 block w-full rounded-xl border border-border bg-bg-subtle p-5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 dark:border-white/10 dark:bg-white/[.035]">
                 <div className="flex justify-between gap-4">
                   <div>
                     <div className="text-xs font-semibold text-primary-strong dark:text-primary-soft">{next.type === "CONTROL" ? tr("Контрольна", "Test") : next.type === "TOPIC" ? tr("Тема", "Topic") : tr("Урок", "Lesson")}</div>
@@ -127,7 +130,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
                 </div>
                 <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary-strong dark:text-primary-soft"><BookOpen className="h-4 w-4" />{tr("Відкрити урок", "Open lesson")}</div>
               </button>
-            ) : <div className="mt-5 rounded-2xl bg-bg-hover p-5 text-sm text-text-muted dark:bg-white/[.04] dark:text-text-secondary">{tr("Поки що немає доступних уроків.", "No lessons are available yet.")}</div>}
+            ) : <div className="mt-5 rounded-2xl bg-bg-hover p-5 text-sm text-text-muted dark:bg-white/[.04] dark:text-text-secondary">{lessons.length ? tr("Усі призначені уроки завершено. Результати доступні нижче.", "All assigned lessons are complete. Your results are available below.") : tr("Поки що немає доступних уроків.", "No lessons are available yet.")}</div>}
           </section>
 
           <section className="rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface">
@@ -174,8 +177,10 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
 
           <section className="rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface">
             <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{tr("Активність", "Activity")}</div>
+            {lessons.some(lesson => lesson.source === "course" && lesson.type === "CONTROL" && lesson.reportOnly) && <div className="mb-6 space-y-2"><h2 className="text-lg font-semibold">{tr("Результати контрольних", "Assessment results")}</h2>{lessons.filter(lesson => lesson.source === "course" && lesson.type === "CONTROL" && lesson.reportOnly).map(lesson => <button type="button" key={eduLessonKey(lesson)} onClick={() => navigate(eduLessonPath(lesson))} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl bg-bg-hover p-3 text-left"><span className="min-w-0"><span className="block font-semibold">{lesson.title}</span><span className="block text-xs text-text-secondary">{lesson.courseReport?.pendingReview ? tr("Очікує перевірки викладача", "Awaiting teacher review") : tr("Завершено", "Completed")}</span></span><span className="shrink-0 font-bold text-primary-strong">{lesson.courseReport?.finalPercent == null ? "—" : formatGradeForSystem(lesson.courseReport.finalPercent, normalizedSystem, normalizedScale)}</span></button>)}</div>}
+            {!!quizGrades.length && <div className="mb-6 space-y-2"><h2 className="text-lg font-semibold">{tr("Результати квізів", "Quiz results")}</h2>{quizGrades.map(quiz => <button type="button" key={quiz.id} onClick={() => navigate(withDevPreview(`/edu/lessons/${quiz.lessonId}/quiz?source=course`))} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl bg-bg-hover p-3 text-left"><span className="min-w-0"><span className="block font-semibold">{quiz.title}</span><span className="block text-xs text-text-secondary">{quiz.status === "NEEDS_MANUAL" ? tr("Очікує перевірки викладача", "Awaiting teacher review") : tr("Перевірено", "Graded")}</span></span><span className="shrink-0 font-bold text-primary-strong">{quiz.finalPercent == null ? "—" : formatGradeForSystem(quiz.finalPercent, normalizedSystem, normalizedScale)}</span></button>)}</div>}
             <div className="mt-5 space-y-3">{lessons.slice(0, 4).map((lesson) => (
-              <button type="button" key={lesson.id} onClick={() => navigate(withDevPreview(`/edu/lessons/${lesson.id}`))} className="flex w-full items-center justify-between rounded-xl bg-bg-subtle p-3 text-left dark:bg-white/[.04]">
+              <button type="button" key={eduLessonKey(lesson)} onClick={() => navigate(withDevPreview(eduLessonPath(lesson)))} className="flex w-full items-center justify-between rounded-xl bg-bg-subtle p-3 text-left dark:bg-white/[.04]">
                 <div>
                   <div className="font-semibold">{lesson.title}</div>
                   <div className="mt-1 text-sm text-text-muted dark:text-text-secondary">{lesson.tasksCount} {tr("задач", "problems")}</div>

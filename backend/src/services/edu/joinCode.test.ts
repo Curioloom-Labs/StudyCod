@@ -5,6 +5,7 @@ import { Class } from "../../entities/Class";
 import { Student } from "../../entities/Student";
 import { User } from "../../entities/User";
 import { Membership } from "../../entities/Membership";
+import { Organization } from "../../entities/Organization";
 import { generateJoinCode, normalizeJoinCode, enrollViaJoinCode } from "./joinCode";
 
 test("generateJoinCode: correct length and unambiguous alphabet only", () => {
@@ -27,10 +28,15 @@ function makeEnrollHarness(opts: { cls: any; user: any; existingStudent: any; ex
   const saved: any = { students: [], memberships: [] };
   const managerRepo = (entity: unknown): any => {
     if (entity === Class) return { findOne: async () => opts.cls };
-    if (entity === User) return { findOne: async () => opts.user };
+    if (entity === Organization) return { findOne: async () => ({ id: 9 }) };
+    const query: any = { getExists: async () => false };
+    for (const method of ["where", "andWhere", "withDeleted", "innerJoin"]) query[method] = () => query;
+    if (entity === User) return { findOne: async () => opts.user ? { userMode: "PERSONAL", eduSessionVersion: 0, ...opts.user } : null,
+      findOneByOrFail: async () => opts.user, createQueryBuilder: () => query };
     if (entity === Student) {
       return {
         findOne: async () => opts.existingStudent,
+        createQueryBuilder: () => query,
         create: (o: any) => o,
         save: async (o: any) => {
           o.id = o.id ?? 777;
@@ -52,11 +58,14 @@ function makeEnrollHarness(opts: { cls: any; user: any; existingStudent: any; ex
     throw new Error("unexpected entity");
   };
   const orig = (AppDataSource as any).transaction;
-  (AppDataSource as any).transaction = async (fn: any) => fn({ getRepository: managerRepo });
+  const originalRepo = (AppDataSource as any).getRepository;
+  (AppDataSource as any).getRepository = managerRepo;
+  (AppDataSource as any).transaction = async (fnOrIsolation: any, fn?: any) => (fn ?? fnOrIsolation)({ getRepository: managerRepo });
   return {
     saved,
     restore() {
       (AppDataSource as any).transaction = orig;
+      (AppDataSource as any).getRepository = originalRepo;
     }
   };
 }
@@ -110,4 +119,13 @@ test("enrollViaJoinCode rejects an unknown code", async () => {
 
 test("enrollViaJoinCode rejects an empty code before any DB work", async () => {
   await assert.rejects(enrollViaJoinCode(1, "   "), /INVALID_CODE/);
+});
+
+test("an archived enrollment cannot be replaced with a new Student using the old join code", async () => {
+  const h = makeEnrollHarness({ cls: { id: 3, organizationId: 9, joinCode: "ABC123" }, user: { id: 42 }, existingStudent: { id: 555, deletedAt: new Date() }, existingMembership: null });
+  try {
+    await assert.rejects(enrollViaJoinCode(42, "ABC123"), /STUDENT_ARCHIVED_CONTACT_TEACHER/);
+    assert.equal(h.saved.students.length, 0);
+    assert.equal(h.saved.memberships.length, 0);
+  } finally { h.restore(); }
 });

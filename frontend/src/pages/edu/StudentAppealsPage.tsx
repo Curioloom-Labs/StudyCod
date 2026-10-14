@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
-import { staggerContainer, fadeUpItem } from "../../lib/motion";
+import "./eduWorkspace.css";
 import { ArrowLeft, MessageSquare, Plus, RefreshCw } from "lucide-react";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { Button } from "../../components/ui/Button";
@@ -25,7 +24,7 @@ import {
   type StudentGradesResponse,
 } from "../../lib/api/edu";
 import { showToast } from "../../lib/toast";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 
 type AppealTargetOption = {
   value: string;
@@ -56,7 +55,6 @@ const STATUS_ORDER: GradeAppealStatus[] = [
 export const StudentAppealsPage: React.FC = () => {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
-  const reduce = useReducedMotion();
   const [searchParams, setSearchParams] = useSearchParams();
   const tr = useCallback((uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk), [i18n.language]);
 
@@ -444,13 +442,9 @@ export const StudentAppealsPage: React.FC = () => {
   }
 
   return (
-    <div className="p-3 sm:p-4 md:p-6">
+    <div className="edu-workspace p-3 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto space-y-6">
-        <motion.div
-          initial={reduce ? false : { opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={reduce ? { duration: 0.16, ease: "linear" } : { duration: 0.3 }}
-        >
+        <div>
           <Button variant="ghost" onClick={() => navigate("/edu/lessons")} className="mb-3 -ml-1">
             <ArrowLeft className="w-4 h-4 mr-2" />
             {tr("До уроків", "Back to lessons")}
@@ -484,12 +478,12 @@ export const StudentAppealsPage: React.FC = () => {
               </Button>
             </div>
           </div>
-        </motion.div>
+        </div>
 
         <div className="h-px bg-gradient-to-r from-primary/40 via-border to-transparent" />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <motion.div variants={staggerContainer} initial="initial" animate="animate" className="lg:col-span-5 space-y-3">
+          <div className="lg:col-span-5 space-y-3">
             {appeals.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border bg-bg-surface/40 p-10 text-center">
                 <div className="mx-auto w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
@@ -500,10 +494,10 @@ export const StudentAppealsPage: React.FC = () => {
               </div>
             ) : (
               appeals.map(item => (
-                <motion.div
+                <button type="button"
                   key={item.id}
-                  variants={fadeUpItem}
-                  className={`group rounded-xl border bg-bg-surface p-5 cursor-pointer transition-fast hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(0,0,0,0.5)] ${selectedAppealId === item.id ? "border-primary/60" : "border-border hover:border-primary/40"}`}
+                  aria-pressed={selectedAppealId === item.id}
+                  className={`group w-full text-left rounded-xl border bg-bg-surface p-5 cursor-pointer transition-fast hover:bg-bg-hover ${selectedAppealId === item.id ? "border-primary/60" : "border-border hover:border-primary/40"}`}
                   onClick={() => setSelectedAppealId(item.id)}
                 >
                   <div className="flex items-start justify-between gap-3 mb-2">
@@ -529,10 +523,10 @@ export const StudentAppealsPage: React.FC = () => {
                   {getSlaHint(item) ? (
                     <div className="mt-1 text-[11px] text-text-muted font-mono">{getSlaHint(item)}</div>
                   ) : null}
-                </motion.div>
+                </button>
               ))
             )}
-          </motion.div>
+          </div>
 
           <div className="lg:col-span-7">
             {!selectedAppealId ? (

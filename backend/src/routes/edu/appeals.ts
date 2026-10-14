@@ -838,6 +838,7 @@ router.post("/classes/:classId/appeals/:appealId/resolve", authRequired, async (
             throw new Error("SUMMARY_GRADE_NOT_FOUND");
           }
           lockedAppeal.summaryGrade.grade = normalizedNewGrade;
+          if (lockedAppeal.summaryGrade.assessmentType === "CONTROL") lockedAppeal.summaryGrade.manualOverrideGrade = normalizedNewGrade;
           await manager.getRepository(SummaryGrade).save(lockedAppeal.summaryGrade);
           gradeChanged = true;
         }

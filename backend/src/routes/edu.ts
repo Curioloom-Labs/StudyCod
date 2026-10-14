@@ -1,3 +1,5 @@
+import { TestData } from "../entities/TestData";
+import { LessonAttempt } from "../entities/LessonAttempt";
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
@@ -24,18 +26,23 @@ import { validateFormula } from "../utils/safeFormulaEvaluator";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, GradingSystem } from "../types/GradingSystem";
 import { saveControlSummaryGradeForNewSystemWithManager } from "../services/edu/controlWorkGrading";
 import { authorizeClassAction } from "../services/edu/classAccess";
+import { createClassForActor } from "../services/edu/classStaff";
+import { updateClassGradingSettings } from "../services/edu/classGradingSettings";
+import { HttpError } from "../utils/httpError";
 import { logger } from "../utils/logger";
 import { generateInteractiveLessonWithAI } from "../services/openRouterService";
 import { emailService } from "../services/emailService";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
 import { resolveUiLocaleFromHeaders } from "../utils/uiLocale";
-import { convertGradeToRaw100, shouldConvertLegacyGrades, normalizeScaleMode, GRADE_SCALE_MODES, DEFAULT_GRADE_SCALE_MODE } from "../utils/gradingScale";
+import { normalizeScaleMode, GRADE_SCALE_MODES, DEFAULT_GRADE_SCALE_MODE } from "../utils/gradingScale";
 import studentAuthRouter from "./edu/studentAuth";
 import announcementsRouter from "./edu/announcements";
 import classStudentsRouter from "./edu/classStudents";
 import studentsRouter from "./edu/students";
 import lessonsRouter from "./edu/lessons";
 import tasksRouter from "./edu/tasks";
+import courseTaskTestsRouter from "./edu/courseTaskTests";
+import { courseTestsSchema } from "../services/edu/courseTaskTests";
 import courseTasksRouter from "./edu/courseTasks";
 import testDataRouter from "./edu/testData";
 import gradingRouter from "./edu/grading";
@@ -56,7 +63,8 @@ import tutorRouter from "./edu/tutor";
 import { enforceAuthTurnstile } from "./auth";
 import { EduRegistrationIntent } from "../entities/EduRegistrationIntent";
 import { Organization, EDUCATIONAL_INSTITUTION_TYPES } from "../entities/Organization";
-import { listUserMemberships } from "../services/edu/membership";
+import { Membership } from "../entities/Membership";
+import { createLessonBodySchema } from "./edu/lessonContracts";
 const eduRouter = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
@@ -136,6 +144,7 @@ eduRouter.use(lessonsRouter);
 // so this reorder introduces no new shadowing.
 eduRouter.use(gradingRouter);
 eduRouter.use(courseTasksRouter);
+eduRouter.use(courseTaskTestsRouter);
 eduRouter.use(tasksRouter);
 eduRouter.use(testDataRouter);
 eduRouter.use(appealsRouter);
@@ -192,14 +201,11 @@ const eduOrganizationRegistrationSchema = z.object({
   turnstileToken: z.string().min(1).max(4096).optional()
 });
 
-const createLessonBodySchema = z.object({
-  type: z.string().transform(v => v.trim().toUpperCase()).refine(v => v === "LESSON" || v === "CONTROL"),
-  title: z.string().min(1).max(255)
-});
-
 const createLessonTaskBodySchema = z.object({
-  title: z.string().min(1).max(255),
-  description: z.string().min(1).max(50_000),
+  testData: courseTestsSchema.optional(),
+  maxAttempts: z.number().int().min(1).max(100).optional(),
+  title: z.string().trim().min(1).max(255),
+  description: z.string().trim().min(1).max(50_000),
   template: z.string().max(200_000).optional(),
   taskMode: z.enum(["CODE", "WEB"]).optional(),
   projectSpec: z.object({
@@ -391,20 +397,12 @@ eduRouter.post("/register-organization", eduOrganizationRegistrationLimiter, asy
 });
 eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const user = await userRepo().findOne({
-      where: {
-        id: req.userId
-      }
-    });
-    if (!user || user.userMode !== "EDUCATIONAL" && user.role !== "SYSTEM_ADMIN") {
-      return res.status(403).json({
-        message: "ONLY_TEACHERS_CAN_CREATE_CLASSES"
-      });
-    }
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
     const schema = z.object({
-      name: z.string().min(1).max(100),
+      name: z.string().trim().min(1).max(100),
       gradingSystem: z.enum(GRADING_SYSTEMS).optional(),
-      gradeScaleMode: z.enum(GRADE_SCALE_MODES).optional()
+      gradeScaleMode: z.enum(GRADE_SCALE_MODES).optional(),
+      organizationId: z.number().int().positive().optional()
     });
     const validated = schema.safeParse(req.body);
     if (!validated.success) return res.status(400).json({
@@ -413,26 +411,21 @@ eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response)
     const {
       name,
       gradingSystem,
-      gradeScaleMode
+      gradeScaleMode,
+      organizationId
     } = validated.data;
-    const memberships = await listUserMemberships(user.id);
-    const teachingMembership = memberships.find((membership) => ["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(membership.role));
-    if (!teachingMembership) {
-      return res.status(403).json({ message: "ORGANIZATION_REQUIRED" });
-    }
-    const cls = classRepo().create({
-      teacher: user,
-      organization: { id: teachingMembership.organizationId } as Organization,
+    const cls = await createClassForActor({
+      organizationId,
       name,
       gradingSystem: gradingSystem || DEFAULT_GRADING_SYSTEM,
       gradeScaleMode: gradeScaleMode || DEFAULT_GRADE_SCALE_MODE
-    });
-    await classRepo().save(cls);
+    }, { userId: req.userId, sessionVersion: req.eduSessionVersion });
     res.status(201).json({
       class: cls
     });
   } catch (error) {
     logger.error("[edu] Error creating class", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -440,6 +433,7 @@ eduRouter.post("/classes", authRequired, async (req: AuthRequest, res: Response)
 });
 eduRouter.get("/classes", authRequired, async (req: AuthRequest, res: Response) => {
   try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
     const user = await userRepo().findOne({
       where: {
         id: req.userId
@@ -450,21 +444,18 @@ eduRouter.get("/classes", authRequired, async (req: AuthRequest, res: Response) 
         message: "ONLY_TEACHERS_CAN_VIEW_CLASSES"
       });
     }
-    const memberships = await listUserMemberships(user.id);
-    const adminOrgIds = memberships
-      .filter((membership) => membership.role === "ORG_ADMIN")
-      .map((membership) => membership.organizationId);
     // Count students via a grouped COUNT (loadRelationCountAndMap) instead of
     // loading every student row across every class just to read `.length`.
     const classes = await classRepo()
       .createQueryBuilder("class")
       .loadRelationCountAndMap("class.studentsCount", "class.students")
       .leftJoin("class.teachers", "assignedTeacher")
+      .leftJoin(Membership, "currentMembership", "currentMembership.org_id = class.org_id AND currentMembership.user_id = :teacherId", { teacherId: user.id })
       .where(
-        adminOrgIds.length
-          ? "(class.teacher_id = :teacherId OR assignedTeacher.id = :teacherId OR class.org_id IN (:...adminOrgIds))"
-          : "(class.teacher_id = :teacherId OR assignedTeacher.id = :teacherId)",
-        { teacherId: user.id, adminOrgIds },
+        user.role === "SYSTEM_ADMIN" ? "1 = 1" : `(currentMembership.role = 'ORG_ADMIN'
+          OR (currentMembership.role IN ('TEACHER', 'ASSISTANT') AND (class.teacher_id = :teacherId OR assignedTeacher.id = :teacherId))
+          OR (currentMembership.id IS NULL AND class.teacher_id = :teacherId))`,
+        { teacherId: user.id },
       )
       .distinct(true)
       .orderBy("class.created_at", "DESC")
@@ -530,134 +521,10 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, requireClassCapa
       });
     }
 
-    const cls = req.classAccess!.cls;
-
-    const requestedGradingSystem = parsedBody.data.gradingSystem as GradingSystem;
-    const previousGradingSystem = (cls.gradingSystem || DEFAULT_GRADING_SYSTEM) as GradingSystem;
-
-    let convertedLegacyGrades = false;
-    let convertedFieldsCount = 0;
-
-    await AppDataSource.transaction("SERIALIZABLE", async manager => {
-      const lockedClass = await manager
-        .createQueryBuilder(Class, "class")
-        .setLock("pessimistic_write")
-        .leftJoinAndSelect("class.teacher", "teacher")
-        .where("class.id = :classId", { classId })
-        .getOne();
-
-      // Authorization already enforced by requireClassCapability; the lock just
-      // guards the read-modify-write of grades against concurrent conversions.
-      if (!lockedClass) {
-        throw new Error("CLASS_NOT_FOUND");
-      }
-
-      const fromSystem = (lockedClass.gradingSystem || DEFAULT_GRADING_SYSTEM) as GradingSystem;
-      const fromScaleMode = normalizeScaleMode(lockedClass.gradeScaleMode);
-
-      if (fromSystem !== requestedGradingSystem) {
-        const eduGrades = await manager
-          .createQueryBuilder(EduGrade, "grade")
-          .leftJoinAndSelect("grade.student", "student")
-          .where("student.class_id = :classId", { classId })
-          .andWhere("grade.total IS NOT NULL")
-          .getMany();
-
-        const summaryGrades = await manager
-          .createQueryBuilder(SummaryGrade, "summary")
-          .where("summary.class_id = :classId", { classId })
-          .getMany();
-
-        const sampleValues: number[] = [];
-        for (const grade of eduGrades) {
-          if (grade.total !== null && Number.isFinite(Number(grade.total))) {
-            sampleValues.push(Number(grade.total));
-          }
-        }
-        for (const summary of summaryGrades) {
-          if (Number.isFinite(Number(summary.grade))) {
-            sampleValues.push(Number(summary.grade));
-          }
-          if (summary.theoryGrade !== null && Number.isFinite(Number(summary.theoryGrade))) {
-            sampleValues.push(Number(summary.theoryGrade));
-          }
-        }
-
-        if (shouldConvertLegacyGrades(sampleValues, fromSystem)) {
-          convertedLegacyGrades = true;
-
-          for (const grade of eduGrades) {
-            if (grade.total === null || !Number.isFinite(Number(grade.total))) continue;
-            const next = convertGradeToRaw100(Number(grade.total), fromSystem, fromScaleMode);
-            if (next !== Number(grade.total)) {
-              grade.total = next;
-              convertedFieldsCount += 1;
-            }
-          }
-
-          for (const summary of summaryGrades) {
-            if (Number.isFinite(Number(summary.grade))) {
-              const nextGrade = convertGradeToRaw100(Number(summary.grade), fromSystem, fromScaleMode);
-              if (nextGrade !== Number(summary.grade)) {
-                summary.grade = nextGrade;
-                convertedFieldsCount += 1;
-              }
-            }
-
-            if (summary.theoryGrade !== null && Number.isFinite(Number(summary.theoryGrade))) {
-              const nextTheoryGrade = convertGradeToRaw100(Number(summary.theoryGrade), fromSystem, fromScaleMode);
-              if (nextTheoryGrade !== Number(summary.theoryGrade)) {
-                summary.theoryGrade = nextTheoryGrade;
-                convertedFieldsCount += 1;
-              }
-            }
-          }
-
-          if (eduGrades.length > 0) {
-            await manager.save(EduGrade, eduGrades);
-          }
-          if (summaryGrades.length > 0) {
-            await manager.save(SummaryGrade, summaryGrades);
-          }
-        }
-      }
-
-      lockedClass.gradingSystem = requestedGradingSystem;
-      if (parsedBody.data.gradeScaleMode) {
-        lockedClass.gradeScaleMode = parsedBody.data.gradeScaleMode;
-      }
-      await manager.save(Class, lockedClass);
-    });
-
-    const updatedClass = await classRepo().findOne({
-      where: {
-        id: classId
-      }
-    });
-
-    if (!updatedClass) {
-      return res.status(404).json({
-        message: "CLASS_NOT_FOUND"
-      });
-    }
-
-    return res.json({
-      class: {
-        id: updatedClass.id,
-        name: updatedClass.name,
-        gradingSystem: updatedClass.gradingSystem,
-        gradeScaleMode: normalizeScaleMode(updatedClass.gradeScaleMode),
-        createdAt: updatedClass.createdAt,
-        updatedAt: updatedClass.updatedAt
-      },
-      conversion: {
-        from: previousGradingSystem,
-        to: requestedGradingSystem,
-        legacyConverted: convertedLegacyGrades,
-        convertedFields: convertedFieldsCount
-      }
-    });
+    const result = await updateClassGradingSettings(classId, { userId: req.userId!, sessionVersion: req.eduSessionVersion }, parsedBody.data.gradingSystem, parsedBody.data.gradeScaleMode);
+    return res.json(result);
   } catch (error) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     if (error instanceof Error && error.message === "CLASS_NOT_FOUND") {
       return res.status(404).json({
         message: "CLASS_NOT_FOUND"
@@ -675,9 +542,20 @@ eduRouter.get("/classes/:classId/lessons", authRequired, requireClassCapability(
     const topics = await topicRepo().createQueryBuilder("topic").leftJoinAndSelect("topic.tasks", "task").where("topic.class_id = :classId", {
       classId
     }).orderBy("topic.order", "ASC").addOrderBy("topic.created_at", "ASC").getMany();
+    const courseLessons = await lessonRepo().find({ where: { class: { id: classId } }, relations: ["tasks"], order: { createdAt: "DESC" } });
     res.json({
-      lessons: topics.map(topic => ({
+      lessons: [...courseLessons.map(lesson => ({
+        id: lesson.id,
+        source: "course",
+        type: lesson.type,
+        title: lesson.title,
+        hasTheory: lesson.hasTheory,
+        tasksCount: lesson.tasks?.length || 0,
+        createdAt: lesson.createdAt.toISOString(),
+      })), ...topics.map(topic => ({
         id: topic.id,
+        source: "legacy",
+        type: "TOPIC",
         title: topic.title,
         description: topic.description || null,
         order: topic.order,
@@ -700,7 +578,7 @@ eduRouter.get("/classes/:classId/lessons", authRequired, requireClassCapability(
           type: task.type,
           order: task.order
         }))
-      }))
+      }))]
     });
   } catch (error) {
     logger.error("[edu] Error getting lessons", { requestId: req.requestId, err: error });
@@ -721,6 +599,7 @@ eduRouter.post("/classes/:classId/lessons", authRequired, requireClassCapability
   const title = parsedBody.data.title;
   const cls = req.classAccess!.cls;
   const lesson = lessonRepo().create({
+    ...parsedBody.data,
     class: cls,
     type,
     title
@@ -731,6 +610,8 @@ eduRouter.post("/classes/:classId/lessons", authRequired, requireClassCapability
   });
 });
 eduRouter.post("/lessons/:lessonId/tasks", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.studentId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_TEACHERS_CAN_CREATE_TASKS" });
+  if (!Number.isSafeInteger(Number(req.params.lessonId)) || Number(req.params.lessonId) <= 0) return res.status(400).json({ message: "INVALID_ID" });
   const user = await userRepo().findOne({
     where: {
       id: req.userId
@@ -772,11 +653,7 @@ eduRouter.post("/lessons/:lessonId/tasks", authRequired, async (req: AuthRequest
 
   const { title, description } = parsedBody.data;
   const normalizedTaskInput = normalizeWebTaskInput(parsedBody.data);
-  if (normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
-    return res.status(400).json({
-      message: "TITLE_DESCRIPTION_AND_TEMPLATE_REQUIRED"
-    });
-  }
+  if (normalizedTaskInput.taskMode !== "CODE" && parsedBody.data.testData?.length) return res.status(400).json({ message: "INVALID_TEST_DATA" });
   const task = taskRepo().create({
     lesson,
     title,
@@ -787,13 +664,28 @@ eduRouter.post("/lessons/:lessonId/tasks", authRequired, async (req: AuthRequest
     webValidationRules: normalizedTaskInput.webValidationRules,
     webValidationProfile: normalizedTaskInput.webValidationProfile,
     projectSpec: parsedBody.data.projectSpec ?? null,
-    maxAttempts: 1,
+    maxAttempts: parsedBody.data.maxAttempts ?? 3,
     isClosed: false
   });
-  await taskRepo().save(task);
-  res.status(201).json({
-    task
+  try {
+  await AppDataSource.transaction("READ COMMITTED", async manager => {
+    const currentLesson = await manager.getRepository(EduLesson).findOne({ where: { id: lesson.id }, lock: { mode: "pessimistic_write" } });
+    if (!currentLesson) throw Object.assign(new Error("LESSON_NOT_FOUND"), { statusCode: 404 });
+    if (currentLesson.type === "CONTROL" && await manager.getRepository(LessonAttempt).createQueryBuilder("attempt").where("attempt.lesson_id = :id", { id: lesson.id }).getCount()) {
+      throw Object.assign(new Error("ASSESSMENT_HAS_STARTED"), { statusCode: 409 });
+    }
+    await manager.getRepository(EduTask).save(task);
+    if (task.taskMode === "CODE" && parsedBody.data.testData?.length) await manager.getRepository(TestData).save(
+      parsedBody.data.testData.map(test => manager.getRepository(TestData).create({ ...test, task, kind: test.isHidden ? "JUDGE" : "SAMPLE", source: "MANUAL" }))
+    );
   });
+  res.status(201).json({ task: { ...task, testDataCount: parsedBody.data.testData?.length ?? 0 } });
+  } catch (error) {
+    const record = error as { statusCode?: number; message?: string };
+    if (record.statusCode) return res.status(record.statusCode).json({ message: record.message });
+    logger.error("[edu] task creation failed", { requestId: req.requestId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
 });
 
 // Task execution/submission endpoints are split into ./edu/tasks.ts

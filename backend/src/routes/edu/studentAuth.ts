@@ -61,13 +61,14 @@ router.post("/student-login", studentLoginLimiter, async (req: AuthRequest, res:
     const uiLanguage = resolveUiLocaleFromHeaders(req.headers, "en");
     if (student.uiLanguage !== uiLanguage) {
       student.uiLanguage = uiLanguage;
-      await studentRepo().save(student);
+      await studentRepo().update(student.id, { uiLanguage });
     }
 
     const token = jwt.sign(
       {
         studentId: student.id,
         type: "STUDENT",
+        credentialVersion: student.credentialVersion,
         classId: student.class.id,
         jti: generateJti()
       },

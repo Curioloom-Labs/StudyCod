@@ -76,6 +76,10 @@ export class SummaryGrade {
     scale: 2
   })
   grade!: number;
+  @Column({ type: "int", nullable: true, name: "manual_override_grade" })
+  manualOverrideGrade!: number | null;
+  @Column({ type: "int", nullable: true, name: "calculated_grade" })
+  calculatedGrade!: number | null;
   @Column({
     type: "decimal",
     precision: 5,

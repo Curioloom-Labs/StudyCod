@@ -2,6 +2,8 @@ import { AppDataSource } from "../../data-source";
 import { Student } from "../../entities/Student";
 import { EduGrade } from "../../entities/EduGrade";
 import { SummaryGrade } from "../../entities/SummaryGrade";
+import { lockStudentActor, type EduLifecycleActor } from "./lifecycleAccess";
+import { HttpError } from "../../utils/httpError";
 
 /**
  * Data-subject hooks for COPPA/FERPA/GDPR-K (design-for-later, p.10). The
@@ -73,31 +75,41 @@ export async function exportStudentData(studentId: number): Promise<StudentExpor
 }
 
 /** Right-to-erasure: hides the student while retaining recoverable academic records. */
-export async function eraseStudentData(studentId: number): Promise<boolean> {
-  const student = await studentRepo().findOne({ where: { id: studentId } });
-  if (!student) return false;
-  await studentRepo().softRemove(student);
-  return true;
+export async function eraseStudentData(studentId: number, actor: EduLifecycleActor): Promise<boolean> {
+  return AppDataSource.transaction("READ COMMITTED", async manager => {
+    const student = await lockStudentActor(manager, studentId, actor, "STUDENT_MANAGE");
+    if (student.deletedAt) return false;
+    await manager.getRepository(Student).update(student.id, { deletedAt: new Date(), credentialVersion: () => "credential_version + 1" });
+    return true;
+  });
 }
 
 /** Restore a previously erased student; used only by an explicitly authorized admin flow. */
-export async function restoreStudentData(studentId: number): Promise<boolean> {
-  const student = await studentRepo().findOne({ where: { id: studentId }, withDeleted: true });
-  if (!student?.deletedAt) return false;
-  await studentRepo().restore(student.id);
-  return true;
+export async function restoreStudentData(studentId: number, actor: EduLifecycleActor): Promise<boolean> {
+  return AppDataSource.transaction("READ COMMITTED", async manager => {
+    const student = await lockStudentActor(manager, studentId, actor, "STUDENT_MANAGE");
+    if (!student.deletedAt) return false;
+    await manager.getRepository(Student).update(student.id, { deletedAt: null });
+    return true;
+  });
 }
 
 export async function setStudentConsent(
   studentId: number,
-  opts: { birthDate?: string | null; consentGiven?: boolean }
+  opts: { birthDate?: string | null; consentGiven?: boolean },
+  actor: EduLifecycleActor
 ): Promise<Student | null> {
-  const student = await studentRepo().findOne({ where: { id: studentId } });
-  if (!student) return null;
-  if (opts.birthDate !== undefined) student.birthDate = opts.birthDate;
-  if (opts.consentGiven !== undefined) {
-    student.parentalConsentAt = opts.consentGiven ? new Date() : null;
-  }
-  await studentRepo().save(student);
-  return student;
+  return AppDataSource.transaction("READ COMMITTED", async manager => {
+    const student = await lockStudentActor(manager, studentId, actor, "STUDENT_MANAGE");
+    if (student.deletedAt) throw new HttpError(409, "STUDENT_ARCHIVED");
+    if (opts.birthDate !== undefined) student.birthDate = opts.birthDate;
+    if (opts.consentGiven !== undefined) {
+      student.parentalConsentAt = opts.consentGiven ? new Date() : null;
+    }
+    if (opts.birthDate !== undefined || opts.consentGiven !== undefined) await manager.getRepository(Student).update(student.id, {
+      ...(opts.birthDate !== undefined ? { birthDate: student.birthDate } : {}),
+      ...(opts.consentGiven !== undefined ? { parentalConsentAt: student.parentalConsentAt } : {})
+    });
+    return student;
+  });
 }

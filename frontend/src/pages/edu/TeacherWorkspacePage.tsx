@@ -3,9 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, ClipboardCheck, Plus, RefreshCw, Users } from "lucide-react";
 import { createClass, getClasses, getPendingReviews, type Class, type PendingReview } from "../../lib/api/edu";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { Modal } from "../../components/ui/Modal";
 import { withDevPreview } from "../../lib/devPreview";
+import "./eduWorkspace.css";
+import { api } from "../../lib/api/client";
 
 export const TeacherWorkspacePage: React.FC = () => {
   const navigate = useNavigate();
@@ -18,6 +20,30 @@ export const TeacherWorkspacePage: React.FC = () => {
   const [openCreate, setOpenCreate] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const createPending = React.useRef(false);
+  const [organizations, setOrganizations] = useState<Array<{ orgId: number; name: string | null; role: string }>>([]);
+  const [organizationId, setOrganizationId] = useState<number | null>(null);
+  const [organizationsLoading, setOrganizationsLoading] = useState(false);
+  const [organizationReload, setOrganizationReload] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setOrganizationsLoading(true);
+    setCreateError(null);
+    void (async () => {
+      try {
+        const items = isPreview ? [{ orgId: 1, name: "StudyCod", role: "TEACHER" }] : (await api.get("/edu/orgs", { signal: controller.signal })).data?.orgs || [];
+        if (controller.signal.aborted) return;
+        const allowed = items.filter((org: { role: string }) => ["TEACHER", "ORG_ADMIN"].includes(org.role));
+        setOrganizations(allowed);
+        setOrganizationId(current => allowed.some((org: { orgId: number }) => org.orgId === current) ? current : allowed[0]?.orgId || null);
+      } catch (cause) {
+        if (!controller.signal.aborted) { setOrganizations([]); setOrganizationId(null); setCreateError(getErrorMessageFromUnknown(cause, tr("Не вдалося завантажити заклади.", "Could not load organizations."))); }
+      } finally { if (!controller.signal.aborted) setOrganizationsLoading(false); }
+    })();
+    return () => controller.abort();
+  }, [openCreate, organizationReload]);
 
   const load = async () => {
     setLoading(true);
@@ -43,23 +69,30 @@ export const TeacherWorkspacePage: React.FC = () => {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (createPending.current || organizationsLoading || !organizationId || !name.trim()) return;
+    createPending.current = true;
+    setCreating(true);
+    setCreateError(null);
     try {
       if (isPreview) {
-        setClasses((current) => [...current, { id: Date.now(), name, gradingSystem: "POINTS_12", studentsCount: 0, createdAt: new Date().toISOString() }]);
+        setClasses((current) => [...current, { id: Date.now(), name: name.trim(), gradingSystem: "POINTS_12", studentsCount: 0, createdAt: new Date().toISOString() }]);
         setName("");
         setOpenCreate(false);
         return;
       }
-      await createClass(name);
+      await createClass(name.trim(), undefined, undefined, organizationId);
       setName("");
       setOpenCreate(false);
       await load();
     } catch (cause: unknown) {
-      setError(getErrorMessageFromUnknown(cause, tr("Не вдалося створити клас.", "Could not create the class.")));
+      setCreateError(getErrorMessageFromUnknown(cause, tr("Не вдалося створити клас.", "Could not create the class.")));
+    } finally {
+      createPending.current = false;
+      setCreating(false);
     }
   };
 
-  return <main className="min-h-full bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-8 lg:py-8">
+  return <main className="edu-workspace min-h-full bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-8 lg:py-8">
     <div className="mx-auto max-w-7xl">
       <header className="flex flex-col justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-end">
         <div>
@@ -67,8 +100,9 @@ export const TeacherWorkspacePage: React.FC = () => {
           <h1 className="mt-2 text-3xl font-bold tracking-[-.04em]">{tr("Кабінет викладача", "Teacher workspace")}</h1>
           <p className="mt-2 text-sm text-text-secondary">{tr("Перевір роботи учнів і керуй класами з одного місця.", "Review student work and manage classes from one place.")}</p>
         </div>
-        <button type="button" onClick={() => setOpenCreate(true)} className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:bg-primary-hover sm:self-auto"><Plus className="size-4" aria-hidden="true" />{tr("Новий клас", "New class")}</button>
+        {organizations.length > 0 && <button type="button" onClick={() => { setCreateError(null); setOpenCreate(true); }} className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:bg-primary-hover sm:self-auto"><Plus className="size-4" aria-hidden="true" />{tr("Новий клас", "New class")}</button>}
       </header>
+      {!openCreate && createError && <div role="alert" className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-accent-error/30 p-3 text-sm"><p>{createError}</p><button type="button" onClick={() => setOrganizationReload(value => value + 1)} className="min-h-11 px-3 font-semibold text-primary-strong">{tr("Повторити завантаження закладів", "Reload organizations")}</button></div>}
 
       {error ? <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent-warn/35 bg-accent-warn/5 px-4 py-3 text-sm" role="status">
         <span className="text-text-secondary">{error} {classes.length || reviews.length ? tr("Показано дані, які вдалося завантажити.", "Showing the data that loaded successfully.") : ""}</span>
@@ -108,14 +142,17 @@ export const TeacherWorkspacePage: React.FC = () => {
             </button></li>)}
           </ul>
           : error ? <p className="py-5 text-sm text-text-secondary">{tr("Не вдалося завантажити класи.", "We couldn’t load classes.")}</p>
-            : <div className="flex flex-wrap items-center justify-between gap-3 py-5"><p className="text-sm text-text-secondary">{tr("Створи клас, щоб запросити учнів і призначати їм завдання.", "Create a class to invite learners and assign work.")}</p><button type="button" onClick={() => setOpenCreate(true)} className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold hover:bg-bg-hover">{tr("Створити клас", "Create a class")}</button></div>}
+            : <div className="flex flex-wrap items-center justify-between gap-3 py-5"><p className="text-sm text-text-secondary">{organizations.length ? tr("Створи клас, щоб запросити учнів і призначати їм завдання.", "Create a class to invite learners and assign work.") : organizationsLoading ? tr("Перевіряємо доступ до закладів…", "Checking organization access…") : tr("Адміністратор має призначити вам клас для роботи з учнями.", "Ask your administrator to assign a class so you can work with learners.")}</p>{organizations.length > 0 && <button type="button" onClick={() => { setCreateError(null); setOpenCreate(true); }} className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold hover:bg-bg-hover">{tr("Створити клас", "Create a class")}</button>}{createError && <button type="button" onClick={() => setOrganizationReload(value => value + 1)} className="min-h-11 px-3 text-sm font-semibold text-primary-strong">{tr("Повторити завантаження закладів", "Reload organizations")}</button>}</div>}
       </section>
     </div>
 
-    <Modal open={openCreate} title={tr("Новий клас", "New class")} description={tr("Клас об’єднує учнів. Мову програмування обирай окремо для кожної теми.", "A class brings learners together. Choose a programming language for each topic.")} onClose={() => setOpenCreate(false)}>
-      <form onSubmit={submit} className="grid gap-4">
-        <label htmlFor="teacher-class-name" className="grid gap-2 text-sm font-medium">{tr("Назва класу", "Class name")}<input id="teacher-class-name" name="className" required value={name} onChange={(event) => setName(event.target.value)} placeholder={tr("Наприклад, 10-Б", "For example, Year 10 A")} className="min-h-11 rounded-lg border border-border bg-bg-base px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" /></label>
-        <div className="flex justify-end gap-2"><button type="button" onClick={() => setOpenCreate(false)} className="min-h-11 rounded-lg px-4 text-sm font-semibold hover:bg-bg-hover">{tr("Скасувати", "Cancel")}</button><button type="submit" className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground">{tr("Створити клас", "Create class")}</button></div>
+    <Modal open={openCreate} closable={!creating} showCloseButton={false} title={tr("Новий клас", "New class")} description={tr("Клас об’єднує учнів. Мову програмування обирай окремо для кожної теми.", "A class brings learners together. Choose a programming language for each topic.")} onClose={() => setOpenCreate(false)}>
+      <form onSubmit={submit} className="edu-workspace grid gap-4" aria-busy={creating}>
+        {createError && <p role="alert" className="rounded-xl bg-accent-error/10 p-3 text-sm text-accent-error">{createError}</p>}
+        <label className="grid gap-2 text-sm font-medium">{tr("Навчальний заклад", "Organization")}<select disabled={creating || organizationsLoading} required value={organizationId || ""} onChange={event => setOrganizationId(Number(event.target.value))} className="min-h-11 rounded-lg border border-border bg-bg-base px-3"><option value="" disabled>{organizationsLoading ? tr("Завантажуємо…", "Loading…") : tr("Оберіть заклад", "Select an organization")}</option>{organizations.map(org => <option key={org.orgId} value={org.orgId}>{org.name || `#${org.orgId}`}</option>)}</select></label>
+        {!organizationsLoading && !organizations.length && <div className="text-sm text-text-secondary">{tr("Потрібен доступ до навчального закладу, щоб створити клас.", "You need access to an organization to create a class.")} <button type="button" onClick={() => setOrganizationReload(value => value + 1)} className="min-h-11 px-3 font-semibold text-primary-strong">{tr("Повторити", "Retry")}</button></div>}
+        <label htmlFor="teacher-class-name" className="grid gap-2 text-sm font-medium">{tr("Назва класу", "Class name")}<input id="teacher-class-name" name="className" required maxLength={100} disabled={creating} value={name} onChange={(event) => setName(event.target.value)} placeholder={tr("Наприклад, 10-Б", "For example, Year 10 A")} className="min-h-11 rounded-lg border border-border bg-bg-base px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" /></label>
+        <div className="flex justify-end gap-2"><button type="button" disabled={creating} onClick={() => setOpenCreate(false)} className="min-h-11 rounded-lg px-4 text-sm font-semibold hover:bg-bg-hover">{tr("Скасувати", "Cancel")}</button><button type="submit" disabled={creating || organizationsLoading || !organizationId || !name.trim()} className="min-h-11 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">{creating ? tr("Створюємо…", "Creating…") : tr("Створити клас", "Create class")}</button></div>
       </form>
     </Modal>
   </main>;

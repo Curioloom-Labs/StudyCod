@@ -7,7 +7,7 @@ import { api } from "../../lib/api/client";
 import { getTaskRubric, setTaskRubric, type RubricCriterion } from "../../lib/api/edu";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 
 interface Submission {
   studentId: number;

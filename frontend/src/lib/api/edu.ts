@@ -1,6 +1,13 @@
 import { api } from "./client";
+import { isAxiosError } from "axios";
+import { getEduErrorMessage } from "../eduError";
+import { tr } from "../../i18n";
 import type { ClassGradingSystem, GradeScaleMode } from "../gradingSystems";
 import type { JudgeLanguage } from "../judgeLanguages";
+import { clearGetMeCache, getMe } from "./profile";
+import { setActiveEduStudentId } from "../eduContext";
+import { selectEducationalContext } from "../eduSession";
+import type { User } from "../../types";
 
 /** Language is selected by a topic/task, never by a class. */
 export type EduLanguage = Uppercase<JudgeLanguage>;
@@ -46,9 +53,19 @@ export async function studentLogin(username: string, password: string, turnstile
     username,
     password,
     ...(turnstileToken ? { turnstileToken } : {}),
-  });
+  }, { headers: { "X-Skip-Auth-Redirect": "1" } });
+  setActiveEduStudentId(null);
+  clearGetMeCache({ clearSnapshot: true });
   localStorage.setItem("userType", "STUDENT");
   return res.data;
+}
+
+export async function educationalAccountLogin(username: string, password: string, turnstileToken?: string): Promise<User> {
+  await api.post("/auth/login", { username, password, ...(turnstileToken ? { turnstileToken } : {}) }, { headers: { "X-Skip-Auth-Redirect": "1" } });
+  setActiveEduStudentId(null);
+  clearGetMeCache({ clearSnapshot: true });
+  localStorage.removeItem("userType");
+  return selectEducationalContext(await getMe({ force: true, suppressAuthRedirect: true }));
 }
 
 export async function restoreEduStudent(studentId: number): Promise<{ ok: boolean }> {
@@ -82,6 +99,13 @@ export interface StudentCredentials {
 }
 export interface Lesson {
   id: number;
+  source?: "course" | "legacy";
+  courseReport?: {
+    totalTasks: number; submittedTasks: number; missingTaskIds: number[]; quizRequired: boolean; quizSubmitted: boolean;
+    pendingReview: number; theoryPercent: number | null; practicePercent: number | null; finalPercent: number | null;
+    tasks: Array<{ id: number; title: string; submitted: boolean; pendingReview: boolean; percent: number | null }>;
+  };
+  courseAttempt?: { timeLimitMinutes?: number; status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED"; remainingSeconds: number | null; startedAt: string | null; finishedAt?: string | null; reason?: "FINISHED" | "TIME_EXPIRED" | null };
   type: "TOPIC" | "CONTROL" | "LESSON";
   title: string;
   parentTopicId?: number;
@@ -379,11 +403,12 @@ export async function registerEducationalOrganization(input: {
   });
   return res.data;
 }
-export async function createClass(name: string, gradingSystem?: ClassGradingSystem, gradeScaleMode?: GradeScaleMode): Promise<Class> {
+export async function createClass(name: string, gradingSystem?: ClassGradingSystem, gradeScaleMode?: GradeScaleMode, organizationId?: number): Promise<Class> {
   const res = await api.post("/edu/classes", {
     name,
     gradingSystem,
-    gradeScaleMode
+    gradeScaleMode,
+    organizationId
   });
   return res.data.class;
 }
@@ -494,13 +519,13 @@ export interface AddStudentsRequest {
     email?: string;
   }>;
 }
-export async function addStudents(classId: number, students: AddStudentsRequest["students"]): Promise<{
+export async function addStudents(classId: number, students: AddStudentsRequest["students"], operationKey?: string): Promise<{
   count: number;
   credentials: StudentCredentials[];
 }> {
   const res = await api.post(`/edu/classes/${classId}/students`, {
-    students
-  });
+    students, operationKey
+  }, { timeout: 180000 });
   return res.data;
 }
 export async function createParentInvite(organizationId: number, payload: {
@@ -522,21 +547,42 @@ export async function exportStudents(classId: number, withPasswords?: boolean): 
   });
   return res.data;
 }
-export async function importStudents(classId: number, csvData: string): Promise<{
+export async function importStudents(classId: number, csvData: string, operationKey?: string): Promise<{
   count: number;
   credentials: StudentCredentials[];
 }> {
   const res = await api.post(`/edu/classes/${classId}/students/import`, {
-    csvData
-  });
+    csvData, operationKey
+  }, { timeout: 180000 });
   return res.data;
 }
-export async function regeneratePassword(studentId: number): Promise<{
+export async function regeneratePassword(studentId: number, operationKey?: string): Promise<{
   username: string;
   password: string;
+  credentials?: StudentCredentials[];
 }> {
-  const res = await api.post(`/edu/students/${studentId}/regenerate-password`);
+  const res = await api.post(`/edu/students/${studentId}/regenerate-password`, { confirm: true, operationKey }, { timeout: 180000 });
   return res.data;
+}
+export type CredentialOperationKind = "CREATE" | "IMPORT" | "RESET" | "RESET_BATCH";
+export interface CredentialOperationSummary {
+  operationKey: string; kind: CredentialOperationKind;
+  state: "PENDING" | "READY" | "EXPIRED" | "CANCELLED" | "ACKNOWLEDGED" | "NOT_FOUND";
+  count?: number; createdAt?: string; expiresAt?: string; studentIds?: number[]; eligibleStudentIds?: number[];
+  credentials?: StudentCredentials[];
+}
+export async function getCredentialOperation(classId: number, operationKey: string): Promise<CredentialOperationSummary> {
+  return (await api.get(`/edu/classes/${classId}/credential-operations/${operationKey}`)).data;
+}
+export async function getCredentialOperations(classId: number): Promise<CredentialOperationSummary[]> {
+  const { data } = await api.get(`/edu/classes/${classId}/credential-operations`);
+  return Array.isArray(data?.operations) ? data.operations : [];
+}
+export async function closeCredentialOperation(classId: number, operationKey: string, kind: CredentialOperationKind, mode: "ack" | "cancel") {
+  return (await api.post(`/edu/classes/${classId}/credential-operations/${operationKey}/${mode}`, { kind })).data;
+}
+export async function resetClassStudentPasswords(classId: number, studentIds: number[], operationKey: string): Promise<{ count: number; credentials: StudentCredentials[] }> {
+  return (await api.post(`/edu/classes/${classId}/students/reset-passwords`, { confirm: true, studentIds, operationKey }, { timeout: 180000 })).data;
 }
 export interface CreateLessonRequest {
   type: "LESSON" | "CONTROL";
@@ -590,10 +636,13 @@ export async function getTopics(classId?: number, language?: EduLanguage): Promi
   const res = await api.get(`/topics?${params.toString()}`);
   return res.data.topics || [];
 }
-export async function getLesson(lessonId: number, type?: "TOPIC" | "CONTROL" | "LESSON"): Promise<Lesson & {
+export async function getLesson(lessonId: number, type?: "TOPIC" | "CONTROL" | "LESSON", source?: "course" | "legacy"): Promise<Lesson & {
   tasks: Task[];
 }> {
-  const qs = type ? `?type=${encodeURIComponent(type)}` : "";
+  const query = new URLSearchParams();
+  if (type) query.set("type", type);
+  if (source) query.set("source", source);
+  const qs = query.size ? `?${query}` : "";
   const res = await api.get(`/edu/lessons/${lessonId}${qs}`);
   return res.data.lesson;
 }
@@ -636,7 +685,14 @@ export async function saveQuiz(lessonId: number, quiz: QuizItem[]): Promise<void
     quiz
   });
 }
+export type CourseTestInput = { input: string; expectedOutput: string; points: number; isHidden: boolean; subtask?: string | null };
+export type CourseTestConfig = { task: { id: number; title: string; lessonId: number }; testData: CourseTestInput[]; maxAttempts: number; revision: string; gradingLocked: boolean };
+export async function getCourseTaskTests(taskId: number): Promise<CourseTestConfig> { return (await api.get(`/edu/course-tasks/${taskId}/tests`)).data; }
+export async function saveCourseTaskTests(taskId: number, input: { testData: CourseTestInput[]; maxAttempts: number; expectedRevision: string }): Promise<CourseTestConfig> { return (await api.put(`/edu/course-tasks/${taskId}/tests`, input)).data; }
+
 export interface CreateTaskRequest {
+  testData?: CourseTestInput[];
+  maxAttempts?: number;
   title: string;
   description: string;
   template: string;
@@ -668,28 +724,36 @@ export async function createTask(lessonId: number, task: CreateTaskRequest): Pro
   const res = await api.post(`/edu/lessons/${lessonId}/tasks`, task);
   return res.data.task;
 }
+/** Carry the storage source only while viewing this exact EDU task. */
+function eduTaskUrl(taskId: number, action = ""): string {
+  const path = `/edu/tasks/${taskId}${action}`;
+  if (typeof window === "undefined" || window.location.pathname !== `/edu/tasks/${taskId}`) return path;
+  const source = new URLSearchParams(window.location.search).get("source");
+  return source === "course" || source === "legacy" ? `${path}?source=${source}` : path;
+}
+
 export async function getTask(taskId: number): Promise<TaskWithGrade> {
-  const res = await api.get(`/edu/tasks/${taskId}`);
+  const res = await api.get(eduTaskUrl(taskId));
   return res.data.task;
 }
 export async function runCode(taskId: number, code: string, input?: string): Promise<{
   output: string;
   stderr?: string;
 }> {
-  const res = await api.post(`/edu/tasks/${taskId}/run`, { code, input });
+  const res = await api.post(eduTaskUrl(taskId, "/run"), { code, input });
   return res.data;
 }
 export async function runCodeFiles(taskId: number, files: CodeFile[], input?: string): Promise<{ output: string; stderr?: string }>
 {
-  const res = await api.post(`/edu/tasks/${taskId}/run`, { files, input });
+  const res = await api.post(eduTaskUrl(taskId, "/run"), { files, input });
   return res.data;
 }
 export async function getWebTaskTemplate(taskId: number): Promise<{ taskId: number; taskMode: "WEB"; files: WebTaskFile[]; rules: WebTaskRule[] }> {
-  const res = await api.get(`/edu/tasks/${taskId}/web-template`);
+  const res = await api.get(eduTaskUrl(taskId, "/web-template"));
   return res.data;
 }
 export async function saveWebTaskDraft(taskId: number, files: WebTaskFile[]): Promise<{ ok: boolean; updatedAt?: string }> {
-  const res = await api.put(`/edu/tasks/${taskId}/web-draft`, { files });
+  const res = await api.put(eduTaskUrl(taskId, "/web-draft"), { files });
   return res.data;
 }
 export async function checkWebTask(taskId: number, files: WebTaskFile[]): Promise<{
@@ -701,7 +765,7 @@ export async function checkWebTask(taskId: number, files: WebTaskFile[]): Promis
   totalRules: number;
   results: Array<{ id: string; type: WebTaskRule["type"]; passed: boolean; message: string; points: number; earnedPoints: number }>;
 }> {
-  const res = await api.post(`/edu/tasks/${taskId}/web-check`, { files });
+  const res = await api.post(eduTaskUrl(taskId, "/web-check"), { files });
   return res.data;
 }
 export async function submitWebTask(taskId: number, files: WebTaskFile[]): Promise<{
@@ -719,7 +783,7 @@ export async function submitWebTask(taskId: number, files: WebTaskFile[]): Promi
   };
   taskMode?: "WEB";
 }> {
-  const res = await api.post(`/edu/tasks/${taskId}/web-submit`, { files });
+  const res = await api.post(eduTaskUrl(taskId, "/web-submit"), { files });
   return res.data;
 }
 export interface SubmitCodeResponse {
@@ -748,15 +812,23 @@ export interface SubmitCodeResponse {
   submissionMeta?: SubmissionMeta;
 }
 export async function submitCode(taskId: number, code: string, binding?: SubmissionBinding): Promise<SubmitCodeResponse> {
-  const res = await api.post(`/edu/tasks/${taskId}/submit`, {
-    code,
-    ...(binding ?? {})
-  });
-  return res.data;
+  const url = eduTaskUrl(taskId, "/submit");
+  try {
+    const res = await api.post(url, { code, ...(binding ?? {}) });
+    return res.data;
+  } catch (error) {
+    // Course errors remain understandable in the shared workspace without changing its UI.
+    if (url.endsWith("?source=course") && isAxiosError(error)) {
+      const message = getEduErrorMessage(error, tr("Не вдалося отримати результат перевірки. Оновіть сторінку перед повторною здачею.", "Could not retrieve the grading result. Reload before resubmitting."));
+      error.message = message;
+      if (error.response) error.response.data = { ...(typeof error.response.data === "object" && error.response.data ? error.response.data : {}), message };
+    }
+    throw error;
+  }
 }
 
 export async function submitCodeFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<SubmitCodeResponse> {
-  const res = await api.post(`/edu/tasks/${taskId}/submit`, { files, ...(binding ?? {}) });
+  const res = await api.post(eduTaskUrl(taskId, "/submit"), { files, ...(binding ?? {}) });
   return res.data;
 }
 export interface CompleteTaskResponse {
@@ -786,7 +858,7 @@ export interface CompleteTaskResponse {
   submissionMeta?: SubmissionMeta;
 }
 export async function completeTask(taskId: number, code: string, binding?: SubmissionBinding): Promise<CompleteTaskResponse> {
-  const res = await api.post(`/edu/tasks/${taskId}/complete`, {
+  const res = await api.post(eduTaskUrl(taskId, "/complete"), {
     code,
     ...(binding ?? {})
   });
@@ -794,7 +866,7 @@ export async function completeTask(taskId: number, code: string, binding?: Submi
 }
 
 export async function completeTaskFiles(taskId: number, files: CodeFile[], binding?: SubmissionBinding): Promise<CompleteTaskResponse> {
-  const res = await api.post(`/edu/tasks/${taskId}/complete`, { files, ...(binding ?? {}) });
+  const res = await api.post(eduTaskUrl(taskId, "/complete"), { files, ...(binding ?? {}) });
   return res.data;
 }
 
@@ -817,7 +889,7 @@ export async function submitHintFeedback(taskId: number, payload: {
   id?: number | null;
   strategyVariant?: "A" | "B";
 }> {
-  const res = await api.post(`/edu/tasks/${taskId}/hints-feedback`, payload);
+  const res = await api.post(eduTaskUrl(taskId, "/hints-feedback"), payload);
   return res.data;
 }
 
@@ -837,7 +909,7 @@ export async function generateTestData(taskId: number, count: number, options?: 
     subtask?: string | null;
   }>;
 }> {
-  const res = await api.post(`/edu/tasks/${taskId}/test-data/generate`, {
+  const res = await api.post(eduTaskUrl(taskId, "/test-data/generate"), {
     count,
     ...(typeof options?.replaceGenerated === "boolean" ? { replaceGenerated: options.replaceGenerated } : {})
   });
@@ -853,7 +925,7 @@ export interface TestDataItem {
 export async function addTestData(taskId: number, testData: TestDataItem[]): Promise<{
   count: number;
 }> {
-  const res = await api.post(`/edu/tasks/${taskId}/test-data`, {
+  const res = await api.post(eduTaskUrl(taskId, "/test-data"), {
     testData
   });
   return res.data;
@@ -913,7 +985,7 @@ export async function deleteGeneratedTestData(taskId: number): Promise<{
   message: string;
   deleted: number;
 }> {
-  const res = await api.delete(`/edu/tasks/${taskId}/test-data/generated`);
+  const res = await api.delete(eduTaskUrl(taskId, "/test-data/generated"));
   return res.data;
 }
 export async function getTestDataItem(taskId: number, testDataId: number): Promise<{
@@ -955,10 +1027,11 @@ export async function updateTaskDetails(taskId: number, update: UpdateTaskDetail
     isClosed: boolean;
   };
 }> {
-  const res = await api.put(`/edu/tasks/${taskId}`, update);
+  const res = await api.put(eduTaskUrl(taskId), update);
   return res.data;
 }
 export interface CreateManualGradeRequest {
+  expectedRevision?: string;
   total: number;
   feedback?: string;
 }
@@ -1013,6 +1086,7 @@ export type SummaryGrade = {
   createdAt: string;
 };
 export interface StudentGradesResponse {
+  quizGrades?: Array<{ id: number; lessonId: number; title: string; status: string; autoPercent: number; finalPercent: number | null; updatedAt: string }>;
   grades: Grade[];
   summaryGrades: SummaryGrade[];
   gradingSystem?: ClassGradingSystem;
@@ -1203,7 +1277,7 @@ export interface TaskGrade {
   } | null;
 }
 export async function getTaskGrades(taskId: number): Promise<TaskGrade[]> {
-  const res = await api.get(`/edu/tasks/${taskId}/grades`);
+  const res = await api.get(eduTaskUrl(taskId, "/grades"));
   return res.data.students;
 }
 export async function getStudentCode(gradeId: number): Promise<{
@@ -1231,6 +1305,8 @@ export async function getStudentCode(gradeId: number): Promise<{
   return res.data;
 }
 export interface UpdateGradeRequest {
+  expectedRevision?: string;
+  latestOnly?: boolean;
   total?: number;
   feedback?: string;
 }
@@ -1238,7 +1314,7 @@ export async function updateGrade(gradeId: number, update: UpdateGradeRequest): 
   message: string;
   grade: {
     id: number;
-    total: number;
+    total: number | null;
     feedback?: string;
     isManuallyGraded: boolean;
   };
@@ -1252,16 +1328,16 @@ export interface RubricCriterion {
   label: string;
   maxPoints: number;
 }
-export async function getTaskRubric(taskId: number): Promise<{ rubric: RubricCriterion[] }> {
-  const res = await api.get(`/edu/tasks/${taskId}/rubric`);
+export async function getTaskRubric(taskId: number): Promise<{ rubric: RubricCriterion[]; locked?: boolean; canEdit?: boolean }> {
+  const res = await api.get(eduTaskUrl(taskId, "/rubric"));
   return res.data;
 }
 export async function setTaskRubric(taskId: number, rubric: RubricCriterion[]): Promise<{ rubric: RubricCriterion[] }> {
-  const res = await api.put(`/edu/tasks/${taskId}/rubric`, { rubric });
+  const res = await api.put(eduTaskUrl(taskId, "/rubric"), { rubric });
   return res.data;
 }
-export async function gradeByRubric(gradeId: number, scores: Record<string, number>, feedback?: string): Promise<{ message: string; grade: { id: number; total: number; feedback?: string } }> {
-  const res = await api.post(`/edu/grades/${gradeId}/rubric`, { scores, feedback });
+export async function gradeByRubric(gradeId: number, scores: Record<string, number>, feedback?: string, expectedRevision?: string): Promise<{ message: string; grade: { id: number; total: number; feedback?: string } }> {
+  const res = await api.post(`/edu/grades/${gradeId}/rubric`, { scores, feedback, expectedRevision });
   return res.data;
 }
 
@@ -1401,6 +1477,7 @@ export interface SummaryGradeGroup {
     studentId: number;
     studentName: string;
     grade: number;
+    revision?: string;
     createdAt: string;
   }>;
 }
@@ -1408,9 +1485,9 @@ export async function getSummaryGrades(classId: number): Promise<SummaryGradeGro
   const res = await api.get(`/edu/classes/${classId}/summary-grades`);
   return res.data.summaryGrades;
 }
-export async function updateSummaryGrade(classId: number, summaryGradeId: number, grade: number): Promise<void> {
+export async function updateSummaryGrade(classId: number, summaryGradeId: number, grade: number, expectedRevision?: string): Promise<void> {
   await api.put(`/edu/classes/${classId}/summary-grades/${summaryGradeId}`, {
-    grade
+    expectedRevision, grade
   });
 }
 export async function deleteSummaryGrade(classId: number, summaryGradeId: number): Promise<void> {
@@ -1452,6 +1529,7 @@ export async function updateTopicSemester(classId: number, topicId: number, seme
   return res.data;
 }
 export interface SemesterGradeRow {
+  revision?: string;
   gradeId: number;
   studentId: number | null;
   semester: number | null;
@@ -1465,10 +1543,12 @@ export async function recomputeSemesterGrades(classId: number): Promise<{ count:
   const res = await api.post(`/edu/classes/${classId}/semester-grades/recompute`, {});
   return res.data;
 }
-export async function updateSemesterGrade(classId: number, gradeId: number, grade: number): Promise<{ gradeId: number; grade: number }> {
-  const res = await api.put(`/edu/classes/${classId}/semester-grades/${gradeId}`, { grade });
+export async function updateSemesterGrade(classId: number, gradeId: number, grade: number, expectedRevision?: string): Promise<{ gradeId: number; grade: number }> {
+  const res = await api.put(`/edu/classes/${classId}/semester-grades/${gradeId}`, { grade, expectedRevision });
   return res.data;
 }
+export async function getGradeReview(gradeId: number): Promise<{ grade: { id: number; total: number | null; feedback: string | null; revision: string } }> { return (await api.get(`/edu/grades/${gradeId}/review`)).data; }
+
 export interface GradebookStudent {
   studentId: number;
   studentName: string;
@@ -1480,8 +1560,11 @@ export interface GradebookStudent {
     lessonType?: string;
     grade: number | null;
     gradeId: number | null;
+    revision?: string;
     createdAt: string | null;
     isControlWork?: boolean;
+    manualOverrideGrade?: number | null;
+    calculatedGrade?: number | null;
     isSummaryGrade?: boolean;
     isSemesterGrade?: boolean;
   }>;
@@ -1696,7 +1779,11 @@ export async function unassignTask(taskId: number): Promise<void> {
 export async function unassignControlWork(controlWorkId: number): Promise<void> {
   await api.post(`/topics/control-works/${controlWorkId}/unassign`);
 }
-export async function updateControlWorkGrade(controlWorkId: number, studentId: number, grade: number): Promise<{
+export async function clearControlWorkGradeOverride(controlWorkId: number, studentId: number, expectedRevision?: string): Promise<void> {
+  await api.put(`/edu/control-works/${controlWorkId}/students/${studentId}/grade`, { useCalculated: true, expectedRevision });
+}
+
+export async function updateControlWorkGrade(controlWorkId: number, studentId: number, grade: number, expectedRevision?: string): Promise<{
   message: string;
   summaryGrade: {
     id: number;
@@ -1704,7 +1791,7 @@ export async function updateControlWorkGrade(controlWorkId: number, studentId: n
   };
 }> {
   const res = await api.put(`/edu/control-works/${controlWorkId}/students/${studentId}/grade`, {
-    grade
+    expectedRevision, grade
   });
   return res.data;
 }
@@ -1736,13 +1823,13 @@ export async function submitQuizAnswers(taskOrLessonId: number, answers: Record<
   });
   return res.data;
 }
-export async function startLessonAttempt(lessonId: number): Promise<{
+export async function startLessonAttempt(lessonId: number, source?: "course"): Promise<{
   attemptId: number;
   startedAt: string;
   timeLimitMinutes: number;
   remainingSeconds: number;
 }> {
-  const res = await api.post(`/edu/lessons/${lessonId}/start-attempt`);
+  const res = await api.post(`/edu/lessons/${lessonId}/start-attempt${source ? "?source=course" : ""}`);
   return res.data;
 }
 export async function getLessonAttemptStatus(lessonId: number): Promise<{
@@ -2087,4 +2174,9 @@ export async function applyRiskInterventionPlan(classId: number, payload?: {
 }): Promise<RiskInterventionPlanResponse> {
   const res = await api.post(`/edu/classes/${classId}/risk-interventions/apply`, payload || {});
   return res.data;
+}
+
+export async function finishCourseLesson(lessonId: number) {
+  const { data } = await api.post(`/edu/course-lessons/${lessonId}/finish`, { confirm: true });
+  return data as { attempt: NonNullable<Lesson["courseAttempt"]>; report: NonNullable<Lesson["courseReport"]> };
 }

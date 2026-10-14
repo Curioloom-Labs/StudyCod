@@ -2,6 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { AppDataSource } from "../../data-source";
 import { Membership } from "../../entities/Membership";
+import { User } from "../../entities/User";
+import { Organization } from "../../entities/Organization";
+import { Class } from "../../entities/Class";
+import { Student } from "../../entities/Student";
+import { ParentLink } from "../../entities/ParentLink";
+import { OrgInvitation } from "../../entities/OrgInvitation";
 import { normalizeOrgRole, isOrgRole, higherRole } from "../../types/OrgRole";
 import { slugifyBase, setMembershipRole, removeMembership } from "./membership";
 
@@ -67,12 +73,19 @@ function makeMembershipHarness(opts: { membership: { role: string } | null; admi
       return queryBuilder;
     },
     where: () => queryBuilder,
+    andWhere: () => queryBuilder,
     getCount: async () => opts.adminCount
   };
+  const ownershipQuery = { where: () => ownershipQuery, andWhere: () => ownershipQuery, getExists: async () => false };
+  const lifecycleQuery: any = { getMany: async () => [], execute: async () => ({ affected: 0 }) };
+  for (const method of ["select", "where", "andWhere", "orderBy", "innerJoin", "withDeleted", "delete"]) lifecycleQuery[method] = () => lifecycleQuery;
+  const lifecycleRepo = { createQueryBuilder: () => lifecycleQuery, find: async () => [] };
+  const userRepo = { findOne: async () => ({ id: 1, emailVerified: true, userMode: "EDUCATIONAL" }),
+    update: async () => ({ affected: 1 }), createQueryBuilder: () => ownershipQuery };
   const orig = (AppDataSource as any).transaction;
   (AppDataSource as any).transaction = async (fn: any) =>
     fn({
-      getRepository: (entity: unknown) => (entity === Membership ? repo : (() => { throw new Error("unexpected entity"); })()),
+      getRepository: (entity: unknown) => entity === Membership ? repo : entity === User ? userRepo : entity === Organization ? { findOne: async () => ({ id: 1 }) } : [Class, Student, ParentLink, OrgInvitation].includes(entity as any) ? lifecycleRepo : (() => { throw new Error("unexpected entity"); })(),
       createQueryBuilder: (entity: unknown) => (entity === Membership ? queryBuilder : (() => { throw new Error("unexpected entity"); })())
     });
   return {

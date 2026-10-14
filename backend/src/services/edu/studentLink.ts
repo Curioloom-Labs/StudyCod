@@ -3,6 +3,8 @@ import { AppDataSource } from "../../data-source";
 import { Student } from "../../entities/Student";
 import { User } from "../../entities/User";
 import { Membership } from "../../entities/Membership";
+import { lockEduOrganization, lockEduUsers, requireFreshEduActor } from "./lifecycleAccess";
+import { Class } from "../../entities/Class";
 
 /**
  * Student↔User unification (Track B, incremental). Two ends of the same model:
@@ -85,19 +87,29 @@ export interface ClaimResult {
  * profile already owned by someone else. Adds a STUDENT membership in the
  * profile's org, atomically.
  */
-export async function claimStudentProfile(userId: number, rawUsername: string, rawPassword: string): Promise<ClaimResult> {
+export async function claimStudentProfile(userId: number, rawUsername: string, rawPassword: string, sessionVersion?: number): Promise<ClaimResult> {
   const { username, password } = validateClaimInput(rawUsername, rawPassword);
 
-  return await AppDataSource.transaction(async (manager) => {
-    const student = await manager.getRepository(Student).findOne({
+  // Read the owner committed by a competing claim after acquiring the locks.
+  // MySQL's default repeatable-read snapshot can otherwise retain no owner.
+  return await AppDataSource.transaction("READ COMMITTED", async (manager) => {
+    const candidate = await manager.getRepository(Student).findOne({
       where: { generatedUsername: username },
-      relations: ["class", "user"]
+      relations: ["class"]
     });
+    if (!candidate) throw new Error("INVALID_CREDENTIALS");
+    await lockEduOrganization(manager, candidate.class.organizationId);
+    await manager.getRepository(Class).findOne({ where: { id: candidate.class.id }, lock: { mode: "pessimistic_write" } });
+    const student = await manager.getRepository(Student).findOne({ where: { id: candidate.id }, lock: { mode: "pessimistic_write" } });
     // Same opaque error for "no such profile" and "wrong password" — never reveal
     // which generated usernames exist.
-    if (!student) throw new Error("INVALID_CREDENTIALS");
+    if (!student || student.generatedUsername !== username) throw new Error("INVALID_CREDENTIALS");
+    const linked = await manager.getRepository(Student).findOne({ where: { id: student.id }, relations: ["class", "user"] });
+    if (!linked?.class) throw new Error("INVALID_CREDENTIALS");
+    student.class = linked.class; student.user = linked.user;
     const ok = await bcrypt.compare(password, student.generatedPassword);
     if (!ok) throw new Error("INVALID_CREDENTIALS");
+    const user = await requireFreshEduActor(manager, { userId, sessionVersion }, await lockEduUsers(manager, [userId]));
 
     if (student.user) {
       if (student.user.id === userId) {
@@ -106,11 +118,8 @@ export async function claimStudentProfile(userId: number, rawUsername: string, r
       throw new Error("ALREADY_CLAIMED");
     }
 
-    const user = await manager.getRepository(User).findOne({ where: { id: userId } });
-    if (!user) throw new Error("USER_NOT_FOUND");
-
     student.user = user;
-    await manager.getRepository(Student).save(student);
+    await manager.getRepository(Student).update(student.id, { user: { id: user.id }, userAccountManaged: false });
 
     const orgId = student.class.organizationId ?? null;
     if (orgId != null) {

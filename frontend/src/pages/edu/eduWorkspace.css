@@ -1,0 +1,25 @@
+.edu-workspace :is(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.edu-workspace button { touch-action: manipulation; }
+.edu-workspace .edu-hover-lift { transition: transform var(--motion-fast) var(--ease-out); }
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .edu-workspace .edu-hover-lift:hover { transform: translateY(-2px); }
+}
+/* One-time confirmation feedback; question navigation stays immediate. */
+.edu-workspace .edu-result { animation: edu-result-in 180ms var(--ease-out) both; }
+@keyframes edu-result-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes edu-result-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .edu-workspace .edu-result { animation: edu-result-fade 120ms linear both; }
+  .edu-workspace .animate-pulse { animation: none; }
+}
+
+.edu-workspace fieldset:disabled label { cursor: default; }

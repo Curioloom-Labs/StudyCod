@@ -4,7 +4,7 @@ import { PageHero } from "../../components/ui/PageHero";
 import { api } from "../../lib/api/client";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, type ClassGradingSystem } from "../../lib/gradingSystems";
 
 interface Child {

@@ -1,10 +1,11 @@
 import React, { useState } from "react";
+import { isAxiosError } from "axios";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Logo } from "../../components/Logo";
 import { register, login, contestLogin, resendVerificationEmail, requestPasswordReset } from "../../lib/api/auth";
-import { registerEducationalOrganization, studentLogin, type EducationalInstitutionType } from "../../lib/api/edu";
+import { registerEducationalOrganization, studentLogin, educationalAccountLogin, type EducationalInstitutionType } from "../../lib/api/edu";
 import type { User, CourseLanguage } from "../../types";
 import { applyTheme, getCurrentTheme } from "../../theme";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -160,8 +161,13 @@ export const AuthPage: React.FC<Props> = ({
   const [emailSent, setEmailSent] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
+  const [accountSetup, setAccountSetup] = useState<{ email: string | null; classLoginAvailable: boolean } | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const errorRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => { setAccountSetup(null); }, [mode, userMode, username, password]);
+  const focusForgotEmail = React.useCallback((input: HTMLInputElement | null) => {
+    if (input && userMode === "EDUCATIONAL") input.focus();
+  }, [userMode]);
 
   React.useEffect(() => {
     if (!error) return;
@@ -257,6 +263,11 @@ export const AuthPage: React.FC<Props> = ({
       if (message) return path ? `${path}: ${message}` : message;
     }
     const msg = getErrorMessageFromUnknown(err, "");
+    if (userMode === "EDUCATIONAL") {
+      if (msg === "INVALID_CREDENTIALS") return tr("Перевірте логін і пароль. Якщо доступи не працюють, зверніться до вчителя або адміністратора закладу.", "Check your username and password. If the details do not work, contact your teacher or institution administrator.");
+      if (msg === "TOO_MANY_LOGIN_ATTEMPTS") return tr("Забагато спроб входу. Зачекайте й спробуйте ще раз.", "Too many sign-in attempts. Wait and try again.");
+      if (["INTERNAL_SERVER_ERROR", "INTERNAL_ERROR", "Network Error"].includes(msg)) return tr("Не вдалося завершити вхід. Перевірте з’єднання та спробуйте ще раз.", "Could not complete sign-in. Check your connection and try again.");
+    }
     if (msg === "CONTEST_ACCOUNT_REQUIRES_CONTEST_LOGIN") {
       return tr(
         "Цей тимчасовий логін працює лише на сторінці контесту. Відкрийте посилання, яке надіслав організатор.",
@@ -272,6 +283,7 @@ export const AuthPage: React.FC<Props> = ({
     if (loading) return;
     setError(null);
     setSuccess(null);
+    setAccountSetup(null);
 
     const requiresTurnstile = authTurnstileEnabled && shouldRenderAuthTurnstile && !import.meta.env.DEV;
     const isQaStudentLogin = userMode === "EDUCATIONAL" && mode === "login" && eduQaStudentUsername.length > 0 && username.trim() === eduQaStudentUsername;
@@ -301,6 +313,7 @@ export const AuthPage: React.FC<Props> = ({
                 difus: 0,
                 avatarUrl: null,
                 userMode: "EDUCATIONAL" as const,
+                accountSettingsScope: "CLASS",
                 studentId: studentResult.student.id,
                 classId: studentResult.student.classId,
                 className: studentResult.student.className,
@@ -313,10 +326,14 @@ export const AuthPage: React.FC<Props> = ({
               return;
             }
             try {
-              const user = await login(username.trim(), password, currentTurnstileToken || undefined);
+              const user = await educationalAccountLogin(username.trim(), password, currentTurnstileToken || undefined);
               notifyAuth(user);
               return;
             } catch (teacherErr: unknown) {
+              if (!isAxiosError(teacherErr)) throw teacherErr;
+              const classOnlyFallback = teacherErr.response?.status === 403 && teacherErr.response?.data?.message === "EMAIL_NOT_VERIFIED" && teacherErr.response?.data?.classLoginAvailable === true;
+              const invalidCredentialsFallback = [400, 401].includes(teacherErr.response?.status || 0) && teacherErr.response?.data?.message === "INVALID_CREDENTIALS";
+              if (!classOnlyFallback && !invalidCredentialsFallback) throw teacherErr;
               try {
                 const studentResult = await studentLogin(username.trim(), password, currentTurnstileToken || undefined);
                 const studentUser: User = {
@@ -325,6 +342,7 @@ export const AuthPage: React.FC<Props> = ({
                   difus: 0,
                   avatarUrl: null,
                   userMode: "EDUCATIONAL" as const,
+                  accountSettingsScope: "CLASS",
                   studentId: studentResult.student.id,
                   classId: studentResult.student.classId,
                   className: studentResult.student.className,
@@ -336,6 +354,7 @@ export const AuthPage: React.FC<Props> = ({
                 notifyAuth(studentUser);
                 return;
               } catch (studentErr: unknown) {
+                if (classOnlyFallback && isAxiosError(studentErr) && [400, 401].includes(studentErr.response?.status || 0) && studentErr.response?.data?.message === "INVALID_CREDENTIALS") throw teacherErr;
                 setError(formatApiError(studentErr, tr("Невірні облікові дані", "Invalid credentials")));
                 return;
               }
@@ -348,6 +367,12 @@ export const AuthPage: React.FC<Props> = ({
             notifyAuth(user);
           }
         } catch (loginErr: unknown) {
+          if (userMode === "EDUCATIONAL" && isAxiosError(loginErr) && loginErr.response?.data?.message === "EDU_ACCOUNT_SETUP_REQUIRED") {
+            const data = loginErr.response.data;
+            setAccountSetup({ email: typeof data.recoveryEmail === "string" ? data.recoveryEmail : null, classLoginAvailable: data.classLoginAvailable === true });
+            setError(tr("Активуйте особистий акаунт: отримайте посилання на пошту й установіть пароль, відмінний від виданого закладом.", "Activate your personal account: request an email link and set a password different from the one issued by your school."));
+            return;
+          }
           const loginErrorMessage = formatApiError(loginErr, tr("Помилка авторизації", "Authorization error"));
           if (loginErrorMessage === "EMAIL_NOT_VERIFIED" && userMode === "EDUCATIONAL") {
             setError(tr("Email не підтверджено. Перевірте вашу пошту та підтвердіть email перед входом.", "Email is not verified. Check your inbox and verify your email before logging in."));
@@ -535,18 +560,18 @@ export const AuthPage: React.FC<Props> = ({
             <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={`${userMode}-${mode}-${eduStep}-${showForgotPassword ? "reset" : emailSent ? "email" : "form"}`}
-              initial={prefersReducedMotion ? undefined : { opacity: 0, x: mode === "register" ? 18 : -18, filter: "blur(5px)" }}
-              animate={prefersReducedMotion ? undefined : { opacity: 1, x: 0, filter: "blur(0px)" }}
-              exit={prefersReducedMotion ? undefined : { opacity: 0, x: mode === "register" ? -14 : 14, filter: "blur(4px)" }}
+              initial={userMode === "EDUCATIONAL" || prefersReducedMotion ? undefined : { opacity: 0, x: mode === "register" ? 18 : -18, filter: "blur(5px)" }}
+              animate={userMode === "EDUCATIONAL" || prefersReducedMotion ? undefined : { opacity: 1, x: 0, filter: "blur(0px)" }}
+              exit={userMode === "EDUCATIONAL" || prefersReducedMotion ? undefined : { opacity: 0, x: mode === "register" ? -14 : 14, filter: "blur(4px)" }}
               transition={{ duration: .28, ease: [0.16, 1, .3, 1] }}
               className="mt-6"
             >
               {showForgotPassword ? (
                 <div className="space-y-5">
-                  <div><label htmlFor={fieldIds.forgotPasswordEmail} className={fieldLabelClass}>Email</label><input id={fieldIds.forgotPasswordEmail} name="email" type="email" autoComplete="email" spellCheck={false} className={fieldInputClass} value={resetEmail} onChange={e => setResetEmail(e.target.value)} placeholder="your@email.com" /></div>
+                  <div><label htmlFor={fieldIds.forgotPasswordEmail} className={fieldLabelClass}>Email</label><input ref={focusForgotEmail} id={fieldIds.forgotPasswordEmail} name="email" type="email" autoComplete="email" spellCheck={false} className={fieldInputClass} value={resetEmail} onChange={e => setResetEmail(e.target.value)} placeholder="your@email.com" /></div>
                   {error && <div role="alert" aria-live="assertive" className="flex items-start gap-2.5 rounded-[14px] border border-accent-error/20 bg-accent-error/10 p-3.5 text-[13px] leading-5 text-accent-error dark:text-accent-error"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div>}
                   {success && <div role="status" aria-live="polite" className="flex items-start gap-2.5 rounded-[14px] border border-primary/20 bg-primary/10 p-3.5 text-[13px] leading-5 text-primary-strong dark:text-primary-strong"><CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />{success}</div>}
-                  <button type="button" className={primaryButtonClass} disabled={loading} onClick={async () => { if (!resetEmail.trim()) { setError(tr("Введіть email", "Enter an email")); return; } setLoading(true); setError(null); setSuccess(null); try { await requestPasswordReset(resetEmail.trim()); setSuccess(tr("Лист з інструкціями відправлено на вашу пошту!", "Instructions were sent to your email!")); } catch (err: unknown) { setError(formatApiError(err, tr("Помилка відправки листа", "Failed to send email"))); } finally { setLoading(false); } }}>{loading ? tr("Відправляємо…", "Sending…") : tr("Надіслати посилання", "Send reset link")}<ArrowRight className="size-4" /></button>
+                  <button type="button" className={primaryButtonClass} disabled={loading} onClick={async () => { if (!resetEmail.trim()) { setError(tr("Введіть email", "Enter an email")); return; } setLoading(true); setError(null); setSuccess(null); try { await requestPasswordReset(resetEmail.trim()); setSuccess(userMode === "EDUCATIONAL" ? tr("Якщо цей email пов’язаний з акаунтом, ви отримаєте посилання. Перевірте вхідні та спам.", "If this email belongs to an account, you will receive a link. Check your inbox and spam.") : tr("Лист з інструкціями відправлено на вашу пошту!", "Instructions were sent to your email!")); } catch (err: unknown) { setError(formatApiError(err, tr("Помилка відправки листа", "Failed to send email"))); } finally { setLoading(false); } }}>{loading ? tr("Відправляємо…", "Sending…") : tr("Надіслати посилання", "Send reset link")}<ArrowRight className="size-4" /></button>
                   <button type="button" onClick={() => { setShowForgotPassword(false); setResetEmail(""); setError(null); setSuccess(null); }} className="w-full text-center text-[13px] font-semibold text-text-muted hover:text-text-primary dark:hover:text-white">{tr("Повернутися до входу", "Back to sign in")}</button>
                 </div>
               ) : emailSent ? (
@@ -565,6 +590,22 @@ export const AuthPage: React.FC<Props> = ({
                   {(mode === "login" || userMode !== "EDUCATIONAL" || eduStep === 2) && <div><div className="flex items-center justify-between"><label htmlFor={fieldIds.password} className={fieldLabelClass}>{t("password")}</label>{mode === "login" && userMode !== "CONTEST" && <button type="button" onClick={() => { setShowForgotPassword(true); setError(null); setSuccess(null); }} className="mb-2 text-[12px] font-semibold text-primary-strong dark:text-primary-strong">{tr("Забули пароль?", "Forgot password?")}</button>}</div><div className="relative"><Lock className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-text-muted" /><input id={fieldIds.password} name="password" type={showPassword ? "text" : "password"} spellCheck={false} className={`${fieldInputClass} pl-11 pr-12`} value={password} onChange={e => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} required /><button type="button" onClick={() => setShowPassword(value => !value)} className="absolute right-2 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-lg text-text-muted transition hover:bg-black/5 hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 dark:text-text-secondary dark:hover:bg-white/10 dark:hover:text-white" aria-label={showPassword ? tr("Приховати пароль", "Hide password") : tr("Показати пароль", "Show password")} title={showPassword ? tr("Приховати пароль", "Hide password") : tr("Показати пароль", "Show password")}>{showPassword ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}</button></div></div>}
                   {mode === "register" && userMode === "PERSONAL" && <div><label className={fieldLabelClass}>{t("programmingLanguage")}</label><div className="grid grid-cols-3 gap-2">{(["JAVA", "PYTHON", "CPP"] as CourseLanguage[]).map(lang => <button key={lang} type="button" onClick={() => setCourse(lang)} className={`h-11 rounded-xl border text-[12px] font-bold transition ${course === lang ? "border-primary/35 bg-primary/10 text-primary-strong dark:text-primary-strong" : "border-border/10 bg-white text-text-muted dark:border-white/10 dark:bg-bg-surface dark:text-text-secondary"}`}>{lang === "CPP" ? "C++" : lang === "JAVA" ? "Java" : "Python"}</button>)}</div></div>}
                   {error && <div ref={errorRef} tabIndex={-1} role="alert" aria-live="assertive" className="flex items-start gap-2.5 rounded-[14px] border border-accent-error/20 bg-accent-error/10 p-3.5 text-[13px] leading-5 text-accent-error outline-none focus-visible:ring-2 focus-visible:ring-accent-error/50 dark:text-accent-error"><AlertCircle className="mt-0.5 size-4 shrink-0" />{error}</div>}
+                  {userMode === "EDUCATIONAL" && accountSetup && <div className="space-y-2 rounded-[14px] border border-primary/20 bg-primary/5 p-3.5 text-[13px] leading-5">
+                    {accountSetup.email ? <button type="button" className="min-h-11 w-full rounded-lg px-3 py-2 text-left font-semibold text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" disabled={loading} onClick={() => {
+                      setResetEmail(accountSetup.email!); setShowForgotPassword(true); setError(null); setSuccess(null);
+                    }}>{tr("Отримати посилання для активації", "Request activation link")}</button>
+                    : <p>{tr("Адміністратор закладу має додати вашу пошту на сторінці учасників. Якщо іншого адміністратора немає, зверніться до підтримки.", "Ask your organization administrator to add your email on the members page. If no other administrator is available, contact support.")}</p>}
+                    {accountSetup.classLoginAvailable && <button type="button" className="min-h-11 w-full rounded-lg px-3 py-2 text-left font-semibold text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" disabled={loading} onClick={async () => {
+                      setLoading(true); setError(null);
+                      try {
+                        const { student } = await studentLogin(username.trim(), password, String(turnstileToken || "") || undefined);
+                        notifyAuth({ id: student.id, username: student.username, difus: 0, avatarUrl: null, userMode: "EDUCATIONAL", accountSettingsScope: "CLASS",
+                          studentId: student.id, classId: student.classId, className: student.className,
+                          firstName: student.firstName, lastName: student.lastName, middleName: student.middleName, email: student.email });
+                      } catch (err) { setError(formatApiError(err, tr("Не вдалося ввійти в клас", "Could not sign in to the class"))); }
+                      finally { setLoading(false); }
+                    }}>{tr("Продовжити як учень класу", "Continue as a class student")}</button>}
+                  </div>}
                   {success && <div role="status" aria-live="polite" className="flex items-start gap-2.5 rounded-[14px] border border-primary/20 bg-primary/10 p-3.5 text-[13px] leading-5 text-primary-strong dark:text-primary-strong"><CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />{success}</div>}
                   {shouldRenderAuthTurnstile && <SecurityCheckPanel ref={turnstileContainerRef} enabled={authTurnstileEnabled} failed={turnstileLoadFailed} scriptReady={authTurnstileEnabled ? turnstileScriptReady : true} tr={tr} />}
                   {mode === "register" && userMode === "EDUCATIONAL" && eduStep === 2 && <button type="button" onClick={() => { setEduStep(1); setError(null); }} className="w-full text-center text-[13px] font-semibold text-text-muted hover:text-text-primary dark:text-text-secondary dark:hover:text-white">{tr("Назад до даних закладу", "Back to institution details")}</button>}

@@ -16,6 +16,9 @@ import { isAssignedToStudent } from "../../utils/assignmentVisibility";
 import { extractTimezoneFromProfileMeta } from "../../utils/profileTimezone";
 import { DEFAULT_GRADING_SYSTEM } from "../../types/GradingSystem";
 import { normalizeScaleMode } from "../../utils/gradingScale";
+import { studentQuizJson } from "../../services/edu/studentQuizPayload";
+import { getCourseControlSnapshot } from "../../services/edu/courseLessonAttempt";
+import { QuizAttempt } from "../../entities/QuizAttempt";
 
 const router = Router();
 
@@ -222,7 +225,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       ? await gradeRepo().find({
         where: { student: { id: req.studentId }, task: { id: In(courseTaskIds) } },
         relations: ["task"],
-        order: { createdAt: "DESC" }
+        order: { createdAt: "DESC", id: "DESC" }
       })
       : [];
     const latestCourseGradeByTaskId = new Map<number, EduGrade>();
@@ -233,8 +236,14 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       if (!latestCourseGradeByTaskId.has(Number(taskId))) latestCourseGradeByTaskId.set(Number(taskId), grade);
       courseAttemptsByTaskId.set(Number(taskId), (courseAttemptsByTaskId.get(Number(taskId)) || 0) + 1);
     }
-    const courseLessonsMapped = await Promise.all(courseLessons.map(async (lesson, lessonIndex) => ({
+    const courseLessonsMapped = await Promise.all(courseLessons.map(async (lesson, lessonIndex) => {
+      const snapshot = lesson.type === "CONTROL" ? await getCourseControlSnapshot(lesson, req.studentId!) : null;
+      return ({
       id: lesson.id,
+      source: "course" as const,
+      courseAttempt: snapshot?.attempt,
+      courseReport: snapshot?.report,
+      reportOnly: snapshot?.attempt.status === "COMPLETED",
       title: lesson.title,
       description: lesson.theory || null,
       order: lessonIndex,
@@ -251,7 +260,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       deadlineTimezone: classDeadlineTimezone,
       controlHasTheory: lesson.controlHasTheory,
       controlHasPractice: lesson.controlHasPractice,
-      quizJson: lesson.quizJson || null,
+      quizJson: studentQuizJson(lesson.quizJson),
       tasks: await Promise.all((lesson.tasks || []).map(async (task, taskIndex) => {
         const grade = latestCourseGradeByTaskId.get(task.id) ?? null;
         const attemptsUsed = courseAttemptsByTaskId.get(task.id) || 0;
@@ -261,6 +270,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
         description: task.description,
         template: task.template,
         taskMode: task.taskMode,
+        testDataCount: task.testData?.length ?? 0,
         projectSpec: task.projectSpec ?? null,
         maxAttempts: task.maxAttempts,
         deadline: task.deadline || null,
@@ -286,7 +296,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       })),
       tasksCount: (lesson.tasks || []).length,
       createdAt: lesson.createdAt.toISOString()
-    })));
+    }); }));
 
     logger.debug("[GET /edu/students/me/lessons] Lessons fetched", {
       requestId: req.requestId,
@@ -441,7 +451,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
         timeLimitMinutes: controlWork.timeLimitMinutes || null,
         deadline: controlWork.deadline,
         deadlineTimezone: classDeadlineTimezone,
-        quizJson: controlWork.quizJson || null,
+        quizJson: studentQuizJson(controlWork.quizJson),
         tasks: tasksWithGrades,
         tasksCount: tasksWithGrades.length,
         createdAt: controlWork.createdAt.toISOString()
@@ -601,6 +611,15 @@ router.get("/students/:studentId/grades", authRequired, async (req: AuthRequest,
 
     res.json({
       grades,
+      quizGrades: (await AppDataSource.getRepository(QuizAttempt).find({ where: { student: { id: studentId } }, relations: ["lesson"], order: { updatedAt: "DESC" } })).map(attempt => ({
+        id: attempt.id,
+        lessonId: attempt.lesson?.id,
+        title: attempt.lesson?.title || "Quiz",
+        status: attempt.status,
+        autoPercent: attempt.autoPercent,
+        finalPercent: attempt.status === "NEEDS_MANUAL" ? null : attempt.finalPercent ?? attempt.autoPercent,
+        updatedAt: attempt.updatedAt,
+      })),
       gradingSystem: targetStudent.class?.gradingSystem || DEFAULT_GRADING_SYSTEM,
       gradeScaleMode: normalizeScaleMode(targetStudent.class?.gradeScaleMode),
       summaryGrades: summaryGrades.map(sg => ({

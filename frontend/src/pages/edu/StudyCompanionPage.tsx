@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUpRight, BookOpen, Lightbulb, Send } from "lucide-react";
 import { askAiTutor, type TutorAnswerDto } from "../../lib/api/edu";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 
 const suggestions = [
   ["Поясни мою останню помилку простими словами", "Explain my last error in simple terms"],

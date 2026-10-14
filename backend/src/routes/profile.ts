@@ -20,6 +20,8 @@ import { logger } from "../utils/logger";
 import { HttpError } from "../utils/httpError";
 import { listStudentsForUser, applyStudentViewToUserDto } from "../services/edu/studentLink";
 import { listUserMemberships } from "../services/edu/membership";
+import { ParentLink } from "../entities/ParentLink";
+import { readClassIssuedPasswordState } from "../services/edu/studentCredentialVersion";
 import {
   getIadCeilingForTopic,
   getIadDeltaByGrade,
@@ -279,11 +281,13 @@ function buildUserDto(user: User, activeRuntime: UserRuntime = "PYTHON") {
 }
 
 async function buildEduContexts(userId: number) {
-  const [students, memberships] = await Promise.all([
+  const [students, memberships, hasParentAccess] = await Promise.all([
     listStudentsForUser(userId),
-    listUserMemberships(userId)
+    listUserMemberships(userId),
+    AppDataSource.getRepository(ParentLink).existsBy({ parent: { id: userId } })
   ]);
   return {
+    hasParentAccess,
     students: students
       .filter((student) => Boolean(student.class))
       .map((student) => ({
@@ -300,6 +304,15 @@ async function buildEduContexts(userId: number) {
       slug: membership.organization?.slug ?? null
     }))
   };
+}
+
+async function buildLinkedStudentProfile(student: Student, userId: number) {
+  const user = await userRepo().findOneBy({ id: userId });
+  if (!user) throw new HttpError(401, "UNAUTHORIZED");
+  return { ...applyStudentViewToUserDto(buildUserDto(user, "PYTHON"), student),
+    avatarUrl: student.avatarUrl ?? null, firstName: student.firstName, lastName: student.lastName,
+    middleName: student.middleName, accountSettingsScope: "ACCOUNT",
+    eduContexts: await buildEduContexts(userId) };
 }
 
 const PROFILE_BADGES: ReadonlyArray<number> = [25, 50, 100, 250, 500, 1000];
@@ -1140,8 +1153,10 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
         relations: ["class"]
       });
       if (student) {
+        if (req.userId) return res.json(await buildLinkedStudentProfile(student, req.userId));
         return res.json({
           id: student.id,
+          accountSettingsScope: "CLASS",
           username: student.generatedUsername,
           iad: 0,
           difus: 0,
@@ -1199,6 +1214,7 @@ router.get("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
     return res.json(dto);
   } catch (err) {
     logger.error("[profile] GET /profile/me error", { requestId: req.requestId, principalId: req.principalId, err });
+    if (err instanceof HttpError) return res.status(err.statusCode).json({ message: err.message });
     return res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
@@ -1231,9 +1247,11 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
       } else if (avatarUrl !== undefined) {
         student.avatarUrl = avatarUrl;
       }
-      await studentRepo().save(student);
+      await studentRepo().update(student.id, { avatarUrl: student.avatarUrl });
+      if (req.userId) return res.json(await buildLinkedStudentProfile(student, req.userId));
       return res.json({
         id: student.id,
+        accountSettingsScope: "CLASS",
         username: student.generatedUsername,
         iad: 0,
         difus: 0,
@@ -1341,7 +1359,21 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
         privacy: nextPrivacy,
       });
     }
-    await userRepo().save(user);
+    if (await readClassIssuedPasswordState(user.id)) {
+      // A managed account can reach this branch without an active class header.
+      // Persist only profile fields so a concurrent staff reset is not reverted.
+      const changes = {
+        ...(avatarData?.startsWith("data:image/") || avatarUrl !== undefined ? { avatarUrl: user.avatarUrl } : {}),
+        ...(contestHandles && typeof contestHandles === "object" ? {
+          cfHandle: user.cfHandle, atcoderHandle: user.atcoderHandle,
+          leetcodeHandle: user.leetcodeHandle, codechefHandle: user.codechefHandle,
+        } : {}),
+        ...(publicProfilePrivacy && typeof publicProfilePrivacy === "object" ? { timezone: user.timezone } : {}),
+      };
+      if (Object.keys(changes).length) await userRepo().update(user.id, changes);
+    } else {
+      await userRepo().save(user);
+    }
     const dto = { ...buildUserDto(user, req.learningRuntime), eduContexts: await buildEduContexts(user.id) };
     if (req.studentId) {
       const selected = dto.eduContexts.students.find((student) => student.studentId === req.studentId);
@@ -1367,15 +1399,15 @@ router.put("/me", authMiddleware, async (req: AuthRequest, res: Response) => {
 router.get("/email-subscription", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (denyContestProfileAccess(req, res)) return;
-    if (req.userType === "STUDENT" && req.studentId) {
+    if (!req.userId && req.userType === "STUDENT" && req.studentId) {
       const student = await studentRepo().findOne({ where: { id: req.studentId } });
       if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
-      return res.json({ enabled: Boolean(student.marketingEmailsEnabled), email: student.email });
+      return res.json({ enabled: Boolean(student.marketingEmailsEnabled), email: student.email, scope: "CLASS" });
     }
     if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
     const user = await userRepo().findOne({ where: { id: req.userId } });
     if (!user) return res.status(404).json({ message: "USER_NOT_FOUND" });
-    return res.json({ enabled: Boolean(user.marketingEmailsEnabled), email: user.email ?? null });
+    return res.json({ enabled: Boolean(user.marketingEmailsEnabled), email: user.email ?? null, scope: "ACCOUNT" });
   } catch (err) {
     logger.error("[profile] GET /profile/email-subscription error", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -1385,22 +1417,23 @@ router.get("/email-subscription", authMiddleware, async (req: AuthRequest, res: 
 router.put("/email-subscription", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (denyContestProfileAccess(req, res)) return;
-    const enabled = Boolean((req.body)?.enabled);
+    const enabled = req.body?.enabled;
+    if (typeof enabled !== "boolean") return res.status(400).json({ message: "INVALID_INPUT" });
 
-    if (req.userType === "STUDENT" && req.studentId) {
+    if (!req.userId && req.userType === "STUDENT" && req.studentId) {
       const student = await studentRepo().findOne({ where: { id: req.studentId } });
       if (!student) return res.status(404).json({ message: "STUDENT_NOT_FOUND" });
       student.marketingEmailsEnabled = enabled;
-      await studentRepo().save(student);
-      return res.json({ enabled: Boolean(student.marketingEmailsEnabled) });
+      await studentRepo().update(student.id, { marketingEmailsEnabled: enabled });
+      return res.json({ enabled: Boolean(student.marketingEmailsEnabled), scope: "CLASS" });
     }
 
     if (!req.userId) return res.status(401).json({ message: "UNAUTHORIZED" });
     const user = await userRepo().findOne({ where: { id: req.userId } });
     if (!user) return res.status(404).json({ message: "USER_NOT_FOUND" });
     user.marketingEmailsEnabled = enabled;
-    await userRepo().save(user);
-    return res.json({ enabled: Boolean(user.marketingEmailsEnabled) });
+    await userRepo().update(user.id, { marketingEmailsEnabled: enabled });
+    return res.json({ enabled: Boolean(user.marketingEmailsEnabled), scope: "ACCOUNT" });
   } catch (err) {
     logger.error("[profile] PUT /profile/email-subscription error", { requestId: req.requestId, principalId: req.principalId, err });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });

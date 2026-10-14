@@ -50,6 +50,7 @@ import { getExecutionQueueMode } from "./services/execution/distributedJudgeQueu
 import { getJudgeExecutionMetrics } from "./services/judgeWorker";
 import { sweepTestCache } from "./services/judgeWorker/testCache";
 import { cleanupCompletedPersonalTaskTests } from "./services/personalTaskCleanup";
+import { startCredentialRecoveryCleanup } from "./services/edu/credentialOperations";
 import { getOpenRouterRuntimeDiagnostics } from "./services/llm/OpenRouterProvider";
 import { env } from "./env";
 import { setRetryAfterForOverload } from "./middleware/overloadRetryAfter";
@@ -1235,6 +1236,7 @@ async function bootstrap(): Promise<void> {
 
     startCertificateQueueWorker();
     startContestQueueWorker();
+    startCredentialRecoveryCleanup();
 
     // Remove test payloads left behind by already-solved generated personal
     // tasks. Grades keep the result/snapshot, so this is safe and idempotent.

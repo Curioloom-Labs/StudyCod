@@ -14,12 +14,15 @@ import { setRequestContextFields } from '../utils/requestContextStore';
 import { AUTH_COOKIE_NAME } from '../utils/authCookie';
 import { UserCourseEnrollment } from '../entities/UserCourseEnrollment';
 import { Student } from '../entities/Student';
+import { matchesStudentCredentialVersion, matchesEduUserPasswordVersion, readClassIssuedPasswordState } from '../services/edu/studentCredentialVersion';
 import type { CourseRuntime } from '../entities/CourseVariant';
+import { matchesEduSessionVersion, readEducationalUserSessionState } from '../services/edu/userSessions';
 
 /**
  * Carries the authenticated principal. EDU runs a deliberate dual identity model
- * (real `User` accounts vs class-scoped `Student` profiles); exactly one of
- * `userId` / `studentId` is set per request. This seam is FROZEN — see
+ * (real `User` accounts vs class-scoped `Student` profiles). A User-backed
+ * learning context may carry both IDs; a raw Student principal has no userId.
+ * Never equate those IDs or infer account authority from studentId. See
  * docs/edu-identity-model.md before branching on it or touching student auth.
  * Notably: never delete a Student to "migrate" identity (grades cascade off
  * `student_id`); link in place via `students.user_id` instead.
@@ -36,6 +39,8 @@ export interface AuthRequest extends Request<ParamsFlatDictionary, unknown, Reco
   principalId?: number;
   userRole?: UserRole | null;
   userMode?: UserMode | null;
+  eduSessionVersion?: number;
+  studentCredentialVersion?: number;
   learningRuntime?: CourseRuntime;
   uiLanguage?: UiLocale;
   iad?: number;
@@ -52,6 +57,9 @@ type JwtPayload = {
   userMode?: UserMode;
   jti?: string;
   iat?: number;
+  credentialVersion?: unknown;
+  eduPasswordVersion?: unknown;
+  eduSessionVersion?: unknown;
 };
 
 function getCookieValue(req: Request, name: string): string | null {
@@ -111,9 +119,11 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
       relations: ["class"]
     });
     if (!activeStudent?.class) return "not-found";
+    if (!matchesStudentCredentialVersion(payload.credentialVersion, activeStudent.credentialVersion)) return "not-found";
 
     const uiLanguage = resolveUiLocaleFromHeaders(req.headers, "en");
     req.studentId = payload.studentId;
+    req.studentCredentialVersion = activeStudent.credentialVersion;
     req.userType = "STUDENT";
     req.principalId = payload.studentId;
     // A class is language-agnostic. Keep the legacy runtime field populated
@@ -133,10 +143,6 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
 
   const userId = Number(payload.userId);
   if (!Number.isFinite(userId) || userId <= 0) return "invalid";
-
-  req.userId = userId;
-  req.userType = "USER";
-  req.principalId = userId;
 
   // Try Redis first (short TTL). Falls back to DB transparently on miss /
   // Redis unavailability. This collapses the per-request MySQL roundtrip for
@@ -174,6 +180,26 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
     });
   }
 
+  // EDU permissions and revocation must not depend on a cached role or Redis.
+  // Native contest sessions retain their existing fast path.
+  const eduRoute = /^\/(?:api\/)?edu(?:\/|$)/.test(req.baseUrl || req.path || "");
+  if (user.userMode !== "CONTEST" || payload.userMode !== "CONTEST" || payload.eduSessionVersion !== undefined || payload.eduPasswordVersion !== undefined || eduRoute || req.headers["x-studycod-edu-student"]) {
+    const securityState = await readEducationalUserSessionState(userId);
+    if (securityState) {
+      if (securityState.requiresPrivateSetup) return "not-found";
+      if (!matchesEduSessionVersion(payload.eduSessionVersion, securityState.eduSessionVersion)) return "not-found";
+      req.eduSessionVersion = securityState.eduSessionVersion;
+      user = { id: securityState.id, role: securityState.role, userMode: securityState.userMode,
+        currentCourseEnrollmentId: securityState.currentCourseEnrollmentId ?? null };
+    } else if (payload.eduSessionVersion !== undefined || user.userMode === "EDUCATIONAL") return "not-found";
+  }
+
+  let issuedState: Awaited<ReturnType<typeof readClassIssuedPasswordState>> | undefined;
+  if (payload.eduPasswordVersion !== undefined || (user.userMode === "EDUCATIONAL" || eduRoute) && (user.role == null || user.role === "USER")) {
+    issuedState = await readClassIssuedPasswordState(userId);
+    if ((payload.eduPasswordVersion !== undefined && !issuedState) || (issuedState && !matchesEduUserPasswordVersion(payload.eduPasswordVersion, issuedState))) return "not-found";
+  }
+
   // Issued contest accounts have no personal course. Keep explicit enrollment
   // selections and every personal/educational lookup unchanged.
   const activeEnrollment = user.userMode === "CONTEST" && !user.currentCourseEnrollmentId ? null
@@ -184,25 +210,36 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
     relations: ["variant"],
     order: { updatedAt: "DESC" }
   });
-  req.learningRuntime = activeEnrollment?.variant?.runtime || "PYTHON";
-  req.userRole = user.role || null;
-  req.userMode = user.userMode || null;
-
   // A User-backed student is selected explicitly by the browser context
   // header. Only a Student linked to this same User can activate it; never
   // trust a raw student id from the client as an authorization decision.
   const requestedStudentId = Number(req.headers["x-studycod-edu-student"] ?? 0);
+  let linkedStudent: Student | null = null;
   if (Number.isInteger(requestedStudentId) && requestedStudentId > 0) {
-    const linkedStudent = await AppDataSource.getRepository(Student).findOne({
+    linkedStudent = await AppDataSource.getRepository(Student).findOne({
       where: { id: requestedStudentId, user: { id: userId } },
       relations: ["class"]
     });
-    if (linkedStudent?.class) {
+    if (linkedStudent?.class && linkedStudent.userAccountManaged && (user.role == null || user.role === "USER")) {
+      issuedState ??= await readClassIssuedPasswordState(userId);
+      // A verified account with an org/class staff context no longer uses the
+      // learner exemption. Its fresh User session can still select its own
+      // Student view; marked pre-promotion sessions were rejected above.
+      if (issuedState && !matchesEduUserPasswordVersion(payload.eduPasswordVersion, issuedState)) return "not-found";
+    }
+  }
+  req.userId = userId;
+  req.userType = "USER";
+  req.principalId = userId;
+  req.learningRuntime = activeEnrollment?.variant?.runtime || "PYTHON";
+  req.userRole = user.role || null;
+  req.userMode = user.userMode || null;
+  if (linkedStudent?.class) {
       req.studentId = linkedStudent.id;
+      req.studentCredentialVersion = linkedStudent.credentialVersion;
       req.userType = "STUDENT";
       req.userMode = "EDUCATIONAL";
       req.learningRuntime = "PYTHON";
-    }
   }
   return "ok";
 }

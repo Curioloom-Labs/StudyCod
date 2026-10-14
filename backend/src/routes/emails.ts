@@ -80,7 +80,7 @@ async function applyPreference(token: EmailPrefToken): Promise<{ email: string; 
     if (!student) return null;
     if (String(student.email || "").toLowerCase() !== token.email.toLowerCase()) return null;
     student.marketingEmailsEnabled = enabled;
-    await studentRepo().save(student);
+    await studentRepo().update(student.id, { marketingEmailsEnabled: enabled });
     return { email: student.email, enabled: Boolean(student.marketingEmailsEnabled) };
   }
 
@@ -88,7 +88,7 @@ async function applyPreference(token: EmailPrefToken): Promise<{ email: string; 
   if (!user) return null;
   if (String(user.email || "").toLowerCase() !== token.email.toLowerCase()) return null;
   user.marketingEmailsEnabled = enabled;
-  await userRepo().save(user);
+  await userRepo().update(user.id, { marketingEmailsEnabled: enabled });
   return { email: user.email || token.email, enabled: Boolean(user.marketingEmailsEnabled) };
 }
 

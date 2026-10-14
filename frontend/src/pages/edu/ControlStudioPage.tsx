@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Calculator, Clock3, FileCheck2, Plus, Save, Sparkles, Wand2 } from "lucide-react";
 import { api } from "../../lib/api/client";
 import { updateControlWorkFormula } from "../../lib/api/edu";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { showToast } from "../../lib/toast";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";

@@ -8,10 +8,11 @@ import { Membership } from "../../entities/Membership";
 import { User } from "../../entities/User";
 import { Organization, EDUCATIONAL_INSTITUTION_TYPES } from "../../entities/Organization";
 import { authRequired, AuthRequest } from "../../middleware/authMiddleware";
-import { createOrganization, getUserOrgRole, listUserMemberships, listOrgMembers, setMembershipRole, removeMembership } from "../../services/edu/membership";
+import { createOrganization, getUserOrgRole, listUserMemberships, listOrgMembers, setMembershipRole, removeMembership, lockMembershipUsers } from "../../services/edu/membership";
 import {
   createInvitation,
   acceptInvitation,
+  previewInvitation,
   revokeInvitation,
   listPendingInvitations
 } from "../../services/edu/invitations";
@@ -24,6 +25,11 @@ import { emailService } from "../../services/emailService";
 import { FRONTEND_URL } from "../../config";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
 import { logger } from "../../utils/logger";
+import { HttpError } from "../../utils/httpError";
+import { hasSchoolIssuedOwnership, schoolIssuedOwnershipSql } from "../../services/edu/accountOwnership";
+import { signAccountUserToken } from "../../services/auth/accountToken";
+import { setSharedAuthCookie } from "../../utils/authCookie";
+import { assignClassTeachers } from "../../services/edu/classStaff";
 
 const router = Router();
 
@@ -103,6 +109,7 @@ router.post("/orgs", authRequired, async (req: AuthRequest, res: Response) => {
     return res.status(201).json({ org: { id: org.id, name: org.name, slug: org.slug, institutionType: org.institutionType } });
   } catch (error: unknown) {
     logger.error("[edu/orgs] create org failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -136,17 +143,63 @@ router.get("/orgs/:orgId/members", authRequired, async (req: AuthRequest, res: R
     if (!(await requireOrgCapability(req, res, orgId, "MEMBER_MANAGE"))) return;
 
     const members = await listOrgMembers(orgId);
+    const states = members.length ? await userRepo().createQueryBuilder("user")
+      .select("user.id", "id").addSelect(schoolIssuedOwnershipSql(), "pending")
+      .addSelect(`EXISTS (SELECT 1 FROM parent_links p JOIN students s ON s.id = p.student_id JOIN classes c ON c.id = s.class_id
+        WHERE p.parent_user_id = user.id AND c.org_id = :orgId)`, "parentAccess")
+      .addSelect(`((user.email_verified = 0 OR user.email IS NULL OR user.email = '') AND ${schoolIssuedOwnershipSql()} AND (
+        user.edu_issuer_org_id = :orgId OR EXISTS (SELECT 1 FROM students contact_student JOIN classes contact_class ON contact_class.id = contact_student.class_id
+          WHERE contact_student.user_id = user.id AND contact_student.user_account_managed = 1 AND contact_class.org_id = :orgId)))`, "editable")
+      .whereInIds(members.map(member => member.userId)).setParameter("orgId", orgId).getRawMany() : [];
+    const setup = new Map(states.map(state => [Number(state.id), state]));
     return res.json({
       members: members.map((m) => ({
         userId: m.userId,
         role: m.role,
         username: m.user?.username ?? null,
         name: `${m.user?.firstName ?? ""} ${m.user?.lastName ?? ""}`.trim() || null,
-        email: m.user?.email ?? null
+        email: m.user?.email ?? null,
+        accountSetupRequired: Boolean(Number(setup.get(m.userId)?.pending)),
+        hasParentAccess: Boolean(Number(setup.get(m.userId)?.parentAccess)),
+        canSetActivationEmail: Boolean(Number(setup.get(m.userId)?.editable))
       }))
     });
   } catch (error: unknown) {
     logger.error("[edu/orgs] list members failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Only an issuing school's administrator can bind an unverified school account.
+// A completed private account has no institution-managed contact-edit path.
+router.patch("/orgs/:orgId/members/:userId/account-contact", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const orgId = Number(req.params.orgId), userId = Number(req.params.userId);
+    if (![orgId, userId].every(value => Number.isSafeInteger(value) && value > 0)) return res.status(400).json({ message: "INVALID_ID" });
+    if (!(await requireOrgCapability(req, res, orgId, "MEMBER_MANAGE"))) return;
+    const parsed = z.object({ email: z.string().trim().email().max(255) }).strict().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+    const email = parsed.data.email.toLowerCase();
+    await AppDataSource.transaction("READ COMMITTED", async manager => {
+      const target = await lockMembershipUsers(manager, orgId, userId, { userId: req.userId!, sessionVersion: req.eduSessionVersion });
+      const member = await manager.getRepository(Membership).findOneBy({ user: { id: userId }, organization: { id: orgId } });
+      if (!target || !member) throw new HttpError(404, "NOT_A_MEMBER");
+      if ((target.emailVerified && target.email) || !(await hasSchoolIssuedOwnership(userId, manager))) throw new HttpError(409, "EDU_ACCOUNT_CONTACT_LOCKED");
+      const classOrigin = await manager.getRepository(Student).createQueryBuilder("student").withDeleted()
+        .innerJoin("student.class", "class").where("student.user_id = :userId AND student.user_account_managed = 1 AND class.org_id = :orgId", { userId, orgId }).getExists();
+      if (target.eduIssuerOrgId !== orgId && !classOrigin) throw new HttpError(403, "FORBIDDEN");
+      const existing = await manager.getRepository(User).findOneBy({ email });
+      if (existing && existing.id !== userId) throw new HttpError(409, "EMAIL_ALREADY_EXISTS");
+      await manager.getRepository(User).update(userId, { email, emailVerified: false, emailVerificationToken: null, emailVerificationExpires: null,
+        passwordResetToken: null, passwordResetExpires: null, eduSessionVersion: () => "edu_session_version + 1" });
+    });
+    await writeAudit({ actorType: "USER", actorId: req.userId!, action: "org.school_account.contact", targetType: "user", targetId: userId, orgId, requestId: req.requestId, ip: req.ip });
+    return res.json({ ok: true, accountSetupRequired: true });
+  } catch (error) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
+    if ((error as { code?: string }).code === "ER_DUP_ENTRY") return res.status(409).json({ message: "EMAIL_ALREADY_EXISTS" });
+    logger.error("[edu/orgs] school account contact failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -192,8 +245,8 @@ router.post("/orgs/:orgId/users", authRequired, async (req: AuthRequest, res: Re
 
     const parsed = z.object({
       username: z.string().trim().min(3).max(50),
-      email: z.string().trim().email().optional().or(z.literal("")),
-      password: z.string().min(8).max(200),
+      email: z.string().trim().email(),
+      password: z.string().min(8).max(72).refine(value => Buffer.byteLength(value, "utf8") <= 72),
       firstName: z.string().trim().max(100).optional(),
       lastName: z.string().trim().max(100).optional(),
       role: z.enum(["TEACHER", "ASSISTANT"]).default("TEACHER")
@@ -218,7 +271,9 @@ router.post("/orgs/:orgId/users", authRequired, async (req: AuthRequest, res: Re
         lastName: data.lastName?.trim() || null,
         userMode: "EDUCATIONAL",
         role: "TEACHER",
-        emailVerified: true,
+        emailVerified: false,
+        eduAccountSetupRequired: true,
+        eduIssuerOrgId: orgId,
         iadJava: 0,
         iadPython: 0,
         iadCpp: 0
@@ -245,7 +300,7 @@ router.post("/orgs/:orgId/users", authRequired, async (req: AuthRequest, res: Re
     });
     return res.status(201).json({
       user: { id: user.id, username: user.username, email: user.email, firstName: user.firstName, lastName: user.lastName, role: data.role },
-      credentials: { username: user.username, email: user.email, password: data.password, role: data.role }
+      credentials: { username: user.username, email: user.email, password: data.password, role: data.role, accountSetupRequired: true }
     });
   } catch (error: unknown) {
     logger.error("[edu/orgs] create staff account failed", { requestId: req.requestId, err: error });
@@ -260,32 +315,19 @@ router.patch("/orgs/:orgId/classes/:classId", authRequired, async (req: AuthRequ
     const orgId = parseInt(req.params.orgId, 10);
     const classId = parseInt(req.params.classId, 10);
     if (!Number.isFinite(orgId) || !Number.isFinite(classId)) return res.status(400).json({ message: "INVALID_ID" });
-    if (!(await requireOrgCapability(req, res, orgId, "CLASS_EDIT"))) return;
+    if (!(await requireOrgCapability(req, res, orgId, "MEMBER_MANAGE"))) return;
     const parsed = z.object({
       teacherId: z.number().int().positive().optional(),
-      teacherIds: z.array(z.number().int().positive()).min(1).optional()
+      teacherIds: z.array(z.number().int().positive()).min(1).max(100).optional(),
+      primaryTeacherId: z.number().int().positive().optional()
     }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
     const teacherIds = Array.from(new Set(parsed.data.teacherIds ?? (parsed.data.teacherId ? [parsed.data.teacherId] : [])));
     if (!teacherIds.length) return res.status(400).json({ message: "AT_LEAST_ONE_TEACHER_REQUIRED" });
 
-    const cls = await classRepo().createQueryBuilder("class")
-      .leftJoinAndSelect("class.teacher", "teacher")
-      .leftJoinAndSelect("class.teachers", "assignedTeacher")
-      .where("class.id = :classId AND class.org_id = :orgId", { classId, orgId })
-      .getOne();
-    if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
-    for (const teacherId of teacherIds) {
-      const targetRole = await getUserOrgRole(teacherId, orgId);
-      if (!targetRole || !["ORG_ADMIN", "TEACHER", "ASSISTANT"].includes(targetRole)) {
-        return res.status(400).json({ message: "TEACHER_NOT_IN_ORG" });
-      }
-    }
-
-    const primaryTeacherId = cls.teacher?.id && teacherIds.includes(cls.teacher.id) ? cls.teacher.id : teacherIds[0];
-    cls.teacher = { id: primaryTeacherId } as User;
-    cls.teachers = teacherIds.map((id) => ({ id } as User));
-    await classRepo().save(cls);
+    const assignment = await assignClassTeachers(orgId, classId, teacherIds, parsed.data.primaryTeacherId, { userId: req.userId!, sessionVersion: req.eduSessionVersion });
+    const primaryTeacherId = assignment.primaryTeacherId;
+    setSharedAuthCookie(res, await signAccountUserToken(await userRepo().findOneByOrFail({ id: req.userId! }), assignment.sessionVersion));
     await writeAudit({
       actorType: "USER",
       actorId: req.userId!,
@@ -300,6 +342,7 @@ router.patch("/orgs/:orgId/classes/:classId", authRequired, async (req: AuthRequ
     return res.json({ ok: true, classId, teacherId: primaryTeacherId, teacherIds });
   } catch (error: unknown) {
     logger.error("[edu/orgs] assign class teacher failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -318,10 +361,11 @@ router.patch("/orgs/:orgId/members/:userId/role", authRequired, async (req: Auth
     const role = normalizeOrgRole(req.body?.role);
     if (!role) return res.status(400).json({ message: "INVALID_ROLE" });
 
-    const result = await setMembershipRole(orgId, targetUserId, role);
+    const result = await setMembershipRole(orgId, targetUserId, role, { userId: req.userId!, sessionVersion: req.eduSessionVersion });
     if (!result.ok) {
-      return res.status(result.reason === "NOT_A_MEMBER" ? 404 : 409).json({ message: result.reason });
+      return res.status(result.reason === "NOT_A_MEMBER" ? 404 : 409).json({ message: result.reason, ...(result.classes ? { classes: result.classes } : {}) });
     }
+    if (targetUserId === req.userId) setSharedAuthCookie(res, await signAccountUserToken(await userRepo().findOneByOrFail({ id: req.userId }), result.sessionVersion));
     await writeAudit({
       actorType: "USER",
       actorId: req.userId ?? null,
@@ -336,6 +380,7 @@ router.patch("/orgs/:orgId/members/:userId/role", authRequired, async (req: Auth
     return res.json({ ok: true, userId: targetUserId, role });
   } catch (error: unknown) {
     logger.error("[edu/orgs] change member role failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -351,9 +396,9 @@ router.delete("/orgs/:orgId/members/:userId", authRequired, async (req: AuthRequ
     }
     if (!(await requireOrgCapability(req, res, orgId, "MEMBER_MANAGE"))) return;
 
-    const result = await removeMembership(orgId, targetUserId);
+    const result = await removeMembership(orgId, targetUserId, { userId: req.userId!, sessionVersion: req.eduSessionVersion });
     if (!result.ok) {
-      return res.status(result.reason === "NOT_A_MEMBER" ? 404 : 409).json({ message: result.reason });
+      return res.status(result.reason === "NOT_A_MEMBER" ? 404 : 409).json({ message: result.reason, ...(result.classes ? { classes: result.classes } : {}) });
     }
     await writeAudit({
       actorType: "USER",
@@ -368,6 +413,7 @@ router.delete("/orgs/:orgId/members/:userId", authRequired, async (req: AuthRequ
     return res.json({ ok: true, userId: targetUserId });
   } catch (error: unknown) {
     logger.error("[edu/orgs] remove member failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -391,7 +437,7 @@ router.post("/orgs/:orgId/invites", authRequired, inviteLimiter, async (req: Aut
       orgId,
       email: parsed.data.email,
       role,
-      invitedByUserId: req.userId!
+      invitedByUserId: req.userId!, sessionVersion: req.eduSessionVersion
     });
     sendInviteEmail(invite.email, invite.role, invite.token);
     await writeAudit({
@@ -417,6 +463,7 @@ router.post("/orgs/:orgId/invites", authRequired, inviteLimiter, async (req: Aut
     });
   } catch (error: unknown) {
     logger.error("[edu/orgs] create invite failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -458,11 +505,12 @@ router.post("/orgs/:orgId/invites/:invitationId/revoke", authRequired, async (re
     }
     if (!(await requireOrgCapability(req, res, orgId, "MEMBER_MANAGE"))) return;
 
-    const ok = await revokeInvitation(invitationId, orgId);
+    const ok = await revokeInvitation(invitationId, orgId, { userId: req.userId!, sessionVersion: req.eduSessionVersion });
     if (!ok) return res.status(404).json({ message: "INVITE_NOT_FOUND" });
     return res.json({ ok: true });
   } catch (error: unknown) {
     logger.error("[edu/orgs] revoke invite failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -491,7 +539,7 @@ router.post("/orgs/:orgId/parent-invites", authRequired, inviteLimiter, async (r
       email: parsed.data.email,
       role: "PARENT",
       studentId: student.id,
-      invitedByUserId: req.userId!
+      invitedByUserId: req.userId!, sessionVersion: req.eduSessionVersion
     });
     sendInviteEmail(invite.email, invite.role, invite.token);
     await writeAudit({
@@ -510,6 +558,7 @@ router.post("/orgs/:orgId/parent-invites", authRequired, inviteLimiter, async (r
     });
   } catch (error: unknown) {
     logger.error("[edu/orgs] create parent invite failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -534,13 +583,27 @@ router.get("/parent/children", authRequired, async (req: AuthRequest, res: Respo
 });
 
 // Accept an invitation as the authenticated user.
+router.get("/invites/:token", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    // A linked User may open an account invitation while using a learning
+    // context. A raw Student principal never carries an authenticated userId.
+    if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
+    return res.json(await previewInvitation(String(req.params.token ?? "").trim(), req.userId));
+  } catch (error) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
+    logger.error("[edu/orgs] invite preview failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 router.post("/invites/:token/accept", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    if (!requireUser(req, res)) return;
+    if (!req.userId) return res.status(403).json({ message: "ONLY_USERS" });
     const token = String(req.params.token ?? "").trim();
     if (!token) return res.status(400).json({ message: "INVALID_TOKEN" });
 
-    const result = await acceptInvitation(token, req.userId!);
+    const result = await acceptInvitation(token, req.userId!, req.eduSessionVersion);
+    setSharedAuthCookie(res, await signAccountUserToken(await userRepo().findOneByOrFail({ id: req.userId }), result.sessionVersion));
     await writeAudit({
       actorType: "USER",
       actorId: req.userId!,
@@ -552,12 +615,13 @@ router.post("/invites/:token/accept", authRequired, async (req: AuthRequest, res
       requestId: req.requestId,
       ip: req.ip
     });
-    return res.json({ orgId: result.orgId, role: result.role });
+    return res.json({ orgId: result.orgId, role: result.role, studentId: result.studentId });
   } catch (error: unknown) {
     if (error instanceof Error && error.message === "INVALID_INVITE") {
       return res.status(400).json({ message: "INVALID_INVITE" });
     }
     logger.error("[edu/orgs] accept invite failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

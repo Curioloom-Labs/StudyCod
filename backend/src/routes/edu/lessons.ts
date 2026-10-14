@@ -1,3 +1,7 @@
+import { persistControlQuiz } from "../../services/edu/controlQuizWrite";
+import { HttpError } from "../../utils/httpError";
+import { courseTaskTestCounts } from "../../services/edu/courseTaskTests";
+import { writeSensitiveStudentRead } from "../../services/audit/auditLog";
 import { Router, Response } from "express";
 import { z } from "zod";
 import { AppDataSource } from "../../data-source";
@@ -8,6 +12,7 @@ import { TopicNew } from "../../entities/TopicNew";
 import { ControlWork } from "../../entities/ControlWork";
 import { TopicTask } from "../../entities/TopicTask";
 import { EduLesson } from "../../entities/EduLesson";
+import { QuizAttempt } from "../../entities/QuizAttempt";
 import { LessonAttempt } from "../../entities/LessonAttempt";
 import { EduGrade } from "../../entities/EduGrade";
 import { SummaryGrade } from "../../entities/SummaryGrade";
@@ -16,6 +21,8 @@ import { saveControlSummaryGradeForNewSystemWithManager } from "../../services/e
 import { logger } from "../../utils/logger";
 import { isAssignedToStudent } from "../../utils/assignmentVisibility";
 import { extractTimezoneFromProfileMeta } from "../../utils/profileTimezone";
+import { studentQuizJson } from "../../services/edu/studentQuizPayload";
+import { startCourseLessonAttempt, getCourseControlSnapshot, finishCourseLessonAttempt, getCourseControlSnapshots } from "../../services/edu/courseLessonAttempt";
 
 const router = Router();
 
@@ -109,8 +116,8 @@ function isTimedAttemptExpired(attempt: Pick<LessonAttempt, "startedAt" | "timeL
 
 router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response) => {
   try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) {
       return res.status(400).json({
         message: "INVALID_ID"
       });
@@ -122,6 +129,10 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
       ? String((req.query).type[0] || "")
       : String((req.query)?.type || "");
     const requestedType = requestedTypeRaw.toUpperCase().trim();
+    const source = String(req.query?.source || "");
+    if ((requestedType && !["LESSON", "TOPIC", "CONTROL"].includes(requestedType)) || (source && !["course", "legacy"].includes(source))) {
+      return res.status(400).json({ message: "INVALID_LESSON_SOURCE" });
+    }
 
     let classIdScope: number | null = null;
 
@@ -143,23 +154,24 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
     // Course-fork lessons live in edu_lessons, alongside the legacy topic and
     // control-work resources. Resolve them before the legacy lookup so a
     // published course can actually be opened by its student.
-    if (!requestedType || requestedType === "LESSON" || requestedType === "TOPIC" || requestedType === "CONTROL") {
+    if (source === "course" || (source !== "legacy" && (!requestedType || requestedType === "LESSON"))) {
       const eduLesson = await eduLessonRepo().findOne({
         where: classIdScope ? { id, class: { id: classIdScope } } : { id },
         relations: ["class", "class.teacher", "tasks"]
       });
-      const matchesRequestedType = !requestedType || requestedType === "LESSON"
-        || (requestedType === "TOPIC" && eduLesson?.type === "LESSON")
-        || (requestedType === "CONTROL" && eduLesson?.type === "CONTROL");
+      const matchesRequestedType = source === "course" || !requestedType || requestedType === "LESSON";
       if (eduLesson && matchesRequestedType) {
         if (req.studentId && eduLesson.class?.id !== classIdScope) return res.status(403).json({ message: "ACCESS_DENIED" });
-        if (req.userId) {
+        if (req.userId && !req.studentId) {
           const access = eduLesson.class?.id ? await authorizeClassForReq(req, eduLesson.class.id, "CLASS_VIEW") : null;
           if (!access?.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
         }
+        const testCounts = await courseTaskTestCounts((eduLesson.tasks || []).map(task => task.id));
+        const snapshot = req.studentId && eduLesson.type === "CONTROL" ? await getCourseControlSnapshot(eduLesson, req.studentId) : null;
         return res.json({
           lesson: {
             id: eduLesson.id,
+            source: "course",
             type: eduLesson.type,
             title: eduLesson.title,
             theory: eduLesson.theory || undefined,
@@ -167,13 +179,19 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
             timeLimitMinutes: eduLesson.timeLimitMinutes || undefined,
             controlHasTheory: eduLesson.controlHasTheory,
             controlHasPractice: eduLesson.controlHasPractice,
-            quizJson: eduLesson.quizJson || null,
+            quizJson: req.studentId ? studentQuizJson(eduLesson.quizJson) : eduLesson.quizJson || null,
+            quizSubmitted: req.studentId ? Boolean(await AppDataSource.getRepository(QuizAttempt).findOne({ where: { lesson: { id }, student: { id: req.studentId } } })) : undefined,
+            courseAttempt: snapshot?.attempt,
+            courseReport: snapshot?.report,
+            reportOnly: snapshot?.attempt.status === "COMPLETED",
             tasks: (eduLesson.tasks || []).map((task) => ({
               id: task.id,
+              source: "course",
               title: task.title,
               description: task.description,
               template: task.template,
               taskMode: task.taskMode,
+              testDataCount: testCounts.get(task.id) ?? 0,
               projectSpec: task.projectSpec ?? null,
               webTemplateFiles: task.webTemplateFiles || null,
               webValidationRules: task.webValidationRules || null,
@@ -187,6 +205,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           }
         });
       }
+      if (source === "course" || requestedType === "LESSON") return res.status(404).json({ message: "LESSON_NOT_FOUND" });
     }
     // USER principals are not query-scoped here; each matched resource is
     // authorized against its class below via the central authorizer.
@@ -465,7 +484,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           timeLimitMinutes: controlWork.timeLimitMinutes || null,
           deadline: controlWork.deadline ? controlWork.deadline.toISOString() : null,
           deadlineTimezone: controlDeadlineTimezone,
-          quizJson: controlWork.quizJson || null,
+          quizJson: req.studentId ? studentQuizJson(controlWork.quizJson) : controlWork.quizJson || null,
           quizSubmitted,
           quizGrade,
           quizReview,
@@ -700,7 +719,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           tasksCount: controlTasksCount,
           hasTheory: cw.hasTheory || false,
           hasPractice: cw.hasPractice !== false,
-          quizJson: cw.quizJson || null,
+          quizJson: req.studentId ? studentQuizJson(cw.quizJson) : cw.quizJson || null,
           studentGrade,
           studentStatus
         };
@@ -1028,6 +1047,44 @@ router.get("/lessons/:id/attempt-status", authRequired, async (req: AuthRequest,
   }
 });
 
+router.get("/course-lessons/:id/results", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.studentId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_TEACHERS" });
+  const id = Number(req.params.id), page = Number(req.query.page ?? 1);
+  if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(page) || page <= 0) return res.status(400).json({ message: "INVALID_ID" });
+  try {
+    const lesson = await eduLessonRepo().findOne({ where: { id }, relations: ["class", "tasks"] });
+    if (!lesson || lesson.type !== "CONTROL") return res.status(404).json({ message: "CONTROL_WORK_NOT_FOUND" });
+    const access = await authorizeClassForReq(req, lesson.class.id, "STUDENT_DATA_VIEW");
+    if (!access?.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const pageSize = 30;
+    const [students, total] = await studentRepo().findAndCount({ where: { class: { id: lesson.class.id } }, order: { lastName: "ASC", firstName: "ASC", id: "ASC" }, skip: (page - 1) * pageSize, take: pageSize });
+    const snapshots = await getCourseControlSnapshots(lesson, students.map(student => student.id));
+    await writeSensitiveStudentRead({ actorType: "USER", actorId: req.principalId ?? req.userId ?? null,
+      action: "student-data.read.gradebook", classId: lesson.class.id, orgId: access.cls.organizationId ?? null,
+      requestId: req.requestId, ip: req.ip, metadata: { lessonId: id, studentCount: students.length, page } });
+    return res.json({ lesson: { id, title: lesson.title, className: lesson.class.name, hasQuiz: Boolean(lesson.quizJson),
+      manualTasks: (lesson.tasks || []).filter(task => task.taskMode === "MANUAL").map(task => ({ id: task.id, title: task.title })) },
+      page, pageSize, total, students: students.map(student => ({ id: student.id, name: `${student.lastName} ${student.firstName}`.trim(), ...snapshots.get(student.id) })) });
+  } catch (error) {
+    logger.error("[edu/lessons] course results failed", { requestId: req.requestId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.post("/course-lessons/:id/finish", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.studentId || req.userType !== "STUDENT") return res.status(403).json({ message: "ONLY_STUDENTS" });
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ message: "INVALID_ID" });
+  if (req.body?.confirm !== true) return res.status(400).json({ message: "CONFIRM_REQUIRED" });
+  try { return res.json(await finishCourseLessonAttempt(id, req.studentId)); }
+  catch (error) {
+    const record = error as { statusCode?: number; message?: string };
+    if (record.statusCode) return res.status(record.statusCode).json({ message: record.message });
+    logger.error("[edu/lessons] course finish failed", { requestId: req.requestId, error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 router.post("/lessons/:id/start-attempt", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const idParsed = lessonIdParamSchema.safeParse(req.params.id);
@@ -1043,6 +1100,19 @@ router.post("/lessons/:id/start-attempt", authRequired, async (req: AuthRequest,
       return res.status(403).json({
         message: "ONLY_STUDENTS_CAN_START_ATTEMPT"
       });
+    }
+
+    if (req.query.source === "course") {
+      const lesson = await eduLessonRepo().findOne({ where: { id }, relations: ["class"] });
+      if (!lesson || lesson.type !== "CONTROL") return res.status(404).json({ message: "CONTROL_WORK_NOT_FOUND" });
+      const student = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
+      if (!student?.class || student.class.id !== lesson.class?.id) return res.status(403).json({ message: "ACCESS_DENIED" });
+      try { return res.json(await startCourseLessonAttempt(lesson, req.studentId)); }
+      catch (error) {
+        if (error instanceof Error && ["CONTROL_WORK_COMPLETED", "ASSESSMENT_NOT_READY"].includes(error.message)) return res.status(409).json({ message: error.message });
+        if (error instanceof Error && error.message === "LESSON_NOT_FOUND") return res.status(404).json({ message: error.message });
+        throw error;
+      }
     }
 
     const controlWork = await controlWorkRepo()
@@ -1294,48 +1364,6 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
       });
     }
 
-    const activeAttempt = await lessonAttemptRepo()
-      .createQueryBuilder("attempt")
-      .where("attempt.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
-      .andWhere("attempt.student_id = :studentId", { studentId: req.studentId })
-      .andWhere("attempt.status = :status", { status: "IN_PROGRESS" })
-      .orderBy("attempt.started_at", "DESC")
-      .getOne();
-
-    if (!activeAttempt) {
-      return res.status(403).json({
-        message: "CONTROL_WORK_NOT_STARTED"
-      });
-    }
-
-    if (Number(activeAttempt.timeLimitMinutes || 0) > 0) {
-      const elapsedSeconds = Math.floor((Date.now() - activeAttempt.startedAt.getTime()) / 1000);
-      const totalSeconds = activeAttempt.timeLimitMinutes * 60;
-      const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
-
-      if (remainingSeconds <= 0) {
-        activeAttempt.status = "COMPLETED";
-        activeAttempt.finishedAt = new Date();
-        activeAttempt.isFinished = true;
-        await lessonAttemptRepo().save(activeAttempt);
-        return res.status(403).json({
-          message: "CONTROL_WORK_TIME_EXPIRED"
-        });
-      }
-    }
-
-    const existingSummaryGrade = await summaryGradeRepo()
-      .createQueryBuilder("sg")
-      .where("sg.student_id = :studentId", { studentId: req.studentId })
-      .andWhere("sg.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
-      .getOne();
-
-    if (existingSummaryGrade && (Boolean(existingSummaryGrade.quizAnswersJson) || existingSummaryGrade.theoryGrade !== null)) {
-      return res.status(409).json({
-        message: "QUIZ_ALREADY_SUBMITTED"
-      });
-    }
-
     let quiz: Record<string, unknown>[];
     try {
       quiz = JSON.parse(controlWork.quizJson);
@@ -1400,116 +1428,12 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
 
     const theoryGrade = Math.round(correctAnswers / totalQuestions * 100);
 
-    let summaryGrade = existingSummaryGrade || null;
-    if (!summaryGrade) {
-      const finalGrade = theoryGrade;
-
-      summaryGrade = summaryGradeRepo().create({
-        student: student,
-        class: student.class,
-        controlWork: controlWork,
-        topic: controlWork.topic,
-        name: controlWork.title || `Контрольна робота #${controlWork.id}`,
-        assessmentType: AssessmentType.CONTROL,
-        theoryGrade: theoryGrade === null ? null : clampGradeToInt(theoryGrade),
-        grade: clampGradeToInt(finalGrade),
-        formulaSnapshot: controlWork.formula || null,
-        calculatedAt: new Date()
-      });
-
-      validateAssessmentType(AssessmentType.CONTROL, controlWork.id, "grade");
-    } else {
-      summaryGrade.controlWork = controlWork;
-      summaryGrade.topic = controlWork.topic;
-      summaryGrade.class = controlWork.topic.class;
-      summaryGrade.assessmentType = AssessmentType.CONTROL;
-      if (!summaryGrade.name) {
-        summaryGrade.name = controlWork.title || `Контрольна робота #${controlWork.id}`;
-      }
-      summaryGrade.theoryGrade = theoryGrade === null ? null : clampGradeToInt(theoryGrade);
-      summaryGrade.grade = clampGradeToInt(theoryGrade);
-      summaryGrade.formulaSnapshot = controlWork.formula || null;
-      summaryGrade.calculatedAt = new Date();
-    }
-
-    try {
-      summaryGrade.quizAnswersJson = JSON.stringify(answers);
-      summaryGrade.quizResultsJson = JSON.stringify({
-        version: 1,
-        correctAnswers,
-        totalQuestions,
-        questions: reviewQuestions
-      });
-    } catch (e) {
-      logger.warn("[edu/lessons] Failed to persist quiz review JSON", { requestId: req.requestId, studentId: req.studentId, controlWorkId: controlWork.id, err: e });
-    }
-
-    await summaryGradeRepo().save(summaryGrade);
-
-    try {
-      await AppDataSource.transaction("SERIALIZABLE", async manager => {
-        await saveControlSummaryGradeForNewSystemWithManager(manager, controlWork.id, req.studentId!, clampGradeToInt(theoryGrade));
-      });
-    } catch (e) {
-      logger.error("[edu/lessons] Failed to recalculate control work summary grade after quiz submit", { requestId: req.requestId, studentId: req.studentId, controlWorkId: controlWork.id, err: e });
-    }
-
-    let isFullyCompleted = true;
-
-    if (controlWork.hasPractice) {
-      const controlTasks = (await topicTaskRepo()
-        .createQueryBuilder("task")
-        .where("task.topic_id = :topicId", { topicId: controlWork.topic.id })
-        .andWhere("task.type = :controlType", { controlType: "CONTROL" })
-        .andWhere("task.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
-        .getMany()).filter(task => isControlTaskVisibleToStudent(task, controlWork, req.studentId!));
-
-      const taskIds = controlTasks.map(task => task.id);
-      if (taskIds.length > 0) {
-        const allTaskGrades = await gradeRepo()
-          .createQueryBuilder("grade")
-          .leftJoinAndSelect("grade.topicTask", "topicTask")
-          .where("grade.student_id = :studentId", { studentId: req.studentId })
-          .andWhere("grade.topic_task_id IN (:...taskIds)", { taskIds })
-          .orderBy("grade.created_at", "DESC")
-          .getMany();
-
-        const latestByTaskId = new Map<number, EduGrade>();
-        const attemptsByTaskId = new Map<number, number>();
-        for (const grade of allTaskGrades) {
-          const topicTaskId = (grade).topicTask?.id;
-          if (!topicTaskId) continue;
-          if (!latestByTaskId.has(topicTaskId)) {
-            latestByTaskId.set(topicTaskId, grade);
-          }
-          attemptsByTaskId.set(topicTaskId, (attemptsByTaskId.get(topicTaskId) || 0) + 1);
-        }
-
-        for (const task of controlTasks) {
-          const latest = latestByTaskId.get(task.id) || null;
-          const attemptsUsed = attemptsByTaskId.get(task.id) || 0;
-          const completed = isControlTaskCompletedForProgress(task, latest, attemptsUsed);
-          if (!completed) {
-            isFullyCompleted = false;
-            break;
-          }
-        }
-      }
-    }
-
-    const attempt = await lessonAttemptRepo()
-      .createQueryBuilder("attempt")
-      .where("attempt.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
-      .andWhere("attempt.student_id = :studentId", { studentId: req.studentId })
-      .andWhere("attempt.status = :status", { status: "IN_PROGRESS" })
-      .orderBy("attempt.started_at", "DESC")
-      .getOne();
-
-    if (attempt && isFullyCompleted) {
-      attempt.status = "COMPLETED";
-      attempt.finishedAt = new Date();
-      await lessonAttemptRepo().save(attempt);
-    }
+    const summaryGrade = await persistControlQuiz({
+      controlWorkId: controlWork.id, studentId: req.studentId!, classId: student.class.id,
+      expectedQuizJson: controlWork.quizJson!, theoryGrade,
+      answersJson: JSON.stringify(answers), resultsJson: JSON.stringify({ version: 1, correctAnswers, totalQuestions, questions: reviewQuestions }),
+      credentialVersion: req.studentCredentialVersion, userId: req.userId, sessionVersion: req.eduSessionVersion
+    });
 
     return res.json({
       message: "Quiz submitted successfully",
@@ -1527,6 +1451,7 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
       }
     });
   } catch (error: unknown) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     logger.error("[edu/lessons] Error submitting quiz", { requestId: req.requestId, studentId: req.studentId, error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"

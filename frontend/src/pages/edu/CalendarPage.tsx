@@ -6,7 +6,7 @@ import { PageHero } from "../../components/ui/PageHero";
 import { PageSkeleton } from "../../components/ui/Skeleton";
 import { SectionHeading } from "../../components/ui/SectionHeading";
 import { getAgenda, type AgendaItemDto, type AgendaBucket } from "../../lib/api/edu";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const dayKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

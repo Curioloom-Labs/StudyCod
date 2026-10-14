@@ -25,6 +25,10 @@ export class Student {
     name: "user_id"
   })
   user?: User | null;
+  @Column({ type: "boolean", default: false, name: "user_account_managed" })
+  userAccountManaged!: boolean;
+  @Column({ type: "int", unsigned: true, default: 0, name: "credential_version" })
+  credentialVersion!: number;
   @Column({
     type: "varchar",
     length: 100,

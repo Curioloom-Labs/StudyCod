@@ -17,6 +17,27 @@ export interface RubricResult {
 
 const MAX_CRITERIA = 30;
 
+/** Strict write validation; legacy read normalization below stays tolerant. */
+export function validateRubricDefinition(raw: unknown): RubricCriterion[] | null {
+  if (!Array.isArray(raw) || raw.length > MAX_CRITERIA) return null;
+  const ids = new Set<string>(), result: RubricCriterion[] = [];
+  for (const value of raw) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const c = value as Record<string, unknown>;
+    if (typeof c.id !== "string" || typeof c.label !== "string" || typeof c.maxPoints !== "number") return null;
+    const id = c.id.trim(), label = c.label.trim();
+    if (!id || id.length > 100 || !label || label.length > 500 || ids.has(id) || ["__proto__", "constructor", "prototype"].includes(id)) return null;
+    if (!Number.isSafeInteger(c.maxPoints) || c.maxPoints <= 0 || c.maxPoints > 100_000) return null;
+    ids.add(id); result.push({ id, label, maxPoints: c.maxPoints });
+  }
+  return result.reduce((sum, criterion) => sum + criterion.maxPoints, 0) <= 100_000 ? result : null;
+}
+
+export function validateRubricScores(rubric: RubricCriterion[], scores: Record<string, unknown>): boolean {
+  if (Object.keys(scores).length !== rubric.length) return false;
+  return rubric.every(c => Object.prototype.hasOwnProperty.call(scores, c.id) && typeof scores[c.id] === "number" && Number.isFinite(scores[c.id]) && (scores[c.id] as number) >= 0 && (scores[c.id] as number) <= c.maxPoints);
+}
+
 /**
  * Validate/clean a rubric definition: non-empty unique ids, trimmed labels,
  * positive integer maxPoints. Invalid criteria are dropped; empty → [].

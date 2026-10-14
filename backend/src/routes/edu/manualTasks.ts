@@ -1,4 +1,5 @@
 import { Router, Response, type NextFunction, type Request } from "express";
+import { HttpError } from "../../utils/httpError";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -16,12 +17,20 @@ import {
   upsertSubmission,
   getSubmission,
   listSubmissionsForTask,
-  markGraded
+  gradeManualSubmission,
+  manualSubmissionRevision
 } from "../../services/edu/manualSubmissions";
 import { logger } from "../../utils/logger";
 import { UPLOADS_ROOT } from "../../config/storagePaths";
+import { assertCoursePracticeActive } from "../../services/edu/courseLessonAttempt";
 
 const router = Router();
+for (const name of ["taskId", "studentId"]) {
+  router.param(name, (_req, res, next, value) => {
+    if (!Number.isSafeInteger(Number(value)) || Number(value) <= 0) { res.status(400).json({ message: "INVALID_ID" }); return; }
+    next();
+  });
+}
 const taskRepo = () => AppDataSource.getRepository(EduTask);
 const studentRepo = () => AppDataSource.getRepository(Student);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
@@ -40,7 +49,7 @@ type ManualTaskRequest = AuthRequest & {
 
 /** Load a MANUAL task with its class/teacher; null if not found or not MANUAL. */
 async function loadManualTask(taskId: number): Promise<EduTask | null> {
-  if (!Number.isFinite(taskId)) return null;
+  if (!Number.isSafeInteger(taskId) || taskId <= 0) return null;
   const task = await taskRepo().findOne({
     where: { id: taskId },
     relations: ["lesson", "lesson.class", "lesson.class.teacher"]
@@ -65,7 +74,7 @@ router.post("/manual-tasks/:taskId/submit", authRequired, (req: ManualTaskReques
     if (req.userType !== "STUDENT" || !req.studentId) {
       return res.status(403).json({ message: "ONLY_STUDENTS" });
     }
-    const taskId = parseInt(req.params.taskId, 10);
+    const taskId = Number(req.params.taskId);
     const task = await loadManualTask(taskId);
     if (!task) return res.status(404).json({ message: "MANUAL_TASK_NOT_FOUND" });
 
@@ -73,14 +82,15 @@ router.post("/manual-tasks/:taskId/submit", authRequired, (req: ManualTaskReques
     if (!student || student.class?.id !== task.lesson?.class?.id) {
       return res.status(403).json({ message: "NOT_A_CLASS_MEMBER" });
     }
+    await assertCoursePracticeActive(task.lesson, student.id);
     if (task.isClosed) return res.status(403).json({ message: "TASK_IS_CLOSED" });
     if (task.deadline && new Date() > new Date(task.deadline)) return res.status(403).json({ message: "DEADLINE_PASSED" });
     const previous = await getSubmission(task.id, student.id);
     if (previous?.status === "GRADED") return res.status(409).json({ message: "SUBMISSION_ALREADY_GRADED" });
 
     const file = req.file;
-    let fileStorageKey: string | null = null;
-    let fileName: string | null = null;
+    let fileStorageKey: string | undefined;
+    let fileName: string | undefined;
     if (file && file.buffer && file.size) {
       const ext = path.extname(String(file.originalname || "")).toLowerCase();
       if (ext && !ALLOWED_EXT.has(ext)) return res.status(400).json({ message: "UNSUPPORTED_FILE_TYPE" });
@@ -93,25 +103,28 @@ router.post("/manual-tasks/:taskId/submit", authRequired, (req: ManualTaskReques
     }
 
     const text = typeof req.body?.text === "string" ? req.body.text : null;
-    const validation = validateManualSubmission({ text, fileStorageKey });
+    const validation = validateManualSubmission({ text, fileStorageKey: fileStorageKey ?? previous?.fileStorageKey });
     if (!validation.ok) {
       if (fileStorageKey) fs.rmSync(path.join(MANUAL_DIR, path.basename(fileStorageKey)), { force: true });
       return res.status(400).json({ message: validation.error });
     }
 
     let submission;
+    let replacedFileStorageKey: string | null = null;
     try {
-      submission = await upsertSubmission(task.id, student.id, { text, fileStorageKey, fileName });
+      ({ submission, replacedFileStorageKey } = await upsertSubmission(task.id, student.id, { text, fileStorageKey, fileName }));
     } catch (error) {
       if (fileStorageKey) fs.rmSync(path.join(MANUAL_DIR, path.basename(fileStorageKey)), { force: true });
       throw error;
     }
-    if (previous?.fileStorageKey && previous.fileStorageKey !== submission.fileStorageKey) {
-      fs.rmSync(path.join(MANUAL_DIR, path.basename(previous.fileStorageKey)), { force: true });
+    if (replacedFileStorageKey) {
+      try { fs.rmSync(path.join(MANUAL_DIR, path.basename(replacedFileStorageKey)), { force: true }); }
+      catch (error) { logger.warn("[edu/manualTasks] replaced attachment cleanup failed", { requestId: req.requestId, err: error }); }
     }
     return res.status(201).json({
       submission: {
         id: submission.id,
+        revision: manualSubmissionRevision(submission),
         status: submission.status,
         hasFile: Boolean(submission.fileStorageKey),
         fileName: submission.fileName ?? null,
@@ -119,6 +132,9 @@ router.post("/manual-tasks/:taskId/submit", authRequired, (req: ManualTaskReques
       }
     });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "SUBMISSION_ALREADY_GRADED") return res.status(409).json({ message: error.message });
+    if (error instanceof Error && ["EMPTY_SUBMISSION", "TEXT_TOO_LONG"].includes(error.message)) return res.status(400).json({ message: error.message });
+    if (error instanceof Error && ["ATTEMPT_NOT_STARTED", "CONTROL_WORK_COMPLETED", "QUIZ_REQUIRED", "TASK_IS_CLOSED", "DEADLINE_PASSED"].includes(error.message)) return res.status(403).json({ message: error.message });
     logger.error("[edu/manualTasks] submit failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
@@ -128,15 +144,25 @@ router.post("/manual-tasks/:taskId/submit", authRequired, (req: ManualTaskReques
 router.get("/manual-tasks/:taskId/submission", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (req.userType !== "STUDENT" || !req.studentId) return res.status(403).json({ message: "ONLY_STUDENTS" });
-    const taskId = parseInt(req.params.taskId, 10);
+    const taskId = Number(req.params.taskId);
     if (!Number.isFinite(taskId)) return res.status(400).json({ message: "INVALID_ID" });
     const task = await loadManualTask(taskId);
     const student = await studentRepo().findOne({ where: { id: req.studentId }, relations: ["class"] });
     if (!task || !student || student.class?.id !== task.lesson?.class?.id) return res.status(403).json({ message: "ACCESS_DENIED" });
     const submission = await getSubmission(taskId, req.studentId);
-    if (!submission) return res.json({ submission: null });
+    let submissionAllowed = true;
+    let submissionBlockedReason: string | null = null;
+    try { await assertCoursePracticeActive(task.lesson, req.studentId); }
+    catch (error) { submissionAllowed = false; submissionBlockedReason = (error as Error).message; }
+    const taskInfo = { submissionAllowed, submissionBlockedReason, id: task.id, title: task.title, description: task.description, rubric: task.rubric ?? [],
+      deadline: task.deadline ?? null, isClosed: task.isClosed, lessonId: task.lesson.id };
+    if (!submission) return res.json({ task: taskInfo, submission: null });
+    const grade = submission.status === "GRADED" ? await gradeRepo().findOne({ where: { task: { id: taskId }, student: { id: req.studentId } }, order: { createdAt: "DESC", id: "DESC" } }) : null;
     return res.json({
+      task: taskInfo,
       submission: {
+        revision: manualSubmissionRevision(submission),
+        grade: grade ? { score: grade.score, maxScore: grade.maxScore, total: grade.total, feedback: grade.feedback } : null,
         text: submission.text ?? null,
         hasFile: Boolean(submission.fileStorageKey),
         fileName: submission.fileName ?? null,
@@ -156,7 +182,7 @@ router.get("/manual-tasks/:taskId/submissions", authRequired, async (req: AuthRe
     if (req.userType === "STUDENT" || req.studentId || !req.userId) {
       return res.status(403).json({ message: "ONLY_TEACHERS" });
     }
-    const taskId = parseInt(req.params.taskId, 10);
+    const taskId = Number(req.params.taskId);
     const task = await loadManualTask(taskId);
     if (!task) return res.status(404).json({ message: "MANUAL_TASK_NOT_FOUND" });
     const taskClassId = task.lesson?.class?.id;
@@ -178,12 +204,13 @@ router.get("/manual-tasks/:taskId/submissions", authRequired, async (req: AuthRe
     });
     const studentIds = submissions.map((submission) => submission.studentId);
     const grades = studentIds.length
-      ? await gradeRepo().find({ where: { task: { id: task.id }, student: { id: In(studentIds) } }, relations: ["student"] })
+      ? await gradeRepo().find({ where: { task: { id: task.id }, student: { id: In(studentIds) } }, relations: ["student"], order: { createdAt: "ASC", id: "ASC" } })
       : [];
     const gradeByStudent = new Map(grades.map((grade) => [grade.student?.id, grade]));
     return res.json({
       submissions: submissions.map((s) => ({
         studentId: s.studentId,
+        revision: manualSubmissionRevision(s, gradeByStudent.get(s.studentId)),
         studentName: `${s.student?.lastName ?? ""} ${s.student?.firstName ?? ""}`.trim(),
         text: s.text ?? null,
         hasFile: Boolean(s.fileStorageKey),
@@ -193,6 +220,7 @@ router.get("/manual-tasks/:taskId/submissions", authRequired, async (req: AuthRe
         grade: gradeByStudent.has(s.studentId)
           ? {
               total: gradeByStudent.get(s.studentId)?.total ?? null,
+              score: gradeByStudent.get(s.studentId)?.score ?? null,
               maxScore: gradeByStudent.get(s.studentId)?.maxScore ?? null,
               feedback: gradeByStudent.get(s.studentId)?.feedback ?? null
             }
@@ -212,7 +240,7 @@ router.post("/manual-tasks/:taskId/submissions/:studentId/grade", authRequired, 
     if (req.userType === "STUDENT" || req.studentId || !req.userId) return res.status(403).json({ message: "ONLY_TEACHERS" });
     const taskId = Number(req.params.taskId);
     const studentId = Number(req.params.studentId);
-    if (!Number.isInteger(taskId) || !Number.isInteger(studentId)) return res.status(400).json({ message: "INVALID_ID" });
+    if (!Number.isSafeInteger(taskId) || taskId <= 0 || !Number.isSafeInteger(studentId) || studentId <= 0) return res.status(400).json({ message: "INVALID_ID" });
     const task = await loadManualTask(taskId);
     if (!task?.lesson?.class) return res.status(404).json({ message: "MANUAL_TASK_NOT_FOUND" });
     const access = await authorizeClassForReq(req, task.lesson.class.id, "GRADE_EDIT");
@@ -221,21 +249,19 @@ router.post("/manual-tasks/:taskId/submissions/:studentId/grade", authRequired, 
     if (!submission) return res.status(404).json({ message: "SUBMISSION_NOT_FOUND" });
     const student = await studentRepo().findOne({ where: { id: studentId }, relations: ["class"] });
     if (!student || student.class?.id !== task.lesson.class.id) return res.status(403).json({ message: "STUDENT_NOT_IN_CLASS" });
-    const maxScore = Math.max(1, Number(req.body?.maxScore) || (task.rubric || []).reduce((sum, item) => sum + Number(item.maxPoints || 0), 0) || 100);
+    const maxScore = req.body?.maxScore ?? ((task.rubric || []).reduce((sum, item) => sum + Number(item.maxPoints || 0), 0) || 100);
     const total = Number(req.body?.total);
-    if (!Number.isFinite(total) || total < 0 || total > maxScore) return res.status(400).json({ message: "INVALID_GRADE_VALUE" });
-    let grade = await gradeRepo().findOne({ where: { task: { id: taskId }, student: { id: studentId } } });
-    if (!grade) grade = gradeRepo().create({ task, student, testsPassed: 0, testsTotal: 0 });
-    grade.total = Math.round(total);
-    grade.maxScore = Math.round(maxScore);
-    grade.score = Math.round(total);
-    grade.feedback = typeof req.body?.feedback === "string" ? req.body.feedback.slice(0, 10_000) : null;
-    grade.isManuallyGraded = true;
-    grade.isCompleted = true;
-    await gradeRepo().save(grade);
-    await markGraded(taskId, studentId);
-    return res.json({ grade: { id: grade.id, total: grade.total, maxScore: grade.maxScore, feedback: grade.feedback, isManuallyGraded: true } });
+    if (typeof req.body?.total !== "number" || typeof maxScore !== "number" || !Number.isSafeInteger(maxScore) || maxScore <= 0 || maxScore > 100_000 || !Number.isSafeInteger(total) || total < 0 || total > maxScore) return res.status(400).json({ message: "INVALID_GRADE_VALUE" });
+    const { grade, revision } = await gradeManualSubmission(task, student, {
+      total, maxScore,
+      feedback: typeof req.body?.feedback === "string" ? req.body.feedback.slice(0, 10_000) : null,
+      expectedRevision: typeof req.body?.expectedRevision === "string" ? req.body.expectedRevision : undefined,
+    }, { userId: req.userId!, sessionVersion: req.eduSessionVersion });
+    return res.json({ revision, grade: { id: grade.id, total: grade.total, score: grade.score, maxScore: grade.maxScore, feedback: grade.feedback, isManuallyGraded: true } });
   } catch (error: unknown) {
+    if (error instanceof Error && ["SUBMISSION_CHANGED", "RUBRIC_CHANGED"].includes(error.message)) return res.status(409).json({ message: error.message });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
+    if (error instanceof Error && error.message === "SUBMISSION_NOT_FOUND") return res.status(404).json({ message: error.message });
     logger.error("[edu/manualTasks] grade failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

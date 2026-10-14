@@ -134,3 +134,30 @@ test("defaults points to 1 and tolerates a malformed quiz", () => {
   assert.deepEqual(gradeQuiz(null, null).results, []);
   assert.equal(gradeQuiz({ questions: [{ id: "q1", type: "SINGLE_CHOICE" as any }] } as any, {}).autoScore, 0);
 });
+
+test("unanswered and coerced choice answers never receive credit", () => {
+  const single: Quiz = { questions: [{ id: "q", type: "SINGLE_CHOICE", correctIndex: 0 }] };
+  for (const answer of [null, "", false, "0", [], {}]) assert.equal(gradeQuiz(single, { q: answer }).autoScore, 0);
+  const boolean: Quiz = { questions: [{ id: "q", type: "TRUE_FALSE", correct: false }] };
+  assert.equal(gradeQuiz(boolean, {}).autoScore, 0);
+  for (const answer of [null, "", "false", 0, [], {}]) assert.equal(gradeQuiz(boolean, { q: answer }).autoScore, 0);
+  assert.equal(gradeQuiz(boolean, { q: false }).autoScore, 1);
+});
+
+test("duplicate multi-choice selections cannot impersonate the correct set", () => {
+  const quiz: Quiz = { questions: [{ id: "q", type: "MULTIPLE_CHOICE", correctIndexes: [0, 2] }] };
+  for (const answer of [[0, 0], [2, 2], ["0", "2"], [null, 2]]) assert.equal(gradeQuiz(quiz, { q: answer }).autoScore, 0);
+});
+
+test("empty matching slots do not match index zero", () => {
+  const quiz: Quiz = { questions: [{ id: "q", type: "MATCHING", correctMatches: [0, 1], points: 2 }] };
+  assert.equal(gradeQuiz(quiz, { q: [null, 1] }).autoScore, 1);
+  assert.equal(gradeQuiz(quiz, { q: ["", null] }).autoScore, 0);
+});
+
+test("blank short answers do not match permissive patterns", () => {
+  const quiz: Quiz = { questions: [{ id: "q", type: "SHORT_ANSWER", pattern: ".*" }] };
+  assert.equal(gradeQuiz(quiz, {}).autoScore, 0);
+  assert.equal(gradeQuiz(quiz, { q: "   " }).autoScore, 0);
+  assert.equal(gradeQuiz(quiz, { q: "text" }).autoScore, 1);
+});

@@ -1,3 +1,4 @@
+import { isAxiosError } from "axios";
 import React from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, BarChart3, Calculator, ChevronRight, GraduationCap, Plus, Save, Settings2, Trash2, UsersRound, X } from "lucide-react";
@@ -10,6 +11,8 @@ import {
   getTopics,
   recomputeSemesterGrades,
   updateGrade,
+  updateControlWorkGrade,
+  clearControlWorkGradeOverride,
   updateSemesterGrade,
   updateSummaryGrade,
   type GradebookResponse,
@@ -17,7 +20,7 @@ import {
   type SummaryGradeGroup,
   type Topic,
 } from "../../lib/api/edu";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { showToast } from "../../lib/toast";
 import { Modal } from "../../components/ui/Modal";
 import { withDevPreview } from "../../lib/devPreview";
@@ -44,6 +47,7 @@ type Column = {
   lessonId: number;
   type: string;
   isSummary?: boolean;
+  isControl?: boolean;
   isSemester?: boolean;
 };
 
@@ -80,7 +84,8 @@ function buildColumns(data: GradebookResponse | null): Column[] {
   return data.lessons.flatMap((lesson) => {
     const isSummary = lesson.type === "SUMMARY";
     const isSemester = lesson.type === "SEMESTER";
-    if (isSummary || isSemester || !lesson.tasks?.length) {
+    const isControl = lesson.type === "CONTROL";
+    if (isSummary || isSemester || isControl || !lesson.tasks?.length) {
       return [{
         id: `${lesson.type}-${lesson.id}`,
         title: lesson.title,
@@ -90,6 +95,7 @@ function buildColumns(data: GradebookResponse | null): Column[] {
         type: lesson.type,
         isSummary,
         isSemester,
+        isControl,
       }];
     }
     return lesson.tasks.map((task) => ({
@@ -105,8 +111,10 @@ function buildColumns(data: GradebookResponse | null): Column[] {
 
 function findGrade(student: GradebookStudent, column: Column) {
   return (student.grades || []).find((grade) => {
-    if (column.isSummary || column.isSemester) return grade.lessonId === column.lessonId || grade.taskId === column.taskId;
-    return grade.taskId === column.taskId;
+    if (column.isControl) return grade.isControlWork === true && grade.lessonId === column.lessonId;
+    if (column.isSummary) return grade.isSummaryGrade === true && grade.lessonId === column.lessonId;
+    if (column.isSemester) return grade.isSemesterGrade === true && grade.lessonId === column.lessonId;
+    return !grade.isControlWork && !grade.isSummaryGrade && !grade.isSemesterGrade && grade.taskId === column.taskId;
   }) ?? null;
 }
 
@@ -170,6 +178,15 @@ export const GradebookWorkspace: React.FC = () => {
   const [thematicOpen, setThematicOpen] = React.useState(false);
   const [thematicTopicId, setThematicTopicId] = React.useState("");
   const [busyAction, setBusyAction] = React.useState(false);
+  const [gradeError, setGradeError] = React.useState<string | null>(null);
+  const [gradeConflict, setGradeConflict] = React.useState<"loading" | "ready" | "failed" | null>(null);
+  const routeClassId = React.useRef(classId); routeClassId.current = classId;
+  const [recomputeConfirm, setRecomputeConfirm] = React.useState(false);
+  const [recomputeError, setRecomputeError] = React.useState<string | null>(null);
+  const mutationPending = React.useRef(false);
+  const gradeInputRef = React.useRef<HTMLInputElement>(null);
+  const recomputeNoticeRef = React.useRef<HTMLDivElement>(null);
+  const semesterButtonRef = React.useRef<HTMLButtonElement>(null);
   const [studentFilter, setStudentFilter] = React.useState<"all" | "missing" | "low">("all");
 
   const gradingSystem = normalizeGradingSystem(data?.gradingSystem || DEFAULT_GRADING_SYSTEM);
@@ -206,18 +223,20 @@ export const GradebookWorkspace: React.FC = () => {
   React.useEffect(() => { void load(); }, [load]);
 
   const openEditor = (student: GradebookStudent, column: Column) => {
+    if (mutationPending.current) return;
     const grade = findGrade(student, column);
+    setGradeError(null); setGradeConflict(null);
     setEditing({ student, column, grade });
     setGradeValue(grade?.grade == null ? "" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode));
   };
 
   React.useEffect(() => {
     const reviewGradeId = Number(searchParams.get("review"));
-    if (!data || !Number.isFinite(reviewGradeId) || reviewGradeId === 0) return;
+    if (editing || mutationPending.current || !data || !Number.isFinite(reviewGradeId) || reviewGradeId === 0) return;
     for (const student of students) {
-      const grade = student.grades.find((item) => item.gradeId === reviewGradeId);
+      const grade = student.grades.find((item) => !item.isControlWork && !item.isSummaryGrade && !item.isSemesterGrade && item.gradeId === reviewGradeId);
       if (!grade) continue;
-      const column = columns.find((item) => item.taskId === grade.taskId || item.lessonId === grade.lessonId);
+      const column = columns.find((item) => findGrade(student, item) === grade);
       if (!column) continue;
       setEditing({ student, column, grade });
       setGradeValue(grade.grade == null ? "" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode));
@@ -225,17 +244,38 @@ export const GradebookWorkspace: React.FC = () => {
     }
   }, [columns, data, gradingSystem, scaleMode, searchParams, students]);
 
-  const saveGrade = async () => {
+  const refreshConflictedGrade = async () => {
     if (!editing) return;
+    const capturedClassId = classId;
+    setGradeConflict("loading");
+    try {
+      const book = await getClassGradebook(Number(capturedClassId));
+      if (routeClassId.current !== capturedClassId) return;
+      const student = book.students.find(item => item.studentId === editing.student.studentId);
+      const column = buildColumns(book).find(item => item.id === editing.column.id);
+      if (!student || !column) throw new Error(tr("Ця клітинка більше недоступна. Закрийте редактор і оновіть журнал.", "This cell is no longer available. Close the editor and reload the gradebook."));
+      setData(book); setEditing({ student, column, grade: findGrade(student, column) }); setGradeConflict("ready");
+    } catch (caught) {
+      if (routeClassId.current !== capturedClassId) return;
+      setGradeConflict("failed"); setGradeError(getErrorMessageFromUnknown(caught, tr("Не вдалося завантажити актуальну оцінку. Введене значення збережено.", "Could not load the current grade. Your input is retained.")));
+    }
+  };
+
+  const saveGrade = async () => {
+    if (!editing || mutationPending.current || gradeConflict) return;
     const raw = parseGradeInputToRaw100(gradeValue, gradingSystem, scaleMode);
     if (raw === null) {
-      showToast({ type: "error", message: `${tr("Некоректна оцінка.", "Invalid grade.")} ${gradingSystemInputHint(gradingSystem, isEn)}` });
+      setGradeError(`${tr("Некоректна оцінка.", "Invalid grade.")} ${gradingSystemInputHint(gradingSystem, isEn)}`);
+      gradeInputRef.current?.focus();
       return;
     }
     if (editing.column.isSemester && !canUseSemesterGrades) {
-      showToast({ type: "error", message: tr(`Семестрову не можна виставити: спочатку потрібні тематичні для всіх тем (${missingThematics.length} ще немає).`, `A semester grade cannot be entered yet. Add thematic grades for all topics first (${missingThematics.length} remaining).`) });
+      setGradeError(tr(`Спочатку потрібні тематичні для всіх тем (${missingThematics.length} ще немає).`, `Add thematic grades for all topics first (${missingThematics.length} remaining).`));
+      gradeInputRef.current?.focus();
       return;
     }
+    mutationPending.current = true;
+    setGradeError(null);
     setSaving(true);
     try {
       if (preview()) {
@@ -263,31 +303,51 @@ export const GradebookWorkspace: React.FC = () => {
             }),
           };
         });
+      } else if (editing.column.isControl) {
+        await updateControlWorkGrade(editing.column.taskId, editing.student.studentId, raw, editing.grade?.revision);
       } else if (editing.column.isSemester) {
         if (!editing.grade?.gradeId) throw new Error(tr("Спочатку перерахуйте семестрові оцінки в журналі.", "Recalculate semester grades in the gradebook first."));
-        await updateSemesterGrade(Number(classId), editing.grade.gradeId, raw);
+        await updateSemesterGrade(Number(classId), editing.grade.gradeId, raw, editing.grade.revision);
       } else if (editing.column.isSummary) {
         if (!editing.grade?.gradeId) throw new Error(tr("Спочатку створіть тематичну колонку в журналі.", "Create a thematic column in the gradebook first."));
-        await updateSummaryGrade(Number(classId), editing.grade.gradeId, raw);
+        await updateSummaryGrade(Number(classId), editing.grade.gradeId, raw, editing.grade.revision);
       } else if (editing.grade?.gradeId) {
-        await updateGrade(editing.grade.gradeId, { total: raw });
+        await updateGrade(editing.grade.gradeId, { total: raw, expectedRevision: editing.grade.revision, latestOnly: true });
       } else {
-        await createManualGrade(editing.column.taskId, editing.student.studentId, { total: raw });
+        await createManualGrade(editing.column.taskId, editing.student.studentId, { total: raw, expectedRevision: editing.grade?.revision });
       }
       setEditing(null);
       setGradeValue("");
       if (!preview()) await load();
       showToast({ type: "success", message: tr("Оцінку збережено.", "Grade saved.") });
     } catch (caught) {
-      showToast({ type: "error", message: getErrorMessageFromUnknown(caught, tr("Не вдалося зберегти оцінку.", "Could not save the grade.")) });
+      setGradeError(getErrorMessageFromUnknown(caught, tr("Не вдалося зберегти оцінку. Введене значення збережено — спробуйте ще раз.", "Could not save the grade. Your input is retained — try again.")));
+      if (isAxiosError(caught) && caught.response?.status === 409 && ["GRADE_CHANGED", "REVIEW_REVISION_REQUIRED"].includes(caught.response.data?.message)) await refreshConflictedGrade();
+      gradeInputRef.current?.focus();
     } finally {
+      mutationPending.current = false;
       setSaving(false);
     }
   };
 
+  const clearControlOverride = async () => {
+    if (!editing?.column.isControl || mutationPending.current || gradeConflict) return;
+    mutationPending.current = true; setSaving(true); setGradeError(null);
+    try {
+      await clearControlWorkGradeOverride(editing.column.taskId, editing.student.studentId, editing.grade?.revision);
+      setEditing(null); setGradeValue(""); await load();
+      showToast({ type: "success", message: tr("Ручну оцінку знято. Журнал показує актуальний розрахунок.", "Manual override removed. The gradebook shows the current calculation.") });
+    } catch (caught) {
+      setGradeError(getErrorMessageFromUnknown(caught, tr("Не вдалося зняти ручну оцінку. Введене значення збережено.", "Could not remove the override. Your input is retained.")));
+      if (isAxiosError(caught) && caught.response?.status === 409 && ["GRADE_CHANGED", "REVIEW_REVISION_REQUIRED"].includes(caught.response.data?.message)) await refreshConflictedGrade();
+    } finally { mutationPending.current = false; setSaving(false); }
+  };
+
   const addThematic = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (mutationPending.current) return;
     if (!thematicTopicId || !missingThematics.some((topic) => topic.id === Number(thematicTopicId))) return;
+    mutationPending.current = true;
     setBusyAction(true);
     try {
       if (preview()) {
@@ -303,31 +363,47 @@ export const GradebookWorkspace: React.FC = () => {
     } catch (caught) {
       showToast({ type: "error", message: getErrorMessageFromUnknown(caught, tr("Не вдалося створити тематичну.", "Could not create the thematic grade.")) });
     } finally {
+      mutationPending.current = false;
       setBusyAction(false);
     }
   };
 
   const recomputeSemester = async () => {
+    if (mutationPending.current) return;
     if (!canUseSemesterGrades) {
       showToast({ type: "error", message: tr(`Семестрові заблоковано: створіть тематичні для всіх тем (${missingThematics.length} ще немає).`, `Semester grades are blocked. Create thematic grades for all topics first (${missingThematics.length} remaining).`) });
       return;
     }
+    mutationPending.current = true;
+    setRecomputeError(null);
     setBusyAction(true);
     try {
       if (!preview()) {
         await recomputeSemesterGrades(Number(classId));
         await load();
       }
+      setRecomputeConfirm(false);
+      semesterButtonRef.current?.focus();
       showToast({ type: "success", message: tr("Семестрові оновлено в журналі.", "Semester grades updated in the gradebook.") });
     } catch (caught) {
-      showToast({ type: "error", message: getErrorMessageFromUnknown(caught, tr("Не вдалося перерахувати семестрові.", "Could not recalculate semester grades.")) });
+      setRecomputeError(getErrorMessageFromUnknown(caught, tr("Не вдалося перерахувати семестрові. Попередні оцінки збережено. Повторіть дію.", "Could not recalculate semester grades. Previous grades are retained. Retry the action.")));
+      recomputeNoticeRef.current?.focus();
     } finally {
+      mutationPending.current = false;
       setBusyAction(false);
     }
   };
 
+  React.useEffect(() => {
+    if (recomputeConfirm) recomputeNoticeRef.current?.focus();
+  }, [recomputeConfirm]);
+
+  React.useEffect(() => {
+    if (editing && !saving) gradeInputRef.current?.focus();
+  }, [editing, saving, gradeError]);
+
   return (
-    <div className={root}>
+    <div data-gradebook-workspace className={`${root} min-w-0 w-full`}>
       <Header
         classId={classId}
         title={tr("Журнал класу", "Class gradebook")}
@@ -336,10 +412,22 @@ export const GradebookWorkspace: React.FC = () => {
           <>
             <button type="button" onClick={() => navigate(`/edu/classes/${classId}`)} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold dark:border-white/10"><Settings2 className="size-4" />{tr("Налаштування класу", "Class settings")}</button>
             <button type="button" disabled={!missingThematics.length} onClick={() => setThematicOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45 dark:bg-primary dark:text-primary-foreground"><Plus className="size-4" />{missingThematics.length ? tr("Тематична", "Thematic") : tr("Усі тематичні створено", "All thematic grades created")}</button>
-            <button type="button" disabled={busyAction || !canUseSemesterGrades} onClick={() => void recomputeSemester()} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold text-text-primary disabled:opacity-55 dark:border-white/10 dark:text-text-primary"><Calculator className="size-4" />{tr("Семестрові", "Semester grades")}</button>
+            <button ref={semesterButtonRef} type="button" disabled={busyAction || saving || !canUseSemesterGrades} onClick={() => { setRecomputeError(null); setRecomputeConfirm(true); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55 dark:border-white/10 dark:text-text-primary"><Calculator className="size-4" />{tr("Семестрові", "Semester grades")}</button>
           </>
         }
       />
+
+      {recomputeConfirm && (
+        <div ref={recomputeNoticeRef} role="alert" tabIndex={-1} className="mb-4 rounded-2xl border border-border/20 bg-bg-surface p-4 focus:outline focus:outline-2 focus:outline-primary">
+          <p className="font-semibold">{tr("Перерахувати семестрові оцінки?", "Recalculate semester grades?")}</p>
+          <p className="mt-2 text-sm text-text-secondary">{tr("Оцінки буде обчислено з тематичних. Вручну змінені семестрові оцінки буде замінено. Історія архівованих учнів збережеться.", "Grades will be calculated from thematic grades. Manual semester overrides will be replaced. Archived learner history will be retained.")}</p>
+          {recomputeError && <p className="mt-3 text-sm text-accent-error">{recomputeError}</p>}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button type="button" disabled={busyAction} onClick={() => { setRecomputeConfirm(false); semesterButtonRef.current?.focus(); }} className="min-h-11 rounded-xl border border-border/20 px-4 py-2 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55">{tr("Скасувати", "Cancel")}</button>
+            <button type="button" disabled={busyAction} onClick={() => void recomputeSemester()} className="min-h-11 rounded-xl bg-primary px-4 py-2 font-semibold text-primary-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55">{busyAction ? tr("Перераховуємо…", "Recalculating…") : tr("Перерахувати", "Recalculate")}</button>
+          </div>
+        </div>
+      )}
 
       {error && <div className="mb-5 rounded-2xl bg-accent-error/10 px-4 py-3 text-sm text-accent-error" role="alert">{error}</div>}
       {!data ? (
@@ -382,11 +470,11 @@ export const GradebookWorkspace: React.FC = () => {
               </thead>
               <tbody>
                 {visibleStudents.map((student) => (
-                  <tr key={student.studentId} className="border-b border-border/8 last:border-0 dark:border-white/[.06]">
+                  <tr key={student.studentId} data-student-id={student.studentId} className="border-b border-border/8 last:border-0 dark:border-white/[.06]">
                   <td className="sticky left-0 z-10 bg-bg-surface px-5 py-4 text-sm font-semibold">{student.studentName}</td>
                     {columns.map((column) => {
                       const grade = findGrade(student, column);
-                      return <td key={column.id} className="px-3 py-3"><button type="button" onClick={() => openEditor(student, column)} className={`inline-flex min-h-11 min-w-12 items-center justify-center rounded-xl px-3 text-sm font-extrabold transition hover:-translate-y-0.5 hover:ring-4 hover:ring-primary/15 ${gradeTone(grade?.grade)}`}>{grade?.grade == null ? "—" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</button></td>;
+                      return <td key={column.id} className="px-3 py-3"><button type="button" data-grade-id={grade?.gradeId} disabled={saving || busyAction} aria-label={`${student.studentName} · ${column.title} · ${grade?.grade == null ? tr("Без оцінки", "No grade") : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}`} onClick={() => openEditor(student, column)} className={`inline-flex min-h-11 min-w-12 items-center justify-center rounded-xl px-3 text-sm font-extrabold hover:ring-4 hover:ring-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55 ${gradeTone(grade?.grade)}`}>{grade?.grade == null ? "—" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</button></td>;
                     })}
                   </tr>
                 ))}
@@ -398,13 +486,18 @@ export const GradebookWorkspace: React.FC = () => {
       )}
 
       {editing && (
-        <Modal open onClose={() => setEditing(null)} title={tr("Редагування оцінки", "Edit grade")} description={`${editing.student.studentName} · ${editing.column.title}`} showCloseButton={false} panelClassName="max-w-md">
+        <Modal open onClose={() => { if (!mutationPending.current) setEditing(null); }} title={tr("Редагування оцінки", "Edit grade")} description={`${editing.student.studentName} · ${editing.column.title}`} showCloseButton={false} panelClassName="max-w-md">
             <div className="flex justify-end">
-              <button type="button" onClick={() => setEditing(null)} aria-label={tr("Закрити редагування оцінки", "Close grade editor")} className="rounded-xl bg-bg-subtle p-2 text-text-secondary"><X className="size-4" aria-hidden="true" /></button>
+              <button type="button" disabled={saving} onClick={() => setEditing(null)} aria-label={tr("Закрити редагування оцінки", "Close grade editor")} className="min-h-11 min-w-11 rounded-xl bg-bg-subtle p-2 text-text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55"><X className="mx-auto size-4" aria-hidden="true" /></button>
             </div>
- <label htmlFor="teacher-grade-value" className="sr-only">{tr("Оцінка", "Grade")}</label><input id="teacher-grade-value" name="gradeValue" inputMode="decimal" value={gradeValue} onChange={(event) => setGradeValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveGrade(); }} className="mt-6 w-full rounded-2xl border border-border/12 bg-bg-hover px-4 py-4 text-center text-3xl font-bold outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-base" placeholder={gradingSystemInputHint(gradingSystem, isEn)} />
-            <div className="mt-4 grid grid-cols-5 gap-2">{quickGrades.map((value) => <button key={value} type="button" onClick={() => setGradeValue(value)} className="rounded-xl bg-bg-hover px-3 py-2 text-sm font-bold dark:bg-white/[.06]">{value}</button>)}</div>
-            <div className="mt-6 flex gap-2"><button type="button" onClick={() => setEditing(null)} className="flex-1 rounded-xl px-4 py-3 font-bold">{tr("Скасувати", "Cancel")}</button><button type="button" disabled={saving || !gradeValue.trim()} onClick={() => void saveGrade()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground disabled:opacity-55"><Save className="size-4" />{tr("Зберегти", "Save")}</button></div>
+            <form onSubmit={event => { event.preventDefault(); void saveGrade(); }}>
+              {editing.column.isControl && editing.grade?.manualOverrideGrade != null && <div data-control-override role="status" className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm"><p>{tr("Ручна оцінка збережена. Нові результати тесту й практики оновлюють розрахунок, не змінюючи вашу оцінку.", "Your manual grade is retained. New quiz and practice results update the calculation while preserving your decision.")}</p><p className="mt-2 font-semibold">{tr("Розрахована оцінка:", "Calculated grade:")} {editing.grade.calculatedGrade == null ? tr("Ще немає результатів для розрахунку", "No results to calculate yet") : formatGradeForSystem(editing.grade.calculatedGrade, gradingSystem, scaleMode)}</p><button type="button" disabled={saving || Boolean(gradeConflict)} onClick={() => void clearControlOverride()} className="mt-3 min-h-11 rounded-xl border border-border/20 px-3 py-2 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55">{editing.grade.calculatedGrade == null ? tr("Прибрати ручну оцінку", "Remove manual grade") : tr("Використати розраховану оцінку", "Use calculated grade")}</button></div>}
+              <label htmlFor="teacher-grade-value" className="sr-only">{tr("Оцінка", "Grade")}</label><input ref={gradeInputRef} id="teacher-grade-value" name="gradeValue" inputMode="decimal" disabled={saving} aria-invalid={Boolean(gradeError)} aria-describedby={gradeError ? "teacher-grade-error" : undefined} value={gradeValue} onChange={(event) => { setGradeValue(event.target.value); setGradeError(null); }} className="mt-6 w-full rounded-2xl border border-border/12 bg-bg-hover px-4 py-4 text-center text-3xl font-bold outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-base" placeholder={gradingSystemInputHint(gradingSystem, isEn)} />
+              {gradeError && <p id="teacher-grade-error" role="alert" className="mt-3 text-sm text-accent-error">{gradeError}</p>}
+              {gradeConflict && <div role="status" className="mt-4 rounded-xl border border-accent-warn/30 bg-accent-warn/10 p-4 text-sm"><p>{tr("Оцінка змінилася. Введене значення збережено. Перегляньте актуальну оцінку перед продовженням.", "The grade changed. Your input is retained. Review the current grade before continuing.")}</p>{gradeConflict === "ready" && <p className="mt-2 font-semibold">{tr("Актуальна оцінка:", "Current grade:")} {editing.grade?.grade == null ? tr("Без оцінки", "No grade") : formatGradeForSystem(editing.grade.grade, gradingSystem, scaleMode)}</p>}<button type="button" disabled={saving || gradeConflict === "loading"} onClick={() => { if (gradeConflict === "ready") { setGradeConflict(null); setGradeError(null); gradeInputRef.current?.focus(); } else void refreshConflictedGrade(); }} className="mt-3 min-h-11 rounded-xl border border-border/20 px-3 py-2 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55">{gradeConflict === "ready" ? tr("Переглянув зміни — продовжити", "Reviewed changes — continue") : tr("Завантажити актуальну оцінку", "Load current grade")}</button></div>}
+              <div className="mt-4 grid grid-cols-5 gap-2">{quickGrades.map((value) => <button key={value} type="button" disabled={saving} onClick={() => { setGradeValue(value); setGradeError(null); }} className="min-h-11 rounded-xl bg-bg-hover px-3 py-2 text-sm font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55 dark:bg-white/[.06]">{value}</button>)}</div>
+              <div className="mt-6 flex gap-2"><button type="button" disabled={saving} onClick={() => setEditing(null)} className="min-h-11 flex-1 rounded-xl px-4 py-3 font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55">{tr("Скасувати", "Cancel")}</button><button type="submit" disabled={saving || Boolean(gradeConflict) || !gradeValue.trim()} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55"><Save className="size-4" />{saving ? tr("Зберігаємо…", "Saving…") : tr("Зберегти", "Save")}</button></div>
+            </form>
         </Modal>
       )}
 

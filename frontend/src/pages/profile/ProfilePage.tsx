@@ -493,7 +493,9 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
       onUserChange({ ...user, marketingEmailsEnabled: next });
     } catch (error: unknown) {
       setEmailPrefEnabled(!next);
-      showToast({ type: "error", message: getErrorMessageFromUnknown(error, tr("Не вдалося оновити налаштування", "Failed to update setting")) });
+      showToast({ type: "error", message: isEducational
+        ? tr("Не вдалося оновити налаштування листів. Попереднє значення збережено — спробуйте ще раз.", "Could not update email settings. Your previous setting is kept — try again.")
+        : getErrorMessageFromUnknown(error, tr("Не вдалося оновити налаштування", "Failed to update setting")) });
     } finally {
       setEmailPrefLoading(false);
     }

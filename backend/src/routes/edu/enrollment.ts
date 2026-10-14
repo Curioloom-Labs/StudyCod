@@ -6,6 +6,7 @@ import { setJoinCode, enrollViaJoinCode } from "../../services/edu/joinCode";
 import { claimStudentProfile } from "../../services/edu/studentLink";
 import { writeAudit } from "../../services/audit/auditLog";
 import { logger } from "../../utils/logger";
+import { HttpError } from "../../utils/httpError";
 
 /**
  * Self-enrolment via class join codes (Student↔User unification, dual-mode).
@@ -51,7 +52,7 @@ router.post("/classes/:classId/join-code", authRequired, async (req: AuthRequest
     const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
 
-    const code = await setJoinCode(classId, parsed.data.enabled);
+    const code = await setJoinCode(classId, parsed.data.enabled, { userId: req.userId, sessionVersion: req.eduSessionVersion });
     await writeAudit({
       actorType: "USER",
       actorId: req.userId,
@@ -65,6 +66,7 @@ router.post("/classes/:classId/join-code", authRequired, async (req: AuthRequest
     return res.json({ joinCode: code });
   } catch (error: unknown) {
     logger.error("[edu/enrollment] set join code failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -79,7 +81,7 @@ router.post("/classes/join", authRequired, async (req: AuthRequest, res: Respons
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
 
     try {
-      const result = await enrollViaJoinCode(req.userId, parsed.data.code);
+      const result = await enrollViaJoinCode(req.userId, parsed.data.code, req.eduSessionVersion);
       if (!result.alreadyEnrolled) {
         await writeAudit({
           actorType: "USER",
@@ -101,6 +103,7 @@ router.post("/classes/join", authRequired, async (req: AuthRequest, res: Respons
     }
   } catch (error: unknown) {
     logger.error("[edu/enrollment] enroll failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -120,7 +123,7 @@ router.post("/students/claim", authRequired, async (req: AuthRequest, res: Respo
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
 
     try {
-      const result = await claimStudentProfile(req.userId, parsed.data.username, parsed.data.password);
+      const result = await claimStudentProfile(req.userId, parsed.data.username, parsed.data.password, req.eduSessionVersion);
       if (!result.alreadyClaimed) {
         await writeAudit({
           actorType: "USER",
@@ -144,6 +147,7 @@ router.post("/students/claim", authRequired, async (req: AuthRequest, res: Respo
     }
   } catch (error: unknown) {
     logger.error("[edu/enrollment] claim failed", { requestId: req.requestId, err: error });
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

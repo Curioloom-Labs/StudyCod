@@ -30,7 +30,7 @@ import {
   updateControlWorkFormula,
   type TestData,
 } from "../../lib/api/edu";
-import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { MarkdownView } from "../../components/MarkdownView";
 import { useDialogA11y } from "../../components/ui/useDialogA11y";
 import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
@@ -187,7 +187,7 @@ const Modal: React.FC<{ title: string; caption?: string; children: React.ReactNo
           <h2 id={titleId} className="mt-2 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.06em]">{title}</h2>
           {caption && <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted dark:text-text-secondary">{caption}</p>}
         </div>
-        <button type="button" onClick={onClose} aria-label={tr("Закрити вікно", "Close dialog")} className="grid size-10 shrink-0 place-items-center rounded-full bg-bg-hover text-text-muted transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 dark:bg-white/[.07] dark:text-text-primary">
+        <button type="button" onClick={onClose} aria-label={tr("Закрити вікно", "Close dialog")} className="grid size-10 shrink-0 place-items-center rounded-full bg-bg-hover text-text-muted transition  focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 dark:bg-white/[.07] dark:text-text-primary">
           <X className="size-4" aria-hidden="true" />
         </button>
       </div>
@@ -838,7 +838,7 @@ export const TopicStudioPage: React.FC = () => {
                         </button>}
                       </div>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <button type="button" onClick={() => void openTests(task)} className="inline-flex items-center gap-1 rounded-xl bg-bg-hover px-3 py-2 text-xs font-black text-accent-warn transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-warn/25 dark:bg-accent-warn/12 dark:text-accent-warn">
+                        <button type="button" onClick={() => void openTests(task)} className="inline-flex items-center gap-1 rounded-xl bg-bg-hover px-3 py-2 text-xs font-black text-accent-warn transition  focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-warn/25 dark:bg-accent-warn/12 dark:text-accent-warn">
                           <FlaskConical className="size-3.5" />
                           {tr("Тести", "Tests")}
                         </button>
@@ -1052,7 +1052,7 @@ export const TopicStudioPage: React.FC = () => {
                       <span className="mb-1 block text-[11px] font-black uppercase tracking-[.1em] text-text-muted dark:text-text-secondary">{tr("Кількість", "Count")}</span>
                       <input id="topic-test-generation-count" name="testGenerationCount" value={testGenerationCount} onChange={(event) => setTestGenerationCount(event.target.value)} type="number" min="1" max="50" className="w-24 rounded-xl border border-border/10 bg-white px-3 py-2 text-sm outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-bg-code" />
                     </label>
-                    <button type="button" disabled={busy} onClick={() => void generateTests()} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-black text-primary-foreground transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:opacity-45">
+                    <button type="button" disabled={busy} onClick={() => void generateTests()} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-xs font-black text-primary-foreground transition  focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:opacity-45">
                       <Sparkles className="size-3.5" aria-hidden="true" />
                       {busy ? tr("Генерую…", "Generating…") : tr("Згенерувати", "Generate")}
                     </button>
@@ -1084,7 +1084,7 @@ export const TopicStudioPage: React.FC = () => {
                       <input name="importIsHidden" type="checkbox" checked={importIsHidden} onChange={(event) => setImportIsHidden(event.target.checked)} />
                       {tr("Приховані", "Hidden")}
                     </label>
-                    <button type="button" disabled={busy || importFiles.length === 0} onClick={() => void importTestFiles()} className="inline-flex items-center gap-2 rounded-xl border border-primary-strong/25 bg-white px-3 py-2.5 text-xs font-black text-primary-strong transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:opacity-45 dark:bg-bg-code dark:text-primary-soft">
+                    <button type="button" disabled={busy || importFiles.length === 0} onClick={() => void importTestFiles()} className="inline-flex items-center gap-2 rounded-xl border border-primary-strong/25 bg-white px-3 py-2.5 text-xs font-black text-primary-strong transition  focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:opacity-45 dark:bg-bg-code dark:text-primary-soft">
                       <Upload className="size-3.5" aria-hidden="true" />
                       {tr("Імпортувати", "Import")}{importFiles.length ? ` (${importFiles.length})` : ""}
                     </button>
@@ -1101,7 +1101,7 @@ export const TopicStudioPage: React.FC = () => {
                       <input name="testIsHidden" type="checkbox" checked={testForm.isHidden} onChange={(event) => setTestForm({ ...testForm, isHidden: event.target.checked })} />
                       {tr("Прихований", "Hidden")}
                     </label>
-                    <button type="button" disabled={busy || !testForm.expectedOutput.trim()} onClick={() => void addTest()} className="rounded-xl bg-primary px-4 py-3 text-sm font-black text-primary-foreground transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:opacity-45">
+                    <button type="button" disabled={busy || !testForm.expectedOutput.trim()} onClick={() => void addTest()} className="rounded-xl bg-primary px-4 py-3 text-sm font-black text-primary-foreground transition  focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 disabled:opacity-45">
                       {tr("Додати до набору", "Add to test set")}
                     </button>
                   </div>

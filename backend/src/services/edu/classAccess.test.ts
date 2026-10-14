@@ -27,6 +27,11 @@ test("ORG_ADMIN reaches a class they do not own", () => {
   assert.equal(decideClassAccess(f, "STUDENT_MANAGE"), true);
 });
 
+test("an orphaned assignment does not inherit legacy primary-owner access", () => {
+  for (const capability of CAPABILITIES) assert.equal(decideClassAccess({ isOwner: true, orgRole: null, legacyOwnership: false }, capability), false);
+  assert.equal(decideClassAccess({ isOwner: true, orgRole: null, legacyOwnership: true }, "CLASS_VIEW"), true);
+});
+
 test("teaching staff do not reach a non-owned class", () => {
   for (const role of ["ASSISTANT", "TEACHER"] as const) {
     const f = facts(false, role);
@@ -43,12 +48,18 @@ test("non-owner with no org role has no access (cross-org isolation)", () => {
   }
 });
 
-test("owner downgraded to ASSISTANT in org still keeps TEACHER powers in own class", () => {
-  // higherRole(TEACHER, ASSISTANT) === TEACHER — ownership is never weakened by
-  // a lower org membership role.
+test("assignment cannot raise an assistant above current org capabilities", () => {
   const f = facts(true, "ASSISTANT");
-  assert.equal(effectiveClassRole(f), "TEACHER");
-  assert.equal(decideClassAccess(f, "CLASS_DELETE"), true);
+  assert.equal(effectiveClassRole(f), "ASSISTANT");
+  assert.equal(decideClassAccess(f, "CLASS_DELETE"), false);
+  assert.equal(decideClassAccess(f, "STUDENT_MANAGE"), false);
+  assert.equal(decideClassAccess(f, "GRADE_EDIT"), true);
+});
+
+test("historical ownership cannot undo a current student or parent role", () => {
+  for (const role of ["STUDENT", "PARENT"] as const) for (const capability of CAPABILITIES) {
+    assert.equal(decideClassAccess(facts(true, role), capability), false, `${role}: ${capability}`);
+  }
 });
 
 test("owner who is also ORG_ADMIN gets the higher (admin) role", () => {

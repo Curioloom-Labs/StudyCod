@@ -9,6 +9,7 @@ const databaseUrl = String(process.env.DB_CONTRACT_DATABASE_URL ?? "").trim();
 type ColumnRow = RowDataPacket & {
   Field: string;
   Null: string;
+  Default: string | number | null;
 };
 
 type IndexRow = RowDataPacket & {
@@ -63,6 +64,7 @@ test("database contract: critical schema, indexes, and hot-path plans", {
       "classes",
       "courses",
       "students",
+      "edu_credential_operations",
       "topics_new",
       "maintenance_state",
       "edu_grades",
@@ -91,7 +93,32 @@ test("database contract: critical schema, indexes, and hot-path plans", {
 
     assert.equal(classRows.find(row => row.Field === "org_id")?.Null, "NO", "classes.org_id must be NOT NULL");
     assert.ok(studentRows.some(row => row.Field === "deleted_at"), "students.deleted_at must exist");
+    const managedAccount = studentRows.find(row => row.Field === "user_account_managed");
+    assert.equal(managedAccount?.Null, "NO", "managed student account flag must exist and be non-null");
+    assert.equal(Number(managedAccount?.Default), 0, "joining a class must not implicitly waive personal account email verification");
+    const credentialVersion = studentRows.find(row => row.Field === "credential_version");
+    assert.equal(credentialVersion?.Null, "NO", "student credential version must be non-null");
+    assert.equal(Number(credentialVersion?.Default), 0, "existing student sessions start at credential version zero");
+    const userRows = await columns(connection, "users");
+    const eduSessionVersion = userRows.find(row => row.Field === "edu_session_version");
+    assert.equal(eduSessionVersion?.Null, "NO", "EDU User session revocation must be durable");
+    assert.equal(Number(eduSessionVersion?.Default), 0, "legacy EDU sessions start at version zero");
+    assert.equal(userRows.find(row => row.Field === "edu_account_setup_required")?.Null, "NO", "school account activation state must be durable");
+    assert.equal(Number(userRows.find(row => row.Field === "edu_account_setup_required")?.Default), 0, "personal accounts are not implicitly school-issued");
+    assert.equal(userRows.find(row => row.Field === "edu_issuer_org_id")?.Null, "YES", "private accounts have no school issuer");
     assert.equal(maintenanceRows.find(row => row.Field === "until")?.Null, "YES", "maintenance_state.until must remain nullable");
+
+    const operationColumns = await columns(connection, "edu_credential_operations");
+    for (const field of ["actor_id", "class_id", "operation_key", "kind", "state", "request_hash", "student_ids", "expires_at"]) {
+      assert.equal(operationColumns.find(row => row.Field === field)?.Null, "NO", `credential operation ${field} must be non-null`);
+    }
+    assert.equal(operationColumns.find(row => row.Field === "response_cipher")?.Null, "YES", "acknowledgment must be able to erase the credential ciphertext");
+    const operationIndexes = await indexNames(connection, "edu_credential_operations");
+    const invitationIndexes = await indexNames(connection, "org_invitations");
+    assert.equal(invitationIndexes.has("idx_invite_email_status"), true, "pending EDU invitation context requires indexed email/status lookup");
+    for (const name of ["uq_edu_credential_operation_actor_key", "idx_edu_credential_operation_class_actor", "idx_edu_credential_operation_expiry"]) {
+      assert.equal(operationIndexes.has(name), true, `missing credential operation index: ${name}`);
+    }
 
     const [gradeIndexes, summaryIndexes, topicIndexes] = await Promise.all([
       indexNames(connection, "edu_grades"),
