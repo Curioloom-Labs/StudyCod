@@ -236,49 +236,16 @@
   }
 
   /* =========================
-     KaTeX – Dark Theme
+     KaTeX theme defaults
      ========================= */
   .katex,
-  .katex-display,
-  .katex .katex-html,
-  .katex .base,
-  .katex .mord,
-  .katex .mrel,
-  .katex .mbin,
-  .katex .mop,
-  .katex .mopen,
-  .katex .mclose,
-  .katex .mpunct,
-  .katex .mfrac,
-  .katex .msqrt,
-  .katex .mroot,
-  .katex .msub,
-  .katex .msup,
-  .katex .munderover,
-  .katex .mtable,
-  .katex .mspace,
-  .katex .mtext,
-  .katex .mstyle,
-  .katex .minner,
-  .katex .mord.mathdefault,
-  .katex .vlist-t,
-  .katex .vlist-s,
-  .katex .sizing,
-  .katex .delimsizing,
-  .katex .nulldelimer,
-  .katex .delim-size1,
-  .katex .delim-size2,
-  .katex .delim-size3,
-  .katex .delim-size4 {
-    color: var(--text-primary) !important;
+  .katex-display {
+    /* Inner spans inherit this default; explicit LaTeX colors stay intact. */
+    color: var(--text-primary);
   }
 
   .katex .katex-mathml {
     display: none;
-  }
-
-  .katex * {
-    color: inherit !important;
   }
 
   /* =========================

@@ -876,12 +876,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
       prose-blockquote:not-italic prose-blockquote:my-4
       prose-blockquote:[&>p]:text-text-primary prose-blockquote:[&>p]:text-sm
       prose-blockquote:[&>p>code]:text-text-primary
-      [&_.katex]:!text-text-primary
       [&_.katex-display]:my-4
-      [&_.katex-display]:!text-text-primary
-      [&_.katex_mathit]:!text-text-primary
-      [&_.katex_main]:!text-text-primary
-      [&_.katex_math]:!text-text-primary
       [&_.katex]:!bg-transparent
       ${taskMarkdownClasses}`}>
       <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={codeComponents}>
