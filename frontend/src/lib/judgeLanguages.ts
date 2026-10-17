@@ -77,7 +77,7 @@ export const JUDGE_FILE_EXTENSIONS: Record<JudgeLanguage, string> = {
   lua: "lua", perl: "pl", php: "php", ruby: "rb", swift: "swift",
 };
 
-/** Small, valid starting points used when a task has no template for the selected language. */
+/** Stable starting points used by standard coding tasks for every problem. */
 export const JUDGE_STARTER_TEMPLATES: Record<JudgeLanguage, string> = {
   java: "import java.util.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        // TODO: solve the problem\n    }\n}\n",
   python: "import sys\n\ndata = sys.stdin.read().split()\n# TODO: solve the problem\n",
@@ -102,12 +102,12 @@ export const JUDGE_STARTER_TEMPLATES: Record<JudgeLanguage, string> = {
 
 export function templateForJudgeLanguage(
   language: JudgeLanguage,
-  options: { templatesByLanguage?: Record<string, string> | null; fallback?: string | null; fallbackLanguage?: JudgeLanguage | null },
+  _options: { templatesByLanguage?: Record<string, string> | null; fallback?: string | null; fallbackLanguage?: JudgeLanguage | null } = {},
 ): string {
-  const specific = options.templatesByLanguage?.[language];
-  if (typeof specific === "string" && specific.trim()) return specific;
-  const fallback = String(options.fallback ?? "");
-  if (fallback.trim() && options.fallbackLanguage === language) return fallback;
+  // Standard tasks always start from the platform template for the selected
+  // language. Task-authored templates can be stale or keyed to the wrong
+  // language, which can put (for example) C++ code in the Java editor.
+  // EDU has its own teacher-controlled template flow and does not use this helper.
   return JUDGE_STARTER_TEMPLATES[language];
 }
 

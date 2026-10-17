@@ -510,8 +510,9 @@ export const LibraryTaskSolvePage: React.FC = () => {
           setVisibleTests([]);
           setLoadError(null);
           setJudgeLanguage("python");
-          setCode(previewLibraryTask.template);
-          setLastSavedCode(previewLibraryTask.template);
+          const starter = getTemplateForLanguage(previewLibraryTask, "python");
+          setCode(starter);
+          setLastSavedCode(starter);
           setLastSavedFiles([]);
           setUseFiles(false);
           return;

@@ -1076,7 +1076,7 @@ export const ContestProblemPage: React.FC = () => {
       if (isPreview()) {
         setStatement(previewStatement);
         setLanguage("python");
-        setCode(previewStatement.task.template);
+        setCode(templateForJudgeLanguage("python", {}));
         setSubmissions([{ id: 1, verdict: "AC", score: 100, createdAt: new Date().toISOString() }]);
         return;
       }
@@ -1102,7 +1102,7 @@ export const ContestProblemPage: React.FC = () => {
     } catch (caught) {
       if (isPreview()) {
         setStatement(previewStatement);
-        setCode(previewStatement.task.template);
+        setCode(templateForJudgeLanguage("python", {}));
         setSubmissions([
           {
             id: 1,
