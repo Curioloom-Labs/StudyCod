@@ -82,6 +82,9 @@ export class Contest {
   @Column({ type: "boolean", default: true, name: "allow_upsolve" })
   allowUpsolve!: boolean;
 
+  @Column({ type: "boolean", default: false, name: "safety_alerts_enabled" })
+  safetyAlertsEnabled!: boolean;
+
   // Ranking model for the live scoreboard:
   //  - IOI: rank by sum of best partial score per problem (default, matches the
   //    submit pipeline which records partial/subtask scores).

@@ -56,6 +56,7 @@ import {
 } from "../../lib/api/contests";
 import { getClasses, uploadStatementImage, type Class as EduClass } from "../../lib/api/edu";
 import { CONTEST_BANNER_THEMES, CONTEST_ICONS } from "./contestBranding";
+import { ContestSafetyGate } from "./ContestSafetyGate";
 import {
   importLibraryTaskArchives,
   listApprovedLibraryTasks,
@@ -944,6 +945,7 @@ export const ContestPage: React.FC = () => {
   const [settingsStartsAt, setSettingsStartsAt] = React.useState("");
   const [settingsEndsAt, setSettingsEndsAt] = React.useState("");
   const [settingsAllowUpsolve, setSettingsAllowUpsolve] = React.useState(true);
+  const [settingsSafetyAlertsEnabled, setSettingsSafetyAlertsEnabled] = React.useState(false);
   const [settingsScoringMode, setSettingsScoringMode] = React.useState<"IOI" | "ICPC">("IOI");
   const [settingsVisibility, setSettingsVisibility] = React.useState<ContestVisibility>("PUBLIC");
   const [settingsJoinCode, setSettingsJoinCode] = React.useState("");
@@ -3252,6 +3254,7 @@ export const ContestPage: React.FC = () => {
     setSettingsStartsAt(toDateTimeLocalInput(data.contest.startsAt));
     setSettingsEndsAt(toDateTimeLocalInput(data.contest.endsAt));
     setSettingsAllowUpsolve(Boolean(data.contest.allowUpsolve));
+    setSettingsSafetyAlertsEnabled(Boolean(data.contest.safetyAlertsEnabled));
     setSettingsScoringMode(data.contest.scoringMode === "ICPC" ? "ICPC" : "IOI");
     setSettingsVisibility(data.contest.visibility ?? "PUBLIC");
     setSettingsJoinCode("");
@@ -3332,6 +3335,7 @@ export const ContestPage: React.FC = () => {
         ...(settingsVisibility === "PRIVATE_CODE" && settingsJoinCode.trim() ? { joinCode: settingsJoinCode.trim() } : {}),
         ...(settingsVisibility === "CLASS" ? { classId: Number(settingsClassId) } : {}),
         allowUpsolve: settingsAllowUpsolve,
+        safetyAlertsEnabled: settingsSafetyAlertsEnabled,
         scoringMode: settingsScoringMode,
         icon: settingsIcon,
         iconImageUrl: settingsIconImageUrl,
@@ -3630,7 +3634,10 @@ export const ContestPage: React.FC = () => {
   };
 
   return (
-    <div className="contest-page-shell">
+    <div data-contest-safety-background="" className="contest-page-shell">
+      {data?.contest.id === contestId && data.contest.safetyAlertsEnabled && data.access.isJoined && !data.access.canManage
+        ? <ContestSafetyGate contestId={contestId} onUnlocked={() => load()} />
+        : null}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Link to="/contest/contests" className="inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -6112,6 +6119,22 @@ export const ContestPage: React.FC = () => {
           <label className="flex items-center gap-2 text-sm font-mono text-text-primary">
             <input type="checkbox" checked={settingsAllowUpsolve} onChange={(e) => setSettingsAllowUpsolve(e.target.checked)} />
             {tr("Дозволити дорішування після завершення", "Allow upsolve after finish")}
+          </label>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-bg-base/45 p-4 text-sm">
+            <input
+              type="checkbox"
+              checked={settingsSafetyAlertsEnabled}
+              disabled={!data.contest.safetyAlertProviderReady && !settingsSafetyAlertsEnabled}
+              onChange={(event) => setSettingsSafetyAlertsEnabled(event.target.checked)}
+              className="mt-0.5 size-4 accent-[#00b869]"
+            />
+            <span>
+              <span className="block font-semibold text-text-primary">{tr("Попереджати учасників про повітряні загрози", "Warn participants about air threats")}</span>
+              <span className="mt-1 block text-xs leading-5 text-text-secondary">{tr("Учасник обере місто, район або область. Під час тривоги чи повідомлення про загрозу з’явиться блокувальне вікно з вибором: продовжити в безпечному місці або взяти паузу до 10 хвилин. Фактичний час паузи додається лише до його контесту.", "Participants choose a city, district, or region. During an air alert or threat, a blocking prompt lets them continue from safety or take up to 10 minutes; only their own contest time is extended by the pause.")}</span>
+              {!data.contest.safetyAlertProviderReady && <span className="mt-2 block text-xs font-medium text-accent-error">{tr("Сервіс сповіщень тимчасово недоступний. Спробуйте пізніше.", "The alert service is temporarily unavailable. Try again later.")}</span>}
+              {data.contest.safetyAlertProviderReady && <span className="mt-2 block text-xs text-text-secondary">{tr("API не потребує токена. Учасник обирає доступну локацію; GPS-координати не збираються.", "No API token is needed. Participants choose an available area; GPS coordinates are not collected.")}</span>}
+            </span>
           </label>
 
           <div>

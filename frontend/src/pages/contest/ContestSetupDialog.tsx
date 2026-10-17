@@ -44,6 +44,7 @@ type ContestDraft = {
   scoreboardVisibility: ContestScoreboardVisibility;
   participantAccessMode: ContestParticipantAccessMode;
   allowUpsolve: boolean;
+  safetyAlertsEnabled: boolean;
   scheduleEnabled: boolean;
   startsAt: string;
   endsAt: string;
@@ -66,6 +67,7 @@ const DEFAULT_DRAFT: ContestDraft = {
   scoreboardVisibility: "LIVE",
   participantAccessMode: "SELF_REGISTRATION",
   allowUpsolve: true,
+  safetyAlertsEnabled: false,
   scheduleEnabled: false,
   startsAt: "",
   endsAt: "",
@@ -207,6 +209,7 @@ export function ContestSetupDialog({
       safeDraft.difficulty || safeDraft.visibility !== "PUBLIC" || safeDraft.classId ||
       safeDraft.scheduleEnabled || safeDraft.startsAt || safeDraft.endsAt ||
       safeDraft.scoringMode !== "IOI" || !safeDraft.allowUpsolve ||
+      safeDraft.safetyAlertsEnabled ||
       safeDraft.icon !== "🏆" || Boolean(safeDraft.iconImageUrl) || safeDraft.bannerTheme !== "forest" || Boolean(safeDraft.bannerImageUrl) ||
       safeDraft.scoreboardVisibility !== "LIVE" || safeDraft.participantAccessMode !== "SELF_REGISTRATION",
     );
@@ -449,6 +452,7 @@ export function ContestSetupDialog({
         } : {}),
         isPublished: false,
         allowUpsolve: draft.allowUpsolve,
+        safetyAlertsEnabled: draft.safetyAlertsEnabled,
         scoringMode: draft.scoringMode,
         icon: draft.icon,
         iconImageUrl: draft.iconImageUrl,
@@ -664,6 +668,10 @@ export function ContestSetupDialog({
                       </div>
                       <p className="mt-4 text-xs text-text-muted dark:text-text-secondary">{tr("Час показано у часовому поясі", "Times are shown in the")} <span className="font-semibold">{timeZone}</span>.</p>
                     </div>}
+                    <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-border/10 px-4 py-3.5 text-sm dark:border-white/10">
+                      <input type="checkbox" name="safetyAlertsEnabled" checked={draft.safetyAlertsEnabled} onChange={(event) => update("safetyAlertsEnabled", event.target.checked)} className="mt-0.5 size-4 accent-[#00b869]" />
+                      <span><span className="block font-bold text-text-primary dark:text-text-primary">{tr("Попереджати про повітряні тривоги", "Warn participants about air raid alerts")}</span><span className="mt-1 block text-xs leading-5 font-normal text-text-muted dark:text-text-secondary">{tr("Перед стартом учасники вкажуть населений пункт. Під час тривоги контест призупиниться для тих, кому потрібно перейти в безпечне місце; використаний час буде додано їм індивідуально.", "Before the contest, participants choose their location. During an alert, anyone who needs to move to safety can pause; their pause time is added to their own contest time.")}</span></span>
+                    </label>
                     <div className="mt-5 rounded-2xl bg-bg-surface px-4 py-3 text-sm leading-6 text-text-muted dark:bg-white/[.04] dark:text-text-secondary"><span className="font-bold text-text-primary dark:text-text-primary">{tr("Після створення:", "After creation:")}</span> {tr("зможеш додати задачі, переглянути таблицю та опублікувати чернетку, коли все буде готово.", "you can add problems, review the scoreboard, and publish the draft when everything is ready.")}</div>
                   </section>}
                 </div>

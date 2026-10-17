@@ -59,6 +59,24 @@ export class ContestParticipant {
   @Column({ type: "varchar", length: 180, nullable: true, name: "notification_full_name" })
   notificationFullName?: string | null;
 
+  @Column({ type: "int", nullable: true, name: "safety_location_uid" })
+  safetyLocationUid?: number | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true, name: "safety_location_name" })
+  safetyLocationName?: string | null;
+
+  @Column({ type: "datetime", precision: 3, nullable: true, name: "safety_pause_started_at" })
+  safetyPauseStartedAt?: Date | null;
+
+  @Column({ type: "datetime", precision: 3, nullable: true, name: "safety_pause_until" })
+  safetyPauseUntil?: Date | null;
+
+  @Column({ type: "int", default: 0, name: "safety_extension_seconds" })
+  safetyExtensionSeconds!: number;
+
+  @Column({ type: "varchar", length: 180, nullable: true, name: "safety_acknowledged_alert_key" })
+  safetyAcknowledgedAlertKey?: string | null;
+
   @Column({ type: "text", nullable: true, name: "disqualification_reason" })
   disqualificationReason?: string | null;
 

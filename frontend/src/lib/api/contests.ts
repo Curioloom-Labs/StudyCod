@@ -57,6 +57,8 @@ export type ContestDetails = {
     endsAt: string | null;
     isPublished: boolean;
     allowUpsolve: boolean;
+    safetyAlertsEnabled?: boolean;
+    safetyAlertProviderReady?: boolean;
     scoringMode?: ContestScoringMode;
     scoreboardVisibility?: ContestScoreboardVisibility;
     participantAccessMode?: ContestParticipantAccessMode;
@@ -71,6 +73,7 @@ export type ContestDetails = {
     canManage?: boolean;
     canDelete?: boolean;
     isPaused?: boolean;
+    personalEndsAt?: string | null;
   };
   problems: ContestProblemListItem[];
   participantsCount: number;
@@ -90,6 +93,7 @@ export type CreateContestRequest = {
   endsAt?: string;
   isPublished?: boolean;
   allowUpsolve?: boolean;
+  safetyAlertsEnabled?: boolean;
   scoringMode?: ContestScoringMode;
   icon?: string;
   iconImageUrl?: string | null;
@@ -111,6 +115,7 @@ export type UpdateContestRequest = {
   endsAt?: string | null;
   isPublished?: boolean;
   allowUpsolve?: boolean;
+  safetyAlertsEnabled?: boolean;
   scoringMode?: ContestScoringMode;
   icon?: string;
   iconImageUrl?: string | null;
@@ -192,6 +197,28 @@ export type ContestRunResult = {
 };
 
 export type ContestScoringMode = "IOI" | "ICPC";
+
+export type ContestSafetyLocation = {
+  uid: number;
+  name: string;
+  type: string;
+  oblastUid: number | null;
+};
+
+export type ContestSafetyState = {
+  enabled: boolean;
+  providerReady: boolean;
+  availableLocations: ContestSafetyLocation[];
+  location: { uid: number; name: string; type: string } | null;
+  needsLocation: boolean;
+  paused: boolean;
+  pausedUntil: string | null;
+  pauseSecondsRemaining: number;
+  extensionSeconds: number;
+  effectiveEndsAt: string | null;
+  alertPending: boolean;
+  alertLocationName: string | null;
+};
 
 export type ScoreboardProblem = { id: number; order: number; label: string; maxScore?: number };
 
@@ -401,6 +428,23 @@ export async function listContests(params: ContestListQuery = {}): Promise<Conte
 export async function getContestDetails(contestId: number): Promise<ContestDetails> {
   const res = await api.get(`/contests/${contestId}`);
   return res.data;
+}
+
+export async function getContestSafetyState(contestId: number): Promise<ContestSafetyState> {
+  const res = await api.get(`/contests/${contestId}/safety`);
+  return res.data;
+}
+
+export async function setContestSafetyLocation(contestId: number, uid: number): Promise<void> {
+  await api.put(`/contests/${contestId}/safety/location`, { uid });
+}
+
+export async function respondToContestSafetyAlert(contestId: number, safe: boolean): Promise<void> {
+  await api.post(`/contests/${contestId}/safety/response`, { safe });
+}
+
+export async function endContestSafetyPause(contestId: number): Promise<void> {
+  await api.post(`/contests/${contestId}/safety/pause/end`);
 }
 
 export async function joinContest(contestId: number, code?: string): Promise<{ joined: boolean; participantId: number }> {

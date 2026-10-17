@@ -41,6 +41,7 @@ import { publishContestEvent, subscribeContestEvents, type ContestEvent } from "
 import { ALL_JUDGE_LANGUAGES } from "../config/judgeLanguages";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { askTutor } from "../services/edu/aiTutor";
+import { getActiveAirRaidAlert, isAirAlertProviderConfigured, listAirAlertLocations } from "../services/contest/airAlerts";
 
 const contestsRouter = Router();
 contestsRouter.use((req, res, next) => {
@@ -204,6 +205,162 @@ function getContestTimeState(contest: Contest): { started: boolean; finished: bo
   const finished = endsAtMs === null ? false : now > endsAtMs;
   const active = started && !finished;
   return { started, finished, active };
+}
+
+const CONTEST_SAFETY_PAUSE_MS = 10 * 60_000;
+
+type ContestSafetySnapshot = {
+  enabled: boolean;
+  providerReady: boolean;
+  availableLocations: Awaited<ReturnType<typeof listAirAlertLocations>>;
+  location: { uid: number; name: string; type: string } | null;
+  needsLocation: boolean;
+  paused: boolean;
+  pausedUntil: string | null;
+  pauseSecondsRemaining: number;
+  extensionSeconds: number;
+  effectiveEndsAt: string | null;
+  alertPending: boolean;
+  alertLocationName: string | null;
+  activeAlertKey: string | null;
+  participant: ContestParticipant | null;
+};
+
+async function findRequestContestParticipant(contestId: number, req: AuthRequest): Promise<ContestParticipant | null> {
+  if (!req.userId && !req.studentId) return null;
+  return participantRepo().findOne({
+    where: {
+      contest: { id: contestId },
+      ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }),
+    },
+  });
+}
+
+async function getContestScoreboardReleaseAtMs(contest: Contest): Promise<number | null> {
+  if (!contest.endsAt) return null;
+  const officialEndMs = new Date(contest.endsAt).getTime();
+  if (!contest.safetyAlertsEnabled) return officialEndMs;
+  const participants = await participantRepo().find({
+    where: { contest: { id: contest.id } },
+    select: { id: true, safetyExtensionSeconds: true, safetyPauseStartedAt: true, safetyPauseUntil: true },
+  });
+  const maxExtensionSeconds = participants.reduce((max, participant) => {
+    const savedExtension = Math.max(0, Number(participant.safetyExtensionSeconds ?? 0));
+    const pauseStartedAt = participant.safetyPauseStartedAt ? new Date(participant.safetyPauseStartedAt).getTime() : NaN;
+    const pauseUntil = participant.safetyPauseUntil ? new Date(participant.safetyPauseUntil).getTime() : NaN;
+    const plannedPause = Number.isFinite(pauseStartedAt) && Number.isFinite(pauseUntil)
+      ? Math.min(600, Math.max(0, Math.ceil((pauseUntil - pauseStartedAt) / 1000)))
+      : 0;
+    return Math.max(max, savedExtension + plannedPause);
+  }, 0);
+  return officialEndMs + maxExtensionSeconds * 1000;
+}
+
+async function settleExpiredContestSafetyPause(participant: ContestParticipant): Promise<ContestParticipant> {
+  const initialStartMs = participant.safetyPauseStartedAt ? new Date(participant.safetyPauseStartedAt).getTime() : NaN;
+  const initialUntilMs = participant.safetyPauseUntil ? new Date(participant.safetyPauseUntil).getTime() : NaN;
+  if (!Number.isFinite(initialStartMs) || !Number.isFinite(initialUntilMs) || initialUntilMs > Date.now()) return participant;
+
+  return AppDataSource.transaction(async (manager) => {
+    const repo = manager.getRepository(ContestParticipant);
+    const current = await repo.findOne({ where: { id: participant.id }, lock: { mode: "pessimistic_write" } });
+    if (!current) return participant;
+    const startedAtMs = current.safetyPauseStartedAt ? new Date(current.safetyPauseStartedAt).getTime() : NaN;
+    const untilMs = current.safetyPauseUntil ? new Date(current.safetyPauseUntil).getTime() : NaN;
+    if (!Number.isFinite(startedAtMs) || !Number.isFinite(untilMs) || untilMs > Date.now()) return current;
+    const elapsedSeconds = Math.min(600, Math.max(0, Math.ceil((untilMs - startedAtMs) / 1000)));
+    current.safetyExtensionSeconds = Math.max(0, Number(current.safetyExtensionSeconds ?? 0)) + elapsedSeconds;
+    current.safetyPauseStartedAt = null;
+    current.safetyPauseUntil = null;
+    return repo.save(current);
+  });
+}
+
+async function getContestSafetySnapshot(contest: Contest, req: AuthRequest): Promise<ContestSafetySnapshot> {
+  const providerReady = isAirAlertProviderConfigured();
+  const isManager = req.userId ? await canManageContest({ contest, req }) : false;
+  const enabled = Boolean(contest.safetyAlertsEnabled) && !isManager;
+  if (!enabled) {
+    return {
+      enabled: false,
+      providerReady,
+      availableLocations: [],
+      location: null,
+      needsLocation: false,
+      paused: false,
+      pausedUntil: null,
+      pauseSecondsRemaining: 0,
+      extensionSeconds: 0,
+      effectiveEndsAt: contest.endsAt ? new Date(contest.endsAt).toISOString() : null,
+      alertPending: false,
+      alertLocationName: null,
+      activeAlertKey: null,
+      participant: null,
+    };
+  }
+  if (!providerReady) throw new Error("AIR_ALERT_PROVIDER_NOT_CONFIGURED");
+
+  const availableLocations = await listAirAlertLocations();
+
+  let participant = await findRequestContestParticipant(contest.id, req);
+  if (!participant && (req.userId || req.studentId)) {
+    participant = await getOrCreateParticipant({ contestId: contest.id, req });
+  }
+  if (!participant) throw new Error("CONTEST_PARTICIPANT_REQUIRED");
+
+  participant = await settleExpiredContestSafetyPause(participant);
+  const pauseUntilMs = participant.safetyPauseUntil ? new Date(participant.safetyPauseUntil).getTime() : NaN;
+  const paused = Number.isFinite(pauseUntilMs) && pauseUntilMs > Date.now();
+  const location = participant.safetyLocationUid != null
+    ? availableLocations.find((item) => item.uid === Number(participant!.safetyLocationUid)) ?? null
+    : null;
+  let alert = null as Awaited<ReturnType<typeof getActiveAirRaidAlert>>;
+
+  const extensionSeconds = Math.max(0, Number(participant.safetyExtensionSeconds ?? 0));
+  const startedAtMs = contest.startsAt ? new Date(contest.startsAt).getTime() : null;
+  const officialEndMs = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
+  const effectiveEndMs = officialEndMs == null ? null : officialEndMs + extensionSeconds * 1000;
+  const contestStarted = startedAtMs == null || Date.now() >= startedAtMs;
+  const contestWindowOpen = effectiveEndMs == null || Date.now() <= effectiveEndMs;
+  if (location && !paused && contestStarted && contestWindowOpen) alert = await getActiveAirRaidAlert(location.uid);
+  return {
+    enabled: true,
+    providerReady,
+    availableLocations,
+    location: location ? { uid: location.uid, name: location.name, type: location.type } : null,
+    needsLocation: !location,
+    paused,
+    pausedUntil: paused ? new Date(pauseUntilMs).toISOString() : null,
+    pauseSecondsRemaining: paused ? Math.max(0, Math.ceil((pauseUntilMs - Date.now()) / 1000)) : 0,
+    extensionSeconds,
+    effectiveEndsAt: effectiveEndMs == null ? null : new Date(effectiveEndMs).toISOString(),
+    alertPending: Boolean(alert && alert.key !== participant.safetyAcknowledgedAlertKey && !paused),
+    alertLocationName: alert?.locationName ?? null,
+    activeAlertKey: alert?.key ?? null,
+    participant,
+  };
+}
+
+async function prepareContestSafetyAccess(contest: Contest, req: AuthRequest): Promise<{
+  participant: ContestParticipant | null;
+  issue: { status: number; message: string } | null;
+}> {
+  try {
+    const snapshot = await getContestSafetySnapshot(contest, req);
+    if (!snapshot.enabled) return { participant: null, issue: null };
+    if (snapshot.needsLocation) return { participant: snapshot.participant, issue: { status: 423, message: "SAFETY_LOCATION_REQUIRED" } };
+    if (snapshot.paused) return { participant: snapshot.participant, issue: { status: 423, message: "SAFETY_PAUSED" } };
+    if (snapshot.alertPending) return { participant: snapshot.participant, issue: { status: 423, message: "SAFETY_ALERT_RESPONSE_REQUIRED" } };
+    if (snapshot.effectiveEndsAt) contest.endsAt = new Date(snapshot.effectiveEndsAt);
+    return { participant: snapshot.participant, issue: null };
+  } catch (error: unknown) {
+    const message = errorMessage(error);
+    if (message === "AIR_ALERT_PROVIDER_NOT_CONFIGURED" || message === "AIR_ALERT_PROVIDER_UNAVAILABLE" || message === "AIR_ALERT_PROVIDER_INVALID_RESPONSE") {
+      return { participant: null, issue: { status: 503, message: "AIR_ALERT_PROVIDER_UNAVAILABLE" } };
+    }
+    if (message === "CONTEST_PARTICIPANT_REQUIRED") return { participant: null, issue: { status: 403, message } };
+    throw error;
+  }
 }
 
 async function canViewContestMeta(params: { contest: Contest; req: AuthRequest }): Promise<boolean> {
@@ -800,11 +957,12 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
     const canManage = req.userId ? await canManageContest({ contest, req }) : false;
-    const afterEnd = contest.scoreboardVisibility === "AFTER_END" && (!contest.endsAt || Date.now() < new Date(contest.endsAt).getTime());
+    const scoreboardReleaseAtMs = await getContestScoreboardReleaseAtMs(contest);
+    const afterEnd = contest.scoreboardVisibility === "AFTER_END" && (scoreboardReleaseAtMs === null || Date.now() < scoreboardReleaseAtMs);
     const organizersOnly = contest.scoreboardVisibility === "ORGANIZERS_ONLY" && !canManage;
     if ((afterEnd || organizersOnly) && !canManage) {
       res.set("Cache-Control", "no-store");
-      return res.json({ rows: [], generatedAtMs: Date.now(), hidden: true, releaseAt: contest.endsAt ? new Date(contest.endsAt).toISOString() : null, hiddenReason: organizersOnly ? "ORGANIZERS_ONLY" : "AFTER_END" });
+      return res.json({ rows: [], generatedAtMs: Date.now(), hidden: true, releaseAt: scoreboardReleaseAtMs === null ? null : new Date(scoreboardReleaseAtMs).toISOString(), hiddenReason: organizersOnly ? "ORGANIZERS_ONLY" : "AFTER_END" });
     }
 
     const organizerUserIds = await getContestOrganizerUserIds(contestId, contest.createdBy?.id);
@@ -815,6 +973,11 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
 
     const officialSubs = subs.filter((s) => s.participant && s.problem && !isOrganizerParticipant(s.participant, organizerUserIds));
     const endsAtMs = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
+    const endMsByParticipant = new Map<number, number>(officialSubs.map((submission) => {
+      const participant = submission.participant!;
+      const extension = contest.safetyAlertsEnabled ? Math.max(0, Number(participant.safetyExtensionSeconds ?? 0)) * 1000 : 0;
+      return [participant.id, endsAtMs == null ? Number.POSITIVE_INFINITY : endsAtMs + extension];
+    }));
     const submissionTimes = officialSubs.map((s) => new Date(s.createdAt).getTime());
     const startMs = contest.startsAt
       ? new Date(contest.startsAt).getTime()
@@ -830,9 +993,12 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
         createdAtMs: new Date(s.createdAt).getTime(),
       }))
       // Only count submissions made during the contest window (exclude upsolve).
-      .filter((s) => endsAtMs == null || s.createdAtMs <= endsAtMs);
+      .filter((s) => {
+        const participantEndMs = endMsByParticipant.get(s.participantId) ?? endsAtMs;
+        return participantEndMs == null || s.createdAtMs <= participantEndMs;
+      });
 
-    const board = computeScoreboard(scoreSubs, { startMs, penaltyPerWrong: 20 });
+    const board = computeScoreboard(scoreSubs, { startMs, penaltyPerWrong: 20, endMsByParticipant });
 
     const participants: Record<number, string> = {};
     const problems: Record<number, string> = {};
@@ -1404,6 +1570,7 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       endsAt: z.string().datetime().optional(),
       isPublished: z.boolean().optional(),
       allowUpsolve: z.boolean().optional(),
+      safetyAlertsEnabled: z.boolean().optional(),
       scoringMode: z.enum(["IOI", "ICPC"]).optional(),
       icon: z.enum(["🏆", "⚡", "🎯", "🧠", "🚀", "🧩", "💻", "📚", "🔥", "🌟"]).optional(),
       iconImageUrl: z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/).nullable().optional(),
@@ -1417,6 +1584,10 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
     }
     const data = parsed.data;
+
+    if (data.safetyAlertsEnabled && !isAirAlertProviderConfigured()) {
+      return res.status(503).json({ message: "AIR_ALERT_PROVIDER_NOT_CONFIGURED" });
+    }
 
     if (data.startsAt && data.endsAt && new Date(data.endsAt).getTime() <= new Date(data.startsAt).getTime()) {
       return res.status(400).json({ message: "END_BEFORE_START" });
@@ -1451,6 +1622,7 @@ contestsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) =
       endsAt: data.endsAt ? new Date(data.endsAt) : null,
       isPublished: typeof data.isPublished === "boolean" ? data.isPublished : false,
       allowUpsolve: typeof data.allowUpsolve === "boolean" ? data.allowUpsolve : true,
+      safetyAlertsEnabled: data.safetyAlertsEnabled ?? false,
       scoringMode: data.scoringMode ?? "IOI",
       icon: data.icon ?? "🏆",
       iconImageUrl: data.iconImageUrl ?? null,
@@ -1496,6 +1668,7 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
         endsAt: z.string().datetime().nullable().optional(),
         isPublished: z.boolean().optional(),
         allowUpsolve: z.boolean().optional(),
+        safetyAlertsEnabled: z.boolean().optional(),
         scoringMode: z.enum(["IOI", "ICPC"]).optional(),
         icon: z.enum(["🏆", "⚡", "🎯", "🧠", "🚀", "🧩", "💻", "📚", "🔥", "🌟"]).optional(),
         iconImageUrl: z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/).nullable().optional(),
@@ -1511,6 +1684,10 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
       return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
     }
     const data = parsed.data;
+
+    if (data.safetyAlertsEnabled && !isAirAlertProviderConfigured()) {
+      return res.status(503).json({ message: "AIR_ALERT_PROVIDER_NOT_CONFIGURED" });
+    }
 
     const nextVisibility = data.visibility ?? contest.visibility;
     if (data.joinCode !== undefined && nextVisibility !== "PRIVATE_CODE") {
@@ -1573,6 +1750,7 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
     if (data.endsAt !== undefined) contest.endsAt = nextEndsAt;
     if (data.isPublished !== undefined) contest.isPublished = data.isPublished;
     if (data.allowUpsolve !== undefined) contest.allowUpsolve = data.allowUpsolve;
+    if (data.safetyAlertsEnabled !== undefined) contest.safetyAlertsEnabled = data.safetyAlertsEnabled;
     if (data.scoringMode !== undefined) contest.scoringMode = data.scoringMode;
     if (data.icon !== undefined) contest.icon = data.icon;
     if (data.iconImageUrl !== undefined) contest.iconImageUrl = data.iconImageUrl;
@@ -1593,6 +1771,8 @@ contestsRouter.patch("/:id", authRequired, async (req: AuthRequest, res: Respons
       startsAt: saved.startsAt ? new Date(saved.startsAt).toISOString() : null,
       endsAt: saved.endsAt ? new Date(saved.endsAt).toISOString() : null,
       allowUpsolve: saved.allowUpsolve ?? true,
+      safetyAlertsEnabled: saved.safetyAlertsEnabled ?? false,
+      safetyAlertProviderReady: isAirAlertProviderConfigured(),
       scoringMode: saved.scoringMode ?? "IOI",
       icon: saved.icon ?? "🏆",
       iconImageUrl: saved.iconImageUrl ?? null,
@@ -1743,6 +1923,9 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
     const now = Date.now();
     const startsAtMs = contest.startsAt ? new Date(contest.startsAt).getTime() : null;
     const endsAtMs = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
+    const effectiveEndsAtMs = !isManager && joined && contest.safetyAlertsEnabled && endsAtMs !== null
+      ? endsAtMs + Math.max(0, Number(joined.safetyExtensionSeconds ?? 0)) * 1000
+      : endsAtMs;
 
     const isPrivileged = isManager;
     const isBeforeStart = startsAtMs !== null && now < startsAtMs;
@@ -1767,6 +1950,8 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
         endsAt: contest.endsAt ? new Date(contest.endsAt).toISOString() : null,
         isPublished: contest.isPublished,
         allowUpsolve: contest.allowUpsolve ?? true,
+        safetyAlertsEnabled: contest.safetyAlertsEnabled ?? false,
+        safetyAlertProviderReady: isAirAlertProviderConfigured(),
         scoringMode: contest.scoringMode ?? "IOI",
         scoreboardVisibility: contest.scoreboardVisibility ?? "LIVE",
         participantAccessMode: contest.participantAccessMode ?? "SELF_REGISTRATION",
@@ -1781,6 +1966,7 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
         canManage: isPrivileged,
         canDelete,
         isPaused,
+        personalEndsAt: effectiveEndsAtMs === null ? null : new Date(effectiveEndsAtMs).toISOString(),
       },
       participantsCount,
       problems: showProblems
@@ -1803,11 +1989,153 @@ contestsRouter.get("/:id", authOptional, async (req: AuthRequest, res: Response)
       serverTime: new Date().toISOString(),
       phase: {
         started: startsAtMs === null ? true : now >= startsAtMs,
-        finished: endsAtMs === null ? false : now > endsAtMs,
+        finished: effectiveEndsAtMs === null ? false : now > effectiveEndsAtMs,
       },
     });
   } catch (error: unknown) {
     logger.error("[contests] GET /:id error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+function publicContestSafetyState(snapshot: ContestSafetySnapshot) {
+  return {
+    enabled: snapshot.enabled,
+    providerReady: snapshot.providerReady,
+    availableLocations: snapshot.availableLocations,
+    location: snapshot.location,
+    needsLocation: snapshot.needsLocation,
+    paused: snapshot.paused,
+    pausedUntil: snapshot.pausedUntil,
+    pauseSecondsRemaining: snapshot.pauseSecondsRemaining,
+    extensionSeconds: snapshot.extensionSeconds,
+    effectiveEndsAt: snapshot.effectiveEndsAt,
+    alertPending: snapshot.alertPending,
+    alertLocationName: snapshot.alertLocationName,
+  };
+}
+
+// Contestant safety state, including the current air-raid alert for their selected area.
+contestsRouter.get("/:id/safety", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.id);
+    if (!Number.isSafeInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (!(await canAccessContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const snapshot = await getContestSafetySnapshot(contest, req);
+    res.set("Cache-Control", "no-store");
+    return res.json(publicContestSafetyState(snapshot));
+  } catch (error: unknown) {
+    const message = errorMessage(error);
+    if (message.startsWith("AIR_ALERT_PROVIDER_")) {
+      logger.warn("[contests] GET /:id/safety unavailable", { requestId: req.requestId, message });
+      return res.status(503).json({ message: "AIR_ALERT_PROVIDER_UNAVAILABLE" });
+    }
+    if (message === "CONTEST_PARTICIPANT_REQUIRED") return res.status(403).json({ message });
+    logger.error("[contests] GET /:id/safety failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Participants set an administrative area, not GPS coordinates. The selection is locked at contest start.
+contestsRouter.put("/:id/safety/location", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.id);
+    if (!Number.isSafeInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (!contest.safetyAlertsEnabled) return res.status(409).json({ message: "SAFETY_NOT_ENABLED" });
+    if (!(await canAccessContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (req.userId && await canManageContest({ contest, req })) return res.status(403).json({ message: "ORGANIZER_NOT_PARTICIPANT" });
+    const parsed = z.object({ uid: z.number().int().positive() }).safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_LOCATION" });
+    const location = (await listAirAlertLocations()).find((item) => item.uid === parsed.data.uid);
+    if (!location) return res.status(400).json({ message: "INVALID_LOCATION" });
+    const participant = await findRequestContestParticipant(contestId, req)
+      ?? await getOrCreateParticipant({ contestId, req });
+    if (contest.startsAt && Date.now() >= new Date(contest.startsAt).getTime()
+      && participant.safetyLocationUid != null && Number(participant.safetyLocationUid) !== location.uid) {
+      return res.status(409).json({ message: "SAFETY_LOCATION_LOCKED" });
+    }
+    participant.safetyLocationUid = location.uid;
+    participant.safetyLocationName = location.name;
+    await participantRepo().save(participant);
+    return res.json({ saved: true, location: { uid: location.uid, name: location.name, type: location.type } });
+  } catch (error: unknown) {
+    const message = errorMessage(error);
+    if (message.startsWith("AIR_ALERT_PROVIDER_")) {
+      logger.warn("[contests] PUT /:id/safety/location unavailable", { requestId: req.requestId, message });
+      return res.status(503).json({ message: "AIR_ALERT_PROVIDER_UNAVAILABLE" });
+    }
+    logger.error("[contests] PUT /:id/safety/location error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Participant response to one active alert. The server records the alert identity and starts the 10-minute pause.
+contestsRouter.post("/:id/safety/response", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.id);
+    if (!Number.isSafeInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const parsed = z.object({ safe: z.boolean() }).safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (!contest.safetyAlertsEnabled) return res.status(409).json({ message: "SAFETY_NOT_ENABLED" });
+    if (!(await canAccessContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const snapshot = await getContestSafetySnapshot(contest, req);
+    if (!snapshot.enabled || !snapshot.participant || !snapshot.location) return res.status(409).json({ message: "SAFETY_LOCATION_REQUIRED" });
+    if (snapshot.paused) return res.status(409).json({ message: "SAFETY_PAUSED" });
+    if (!snapshot.alertPending || !snapshot.activeAlertKey) return res.status(409).json({ message: "NO_PENDING_SAFETY_ALERT" });
+
+    const participant = snapshot.participant;
+    const now = new Date();
+    participant.safetyAcknowledgedAlertKey = snapshot.activeAlertKey;
+    if (!parsed.data.safe) {
+      participant.safetyPauseStartedAt = now;
+      participant.safetyPauseUntil = new Date(now.getTime() + CONTEST_SAFETY_PAUSE_MS);
+    }
+    await participantRepo().save(participant);
+    return res.json({ accepted: true, paused: !parsed.data.safe });
+  } catch (error: unknown) {
+    const message = errorMessage(error);
+    if (message === "AIR_ALERT_PROVIDER_NOT_CONFIGURED" || message === "AIR_ALERT_PROVIDER_UNAVAILABLE" || message === "AIR_ALERT_PROVIDER_INVALID_RESPONSE") {
+      return res.status(503).json({ message: "AIR_ALERT_PROVIDER_UNAVAILABLE" });
+    }
+    logger.error("[contests] POST /:id/safety/response error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// End the movement pause early; the server grants only the real elapsed pause duration as individual extra time.
+contestsRouter.post("/:id/safety/pause/end", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.id);
+    if (!Number.isSafeInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (!contest.safetyAlertsEnabled) return res.status(409).json({ message: "SAFETY_NOT_ENABLED" });
+    if (!(await canAccessContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const participant = await findRequestContestParticipant(contestId, req);
+    if (!participant) return res.status(409).json({ message: "NO_ACTIVE_SAFETY_PAUSE" });
+    const settled = await AppDataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(ContestParticipant);
+      const current = await repo.findOne({ where: { id: participant.id }, lock: { mode: "pessimistic_write" } });
+      if (!current?.safetyPauseStartedAt || !current.safetyPauseUntil) return null;
+      const startedAtMs = new Date(current.safetyPauseStartedAt).getTime();
+      const untilMs = new Date(current.safetyPauseUntil).getTime();
+      const elapsedSeconds = Math.min(600, Math.max(0, Math.ceil((Math.min(Date.now(), untilMs) - startedAtMs) / 1000)));
+      current.safetyExtensionSeconds = Math.max(0, Number(current.safetyExtensionSeconds ?? 0)) + elapsedSeconds;
+      current.safetyPauseStartedAt = null;
+      current.safetyPauseUntil = null;
+      await repo.save(current);
+      return { elapsedSeconds, extensionSeconds: current.safetyExtensionSeconds };
+    });
+    if (!settled) return res.status(409).json({ message: "NO_ACTIVE_SAFETY_PAUSE" });
+    return res.json({ resumed: true, addedSeconds: settled.elapsedSeconds, extensionSeconds: settled.extensionSeconds });
+  } catch (error: unknown) {
+    logger.error("[contests] POST /:id/safety/pause/end error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -3236,10 +3564,13 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
-    const isCreator = req.userId ? contest.createdBy?.id === req.userId : false;
-    const isPrivileged = isCreator || req.userRole === "SYSTEM_ADMIN";
+    const isPrivileged = req.userRole === "SYSTEM_ADMIN" || Boolean(req.userId && await canManageContest({ contest, req }));
     const isBeforeStart = contest.startsAt ? Date.now() < new Date(contest.startsAt).getTime() : false;
     if (isBeforeStart && !isPrivileged) return res.status(403).json({ message: "CONTEST_NOT_STARTED" });
+    if (contest.safetyAlertsEnabled && !isPrivileged) {
+      const safety = await prepareContestSafetyAccess(contest, req);
+      if (safety.issue) return res.status(safety.issue.status).json({ message: safety.issue.message });
+    }
 
     const problem = await sharedContestRead(`statement:${contestId}:${problemId}`, () => problemRepo().findOne({
       where: { id: problemId, contest: { id: contestId } }, relations: ["libraryTask"],
@@ -3296,6 +3627,10 @@ contestsRouter.post("/:id/problems/:problemId/tutor", authRequired, contestTutor
     const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     if (!(await canAccessContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (contest.safetyAlertsEnabled) {
+      const safety = await prepareContestSafetyAccess(contest, req);
+      if (safety.issue) return res.status(safety.issue.status).json({ message: safety.issue.message });
+    }
     if (!getContestTimeState(contest).finished || !contest.allowUpsolve) {
       return res.status(403).json({ message: "TUTOR_AVAILABLE_AFTER_CONTEST" });
     }
@@ -3526,6 +3861,10 @@ contestsRouter.get("/:id/jobs/:jobId", authRequired, async (req: AuthRequest, re
     const contest = await readContestAccessRecord(job.contest_id);
     if (!contest || !(contest.isPublished !== false && isContestOnlyUser(req) && req.userId
       ? true : await canAccessContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (contest.safetyAlertsEnabled) {
+      const safety = await prepareContestSafetyAccess(contest, req);
+      if (safety.issue) return res.status(safety.issue.status).json({ message: safety.issue.message });
+    }
     const progress = job.kind === "check" && job.state === "running"
       ? await readJudgeProgress(contestProgressId(job.job_id, job.attempt)) : null;
     res.set("Cache-Control", "no-store");
@@ -3595,6 +3934,11 @@ contestsRouter.post(
 
       const allowed = await canAccessContest({ contest, req });
       if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+      const safety = contest.safetyAlertsEnabled
+        ? await prepareContestSafetyAccess(contest, req)
+        : { participant: null, issue: null };
+      if (safety.issue) return res.status(safety.issue.status).json({ message: safety.issue.message });
 
       if (await respondToContestRetry(req, res, contestId, "run")) return;
 
@@ -3703,7 +4047,7 @@ contestsRouter.post(
         run_all: true,
       };
 
-      const participant = await getOrCreateParticipant({ contestId, req });
+      const participant = safety.participant ?? await getOrCreateParticipant({ contestId, req });
       const job = await enqueueContestJob({ contestId, problemId, participantId: participant.id, kind: "run",
         contestWindow: { endsAt: contest.endsAt, allowUpsolve: contest.allowUpsolve },
         key: req.get("Idempotency-Key") || crypto.randomUUID(),
@@ -3743,6 +4087,11 @@ contestsRouter.post(
       const allowed = await canAccessContest({ contest, req });
       if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
+      const safety = contest.safetyAlertsEnabled
+        ? await prepareContestSafetyAccess(contest, req)
+        : { participant: null, issue: null };
+      if (safety.issue) return res.status(safety.issue.status).json({ message: safety.issue.message });
+
       if (await respondToContestRetry(req, res, contestId, "check")) return;
 
       const timeState = getContestTimeState(contest);
@@ -3761,7 +4110,7 @@ contestsRouter.post(
         return res.status(403).json({ message: "CONTEST_PAUSED" });
       }
 
-      const participant = await getOrCreateParticipant({ contestId, req });
+      const participant = safety.participant ?? await getOrCreateParticipant({ contestId, req });
       if (participant.isDisqualified) {
         return res.status(403).json({ message: "PARTICIPANT_DISQUALIFIED" });
       }
@@ -3912,6 +4261,10 @@ contestsRouter.get("/:id/problems/:problemId/submissions", authRequired, async (
     if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
     const allowed = await canAccessContest({ contest, req });
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (contest.safetyAlertsEnabled && !await canManageContest({ contest, req })) {
+      const safety = await prepareContestSafetyAccess(contest, req);
+      if (safety.issue) return res.status(safety.issue.status).json({ message: safety.issue.message });
+    }
 
     // Validate problem belongs to contest.
     const problem = await problemRepo().findOne({ where: { id: problemId, contest: { id: contestId } } });
@@ -4245,10 +4598,11 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
     if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const isManager = req.userId ? await canManageContest({ contest, req }) : false;
+    const scoreboardReleaseAtMs = await getContestScoreboardReleaseAtMs(contest);
     const scoreboardIsHidden = contest.scoreboardVisibility === "ORGANIZERS_ONLY"
       ? !isManager
       : contest.scoreboardVisibility === "AFTER_END"
-        ? !isManager && (!contest.endsAt || Date.now() < new Date(contest.endsAt).getTime())
+        ? !isManager && (scoreboardReleaseAtMs === null || Date.now() < scoreboardReleaseAtMs)
         : false;
     if (scoreboardIsHidden) {
       res.set("Cache-Control", "no-store");
@@ -4258,7 +4612,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
         problems: [],
         rows: [],
         hidden: true,
-        releaseAt: contest.endsAt ? new Date(contest.endsAt).toISOString() : null,
+        releaseAt: scoreboardReleaseAtMs === null ? null : new Date(scoreboardReleaseAtMs).toISOString(),
         hiddenReason: contest.scoreboardVisibility === "ORGANIZERS_ONLY" ? "ORGANIZERS_ONLY" : "AFTER_END",
         generatedAtMs: Date.now(),
       });
@@ -4292,7 +4646,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
     const participants = await participantRepo().find({
       where: { contest: { id: contestId } },
       relations: ["user"],
-      select: { id: true, displayName: true, isDisqualified: true, principalType: true, user: { id: true } },
+      select: { id: true, displayName: true, isDisqualified: true, principalType: true, safetyExtensionSeconds: true, user: { id: true } },
       order: { joinedAt: "ASC" },
     });
     const organizerParticipantIds = new Set(
@@ -4330,10 +4684,14 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
 
     const endsAtMs = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
     const startsAtMs = contest.startsAt ? new Date(contest.startsAt).getTime() : null;
+    const endMsByParticipant = new Map<number, number>(contestParticipants.map((participant) => [
+      participant.id,
+      endsAtMs == null ? Number.POSITIVE_INFINITY : endsAtMs + (contest.safetyAlertsEnabled ? Math.max(0, Number(participant.safetyExtensionSeconds ?? 0)) * 1000 : 0),
+    ]));
     const nowMs = Date.now();
     // Freeze the final hour by default (UI decides how to render frozen rows).
     const freezeAtMs = endsAtMs != null ? endsAtMs - 60 * 60 * 1000 : null;
-    const finished = endsAtMs != null && nowMs > endsAtMs;
+    const finished = scoreboardReleaseAtMs != null && nowMs > scoreboardReleaseAtMs;
     const frozen = freezeAtMs != null && nowMs >= freezeAtMs && !finished;
     // Managers/admins always see the live board; participants see a frozen board
     // (submissions after the freeze cutoff are withheld) during the freeze window.
@@ -4388,6 +4746,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       if (!Number.isFinite(pid) || !Number.isFinite(pr)) continue;
       const createdAt = String(s.createdAt ?? "");
       const tMs = new Date(createdAt).getTime();
+      if (!Number.isFinite(tMs) || tMs > (endMsByParticipant.get(pid) ?? Number.POSITIVE_INFINITY)) continue;
       if (Number.isFinite(tMs)) submissionTimes.push(tMs);
       const key = `${pid}:${pr}`;
       if (cutoffMs != null && tMs > cutoffMs) {
@@ -4405,7 +4764,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
 
     const scoreSubs: ScoreboardSubmission[] = allSubs
       .filter((s) => !isAnnulledFor(Number(s.participantId), Number(s.problemId)))
-      .filter((s) => endsAtMs == null || new Date(String(s.createdAt ?? "")).getTime() <= endsAtMs)
+      .filter((s) => new Date(String(s.createdAt ?? "")).getTime() <= (endMsByParticipant.get(Number(s.participantId)) ?? Number.POSITIVE_INFINITY))
       .filter((s) => cutoffMs == null || new Date(String(s.createdAt ?? "")).getTime() <= cutoffMs)
       .map((s) => ({
         participantId: Number(s.participantId),
@@ -4413,7 +4772,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
         verdict: s.verdict != null ? String(s.verdict) : null,
         createdAtMs: new Date(String(s.createdAt ?? "")).getTime(),
       }));
-    const icpcBoard = computeScoreboard(scoreSubs, { startMs: icpcStartMs, penaltyPerWrong: ICPC_PENALTY_PER_WRONG, nowMs });
+    const icpcBoard = computeScoreboard(scoreSubs, { startMs: icpcStartMs, penaltyPerWrong: ICPC_PENALTY_PER_WRONG, nowMs, endMsByParticipant });
     const icpcByParticipant = new Map<number, (typeof icpcBoard.rows)[number]>();
     for (const r of icpcBoard.rows) icpcByParticipant.set(r.participantId, r);
 

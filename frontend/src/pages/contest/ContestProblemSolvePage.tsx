@@ -53,6 +53,7 @@ import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { tracePlayground, type TraceResult } from "../../lib/api/playground";
 import { getCachedMeUser } from "../../lib/api/profile";
 import { isDevPreviewActive, withDevPreview } from "../../lib/devPreview";
+import { ContestSafetyGate } from "./ContestSafetyGate";
 
 type ContestMeta = {
   title: string;
@@ -553,7 +554,7 @@ export const ContestProblemSolvePage: React.FC = () => {
       );
       setContestMeta({
         title: contest.contest.title,
-        endsAt: contest.contest.endsAt,
+        endsAt: contest.access.personalEndsAt ?? contest.contest.endsAt,
       });
       if (!retainWorkspace) hydrateDraft(stmt);
       loadedProblemRef.current = problemKey;
@@ -1121,20 +1122,21 @@ export const ContestProblemSolvePage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-3 sm:p-4 md:p-6">
+      <div data-contest-safety-background="" className="p-3 sm:p-4 md:p-6">
         <Card className="p-4">
           <Skeleton className="h-8 w-2/3 mb-3" />
           <Skeleton className="h-4 w-full mb-2" />
           <Skeleton className="h-4 w-5/6 mb-6" />
           <Skeleton className="h-[70vh] w-full" />
         </Card>
+        {!isPreview ? <ContestSafetyGate contestId={contestId} /> : null}
       </div>
     );
   }
 
   if (error && !statement) {
     return (
-      <div className="p-3 sm:p-4 md:p-6">
+      <div data-contest-safety-background="" className="p-3 sm:p-4 md:p-6">
         <Card className="p-4">
           <div
             role="alert"
@@ -1151,11 +1153,12 @@ export const ContestProblemSolvePage: React.FC = () => {
             Try again
           </Button>
         </Card>
+        {!isPreview ? <ContestSafetyGate contestId={contestId} onUnlocked={() => void load()} /> : null}
       </div>
     );
   }
 
-  if (!statement) return null;
+  if (!statement) return isPreview ? null : <ContestSafetyGate contestId={contestId} onUnlocked={() => void load()} />;
 
   const entryFile = JUDGE_ENTRY_FILES[judgeLanguage];
   const publicExamples = examplesFromStatement(statement.task.description);
@@ -1172,7 +1175,8 @@ export const ContestProblemSolvePage: React.FC = () => {
     latestAnnouncement && latestAnnouncement.id !== dismissedAnnouncementId;
 
   return (
-    <div className="contest-problem-solve ide-contest-page bg-bg-base text-text-primary">
+    <div data-contest-safety-background="" className="contest-problem-solve ide-contest-page bg-bg-base text-text-primary">
+      {!isPreview ? <ContestSafetyGate contestId={contestId} onUnlocked={() => void load()} /> : null}
       {showAnnouncement ? (
         <aside
           className="flex items-start gap-3 rounded-lg border border-border px-4 py-2 sm:items-center"

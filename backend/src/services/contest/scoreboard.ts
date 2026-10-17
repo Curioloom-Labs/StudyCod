@@ -46,16 +46,19 @@ function isAc(verdict: string | null): boolean {
 
 export function computeScoreboard(
   submissions: ScoreboardSubmission[],
-  options: { startMs: number; penaltyPerWrong?: number; nowMs?: number }
+  options: { startMs: number; penaltyPerWrong?: number; nowMs?: number; endMsByParticipant?: Map<number, number> }
 ): ScoreboardResult {
   const startMs = options.startMs;
   const penaltyPerWrong = Number.isFinite(options.penaltyPerWrong as number) ? Number(options.penaltyPerWrong) : 20;
   const nowMs = options.nowMs ?? Date.now();
+  const endMsByParticipant = options.endMsByParticipant;
 
   // Group by participant -> problem, in chronological order.
   const sorted = [...submissions].sort((a, b) => a.createdAtMs - b.createdAtMs);
   const byParticipant = new Map<number, Map<number, ScoreboardSubmission[]>>();
   for (const s of sorted) {
+    const participantEndMs = endMsByParticipant?.get(s.participantId);
+    if (participantEndMs != null && s.createdAtMs > participantEndMs) continue;
     if (s.verdict === null) continue;
     if (!byParticipant.has(s.participantId)) byParticipant.set(s.participantId, new Map());
     const byProblem = byParticipant.get(s.participantId)!;
