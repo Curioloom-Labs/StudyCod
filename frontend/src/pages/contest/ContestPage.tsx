@@ -39,6 +39,7 @@ import {
   setContestParticipantDisqualified,
   getContestSafetyState,
   setContestOrganizerSafetyLock,
+  sendContestParticipantMessage,
   joinContest,
   updateContestProblemSettings,
   updateContest,
@@ -1008,6 +1009,17 @@ export const ContestPage: React.FC = () => {
   const [adminParticipants, setAdminParticipants] = React.useState<ContestAdminParticipant[]>([]);
   const [adminParticipantsActionMessage, setAdminParticipantsActionMessage] = React.useState<string | null>(null);
   const [adminParticipantsActionTone, setAdminParticipantsActionTone] = React.useState<"success" | "warn" | "error">("success");
+  const [contestMessageTitle, setContestMessageTitle] = React.useState("");
+  const [contestMessageText, setContestMessageText] = React.useState("");
+  const [contestMessageSending, setContestMessageSending] = React.useState(false);
+  const [contestMessageError, setContestMessageError] = React.useState<string | null>(null);
+  const [contestMessageResult, setContestMessageResult] = React.useState<{
+    sent: number;
+    eligible: number;
+    skipped: number;
+    failed: Array<{ email: string; name: string }>;
+    duplicateAddresses: number;
+  } | null>(null);
   const [simProblemId, setSimProblemId] = React.useState<number | null>(null);
   const [simPairs, setSimPairs] = React.useState<ContestSimilarityPair[]>([]);
   const [simLoading, setSimLoading] = React.useState(false);
@@ -1295,6 +1307,37 @@ export const ContestPage: React.FC = () => {
       setAdminParticipantsLoading(false);
     }
   }, [contestId, data?.access?.canManage, tr]);
+
+  const sendContestMessage = async (retryEmails?: string[]) => {
+    if (!contestId || !data?.access?.canManage || !contestMessageTitle.trim() || !contestMessageText.trim()) return;
+    setContestMessageSending(true);
+    setContestMessageError(null);
+    if (!retryEmails) setContestMessageResult(null);
+    try {
+      const result = await sendContestParticipantMessage(contestId, {
+        title: contestMessageTitle.trim(),
+        text: contestMessageText.trim(),
+        ...(retryEmails ? { retryEmails } : {}),
+      });
+      const combinedResult = retryEmails && contestMessageResult
+        ? {
+            ...contestMessageResult,
+            sent: contestMessageResult.sent + result.sent,
+            failed: result.failed,
+          }
+        : result;
+      setContestMessageResult(combinedResult);
+      if (combinedResult.sent > 0 && combinedResult.failed.length === 0) {
+        setContestMessageTitle("");
+        setContestMessageText("");
+      }
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
+      setContestMessageError(message || tr("Не вдалося надіслати листи учасникам.", "Failed to email participants."));
+    } finally {
+      setContestMessageSending(false);
+    }
+  };
 
   React.useEffect(() => {
     if (tab !== "participants") return;
@@ -6419,6 +6462,73 @@ export const ContestPage: React.FC = () => {
                   </> : null}
 
                   {tab === "participants" ? <>
+                  <Card className="p-4 sm:p-5">
+                    <div className="mb-4">
+                      <h2 className="text-base font-semibold text-text-primary flex items-center gap-2">
+                        <Send aria-hidden="true" className="w-4 h-4 text-primary" />
+                        {tr("Лист учасникам", "Email participants")}
+                      </h2>
+                      <p className="mt-1 text-sm text-text-secondary">
+                        {tr("Надішли нагадування на email адреси, вказані для учасників контесту. Однакові адреси отримають один лист.", "Send a reminder to the email addresses saved for contest participants. Duplicate addresses receive one email.")}
+                      </p>
+                    </div>
+                    <div className="grid gap-3">
+                      <div>
+                        <label htmlFor="contest-participant-message-title" className="mb-1.5 block text-sm font-medium text-text-primary">
+                          {tr("Тема листа", "Email subject")}
+                        </label>
+                        <input
+                          id="contest-participant-message-title"
+                          type="text"
+                          maxLength={160}
+                          value={contestMessageTitle}
+                          onChange={(event) => setContestMessageTitle(event.target.value)}
+                          className="w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm text-text-primary outline-none focus:border-primary"
+                          placeholder={tr("Нагадування про контест", "Contest reminder")}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="contest-participant-message-text" className="mb-1.5 block text-sm font-medium text-text-primary">
+                          {tr("Повідомлення", "Message")}
+                        </label>
+                        <textarea
+                          id="contest-participant-message-text"
+                          maxLength={5000}
+                          rows={5}
+                          value={contestMessageText}
+                          onChange={(event) => setContestMessageText(event.target.value)}
+                          className="w-full resize-y rounded-lg border border-border bg-bg-base px-3 py-2 text-sm leading-6 text-text-primary outline-none focus:border-primary"
+                          placeholder={tr("Напиши учасникам важливу інформацію або нагадування…", "Write an update or reminder for participants…")}
+                        />
+                        <p className="mt-1 text-right text-xs text-text-muted">{contestMessageText.length}/5000</p>
+                      </div>
+                      {contestMessageError ? <p role="alert" className="text-sm text-accent-error">{contestMessageError}</p> : null}
+                      {contestMessageResult ? (
+                        <div role="status" className={`rounded-lg border px-3 py-2 text-sm ${contestMessageResult.failed.length || contestMessageResult.skipped > 0 ? "border-accent-warn/50 bg-accent-warn/10 text-text-primary" : "border-accent-success/40 bg-accent-success/10 text-text-primary"}`}>
+                          <p>{tr(
+                            `Надіслано листів: ${contestMessageResult.sent} із ${contestMessageResult.eligible}. Без email пропущено учасників: ${contestMessageResult.skipped}. Помилок: ${contestMessageResult.failed.length}.`,
+                            `Emails sent: ${contestMessageResult.sent} of ${contestMessageResult.eligible}. Participants skipped without an email: ${contestMessageResult.skipped}. Failed: ${contestMessageResult.failed.length}.`,
+                          )}</p>
+                          {contestMessageResult.duplicateAddresses > 0 ? <p className="mt-1 text-xs text-text-secondary">{tr(
+                            `Дубльованих адрес об’єднано: ${contestMessageResult.duplicateAddresses}.`,
+                            `Duplicate addresses combined: ${contestMessageResult.duplicateAddresses}.`,
+                          )}</p> : null}
+                          {contestMessageResult.failed.length > 0 ? <p className="mt-1 text-xs text-text-secondary">{contestMessageResult.failed.slice(0, 5).map((item) => item.name || item.email).join(", ")}{contestMessageResult.failed.length > 5 ? "…" : ""}</p> : null}
+                          {contestMessageResult.failed.length > 0 ? <Button className="mt-2" variant="secondary" onClick={() => void sendContestMessage(contestMessageResult.failed.map((item) => item.email))} disabled={contestMessageSending}>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            {contestMessageSending ? tr("Повторюємо…", "Retrying…") : tr("Повторити невдалі листи", "Retry failed emails")}
+                          </Button> : null}
+                        </div>
+                      ) : null}
+                      <div>
+                        <Button onClick={() => void sendContestMessage()} disabled={contestMessageSending || !contestMessageTitle.trim() || !contestMessageText.trim()}>
+                          <Send className="mr-2 h-4 w-4" />
+                          {contestMessageSending ? tr("Надсилаємо…", "Sending…") : tr("Надіслати листи", "Send emails")}
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+
                   <Card className="p-4 sm:p-5">
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <h2 className="text-base font-semibold text-text-primary flex items-center gap-2"><Users2 aria-hidden="true" className="w-4 h-4 text-primary" />{tr("Список і модерація учасників", "Participants and moderation")}</h2>

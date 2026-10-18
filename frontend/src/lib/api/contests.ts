@@ -702,6 +702,22 @@ export async function postContestCommunityAnnouncement(
   return res.data;
 }
 
+export async function sendContestParticipantMessage(
+  contestId: number,
+  payload: { title: string; text: string; retryEmails?: string[] }
+): Promise<{
+  contestId: number;
+  participants: number;
+  eligible: number;
+  sent: number;
+  failed: Array<{ email: string; name: string }>;
+  skipped: number;
+  duplicateAddresses: number;
+}> {
+  const res = await api.post(`/contests/${contestId}/messages`, payload);
+  return res.data;
+}
+
 export async function setContestPaused(contestId: number, paused: boolean): Promise<{ contestId: number; isPaused: boolean }> {
   const res = await api.patch(`/contests/${contestId}/admin/pause`, { paused });
   return res.data;
