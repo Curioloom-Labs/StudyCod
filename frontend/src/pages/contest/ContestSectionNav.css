@@ -71,13 +71,15 @@
 }
 
 .contest-hero-card {
+  --contest-hero-accent: #a3c8ab;
   position: relative;
   isolation: isolate;
   border-radius: 24px;
+  border-color: color-mix(in oklch, var(--contest-hero-accent) 20%, var(--border));
   background:
-    radial-gradient(ellipse at 8% 0%, color-mix(in oklch, var(--primary) 14%, transparent), transparent 54%),
-    linear-gradient(125deg, color-mix(in oklch, var(--bg-surface) 88%, var(--primary)), var(--bg-surface) 68%);
-  box-shadow: 0 24px 70px -48px color-mix(in oklch, var(--primary) 45%, transparent);
+    radial-gradient(ellipse at 8% 0%, color-mix(in oklch, var(--contest-hero-accent) 14%, transparent), transparent 54%),
+    linear-gradient(125deg, color-mix(in oklch, var(--bg-surface) 88%, var(--contest-hero-accent)), var(--bg-surface) 68%);
+  box-shadow: 0 24px 70px -48px color-mix(in oklch, var(--contest-hero-accent) 45%, transparent);
 }
 
 .contest-hero-card__image-wrap {
@@ -97,6 +99,10 @@
   object-fit: cover;
 }
 
+.contest-hero-icon {
+  background: color-mix(in oklch, var(--contest-hero-accent) 10%, transparent);
+}
+
 .contest-hero-card__content {
   position: relative;
   z-index: 1;
@@ -112,7 +118,7 @@
   max-width: 100%;
   margin-top: 22px;
   padding: 14px 0;
-  border-top: 1px solid color-mix(in oklch, var(--border) 70%, var(--primary));
+  border-top: 1px solid color-mix(in oklch, var(--border) 70%, var(--contest-hero-accent));
   border-bottom: 1px solid var(--border);
 }
 
@@ -175,7 +181,7 @@
   width: 3px;
   height: 3px;
   border-radius: 50%;
-  background: var(--primary);
+  background: var(--contest-hero-accent);
 }
 
 .contest-problems-card {

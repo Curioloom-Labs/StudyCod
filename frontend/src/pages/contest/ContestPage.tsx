@@ -4105,7 +4105,7 @@ export const ContestPage: React.FC = () => {
                 <Link to={`/contest/contests/${contestId}`} className="contest-manager-header__preview">{tr("Переглянути як учасник", "View contest page")} <ArrowLeft aria-hidden="true" className="size-4 rotate-180" /></Link>
               </div>
             </header>
-          ) : <Card className="contest-hero-card overflow-hidden border border-primary/20 p-0">
+          ) : <Card className="contest-hero-card overflow-hidden border p-0">
             {data.contest.bannerImageUrl ? (
               <div className="contest-hero-card__image-wrap" aria-hidden="true">
                 <img
@@ -4125,7 +4125,7 @@ export const ContestPage: React.FC = () => {
               <PageEyebrow label={tr("Контест", "Contest")} />
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <h1 className="flex min-w-0 flex-1 items-center gap-3 break-words text-3xl font-bold leading-tight tracking-tight text-text-primary md:text-4xl [text-wrap:balance]">
-                  <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-primary/10 text-2xl">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" width={44} height={44} fetchPriority="high" className="size-full object-cover" /> : data.contest.icon || "🏆"}</span>{data.contest.title}
+                  <span aria-hidden="true" className="contest-hero-icon grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl text-2xl">{data.contest.iconImageUrl ? <img src={data.contest.iconImageUrl} alt="" width={44} height={44} fetchPriority="high" className="size-full object-cover" /> : data.contest.icon || "🏆"}</span>{data.contest.title}
                 </h1>
                 <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
                   {(() => {
