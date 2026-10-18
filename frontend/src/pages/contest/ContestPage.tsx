@@ -36,6 +36,8 @@ import {
   setContestAnnulment,
   setContestPaused,
   setContestParticipantDisqualified,
+  getContestSafetyState,
+  setContestOrganizerSafetyLock,
   joinContest,
   updateContestProblemSettings,
   updateContest,
@@ -53,6 +55,8 @@ import {
   type ContestBannerTheme,
   type ContestParticipantAccessMode,
   type ContestScoreboardVisibility,
+  type ContestSafetyRedLockMode,
+  type ContestSafetyState,
 } from "../../lib/api/contests";
 import { getClasses, uploadStatementImage, type Class as EduClass } from "../../lib/api/edu";
 import { CONTEST_BANNER_THEMES, CONTEST_ICONS } from "./contestBranding";
@@ -71,6 +75,7 @@ import {
   updateContestCertificateSettings,
 } from "../../lib/api/certificates";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { toast } from "../../lib/toast";
 import { ContestSectionNav, type ContestSection } from "./ContestSectionNav";
 import "./CertificateStudio.css";
 import {
@@ -946,6 +951,11 @@ export const ContestPage: React.FC = () => {
   const [settingsEndsAt, setSettingsEndsAt] = React.useState("");
   const [settingsAllowUpsolve, setSettingsAllowUpsolve] = React.useState(true);
   const [settingsSafetyAlertsEnabled, setSettingsSafetyAlertsEnabled] = React.useState(false);
+  const [settingsSafetyRedLocationUid, setSettingsSafetyRedLocationUid] = React.useState("");
+  const [settingsSafetyRedLockMode, setSettingsSafetyRedLockMode] = React.useState<ContestSafetyRedLockMode>("PAUSE_10_MIN");
+  const [settingsSafetyState, setSettingsSafetyState] = React.useState<ContestSafetyState | null>(null);
+  const [settingsSafetyLocationsLoading, setSettingsSafetyLocationsLoading] = React.useState(false);
+  const [settingsSafetyLockSaving, setSettingsSafetyLockSaving] = React.useState(false);
   const [settingsScoringMode, setSettingsScoringMode] = React.useState<"IOI" | "ICPC">("IOI");
   const [settingsVisibility, setSettingsVisibility] = React.useState<ContestVisibility>("PUBLIC");
   const [settingsJoinCode, setSettingsJoinCode] = React.useState("");
@@ -3255,6 +3265,8 @@ export const ContestPage: React.FC = () => {
     setSettingsEndsAt(toDateTimeLocalInput(data.contest.endsAt));
     setSettingsAllowUpsolve(Boolean(data.contest.allowUpsolve));
     setSettingsSafetyAlertsEnabled(Boolean(data.contest.safetyAlertsEnabled));
+    setSettingsSafetyRedLocationUid(data.contest.safetyRedLocationUid ? String(data.contest.safetyRedLocationUid) : "");
+    setSettingsSafetyRedLockMode(data.contest.safetyRedLockMode ?? "PAUSE_10_MIN");
     setSettingsScoringMode(data.contest.scoringMode === "ICPC" ? "ICPC" : "IOI");
     setSettingsVisibility(data.contest.visibility ?? "PUBLIC");
     setSettingsJoinCode("");
@@ -3267,6 +3279,17 @@ export const ContestPage: React.FC = () => {
     setSettingsParticipantAccessMode(data.contest.participantAccessMode || "SELF_REGISTRATION");
     setSettingsClassesError(null);
   }, [tab, data?.access.canManage, data?.contest]);
+
+  React.useEffect(() => {
+    if (!contestId || tab !== "management" || !data?.access.canManage) return;
+    let active = true;
+    setSettingsSafetyLocationsLoading(true);
+    getContestSafetyState(contestId)
+      .then((result) => { if (active) setSettingsSafetyState(result); })
+      .catch(() => { if (active) setSettingsSafetyState(null); })
+      .finally(() => { if (active) setSettingsSafetyLocationsLoading(false); });
+    return () => { active = false; };
+  }, [tab, contestId, data?.access.canManage]);
 
   React.useEffect(() => {
     if (tab !== "management" || settingsVisibility !== "CLASS") return;
@@ -3336,6 +3359,8 @@ export const ContestPage: React.FC = () => {
         ...(settingsVisibility === "CLASS" ? { classId: Number(settingsClassId) } : {}),
         allowUpsolve: settingsAllowUpsolve,
         safetyAlertsEnabled: settingsSafetyAlertsEnabled,
+        safetyRedLocationUid: settingsSafetyRedLocationUid ? Number(settingsSafetyRedLocationUid) : null,
+        safetyRedLockMode: settingsSafetyRedLockMode,
         scoringMode: settingsScoringMode,
         icon: settingsIcon,
         iconImageUrl: settingsIconImageUrl,
@@ -3351,6 +3376,26 @@ export const ContestPage: React.FC = () => {
       setSettingsError(msg || tr("Не вдалося зберегти налаштування контесту", "Failed to save contest settings"));
     } finally {
       setSettingsSaving(false);
+    }
+  };
+
+  const setOrganizerSafetyLock = async (locked: boolean) => {
+    if (!contestId || !data?.access?.canManage || settingsSafetyLockSaving) return;
+    setSettingsSafetyLockSaving(true);
+    try {
+      await setContestOrganizerSafetyLock(contestId, locked);
+      setData((current) => current ? {
+        ...current,
+        contest: { ...current.contest, safetyManualLocked: locked },
+      } : current);
+      setSettingsSafetyState((current) => current ? { ...current, manualLockActive: locked } : current);
+      toast.success(locked
+        ? tr("Доступ учасників призупинено", "Participant access paused")
+        : tr("Доступ учасників відновлено", "Participant access restored"));
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error) || tr("Не вдалося змінити блокування", "Could not update the participant lock"));
+    } finally {
+      setSettingsSafetyLockSaving(false);
     }
   };
 
@@ -3635,7 +3680,7 @@ export const ContestPage: React.FC = () => {
 
   return (
     <div data-contest-safety-background="" className="contest-page-shell">
-      {data?.contest.id === contestId && data.contest.safetyAlertsEnabled && data.access.isJoined && !data.access.canManage
+      {data?.contest.id === contestId && data.access.isJoined && !data.access.canManage
         ? <ContestSafetyGate contestId={contestId} onUnlocked={() => load()} />
         : null}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -6136,6 +6181,41 @@ export const ContestPage: React.FC = () => {
               {data.contest.safetyAlertProviderReady && <span className="mt-2 block text-xs text-text-secondary">{tr("API не потребує токена. Учасник обирає доступну локацію; GPS-координати не збираються.", "No API token is needed. Participants choose an available area; GPS coordinates are not collected.")}</span>}
             </span>
           </label>
+
+          {settingsSafetyAlertsEnabled ? <div className="grid gap-4 rounded-2xl border border-border bg-bg-base/45 p-4">
+            <div>
+              <h4 className="text-sm font-semibold text-text-primary">{tr("Червоний рівень загрози", "Red-level threat")}</h4>
+              <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Місто-орієнтир задає організатор. Зміна рівня з червоного на жовтий знімає глобальне блокування й запускає звичну паузу до 10 хвилин для учасників, яких стосується тривога.", "The organizer chooses a reference city. When the level changes from red to yellow, the global lock ends and the usual up-to-10-minute pause is offered to participants affected by the alert.")}</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-xs font-semibold text-text-secondary">
+                {tr("Місто-орієнтир", "Reference city")}
+                <select value={settingsSafetyRedLocationUid} onChange={(event) => setSettingsSafetyRedLocationUid(event.target.value)} disabled={settingsSafetyLocationsLoading} className="mt-1.5 w-full rounded-lg border border-border bg-bg-code px-4 py-2.5 text-sm font-normal text-text-primary focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60">
+                  <option value="">{settingsSafetyLocationsLoading ? tr("Завантажуємо міста…", "Loading cities…") : tr("Не обрано", "Not selected")}</option>
+                  {(settingsSafetyState?.availableLocations ?? []).filter((location) => location.type === "Місто" || location.type === "Місто з спеціальним статусом").map((location) => <option key={location.uid} value={location.uid}>{location.name}</option>)}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-text-secondary">
+                {tr("Дія під час червоного рівня", "Action during red level")}
+                <select value={settingsSafetyRedLockMode} onChange={(event) => setSettingsSafetyRedLockMode(event.target.value as ContestSafetyRedLockMode)} className="mt-1.5 w-full rounded-lg border border-border bg-bg-code px-4 py-2.5 text-sm font-normal text-text-primary focus-visible:ring-2 focus-visible:ring-primary">
+                  <option value="PAUSE_10_MIN">{tr("Як жовтий: учасник обирає паузу до 10 хв", "Like yellow: participants can take up to 10 minutes")}</option>
+                  <option value="LOCK_UNTIL_CLEAR">{tr("Блокувати всіх до зміни рівня", "Lock everyone until the level changes")}</option>
+                </select>
+              </label>
+            </div>
+            {!settingsSafetyLocationsLoading && !settingsSafetyState?.availableLocations.length ? <p className="text-xs text-accent-error">{tr("Не вдалося завантажити міста. Онови сторінку, щоб налаштувати червоний рівень.", "Could not load cities. Refresh the page to configure red-level behavior.")}</p> : null}
+          </div> : null}
+
+          <div className="flex flex-col gap-3 rounded-2xl border border-border bg-bg-base/45 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h4 className="text-sm font-semibold text-text-primary">{tr("Ручне блокування учасників", "Manual participant lock")}</h4>
+              <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Організатор може призупинити доступ до умови й редактора для всіх. Тривалість блокування додається всім до часу контесту.", "The organizer can pause access to tasks and the editor for everyone. The lock duration is added to every participant's contest time.")}</p>
+              <p role="status" className="mt-2 text-xs font-semibold">{data.contest.safetyManualLocked ? tr("Учасників зараз заблоковано", "Participants are currently locked") : tr("Ручне блокування вимкнено", "Manual lock is off")}</p>
+            </div>
+            <button type="button" onClick={() => void setOrganizerSafetyLock(!data.contest.safetyManualLocked)} disabled={settingsSafetyLockSaving} aria-pressed={Boolean(data.contest.safetyManualLocked)} className={`min-h-11 shrink-0 rounded-xl px-4 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-wait disabled:opacity-60 ${data.contest.safetyManualLocked ? "border border-border bg-bg-code text-text-primary hover:bg-bg-hover" : "bg-accent-error px-5 text-white hover:brightness-110"}`}>
+              {settingsSafetyLockSaving ? tr("Оновлюємо…", "Updating…") : data.contest.safetyManualLocked ? tr("Відновити доступ", "Restore access") : tr("Заблокувати зараз", "Lock now")}
+            </button>
+          </div>
 
           <div>
             <div className="text-sm font-mono text-text-primary mb-1.5">{tr("Модель рейтингу", "Ranking model")}</div>

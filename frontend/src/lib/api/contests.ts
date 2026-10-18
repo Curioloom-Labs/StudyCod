@@ -59,6 +59,10 @@ export type ContestDetails = {
     allowUpsolve: boolean;
     safetyAlertsEnabled?: boolean;
     safetyAlertProviderReady?: boolean;
+    safetyRedLocationUid?: number | null;
+    safetyRedLocationName?: string | null;
+    safetyRedLockMode?: ContestSafetyRedLockMode;
+    safetyManualLocked?: boolean;
     scoringMode?: ContestScoringMode;
     scoreboardVisibility?: ContestScoreboardVisibility;
     participantAccessMode?: ContestParticipantAccessMode;
@@ -94,6 +98,8 @@ export type CreateContestRequest = {
   isPublished?: boolean;
   allowUpsolve?: boolean;
   safetyAlertsEnabled?: boolean;
+  safetyRedLocationUid?: number | null;
+  safetyRedLockMode?: ContestSafetyRedLockMode;
   scoringMode?: ContestScoringMode;
   icon?: string;
   iconImageUrl?: string | null;
@@ -116,6 +122,8 @@ export type UpdateContestRequest = {
   isPublished?: boolean;
   allowUpsolve?: boolean;
   safetyAlertsEnabled?: boolean;
+  safetyRedLocationUid?: number | null;
+  safetyRedLockMode?: ContestSafetyRedLockMode;
   scoringMode?: ContestScoringMode;
   icon?: string;
   iconImageUrl?: string | null;
@@ -197,6 +205,7 @@ export type ContestRunResult = {
 };
 
 export type ContestScoringMode = "IOI" | "ICPC";
+export type ContestSafetyRedLockMode = "PAUSE_10_MIN" | "LOCK_UNTIL_CLEAR";
 
 export type ContestSafetyLocation = {
   uid: number;
@@ -217,7 +226,15 @@ export type ContestSafetyState = {
   extensionSeconds: number;
   effectiveEndsAt: string | null;
   alertPending: boolean;
+  alertActive: boolean;
+  alertLevel: "yellow" | "red" | null;
   alertLocationName: string | null;
+  globalLocked: boolean;
+  globalLockReason: "RED_ALERT" | "ORGANIZER" | null;
+  globalLockLocationName: string | null;
+  manualLockActive: boolean;
+  redLocation: { uid: number; name: string } | null;
+  redLockMode: ContestSafetyRedLockMode;
 };
 
 export type ScoreboardProblem = { id: number; order: number; label: string; maxScore?: number };
@@ -445,6 +462,11 @@ export async function respondToContestSafetyAlert(contestId: number, safe: boole
 
 export async function endContestSafetyPause(contestId: number): Promise<void> {
   await api.post(`/contests/${contestId}/safety/pause/end`);
+}
+
+export async function setContestOrganizerSafetyLock(contestId: number, locked: boolean): Promise<{ locked: boolean }> {
+  const res = await api.post(`/contests/${contestId}/safety/organizer-lock`, { locked });
+  return res.data;
 }
 
 export async function joinContest(contestId: number, code?: string): Promise<{ joined: boolean; participantId: number }> {

@@ -7,6 +7,8 @@ export type AirAlertLocation = {
   oblastUid: number | null;
 };
 
+export type AirAlertLevel = "yellow" | "red";
+
 type TryvohaRegion = {
   id: number;
   slug: string;
@@ -154,6 +156,7 @@ export async function getActiveAirRaidAlert(locationUid: number): Promise<{
   key: string;
   locationName: string;
   startedAt: string | null;
+  level: AirAlertLevel;
 } | null> {
   const [regions, alerts] = await Promise.all([fetchRegions(), fetchActiveAlerts()]);
   const selectedRegion = regionsByUid(regions).get(Number(locationUid));
@@ -174,5 +177,9 @@ export async function getActiveAirRaidAlert(locationUid: number): Promise<{
     key: fingerprint,
     locationName: matching.length === 1 ? String(matching[0].name_uk ?? selectedLocation.name) : selectedLocation.name,
     startedAt: matching[0].started_at ?? null,
+    // If several districts are active under an oblast, use the most severe level.
+    // The level is also part of `key`, so red ↔ yellow transitions re-trigger the
+    // participant prompt even when the underlying alert episode keeps running.
+    level: matching.some((alert) => alert.level === "red") ? "red" : "yellow",
   };
 }

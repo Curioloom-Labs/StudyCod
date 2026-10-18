@@ -19,6 +19,7 @@ export type ContestDifficulty = "EASY" | "MEDIUM" | "HARD";
 export type ContestScoreboardVisibility = "LIVE" | "AFTER_END" | "ORGANIZERS_ONLY";
 export type ContestParticipantAccessMode = "SELF_REGISTRATION" | "ISSUED_ACCOUNTS";
 export type ContestBannerTheme = "forest" | "ocean" | "violet" | "sunset";
+export type ContestSafetyRedLockMode = "PAUSE_10_MIN" | "LOCK_UNTIL_CLEAR";
 
 @Entity("contests")
 export class Contest {
@@ -84,6 +85,30 @@ export class Contest {
 
   @Column({ type: "boolean", default: false, name: "safety_alerts_enabled" })
   safetyAlertsEnabled!: boolean;
+
+  @Column({ type: "int", nullable: true, name: "safety_red_location_uid" })
+  safetyRedLocationUid?: number | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true, name: "safety_red_location_name" })
+  safetyRedLocationName?: string | null;
+
+  @Column({ type: "varchar", length: 6, nullable: true, name: "safety_red_alert_last_level" })
+  safetyRedAlertLastLevel?: "yellow" | "red" | null;
+
+  @Column({ type: "varchar", length: 180, nullable: true, name: "safety_red_downgrade_alert_key" })
+  safetyRedDowngradeAlertKey?: string | null;
+
+  @Column({ type: "varchar", length: 24, default: "PAUSE_10_MIN", name: "safety_red_lock_mode" })
+  safetyRedLockMode!: ContestSafetyRedLockMode;
+
+  @Column({ type: "boolean", default: false, name: "safety_manual_locked" })
+  safetyManualLocked!: boolean;
+
+  @Column({ type: "datetime", precision: 3, nullable: true, name: "safety_global_lock_started_at" })
+  safetyGlobalLockStartedAt?: Date | null;
+
+  @Column({ type: "int", default: 0, name: "safety_global_extension_seconds" })
+  safetyGlobalExtensionSeconds!: number;
 
   // Ranking model for the live scoreboard:
   //  - IOI: rank by sum of best partial score per problem (default, matches the

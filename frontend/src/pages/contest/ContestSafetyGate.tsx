@@ -9,6 +9,7 @@ import {
   type ContestSafetyLocation,
   type ContestSafetyState,
 } from "../../lib/api/contests";
+import { toast } from "../../lib/toast";
 
 type Props = {
   contestId: number | null;
@@ -40,6 +41,7 @@ export const ContestSafetyGate: React.FC<Props> = ({ contestId, onLockChange, on
   const [busy, setBusy] = React.useState(false);
   const [now, setNow] = React.useState(Date.now());
   const wasLocked = React.useRef<boolean | null>(null);
+  const previousAlert = React.useRef<{ enabled: boolean; active: boolean; locationName: string | null } | null>(null);
   const dialogRef = React.useRef<HTMLElement | null>(null);
 
   const refresh = React.useCallback(async () => {
@@ -66,10 +68,25 @@ export const ContestSafetyGate: React.FC<Props> = ({ contestId, onLockChange, on
     };
   }, [contestId, refresh]);
 
+  const english = document.documentElement.lang.toLowerCase().startsWith("en");
   const pausedSeconds = state?.pausedUntil
     ? Math.max(0, Math.ceil((new Date(state.pausedUntil).getTime() - now) / 1000))
     : 0;
-  const locked = providerError || state === null || Boolean(state.enabled && (state.needsLocation || state.paused || state.alertPending));
+  const locked = providerError || state === null || Boolean(state.globalLocked || (state.enabled && (state.needsLocation || state.paused || state.alertPending)));
+
+  React.useEffect(() => {
+    if (!state) return;
+    const previous = previousAlert.current;
+    if (previous?.enabled && previous.active && state.enabled && !state.alertActive) {
+      const location = previous.locationName ? ` — ${previous.locationName}` : "";
+      toast.info(english ? `All clear${location}. The contest is available again.` : `Відбій${location}. Контест знову доступний.`, 6000);
+    }
+    previousAlert.current = {
+      enabled: state.enabled,
+      active: state.alertActive,
+      locationName: state.alertLocationName,
+    };
+  }, [state, english]);
 
   React.useEffect(() => {
     onLockChange?.(locked);
@@ -125,7 +142,6 @@ export const ContestSafetyGate: React.FC<Props> = ({ contestId, onLockChange, on
     };
   }, [locked, providerError, state?.alertPending, state?.needsLocation, state?.paused]);
 
-  const english = document.documentElement.lang.toLowerCase().startsWith("en");
   const queryNorm = normalizedSearch(query);
   const filteredLocations = React.useMemo(() => (state?.availableLocations ?? [])
     .filter((location) => {
@@ -196,6 +212,20 @@ export const ContestSafetyGate: React.FC<Props> = ({ contestId, onLockChange, on
             <LoaderCircle aria-hidden="true" className="size-8 animate-spin text-emerald-300" />
             <h2 id="contest-safety-title" className="mt-4 text-xl font-bold">{english ? "Checking safety status" : "Перевіряємо налаштування безпеки"}</h2>
           </div>
+        ) : state.globalLocked ? (
+          <>
+            <div className="grid size-14 place-items-center rounded-2xl bg-red-400/10 text-red-300"><AlertTriangle aria-hidden="true" className="size-7" /></div>
+            <p className="mt-5 text-xs font-bold uppercase tracking-[.16em] text-red-200/80">{english ? "Contest access paused" : "Доступ до контесту призупинено"}</p>
+            <h2 id="contest-safety-title" className="mt-2 text-2xl font-bold tracking-tight">{state.globalLockReason === "ORGANIZER"
+              ? (english ? "The organizer paused the contest" : "Організатор заблокував контест")
+              : (english ? "Red-level threat" : "Червоний рівень загрози")}</h2>
+            <p className="mt-3 text-sm leading-6 text-white/70">{state.globalLockReason === "ORGANIZER"
+              ? (english ? "The task and editor are hidden for everyone until the organizer restores access." : "Умова й редактор приховані для всіх. Доступ відновить організатор.")
+              : (english
+                ? `The task and editor are hidden for everyone while the red-level threat is active${state.globalLockLocationName ? ` in ${state.globalLockLocationName}` : ""}. Access will return when the level changes.`
+                : `Умова й редактор приховані для всіх, поки активний червоний рівень${state.globalLockLocationName ? ` у місті ${state.globalLockLocationName}` : ""}. Доступ відновиться, коли рівень зміниться.`)}</p>
+            <div role="status" className="mt-6 rounded-2xl bg-black/20 px-4 py-3 text-sm text-white/65">{english ? "Status is checked automatically." : "Статус перевіряється автоматично."}</div>
+          </>
         ) : state.paused ? (
           <>
             <div className="grid size-14 place-items-center rounded-2xl bg-amber-400/10 text-amber-300"><Clock3 aria-hidden="true" className="size-7" /></div>
