@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, KeyRound, RefreshCw, Eye, EyeOff, Ban, RotateCcw, MessageSquare, Megaphone, Send, ShieldCheck, Users2, Award, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound, Layers3, Type, Square, ZoomIn, ZoomOut, ArrowUp, ArrowDown, FileText, Settings2, Archive, X, Check, FileArchive, AlertCircle } from "lucide-react";
@@ -6596,8 +6597,8 @@ export const ContestPage: React.FC = () => {
                     </Card>
                   ) : null}
 
-                  {adminSubsParticipant && adminSubsFullPage ? (
-                    <div className="fixed inset-0 z-50 bg-bg-base">
+                  {adminSubsParticipant && adminSubsFullPage && typeof document !== "undefined" ? createPortal(
+                    <div className="fixed inset-0 z-[110] bg-bg-base" role="dialog" aria-modal="true" aria-label={tr("Інспектор подач", "Submission inspector")}>
                       <div className="h-full flex flex-col">
                         <div className="border-b border-border bg-bg-surface/95 backdrop-blur px-3 py-3 sm:px-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="font-mono text-text-primary text-sm md:text-base">
@@ -6621,7 +6622,8 @@ export const ContestPage: React.FC = () => {
                           {adminInspectorBody}
                         </div>
                       </div>
-                    </div>
+                    </div>,
+                    document.body,
                   ) : null}
                   </> : null}
                 </>
