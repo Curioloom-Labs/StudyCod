@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   DEBUG_MENTOR_SYSTEM_PROMPT,
+  mentorSystemPrompt,
   stripCodeFromMentorReply,
   deterministicReply,
   type DebugMentorContext,
@@ -58,4 +59,24 @@ test("deterministicReply opener differs from follow-up for wrong answer", () => 
     { role: "mentor", content: "а що каже перший тест?" },
   ]);
   assert.notEqual(opener, followUp);
+});
+
+test("English UI selects English mentor instructions without weakening teaching rules", () => {
+  assert.equal(mentorSystemPrompt(), DEBUG_MENTOR_SYSTEM_PROMPT);
+  const english = mentorSystemPrompt("en");
+  assert.match(english, /Reply in clear English only/);
+  assert.doesNotMatch(english, /Відповідай простою українською/);
+  assert.match(english, /Не давай повний код чи повне розв’язання задачі/);
+});
+
+test("English fallback and code-removal messages stay English for all error kinds", () => {
+  for (const verdict of ["CE", "TLE", "RE", "WA"]) {
+    const reply = deterministicReply(baseCtx({ verdict, uiLocale: "en" }), []);
+    assert.ok(reply.includes("?"));
+    assert.doesNotMatch(reply, /[\u0400-\u04ff]/);
+    assert.notEqual(reply, deterministicReply(baseCtx({ verdict }), []));
+  }
+  const filtered = stripCodeFromMentorReply("Try this: ```python\nprint(1)\n```", "en");
+  assert.match(filtered, /code removed/);
+  assert.doesNotMatch(filtered, /print\(1\)|[\u0400-\u04ff]/);
 });

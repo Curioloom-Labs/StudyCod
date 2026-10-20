@@ -14,6 +14,7 @@
 import { getLLMProvider } from "../llm/provider";
 import { logger } from "../../utils/logger";
 import { classifyErrorKind, type FailureCase, type HintLanguage } from "./failureHints";
+import type { UiLocale } from "../../utils/uiLocale";
 
 export type DebugChatRole = "student" | "mentor";
 export interface DebugChatMessage {
@@ -22,6 +23,7 @@ export interface DebugChatMessage {
 }
 
 export interface DebugMentorContext {
+  uiLocale?: UiLocale;
   taskTitle: string;
   taskText: string;
   language: HintLanguage;
@@ -46,12 +48,25 @@ export const DEBUG_MENTOR_SYSTEM_PROMPT = `Ти — уважний настав�
 - Якщо учень просить «просто дай код», ввічливо відмов у повному рішенні, але все одно допоможи з найближчим конкретним поняттям чи кроком.
 - Не давай порад про стиль, іменування чи коментарі.`;
 
+/** Keep the same teaching contract while honoring the interface language. */
+export function mentorSystemPrompt(locale: UiLocale = "uk"): string {
+  return locale === "en"
+    ? DEBUG_MENTOR_SYSTEM_PROMPT.replace(
+        "Відповідай простою українською",
+        "Reply in clear English only (including questions and examples)"
+      )
+    : DEBUG_MENTOR_SYSTEM_PROMPT;
+}
+
 /** Remove fenced/large code blocks so a reply can never leak a ready solution. */
-export function stripCodeFromMentorReply(text: string): string {
+export function stripCodeFromMentorReply(text: string, locale: UiLocale = "uk"): string {
   let out = String(text ?? "");
+  const nudge = locale === "en"
+    ? " (code removed — try describing the idea in words) "
+    : " (код прибрано — спробуй сформулювати ідею словами) ";
   // Fenced code blocks → a gentle nudge instead of code.
-  out = out.replace(/```[\s\S]*?```/g, " (код прибрано — спробуй сформулювати ідею словами) ");
-  out = out.replace(/~~~[\s\S]*?~~~/g, " (код прибрано — спробуй сформулювати ідею словами) ");
+  out = out.replace(/```[\s\S]*?```/g, nudge);
+  out = out.replace(/~~~[\s\S]*?~~~/g, nudge);
   // Collapse any stray remaining triple backticks.
   out = out.replace(/```+/g, "`");
   return out.replace(/[ \t]{2,}/g, " ").trim();
@@ -91,6 +106,20 @@ export function deterministicReply(ctx: DebugMentorContext, history: DebugChatMe
   const stderr = String(ctx.stderr ?? (ctx.failures ?? []).map(f => f.stderr || "").join("\n"));
   const kind = classifyErrorKind(String(ctx.verdict ?? ""), stderr);
   const opener = history.filter(m => m.role === "mentor").length === 0;
+  if (ctx.uiLocale === "en") {
+    switch (kind) {
+      case "compile":
+        return "This looks like a compilation error. Which line does the compiler point to, and what might be wrong with the brackets, types, or punctuation there?";
+      case "timeout":
+        return "The program exceeds the time limit. Where does your code repeat the most work, and could nested loops be replaced by a single pass? How many operations does it perform on the largest input?";
+      case "runtime":
+        return "The program stops during execution. What error type and line does the message mention? Could an index be out of bounds or a value be missing?";
+      default:
+        return opener
+          ? "Compare your output with the expected output on the first failing test. Is the difference in the values, formatting, or order? Which one will you inspect first?"
+          : "Let's narrow it down. On which specific input does your result differ from the expected output, and what did you expect to see?";
+    }
+  }
   switch (kind) {
     case "compile":
       return "Схоже на помилку компіляції. На який рядок вказує повідомлення компілятора, і що там може бути не так із дужками, типами чи крапкою з комою?";
@@ -124,8 +153,8 @@ ${transcript || "Учень: (ще нічого не написав)"}
 
   try {
     const provider = getLLMProvider();
-    const raw = await provider.generateText(prompt, DEBUG_MENTOR_SYSTEM_PROMPT, { temperature: 0.3, maxTokens: 320 });
-    const reply = stripCodeFromMentorReply(raw).slice(0, 1200).trim();
+    const raw = await provider.generateText(prompt, mentorSystemPrompt(params.context.uiLocale), { temperature: 0.3, maxTokens: 320 });
+    const reply = stripCodeFromMentorReply(raw, params.context.uiLocale).slice(0, 1200).trim();
     if (reply) return { reply, source: "ai" };
   } catch (err: unknown) {
     logger.debug("[debugMentor] AI reply failed, using deterministic fallback", { error: err instanceof Error ? err.message : String(err) });

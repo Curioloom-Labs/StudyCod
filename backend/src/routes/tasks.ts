@@ -27,6 +27,7 @@ import { In } from "typeorm";
 import { safeAICall, sendAIError, neutralizePromptInjection, type AIError } from "../services/ai/safeAICall";
 import { generateAlgorithmicHints, explainSubmissionError, type HintLanguage } from "../services/ai/failureHints";
 import { debugMentorReply, type DebugChatMessage, DEBUG_CHAT_MAX_HISTORY, DEBUG_CHAT_MAX_MESSAGE_CHARS } from "../services/ai/debugMentor";
+import { resolveUiLocaleFromHeaders } from "../utils/uiLocale";
 import { computeIntegrityScore } from "../services/integrity/proctoringScore";
 import { initialConceptState, reviewConcept, gradeFromOutcome, dueConcepts, DEFAULT_EASE_FACTOR, type ConceptReviewState as ConceptReviewStateShape } from "../services/learning/spacedRepetition";
 import { ConceptReviewState } from "../entities/ConceptReviewState";
@@ -3265,6 +3266,7 @@ tasksRouter.post("/debug-chat", authMiddleware, submissionRateLimitMiddleware, a
 
     const result = await debugMentorReply({
       context: {
+        uiLocale: resolveUiLocaleFromHeaders(req.headers, "uk"),
         taskTitle: String(body.taskTitle ?? "").slice(0, 300),
         taskText: String(body.taskText ?? "").slice(0, 4000),
         language,
