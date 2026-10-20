@@ -1,4 +1,5 @@
 import { Router, type Response } from "express";
+import multer from "multer";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
 import { Contest } from "../entities/Contest";
@@ -11,6 +12,25 @@ import { logger } from "../utils/logger";
 
 const router = Router();
 const sendLimiter = createRouteLimiter({ windowMs: 60_000, limit: 10, message: "RATE_LIMIT" });
+const PARTICIPANT_MESSAGE_ATTACHMENT_MIME = new Set([
+  "image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp", "image/tiff", "image/heic", "image/heif",
+  "application/pdf", "text/plain", "application/json", "text/csv",
+  "application/zip", "application/x-zip-compressed",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENT_SIZE = 20 * 1024 * 1024;
+const participantMessageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_ATTACHMENT_SIZE, files: 5 },
+  fileFilter: (_req, file, callback) => {
+    if (PARTICIPANT_MESSAGE_ATTACHMENT_MIME.has(String(file.mimetype || "").toLowerCase())) callback(null, true);
+    else callback(new Error("UNSUPPORTED_MEDIA_TYPE"));
+  },
+});
 const messageSchema = z.object({
   title: z.string().trim().min(1).max(160),
   text: z.string().trim().min(1).max(5_000),
@@ -47,14 +67,82 @@ function escapeHtml(value: string): string {
   })[character] ?? character);
 }
 
-router.post("/:id/messages", authRequired, sendLimiter, async (req: AuthRequest, res: Response) => {
+function decodeMultipartFilename(value: string): string {
+  if (!value || /[^\u0000-\u00ff]/.test(value)) return value;
+  const decoded = Buffer.from(value, "latin1").toString("utf8");
+  if (decoded.includes("\uFFFD") || !/[^\u0000-\u007f]/.test(decoded)) return value;
+  return decoded;
+}
+
+function trimTrailingUrlPunctuation(value: string): string {
+  let result = value.replace(/[.,!?;:]+$/g, "");
+  const openParentheses = (result.match(/\(/g) ?? []).length;
+  let closeParentheses = (result.match(/\)/g) ?? []).length;
+  while (result.endsWith(")") && closeParentheses > openParentheses) {
+    result = result.slice(0, -1);
+    closeParentheses -= 1;
+  }
+  return result;
+}
+
+function linkifyMessageText(value: string): string {
+  const pattern = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+  let html = "";
+  let lastIndex = 0;
+  for (const match of value.matchAll(pattern)) {
+    const start = match.index ?? lastIndex;
+    const url = trimTrailingUrlPunctuation(match[0]);
+    if (!url) continue;
+    html += escapeHtml(value.slice(lastIndex, start));
+    const href = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    html += `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:#72edb0;text-decoration:underline;word-break:break-all;">${escapeHtml(url)}</a>`;
+    lastIndex = start + url.length;
+  }
+  html += escapeHtml(value.slice(lastIndex));
+  return html;
+}
+
+router.post("/:id/messages", authRequired, sendLimiter, (req, res, next) => {
+  participantMessageUpload.array("attachments", 5)(req, res, (error: unknown) => {
+    if (!error) return next();
+    const code = error instanceof multer.MulterError ? error.code : undefined;
+    const message = error instanceof Error && error.message === "UNSUPPORTED_MEDIA_TYPE"
+      ? "UNSUPPORTED_MEDIA_TYPE"
+      : code === "LIMIT_FILE_SIZE"
+        ? "FILE_TOO_LARGE"
+        : code === "LIMIT_FILE_COUNT"
+          ? "TOO_MANY_FILES"
+          : "UPLOAD_FAILED";
+    const status = message === "FILE_TOO_LARGE" ? 413 : 400;
+    return res.status(status).json({ message });
+  });
+}, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
     const contestId = Number(req.params.id);
     if (!Number.isSafeInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
 
-    const parsed = messageSchema.safeParse(req.body ?? {});
+    let requestBody: unknown = req.body ?? {};
+    if (typeof req.body?.payload === "string") {
+      try {
+        requestBody = JSON.parse(req.body.payload);
+      } catch {
+        return res.status(400).json({ message: "INVALID_INPUT" });
+      }
+    }
+    const parsed = messageSchema.safeParse(requestBody);
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+
+    const attachmentFiles = (req.files as Express.Multer.File[] | undefined) ?? [];
+    const totalAttachmentSize = attachmentFiles.reduce((total, file) => total + file.size, 0);
+    if (totalAttachmentSize > MAX_TOTAL_ATTACHMENT_SIZE) {
+      return res.status(413).json({ message: "ATTACHMENTS_TOO_LARGE" });
+    }
+    const emailAttachments = attachmentFiles.map((file) => ({
+      filename: decodeMultipartFilename(file.originalname).replace(/[\\/<>:\\"|?*\x00-\x1f]/g, "_").slice(0, 180) || "attachment",
+      content: file.buffer,
+      contentType: file.mimetype,
+    }));
 
     const contest = await AppDataSource.getRepository(Contest).findOne({
       where: { id: contestId },
@@ -120,7 +208,7 @@ router.post("/:id/messages", authRequired, sendLimiter, async (req: AuthRequest,
         const index = cursor++;
         const recipient = emailRecipients[index];
         const greeting = recipient.name ? `Вітаємо, ${recipient.name}!` : "Вітаємо!";
-        const contentHtml = `<p style="margin:0 0 14px 0;">${escapeHtml(greeting)}</p><h2 style="margin:0 0 12px 0;font-size:18px;line-height:1.4;">${escapeHtml(safeSubjectTitle)}</h2><div style="white-space:pre-wrap;line-height:1.7;">${escapeHtml(parsed.data.text)}</div><p style="margin:20px 0 0;"><a href="${escapeHtml(contestUrl)}" style="color:#72edb0;">Відкрити контест «${escapeHtml(safeContestTitle)}»</a></p>`;
+        const contentHtml = `<p style="margin:0 0 14px 0;">${escapeHtml(greeting)}</p><h2 style="margin:0 0 12px 0;font-size:18px;line-height:1.4;">${escapeHtml(safeSubjectTitle)}</h2><div style="white-space:pre-wrap;line-height:1.7;">${linkifyMessageText(parsed.data.text)}</div><p style="margin:20px 0 0;"><a href="${escapeHtml(contestUrl)}" style="color:#72edb0;">Відкрити контест «${escapeHtml(safeContestTitle)}»</a></p>`;
         try {
           await emailService.sendNotificationEmail({
             to: recipient.email,
@@ -128,6 +216,7 @@ router.post("/:id/messages", authRequired, sendLimiter, async (req: AuthRequest,
             title: safeSubjectTitle,
             contentHtml,
             text: `${greeting}\n\n${safeSubjectTitle}\n\n${parsed.data.text}\n\nКонтест: ${contestUrl}`,
+            attachments: emailAttachments,
           });
           sent += 1;
         } catch {

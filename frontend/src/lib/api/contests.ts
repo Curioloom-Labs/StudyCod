@@ -704,7 +704,8 @@ export async function postContestCommunityAnnouncement(
 
 export async function sendContestParticipantMessage(
   contestId: number,
-  payload: { title: string; text: string; retryEmails?: string[] }
+  payload: { title: string; text: string; retryEmails?: string[] },
+  attachments: File[] = []
 ): Promise<{
   contestId: number;
   participants: number;
@@ -714,7 +715,10 @@ export async function sendContestParticipantMessage(
   skipped: number;
   duplicateAddresses: number;
 }> {
-  const res = await api.post(`/contests/${contestId}/messages`, payload);
+  const formData = new FormData();
+  formData.append("payload", JSON.stringify(payload));
+  for (const file of attachments) formData.append("attachments", file, file.name);
+  const res = await api.post(`/contests/${contestId}/messages`, formData);
   return res.data;
 }
 

@@ -1011,6 +1011,7 @@ export const ContestPage: React.FC = () => {
   const [adminParticipantsActionTone, setAdminParticipantsActionTone] = React.useState<"success" | "warn" | "error">("success");
   const [contestMessageTitle, setContestMessageTitle] = React.useState("");
   const [contestMessageText, setContestMessageText] = React.useState("");
+  const [contestMessageAttachments, setContestMessageAttachments] = React.useState<File[]>([]);
   const [contestMessageSending, setContestMessageSending] = React.useState(false);
   const [contestMessageError, setContestMessageError] = React.useState<string | null>(null);
   const [contestMessageResult, setContestMessageResult] = React.useState<{
@@ -1318,7 +1319,7 @@ export const ContestPage: React.FC = () => {
         title: contestMessageTitle.trim(),
         text: contestMessageText.trim(),
         ...(retryEmails ? { retryEmails } : {}),
-      });
+      }, contestMessageAttachments);
       const combinedResult = retryEmails && contestMessageResult
         ? {
             ...contestMessageResult,
@@ -1330,10 +1331,18 @@ export const ContestPage: React.FC = () => {
       if (combinedResult.sent > 0 && combinedResult.failed.length === 0) {
         setContestMessageTitle("");
         setContestMessageText("");
+        setContestMessageAttachments([]);
       }
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      setContestMessageError(message || tr("Не вдалося надіслати листи учасникам.", "Failed to email participants."));
+      const uploadErrorMessages: Record<string, string> = {
+        UNSUPPORTED_MEDIA_TYPE: tr("Цей тип файлу не підтримується.", "This file type is not supported."),
+        FILE_TOO_LARGE: tr("Файл завеликий. Максимум — 10 МБ.", "A file is too large. Maximum size is 10 MB."),
+        ATTACHMENTS_TOO_LARGE: tr("Загальний розмір вкладень не може перевищувати 20 МБ.", "Attachments cannot exceed 20 MB in total."),
+        TOO_MANY_FILES: tr("Можна прикріпити не більше 5 файлів.", "You can attach up to 5 files."),
+        UPLOAD_FAILED: tr("Не вдалося завантажити вкладення.", "Failed to upload attachments."),
+      };
+      setContestMessageError(uploadErrorMessages[message] || message || tr("Не вдалося надіслати листи учасникам.", "Failed to email participants."));
     } finally {
       setContestMessageSending(false);
     }
@@ -6500,7 +6509,60 @@ export const ContestPage: React.FC = () => {
                           className="w-full resize-y rounded-lg border border-border bg-bg-base px-3 py-2 text-sm leading-6 text-text-primary outline-none focus:border-primary"
                           placeholder={tr("Напиши учасникам важливу інформацію або нагадування…", "Write an update or reminder for participants…")}
                         />
-                        <p className="mt-1 text-right text-xs text-text-muted">{contestMessageText.length}/5000</p>
+                        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs text-text-muted">{tr("Посилання http://, https:// та www. у листі будуть клікабельними.", "http://, https:// and www. links in the email will be clickable.")}</p>
+                          <p className="text-right text-xs text-text-muted">{contestMessageText.length}/5000</p>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-text-primary transition-colors hover:bg-bg-hover">
+                            <Upload aria-hidden="true" className="h-4 w-4" />
+                            {tr("Додати файли", "Attach files")}
+                            <input
+                              type="file"
+                              multiple
+                              accept=".pdf,.txt,.csv,.json,.png,.jpg,.jpeg,.gif,.webp,.avif,.bmp,.tif,.tiff,.heic,.heif,.zip,.doc,.docx,.xls,.xlsx"
+                              className="sr-only"
+                              onChange={(event) => {
+                                const selected = Array.from(event.currentTarget.files ?? []);
+                                const unique = new Map(contestMessageAttachments.map((file) => [`${file.name}:${file.size}:${file.lastModified}`, file]));
+                                for (const file of selected) unique.set(`${file.name}:${file.size}:${file.lastModified}`, file);
+                                const nextAttachments = Array.from(unique.values());
+                                if (nextAttachments.some((file) => file.size > 10 * 1024 * 1024)) {
+                                  setContestMessageError(tr("Файл завеликий. Максимум — 10 МБ.", "A file is too large. Maximum size is 10 MB."));
+                                } else if (nextAttachments.length > 5) {
+                                  setContestMessageError(tr("Можна прикріпити не більше 5 файлів.", "You can attach up to 5 files."));
+                                } else if (nextAttachments.reduce((total, file) => total + file.size, 0) > 20 * 1024 * 1024) {
+                                  setContestMessageError(tr("Загальний розмір вкладень не може перевищувати 20 МБ.", "Attachments cannot exceed 20 MB in total."));
+                                } else {
+                                  setContestMessageAttachments(nextAttachments);
+                                  setContestMessageError(null);
+                                }
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                          <span className="text-xs text-text-muted">{tr("До 5 файлів, максимум 10 МБ кожен і 20 МБ разом.", "Up to 5 files, 10 MB each and 20 MB total.")}</span>
+                        </div>
+                        {contestMessageAttachments.length > 0 ? (
+                          <ul className="mt-2 flex flex-wrap gap-2" aria-label={tr("Вкладені файли", "Attached files")}>
+                            {contestMessageAttachments.map((file) => (
+                              <li key={`${file.name}:${file.size}:${file.lastModified}`} className="inline-flex max-w-full items-center gap-2 rounded-lg bg-bg-hover px-2.5 py-1.5 text-xs text-text-primary">
+                                <FileText aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                                <span className="max-w-[240px] truncate">{file.name}</span>
+                                <button
+                                  type="button"
+                                  aria-label={tr(`Прибрати файл ${file.name}`, `Remove ${file.name}`)}
+                                  onClick={() => setContestMessageAttachments((current) => current.filter((item) => item !== file))}
+                                  className="rounded p-0.5 hover:bg-black/10"
+                                >
+                                  <X aria-hidden="true" className="h-3.5 w-3.5" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
                       </div>
                       {contestMessageError ? <p role="alert" className="text-sm text-accent-error">{contestMessageError}</p> : null}
                       {contestMessageResult ? (
