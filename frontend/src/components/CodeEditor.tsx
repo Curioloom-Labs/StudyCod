@@ -1145,7 +1145,11 @@ export const CodeEditor: React.FC<Props> = React.memo(({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [didMount, setDidMount] = useState(false);
   const [mountTimedOut, setMountTimedOut] = useState(false);
-  const [loaderReady, setLoaderReady] = useState(false);
+  const [loadedLanguage, setLoadedLanguage] = useState<string | null>(null);
+  // Do not let Monaco encounter a new language before its tokenizer exists.
+  // Its lazy language request is cached, so mounting early can leave that
+  // model permanently unhighlighted after switching languages.
+  const loaderReady = loadedLanguage === monacoLang;
   const [loaderError, setLoaderError] = useState<string | null>(null);
   const [debugSize, setDebugSize] = useState<{ w: number; h: number } | null>(null);
   const [appTheme, setAppTheme] = useState<AppTheme>(() => getCurrentTheme());
@@ -1181,9 +1185,6 @@ export const CodeEditor: React.FC<Props> = React.memo(({
       .then(() => loader.init())
       .then(monaco => {
         if (cancelled) return;
-        setLoaderReady(true);
-        setLoaderError(null);
-
         // Ensure our customizations exist as soon as Monaco is available.
         ensureStudyCodMonacoThemes(monaco);
         registerJudgeLanguageModes(monaco);
@@ -1191,11 +1192,13 @@ export const CodeEditor: React.FC<Props> = React.memo(({
         if (monacoLang === "java") registerJavaStdlibCompletions(monaco);
         registerImportCompletions(monaco, language);
         registerStudyCodSnippets(monaco, monacoLang);
+        setLoadedLanguage(monacoLang);
+        setLoaderError(null);
       })
       .catch(err => {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);
-        setLoaderReady(false);
+        setLoadedLanguage(null);
         setLoaderError(msg);
       });
 
@@ -1362,7 +1365,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
       {loaderReady ? <Suspense fallback={<div className="h-full w-full flex items-center justify-center bg-bg-code border border-border">
             <div className="text-text-secondary font-mono text-sm">{tr("Завантаження редактора…", "Loading editor…")}</div>
           </div>}>
-        <Editor height="100%" width="100%" language={monacoLang} theme={monacoTheme} value={value} options={editorOptions} onChange={handleChange} beforeMount={(monaco: MonacoApi) => {
+        <Editor key={`${monacoLang}:${filePath || ""}`} height="100%" width="100%" language={monacoLang} theme={monacoTheme} value={value} options={editorOptions} onChange={handleChange} beforeMount={(monaco: MonacoApi) => {
         // Theme must be defined before the editor instance is created.
         // Otherwise setting an unknown theme name can lead to a blank editor.
         ensureStudyCodMonacoThemes(monaco);
