@@ -1,7 +1,7 @@
 import { api } from "./client";
 import { optimizeCertificateTemplateImages } from "../certificates/optimizeTemplateImages";
 
-const CERTIFICATE_TEMPLATE_TEXT_LIMIT = 5_000_000;
+const CERTIFICATE_TEMPLATE_TEXT_LIMIT = 50 * 1024 * 1024;
 
 type CertificateApiValidationIssue = {
   path?: Array<string | number>;
@@ -42,7 +42,7 @@ function getCertificateApiMessage(error: unknown): string {
 
 function makeTemplateTooLargeMessage(limit?: number): string {
   const max = Number(limit ?? CERTIFICATE_TEMPLATE_TEXT_LIMIT);
-  const maxMb = Number.isFinite(max) && max > 0 ? (max / (1024 * 1024)).toFixed(1) : "5.0";
+  const maxMb = Number.isFinite(max) && max > 0 ? (max / (1024 * 1024)).toFixed(1) : "50.0";
   return `TEMPLATE_TOO_LARGE: шаблон завеликий (до ${maxMb} МБ на поле HTML або CSS). Вбудовані PNG/JPG/WebP стискаються автоматично; заміни завелике зображення на URL або зменш його. / Template is too large (up to ${maxMb} MB per HTML or CSS field). Embedded PNG/JPG/WebP images are compressed automatically; use an image URL or reduce the image size.`;
 }
 
@@ -95,8 +95,9 @@ function normalizeCertificateApiError(error: unknown, fallbackMessage: string): 
 }
 
 function assertTemplateTextSize(payload: { htmlTemplate?: string | null; cssTemplate?: string | null }): void {
-  const htmlLen = String(payload.htmlTemplate ?? "").length;
-  const cssLen = String(payload.cssTemplate ?? "").length;
+  const encoder = new TextEncoder();
+  const htmlLen = encoder.encode(String(payload.htmlTemplate ?? "")).byteLength;
+  const cssLen = encoder.encode(String(payload.cssTemplate ?? "")).byteLength;
   if (htmlLen > CERTIFICATE_TEMPLATE_TEXT_LIMIT || cssLen > CERTIFICATE_TEMPLATE_TEXT_LIMIT) {
     throw new Error(makeTemplateTooLargeMessage(CERTIFICATE_TEMPLATE_TEXT_LIMIT));
   }

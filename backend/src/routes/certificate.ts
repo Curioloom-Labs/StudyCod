@@ -9,7 +9,7 @@ import { logger } from "../utils/logger";
 const certificateRouter = Router();
 const verificationService = new CertificateVerificationService();
 
-const CERTIFICATE_TEMPLATE_TEXT_LIMIT = 5_000_000;
+const CERTIFICATE_TEMPLATE_TEXT_LIMIT = 50 * 1024 * 1024;
 const certificateFieldKeySchema = z.enum([
   "contest_name",
   "name",
@@ -43,15 +43,24 @@ function certificateTemplateValidationError(parsed: z.ZodSafeParseError<unknown>
   });
 
   if (tooLargeIssue) {
-    return res.status(413).json({
-      message: "TEMPLATE_TOO_LARGE",
-      detail: `Template HTML/CSS is too large. Max allowed per field is ${CERTIFICATE_TEMPLATE_TEXT_LIMIT} characters.`,
-      limit: CERTIFICATE_TEMPLATE_TEXT_LIMIT,
-      errors: parsed.error.issues,
-    });
+    return certificateTemplateTooLargeResponse(res);
   }
 
   return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+}
+
+function certificateTemplateTooLargeResponse(res: Response) {
+  return res.status(413).json({
+    message: "TEMPLATE_TOO_LARGE",
+    detail: `Template HTML/CSS is too large. Max allowed per field is ${CERTIFICATE_TEMPLATE_TEXT_LIMIT} UTF-8 bytes.`,
+    limit: CERTIFICATE_TEMPLATE_TEXT_LIMIT,
+  });
+}
+
+function hasOversizedCertificateTemplate(payload: { htmlTemplate?: string | null; cssTemplate?: string | null }): boolean {
+  return [payload.htmlTemplate, payload.cssTemplate].some(
+    value => typeof value === "string" && Buffer.byteLength(value, "utf8") > CERTIFICATE_TEMPLATE_TEXT_LIMIT
+  );
 }
 
 certificateRouter.post("/template", authRequired, async (req: AuthRequest, res: Response) => {
@@ -77,6 +86,7 @@ certificateRouter.post("/template", authRequired, async (req: AuthRequest, res: 
     if (!parsed.success) {
       return certificateTemplateValidationError(parsed, res);
     }
+    if (hasOversizedCertificateTemplate(parsed.data)) return certificateTemplateTooLargeResponse(res);
 
     if (parsed.data.type === "custom" && !String(parsed.data.htmlTemplate ?? "").trim()) {
       return res.status(400).json({ message: "HTML_TEMPLATE_REQUIRED" });
@@ -154,6 +164,7 @@ certificateRouter.put("/template/:templateId", authRequired, async (req: AuthReq
 
     const parsed = schema.safeParse(req.body ?? {});
     if (!parsed.success) return certificateTemplateValidationError(parsed, res);
+    if (hasOversizedCertificateTemplate(parsed.data)) return certificateTemplateTooLargeResponse(res);
 
     const current = await certificateService.getTemplateById(templateId);
     const resultingType = parsed.data.type ?? current?.type;

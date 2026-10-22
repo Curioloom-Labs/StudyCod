@@ -470,6 +470,9 @@ const LARGE_BODY_PATH_PREFIXES = [
   "/topics", "/api/topics",
   "/contests", "/api/contests"
 ];
+// Allow 50 MiB for both template fields in one JSON request, plus payload overhead.
+const CERTIFICATE_TEMPLATE_BODY_LIMIT = "110mb";
+const CERTIFICATE_TEMPLATE_BODY_PATH = /^\/(?:api\/)?certificate\/template(?:\/\d+)?\/?$/;
 const defaultBodyLimit = String(env.BODY_LIMIT_DEFAULT || "256kb");
 const largeBodyLimit = String(
   env.BODY_LIMIT_LARGE
@@ -487,11 +490,16 @@ function isLargeBodyPath(path: string): boolean {
 
 const jsonParserDefault = express.json({ limit: defaultBodyLimit });
 const jsonParserLarge = express.json({ limit: largeBodyLimit });
+const jsonParserCertificateTemplate = express.json({ limit: CERTIFICATE_TEMPLATE_BODY_LIMIT });
 const urlencodedParserDefault = express.urlencoded({ extended: false, limit: defaultBodyLimit });
 const urlencodedParserLarge = express.urlencoded({ extended: false, limit: largeBodyLimit });
 
 app.use((req, res, next) => {
-  (isLargeBodyPath(req.path) ? jsonParserLarge : jsonParserDefault)(req, res, next);
+  const isCertificateTemplateWrite = (req.method === "POST" || req.method === "PUT")
+    && CERTIFICATE_TEMPLATE_BODY_PATH.test(req.path);
+  (isCertificateTemplateWrite
+    ? jsonParserCertificateTemplate
+    : isLargeBodyPath(req.path) ? jsonParserLarge : jsonParserDefault)(req, res, next);
 });
 app.use((req, res, next) => {
   (isLargeBodyPath(req.path) ? urlencodedParserLarge : urlencodedParserDefault)(req, res, next);

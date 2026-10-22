@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { Upload, Award } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 
+const MAX_DIPLOMA_IMPORT_BYTES = 110 * 1024 * 1024;
+
 export type DiplomaImport = {
   name: string;
   htmlTemplate: string;
@@ -43,7 +45,7 @@ export function TournamentDiplomaImport({ onLoad }: { onLoad: (template: Diploma
   };
 
   const importJson = async (file: File) => {
-    if (file.size > 5_000_000) throw new Error("size");
+    if (file.size > MAX_DIPLOMA_IMPORT_BYTES) throw new Error("size");
     const value: unknown = JSON.parse(await file.text());
     if (!isDiplomaImport(value)) throw new Error("shape");
     const template = value as DiplomaImport;
@@ -91,7 +93,7 @@ export function TournamentDiplomaImport({ onLoad }: { onLoad: (template: Diploma
         try {
           await importJson(file);
         } catch {
-          setError(tr("Потрібен JSON-шаблон до 5 МБ із полями name, htmlTemplate та cssTemplate.", "Choose a JSON template under 5 MB with name, htmlTemplate and cssTemplate fields."));
+          setError(tr("Потрібен коректний JSON-шаблон до 110 МБ із полями name, htmlTemplate та cssTemplate.", "Choose a valid JSON template up to 110 MB with name, htmlTemplate and cssTemplate fields."));
         }
       }}
     />

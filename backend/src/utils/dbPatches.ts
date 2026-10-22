@@ -381,7 +381,18 @@ async function ensureContestCertificateSettingsTable(): Promise<void> {
 async function ensureCertificateTemplatesTable(): Promise<void> {
   try {
     const rows = (await query("SHOW TABLES LIKE 'certificate_templates'")) as Array<SqlRow>;
-    if (Array.isArray(rows) && rows.length > 0) return;
+    if (Array.isArray(rows) && rows.length > 0) {
+      const columns = (await query("SHOW COLUMNS FROM `certificate_templates`")) as Array<SqlRow>;
+      for (const columnName of ["html_template", "css_template"]) {
+        const column = columns.find(row => String(row.Field ?? "").toLowerCase() === columnName);
+        const columnType = String(column?.Type ?? "").toLowerCase();
+        if (column && !columnType.startsWith("longtext")) {
+          logger.warn(`[DB Patch] Widening certificate_templates.${columnName} to LONGTEXT...`);
+          await query(`ALTER TABLE \`certificate_templates\` MODIFY COLUMN \`${columnName}\` LONGTEXT NULL`);
+        }
+      }
+      return;
+    }
 
     logger.warn("[DB Patch] Table certificate_templates is missing. Creating...");
     await query(`
@@ -390,8 +401,8 @@ async function ensureCertificateTemplatesTable(): Promise<void> {
         contest_id INT NULL,
         name VARCHAR(180) NOT NULL,
         type ENUM('studycod','custom') NOT NULL DEFAULT 'studycod',
-        html_template MEDIUMTEXT NULL,
-        css_template MEDIUMTEXT NULL,
+        html_template LONGTEXT NULL,
+        css_template LONGTEXT NULL,
         background_pdf_url VARCHAR(1024) NULL,
         is_active TINYINT(1) NOT NULL DEFAULT 1,
         version INT NOT NULL DEFAULT 1,
