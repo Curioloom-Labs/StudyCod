@@ -5331,7 +5331,7 @@ contestsRouter.post("/:id/generate-certificates", authRequired, async (req: Auth
       jobId: job.jobId,
     });
   } catch (error: unknown) {
-    if (["AWARDS_NOT_CONFIRMED", "AWARDS_STALE"].includes(errorMessage(error))) {
+    if (["AWARDS_NOT_CONFIRMED", "AWARDS_STALE", "CERTIFICATE_GENERATION_IN_PROGRESS"].includes(errorMessage(error))) {
       return res.status(409).json({ message: errorMessage(error) });
     }
     if (errorMessage(error) === "CERTIFICATES_DISABLED_FOR_CONTEST") {

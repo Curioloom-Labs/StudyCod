@@ -472,7 +472,7 @@ const LARGE_BODY_PATH_PREFIXES = [
 ];
 // Allow 50 MiB for both template fields in one JSON request, plus payload overhead.
 const CERTIFICATE_TEMPLATE_BODY_LIMIT = "110mb";
-const CERTIFICATE_TEMPLATE_BODY_PATH = /^\/(?:api\/)?certificate\/template(?:\/\d+)?\/?$/;
+const CERTIFICATE_TEMPLATE_BODY_PATH = /^\/(?:api\/)?certificate\/(?:template(?:\/\d+)?|contest\/\d+\/preview)\/?$/;
 const defaultBodyLimit = String(env.BODY_LIMIT_DEFAULT || "256kb");
 const largeBodyLimit = String(
   env.BODY_LIMIT_LARGE

@@ -24,11 +24,11 @@ const DANGEROUS_CSS_PATTERNS = [
 ];
 
 function sanitizeCss(input: string): string {
-  // Keep only self-contained WOFF2 font data used by the bundled diploma designs.
-  // External URLs and all other CSS URLs remain blocked for certificate templates.
+  // Self-contained fonts and raster backgrounds must survive into the PDF.
+  // External resources and active SVG data remain blocked.
   let css = input.replace(/url\s*\(([^)]*)\)/gi, (candidate) => {
-    const embeddedFont = candidate.match(/^url\s*\(\s*["']?(data:font\/woff2;base64,[a-z0-9+/=]+)["']?\s*\)$/i);
-    return embeddedFont ? `url("${embeddedFont[1]}")` : "/* blocked */";
+    const embeddedResource = candidate.match(/^url\s*\(\s*["']?(data:(?:font\/woff2|image\/(?:png|jpe?g|webp));base64,[a-z0-9+/=]+)["']?\s*\)$/i);
+    return embeddedResource ? `url("${embeddedResource[1]}")` : "/* blocked */";
   });
   for (const pattern of DANGEROUS_CSS_PATTERNS) {
     css = css.replace(pattern, "/* blocked */");

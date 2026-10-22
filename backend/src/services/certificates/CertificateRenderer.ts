@@ -173,7 +173,7 @@ export class CertificateRenderer {
         });
 
     const browser = await getBrowser();
-    const page = await browser.newPage();
+    const page = await browser.newPage({ javaScriptEnabled: false });
     try {
       await page.setContent(html, { waitUntil: "networkidle" });
       const data = await page.pdf({

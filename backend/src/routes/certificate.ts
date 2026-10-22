@@ -5,11 +5,73 @@ import { AuthRequest, authOptional, authRequired } from "../middleware/authMiddl
 import { certificateService } from "../services/certificates/CertificateService";
 import { CertificateVerificationService } from "../services/certificates/CertificateVerificationService";
 import { logger } from "../utils/logger";
+import { HttpError } from "../utils/httpError";
+import { certificatePdfPath, getCertificateWorkspace, previewCertificate, requireCertificateManager, retryFailedCertificateJobs, queueExistingCertificateEmails } from "../services/certificates/CertificateWorkspace";
+import { requireCurrentAwards } from "../services/contest/awards";
 
 const certificateRouter = Router();
 const verificationService = new CertificateVerificationService();
 
 const CERTIFICATE_TEMPLATE_TEXT_LIMIT = 50 * 1024 * 1024;
+
+function workspaceError(error: unknown, res: Response) {
+  if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.code });
+  const message = error instanceof Error ? error.message : "INTERNAL_SERVER_ERROR";
+  if (["AWARDS_STALE", "AWARDS_NOT_CONFIRMED", "CERTIFICATE_GENERATION_IN_PROGRESS"].includes(message)) return res.status(409).json({ message });
+  logger.error("[certificates] workspace request failed", { error });
+  return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+}
+
+certificateRouter.get("/contest/:contestId/workspace", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.contestId);
+    await requireCertificateManager(req, contestId);
+    return res.json(await getCertificateWorkspace(contestId, req.userId!));
+  } catch (error) { return workspaceError(error, res); }
+});
+
+certificateRouter.post("/contest/:contestId/preview", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.contestId);
+    const contest = await requireCertificateManager(req, contestId);
+    const parsed = z.object({
+      templateId: z.number().int().positive().optional(),
+      htmlTemplate: z.string().max(CERTIFICATE_TEMPLATE_TEXT_LIMIT).optional(),
+      cssTemplate: z.string().max(CERTIFICATE_TEMPLATE_TEXT_LIMIT).optional(),
+      participantId: z.number().int().positive().optional(),
+      place: z.enum(["1", "2", "3"]).nullable().optional(),
+    }).safeParse(req.body ?? {});
+    if (!parsed.success) return certificateTemplateValidationError(parsed, res);
+    if (hasOversizedCertificateTemplate(parsed.data)) return certificateTemplateTooLargeResponse(res);
+    return res.json(await previewCertificate(contestId, contest, parsed.data));
+  } catch (error) { return workspaceError(error, res); }
+});
+
+certificateRouter.post("/contest/:contestId/retry", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.contestId);
+    await requireCertificateManager(req, contestId);
+    await requireCurrentAwards(contestId);
+    return res.json(await retryFailedCertificateJobs(contestId));
+  } catch (error) { return workspaceError(error, res); }
+});
+
+certificateRouter.post("/contest/:contestId/send", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.contestId);
+    await requireCertificateManager(req, contestId);
+    return res.json(await queueExistingCertificateEmails(contestId));
+  } catch (error) { return workspaceError(error, res); }
+});
+
+certificateRouter.get("/contest/:contestId/pdf/:participantId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.contestId);
+    await requireCertificateManager(req, contestId);
+    const filePath = await certificatePdfPath(contestId, Number(req.params.participantId));
+    return res.download(filePath);
+  } catch (error) { return workspaceError(error, res); }
+});
 const certificateFieldKeySchema = z.enum([
   "contest_name",
   "name",
@@ -87,6 +149,7 @@ certificateRouter.post("/template", authRequired, async (req: AuthRequest, res: 
       return certificateTemplateValidationError(parsed, res);
     }
     if (hasOversizedCertificateTemplate(parsed.data)) return certificateTemplateTooLargeResponse(res);
+    if (parsed.data.contestId) await requireCertificateManager(req, parsed.data.contestId);
 
     if (parsed.data.type === "custom" && !String(parsed.data.htmlTemplate ?? "").trim()) {
       return res.status(400).json({ message: "HTML_TEMPLATE_REQUIRED" });
@@ -104,6 +167,7 @@ certificateRouter.post("/template", authRequired, async (req: AuthRequest, res: 
 
     return res.json(result);
   } catch (error: unknown) {
+    if (error instanceof HttpError) return workspaceError(error, res);
     logger.error("[certificate] failed to create template", {
       userId: req.userId ?? null,
       userType: req.userType ?? null,
@@ -143,9 +207,10 @@ certificateRouter.put("/template/:templateId", authRequired, async (req: AuthReq
     if (!templateRow) return res.status(404).json({ message: "TEMPLATE_NOT_FOUND" });
 
     const isAdmin = req.userRole === "SYSTEM_ADMIN";
+    if (templateRow.contestId) await requireCertificateManager(req, Number(templateRow.contestId));
     const isCreator = Number(templateRow.createdByUserId ?? 0) === req.userId;
     const isContestOwner = Number(templateRow.contestOwnerId ?? 0) === req.userId;
-    if (!isAdmin && !isCreator && !isContestOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (!templateRow.contestId && !isAdmin && !isCreator && !isContestOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
 
     const schema = z.object({
       name: z.string().min(2).max(180).optional(),
@@ -185,6 +250,7 @@ certificateRouter.put("/template/:templateId", authRequired, async (req: AuthReq
 
     return res.json({ ok: true, ...result });
   } catch (error: unknown) {
+    if (error instanceof HttpError) return workspaceError(error, res);
     logger.error("[certificate] failed to update template", {
       templateId: req.params.templateId,
       userId: req.userId ?? null,
@@ -293,16 +359,7 @@ certificateRouter.put("/contest/:contestId/settings", authRequired, async (req: 
     const contestId = Number(req.params.contestId);
     if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_CONTEST_ID" });
 
-    const manageRows = rows(await AppDataSource.query(
-      `SELECT created_by_user_id as createdByUserId FROM contests WHERE id = ? LIMIT 1`,
-      [contestId]
-    ));
-    const contestRow = manageRows[0];
-    if (!contestRow) return res.status(404).json({ message: "CONTEST_NOT_FOUND" });
-
-    const isAdmin = req.userRole === "SYSTEM_ADMIN";
-    const isOwner = Number(contestRow.createdByUserId) === req.userId;
-    if (!isAdmin && !isOwner) return res.status(403).json({ message: "ACCESS_DENIED" });
+    await requireCertificateManager(req, contestId);
 
     const schema = z.object({
       mode: z.enum(["none", "studycod", "custom"]),
@@ -312,6 +369,14 @@ certificateRouter.put("/contest/:contestId/settings", authRequired, async (req: 
     const parsed = schema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
 
+    if (parsed.data.defaultTemplateId) {
+      const template = await certificateService.getTemplateById(parsed.data.defaultTemplateId);
+      if (!template || !template.isActive) return res.status(400).json({ message: "TEMPLATE_NOT_FOUND" });
+      if (template.contestId != null && template.contestId !== contestId) return res.status(403).json({ message: "ACCESS_DENIED" });
+    } else if (parsed.data.mode === "custom") {
+      return res.status(400).json({ message: "HTML_TEMPLATE_REQUIRED" });
+    }
+
     await certificateService.upsertContestSettings({
       contestId,
       mode: parsed.data.mode,
@@ -320,8 +385,8 @@ certificateRouter.put("/contest/:contestId/settings", authRequired, async (req: 
     });
 
     return res.json({ ok: true });
-  } catch {
-    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  } catch (error) {
+    return workspaceError(error, res);
   }
 });
 

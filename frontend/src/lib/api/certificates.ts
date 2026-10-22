@@ -354,3 +354,43 @@ export async function generateContestCertificates(
     throw normalizeCertificateApiError(e, "Failed to queue certificate generation");
   }
 }
+
+export type CertificateWorkspaceData = {
+  settings: { mode: "none" | "studycod" | "custom"; templateId: number | null; sendEmailEnabled: boolean };
+  templates: Array<{ id: number; name: string; type: "studycod" | "custom"; contestId: number | null; version: number }>;
+  recipients: Array<{ participantId: number; email: string; certificateId: string | null; status: string | null;
+    place: string | null; issuedAt: string | null; emailSentAt: string | null; pdfAvailable: boolean }>;
+  generation: { batchId: number | null; status: "idle" | "queued" | "running" | "completed" | "failed";
+    pending: number; failed: number; rendered: number; emailed: number;
+    errors: Array<{ participantId: number | null; stage: string; message: string }> };
+};
+
+export type CertificatePreviewDraft = { templateId?: number; htmlTemplate?: string; cssTemplate?: string;
+  participantId?: number; place?: "1" | "2" | "3" | null };
+
+export async function getCertificateWorkspace(contestId: number): Promise<CertificateWorkspaceData> {
+  try { return (await api.get(`/certificate/contest/${contestId}/workspace`)).data; }
+  catch (error) { throw normalizeCertificateApiError(error, "Failed to load certificates"); }
+}
+
+export async function previewContestCertificate(contestId: number, draft: CertificatePreviewDraft): Promise<{ html: string }> {
+  const optimized = await optimizeCertificateTemplateImages(draft);
+  assertTemplateTextSize(optimized);
+  try { return (await api.post(`/certificate/contest/${contestId}/preview`, optimized)).data; }
+  catch (error) { throw normalizeCertificateApiError(error, "Failed to preview certificate"); }
+}
+
+export async function retryContestCertificateJobs(contestId: number): Promise<{ retried: number }> {
+  try { return (await api.post(`/certificate/contest/${contestId}/retry`)).data; }
+  catch (error) { throw normalizeCertificateApiError(error, "Failed to retry generation"); }
+}
+
+export async function sendExistingContestCertificates(contestId: number): Promise<{ queued: number }> {
+  try { return (await api.post(`/certificate/contest/${contestId}/send`)).data; }
+  catch (error) { throw normalizeCertificateApiError(error, "Failed to queue email delivery"); }
+}
+
+export async function downloadContestCertificate(contestId: number, participantId: number): Promise<Blob> {
+  const response = await api.get(`/certificate/contest/${contestId}/pdf/${participantId}`, { responseType: "blob" });
+  return response.data as Blob;
+}

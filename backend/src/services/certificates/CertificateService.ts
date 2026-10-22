@@ -298,36 +298,41 @@ export class CertificateService {
     forceRegenerate?: boolean;
   }): Promise<{ jobId: number }> {
     await requireCurrentAwards(params.contestId);
-    const settingsRows = (await AppDataSource.query(
-      `SELECT certificate_mode as mode FROM contest_certificate_settings WHERE contest_id = ? LIMIT 1`,
-      [params.contestId]
-    )) as SqlRow[];
-    const mode = normalizeMode(settingsRows[0]?.mode);
-    if (mode === "none") {
-      throw new Error("CERTIFICATES_DISABLED_FOR_CONTEST");
-    }
+    return AppDataSource.transaction(async manager => {
+      const settingsRows = (await manager.query(
+        `SELECT certificate_mode as mode FROM contest_certificate_settings WHERE contest_id = ? LIMIT 1 FOR UPDATE`,
+        [params.contestId]
+      )) as SqlRow[];
+      const mode = normalizeMode(settingsRows[0]?.mode);
+      if (mode === "none") {
+        throw new Error("CERTIFICATES_DISABLED_FOR_CONTEST");
+      }
+      const active = await manager.query(`SELECT id FROM certificate_job_queue WHERE status IN ('queued', 'processing')
+        AND JSON_EXTRACT(payload_json, '$.contestId') = ? LIMIT 1`, [params.contestId]);
+      if (active.length) throw new Error("CERTIFICATE_GENERATION_IN_PROGRESS");
 
-    const payload = {
-      contestId: params.contestId,
-      requestedByUserId: params.requestedByUserId,
-      forceRegenerate: Boolean(params.forceRegenerate),
-    };
+      const payload = {
+        contestId: params.contestId,
+        requestedByUserId: params.requestedByUserId,
+        forceRegenerate: Boolean(params.forceRegenerate),
+      };
 
-    const result = await AppDataSource.query(
-      `
-      INSERT INTO certificate_job_queue (
-        queue_name, status, payload_json, attempts, max_attempts, available_at, created_at, updated_at
-      ) VALUES ('generate_batch', 'queued', ?, 0, 3, NOW(), NOW(), NOW())
-      `,
-      [JSON.stringify(payload)]
-    );
+      const result = await manager.query(
+        `
+        INSERT INTO certificate_job_queue (
+          queue_name, status, payload_json, attempts, max_attempts, available_at, created_at, updated_at
+        ) VALUES ('generate_batch', 'queued', ?, 0, 3, NOW(), NOW(), NOW())
+        `,
+        [JSON.stringify(payload)]
+      );
 
-    await AppDataSource.query(
-      `UPDATE contest_certificate_settings SET generation_status = 'queued', updated_at = NOW() WHERE contest_id = ?`,
-      [params.contestId]
-    );
+      await manager.query(
+        `UPDATE contest_certificate_settings SET generation_status = 'queued', updated_at = NOW() WHERE contest_id = ?`,
+        [params.contestId]
+      );
 
-    return { jobId: Number(readProperty(result, "insertId") ?? 0) };
+      return { jobId: Number(readProperty(result, "insertId") ?? 0) };
+    });
   }
 
   async processBatchJob(payload: { contestId: number; forceRegenerate?: boolean }): Promise<void> {
@@ -412,8 +417,8 @@ export class CertificateService {
     const fields = await this.resolveTemplateFields(template?.id ?? null);
     const payloadData: CertificatePayload = {
       contest_name: String(ctx.contestTitle ?? ""),
-      name: String(ctx.notificationFullName ?? ctx.displayName ?? "Participant"),
-      full_name: String(ctx.notificationFullName ?? ctx.displayName ?? "Participant"),
+      name: String(ctx.notificationFullName || ctx.displayName || "Participant"),
+      full_name: String(ctx.notificationFullName || ctx.displayName || "Participant"),
       place: decision.awardPlace == null ? null : String(decision.awardPlace),
       score: totalScore,
       max_score: totalMaxScore,
@@ -566,8 +571,9 @@ export class CertificateService {
 
     const row = rows[0];
     if (!row) return;
+    if (row.emailSentAt) return;
 
-    const recipient = String(row.notificationEmail ?? row.userEmail ?? row.studentEmail ?? "").trim().toLowerCase();
+    const recipient = String(row.notificationEmail || row.userEmail || row.studentEmail || "").trim().toLowerCase();
     if (!recipient) {
       logger.warn("[certificates] email recipient missing", { contestId, participantId, certificateId: payload.certificateId });
       return;
