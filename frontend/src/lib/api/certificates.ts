@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { optimizeCertificateTemplateImages } from "../certificates/optimizeTemplateImages";
 
 const CERTIFICATE_TEMPLATE_TEXT_LIMIT = 5_000_000;
 
@@ -42,7 +43,7 @@ function getCertificateApiMessage(error: unknown): string {
 function makeTemplateTooLargeMessage(limit?: number): string {
   const max = Number(limit ?? CERTIFICATE_TEMPLATE_TEXT_LIMIT);
   const maxMb = Number.isFinite(max) && max > 0 ? (max / (1024 * 1024)).toFixed(1) : "5.0";
-  return `TEMPLATE_TOO_LARGE: template HTML/CSS is too large (limit ~${maxMb} MB). Reduce embedded base64 background size or use external URL.`;
+  return `TEMPLATE_TOO_LARGE: шаблон завеликий (до ${maxMb} МБ на поле HTML або CSS). Вбудовані PNG/JPG/WebP стискаються автоматично; заміни завелике зображення на URL або зменш його. / Template is too large (up to ${maxMb} MB per HTML or CSS field). Embedded PNG/JPG/WebP images are compressed automatically; use an image URL or reduce the image size.`;
 }
 
 function parseInvalidInputMessage(data: CertificateApiErrorData): string | null {
@@ -172,9 +173,10 @@ export async function createCertificateTemplate(payload: {
     isRequired?: boolean;
   }>;
 }): Promise<{ templateId: number }> {
-  assertTemplateTextSize(payload);
+  const optimizedPayload = await optimizeCertificateTemplateImages(payload);
+  assertTemplateTextSize(optimizedPayload);
   try {
-    const res = await api.post("/certificate/template", payload);
+    const res = await api.post("/certificate/template", optimizedPayload);
     return res.data as { templateId: number };
   } catch (e: unknown) {
     throw normalizeCertificateApiError(e, "Failed to create certificate template");
@@ -207,9 +209,10 @@ export async function updateCertificateTemplate(
     }>;
   }
 ): Promise<{ ok: boolean; templateId: number; version: number }> {
-  assertTemplateTextSize(payload);
+  const optimizedPayload = await optimizeCertificateTemplateImages(payload);
+  assertTemplateTextSize(optimizedPayload);
   try {
-    const res = await api.put(`/certificate/template/${Number(templateId)}`, payload);
+    const res = await api.put(`/certificate/template/${Number(templateId)}`, optimizedPayload);
     return res.data as { ok: boolean; templateId: number; version: number };
   } catch (e: unknown) {
     throw normalizeCertificateApiError(e, "Failed to update certificate template");

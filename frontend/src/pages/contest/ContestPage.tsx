@@ -1748,6 +1748,14 @@ export const ContestPage: React.FC = () => {
       );
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
+      if (msg === "CERTIFICATES_DISABLED_FOR_CONTEST") {
+        setCertificateGlobalSettingsOpen(true);
+        setCertificateError(tr(
+          "Сертифікати для цього контесту вимкнені. У параметрах вибери StudyCod або власний макет, збережи налаштування, а тоді запусти генерацію ще раз.",
+          "Certificates are disabled for this contest. In Parameters, choose StudyCod or a custom design, save the settings, then start generation again."
+        ));
+        return;
+      }
       setCertificateError(msg || tr("Не вдалося запустити генерацію сертифікатів", "Failed to start certificate generation"));
     } finally {
       setCertificateGenerating(false);
