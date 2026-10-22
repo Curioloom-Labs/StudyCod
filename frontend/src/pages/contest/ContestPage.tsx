@@ -62,6 +62,7 @@ import {
 } from "../../lib/api/contests";
 import { getClasses, uploadStatementImage, type Class as EduClass } from "../../lib/api/edu";
 import { CONTEST_BANNER_THEMES, CONTEST_ICONS } from "./contestBranding";
+import { TournamentDiplomaImport, type DiplomaImport } from "./TournamentDiplomaImport";
 import { ContestAwardsPanel } from "./ContestAwardsPanel";
 import { ContestDisqualificationDialog } from "./ContestDisqualificationDialog";
 import { ContestSafetyGate } from "./ContestSafetyGate";
@@ -1488,6 +1489,29 @@ export const ContestPage: React.FC = () => {
       cssTemplate: String(certificateTemplateCss ?? "").trim(),
     };
   }, [certificateAutoSyncLayout, certificateFields, certificateLayout, certificateLayoutBackgroundUrl, certificateLayoutExtraObjects, certificateTemplateCss, certificateTemplateHtml]);
+
+  const applyImportedDiploma = (template: DiplomaImport) => {
+    setCertificateAutoSyncLayout(false);
+    setCertificateMode("custom");
+    setCertificateTemplateId("");
+    setCertificateTemplateAutoCreated(false);
+    setCertificateTemplateName(template.name);
+    setCertificateTemplateHtml(template.htmlTemplate);
+    setCertificateTemplateCss(template.cssTemplate);
+    const mapped = defaultCertificateFieldsState();
+    for (const key of CERTIFICATE_FIELD_KEYS) mapped[key] = { isEnabled: false, isRequired: false };
+    const fields = template.fields ?? extractTemplatePlaceholders(template.htmlTemplate).map(fieldKey => ({ fieldKey, isEnabled: true, isRequired: fieldKey === "name" }));
+    for (const field of fields) {
+      if (CERTIFICATE_FIELD_KEYS.includes(field.fieldKey as CertificateFieldKey)) {
+        mapped[field.fieldKey as CertificateFieldKey] = { isEnabled: field.isEnabled !== false, isRequired: field.isRequired === true };
+      }
+    }
+    setCertificateFields(mapped);
+    setCertificatePreviewOpen(true);
+    setCertificateUiAdvancedOpen(true);
+    setCertificateError(null);
+    setCertificateMessage(tr("Макет із підписом завантажено. Збережи налаштування, щоб видати дипломи за підтвердженими місцями.", "Signed design loaded. Save settings to issue certificates using confirmed awards."));
+  };
 
   const createCustomCertificateTemplate = async (): Promise<number | null> => {
     if (!contestId) return null;
@@ -4498,6 +4522,8 @@ export const ContestPage: React.FC = () => {
                         <Button aria-expanded={certificateUiAdvancedOpen} variant={certificateUiAdvancedOpen ? "secondary" : "ghost"} onClick={() => setCertificateUiAdvancedOpen((open) => !open)}>{certificateUiAdvancedOpen ? tr("Сховати код", "Hide code") : tr("Розширений режим", "Advanced")}</Button>
                       </div>
                     </div>
+
+                    <TournamentDiplomaImport onLoad={applyImportedDiploma} />
 
                     {certificateEditorOpen ? <>
                     {!certificateUiSimpleMode || certificateGlobalSettingsOpen ? (
