@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import { requireCurrentAwards } from "../contest/awards";
+import { eligibleForCertificate } from "../contest/awardRules";
 import fs from "fs";
 import path from "path";
 import QRCode from "qrcode";
@@ -295,6 +297,7 @@ export class CertificateService {
     requestedByUserId: number;
     forceRegenerate?: boolean;
   }): Promise<{ jobId: number }> {
+    await requireCurrentAwards(params.contestId);
     const settingsRows = (await AppDataSource.query(
       `SELECT certificate_mode as mode FROM contest_certificate_settings WHERE contest_id = ? LIMIT 1`,
       [params.contestId]
@@ -336,29 +339,12 @@ export class CertificateService {
       [contestId]
     );
 
-    const participants = (await AppDataSource.query(
-      `
-      SELECT p.id as participantId
-      FROM contest_participants p
-      WHERE p.contest_id = ?
-        AND COALESCE(p.is_disqualified, 0) = 0
-      ORDER BY p.id ASC
-      `,
-      [contestId]
-    )) as SqlRow[];
-
-    for (const row of participants) {
-      const participantId = Number(row.participantId);
-      if (!Number.isFinite(participantId) || participantId <= 0) continue;
-
-      await AppDataSource.query(
-        `
-        INSERT INTO certificate_job_queue (
-          queue_name, status, payload_json, attempts, max_attempts, available_at, created_at, updated_at
-        ) VALUES ('pdf_render', 'queued', ?, 0, 5, NOW(), NOW(), NOW())
-        `,
-        [JSON.stringify({ contestId, participantId, forceRegenerate: Boolean(payload.forceRegenerate) })]
-      );
+    const confirmed = await requireCurrentAwards(contestId);
+    for (const row of confirmed.rows.filter(eligibleForCertificate)) {
+      await AppDataSource.query(`INSERT INTO certificate_job_queue (
+        queue_name, status, payload_json, attempts, max_attempts, available_at, created_at, updated_at
+      ) VALUES ('pdf_render', 'queued', ?, 0, 5, NOW(), NOW(), NOW())`,
+        [JSON.stringify({ contestId, participantId: row.participantId, forceRegenerate: Boolean(payload.forceRegenerate) })]);
     }
 
     await AppDataSource.query(
@@ -371,11 +357,15 @@ export class CertificateService {
     const contestId = Number(payload.contestId);
     const participantId = Number(payload.participantId);
     if (!Number.isFinite(contestId) || !Number.isFinite(participantId)) return;
+    const confirmed = await requireCurrentAwards(contestId);
+    const decision = confirmed.rows.find(row => row.participantId === participantId);
+    if (!decision || !eligibleForCertificate(decision)) return;
 
     const contextRows = (await AppDataSource.query(
       `
       SELECT c.id as contestId,
              c.title as contestTitle,
+             c.ends_at as contestEndsAt,
              c.created_by_user_id as organizerUserId,
              u.username as organizerName,
              p.id as participantId,
@@ -407,50 +397,12 @@ export class CertificateService {
       [contestId, participantId]
     )) as SqlRow[];
     const existingId = Number(existingRows[0]?.id ?? 0) || null;
-    if (existingId && !payload.forceRegenerate) {
+    if (existingId && existingRows[0]?.status !== "revoked" && !payload.forceRegenerate) {
       return;
     }
 
-    const scoreRows = (await AppDataSource.query(
-      `
-      SELECT COALESCE(SUM(t.bestScore), 0) as totalScore,
-             COALESCE(SUM(t.bestMaxScore), 0) as participantMaxScore
-      FROM (
-        SELECT cs.problem_id as problemId,
-               MAX(COALESCE(cs.score, 0)) as bestScore,
-               MAX(COALESCE(cs.max_score, 0)) as bestMaxScore
-        FROM contest_submissions cs
-        WHERE cs.contest_id = ?
-          AND cs.participant_id = ?
-          AND cs.phase = 'CONTEST'
-        GROUP BY cs.problem_id
-      ) t
-      `,
-      [contestId, participantId]
-    )) as SqlRow[];
-
-    const contestMaxRows = (await AppDataSource.query(
-      `
-      SELECT COALESCE(SUM(COALESCE(cp.points, mx.problemMaxScore, 0)), 0) as totalMaxScore
-      FROM contest_problems cp
-      LEFT JOIN (
-        SELECT cs.problem_id as problemId,
-               MAX(COALESCE(cs.max_score, 0)) as problemMaxScore
-        FROM contest_submissions cs
-        WHERE cs.contest_id = ?
-          AND cs.phase = 'CONTEST'
-        GROUP BY cs.problem_id
-      ) mx ON mx.problemId = cp.id
-      WHERE cp.contest_id = ?
-      `,
-      [contestId, contestId]
-    )) as SqlRow[];
-
-    const totalScore = Number(scoreRows[0]?.totalScore ?? 0) || 0;
-    const totalMaxScore =
-      Number(contestMaxRows[0]?.totalMaxScore ?? 0) ||
-      Number(scoreRows[0]?.participantMaxScore ?? 0) ||
-      0;
+    const totalScore = decision.totalScore;
+    const totalMaxScore = decision.maxScore;
 
     const certificateId = `SC-${contestId}-${participantId}-${crypto.randomBytes(4).toString("hex")}`;
     const verifyUrl = `${String(FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "")}/certificate/${certificateId}`;
@@ -462,10 +414,10 @@ export class CertificateService {
       contest_name: String(ctx.contestTitle ?? ""),
       name: String(ctx.notificationFullName ?? ctx.displayName ?? "Participant"),
       full_name: String(ctx.notificationFullName ?? ctx.displayName ?? "Participant"),
-      place: await this.resolvePlace(contestId, participantId),
+      place: decision.awardPlace == null ? null : String(decision.awardPlace),
       score: totalScore,
       max_score: totalMaxScore,
-      date: toIsoDate(new Date()),
+      date: ctx.contestEndsAt ? new Date(String(ctx.contestEndsAt)).toLocaleDateString("uk-UA", { timeZone: "Europe/Kyiv" }) : toIsoDate(new Date()),
       organizer: String(ctx.organizerName ?? "StudyCod Organizer"),
       signature: "StudyCod",
       certificate_id: certificateId,
@@ -480,6 +432,8 @@ export class CertificateService {
     };
 
     const pdfBuffer = await this.renderer.renderPdf(renderInput);
+    const latest = await requireCurrentAwards(contestId);
+    if (latest.confirmedAt !== confirmed.confirmedAt) throw new Error("AWARDS_STALE");
 
     const contestFolder = path.join(CERTIFICATES_ROOT, String(contestId));
     ensureDir(contestFolder);
@@ -498,6 +452,7 @@ export class CertificateService {
             template_id = ?,
             score = ?,
             max_score = ?,
+            place_text = ?,
             participant_name = ?,
             organizer_name = ?,
             issued_at = NOW(),
@@ -505,6 +460,7 @@ export class CertificateService {
             qr_code_data_url = ?,
             checksum_sha256 = ?,
             status = 'rendered',
+            email_sent_at = NULL,
             revoked_at = NULL,
             updated_at = NOW()
         WHERE id = ?
@@ -514,6 +470,7 @@ export class CertificateService {
           template?.id ?? null,
           totalScore,
           totalMaxScore,
+          payloadData.place,
           payloadData.name,
           payloadData.organizer,
           relativeStorageKey,
@@ -535,6 +492,7 @@ export class CertificateService {
           certificate_id = VALUES(certificate_id),
           template_id = VALUES(template_id),
           status = 'rendered',
+          email_sent_at = NULL,
           score = VALUES(score),
           max_score = VALUES(max_score),
           place_text = VALUES(place_text),
@@ -581,6 +539,8 @@ export class CertificateService {
   async processEmailJob(payload: { contestId: number; participantId: number; certificateId: string }): Promise<void> {
     const contestId = Number(payload.contestId);
     const participantId = Number(payload.participantId);
+    const awards = await requireCurrentAwards(contestId);
+    if (!awards.rows.some(row => row.participantId === participantId && eligibleForCertificate(row))) return;
 
     const rows = (await AppDataSource.query(
       `
@@ -598,7 +558,7 @@ export class CertificateService {
       LEFT JOIN contest_participants p ON p.id = c.participant_id
       LEFT JOIN users u ON u.id = c.user_id
       LEFT JOIN students st ON st.id = c.student_id
-      WHERE c.contest_id = ? AND c.participant_id = ? AND c.certificate_id = ?
+      WHERE c.contest_id = ? AND c.participant_id = ? AND c.certificate_id = ? AND c.revoked_at IS NULL AND c.status <> 'revoked'
       LIMIT 1
       `,
       [contestId, participantId, payload.certificateId]
@@ -775,42 +735,7 @@ export class CertificateService {
     });
   }
 
-  private async resolvePlace(contestId: number, participantId: number): Promise<string | null> {
-    const rows = (await AppDataSource.query(
-      `
-      SELECT ranked.participantId,
-             ranked.rankPos
-      FROM (
-        SELECT totals.participantId,
-               ROW_NUMBER() OVER (ORDER BY totals.totalScore DESC, totals.participantId ASC) as rankPos
-        FROM (
-          SELECT p.id as participantId,
-                 COALESCE(SUM(best.bestScore), 0) as totalScore
-          FROM contest_participants p
-          LEFT JOIN (
-            SELECT cs.participant_id as participantId,
-                   cs.problem_id as problemId,
-                   MAX(COALESCE(cs.score, 0)) as bestScore
-            FROM contest_submissions cs
-            WHERE cs.contest_id = ?
-              AND cs.phase = 'CONTEST'
-            GROUP BY cs.participant_id, cs.problem_id
-          ) best ON best.participantId = p.id
-          WHERE p.contest_id = ?
-            AND COALESCE(p.is_disqualified, 0) = 0
-          GROUP BY p.id
-        ) totals
-      ) ranked
-      WHERE ranked.participantId = ?
-      LIMIT 1
-      `,
-      [contestId, contestId, participantId]
-    )) as SqlRow[];
 
-    const rank = Number(rows[0]?.rankPos ?? 0);
-    if (!Number.isFinite(rank) || rank <= 0) return null;
-    return String(rank);
-  }
 }
 
 export const certificateService = new CertificateService();

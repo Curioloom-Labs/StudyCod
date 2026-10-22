@@ -62,6 +62,8 @@ import {
 } from "../../lib/api/contests";
 import { getClasses, uploadStatementImage, type Class as EduClass } from "../../lib/api/edu";
 import { CONTEST_BANNER_THEMES, CONTEST_ICONS } from "./contestBranding";
+import { ContestAwardsPanel } from "./ContestAwardsPanel";
+import { ContestDisqualificationDialog } from "./ContestDisqualificationDialog";
 import { ContestSafetyGate } from "./ContestSafetyGate";
 import {
   importLibraryTaskArchives,
@@ -1004,6 +1006,7 @@ export const ContestPage: React.FC = () => {
   const [progressError, setProgressError] = React.useState<string | null>(null);
   const [progress, setProgress] = React.useState<ContestMyProgressProblem[] | null>(null);
 
+  const [disqualificationTarget, setDisqualificationTarget] = React.useState<ContestAdminParticipant | null>(null);
   const [adminParticipantsLoading, setAdminParticipantsLoading] = React.useState(false);
   const [adminParticipantsError, setAdminParticipantsError] = React.useState<string | null>(null);
   const [adminParticipants, setAdminParticipants] = React.useState<ContestAdminParticipant[]>([]);
@@ -3201,18 +3204,16 @@ export const ContestPage: React.FC = () => {
     }
   };
 
-  const toggleParticipantDisqualification = async (p: ContestAdminParticipant) => {
+  const toggleParticipantDisqualification = async (p: ContestAdminParticipant, options?: { retainParticipation: boolean; reason: string }) => {
     if (!contestId) return;
+    if (!p.isDisqualified && !options) { setDisqualificationTarget(p); return; }
     try {
-      const reason = p.isDisqualified
-        ? null
-        : (typeof window !== "undefined"
-            ? (window.prompt(tr("Причина дискваліфікації (необов'язково)", "Disqualification reason (optional)"), p.disqualificationReason ?? "") ?? "")
-            : "");
+      const reason = options?.reason ?? null;
 
       const nextDisqualified = !p.isDisqualified;
       const response = await setContestParticipantDisqualified(contestId, p.id, {
         disqualified: !p.isDisqualified,
+        retainParticipation: options?.retainParticipation ?? false,
         reason: p.isDisqualified ? null : (String(reason).trim() || null),
       });
 
@@ -3261,6 +3262,7 @@ export const ContestPage: React.FC = () => {
         }
       }
 
+      setDisqualificationTarget(null);
       await loadAdminParticipants();
     } catch (e: unknown) {
       const msg = getErrorMessage(e);
@@ -6471,6 +6473,8 @@ export const ContestPage: React.FC = () => {
                   </> : null}
 
                   {tab === "participants" ? <>
+                  <ContestAwardsPanel contestId={data.contest.id} refreshKey={adminParticipants} />
+                  {disqualificationTarget && <ContestDisqualificationDialog key={disqualificationTarget.id} participant={disqualificationTarget} onClose={() => setDisqualificationTarget(null)} onConfirm={options => toggleParticipantDisqualification(disqualificationTarget, options)} />}
                   <Card className="p-4 sm:p-5">
                     <div className="mb-4">
                       <h2 className="text-base font-semibold text-text-primary flex items-center gap-2">
@@ -6697,10 +6701,11 @@ export const ContestPage: React.FC = () => {
                                 <td className="p-2 border-b border-border">
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     {p.isDisqualified ? (
-                                      <Badge color="warn">{tr("Дискваліфіковано", "Disqualified")}</Badge>
+                                      <Badge color="warn">{p.retainParticipation ? tr("Учасник · 0 балів", "Participant · 0 points") : tr("Дискваліфіковано", "Disqualified")}</Badge>
                                     ) : (
                                       <Badge color="success">{tr("У заліку", "Active")}</Badge>
                                     )}
+                                    {p.attendance === "ABSENT" ? <Badge color="warn">{tr("Відсутній · немає подач", "Absent · no submissions")}</Badge> : p.attendance === "PENDING" ? <span className="text-xs text-text-muted">{tr("Ще немає подач", "No submissions yet")}</span> : p.attendance === "PRESENT" ? <span className="text-xs text-text-muted">{tr(`Подач: ${p.submissionCount ?? 0}`, `Submissions: ${p.submissionCount ?? 0}`)}</span> : null}
                                     {p.integrity && p.integrity.total > 0 ? (
                                       <span
                                         className="inline-flex items-center gap-1 rounded border border-accent-warn/50 bg-accent-warn/10 px-1.5 py-0.5 text-[10px] font-mono text-accent-warn"

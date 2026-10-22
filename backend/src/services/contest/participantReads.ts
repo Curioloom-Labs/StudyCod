@@ -23,10 +23,10 @@ export async function userOwnsContestParticipant(participantId: number, contestI
 export async function readUserContestParticipant(contestId: number, userId: number): Promise<ContestParticipant | null> {
   if (!validId(contestId) || !validId(userId)) return null;
   const rows = await AppDataSource.query(`SELECT id,principal_type principalType,display_name displayName,
-    is_disqualified isDisqualified,contest_account_handle contestAccountHandle,contest_account_note contestAccountNote,
+    is_disqualified isDisqualified,retain_participation retainParticipation,contest_account_handle contestAccountHandle,contest_account_note contestAccountNote,
     notification_email notificationEmail,notification_full_name notificationFullName,
     disqualification_reason disqualificationReason,disqualified_at disqualifiedAt,joined_at joinedAt,updated_at updatedAt
     FROM contest_participants WHERE contest_id=? AND user_id=? LIMIT 1`, [contestId, userId]) as ContestParticipant[];
   if (!rows[0]) return null;
-  return AppDataSource.getRepository(ContestParticipant).create({ ...rows[0], isDisqualified: Boolean(Number(rows[0].isDisqualified)) });
+  return AppDataSource.getRepository(ContestParticipant).create({ ...rows[0], isDisqualified: Boolean(Number(rows[0].isDisqualified)), retainParticipation: Boolean(Number(rows[0].retainParticipation)) });
 }

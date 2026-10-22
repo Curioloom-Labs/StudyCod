@@ -404,6 +404,8 @@ export const ScoreboardPage: React.FC = () => {
                           <td className="max-w-[360px] border-b border-border/70 px-4 py-3 text-text-primary">
                             {me ? <Crown aria-hidden="true" className="mr-2 inline size-4 text-secondary align-[-2px]" /> : null}
                             <span className="inline-block max-w-[280px] truncate align-bottom font-semibold">{r.displayName}</span>
+                            {board.awardsConfirmed && r.awardPlace != null && <span className="ml-2 inline-flex rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-xs text-primary">{tr(`${r.awardPlace} місце`, `${r.awardPlace === 1 ? "1st" : r.awardPlace === 2 ? "2nd" : "3rd"} place`)}</span>}
+                            {r.isDisqualified && r.retainParticipation && <span className="ml-2 text-xs text-accent-warn">{tr("Участь · 0 балів", "Participation · 0 points")}</span>}
                             {me ? <span className="ml-2 rounded-md bg-secondary/15 px-2 py-1 text-[10px] font-bold text-secondary">{tr("ви", "you")}</span> : null}
                           </td>
                           {problems.map((p) => {

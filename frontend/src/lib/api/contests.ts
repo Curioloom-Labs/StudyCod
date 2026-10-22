@@ -254,6 +254,9 @@ export type ScoreboardProblemCell = {
 };
 
 export type ScoreboardRow = {
+  awardPlace?: 1 | 2 | 3 | null;
+  isDisqualified?: boolean;
+  retainParticipation?: boolean;
   rank: number;
   participantId: number;
   displayName: string;
@@ -267,6 +270,7 @@ export type ScoreboardRow = {
 };
 
 export type ContestStandings = {
+  awardsConfirmed?: boolean;
   contestId: number;
   scoringMode: ContestScoringMode;
   problems: ScoreboardProblem[];
@@ -302,6 +306,9 @@ export type ContestAdminParticipant = {
   contestAccountHandle?: string | null;
   contestAccountNote?: string | null;
   isDisqualified: boolean;
+  retainParticipation?: boolean;
+  submissionCount?: number;
+  attendance?: "PRESENT" | "ABSENT" | "PENDING";
   disqualificationReason: string | null;
   disqualifiedAt: string | null;
   integrity?: { total: number; byType: Record<string, number> };
@@ -555,7 +562,7 @@ export async function listContestAdminParticipants(contestId: number): Promise<{
 export async function setContestParticipantDisqualified(
   contestId: number,
   participantId: number,
-  payload: { disqualified: boolean; reason?: string | null }
+  payload: { disqualified: boolean; reason?: string | null; retainParticipation?: boolean }
 ): Promise<{
   participant: { id: number; isDisqualified: boolean; disqualificationReason: string | null; disqualifiedAt: string | null };
   notification?: {

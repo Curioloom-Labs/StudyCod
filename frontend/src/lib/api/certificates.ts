@@ -77,6 +77,9 @@ function normalizeCertificateApiError(error: unknown, fallbackMessage: string): 
     return new Error(parsed || "INVALID_INPUT");
   }
 
+  if (code === "AWARDS_NOT_CONFIRMED") return new Error("Спочатку підтвердь розподіл місць у розділі «Учасники». / Confirm awards in Participants first.");
+  if (code === "AWARDS_STALE") return new Error("Результати змінилися. Онови та підтвердь розподіл місць повторно. / Results changed. Refresh and reconfirm awards.");
+
   if (code === "ONLY_USERS") {
     return new Error("ACCESS_DENIED: only authenticated USER accounts can manage certificate templates.");
   }

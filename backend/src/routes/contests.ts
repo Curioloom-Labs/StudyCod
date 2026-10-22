@@ -16,6 +16,8 @@ import { Student } from "../entities/Student";
 import { Class } from "../entities/Class";
 import { LibraryTask } from "../entities/LibraryTask";
 import { TestData } from "../entities/TestData";
+import { applyAwardDecisions, proposeAwards, type AwardRow } from "../services/contest/awardRules";
+import { awardSourceVersion, contestSubmissionCounts, readConfirmedAwards } from "../services/contest/awards";
 import { cachedStandings, invalidateStandings } from "../services/contest/standingsCache";
 import { findContestJobByKey, enqueueContestJob, getContestJob, jobReceipt, registerContestJobProcessor, requestHash, waitContestJob, type ContestJobPayload } from "../services/contest/executionQueue";
 import { contestProgressId, readJudgeProgress } from "../services/judgeWorker/progress";
@@ -1133,7 +1135,7 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
       relations: ["participant", "participant.user", "problem"],
     });
 
-    const officialSubs = subs.filter((s) => s.participant && s.problem && !isOrganizerParticipant(s.participant, organizerUserIds));
+    const officialSubs = subs.filter((s) => s.participant && s.problem && !s.participant.isDisqualified && s.phase === "CONTEST" && s.executionStatus === "completed" && !isOrganizerParticipant(s.participant, organizerUserIds));
     const endsAtMs = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
     const endMsByParticipant = new Map<number, number>(officialSubs.map((submission) => {
       const participant = submission.participant!;
@@ -1164,6 +1166,13 @@ contestsRouter.get("/:id/scoreboard", authOptional, async (req: AuthRequest, res
     const board = computeScoreboard(scoreSubs, { startMs, penaltyPerWrong: 20, endMsByParticipant });
 
     const participants: Record<number, string> = {};
+    const retained = (await participantRepo().find({
+      where: { contest: { id: contestId }, isDisqualified: true, retainParticipation: true }, relations: ["user"],
+    })).filter(p => !isOrganizerParticipant(p, organizerUserIds));
+    for (const participant of retained) {
+      participants[participant.id] = participant.displayName;
+      board.rows.push({ rank: board.rows.length + 1, participantId: participant.id, solved: 0, penalty: 0, lastAcMs: null, problems: {} });
+    }
     const problems: Record<number, string> = {};
     for (const s of officialSubs) {
       if (s.participant) participants[s.participant.id] = String(s.participant.displayName ?? `#${s.participant.id}`);
@@ -3154,6 +3163,8 @@ contestsRouter.get("/:id/admin/participants", authRequired, async (req: AuthRequ
       integrityByParticipant.set(pid, entry);
     }
 
+    const submissionCounts = await contestSubmissionCounts(contestId);
+    const releaseAt = await getContestScoreboardReleaseAtMs(contest);
     return res.json({
       contestId,
       participants: participants.map((p) => ({
@@ -3164,6 +3175,9 @@ contestsRouter.get("/:id/admin/participants", authRequired, async (req: AuthRequ
         contestAccountHandle: p.contestAccountHandle ?? null,
         contestAccountNote: p.contestAccountNote ?? null,
         isDisqualified: p.isDisqualified,
+        retainParticipation: p.retainParticipation,
+        submissionCount: submissionCounts.get(p.id) ?? 0,
+        attendance: (submissionCounts.get(p.id) ?? 0) > 0 ? "PRESENT" : releaseAt != null && Date.now() >= releaseAt ? "ABSENT" : "PENDING",
         disqualificationReason: p.disqualificationReason ?? null,
         disqualifiedAt: p.disqualifiedAt ? new Date(p.disqualifiedAt).toISOString() : null,
         integrity: integrityByParticipant.get(p.id) ?? { total: 0, byType: {} },
@@ -3300,7 +3314,8 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
     const canManage = await canManageContest({ contest, req });
     if (!canManage) return res.status(403).json({ message: "ACCESS_DENIED" });
 
-    const schema = z.object({ disqualified: z.boolean(), reason: z.string().max(2000).nullable().optional() });
+    const schema = z.object({ disqualified: z.boolean(), reason: z.string().max(2000).nullable().optional(), retainParticipation: z.boolean().optional() })
+      .refine(data => !data.disqualified || data.retainParticipation !== undefined, { message: "DISQUALIFICATION_MODE_REQUIRED" });
     const parsed = schema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
 
@@ -3311,9 +3326,14 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
     if (!participant) return res.status(404).json({ message: "PARTICIPANT_NOT_FOUND" });
 
     participant.isDisqualified = parsed.data.disqualified;
+    participant.retainParticipation = parsed.data.disqualified && parsed.data.retainParticipation === true;
     participant.disqualificationReason = parsed.data.disqualified ? (parsed.data.reason?.trim() || null) : null;
     participant.disqualifiedAt = parsed.data.disqualified ? new Date() : null;
     const saved = await participantRepo().save(participant);
+    // Any previously issued diploma must be regenerated after a changed decision.
+    await AppDataSource.query(`UPDATE certificates SET status = 'revoked', revoked_at = NOW(), updated_at = NOW()
+      WHERE contest_id = ? AND participant_id = ?`, [contestId, participantId]);
+
 
     let notification: {
       attempted: boolean;
@@ -3367,6 +3387,7 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
         const contentHtml = `
 <p style="margin:0 0 12px 0;">Вітаємо, <b>${escapeHtml(participantName)}</b>.</p>
 <p style="margin:0 0 12px 0;">Повідомляємо, що вас дискваліфіковано з контесту <b>${escapeHtml(contest.title)}</b>.</p>
+<p style="margin:0 0 12px 0;">${saved.retainParticipation ? "Участь збережено з результатом 0 балів. За наявності подачі ви зможете отримати диплом учасника після підтвердження організатором." : "Вас виключено із заліку. Диплом за цей контест не видаватиметься."}</p>
 <p style="margin:0 0 8px 0;"><b>Дата/час рішення:</b> ${escapeHtml(disqualifiedAtDisplay)}</p>
 <p style="margin:0 0 12px 0;"><b>Причина дискваліфікації:</b> ${escapeHtml(reasonText)}</p>
 
@@ -3435,6 +3456,7 @@ contestsRouter.patch("/:id/admin/participants/:participantId/disqualify", authRe
       participant: {
         id: saved.id,
         isDisqualified: saved.isDisqualified,
+        retainParticipation: saved.retainParticipation,
         disqualificationReason: saved.disqualificationReason ?? null,
         disqualifiedAt: saved.disqualifiedAt ? new Date(saved.disqualifiedAt).toISOString() : null,
       },
@@ -4835,42 +4857,8 @@ contestsRouter.get("/:id/my-progress", authRequired, async (req: AuthRequest, re
 // pre-sorted accordingly. (The legacy ICPC-only GET /:id/scoreboard route still
 // exists for older clients.)
 const ICPC_PENALTY_PER_WRONG = 20;
-contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res: Response) => {
-  try {
-    const contestId = Number(req.params.id);
-    if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
-
-    const contest = await readContestAccessRecord(contestId);
-    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
-    const allowed = await canAccessContest({ contest, req });
-    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
-
-    const isManager = req.userId ? await canManageContest({ contest, req }) : false;
-    const scoreboardReleaseAtMs = await getContestScoreboardReleaseAtMs(contest);
-    const scoreboardIsHidden = contest.scoreboardVisibility === "ORGANIZERS_ONLY"
-      ? !isManager
-      : contest.scoreboardVisibility === "AFTER_END"
-        ? !isManager && (scoreboardReleaseAtMs === null || Date.now() < scoreboardReleaseAtMs)
-        : false;
-    if (scoreboardIsHidden) {
-      res.set("Cache-Control", "no-store");
-      return res.json({
-        contestId,
-        scoringMode: contest.scoringMode ?? "IOI",
-        problems: [],
-        rows: [],
-        hidden: true,
-        releaseAt: scoreboardReleaseAtMs === null ? null : new Date(scoreboardReleaseAtMs).toISOString(),
-        hiddenReason: contest.scoreboardVisibility === "ORGANIZERS_ONLY" ? "ORGANIZERS_ONLY" : "AFTER_END",
-        generatedAtMs: Date.now(),
-      });
-    }
-
-    const now = Date.now();
-    const end = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
-    const view = isManager ? "organizer" : end != null && now >= end - 3600000 && now <= end ? "frozen" : "public";
-    res.set("Cache-Control", "no-store");
-    const board = await cachedStandings(contestId, `${view}:${contest.updatedAt?.getTime() ?? 0}:${end != null && now > end ? "finished" : "active"}`, async () => {
+async function computeContestStandings(contest: Contest, isManager: boolean, scoreboardReleaseAtMs: number | null) {
+    const contestId = contest.id;
     const scoringMode: "IOI" | "ICPC" = contest.scoringMode;
 
     const problems = await problemRepo().find({
@@ -4894,14 +4882,15 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
     const participants = await participantRepo().find({
       where: { contest: { id: contestId } },
       relations: ["user"],
-      select: { id: true, displayName: true, isDisqualified: true, principalType: true, safetyExtensionSeconds: true, user: { id: true } },
+      select: { id: true, displayName: true, isDisqualified: true, retainParticipation: true, principalType: true, safetyExtensionSeconds: true, user: { id: true } },
       order: { joinedAt: "ASC" },
     });
     const organizerParticipantIds = new Set(
       participants.filter((participant) => isOrganizerParticipant(participant, organizerUserIds)).map((participant) => participant.id)
     );
     const contestParticipants = participants.filter((participant) => !isOrganizerParticipant(participant, organizerUserIds));
-    const activeParticipants = contestParticipants.filter((participant) => !participant.isDisqualified);
+    const activeParticipants = contestParticipants.filter((participant) => !participant.isDisqualified || participant.retainParticipation);
+    const disqualifiedIds = new Set(contestParticipants.filter(p => p.isDisqualified).map(p => p.id));
 
     await ensureContestAdminTables();
     const annulmentRows = (await AppDataSource.query(
@@ -4954,6 +4943,9 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       label: p.label ?? labelFromOrder(p.order),
       maxScore: problemMaxPoints(p),
     }));
+    const savedAwards = await readConfirmedAwards(contestId);
+    const awardsConfirmed = savedAwards != null && savedAwards.sourceVersion === await awardSourceVersion(contestId);
+    const awardPlaces = new Map((awardsConfirmed ? savedAwards.rows : []).map(row => [row.participantId, row.awardPlace]));
 
     if (activeParticipants.length === 0) {
       return {
@@ -4983,7 +4975,8 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       ORDER BY created_at ASC, id ASC
       `,
       [contestId]
-    )) as Array<UnknownRecord>).filter((submission) => !organizerParticipantIds.has(Number(submission.participantId)));
+    )) as Array<UnknownRecord>).filter((submission) => !organizerParticipantIds.has(Number(submission.participantId))
+      && !disqualifiedIds.has(Number(submission.participantId)));
 
     // IOI best score per (participant, problem) as of the freeze cutoff, and a
     // "pending" flag for cells whose latest activity is hidden behind the freeze.
@@ -4996,7 +4989,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       if (!Number.isFinite(pid) || !Number.isFinite(pr)) continue;
       const createdAt = String(s.createdAt ?? "");
       const tMs = new Date(createdAt).getTime();
-      if (!Number.isFinite(tMs) || tMs > (endMsByParticipant.get(pid) ?? Number.POSITIVE_INFINITY)) continue;
+      if (!Number.isFinite(tMs) || (startsAtMs != null && tMs < startsAtMs) || tMs > (endMsByParticipant.get(pid) ?? Number.POSITIVE_INFINITY)) continue;
       if (Number.isFinite(tMs)) submissionTimes.push(tMs);
       const key = `${pid}:${pr}`;
       if (cutoffMs != null && tMs > cutoffMs) {
@@ -5013,6 +5006,7 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
     const icpcStartMs = startsAtMs ?? (submissionTimes.length ? Math.min(...submissionTimes) : nowMs);
 
     const scoreSubs: ScoreboardSubmission[] = allSubs
+      .filter((s) => startsAtMs == null || new Date(String(s.createdAt ?? "")).getTime() >= startsAtMs)
       .filter((s) => !isAnnulledFor(Number(s.participantId), Number(s.problemId)))
       .filter((s) => new Date(String(s.createdAt ?? "")).getTime() <= (endMsByParticipant.get(Number(s.participantId)) ?? Number.POSITIVE_INFINITY))
       .filter((s) => cutoffMs == null || new Date(String(s.createdAt ?? "")).getTime() <= cutoffMs)
@@ -5068,6 +5062,9 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
         return {
           participantId: p.id,
           displayName: p.displayName,
+          awardPlace: awardPlaces.get(p.id) ?? null,
+          isDisqualified: p.isDisqualified,
+          retainParticipation: p.retainParticipation,
           totalScore: total,
           solved: Number(icpc?.solved ?? 0),
           penalty: Number(icpc?.penalty ?? 0),
@@ -5098,11 +5095,51 @@ contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res:
       scoringMode,
       problems: baseProblems,
       rows,
+      awardsConfirmed,
       firstBlood,
       freeze: { enabled: freezeAtMs != null, freezeAtMs, frozen: viewerFrozen, isManagerView: isManager },
-      disqualifiedCount: contestParticipants.length - activeParticipants.length,
+      disqualifiedCount: disqualifiedIds.size,
       generatedAtMs: nowMs,
     };
+}
+
+contestsRouter.get("/:id/standings", authOptional, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.id);
+    if (!Number.isFinite(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+
+    const contest = await readContestAccessRecord(contestId);
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    const allowed = await canAccessContest({ contest, req });
+    if (!allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const isManager = req.userId ? await canManageContest({ contest, req }) : false;
+    const scoreboardReleaseAtMs = await getContestScoreboardReleaseAtMs(contest);
+    const scoreboardIsHidden = contest.scoreboardVisibility === "ORGANIZERS_ONLY"
+      ? !isManager
+      : contest.scoreboardVisibility === "AFTER_END"
+        ? !isManager && (scoreboardReleaseAtMs === null || Date.now() < scoreboardReleaseAtMs)
+        : false;
+    if (scoreboardIsHidden) {
+      res.set("Cache-Control", "no-store");
+      return res.json({
+        contestId,
+        scoringMode: contest.scoringMode ?? "IOI",
+        problems: [],
+        rows: [],
+        hidden: true,
+        releaseAt: scoreboardReleaseAtMs === null ? null : new Date(scoreboardReleaseAtMs).toISOString(),
+        hiddenReason: contest.scoreboardVisibility === "ORGANIZERS_ONLY" ? "ORGANIZERS_ONLY" : "AFTER_END",
+        generatedAtMs: Date.now(),
+      });
+    }
+
+    const now = Date.now();
+    const end = contest.endsAt ? new Date(contest.endsAt).getTime() : null;
+    const view = isManager ? "organizer" : end != null && now >= end - 3600000 && now <= end ? "frozen" : "public";
+    res.set("Cache-Control", "no-store");
+    const board = await cachedStandings(contestId, `${view}:${contest.updatedAt?.getTime() ?? 0}:${end != null && now > end ? "finished" : "active"}`, async () => {
+    return computeContestStandings(contest, isManager, scoreboardReleaseAtMs);
     });
     return res.json(board);
   } catch (error: unknown) {
@@ -5179,7 +5216,92 @@ contestsRouter.get("/:id/events", sseAuthShim, authOptional, async (req: AuthReq
   }
 });
 
-// Organizer/admin: enqueue certificate generation for all non-disqualified participants
+async function contestAwardPreview(contest: Contest) {
+  await ensureContestAdminTables();
+  const sourceVersion = await awardSourceVersion(contest.id);
+  const releaseAt = await getContestScoreboardReleaseAtMs(contest);
+  const board = await computeContestStandings(contest, true, releaseAt);
+  const organizerIds = await getContestOrganizerUserIds(contest.id, contest.createdBy?.id);
+  const participants = (await participantRepo().find({ where: { contest: { id: contest.id } }, relations: ["user"], order: { id: "ASC" } }))
+    .filter(p => !isOrganizerParticipant(p, organizerIds));
+  const counts = await contestSubmissionCounts(contest.id);
+  const byId = new Map(board.rows.map(r => [r.participantId, r]));
+  const rows: AwardRow[] = participants.map(p => ({
+    participantId: p.id, displayName: p.displayName, rank: byId.get(p.id)?.rank ?? null,
+    totalScore: p.isDisqualified ? 0 : byId.get(p.id)?.totalScore ?? 0,
+    maxScore: board.problems.reduce((sum, p) => sum + p.maxScore, 0),
+    submissionCount: counts.get(p.id) ?? 0, isDisqualified: p.isDisqualified,
+    retainParticipation: p.retainParticipation, awardPlace: null,
+  }));
+  const pending = await AppDataSource.query(`SELECT COUNT(*) AS count FROM contest_submissions
+    WHERE contest_id = ? AND phase = 'CONTEST' AND execution_status IN ('queued', 'running', 'pending')`, [contest.id]);
+  const saved = await readConfirmedAwards(contest.id);
+  const stale = saved != null && saved.sourceVersion !== sourceVersion;
+  const savedById = new Map((saved?.rows ?? []).map(r => [r.participantId, r.awardPlace]));
+  if (sourceVersion !== await awardSourceVersion(contest.id)) throw new Error("AWARDS_STALE");
+  return {
+    contestId: contest.id, sourceVersion, canConfirm: releaseAt != null && Date.now() >= releaseAt && Number(pending[0]?.count ?? 0) === 0,
+    pendingSubmissions: Number(pending[0]?.count ?? 0), confirmedAt: saved?.confirmedAt ?? null,
+    stale, confirmed: saved != null && !stale,
+    rows: saved && !stale ? rows.map(r => ({ ...r, awardPlace: savedById.get(r.participantId) ?? null })) : rows,
+    suggested: proposeAwards(rows),
+  };
+}
+
+contestsRouter.get("/:id/admin/awards", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    if (!Number.isInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (!(await canManageContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    res.set("Cache-Control", "no-store");
+    return res.json(await contestAwardPreview(contest));
+  } catch (error: unknown) {
+    if (errorMessage(error) === "AWARDS_STALE") return res.status(409).json({ message: "AWARDS_STALE" });
+    logger.error("[contests] award preview failed", { err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+contestsRouter.put("/:id/admin/awards", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    if (!Number.isInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (!(await canManageContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const parsed = z.object({ sourceVersion: z.string().length(64), decisions: z.array(z.object({
+      participantId: z.number().int().positive(), awardPlace: z.union([z.literal(1), z.literal(2), z.literal(3), z.null()]),
+    })).max(10000) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+    const preview = await contestAwardPreview(contest);
+    if (!preview.canConfirm) return res.status(409).json({ message: "CONTEST_NOT_FINISHED_OR_JUDGING" });
+    if (preview.sourceVersion !== parsed.data.sourceVersion) return res.status(409).json({ message: "AWARDS_STALE" });
+    const rows = applyAwardDecisions(preview.rows, parsed.data.decisions);
+    await AppDataSource.transaction(async manager => {
+      await manager.query("SELECT id FROM contests WHERE id = ? FOR UPDATE", [contestId]);
+      if (preview.sourceVersion !== await awardSourceVersion(contestId, manager)) throw new Error("AWARDS_STALE");
+      await manager.query(`INSERT INTO contest_awards (contest_id, source_version, decisions_json, confirmed_by_user_id, confirmed_at)
+        VALUES (?, ?, ?, ?, NOW(3)) ON DUPLICATE KEY UPDATE source_version = VALUES(source_version),
+        decisions_json = VALUES(decisions_json), confirmed_by_user_id = VALUES(confirmed_by_user_id), confirmed_at = NOW(3)`,
+        [contestId, preview.sourceVersion, JSON.stringify(rows), req.userId]);
+      await manager.query(`UPDATE certificates SET status = 'revoked', revoked_at = NOW(), updated_at = NOW()
+        WHERE contest_id = ? AND status <> 'revoked'`, [contestId]);
+    });
+    return res.json({ ok: true });
+  } catch (error: unknown) {
+    const message = errorMessage(error);
+    if (message === "AWARDS_STALE") return res.status(409).json({ message });
+    if (["INVALID_AWARD_PARTICIPANTS", "INELIGIBLE_AWARD_PARTICIPANT"].includes(message)) return res.status(400).json({ message });
+    logger.error("[contests] award confirmation failed", { err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Organizer/admin: enqueue certificate generation for confirmed eligible participants.
 contestsRouter.post("/:id/generate-certificates", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
@@ -5209,6 +5331,9 @@ contestsRouter.post("/:id/generate-certificates", authRequired, async (req: Auth
       jobId: job.jobId,
     });
   } catch (error: unknown) {
+    if (["AWARDS_NOT_CONFIRMED", "AWARDS_STALE"].includes(errorMessage(error))) {
+      return res.status(409).json({ message: errorMessage(error) });
+    }
     if (errorMessage(error) === "CERTIFICATES_DISABLED_FOR_CONTEST") {
       return res.status(400).json({ message: "CERTIFICATES_DISABLED_FOR_CONTEST" });
     }
