@@ -65,6 +65,7 @@ import { CONTEST_BANNER_THEMES, CONTEST_ICONS } from "./contestBranding";
 import { TournamentDiplomaImport, type DiplomaImport } from "./TournamentDiplomaImport";
 import { ContestAwardsPanel } from "./ContestAwardsPanel";
 import { ContestDisqualificationDialog } from "./ContestDisqualificationDialog";
+import { CertificateRecipientsPreview } from "./CertificateRecipientsPreview";
 import { ContestSafetyGate } from "./ContestSafetyGate";
 import {
   importLibraryTaskArchives,
@@ -4524,6 +4525,7 @@ export const ContestPage: React.FC = () => {
                     </div>
 
                     <TournamentDiplomaImport onLoad={applyImportedDiploma} />
+                    <CertificateRecipientsPreview contestId={data.contest.id} />
 
                     {certificateEditorOpen ? <>
                     {!certificateUiSimpleMode || certificateGlobalSettingsOpen ? (
