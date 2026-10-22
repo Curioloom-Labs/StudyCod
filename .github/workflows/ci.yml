@@ -93,7 +93,7 @@ jobs:
 
       - name: Install Chromium for Playwright
         working-directory: backend
-        run: npx playwright install --with-deps chromium
+          run: npx playwright install chromium
 
       - name: Start frontend preview
         working-directory: frontend
