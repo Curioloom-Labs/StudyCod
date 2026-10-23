@@ -517,7 +517,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
           {[1, 2, 3].map((key) => (
             <div
               key={key}
-              className="h-[270px] animate-pulse rounded-[24px] bg-bg-hover dark:bg-white/[.05]"
+              className="min-h-[350px] animate-pulse rounded-[24px] bg-bg-hover dark:bg-white/[.05]"
             />
           ))}
         </div>

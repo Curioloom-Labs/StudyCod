@@ -1,11 +1,10 @@
 import React, { useEffect, useState, Suspense, useCallback, useMemo, useRef, useContext, startTransition } from "react";
 import { Routes, Route, useLocation, useNavigate, useSearchParams, useParams, Navigate, type Location } from "react-router-dom";
 import { enforceSubdomain, getHostContext } from "./lib/subdomain";
-import { AnimatePresence } from "framer-motion";
 import { getCachedMeUser, getMe, isGetMeSessionChanged } from "./lib/api/profile";
 import type { User } from "./types";
 import { useTranslation } from "react-i18next";
-import { AnimatedPage, PageMotionScope } from "./components/layout/AnimatedPage";
+import { AnimatedPage } from "./components/layout/AnimatedPage";
 import { PlatformFooter } from "./components/layout/PlatformFooter";
 import { PremiumWorkspaceShell } from "./components/layout/PremiumWorkspaceShell";
 import { PersonalLearningProvider } from "./components/learning/PersonalLearningProvider";
@@ -877,11 +876,7 @@ const AppContent: React.FC = React.memo(() => {
   // The personal product no longer sits inside any legacy terminal/momentum
   // shell. It owns a single, calm SaaS workspace chrome across every core page.
   if (user.userMode !== "EDUCATIONAL") {
-    if (sharedWorkspace?.active) return <PageMotionScope.Provider value={false}>
-      <AnimatePresence mode="sync" initial={false}>
-        <AnimatedPage key={resolvedPage} className="w-full">{content}</AnimatedPage>
-      </AnimatePresence>
-    </PageMotionScope.Provider>;
+    if (sharedWorkspace?.active) return <AnimatedPage key={resolvedPage} className="w-full">{content}</AnimatedPage>;
     return <PersonalLearningProvider><PremiumWorkspaceShell
       user={user}
       page={resolvedPage}
@@ -896,13 +891,9 @@ const AppContent: React.FC = React.memo(() => {
       onSupportDesk={() => navigate("/support/desk")}
       onLogout={handleLogout}
     >
-      <PageMotionScope.Provider value={false}>
-        <AnimatePresence mode="sync" initial={false}>
-          <AnimatedPage key={resolvedPage} className="w-full">
-            {content}
-          </AnimatedPage>
-        </AnimatePresence>
-      </PageMotionScope.Provider>
+      <AnimatedPage key={resolvedPage} className="w-full">
+        {content}
+      </AnimatedPage>
     </PremiumWorkspaceShell></PersonalLearningProvider>;
   }
 
@@ -1120,13 +1111,9 @@ export const App: React.FC = () => {
         {!isContestSurface && <GlobalQuickSearch />}
         <NetworkStatus />
         {!isContestSurface && <MascotCompanion />}
-        <AnimatePresence mode="sync" initial={false}>
         <AnimatedPage key={productRouteKey} className="w-full">
         <PersonalWorkspaceFrame routeLocation={location}><ContestOnlySurfaceGuard>
-          <PageMotionScope.Provider value={false}>
-          <AnimatePresence mode="sync" initial={false}>
           <AnimatedPage key={topLevelRouteKey} className="w-full">
-          <PageMotionScope.Provider value={true}>
           <Routes location={location}>
           {(import.meta.env.DEV || import.meta.env.VITE_BROWSER_CONTRACT === "1") ? <Route path="/__dev/editor" element={<Suspense fallback={<PageLoader />}>
                 <AnimatedPage>
@@ -1362,13 +1349,9 @@ export const App: React.FC = () => {
               </Suspense>} />
             <Route path="*" element={<AnimatedPage><AppContent /></AnimatedPage>} />
           </Routes>
-          </PageMotionScope.Provider>
           </AnimatedPage>
-          </AnimatePresence>
-          </PageMotionScope.Provider>
         </ContestOnlySurfaceGuard></PersonalWorkspaceFrame>
         </AnimatedPage>
-        </AnimatePresence>
     </TheoryModalProvider>
   </PageLoadingProvider>;
 };
@@ -1537,10 +1520,7 @@ const ContestRoutes: React.FC = React.memo(() => {
   };
   const content = <main id="main-content" tabIndex={-1} className="relative min-w-0 overflow-x-clip outline-none">
         <Suspense fallback={<ContestRouteFallback />}>
-          <PageMotionScope.Provider value={false}>
-          <AnimatePresence mode="sync" initial={false}>
             <AnimatedPage key={location.pathname} className="w-full">
-            <PageMotionScope.Provider value={true}>
             <Routes location={location}>
               <Route index element={<Navigate to="contests" replace />} />
               <Route path="contests" element={<AnimatedPage><ContestsPage canCreate={user.userMode !== "CONTEST"} canJoinPrivateByCode={user.userMode !== "CONTEST"} favoriteScope={String(user.id)} /></AnimatedPage>} />
@@ -1550,10 +1530,7 @@ const ContestRoutes: React.FC = React.memo(() => {
               <Route path="contests/:id/problems/:problemId" element={<AnimatedPage><ContestProblemSolvePage /></AnimatedPage>} />
               <Route path="*" element={<Navigate to="contests" replace />} />
             </Routes>
-            </PageMotionScope.Provider>
             </AnimatedPage>
-          </AnimatePresence>
-          </PageMotionScope.Provider>
         </Suspense>
       </main>;
 
@@ -1829,10 +1806,7 @@ const EduRoutes: React.FC = React.memo(() => {
   const studentOnly = (element: React.ReactElement) => user.studentId ? element : <Navigate to="/edu" replace />;
   const eduMain = <div id="main-content" role={eduRouteOwnsMainLandmark(location.pathname) ? undefined : "main"} tabIndex={-1} className={`relative flex-1 min-h-0 flex flex-col outline-none ${/^\/edu\/tasks\//.test(location.pathname) ? "overflow-x-hidden overflow-y-auto" : "overflow-y-auto"}`}>
       <Suspense fallback={<PageLoader />}>
-        <PageMotionScope.Provider value={false}>
-        {/* EDU navigation releases page portals immediately; entry motion stays scoped to the new page. */}
-          <AnimatedPage key={location.pathname} className="w-full">
-          <PageMotionScope.Provider value={true}>
+        <AnimatedPage key={location.pathname} className="w-full">
           <Routes location={location}>
             {}
             <Route index element={user.studentId ? <Navigate to="/edu/lessons" replace /> : <AnimatedPage>
@@ -1878,9 +1852,7 @@ const EduRoutes: React.FC = React.memo(() => {
             {}
             <Route path="*" element={<Navigate to={user.studentId ? "/edu/lessons" : "/edu"} replace />} />
           </Routes>
-          </PageMotionScope.Provider>
-          </AnimatedPage>
-        </PageMotionScope.Provider>
+        </AnimatedPage>
       </Suspense>
   </div>;
 

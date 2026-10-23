@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { animate, motion, useReducedMotion } from "framer-motion";
+import { animate, useReducedMotion } from "framer-motion";
 import { ArrowLeft, Clock3, Download, Edit2, ExternalLink, GripVertical, Library, Play, Plus, Rocket, Search, Send, Share2, SlidersHorizontal, Star, Trash2, Upload, X } from "lucide-react";
-import { staggerContainer, fadeUpItem } from "../../lib/motion";
 import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
 import { MarkdownView } from "../../components/MarkdownView";
@@ -1934,7 +1933,7 @@ export const TaskLibraryPage: React.FC = () => {
             </div>
 
             {loading ? (
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2 md:grid-cols-1">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <Skeleton key={i} className="h-[220px] rounded-[26px]" />
                 ))}
@@ -1954,7 +1953,7 @@ export const TaskLibraryPage: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <motion.div variants={staggerContainer} initial="initial" animate="animate" className="grid gap-2 md:grid-cols-1">
+              <div className="grid gap-2 md:grid-cols-1">
                 {visibleTasks.map((task) => {
                   const isSelected = selectedId === task.id;
                   const isFav = favoriteIds.has(task.id);
@@ -1968,9 +1967,8 @@ export const TaskLibraryPage: React.FC = () => {
                     : null;
 
                   return (
-                    <motion.article
+                    <article
                       key={task.id}
-                      variants={fadeUpItem}
                       className={`group flex min-h-0 flex-col rounded-xl border bg-bg-surface p-4 text-left transition-colors ${isSelected ? "border-primary/55 bg-primary/5 ring-2 ring-primary/10 dark:border-primary/35" : "border-border hover:border-primary/30 hover:bg-bg-hover/40"}`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -2108,10 +2106,10 @@ export const TaskLibraryPage: React.FC = () => {
                           </button>
                         )}
                       </div>
-                    </motion.article>
+                    </article>
                   );
                 })}
-              </motion.div>
+              </div>
             )}
           </section>
 
