@@ -526,7 +526,6 @@ export const TasksPage: React.FC<Props> = ({
 
   const latestSubmitRequestSeq = useRef(0);
   const generateRequestRef = useRef(false);
-  const autoCourseGenerationRef = useRef<string | null>(null);
   const [coursePracticeItemId, setCoursePracticeItemId] = useState<number | null>(() => {
     try {
       const value = Number(window.sessionStorage.getItem("studycod:active-course-practice-item"));
@@ -1667,22 +1666,15 @@ export const TasksPage: React.FC<Props> = ({
     }
   };
 
-  // Generation is an explicit action from a roadmap topic. Opening a practice
-  // URL directly must only restore the IDE and never start an AI request.
+  // Older roadmap links carried generate=1 and started AI generation on page
+  // load. Consume that legacy flag without generating; the IDE exposes an
+  // explicit Generate task button for the selected course item.
   useEffect(() => {
-    if (isPreviewMode || !requestedCourseItemIdFromUrl || searchParams.get("generate") !== "1") return;
-    if (loading) return;
-    const key = `${requestedCourseIdFromUrl ?? "legacy"}:${requestedCourseItemIdFromUrl}:generate`;
-    if (autoCourseGenerationRef.current === key) return;
-    autoCourseGenerationRef.current = key;
+    if (!requestedCourseItemIdFromUrl || searchParams.get("generate") !== "1") return;
     const nextSearch = new URLSearchParams(searchParams);
     nextSearch.delete("generate");
     setSearchParams(nextSearch, { replace: true });
-    void handleGenerate({ courseItemId: requestedCourseItemIdFromUrl });
-    // handleGenerate is intentionally invoked once per roadmap command; the
-    // ref above prevents reruns when its surrounding workspace state changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPreviewMode, requestedCourseIdFromUrl, requestedCourseItemIdFromUrl, courseEnrollmentId, searchParams, setSearchParams, loading, tasks.length]);
+  }, [requestedCourseItemIdFromUrl, searchParams, setSearchParams]);
 
   const handleSubmit = async () => {
     if (!active) return;

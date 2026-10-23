@@ -10,7 +10,8 @@ import { BoundedCache } from '../../utils/boundedCache';
 import { env } from '../../env';
 import { topicLanguageLabel, type TopicLanguage } from '../../utils/topicLanguage';
 import { createIntroductoryHelloWorldTask, shouldUseCanonicalIntroductoryPractice } from './introductoryTask';
-import { requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTask, reviewGeneratedTests, TASK_PRECISION_INSTRUCTIONS } from './TaskContractReview';
+import { requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTests, TASK_PRECISION_INSTRUCTIONS } from './TaskContractReview';
+import { validateAndReviewGeneratedTask } from './GeneratedTaskContract';
 import { generateReferenceTestData, type ReferenceTestExecutor } from './ReferenceTestData';
 
 export type LLMTaskLanguage = TopicLanguage;
@@ -373,8 +374,11 @@ export class LLMOrchestrator {
       }, {
         signal: params.signal
       });
-      const validated = AIResponseValidator.validateGenerateTask(raw, params.topicTitle, params.topicIndex, params.allowedIoTypes);
-      await reviewGeneratedTask(this.cloudflareProvider, validated, { signal: params.signal, userId: params.userId, topicId: params.topicId });
+      const validated = await validateAndReviewGeneratedTask(this.cloudflareProvider, raw, {
+        expectedTopic: params.topicTitle,
+        topicIndex: params.topicIndex,
+        allowedIoTypes: params.allowedIoTypes,
+      }, { signal: params.signal, userId: params.userId, topicId: params.topicId });
       return validated;
     };
 
@@ -1040,7 +1044,7 @@ ${uniquenessBlock}
 - Для STDIN_STDOUT напиши 1–3 короткі речення або рядки: що виводиться, у якому порядку та скільки рядків. Наприклад: "Два рядки: спочатку повідомлення про діапазон, потім назва дня або Invalid day."
 - НЕ додавай прикладів input/output, слів "Приклад", "Наприклад", "Example", переліку конкретних запусків або довгого переказу умов.
 - Не вставляй сюди practicalTask, constraints чи пояснення алгоритму. Усі конкретні правила, від яких залежить відповідь, мають залишатися в practicalTask.
-- Для NO_INPUT_FIXED_OUTPUT outputFormat може містити лише точний очікуваний stdout; це єдиний виняток із правила стислості.
+- Для NO_INPUT_FIXED_OUTPUT outputFormat має бути лише точним stdout без пояснень або markdown; поверни рівно один приклад із порожнім input і зроби examples[0].output дослівно однаковим з outputFormat (включно з пробілами та переносами рядків).
 - outputFormat має бути зрозумілим без здогадок: явно вкажи порядок рядків і допустимі буквальні значення, якщо вони є.
 - Якщо ioType = NO_INPUT_FIXED_OUTPUT: outputFormat МАЄ бути ТОЧНИМ текстом, який програма має вивести в stdout (як готовий expected output), а не описом.
 - Якщо очікується кілька рядків, outputFormat ОБОВ'ЯЗКОВО подай багаторядково: кожен рядок на новому рядку (реальні переноси \n), у правильному порядку, без злиття в один рядок.
@@ -1163,7 +1167,7 @@ OUTPUT DATA (outputFormat):
 - For STDIN_STDOUT, use 1–3 short sentences or lines: what is printed, in what order, and how many lines. Example: "Two lines: first the range message, then the day name or Invalid day."
 - Do NOT include input/output examples, words like "Example" or "For example", a list of concrete runs, or a long restatement of the condition.
 - Do not put practicalTask, constraints, or algorithm explanation here. All rules that determine the answer stay in practicalTask.
-- For NO_INPUT_FIXED_OUTPUT, outputFormat may contain only the exact expected stdout; this is the only exception to the brevity rule.
+- For NO_INPUT_FIXED_OUTPUT, outputFormat must contain only exact stdout with no explanation or markdown; return exactly one example with empty input and make examples[0].output byte-for-byte identical to outputFormat, including spaces and line breaks.
 - outputFormat must be understandable without guessing: state the line order and literal allowed values when relevant.
 - If ioType = NO_INPUT_FIXED_OUTPUT: outputFormat MUST be the EXACT text that the program should output to stdout (as a ready-made expected output), not a description.
 - If multiple lines are expected, outputFormat MUST be presented in multi-line format: each line on a new line (real \n), in the correct order, without merging into one line.
@@ -1224,12 +1228,11 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
           temperature: 0.15,
           maxTokens: LLM_TASK_MAX_TOKENS
         });
-        const validated = AIResponseValidator.validateGenerateTask(
-          parsed,
-          params.anchor.topic,
-          params.topicIndex,
-          params.allowedIoTypes
-        );
+        const validated = await validateAndReviewGeneratedTask(provider, parsed, {
+          expectedTopic: params.anchor.topic,
+          topicIndex: params.topicIndex,
+          allowedIoTypes: params.allowedIoTypes,
+        }, { signal: params.signal, userId: params.userId, topicId: params.topicId });
         const practicalTaskLower = validated.practicalTask.toLowerCase();
         const coreOperationLower = params.anchor.coreOperation.toLowerCase();
         const titleLower = validated.title.toLowerCase();
@@ -1251,7 +1254,6 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
             throw new Error(`MULTI_TASK_NOT_ALLOWED: Task contains multi-task marker "${marker}". Single task only. Generation aborted.`);
           }
         }
-        await reviewGeneratedTask(provider, validated, { signal: params.signal, userId: params.userId, topicId: params.topicId });
         return validated;
       } catch (err: unknown) {
         const message = errorMessage(err);

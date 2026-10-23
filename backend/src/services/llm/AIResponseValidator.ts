@@ -468,6 +468,12 @@ export function makeAIValidationError(mode: string, message: string, rawResponse
   return new AIValidationError(mode, emptyZod(), message, rawResponse);
 }
 
+export class FixedOutputContractMismatchError extends AIValidationError {
+  constructor(public readonly task: AiTaskGenerationResult, exampleIndex: number) {
+    super('generateTask', emptyZod(), 'Example ' + (exampleIndex + 1) + ': fixed output contradicts outputFormat', task);
+  }
+}
+
 // Declarative rule registry for generateTask responses.
 // Each rule owns its own predicate + canonical error message. `applies`
 // optionally gates the rule on IO type so we don't run e.g. STDIN_STDOUT
@@ -725,7 +731,7 @@ export class AIResponseValidator {
           throw makeAIValidationError('generateTask', `Example ${index + 1}: no-input tasks require empty stdin`);
         }
         if (ioType === 'NO_INPUT_FIXED_OUTPUT' && example.output.replace(/\r\n/g, '\n').trim() !== outFmt.replace(/\r\n/g, '\n').trim()) {
-          throw makeAIValidationError('generateTask', `Example ${index + 1}: fixed output contradicts outputFormat`);
+          throw new FixedOutputContractMismatchError(validated, index);
         }
         const inputKey = example.input.replace(/\r\n/g, '\n');
         const known = outputByInput.get(inputKey);

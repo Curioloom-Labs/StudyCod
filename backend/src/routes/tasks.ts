@@ -2108,12 +2108,11 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   });
   if (!aiTaskResult.success) {
     const isCatalogRequest = String(params.subtitle ?? "").startsWith("CATALOG_ITEM:");
-    if (!shouldUseGenericPersonalFallback(params.subtitle) && !isCatalogRequest) {
+    if (isCatalogRequest || !shouldUseGenericPersonalFallback(params.subtitle)) {
       throw Object.assign(new Error("COURSE_PRACTICE_GENERATION_UNAVAILABLE"), { statusCode: 503 });
     }
-    // Keep both personal and course practice usable during provider outages.
-    // Course fallbacks are deterministic and topic-aware, so they never leave
-    // the learner with an empty IDE just because the AI provider is down.
+    // Keep generic personal practice usable during provider outages. A failed
+    // catalog generation stays retryable instead of saving an unrelated fallback.
     await params.reportProgress?.(
       "saving",
       88,
