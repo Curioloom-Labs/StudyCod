@@ -13,22 +13,19 @@ export const reducedMotionTransition: Transition = {
 };
 export const pageVariants: Variants = {
   initial: {
-    opacity: 0,
-    transform: "translate3d(16px, 0, 0)"
+    opacity: 0
   },
   animate: {
     opacity: 1,
-    transform: "translate3d(0, 0, 0)",
     transition: {
-      duration: 0.18,
+      duration: 0.15,
       ease: easeOutExpo
     }
   },
   exit: {
     opacity: 0,
-    transform: "translate3d(-12px, 0, 0)",
     transition: {
-      duration: 0.11,
+      duration: 0.12,
       ease: easeOutQuint
     }
   }
