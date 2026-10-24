@@ -58,6 +58,31 @@ export interface LearningCourseItem {
   progress: { status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED"; score: number | null; completedAt: string | null };
 }
 
+export interface CatalogQuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+}
+
+export interface CatalogQuiz {
+  itemId: number;
+  title: string;
+  passingScore: number;
+  questions: CatalogQuizQuestion[];
+  progress: LearningCourseItem["progress"];
+}
+
+export interface CatalogQuizResult {
+  score: number;
+  correctCount: number;
+  total: number;
+  passed: boolean;
+  passingScore: number;
+  review: Array<{ questionId: string; question: string; options: string[]; selectedIndex: number; correctIndex: number }>;
+  progress: LearningCourseItem["progress"];
+  enrollment: { id: number; status: CatalogEnrollmentStatus; completionPercent: number; masteryScore: number };
+}
+
 export interface LearningProjectProgress {
   milestoneIds: string[];
   draft: string;
@@ -219,6 +244,16 @@ export async function completeCatalogItem(itemId: number, score?: number) {
   }
   const response = await api.post(`/learning/items/${itemId}/complete`, score == null ? {} : { score });
   return response.data?.enrollment;
+}
+
+export async function getCatalogQuiz(itemId: number): Promise<CatalogQuiz> {
+  const response = await api.get(`/learning/items/${itemId}/quiz`);
+  return response.data?.quiz;
+}
+
+export async function submitCatalogQuiz(itemId: number, answers: Array<{ questionId: string; selectedIndex: number }>): Promise<CatalogQuizResult> {
+  const response = await api.post(`/learning/items/${itemId}/quiz/submit`, { answers });
+  return response.data?.result;
 }
 
 export async function getCatalogProject(itemId: number): Promise<LearningProject> {

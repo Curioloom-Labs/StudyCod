@@ -9,7 +9,10 @@ import type { TaskIoType, TaskLang } from "../entities/Task";
 import { Topic } from "../entities/Topic";
 import { CourseItem } from "../entities/CourseItem";
 import { getCoursePracticeContext, startCourseItem, completeCourseItem } from "../services/learningCatalogService";
+import { buildCoursePracticeTheoryForAi } from "../services/learning/coursePracticeContext";
 import { localizeCourseItem } from "../services/curriculumLocalization";
+import { olympiadPracticeContractIssues, parseOlympiadPracticeContract } from "../services/learning/learningContract";
+import { extractOlympiadDebuggingDraft } from "../services/llm/OlympiadTaskExamples";
 import { getPersonalMiniProjectDefinition, PERSONAL_MINI_PROJECT_INTERVAL } from "../data/personalMiniProjects";
 import {
   getPersonalThematicStartTopicIndex,
@@ -20,10 +23,11 @@ import { Grade } from "../entities/Grade";
 import { User } from "../entities/User";
 import { UserCourseEnrollment } from "../entities/UserCourseEnrollment";
 import { TestData } from "../entities/TestData";
+import { LearningAttempt } from "../entities/LearningAttempt";
 import { TheoryBlock } from "../entities/TheoryBlock";
 import { authMiddleware, AuthRequest } from "../middleware/authMiddleware";
 import { submissionRateLimitMiddleware } from "../middleware/submissionRateLimit";
-import { In } from "typeorm";
+import { In, IsNull } from "typeorm";
 import { safeAICall, sendAIError, neutralizePromptInjection, type AIError } from "../services/ai/safeAICall";
 import { generateAlgorithmicHints, explainSubmissionError, type HintLanguage } from "../services/ai/failureHints";
 import { debugMentorReply, type DebugChatMessage, DEBUG_CHAT_MAX_HISTORY, DEBUG_CHAT_MAX_MESSAGE_CHARS } from "../services/ai/debugMentor";
@@ -35,7 +39,7 @@ import { SubmissionIntegrity } from "../entities/SubmissionIntegrity";
 import { SolveSession } from "../entities/SolveSession";
 import { boundSnapshots, type ReplaySnapshot } from "../services/replay/replaySession";
 import { getStableDifus } from "../utils/adaptiveDifficulty";
-import { canUseTaskExamplesAfterTestFailure, shouldUseGenericPersonalFallback } from "../utils/taskGenerationPolicy";
+import { canUseTaskExamplesAfterTestFailure, shouldRegenerateOlympiadTask, shouldUseGenericPersonalFallback } from "../utils/taskGenerationPolicy";
 import { executeCodeWithInput } from "../services/codeExecutionService";
 import { computeTotalFromParts, evaluateCodeWithAI } from "../ai/evaluator";
 import { judgeWithSemaphore } from "../services/judgeWorker";
@@ -50,7 +54,7 @@ import { HttpError } from "../utils/httpError";
 import { chooseDefaultCheckerFromExpectedOutputs } from "../utils/checkerSpec";
 import { concatForAI, decodeMultiFileSubmissionV1, encodeMultiFileSubmissionV1, normalizeSafeCodeFilePath, pickEntryContent } from "../utils/multiFileSubmission";
 import { buildLearningFirstFailure } from "../services/learning/firstFailure";
-import { recordLearningOutcome } from "../services/learning/failureToSkillEngine";
+import { getCourseSkillEvidence, recordLearningOutcome } from "../services/learning/failureToSkillEngine";
 import { hasTheoryBlockEnTranslationColumns } from "../services/translation/translationSchema";
 import { looksLikeTranslationProviderErrorText, translateMarkdownUkToEn } from "../services/translation/translateUkToEn";
 import { env } from "../env";
@@ -84,6 +88,17 @@ import {
   buildLocalizedTopicTitleEnById as buildLocalizedTopicTitleEnByIdService,
   translateTopicTheoryUkToEn as translateTopicTheoryUkToEnService,
 } from "../services/translation/topicTitleTranslator";
+
+// Mutable dependency seam for the generated course-practice route. Keeping
+// these calls together lets route tests exercise persistence without patching
+// immutable TypeScript module exports.
+export const taskGenerationDependencies = {
+  safeAICall,
+  getCoursePracticeContext,
+  startCourseItem,
+  getStableDifus,
+};
+
 const tasksRouter = Router();
 
 type ApiCodeFile = { path: string; content: string };
@@ -1814,6 +1829,9 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   // Prompt context
   topicTitleForAi: string;
   theoryForAi: string;
+  allowedIoTypesOverride?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
+  validationFeedback?: string;
+  olympiadTaskRepairAttempt?: number;
   prevTopicsText?: string;
   subtitle?: string;
   // Uniqueness context
@@ -1822,12 +1840,16 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   stdinPolicyTopicIndex: number;
   reportProgress?: (phase: TaskGenerationProgressPhase, progress: number, message: string) => Promise<void>;
 }): Promise<Task> {
+  const olympiadPracticeContract = parseOlympiadPracticeContract(params.theoryForAi);
+  const isOlympiadAlgorithmicPractice = olympiadPracticeContract !== null;
   const stdinAllowed = isStdinAllowedForTopic({
     allTopics: params.allTopics,
     lang: params.lang,
     topicIndex: params.stdinPolicyTopicIndex
-  });
-  const generationAllowedIoTypes = chooseGenerationAllowedIoTypes({
+  }) || params.allowedIoTypesOverride?.includes("STDIN_STDOUT") === true;
+  const generationAllowedIoTypes = params.allowedIoTypesOverride?.length
+    ? params.allowedIoTypesOverride
+    : chooseGenerationAllowedIoTypes({
     stdinAllowed,
     numInTopic: params.numInTopic,
     topicIndex: params.stdinPolicyTopicIndex
@@ -2080,7 +2102,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     return saved;
   };
 
-  const aiTaskResult = await safeAICall<GeneratedTaskPayload>('generateTask', {
+  const aiTaskResult = await taskGenerationDependencies.safeAICall<GeneratedTaskPayload>('generateTask', {
     topicTitle: params.topicTitleForAi,
     theory: String(params.theoryForAi || i18nText(params.userLanguage, "Контрольна робота. Теорії не потрібно.", "Control work. No theory is required.")).trim()
       || i18nText(params.userLanguage, "Контрольна робота.", "Control work."),
@@ -2096,6 +2118,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     previousTasks: previousTasksBrief,
     previousTaskPractices: previousTaskPracticesForUniq,
     previousTaskTitles: previousTaskTitlesForUniq,
+    ...(params.validationFeedback ? { validationFeedback: params.validationFeedback } : {}),
     ...(params.prevTopicsText ? { prevTopics: params.prevTopicsText, isControl: params.type === "CONTROL" } : {})
   }, {
     language: params.userLanguage,
@@ -2108,6 +2131,9 @@ async function generateAndPersistPersonalProgrammingTask(params: {
   });
   if (!aiTaskResult.success) {
     const isCatalogRequest = String(params.subtitle ?? "").startsWith("CATALOG_ITEM:");
+    if (isOlympiadAlgorithmicPractice) {
+      throw Object.assign(new Error("OLYMPIAD_PRACTICE_GENERATION_UNAVAILABLE"), { statusCode: 503 });
+    }
     if (isCatalogRequest || !shouldUseGenericPersonalFallback(params.subtitle)) {
       throw Object.assign(new Error("COURSE_PRACTICE_GENERATION_UNAVAILABLE"), { statusCode: 503 });
     }
@@ -2127,8 +2153,11 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     i18nText(params.userLanguage, "Перевіряємо приклади та готуємо автотести", "Checking examples and preparing autotests"),
   );
   const practicalOnly = String(aiTask.practicalTask ?? "").trim();
+  const debuggingDraft = olympiadPracticeContract
+    ? extractOlympiadDebuggingDraft(olympiadPracticeContract, practicalOnly)
+    : null;
   // Use a single, stable template per language (AI templates often drift and can break expectations).
-  const template = (() => {
+  const template = debuggingDraft ?? (() => {
     if (params.lang === "PYTHON") {
       return [
         "def main():",
@@ -2260,6 +2289,10 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     // Use task examples instead so we can return a task quickly.
     const SHOULD_SKIP_TESTDATA_MS = 6_000;
     if (remainingBeforeTests < SHOULD_SKIP_TESTDATA_MS) {
+      if (isOlympiadAlgorithmicPractice) {
+        await taskRepo().remove(saved);
+        throw Object.assign(new Error("OLYMPIAD_PRACTICE_TEST_GENERATION_DEADLINE"), { statusCode: 504 });
+      }
       if (aiExamples.length === 0 && testExamples.length === 0) {
         await taskRepo().remove(saved);
         throw {
@@ -2292,7 +2325,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     } else {
 
     for (let consistencyAttempt = 0; consistencyAttempt <= TEST_CONSISTENCY_RETRY_ATTEMPTS; consistencyAttempt++) {
-      const testDataResult = await safeAICall('generateTestData', {
+      const testDataResult = await taskGenerationDependencies.safeAICall('generateTestData', {
         taskDescription: buildTestDataPrompt({
           statement: statementMarkdown || practicalOnly,
           existingExamples: [...testExamples, ...aiExamples],
@@ -2302,6 +2335,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
         lang: params.lang,
         count: remainingCount,
         ioType,
+          ...(olympiadPracticeContract ? { requiredCases: olympiadPracticeContract.requiredCases } : {}),
         publicExamples: aiExamples,
         userId: params.userId
       }, {
@@ -2313,7 +2347,35 @@ async function generateAndPersistPersonalProgrammingTask(params: {
       });
       if (!testDataResult.success) {
         const status = Number(testDataResult.error?.statusCode ?? 0);
+        const validationError = String(testDataResult.error?.details?.validationError ?? "");
+        const repairAttempt = params.olympiadTaskRepairAttempt ?? 0;
+        const remainingForTaskRepair = params.requestBudgetMs - (Date.now() - params.requestStartedAt);
+        if (isOlympiadAlgorithmicPractice && repairAttempt < 1 && remainingForTaskRepair >= 18_000
+          && shouldRegenerateOlympiadTask(testDataResult.error)) {
+          await taskRepo().remove(saved);
+          logger.warn("[tasks] regenerating Olympiad task after statement/example oracle rejection", {
+            requestId: params.requestId,
+            userId: params.userId,
+            lang: params.lang,
+            repairAttempt: repairAttempt + 1,
+            validationError: validationError.slice(0, 1200),
+          });
+          await params.reportProgress?.(
+            "tests",
+            76,
+            i18nText(params.userLanguage, "Приклад не узгодився з еталонною перевіркою, генеруємо новий варіант", "An example failed reference validation; generating a new variant"),
+          );
+          return generateAndPersistPersonalProgrammingTask({
+            ...params,
+            validationFeedback: `The previously generated task was rejected by its executed Python reference check. Regenerate the complete learner-facing statement and all public examples so they agree with the task rules. Keep the same learning-contract objective and algorithm. Validation finding: ${validationError}`,
+            olympiadTaskRepairAttempt: repairAttempt + 1,
+          });
+        }
         const canFallback = canUseTaskExamplesAfterTestFailure(testDataResult.error);
+        if (isOlympiadAlgorithmicPractice && canFallback) {
+          await taskRepo().remove(saved);
+          throw Object.assign(new Error("OLYMPIAD_PRACTICE_TEST_GENERATION_UNAVAILABLE"), { statusCode: 503 });
+        }
         if (!canFallback) {
           await taskRepo().remove(saved);
           throw testDataResult.error;
@@ -2396,6 +2458,11 @@ async function generateAndPersistPersonalProgrammingTask(params: {
     }
   }
 
+  if (isOlympiadAlgorithmicPractice && testExamples.length < REQUIRED_TEST_COUNT) {
+    await taskRepo().remove(saved);
+    throw Object.assign(new Error("OLYMPIAD_PRACTICE_TEST_SET_INCOMPLETE"), { statusCode: 503 });
+  }
+
   const pointsByIndex: number[] = (() => {
     const n = Math.max(1, testExamples.length);
     const totalPoints = 100;
@@ -2453,7 +2520,9 @@ tasksRouter.get("/", authMiddleware, async (req: AuthRequest, res: Response) => 
       .leftJoinAndSelect("topic.theoryBlock", "theoryBlock")
       .leftJoinAndSelect("task.courseItem", "courseItem")
       .where("user.id = :userId", { userId: req.userId });
-    if (req.learningRuntime) taskQuery.andWhere("task.lang = :runtime", { runtime: req.learningRuntime });
+    // The authorized enrollment defines a course's language. The active Lab
+    // runtime may belong to another course and must not hide these tasks.
+    if (req.learningRuntime && scope !== "COURSE") taskQuery.andWhere("task.lang = :runtime", { runtime: req.learningRuntime });
     if (scope === "COURSE") taskQuery.andWhere("task.course_enrollment_id = :enrollmentId", { enrollmentId: requestedEnrollmentId });
     if (scope === "LAB") taskQuery.andWhere("task.course_enrollment_id IS NULL");
     const tasks = await taskQuery.orderBy("task.created_at", "DESC").getMany();
@@ -3219,15 +3288,17 @@ tasksRouter.get("/concepts/due", authMiddleware, async (req: AuthRequest, res: R
   }
 });
 
-// Multi-turn Socratic debug mentor. Stateless: the client replays the bounded
-// transcript each turn. Student messages are prompt-injection sanitized before
-// reaching the LLM; replies are post-filtered to never contain code blocks.
+// Multi-turn Socratic debug mentor. The client replays a bounded transcript;
+// when a personal task ID is supplied, the server adds only that owner's
+// persisted lesson and attempt history. Client-replayed messages are untrusted
+// regardless of the role label and are sanitized before reaching the model.
+// replies are post-filtered to never contain code blocks.
 tasksRouter.post("/debug-chat", authMiddleware, submissionRateLimitMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
 
     const langRaw = String(body.language ?? "").trim().toUpperCase();
-    const language = (["JAVA", "PYTHON", "CPP"].includes(langRaw) ? langRaw : "PYTHON") as HintLanguage;
+    let language = (["JAVA", "PYTHON", "CPP"].includes(langRaw) ? langRaw : "PYTHON") as HintLanguage;
 
     const code = String(body.code ?? "").slice(0, 20_000);
     if (!code.trim()) {
@@ -3240,8 +3311,8 @@ tasksRouter.post("/debug-chat", authMiddleware, submissionRateLimitMiddleware, a
       .map((m) => {
         const role: DebugChatMessage["role"] = String(m.role) === "mentor" ? "mentor" : "student";
         let content = String(m.content ?? "").slice(0, DEBUG_CHAT_MAX_MESSAGE_CHARS);
-        // Sanitize ONLY student turns (mentor turns are our own output).
-        if (role === "student") content = neutralizePromptInjection(content);
+        // The client replays both roles, so neither role label is trusted.
+        content = neutralizePromptInjection(content);
         return { role, content };
       })
       .filter((m) => m.content.trim().length > 0)
@@ -3263,12 +3334,126 @@ tasksRouter.post("/debug-chat", authMiddleware, submissionRateLimitMiddleware, a
         stderr: f.stderr == null ? null : String(f.stderr).slice(0, 2000),
       }));
 
+    let taskTitle = String(body.taskTitle ?? "").slice(0, 300);
+    let taskText = String(body.taskText ?? "").slice(0, 4000);
+    let learningContext = "";
+    const requestedTaskId = Number(body.taskId);
+    if (req.userId && Number.isInteger(requestedTaskId) && requestedTaskId > 0) {
+      const ownedTask = await taskRepo().findOne({
+        where: { id: requestedTaskId, user: { id: req.userId } },
+        relations: ["courseItem", "courseItem.module", "courseItem.module.course"],
+      });
+      if (!ownedTask) return res.status(404).json({ message: "TASK_NOT_FOUND" });
+      taskTitle = String(ownedTask.title ?? taskTitle).slice(0, 300);
+      taskText = String(ownedTask.description ?? taskText).slice(0, 4000);
+      language = ownedTask.lang;
+
+      const contextParts: string[] = [];
+      const courseItem = ownedTask.courseItem;
+      if (courseItem) {
+        const course = courseItem.module?.course;
+        const exercise = readProperty(courseItem.content, "exercise");
+        const theoryItemId = Number(readProperty(courseItem.content, "theoryItemId") ?? readProperty(exercise, "theoryItemId"));
+        contextParts.push(`Курс: ${String(course?.title ?? course?.catalogKey ?? "навчальний курс").slice(0, 180)}; урок: ${String(courseItem.title ?? "").slice(0, 180)}.`);
+        if (Number.isInteger(theoryItemId) && theoryItemId > 0) {
+          const theoryItem = await AppDataSource.getRepository(CourseItem).findOne({ where: { id: theoryItemId } });
+          const markdown = String(readProperty(theoryItem?.content, "markdown") ?? "").trim();
+          if (markdown) contextParts.push(`Теорія уроку:\n${markdown.slice(0, 1600)}`);
+        }
+      }
+
+      const priorAttempts = await AppDataSource.getRepository(LearningAttempt).find({
+        where: { principalType: "USER", principalId: req.userId, taskKind: "PERSONAL", taskId: ownedTask.id },
+        order: { createdAt: "DESC" },
+        take: 6,
+      });
+      if (priorAttempts.length) {
+        const historySummary = priorAttempts.map((attempt, index) => {
+          const category = attempt.failureCategory ? `, причина: ${String(attempt.failureCategory).slice(0, 48)}` : "";
+          return `${index + 1}. ${attempt.outcome === "SOLVED" ? "розв'язано" : "потрібна робота"}${category}, рівень підказки до ${Math.max(0, Math.min(3, Number(attempt.highestHintLevelShown) || 0))}`;
+        });
+        contextParts.push(`Останні спроби цього учня для цієї задачі (новіші першими):\n${historySummary.join("\n")}`);
+      }
+
+      if (ownedTask.courseEnrollmentId) {
+        try {
+          const evidence = await getCourseSkillEvidence(req.userId, ownedTask.courseEnrollmentId);
+          if (evidence.practicedTasks > 0) {
+            const weakTopics = evidence.topics
+              .filter((topic) => topic.practiced >= 2 && topic.solved < topic.practiced)
+              .sort((a, b) => a.solved / a.practiced - b.solved / b.practiced || b.practiced - a.practiced)
+              .slice(0, 3)
+              .map((topic) => `${topic.name} (${topic.solved}/${topic.practiced})`);
+            const masterySummary = [
+              `У цьому курсі: розв’язано ${evidence.solvedTasks} із ${evidence.practicedTasks} практик; після помилки самостійно доведено до розв’язання ${evidence.solvedAfterFailure}.`,
+              weakTopics.length ? `Теми, де частіше потрібна практика: ${weakTopics.join("; ")}.` : "За наявними спробами виразної слабкої теми немає.",
+            ].join(" ");
+            contextParts.push(`Профіль засвоєння в цьому enrollment: ${masterySummary}`);
+          }
+
+          const relatedTasks = await AppDataSource.getRepository(Task).find({
+            where: {
+              user: { id: req.userId },
+              courseEnrollment: { id: ownedTask.courseEnrollmentId },
+              type: "TOPIC",
+              taskMode: "CODE",
+            },
+            relations: ["courseItem"],
+            order: { createdAt: "DESC" },
+            take: 16,
+          });
+          const relatedTaskIds = relatedTasks
+            .filter((relatedTask) => relatedTask.id !== ownedTask.id)
+            .map((relatedTask) => relatedTask.id);
+          if (relatedTaskIds.length) {
+            const relatedAttempts = await AppDataSource.getRepository(LearningAttempt).find({
+              where: {
+                principalType: "USER",
+                principalId: req.userId,
+                taskKind: "PERSONAL",
+                taskId: In(relatedTaskIds),
+              },
+              order: { createdAt: "DESC" },
+              take: 64,
+            });
+            const latestByTask = new Map<number, LearningAttempt>();
+            for (const attempt of relatedAttempts) {
+              if (!latestByTask.has(attempt.taskId)) latestByTask.set(attempt.taskId, attempt);
+            }
+            const relatedHistory = relatedTasks
+              .filter((relatedTask) => relatedTask.id !== ownedTask.id && latestByTask.has(relatedTask.id))
+              .slice(0, 4)
+              .map((relatedTask) => {
+                const attempt = latestByTask.get(relatedTask.id)!;
+                const lesson = relatedTask.courseItem
+                  ? localizeCourseItem(relatedTask.courseItem, resolveUiLanguage(req)).title
+                  : "попередня практика";
+                const outcome = attempt.outcome === "SOLVED" ? "розв’язано" : "ще не розв’язано";
+                return `${String(lesson).slice(0, 100)} — ${outcome}${attempt.failureCategory ? ` (${String(attempt.failureCategory).slice(0, 32)})` : ""}`;
+              });
+            if (relatedHistory.length) {
+              contextParts.push(`Останні спроби в інших уроках цього курсу (без коду):\n${relatedHistory.join("\n")}`);
+            }
+          }
+        } catch (error: unknown) {
+          logger.warn("[tasks] mentor course learning context unavailable", {
+            requestId: req.requestId,
+            taskId: ownedTask.id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      learningContext = contextParts.join("\n\n").slice(0, 2200);
+    }
+
     const result = await debugMentorReply({
       context: {
-        uiLocale: resolveUiLocaleFromHeaders(req.headers, "uk"),
-        taskTitle: String(body.taskTitle ?? "").slice(0, 300),
-        taskText: String(body.taskText ?? "").slice(0, 4000),
+        taskTitle,
+        taskText,
+        ...(learningContext ? { learningContext } : {}),
+        uiLanguage: resolveUiLanguage(req),
         language,
+        uiLanguage: resolveUiLanguage(req),
         code,
         verdict: String(body.verdict ?? "").slice(0, 32),
         stderr: body.stderr == null ? "" : String(body.stderr).slice(0, 8000),
@@ -3286,6 +3471,7 @@ tasksRouter.post("/debug-chat", authMiddleware, submissionRateLimitMiddleware, a
 
 tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Response) => {
   let throttleKey: string | null = null;
+  let generateSlotReserved = false;
   let reportGenerationProgress: (
     phase: TaskGenerationProgressPhase,
     progress: number,
@@ -3314,6 +3500,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     const rawLang = String(req.learningRuntime ?? "PYTHON").toUpperCase().trim();
     let lang: "JAVA" | "PYTHON" | "CPP" = rawLang === "PYTHON" ? "PYTHON" : rawLang === "CPP" ? "CPP" : "JAVA";
     const forcePersonalControl = readProperty(req.body, "forceControl") === true;
+    const generateCourseVariant = readProperty(req.body, "generateCourseVariant") === true;
+    const requestedCourseItemId = Number(readProperty(req.body, "courseItemId") ?? 0);
+    if (generateCourseVariant && (!Number.isInteger(requestedCourseItemId) || requestedCourseItemId <= 0)) {
+      return res.status(400).json({ message: "COURSE_ITEM_REQUIRED_FOR_VARIANT" });
+    }
     throttleKey = makeGenerateThrottleKey(userId, lang);
 
     const now = Date.now();
@@ -3344,6 +3535,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         retryAfterMs
       });
     }
+    generateSlotReserved = true;
 
     // Opportunistic cleanup for expired cooldown entries.
     if (generateCooldownByRuntime.size > 1000) {
@@ -3372,10 +3564,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     // have arrived from another language, so do not reject a valid course
     // practice request merely because authMiddleware selected a different
     // active runtime for the legacy workspace.
-    const requestedCourseItemId = Number(readProperty(req.body, "courseItemId") ?? 0);
     let courseContext: Awaited<ReturnType<typeof getCoursePracticeContext>> | null = null;
     if (Number.isInteger(requestedCourseItemId) && requestedCourseItemId > 0) {
-      courseContext = await getCoursePracticeContext(userId, requestedCourseItemId, userLanguage);
+      courseContext = await taskGenerationDependencies.getCoursePracticeContext(userId, requestedCourseItemId, userLanguage);
       const courseRuntime = String(courseContext.enrollment.variant?.runtime ?? "").toUpperCase();
       if (courseRuntime === "JAVA" || courseRuntime === "PYTHON" || courseRuntime === "CPP") {
         lang = courseRuntime;
@@ -3408,6 +3599,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         .leftJoin("task.grades", "grade")
         .where("task.user_id = :userId", { userId })
         .andWhere("task.lang = :lang", { lang })
+        .andWhere("task.course_enrollment_id IS NULL")
         .andWhere("task.completed = 0")
         .andWhere("grade.id IS NULL")
         .orderBy("task.createdAt", "ASC")
@@ -3436,7 +3628,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     if (Number.isInteger(requestedCourseItemId) && requestedCourseItemId > 0) {
       const context = courseContext;
       if (!context) throw Object.assign(new Error("COURSE_ITEM_NOT_FOUND"), { statusCode: 404 });
-      if (context.progress?.status === "COMPLETED") {
+      if (context.progress?.status === "COMPLETED" && !generateCourseVariant) {
         return res.status(409).json({
           status: "blocked",
           message: "COURSE_ITEM_COMPLETED",
@@ -3446,6 +3638,20 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
 
       const content = context.item.content ?? {};
       const exercise = isRecord(content.exercise) ? content.exercise : {};
+      const exerciseContract = isRecord(exercise.learningContract) ? exercise.learningContract : null;
+      const isOlympiadVariant = exerciseContract?.kind === "OLYMPIAD_ALGORITHMIC_PRACTICE";
+      if (isOlympiadVariant) {
+        const contractIssues = olympiadPracticeContractIssues(exerciseContract, lang);
+        if (contractIssues.length > 0) {
+          return res.status(409).json({
+            message: "OLYMPIAD_PRACTICE_CONTRACT_INVALID",
+            issues: contractIssues,
+          });
+        }
+      }
+      if (generateCourseVariant && !isOlympiadVariant) {
+        return res.status(409).json({ message: "OLYMPIAD_PRACTICE_VARIANT_REQUIRED" });
+      }
       // `course_items.order` is only the position inside its module. The AI
       // policy is based on the global learning topic, which is the module's
       // order. Using the item order made every practice in a module look like
@@ -3453,20 +3659,19 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       const moduleOrder = Number(context.item.module?.order);
       const itemOrder = Number(context.item.order);
       const topicIndex = Math.max(0, Number.isFinite(moduleOrder) ? moduleOrder : (itemOrder || 0));
-      const existingCourseTasks = await taskRepo()
+      const existingCourseTask = await taskRepo()
         .createQueryBuilder("task")
         .where("task.user_id = :userId", { userId })
         .andWhere("task.course_item_id = :courseItemId", { courseItemId: requestedCourseItemId })
         .andWhere("task.course_enrollment_id = :enrollmentId", { enrollmentId: context.enrollment.id })
         .orderBy("task.createdAt", "ASC")
         .select(["task.id", "task.title", "task.description", "task.numInTopic"])
-        .getMany();
+        .getOne();
       // A catalog item represents one authored practice. If the client retries
       // after a slow response, return the already persisted task instead of
       // generating another task for the same item. This also keeps the
       // authored Practice N/total sequence stable.
-      const existingCourseTask = existingCourseTasks[0];
-      if (existingCourseTask) {
+      if (existingCourseTask && !generateCourseVariant) {
         const hydratedExisting = await taskRepo().findOne({
           where: { id: existingCourseTask.id },
           relations: ["topic", "topic.theoryBlock", "courseItem"],
@@ -3488,15 +3693,68 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         }
       }
 
+      // Give the generator practice history from the whole lesson, not only
+      // the current item. Each practice row is generated once, so an
+      // item-scoped history is always empty and cannot prevent sibling tasks
+      // from repeating the same problem.
+      const earlierCourseTasks = await taskRepo()
+        .createQueryBuilder("task")
+        .innerJoin("task.courseItem", "courseItem")
+        .innerJoin("courseItem.module", "courseModule")
+        .where("task.user_id = :userId", { userId })
+        .andWhere("task.course_enrollment_id = :enrollmentId", { enrollmentId: context.enrollment.id })
+        .andWhere("courseModule.id = :moduleId", { moduleId: context.item.module?.id })
+        .andWhere("courseItem.kind = :kind", { kind: "CODE_TASK" })
+        .andWhere("courseItem.order < :currentOrder", { currentOrder: context.item.order })
+        .andWhere("courseItem.id != :courseItemId", { courseItemId: requestedCourseItemId })
+        .orderBy("courseItem.order", "ASC")
+        .addOrderBy("task.createdAt", "ASC")
+        .select(["task.id", "task.title", "task.description", "task.numInTopic"])
+        .getMany();
+
+      // A generated capstone lives in the projects module, so module-scoped
+      // history cannot see the learner's earlier variants of its target skill.
+      // Include every previously generated problem for this Olympiad topic.
+      const topicPracticeHistory = isOlympiadVariant && context.course.catalogKey && exerciseContract?.topicKey
+        ? await taskRepo()
+          .createQueryBuilder("task")
+          .innerJoin("task.courseItem", "courseItem")
+          .where("task.user_id = :userId", { userId })
+          .andWhere("task.course_enrollment_id = :enrollmentId", { enrollmentId: context.enrollment.id })
+          .andWhere("courseItem.contentKey LIKE :contentKeyPattern", {
+            contentKeyPattern: `${context.course.catalogKey}.${String(exerciseContract.topicKey)}.practice-%`,
+          })
+          .andWhere("courseItem.id != :courseItemId", { courseItemId: requestedCourseItemId })
+          .orderBy("task.createdAt", "DESC")
+          .take(12)
+          .select(["task.id", "task.title", "task.description", "task.numInTopic"])
+          .getMany()
+        : [];
+
+      // Contest authors can ask for another dynamic variant of an Olympiad
+      // lesson. Include prior variants in the uniqueness context, while
+      // leaving the learner's completed lesson progress untouched.
+      const sameItemVariants = generateCourseVariant
+        ? await taskRepo()
+          .createQueryBuilder("task")
+          .where("task.user_id = :userId", { userId })
+          .andWhere("task.course_item_id = :courseItemId", { courseItemId: requestedCourseItemId })
+          .andWhere("task.course_enrollment_id = :enrollmentId", { enrollmentId: context.enrollment.id })
+          .orderBy("task.createdAt", "DESC")
+          .take(8)
+          .select(["task.id", "task.title", "task.description", "task.numInTopic"])
+          .getMany()
+        : [];
+      const existingCourseTasks = Array.from(new Map(
+        [...sameItemVariants, ...earlierCourseTasks, ...topicPracticeHistory].map((task) => [task.id, task]),
+      ).values());
+
       const catalogPracticeSequence = catalogPracticeSequenceFromItem(context.item) ?? 1;
-      const difus = await getStableDifus(userId, lang, topicIndex, userRepo, gradeRepo);
-      const theoryForAi = [
-        context.theoryMarkdown,
-        typeof exercise.prompt === "string" ? `Practice brief:\n${exercise.prompt}` : "",
-        exercise.learningContract && typeof exercise.learningContract === "object"
-          ? `Machine-checked learning contract (follow it exactly; do not collapse the task into a copy of the theory example):\n${JSON.stringify(exercise.learningContract)}`
-          : "",
-      ].filter(Boolean).join("\n\n").trim();
+      const difus = await taskGenerationDependencies.getStableDifus(userId, lang, topicIndex, userRepo, gradeRepo);
+      const theoryForAi = buildCoursePracticeTheoryForAi({
+        theoryMarkdown: context.theoryMarkdown,
+        exercise,
+      });
 
       await reportGenerationProgress(
         "condition",
@@ -3521,6 +3779,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         requiredTasksInThisGroup: 1,
         topicTitleForAi: context.item.title,
         theoryForAi,
+        ...(isRecord(exercise.learningContract) && exercise.learningContract.kind === "OLYMPIAD_ALGORITHMIC_PRACTICE"
+          ? { allowedIoTypesOverride: ["STDIN_STDOUT" as const] }
+          : {}),
         subtitle: `CATALOG_ITEM:${requestedCourseItemId}|${context.course.catalogKey || context.course.id}`,
         existingTasksForContext: existingCourseTasks.map((task) => ({
           id: task.id,
@@ -3533,7 +3794,9 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         reportProgress: reportGenerationProgress,
       });
 
-      if (typeof exercise.starterCode === "string" && exercise.starterCode.trim()) {
+      const isGeneratedDebuggingPractice = exerciseContract?.kind === "OLYMPIAD_ALGORITHMIC_PRACTICE"
+        && exerciseContract.stage === "EDGE_CASES";
+      if (!isGeneratedDebuggingPractice && typeof exercise.starterCode === "string" && exercise.starterCode.trim()) {
         saved.template = exercise.starterCode;
       }
       saved.courseItem = context.item;
@@ -3541,7 +3804,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       saved.courseEnrollment = context.enrollment;
       saved.courseEnrollmentId = context.enrollment.id;
       await taskRepo().save(saved);
-      await startCourseItem(userId, requestedCourseItemId);
+      if (!generateCourseVariant) await taskGenerationDependencies.startCourseItem(userId, requestedCourseItemId);
       const hydrated = await taskRepo().findOne({ where: { id: saved.id }, relations: ["topic", "topic.theoryBlock", "courseItem"] });
       await reportGenerationProgress(
         "ready",
@@ -3572,6 +3835,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       .where("task.user_id = :userId", { userId })
       .andWhere("task.lang = :lang", { lang })
       .andWhere("task.type = :type", { type: "TOPIC" })
+      .andWhere("task.course_enrollment_id IS NULL")
       .andWhere("(task.subtitle IS NULL OR task.subtitle NOT LIKE :miniProjectPrefix)", { miniProjectPrefix: "MPJ:%" })
       .groupBy("task.topic_index")
       .getRawMany<{ topicIndex: unknown; cnt: unknown }>();
@@ -3593,6 +3857,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       .where("task.user_id = :userId", { userId })
       .andWhere("task.lang = :lang", { lang })
       .andWhere("task.type = :type", { type: "TOPIC" })
+      .andWhere("task.course_enrollment_id IS NULL")
       .andWhere("(task.subtitle IS NULL OR task.subtitle NOT LIKE :miniProjectPrefix)", { miniProjectPrefix: "MPJ:%" })
       .andWhere("task.completed = 1")
       .andWhere("grade.total >= :passGrade", { passGrade: PERSONAL_TOPIC_PASS_GRADE })
@@ -3606,7 +3871,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
     }
 
     const topicTasksForRetry = await taskRepo().find({
-      where: { user: { id: userId }, lang, type: "TOPIC" },
+      where: { user: { id: userId }, lang, type: "TOPIC", courseEnrollment: IsNull() },
       relations: ["grades"],
       order: { createdAt: "ASC" }
     });
@@ -3833,7 +4098,8 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         },
         topic: {
           id: topic.id
-        }
+        },
+        courseEnrollment: IsNull(),
       },
       order: {
         numInTopic: "ASC"
@@ -4292,7 +4558,7 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
       message: "Internal server error"
     });
   } finally {
-    if (throttleKey) await releaseGenerateSlot(throttleKey);
+    if (throttleKey && generateSlotReserved) await releaseGenerateSlot(throttleKey);
   }
 });
 tasksRouter.post("/reset-topic", authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -4997,7 +5263,7 @@ tasksRouter.post(
         learningFeedbackCandidates.push({
           testId: t.id,
           passed: false,
-          isPublic: true,
+          isPublic: !t.isHidden,
           input: t.input || "",
           expected: (t.expectedOutput ?? "").toString(),
           actual: "",
@@ -5035,7 +5301,7 @@ tasksRouter.post(
         learningFeedbackCandidates.push({
           testId: t.id,
           passed,
-          isPublic: true,
+          isPublic: !t.isHidden,
           input: t.input || "",
           expected: (r?.expected ?? t.expectedOutput ?? "").toString(),
           actual: r?.actual ?? "",
@@ -5074,7 +5340,7 @@ tasksRouter.post(
   }
 
   if (effectiveIoType === "NO_INPUT_FIXED_OUTPUT" && passedTests < judgedTests.length) {
-    const firstFail = testResultsDetailed.find(r => !r.passed);
+    const firstFail = testResultsDetailed.find(r => !r.passed && r.isPublic);
     if (firstFail) {
       const expected = String(firstFail.expectedOutput ?? "").trim();
       const actual = String(firstFail.actualOutput ?? "").trim();
@@ -5093,6 +5359,7 @@ tasksRouter.post(
       for (const t of judgedTests) expectedById.set(t.id, (t.expectedOutput || "").toString());
       const failuresForHints = testResultsDetailed.filter(r => !r.passed).slice(0, 3).map(r => ({
         testId: r.testId,
+        isPublic: r.isPublic,
         input: r.input || "",
         expected: expectedById.get(r.testId) ?? "",
         actual: r.actualOutput || "",
@@ -5199,6 +5466,19 @@ tasksRouter.post(
     verdict: workerRes?.verdict ?? null,
     tests: learningFeedbackCandidates
   });
+  let learningTopicLabel = task.topic?.title ?? null;
+  if (task.courseEnrollmentId && task.courseItemId) {
+    try {
+      const courseItem = await AppDataSource.getRepository(CourseItem).findOne({ where: { id: task.courseItemId } });
+      if (courseItem) {
+        learningTopicLabel = localizeCourseItem(courseItem, resolveUiLanguage(req)).title
+          .replace(/^(?:Практика|Practice)\s+\d+\/\d+:\s*/i, "")
+          .trim();
+      }
+    } catch (error: unknown) {
+      logger.warn("[learning] course topic label lookup failed", { requestId: req.requestId, taskId: task.id, error });
+    }
+  }
   let learningAttempt: Awaited<ReturnType<typeof recordLearningOutcome>> | null = null;
   try {
     learningAttempt = await recordLearningOutcome({
@@ -5207,7 +5487,7 @@ tasksRouter.post(
       taskKind: "PERSONAL",
       taskId: task.id,
       topicId: task.topic?.id ?? null,
-      topicLabel: task.topic?.title ?? null,
+      topicLabel: learningTopicLabel,
       submissionId: String(savedGrade.id),
       outcome: passedTests >= judgedTests.length ? "SOLVED" : "FAILED",
       failureCategory: learningFirstFailure?.errorKind ?? (workerRes?.verdict === "CE" ? "compile" : null),

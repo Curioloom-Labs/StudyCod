@@ -12,9 +12,18 @@ import { IsNull } from "typeorm";
 import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeFile, JudgeRequest } from "./judgeWorker/types";
 import { projectEntryFile } from "./learningCatalogProjectFiles";
+import { courseItemScorePasses } from "./learning/learningContract";
+import {
+  COURSE_QUIZ_PASSING_SCORE,
+  gradeCourseQuiz,
+  learnerSafeCourseQuizContent,
+  parseCourseQuiz,
+} from "./learning/courseQuiz";
 import {
   localizeCourseItem,
+  localizedCourseDescription,
   localizedCourseMetadata,
+  localizedCourseTitle,
   localizedModuleTitle,
   localizedPrerequisiteTitle,
   type CurriculumLocale,
@@ -543,12 +552,11 @@ export async function getLearningCatalog(userId: number, locale: LearningLocale 
 
   return Promise.all(courses.map(async (course) => {
     const dependencyState = await getPrerequisiteState(userId, course.id, locale);
-    const localized = localizedCourseMetadata(course.catalogKey, locale);
     return {
       id: course.id,
       key: course.catalogKey,
-      title: localized?.title ?? course.title,
-      description: localized?.description ?? course.description,
+      title: localizedCourseTitle(course, locale),
+      description: localizedCourseDescription(course, locale),
       level: course.level,
       isBase: course.isBase,
       status: course.status,
@@ -710,8 +718,8 @@ export async function getCourseForUser(userId: number, courseId: number, locale:
   return {
     id: course.id,
     key: course.catalogKey,
-    title: localizedCourseMetadata(course.catalogKey, locale)?.title ?? course.title,
-    description: localizedCourseMetadata(course.catalogKey, locale)?.description ?? course.description,
+    title: localizedCourseTitle(course, locale),
+    description: localizedCourseDescription(course, locale),
     level: course.level,
     isBase: course.isBase,
     runtime: enrollment.variant.runtime,
@@ -735,7 +743,9 @@ export async function getCourseForUser(userId: number, courseId: number, locale:
         kind: item.kind,
         title: localizedItem.title,
         order: item.order,
-        content: localizedItem.content || {},
+        content: item.kind === "QUIZ"
+          ? learnerSafeCourseQuizContent(localizedItem.content)
+          : localizedItem.content || {},
         progress: progressByItem.get(item.id) ? {
           status: progressByItem.get(item.id)!.status,
           score: progressByItem.get(item.id)!.score ?? null,
@@ -745,6 +755,76 @@ export async function getCourseForUser(userId: number, courseId: number, locale:
         })(),
       })),
     })),
+  };
+}
+
+async function getEnrolledCourseQuizContext(userId: number, itemId: number, locale: LearningLocale = "uk") {
+  const item = await itemRepo().findOne({ where: { id: itemId, isActive: true }, relations: ["module", "module.course"] });
+  if (!item?.module?.course || item.kind !== "QUIZ") {
+    throw Object.assign(new Error("COURSE_QUIZ_NOT_FOUND"), { statusCode: 404 });
+  }
+  const enrollment = await findBestCourseEnrollment(userId, item.module.course.id, ["variant"]);
+  if (!enrollment) throw Object.assign(new Error("COURSE_NOT_ENROLLED"), { statusCode: 403 });
+  if (enrollment.status === "AVAILABLE" || enrollment.status === "LOCKED") {
+    throw Object.assign(new Error("COURSE_NOT_ACTIVE"), { statusCode: 409 });
+  }
+  await assertSequentialAccess(enrollment.id, item.module.course.id, item.id);
+  const dependencyState = await getPrerequisiteState(userId, enrollment.courseId, locale);
+  if (!dependencyState.satisfied && !item.module.course.isBase) {
+    throw Object.assign(new Error("PREREQUISITES_INCOMPLETE"), { statusCode: 423, prerequisites: dependencyState.prerequisites });
+  }
+  let progress = await progressRepo().findOne({ where: { enrollment: { id: enrollment.id }, item: { id: item.id } } });
+  if (progress?.status !== "COMPLETED") {
+    progress = progress || progressRepo().create({ enrollment: { id: enrollment.id }, item: { id: item.id } });
+    if (progress.status !== "IN_PROGRESS") {
+      progress.status = "IN_PROGRESS";
+      progress = await progressRepo().save(progress);
+    }
+  }
+  return { item, enrollment, progress };
+}
+
+export async function getCourseQuiz(userId: number, itemId: number, locale: LearningLocale = "uk") {
+  const { item, progress } = await getEnrolledCourseQuizContext(userId, itemId, locale);
+  const localizedItem = localizeCourseItem(item, locale);
+  const questions = parseCourseQuiz(localizedItem.content);
+  if (!questions) throw Object.assign(new Error("COURSE_QUIZ_INVALID"), { statusCode: 409 });
+  return {
+    itemId: item.id,
+    title: localizedItem.title,
+    passingScore: COURSE_QUIZ_PASSING_SCORE,
+    questions: questions.map(({ id, question, options }) => ({ id, question, options })),
+    progress: {
+      status: progress?.status ?? "NOT_STARTED",
+      score: progress?.score == null ? null : Number(progress.score),
+      completedAt: progress?.completedAt ?? null,
+    },
+  };
+}
+
+export async function submitCourseQuiz(userId: number, itemId: number, answers: unknown, locale: LearningLocale = "uk") {
+  const { item } = await getEnrolledCourseQuizContext(userId, itemId, locale);
+  const questions = parseCourseQuiz(item.content);
+  if (!questions) throw Object.assign(new Error("COURSE_QUIZ_INVALID"), { statusCode: 409 });
+  const result = gradeCourseQuiz(questions, answers);
+  if (!result) throw Object.assign(new Error("COURSE_QUIZ_ANSWERS_INVALID"), { statusCode: 400 });
+
+  const enrollment = await completeCourseItem(userId, item.id, result.score, "practice");
+  const progress = await progressRepo().findOne({ where: { enrollment: { id: enrollment.id }, item: { id: item.id } } });
+  return {
+    ...result,
+    passingScore: COURSE_QUIZ_PASSING_SCORE,
+    progress: {
+      status: progress?.status ?? "IN_PROGRESS",
+      score: progress?.score == null ? result.score : Number(progress.score),
+      completedAt: progress?.completedAt ?? null,
+    },
+    enrollment: {
+      id: enrollment.id,
+      status: enrollment.status,
+      completionPercent: percent(enrollment.completionPercent),
+      masteryScore: Number(enrollment.masteryScore ?? 0),
+    },
   };
 }
 
@@ -852,12 +932,17 @@ export async function completeCourseItem(
     || progressRepo().create({ enrollment: { id: enrollment.id }, item: { id: item.id } });
   const wasCompleted = progress.status === "COMPLETED";
   const normalizedScore = score == null ? null : percent(score);
+  const judgeFinalAssessment = readProperty(item.content, "finalAssessmentMode") === "JUDGE_GENERATED"
+    && readProperty(item.content, "finalAssessment") === true;
   const previousScoreValue = Number(progress.score);
   const previousScore = Number.isFinite(previousScoreValue) ? percent(previousScoreValue) : null;
   const bestScore = normalizedScore == null ? previousScore : Math.max(previousScore ?? 0, normalizedScore);
   progress.score = bestScore;
-  const passed = normalizedScore == null || normalizedScore >= 60 || wasCompleted;
-  if (source === "practice" && normalizedScore != null && normalizedScore < 60 && !wasCompleted) {
+  const passed = wasCompleted || courseItemScorePasses(
+    judgeFinalAssessment ? score : normalizedScore,
+    judgeFinalAssessment,
+  );
+  if (source === "practice" && !passed && !wasCompleted) {
     progress.status = "IN_PROGRESS";
     progress.completedAt = null;
   } else if (passed) {
@@ -865,6 +950,8 @@ export async function completeCourseItem(
     progress.completedAt = progress.completedAt || new Date();
   }
   await progressRepo().save(progress);
+
+  if (judgeFinalAssessment && source === "practice" && passed) enrollment.finalAssessmentPassed = true;
 
   return recalculateEnrollmentProgress(enrollment);
 }
@@ -1217,7 +1304,10 @@ export async function passFinalAssessment(userId: number, enrollmentId: number):
     throw Object.assign(new Error("FINAL_WORK_REQUIRED"), { statusCode: 409 });
   }
   const progress = await progressRepo().findOne({ where: { enrollment: { id: enrollment.id }, item: { id: finalAssessment.id } } });
-  if (!progress || progress.status !== "COMPLETED" || progress.projectData?.status !== "SUBMITTED") {
+  const judgeGenerated = readProperty(finalAssessment.content, "finalAssessmentMode") === "JUDGE_GENERATED";
+  const judgePassed = progress?.status === "COMPLETED" && percent(progress.score) === 100;
+  const projectSubmitted = progress?.status === "COMPLETED" && progress.projectData?.status === "SUBMITTED";
+  if (judgeGenerated ? !judgePassed : !projectSubmitted) {
     throw Object.assign(new Error("FINAL_WORK_REQUIRED"), { statusCode: 409 });
   }
   enrollment.finalAssessmentPassed = true;

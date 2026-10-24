@@ -64,3 +64,27 @@ courses:
     level: SPECIALIZATION
     prerequisites: [cpp-core]
     source: theories/cpp_advanced_theory.yml
+  - key: olympiad-python
+    title: "Olympiad Programming: Python"
+    description: "Олімпіадні алгоритми Python: від префіксних сум до оптимізації лінійним динамічним програмуванням."
+    runtime: PYTHON
+    level: SPECIALIZATION
+    status: PUBLISHED
+    prerequisites: [python-core]
+    source: theories/olympiad_python_theory.yml
+  - key: olympiad-java
+    title: "Olympiad Programming: Java"
+    description: "Олімпіадні алгоритми Java з акцентом на типи даних, точний ввід і ефективність JVM."
+    runtime: JAVA
+    level: SPECIALIZATION
+    status: PUBLISHED
+    prerequisites: [java-core]
+    source: theories/olympiad_java_theory.yml
+  - key: olympiad-cpp
+    title: "Olympiad Programming: C++"
+    description: "Олімпіадні алгоритми C++ з практикою STL, меж, 64-бітних сум і швидкого вводу."
+    runtime: CPP
+    level: SPECIALIZATION
+    status: PUBLISHED
+    prerequisites: [cpp-core]
+    source: theories/olympiad_cpp_theory.yml

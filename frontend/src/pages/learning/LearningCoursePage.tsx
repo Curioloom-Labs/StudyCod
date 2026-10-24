@@ -308,6 +308,10 @@ export const LearningCoursePage: React.FC = () => {
       navigate(withDevPreview(`/learning/course/${course?.id ?? ""}/practice/${item.id}`));
       return;
     }
+    if (item.kind === "QUIZ") {
+      navigate(withDevPreview(`/learning/course/${course.id}/practice/${item.id}`));
+      return;
+    }
     setBusyItem(item.id);
     setMessage(null);
     setError(null);
@@ -344,7 +348,7 @@ export const LearningCoursePage: React.FC = () => {
       return;
     }
 
-    if (nodeCompleted(node)) return;
+    if (nodeCompleted(node) && node.item?.kind !== "QUIZ") return;
     if (node.kind === "PROJECT" && node.item) {
       navigate(withDevPreview(`/learning/course/${course.id}/practice/${node.item.id}`));
       return;
@@ -438,7 +442,7 @@ export const LearningCoursePage: React.FC = () => {
                   ? tr("Продовжити практику", "Continue practice")
                   : node.kind === "PROJECT"
                     ? tr("Відкрити мініпроєкт", "Open mini-project")
-                    : tr("Відкрити практику", "Open practice");
+                    : node.kind === "MILESTONE" && node.item?.kind === "QUIZ" ? tr("Відкрити квіз", "Open quiz") : tr("Відкрити практику", "Open practice");
 
             return <div key={node.id} ref={(element) => { roadmapNodeRefs.current[node.id] = element; }} className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)] lg:gap-0">
               {index > 0 && renderRoadmapWave(incomingThickRatio, "absolute left-5 top-0 z-[1] block h-1/2 w-16 -translate-x-1/2 lg:left-1/2 lg:w-24")}
@@ -475,7 +479,7 @@ export const LearningCoursePage: React.FC = () => {
     {selectedNode && selectedNode.kind !== "TOPIC" && <section className="mb-6 mt-6 rounded-2xl border border-primary/25 bg-bg-surface p-5 sm:p-7">
       <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{selectedNode.kind === "PROJECT" ? tr("Практичний проєкт", "Practical project") : tr("Етап курсу", "Course milestone")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{selectedNode.kind === "PROJECT" ? projectTitle(selectedNode.title) : selectedNode.title}</h2></div><button type="button" onClick={() => setSelectedNodeId(null)} className="rounded-xl border border-border p-2 text-text-secondary transition hover:text-text-primary" aria-label={tr("Закрити", "Close")}><X className="size-4" /></button></div>
 
-      {selectedItem && selectedNode.kind === "MILESTONE" && <div className="mt-6">{markdownOf(selectedItem) && <div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedItem)} /></div>}<div className="mt-5 flex items-center justify-between gap-3"><span className="text-xs text-text-secondary">{selectedItem.progress.status === "COMPLETED" ? tr("Завершено", "Completed") : tr("Цей етап ще потрібно зарахувати.", "This milestone still needs to be completed.")}</span><button type="button" disabled={selectedItem.progress.status === "COMPLETED" || busyItem === selectedItem.id} onClick={() => void completeItem(selectedItem)} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-45">{selectedItem.progress.status === "COMPLETED" ? tr("Зараховано", "Completed") : tr("Завершити етап", "Complete milestone")}</button></div></div>}
+      {selectedItem && selectedNode.kind === "MILESTONE" && <div className="mt-6">{markdownOf(selectedItem) && <div className="rounded-2xl bg-bg-code/35 p-4 sm:p-6"><MarkdownView content={markdownOf(selectedItem)} /></div>}<div className="mt-5 flex items-center justify-between gap-3"><span className="text-xs text-text-secondary">{selectedItem.progress.status === "COMPLETED" ? tr("Завершено", "Completed") : tr("Цей етап ще потрібно зарахувати.", "This milestone still needs to be completed.")}</span><button type="button" disabled={(selectedItem.progress.status === "COMPLETED" && selectedItem.kind !== "QUIZ") || busyItem === selectedItem.id} onClick={() => selectedItem.kind === "QUIZ" ? navigate(withDevPreview(`/learning/course/${course.id}/practice/${selectedItem.id}`)) : void completeItem(selectedItem)} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-45">{selectedItem.kind === "QUIZ" ? selectedItem.progress.status === "COMPLETED" ? tr("Пройти ще раз", "Retake quiz") : tr("Відкрити квіз", "Open quiz") : selectedItem.progress.status === "COMPLETED" ? tr("Зараховано", "Completed") : tr("Завершити етап", "Complete milestone")}</button></div></div>}
 
     </section>}
 

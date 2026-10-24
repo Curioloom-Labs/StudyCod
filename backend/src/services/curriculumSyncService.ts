@@ -3,11 +3,12 @@ import { AppDataSource } from "../data-source";
 import type { Repository } from "typeorm";
 import { Course } from "../entities/Course";
 import { CourseDependency } from "../entities/CourseDependency";
+import { hasCurriculumAuthoringOverrides, mergeCurriculumSourceFields } from "./curriculumAuthoringOverrides";
 import { CourseItem } from "../entities/CourseItem";
 import { CourseModule } from "../entities/CourseModule";
 import { CourseVariant } from "../entities/CourseVariant";
 import { loadCurriculumMiniProjects, loadCurriculumTopics, validateCurriculum, type CurriculumCourseDefinition, type CurriculumMiniProject, type CurriculumTopic } from "../utils/curriculum";
-import { buildPracticeContract, projectAssessmentContract } from "./learning/learningContract";
+import { buildOlympiadPracticeContract, buildPracticeContract, projectAssessmentContract } from "./learning/learningContract";
 
 export type CurriculumSyncReport = {
   dryRun: boolean;
@@ -57,24 +58,38 @@ function practiceCount(topic: CurriculumTopic): number {
 }
 
 function exerciseDefinition(course: CurriculumCourseDefinition, topic: CurriculumTopic, theoryKey: string, sequence: number, total: number) {
-  const contract = buildPracticeContract({
-    courseKey: course.key,
-    topicKey: topic.key,
-    topicTitle: topic.title,
-    topicDescription: topic.description,
-    exerciseFocus: topic.exerciseFocus || extractExerciseFocus(topic.content) || undefined,
-    sequence,
-    total,
-  });
+  const exerciseFocus = topic.exerciseFocus || extractExerciseFocus(topic.content) || undefined;
+  const isOlympiadCourse = course.key.startsWith("olympiad-");
+  const contract = isOlympiadCourse
+    ? buildOlympiadPracticeContract({
+        courseKey: course.key,
+        topicKey: topic.key,
+        topicTitle: topic.title,
+        runtime: course.runtime,
+        objective: exerciseFocus || topic.description || topic.title,
+        sequence,
+        total,
+      })
+    : buildPracticeContract({
+        courseKey: course.key,
+        topicKey: topic.key,
+        topicTitle: topic.title,
+        topicDescription: topic.description,
+        exerciseFocus,
+        sequence,
+        total,
+      });
   return {
-    version: 2,
-    generation: "deterministic-v2",
+    version: "kind" in contract ? 3 : 2,
+    generation: "kind" in contract ? "ai-after-reading-v3" : "deterministic-v2",
     exerciseKey: `${course.key}.${topic.key}.practice-${sequence}`,
     sequence,
     total,
     generatedAfterTheory: true,
     theoryItemKey: theoryKey,
-    prompt: contract.taskIntent,
+    prompt: "kind" in contract
+      ? `Generate one original, auto-checkable Olympiad programming problem that practices this lesson's algorithm. Follow the structured problem contract exactly; generate the statement and tests dynamically for this learner.`
+      : contract.taskIntent,
     learningContract: contract,
     starterCode: starterCode(course.runtime),
     runtime: course.runtime,
@@ -220,8 +235,41 @@ function miniProjectItem(course: CurriculumCourseDefinition, project: Curriculum
   };
 }
 
-function finalAssessmentItem(course: CurriculumCourseDefinition, order: number) {
+export function buildFinalAssessmentItem(
+  course: CurriculumCourseDefinition,
+  order: number,
+  capstoneTopic?: CurriculumTopic,
+  capstoneTheoryItemId?: number,
+) {
   const projectKey = `${course.key}.final-assessment`;
+  if (course.key.startsWith("olympiad-")) {
+    if (!capstoneTopic || !capstoneTheoryItemId) {
+      throw new Error(`${course.key}: combine-techniques theory is required for the generated final assessment`);
+    }
+    const theoryItemKey = `${course.key}.${capstoneTopic.key}.theory`;
+    const exercise = exerciseDefinition(course, capstoneTopic, theoryItemKey, 3, 3);
+    exercise.exerciseKey = `${course.key}.final-assessment`;
+    return {
+      contentKey: projectKey,
+      title: "Підсумковий алгоритмічний залік",
+      order,
+      sourceHash: hash({ course: course.key, version: 2, capstoneTopic: capstoneTopic.sourceHash }),
+      sourcePath: "curriculum/final-assessment.generated",
+      content: {
+        generated: true,
+        finalAssessment: true,
+        finalAssessmentMode: "JUDGE_GENERATED",
+        required: true,
+        runtime: course.runtime,
+        exercisePolicy: "generate-after-reading",
+        theoryItemKey,
+        theoryItemId: capstoneTheoryItemId,
+        generatedAfterTheory: true,
+        exercise,
+      },
+    };
+  }
+
   return {
     contentKey: projectKey,
     title: "Фінальна робота курсу",
@@ -268,10 +316,12 @@ function finalAssessmentItem(course: CurriculumCourseDefinition, order: number) 
 }
 
 async function saveCourseItem(itemRepo: Repository<CourseItem>, module: CourseModule, input: CourseItemSyncInput, report: CurriculumSyncReport, dryRun: boolean, preserveExisting = false): Promise<CourseItem> {
-  let item = await itemRepo.findOne({ where: { module: { id: module.id }, contentKey: input.contentKey } });
+  let item = await itemRepo.findOne({ where: { module: { id: module.id }, contentKey: input.contentKey }, relations: ["module"] });
+  if (!item) item = await itemRepo.findOne({ where: { contentKey: input.contentKey }, relations: ["module"] });
   if (!item && input.legacyContentKeys?.length) {
     for (const legacyContentKey of input.legacyContentKeys) {
-      item = await itemRepo.findOne({ where: { module: { id: module.id }, contentKey: legacyContentKey } });
+      item = await itemRepo.findOne({ where: { module: { id: module.id }, contentKey: legacyContentKey }, relations: ["module"] });
+      if (!item) item = await itemRepo.findOne({ where: { contentKey: legacyContentKey }, relations: ["module"] });
       if (item) break;
     }
   }
@@ -289,18 +339,39 @@ async function saveCourseItem(itemRepo: Repository<CourseItem>, module: CourseMo
   const learningContract = exercise && typeof exercise.learningContract === "object" && exercise.learningContract !== null
     ? exercise.learningContract as Record<string, unknown>
     : null;
-  if (item && preserveExisting && Number(learningContract?.version || 0) >= 2) return item;
+  const olympiadPractice = String(input.contentKey).startsWith("olympiad-");
+  const hasCurrentContract = olympiadPractice
+    ? learningContract?.kind === "OLYMPIAD_ALGORITHMIC_PRACTICE" && Number(learningContract.version || 0) >= 3
+    : Number(learningContract?.version || 0) >= 2;
+  if (item && preserveExisting && hasCurrentContract) {
+    const sourceOrder = mergeCurriculumSourceFields(item, { order: input.order }, item.authoringOverrides).order;
+    if (item.module?.id !== module.id || item.order !== sourceOrder) {
+      item.module = module;
+      item.order = sourceOrder;
+      if (!dryRun) await itemRepo.save(item);
+      report.itemsUpdated += 1;
+    }
+    return item;
+  }
   if (!item) item = itemRepo.create({ module: { id: module.id }, contentKey: input.contentKey });
+  const oldModuleId = item.module?.id;
+  const sourceFields = mergeCurriculumSourceFields(item, {
+    kind: input.kind,
+    title: input.title,
+    order: input.order,
+    content: input.content,
+  }, item.authoringOverrides);
+  item.module = module;
   item.contentKey = input.contentKey;
-  const changed = created || item.sourceHash !== input.sourceHash || item.title !== input.title || JSON.stringify(item.content) !== JSON.stringify(input.content);
-  item.kind = input.kind;
-  item.title = input.title;
-  item.order = input.order;
+  const changed = created || oldModuleId !== module.id || item.order !== sourceFields.order || item.sourceHash !== input.sourceHash || item.title !== sourceFields.title || JSON.stringify(item.content) !== JSON.stringify(sourceFields.content);
+  item.kind = sourceFields.kind;
+  item.title = sourceFields.title;
+  item.order = sourceFields.order;
   item.sourceHash = input.sourceHash;
   item.sourcePath = input.sourcePath;
   item.contentVersion = created ? 1 : changed ? (item.contentVersion || 1) + 1 : item.contentVersion || 1;
   item.isActive = true;
-  item.content = input.content;
+  item.content = sourceFields.content;
   if (created) report.itemsCreated += 1;
   else if (changed) report.itemsUpdated += 1;
   if (dryRun) return item;
@@ -328,12 +399,19 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
       let course = await txCourseRepo.findOne({ where: { catalogKey: definition.key } });
       const created = !course;
       if (!course) course = txCourseRepo.create({ catalogKey: definition.key, organization: null });
-      const changed = created || course.sourceHash !== sourceHash || course.title !== definition.title || course.description !== (definition.description || null);
-      course.title = definition.title;
-      course.description = definition.description || null;
-      course.level = definition.level;
-      course.isBase = definition.isBase === true;
-      course.status = "PUBLISHED";
+      const sourceFields = mergeCurriculumSourceFields(course, {
+        title: definition.title,
+        description: definition.description || null,
+        level: definition.level,
+        isBase: definition.isBase === true,
+        status: definition.status || "PUBLISHED",
+      }, course.authoringOverrides);
+      const changed = created || course.sourceHash !== sourceHash || course.title !== sourceFields.title || course.description !== sourceFields.description;
+      course.title = sourceFields.title;
+      course.description = sourceFields.description;
+      course.level = sourceFields.level;
+      course.isBase = sourceFields.isBase;
+      course.status = sourceFields.status;
       course.sourceHash = sourceHash;
       course.contentVersion = manifest.version;
       course.lastSyncedAt = new Date();
@@ -343,28 +421,35 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
       else if (changed) report.coursesUpdated += 1;
 
       let variant = await txVariantRepo.findOne({ where: { course: { id: course.id }, runtime: definition.runtime } });
+      const variantStatus = course.authoringOverrides?.status === true ? course.status : definition.status || "PUBLISHED";
       if (!variant) {
-        variant = txVariantRepo.create({ course: { id: course.id }, runtime: definition.runtime, title: definition.runtime === "CPP" ? "C++" : definition.runtime === "JAVA" ? "Java" : "Python", status: "PUBLISHED" });
+        variant = txVariantRepo.create({ course: { id: course.id }, runtime: definition.runtime, title: definition.runtime === "CPP" ? "C++" : definition.runtime === "JAVA" ? "Java" : "Python", status: variantStatus });
         await txVariantRepo.save(variant);
         report.variantsCreated += 1;
-      } else if (variant.status !== "PUBLISHED") {
-        variant.status = "PUBLISHED";
+      } else if (variant.status !== variantStatus) {
+        variant.status = variantStatus;
         await txVariantRepo.save(variant);
       }
 
       const legacyMain = await txModuleRepo.findOne({ where: { course: { id: course.id }, contentKey: `${definition.key}.main` } });
       const desiredKeys = new Set<string>();
       const topicModuleIds = new Set<number>();
+      const theoryItemIds = new Map<string, number>();
+      const moduleCount = courseTopics.reduce((count, topic) => Math.max(count, (topic.moduleOrder ?? courseTopics.indexOf(topic)) + 1), 0);
       for (const topic of courseTopics) {
-        const topicModuleKey = `${definition.key}.topic.${topic.key}`;
+        const topicModuleKey = topic.moduleKey || `${definition.key}.topic.${topic.key}`;
+        const moduleTitle = topic.moduleTitle || topic.title;
+        const moduleOrder = topic.moduleOrder ?? courseTopics.indexOf(topic);
+        const itemOrderOffset = (topic.lessonOrder ?? 0) * 10;
         let module = await txModuleRepo.findOne({ where: { course: { id: course.id }, contentKey: topicModuleKey } });
         const wasCreated = !module;
         if (!module) {
-          module = txModuleRepo.create({ course: { id: course.id }, contentKey: topicModuleKey, title: topic.title, order: courseTopics.indexOf(topic), sourceHash: topic.sourceHash });
+          module = txModuleRepo.create({ course: { id: course.id }, contentKey: topicModuleKey, title: moduleTitle, order: moduleOrder, sourceHash: topic.sourceHash });
           report.modulesCreated += 1;
         } else {
-          module.title = topic.title;
-          module.order = courseTopics.indexOf(topic);
+          const sourceFields = mergeCurriculumSourceFields(module, { title: moduleTitle, order: moduleOrder }, module.authoringOverrides);
+          module.title = sourceFields.title;
+          module.order = sourceFields.order;
           module.sourceHash = topic.sourceHash;
         }
         module = await txModuleRepo.save(module);
@@ -381,12 +466,13 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
           }
         }
         const pair = topicItems(definition, topic);
-        const theory = await saveCourseItem(txItemRepo, module, { ...pair.theory, kind: "THEORY", order: 0 }, report, false);
+        const theory = await saveCourseItem(txItemRepo, module, { ...pair.theory, kind: "THEORY", order: itemOrderOffset }, report, false);
+        theoryItemIds.set(topic.key, theory.id);
         desiredKeys.add(pair.theory.contentKey);
         if (!theoryOnly) {
           const practices = topicItems(definition, topic, theory.id).practices;
           for (const practice of practices) {
-            await saveCourseItem(txItemRepo, module, { ...practice, kind: "CODE_TASK", order: practice.order }, report, false, true);
+            await saveCourseItem(txItemRepo, module, { ...practice, kind: "CODE_TASK", order: itemOrderOffset + practice.order }, report, false, true);
             desiredKeys.add(practice.contentKey);
           }
         }
@@ -394,11 +480,12 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
       const projectsModuleKey = `${definition.key}.projects`;
       let projectsModule = await txModuleRepo.findOne({ where: { course: { id: course.id }, contentKey: projectsModuleKey } });
       if (!projectsModule) {
-        projectsModule = txModuleRepo.create({ course: { id: course.id }, contentKey: projectsModuleKey, title: "Проєкти та фінальна робота", order: courseTopics.length, sourceHash });
+        projectsModule = txModuleRepo.create({ course: { id: course.id }, contentKey: projectsModuleKey, title: "Проєкти та фінальна робота", order: moduleCount, sourceHash });
         report.modulesCreated += 1;
       } else {
-        projectsModule.title = "Проєкти та фінальна робота";
-        projectsModule.order = courseTopics.length;
+        const sourceFields = mergeCurriculumSourceFields(projectsModule, { title: "Проєкти та фінальна робота", order: moduleCount }, projectsModule.authoringOverrides);
+        projectsModule.title = sourceFields.title;
+        projectsModule.order = sourceFields.order;
         projectsModule.sourceHash = sourceHash;
       }
       projectsModule = await txModuleRepo.save(projectsModule);
@@ -408,19 +495,29 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
         await saveCourseItem(txItemRepo, projectsModule, { ...item, kind: "MANUAL" }, report, false);
         desiredKeys.add(item.contentKey);
       }
-      const finalItem = finalAssessmentItem(definition, miniProjects.length);
-      await saveCourseItem(txItemRepo, projectsModule, { ...finalItem, kind: "MANUAL" }, report, false);
+      const capstoneTopic = courseTopics.find((topic) => topic.key === "combine-techniques");
+      const finalItem = buildFinalAssessmentItem(definition, miniProjects.length, capstoneTopic, theoryItemIds.get("combine-techniques"));
+      await saveCourseItem(txItemRepo, projectsModule, { ...finalItem, kind: definition.key.startsWith("olympiad-") ? "CODE_TASK" : "MANUAL" }, report, false);
       desiredKeys.add(finalItem.contentKey);
       const allCourseModules = await txModuleRepo.find({ where: { course: { id: course.id } } });
       for (const staleModule of allCourseModules) {
         if (topicModuleIds.has(staleModule.id) || staleModule.id === projectsModule.id) continue;
+        if (hasCurriculumAuthoringOverrides(staleModule.authoringOverrides)) continue;
+        if (definition.key.startsWith("olympiad-") && staleModule.contentKey?.startsWith(`${definition.key}.topic.`)) {
+          const remainingItems = await txItemRepo.find({ where: { module: { id: staleModule.id } } });
+          if (remainingItems.length === 0) {
+            await txModuleRepo.remove(staleModule);
+            continue;
+          }
+        }
         if (staleModule.id === legacyMain?.id) {
           staleModule.title = "Архівні елементи";
-          staleModule.order = courseTopics.length + 1;
+          staleModule.order = moduleCount + 1;
           await txModuleRepo.save(staleModule);
         }
         const existingItems = await txItemRepo.find({ where: { module: { id: staleModule.id } } });
         for (const item of existingItems) {
+          if (hasCurriculumAuthoringOverrides(item.authoringOverrides)) continue;
           if (item.kind === "CODE_TASK") continue;
           if (item.isActive !== false) {
             item.isActive = false;
@@ -433,6 +530,7 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
       for (const moduleId of [...topicModuleIds, projectsModule.id]) {
         const existingItems = await txItemRepo.find({ where: { module: { id: moduleId } } });
       for (const item of existingItems) {
+        if (hasCurriculumAuthoringOverrides(item.authoringOverrides)) continue;
         if (theoryOnly) {
           // Theory-only releases may retire stale authored theory, but they
           // must never rewrite or archive generated practice items.

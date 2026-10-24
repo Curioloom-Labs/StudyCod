@@ -183,11 +183,12 @@ export async function getTaskGenerationProgress(generationId: string): Promise<T
   return res.data as TaskGenerationProgress;
 }
 
-export async function generateTask(language?: UiLanguage, options?: { forceControl?: boolean; courseItemId?: number; generationId?: string }): Promise<unknown> {
+export async function generateTask(language?: UiLanguage, options?: { forceControl?: boolean; courseItemId?: number; generateCourseVariant?: boolean; generationId?: string }): Promise<unknown> {
   try {
     const res = await api.post("/tasks/generate", {
       ...(language ? { language } : {}),
       ...(options?.forceControl ? { forceControl: true } : {}),
+      ...(options?.generateCourseVariant ? { generateCourseVariant: true } : {}),
       ...(options?.generationId ? { generationId: options.generationId } : {}),
       ...(Number.isInteger(options?.courseItemId) && Number(options?.courseItemId) > 0
         ? { courseItemId: Number(options?.courseItemId) }
@@ -257,6 +258,7 @@ export type ExplainErrorPayload = {
   stderr?: string | null;
   taskTitle?: string;
   taskText?: string;
+  taskId?: number | string;
   failures?: ExplainErrorFailure[];
 };
 

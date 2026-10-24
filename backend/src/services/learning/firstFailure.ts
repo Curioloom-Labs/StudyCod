@@ -98,11 +98,10 @@ export function buildLearningFirstFailure(input: LearningFailureInput): Learning
   const tests = Array.isArray(input?.tests) ? input.tests : [];
   if (!tests.length) return null;
 
-  const failedAt = tests.findIndex((t) => t?.passed === false);
+  const failedAt = tests.findIndex((t) => t?.passed === false && t?.isPublic === true);
   if (failedAt < 0) return null;
 
   const failed = tests[failedAt] || {};
-  if (failed.isPublic !== true) return null;
 
   const publicPrefix = tests.slice(0, failedAt + 1).filter((t) => t?.isPublic === true).length;
   if (!publicPrefix) return null;

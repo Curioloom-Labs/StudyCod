@@ -2,6 +2,7 @@ import type { Repository } from "typeorm";
 import { AppDataSource } from "../../data-source";
 import { LearningAttempt, type LearningOutcome, type LearningPrincipalType, type LearningTaskKind } from "../../entities/LearningAttempt";
 import { LearningEvent, type LearningEventType } from "../../entities/LearningEvent";
+import { Task } from "../../entities/Task";
 
 export type LearningRepositories = {
   attempts: Repository<LearningAttempt>;
@@ -35,10 +36,13 @@ export type LearningEventInput = {
 };
 
 export type SkillEvidence = {
+  totalAttempts: number;
   practicedTasks: number;
   solvedTasks: number;
   solvedAfterFailure: number;
   revisitedSolved: number;
+  hintedTasks: number;
+  hintLevelCounts: Array<{ level: 1 | 2 | 3; tasks: number }>;
   overcomeCategories: Array<{ name: string; tasks: number }>;
   topics: Array<{ name: string; practiced: number; solved: number; improving: boolean }>;
   recentSkills: Array<{ taskId: number; topic: string | null; category: string | null; outcome: "Evidence collected"; createdAt: Date }>;
@@ -161,7 +165,7 @@ export async function recordLearningOutcome(input: LearningOutcomeInput, repos =
 }
 
 export function deriveSkillEvidence(attempts: LearningAttempt[]): SkillEvidence {
-  const taskStates = new Map<number, { topic: string | null; practiced: boolean; solved: boolean; failed: boolean; solvedAfterFailure: boolean; categories: Set<string>; lastSolved: LearningAttempt | null }>();
+  const taskStates = new Map<number, { topic: string | null; practiced: boolean; solved: boolean; failed: boolean; solvedAfterFailure: boolean; categories: Set<string>; lastSolved: LearningAttempt | null; highestHintLevelShown: number }>();
   for (const attempt of [...attempts].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())) {
     const state = taskStates.get(attempt.taskId) ?? {
       topic: attempt.topicLabel || (attempt.topicId ? `topic:${attempt.topicId}` : null),
@@ -171,8 +175,10 @@ export function deriveSkillEvidence(attempts: LearningAttempt[]): SkillEvidence 
       solvedAfterFailure: false,
       categories: new Set<string>(),
       lastSolved: null,
+      highestHintLevelShown: 0,
     };
     state.practiced = true;
+    state.highestHintLevelShown = Math.max(state.highestHintLevelShown, Math.max(0, Math.min(3, Number(attempt.highestHintLevelShown) || 0)));
     if (attempt.topicLabel) state.topic = attempt.topicLabel;
     if (attempt.outcome === "FAILED") {
       state.failed = true;
@@ -189,6 +195,10 @@ export function deriveSkillEvidence(attempts: LearningAttempt[]): SkillEvidence 
   const practicedTasks = taskStates.size;
   const solvedTasks = Array.from(taskStates.values()).filter((s) => s.solved).length;
   const revisitedSolved = Array.from(taskStates.values()).filter((s) => s.solvedAfterFailure).length;
+  const hintLevelCounts = ([1, 2, 3] as const).map((level) => ({
+    level,
+    tasks: Array.from(taskStates.values()).filter((state) => state.highestHintLevelShown === level).length,
+  }));
   const categoryTaskSets = new Map<string, Set<number>>();
   for (const [taskId, state] of taskStates) {
     if (!state.solvedAfterFailure) continue;
@@ -222,10 +232,13 @@ export function deriveSkillEvidence(attempts: LearningAttempt[]): SkillEvidence 
     .slice(0, 5);
 
   return {
+    totalAttempts: attempts.length,
     practicedTasks,
     solvedTasks,
     solvedAfterFailure: revisitedSolved,
     revisitedSolved,
+    hintedTasks: Array.from(taskStates.values()).filter((state) => state.highestHintLevelShown > 0).length,
+    hintLevelCounts,
     overcomeCategories: Array.from(categoryTaskSets.entries())
       .map(([name, taskIds]) => ({ name, tasks: taskIds.size }))
       .sort((a, b) => b.tasks - a.tasks || a.name.localeCompare(b.name)),
@@ -243,4 +256,18 @@ export async function getSkillEvidence(principalType: LearningPrincipalType, pri
   });
   // Library exercises are independent practice and must not become lesson skill evidence.
   return deriveSkillEvidence(attempts.filter((attempt) => attempt.taskKind !== "LIBRARY"));
+}
+
+export async function getCourseSkillEvidence(principalId: number, courseEnrollmentId: number, repos = learningRepositories()): Promise<SkillEvidence> {
+  const tasks = await AppDataSource.getRepository(Task).find({
+    where: { user: { id: principalId }, courseEnrollment: { id: courseEnrollmentId }, type: "TOPIC", taskMode: "CODE" },
+    select: { id: true },
+  });
+  const taskIds = new Set(tasks.map((task) => task.id));
+  if (taskIds.size === 0) return deriveSkillEvidence([]);
+  const attempts = await repos.attempts.find({
+    where: { principalType: "USER", principalId, taskKind: "PERSONAL" },
+    order: { createdAt: "ASC" },
+  });
+  return deriveSkillEvidence(attempts.filter((attempt) => taskIds.has(attempt.taskId)));
 }

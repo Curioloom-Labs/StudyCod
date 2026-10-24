@@ -41,6 +41,7 @@ import { WebPreviewPane } from "../WebPreviewPane";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
 import {
+  getAssistantFailures,
   getIdeSaveStatusLabel,
   reconcileMobilePaneAfterResult,
 } from "./editorFeedback";
@@ -1101,6 +1102,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     props.checkResult?.publicTestResults?.find((test) => !test.passed)
       ?.testId ?? null;
   const publicTestResults = props.checkResult?.publicTestResults ?? [];
+  const assistantFailures = getAssistantFailures(props.checkResult?.publicTestResults);
   const visiblePublicTestResults = showFailedOnly
     ? publicTestResults.filter((test) => !test.passed)
     : publicTestResults;
@@ -2078,6 +2080,8 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           stderr={props.runResult?.stderr || props.checkResult?.compileError}
           taskTitle={props.task.title}
           taskText={props.task.description}
+          taskId={props.task.id}
+          failures={assistantFailures}
         />
         {props.checkResult && !verdictIsAccepted(props.checkResult.verdict) ? (
           <ErrorExplainButton
@@ -2087,6 +2091,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             stderr={props.checkResult.compileError || props.runResult?.stderr}
             taskTitle={props.task.title}
             taskText={props.task.description}
+            failures={assistantFailures}
           />
         ) : null}
       </>
@@ -2391,11 +2396,6 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   <RotateCcw />
                   {tr("Відновити початковий код", "Restore starter code")}
                 </button>
-                {!props.problemNavigation &&
-                !props.contextToolbar &&
-                !props.toolbarStatus
-                  ? props.toolbar
-                  : null}
                 {props.attemptsUsed != null ? (
                   <p className="ide-input-note mt-3">
                     {tr("Надсилання", "Submissions")}: {props.attemptsUsed}
@@ -2409,7 +2409,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         </div>
       </header>
       {!props.problemNavigation &&
-      (props.contextToolbar || props.toolbarStatus) ? (
+      (props.contextToolbar || props.toolbarStatus || props.toolbar) ? (
         <nav
           className="ide-context-bar"
           aria-label={tr("Навігація задачами", "Problem navigation")}

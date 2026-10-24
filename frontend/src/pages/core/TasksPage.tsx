@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { getTask, listTasks, generateTask, getTaskGenerationProgress, saveDraft, submitTask, runTask, getWebTaskTemplate, saveWebTaskDraft, checkWebTask, submitWebTask, getPersonalControlQuiz, submitPersonalControlQuiz, type WebTaskFile, type PersonalControlQuizPayload, type PersonalControlQuizSubmitResponse } from "../../lib/api/tasks";
 import { recordSuccessfulStudySession } from "../../lib/studySessions";
 import { Modal } from "../../components/ui/Modal";
@@ -20,6 +20,7 @@ import { useMediaQuery } from "../../utils/useMediaQuery";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
 import { IDE_THEORY_COMPLETION_KEY, scopedStorageKey } from "../../lib/storageScope";
 import { completeCatalogItem, getLearningCourse, type LearningCourse } from "../../lib/api/learningCatalog";
+import { tasksForCourseItem } from "../../lib/personalPractice";
 interface Props {
   user: User;
 }
@@ -303,6 +304,7 @@ export const TasksPage: React.FC<Props> = ({
   user
 }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const runtime = user.activeRuntime || "PYTHON";
   const {
     i18n
@@ -526,14 +528,6 @@ export const TasksPage: React.FC<Props> = ({
 
   const latestSubmitRequestSeq = useRef(0);
   const generateRequestRef = useRef(false);
-  const [coursePracticeItemId, setCoursePracticeItemId] = useState<number | null>(() => {
-    try {
-      const value = Number(window.sessionStorage.getItem("studycod:active-course-practice-item"));
-      return Number.isInteger(value) && value > 0 ? value : null;
-    } catch {
-      return null;
-    }
-  });
   const [courseContext, setCourseContext] = useState<{ courseId: number; courseTitle: string; itemTitle: string } | null>(null);
   const [nextCoursePracticeItemId, setNextCoursePracticeItemId] = useState<number | null>(null);
   const [courseEnrollmentId, setCourseEnrollmentId] = useState<number | null>(null);
@@ -587,29 +581,19 @@ export const TasksPage: React.FC<Props> = ({
   }, [searchParams]);
 
   const requestedCourseItemIdFromUrl = useMemo(() => {
-    const pathMatch = window.location.pathname.match(/^\/learning\/course\/\d+\/practice\/(\d+)/);
-    const raw = searchParams.get("courseItemId") ?? pathMatch?.[1];
+    const pathMatch = location.pathname.match(/^\/learning\/course\/\d+\/practice\/(\d+)/);
+    const raw = pathMatch?.[1] ?? searchParams.get("courseItemId");
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-  }, [searchParams]);
+  }, [location.pathname, searchParams]);
   const requestedCourseIdFromUrl = useMemo(() => {
-    const pathMatch = window.location.pathname.match(/^\/learning\/course\/(\d+)\/practice\//);
-    const raw = searchParams.get("courseId") ?? pathMatch?.[1];
+    const pathMatch = location.pathname.match(/^\/learning\/course\/(\d+)\/practice\//);
+    const raw = pathMatch?.[1] ?? searchParams.get("courseId");
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-  }, [searchParams]);
-  const effectiveCourseItemId = requestedCourseItemIdFromUrl ?? coursePracticeItemId;
+  }, [location.pathname, searchParams]);
+  const effectiveCourseItemId = requestedCourseItemIdFromUrl;
   const courseMode = requestedCourseIdFromUrl != null && effectiveCourseItemId != null;
-
-  useEffect(() => {
-    if (!requestedCourseItemIdFromUrl) return;
-    setCoursePracticeItemId(requestedCourseItemIdFromUrl);
-    try {
-      window.sessionStorage.setItem("studycod:active-course-practice-item", String(requestedCourseItemIdFromUrl));
-    } catch {
-      // Private browsing/storage-disabled environments still work from URL state.
-    }
-  }, [requestedCourseItemIdFromUrl]);
 
   useEffect(() => {
     if (!requestedCourseIdFromUrl || !effectiveCourseItemId) {
@@ -625,8 +609,8 @@ export const TasksPage: React.FC<Props> = ({
         const allCourseItems = course.modules.flatMap((module) => module.items);
         const currentIndex = allCourseItems.findIndex((candidate) => candidate.id === effectiveCourseItemId);
         const item = currentIndex >= 0 ? allCourseItems[currentIndex] : undefined;
-        const nextPractice = currentIndex >= 0 && item?.progress.status === "COMPLETED"
-          ? allCourseItems.slice(currentIndex + 1).find((candidate) => candidate.kind === "CODE_TASK" && candidate.progress.status !== "COMPLETED")
+        const nextPractice = item?.progress.status === "COMPLETED" && course.nextAction?.kind === "CODE_TASK"
+          ? allCourseItems.find((candidate) => candidate.id === course.nextAction?.itemId && candidate.id !== effectiveCourseItemId)
           : undefined;
         setCourseContext(item ? { courseId: course.id, courseTitle: course.title, itemTitle: item.title } : null);
         setNextCoursePracticeItemId(nextPractice?.id ?? null);
@@ -639,7 +623,14 @@ export const TasksPage: React.FC<Props> = ({
         }
       });
     return () => { cancelled = true; };
-  }, [requestedCourseIdFromUrl, effectiveCourseItemId]);
+  }, [requestedCourseIdFromUrl, effectiveCourseItemId, active?.status, active?.lastGradeTotal]);
+
+  const loadWorkspaceTasks = useCallback(async () => {
+    const data = isPreviewMode ? PERSONAL_TASK_PREVIEW_FIXTURES : await listTasks(uiLanguage, courseMode
+      ? { scope: "COURSE", courseEnrollmentId: courseEnrollmentId ?? undefined }
+      : { scope: "LAB" });
+    return tasksForCourseItem(data, courseMode ? effectiveCourseItemId : null);
+  }, [isPreviewMode, uiLanguage, courseMode, courseEnrollmentId, effectiveCourseItemId]);
 
   const syncTaskSelectionToUrl = useCallback((taskId: number | null) => {
     const nextSearch = new URLSearchParams(searchParams);
@@ -980,7 +971,7 @@ export const TasksPage: React.FC<Props> = ({
     if (Number.isFinite(sHeader) && sHeader > 0) return Math.ceil(sHeader);
     const responseData = asRecord(apiErr?.response?.data);
     const details = asRecord(responseData?.details);
-    const msBody = Number(details?.retryAfterMs ?? NaN);
+    const msBody = Number(responseData?.retryAfterMs ?? details?.retryAfterMs ?? NaN);
     if (Number.isFinite(msBody) && msBody > 0) return Math.ceil(msBody / 1000);
     return null;
   };
@@ -1163,8 +1154,7 @@ export const TasksPage: React.FC<Props> = ({
 
   useEffect(() => {
     if (!requestedCourseItemIdFromUrl || searchParams.get("generate") === "1" || !tasks.length) return;
-    const prefix = `CATALOG_ITEM:${requestedCourseItemIdFromUrl}|`;
-    const requested = tasks.find((task) => String(task.subtitle ?? "").startsWith(prefix));
+    const requested = tasksForCourseItem(tasks, requestedCourseItemIdFromUrl)[0];
     if (!requested || active?.id === requested.id) return;
     setActive(requested);
     const next = deriveEditorFromTask(requested);
@@ -1262,7 +1252,7 @@ export const TasksPage: React.FC<Props> = ({
     let mounted = true;
     const load = async () => {
       try {
-        const data = isPreviewMode ? PERSONAL_TASK_PREVIEW_FIXTURES : await listTasks(uiLanguage, requestedCourseIdFromUrl ? { scope: "COURSE", ...(courseEnrollmentId ? { courseEnrollmentId } : {}) } : { scope: "LAB" });
+        const data = await loadWorkspaceTasks();
         if (mounted) {
           const filtered = data;
           setTasks(filtered);
@@ -1301,7 +1291,7 @@ export const TasksPage: React.FC<Props> = ({
     return () => {
       mounted = false;
     };
-  }, [deriveEditorFromTask, requestedTaskIdFromUrl, uiLanguage, isPreviewMode, theoryIsAcknowledged, requestedCourseIdFromUrl, courseEnrollmentId]);
+  }, [deriveEditorFromTask, requestedTaskIdFromUrl, uiLanguage, isPreviewMode, theoryIsAcknowledged, requestedCourseIdFromUrl, courseEnrollmentId, loadWorkspaceTasks]);
   useEffect(() => {
     if (tasks.length > 0 && !active) {
       const openTaskId = sessionStorage.getItem("openTaskId");
@@ -1498,12 +1488,12 @@ export const TasksPage: React.FC<Props> = ({
     setConsoleOutput("");
     setUIState("idle");
     let progressPolling = true;
-    let progressPollPromise: Promise<void> | null = null;
     try {
-      progressPollPromise = (async () => {
+      void (async () => {
         while (progressPolling) {
           try {
             const next = await getTaskGenerationProgress(generationId);
+            if (!progressPolling) break;
             setGenerationProgress(next);
             setGenerationPhase(next.phase);
             if (next.status === "error" || next.status === "ready") break;
@@ -1523,7 +1513,6 @@ export const TasksPage: React.FC<Props> = ({
         generationId,
       });
       progressPolling = false;
-      await progressPollPromise;
       const payload = asRecord(res);
       const status = String(payload?.status ?? "");
       if (status === "ok" && payload?.task && typeof payload.task === "object") {
@@ -1560,7 +1549,7 @@ export const TasksPage: React.FC<Props> = ({
             nextSearch.delete("generate");
             nextSearch.delete("courseItemId");
             nextSearch.set("task", String(generatedTaskId));
-            setSearchParams(nextSearch, { replace: true });
+            navigate({ pathname: `/learning/course/${requestedCourseIdFromUrl}/practice/${options.courseItemId}`, search: nextSearch.toString() }, { replace: true });
           } else {
             syncTaskSelectionToUrl(generatedTaskId);
           }
@@ -1655,7 +1644,6 @@ export const TasksPage: React.FC<Props> = ({
       setUIState("error");
     } finally {
       progressPolling = false;
-      if (progressPollPromise) await progressPollPromise;
       if (closeDelayMs > 0) {
         await new Promise<void>((resolve) => setTimeout(resolve, closeDelayMs));
       }
@@ -1781,7 +1769,7 @@ export const TasksPage: React.FC<Props> = ({
         setConsoleOutput(result.aiFeedback + autoGenerateHint);
         setUIState(total >= PERSONAL_TASK_PASS_GRADE ? "success" : "error");
 
-        const updatedTasks = await listTasks(uiLanguage, requestedCourseIdFromUrl ? { scope: "COURSE", courseEnrollmentId: courseEnrollmentId ?? undefined } : { scope: "LAB" });
+        const updatedTasks = await loadWorkspaceTasks();
         setTasks(updatedTasks);
         notifyCourseProgress();
         if (autoGeneratedPracticeId) {
@@ -1866,7 +1854,7 @@ export const TasksPage: React.FC<Props> = ({
         setAiResult(result);
         setRevealedHints(0);
         setUIState(gradeTotal >= PERSONAL_TASK_PASS_GRADE ? "success" : "error");
-        const updatedTasks = await listTasks(uiLanguage, requestedCourseIdFromUrl ? { scope: "COURSE", courseEnrollmentId: courseEnrollmentId ?? undefined } : { scope: "LAB" });
+        const updatedTasks = await loadWorkspaceTasks();
           setTasks(updatedTasks);
           notifyCourseProgress();
         const updated = updatedTasks.find(t => t.id === active.id);
@@ -1988,7 +1976,8 @@ export const TasksPage: React.FC<Props> = ({
           }
         }
       }
-      const updatedTasks = await listTasks(uiLanguage, requestedCourseIdFromUrl ? { scope: "COURSE", courseEnrollmentId: courseEnrollmentId ?? undefined } : { scope: "LAB" });
+      const updatedTasks = await loadWorkspaceTasks();
+      notifyCourseProgress();
       let effectiveTasks = updatedTasks;
 
       const activeSubtitle = String(active?.subtitle ?? "");
@@ -2004,7 +1993,7 @@ export const TasksPage: React.FC<Props> = ({
             const gen = await generateTask(uiLanguage);
             const payload = asRecord(gen);
             if (String(payload?.status ?? "") === "ok" && payload?.task && typeof payload.task === "object") {
-              const refreshed = await listTasks(uiLanguage, requestedCourseIdFromUrl ? { scope: "COURSE", courseEnrollmentId: courseEnrollmentId ?? undefined } : { scope: "LAB" });
+              const refreshed = await loadWorkspaceTasks();
               effectiveTasks = refreshed;
             }
           } catch (genErr: unknown) {
@@ -2225,25 +2214,25 @@ export const TasksPage: React.FC<Props> = ({
     editorCodeRef.current = nextCode;
   }, []);
   const ideWebPreviewFiles = useMemo(() => isWebTask ? toWebTaskFiles() : undefined, [isWebTask, toWebTaskFiles]);
-  const canGenerateFromToolbar = !loading && cooldownSecondsLeft <= 0 && canGenerateFromSidebar;
+  const canGenerateFromToolbar = !loading && cooldownSecondsLeft <= 0;
   const ideToolbar = useMemo(() => (
     <>
       {courseMode ? <>
-        <button type="button" onClick={() => window.location.assign(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-text-primary transition hover:bg-white/[.08]">{tr("До маршруту", "Back to path")}</button>
+        <button type="button" onClick={() => navigate(`/learning/course/${requestedCourseIdFromUrl}/path`)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-text-primary transition hover:bg-white/[.08]">{tr("До маршруту", "Back to path")}</button>
         {uiState === "error" ? (
           <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground disabled:opacity-50">{tr("Повторити", "Retry")}<ArrowRight className="size-3.5" /></button>
         ) : !active ? (
           <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={loading} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground shadow-[var(--ui-card-shadow)] transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"><Sparkles className="size-3.5" />{tr("Згенерувати завдання", "Generate task")}<ArrowRight className="size-3.5" /></button>
         ) : nextCoursePracticeItemId ? (
-          <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: nextCoursePracticeItemId })} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground shadow-[var(--ui-card-shadow)] transition hover:bg-primary-hover"><Sparkles className="size-3.5" />{tr("Згенерувати наступну", "Generate next")}<ArrowRight className="size-3.5" /></button>
+          <button type="button" onClick={() => navigate(`/learning/course/${requestedCourseIdFromUrl}/practice/${nextCoursePracticeItemId}`)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground shadow-[var(--ui-card-shadow)] transition hover:bg-primary-hover"><ArrowRight className="size-3.5" />{tr("Наступна практика", "Next practice")}</button>
         ) : null}
       </> : <>
         <button type="button" onClick={() => navigate("/lab/library")} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-text-primary transition hover:bg-white/[.08]"><BookOpen className="size-3.5" />{tr("Бібліотека", "Library")}</button>
         <button type="button" onClick={() => setTaskHistoryOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[.025] px-2.5 text-xs font-semibold text-text-primary transition hover:bg-white/[.08]" aria-label={tr("Відкрити історію завдань", "Open task history")}><History className="size-3.5" />{tr("Історія", "History")} ({sidebarStats.completed}/{sidebarStats.total})</button>
-        <button type="button" onClick={() => void handleGenerateRef.current({ courseItemId: effectiveCourseItemId ?? undefined })} disabled={!canGenerateFromToolbar} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground shadow-[var(--ui-card-shadow)] transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40"><Plus className="size-3.5" />{tr("Нове", "New")}</button>
+        <button type="button" onClick={() => { const pending = tasks.find((task) => task.status !== "GRADED"); if (pending) openSidebarTask(pending); else void handleGenerateRef.current(); }} disabled={!canGenerateFromToolbar} title={blockedReason ?? undefined} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-bold text-primary-foreground shadow-[var(--ui-card-shadow)] transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-40"><Plus className="size-3.5" />{canGenerateFromSidebar ? tr("Нове", "New") : tr("Продовжити завдання", "Continue task")}</button>
       </>}
     </>
-  ), [courseMode, requestedCourseIdFromUrl, uiState, active?.id, loading, effectiveCourseItemId, nextCoursePracticeItemId, navigate, sidebarStats.completed, sidebarStats.total, canGenerateFromToolbar]);
+  ), [courseMode, requestedCourseIdFromUrl, uiState, active?.id, loading, effectiveCourseItemId, nextCoursePracticeItemId, navigate, sidebarStats.completed, sidebarStats.total, canGenerateFromToolbar, canGenerateFromSidebar, blockedReason, tasks, openSidebarTask]);
 
   const consoleStateMeta = useMemo(() => {
     if (uiState === "evaluating") {

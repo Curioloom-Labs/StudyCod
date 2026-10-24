@@ -13,6 +13,8 @@ import { createIntroductoryHelloWorldTask, shouldUseCanonicalIntroductoryPractic
 import { requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTests, TASK_PRECISION_INSTRUCTIONS } from './TaskContractReview';
 import { validateAndReviewGeneratedTask } from './GeneratedTaskContract';
 import { generateReferenceTestData, type ReferenceTestExecutor } from './ReferenceTestData';
+import { parseOlympiadPracticeContract } from '../learning/learningContract';
+import { ensureOlympiadCompleteProgramRequest, validateOlympiadDebuggingTask, validateOlympiadTaskExamples, validateOlympiadTaskNarrativeDomain } from './OlympiadTaskExamples';
 
 export type LLMTaskLanguage = TopicLanguage;
 
@@ -137,6 +139,11 @@ function compactPromptText(raw: string, maxLength: number): string {
 function extractLearningContract(raw: string): string {
   const match = String(raw ?? '').match(/<!--\s*STUDYCOD_LEARNING_META_START[\s\S]*?STUDYCOD_LEARNING_META_END\s*-->/i);
   return match ? match[0].trim() : '';
+}
+
+function serializeOlympiadContractForReview(theory: string): string | undefined {
+  const contract = parseOlympiadPracticeContract(theory);
+  return contract ? JSON.stringify(contract) : undefined;
 }
 
 function getDifficultyPrompt(difus: number, isEnglish: boolean = false): string {
@@ -331,7 +338,8 @@ export class LLMOrchestrator {
     /** Inbound request id for trace correlation across HTTP -> orchestrator. */
     requestId?: string;
   }): Promise<AiTaskGenerationResult> {
-    if (params.topicIndex === 0) {
+    const olympiadContract = parseOlympiadPracticeContract(params.theory);
+    if (params.topicIndex === 0 && !olympiadContract) {
       logger.info("[llm] introductory task generation parameters", {
         requestId: params.requestId,
         numInTopic: params.numInTopic,
@@ -342,7 +350,7 @@ export class LLMOrchestrator {
     // Topic 0 has one intentionally canonical Hello World checkpoint. Asking
     // an LLM to creatively regenerate this exact task has repeatedly produced
     // arithmetic exercises, which the curriculum validator correctly rejects.
-    if (shouldUseCanonicalIntroductoryPractice(params)) {
+    if (!olympiadContract && shouldUseCanonicalIntroductoryPractice(params)) {
       return createIntroductoryHelloWorldTask({
         topicTitle: params.topicTitle,
         lang: params.lang,
@@ -374,11 +382,23 @@ export class LLMOrchestrator {
       }, {
         signal: params.signal
       });
+      const validationTopicIndex = olympiadContract && params.topicIndex === 0 ? 1 : params.topicIndex;
       const validated = await validateAndReviewGeneratedTask(this.cloudflareProvider, raw, {
         expectedTopic: params.topicTitle,
-        topicIndex: params.topicIndex,
+        topicIndex: validationTopicIndex,
         allowedIoTypes: params.allowedIoTypes,
-      }, { signal: params.signal, userId: params.userId, topicId: params.topicId });
+      }, {
+        signal: params.signal,
+        userId: params.userId,
+        topicId: params.topicId,
+        learningContract: serializeOlympiadContractForReview(params.theory),
+        beforeReview: olympiadContract ? (task) => {
+          ensureOlympiadCompleteProgramRequest(olympiadContract, task);
+          validateOlympiadTaskNarrativeDomain(olympiadContract, task);
+          validateOlympiadTaskExamples(olympiadContract, task);
+          validateOlympiadDebuggingTask(olympiadContract, task);
+        } : undefined,
+      });
       return validated;
     };
 
@@ -674,10 +694,12 @@ Return ONLY JSON without explanations.`
       properties: {
         title: {
           type: "string",
+          minLength: 1,
           description: isEnglish ? "Task title" : "Назва завдання"
         },
         topic: {
           type: "string",
+          minLength: 1,
           description: isEnglish ? `Task topic (MUST be "${params.anchor.topic}")` : `Тема завдання (ОБОВ'ЯЗКОВО "${params.anchor.topic}")`
         },
         difficulty: {
@@ -686,10 +708,12 @@ Return ONLY JSON without explanations.`
         },
         theoryMarkdown: {
           type: "string",
+          minLength: 1,
           description: isEnglish ? "Theory in Markdown format" : "Теорія у форматі Markdown"
         },
         practicalTask: {
           type: "string",
+          minLength: 1,
           description: isEnglish ? "Practical task" : "Практичне завдання"
         },
         ioType: {
@@ -703,18 +727,22 @@ Return ONLY JSON without explanations.`
         },
         inputFormat: {
           type: "string",
+          minLength: 1,
           description: isEnglish ? "Input format" : "Формат вхідних даних"
         },
         outputFormat: {
           type: "string",
+          minLength: 1,
           description: isEnglish ? "Output format" : "Формат вихідних даних"
         },
         constraints: {
           type: "string",
+          minLength: 1,
           description: isEnglish ? "Constraints" : "Обмеження"
         },
         examples: {
           type: "array",
+          minItems: 1,
           items: {
             type: "object",
             properties: {
@@ -722,10 +750,12 @@ Return ONLY JSON without explanations.`
                 type: "string"
               },
               output: {
-                type: "string"
+                type: "string",
+                minLength: 1
               },
               explanation: {
-                type: "string"
+                type: "string",
+                minLength: 1
               }
             },
             required: ["input", "output", "explanation"]
@@ -733,6 +763,7 @@ Return ONLY JSON without explanations.`
         },
         codeTemplate: {
           type: "string",
+          minLength: 1,
           description: isEnglish ? "Code template" : "Шаблон коду"
         }
       },
@@ -755,9 +786,25 @@ CRITICAL: The "topic" field in JSON MUST be equal to "${params.anchor.topic}". D
       ...params.anchor.allowedScope,
     ].join(" ").toLowerCase();
     const isFoundationalDataTask = /змінн|тип\s+дан|типи|оголош|присво|літерал|variable|data\s+type|declar|literal|primitive/.test(taskSemanticText);
-    const compactPreviousTasks = compactPromptText(params.previousTasks ?? '', LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS);
-    const compactTheoryContext = compactPromptText(params.theory, LLM_TASK_THEORY_CONTEXT_CHARS);
     const learningContract = extractLearningContract(params.theory);
+    const olympiadContract = parseOlympiadPracticeContract(params.theory);
+    const previousTasksContextLimit = olympiadContract
+      ? Math.min(LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS, 1_000)
+      : LLM_TASK_PREVIOUS_TASKS_CONTEXT_CHARS;
+    const compactPreviousTasks = compactPromptText(params.previousTasks ?? '', previousTasksContextLimit);
+    const theoryContext = olympiadContract
+      ? params.theory.replace(learningContract, '')
+      : params.theory;
+    const theoryContextLimit = olympiadContract
+      ? Math.min(LLM_TASK_THEORY_CONTEXT_CHARS, 3_200)
+      : LLM_TASK_THEORY_CONTEXT_CHARS;
+    const compactTheoryContext = compactPromptText(theoryContext, theoryContextLimit);
+    const isIntroPractice = params.topicIndex === 0 && !olympiadContract;
+    const taskDifficultyPrompt = olympiadContract
+      ? isEnglish
+        ? 'Choose difficulty 0–5 to match the contract stage and target algorithm; do not reduce an algorithm lesson to syntax-only practice.'
+        : 'Обери складність 0–5 відповідно до етапу контракту й цільового алгоритму; не зводь алгоритмічний урок до вправи лише на синтаксис.'
+      : difficultyPrompt;
 
     let uniquenessBlock = "";
     if (compactPreviousTasks) {
@@ -774,7 +821,7 @@ SEMANTIC ANCHOR (IMMUTABLE - DO NOT CHANGE):
 - Forbidden: ${params.anchor.forbiddenScope.join(', ')}
 
 Programming language: ${langName}
-${difficultyPrompt}
+${taskDifficultyPrompt}
 `;
     const userPromptBaseUa = `
 SEMANTIC ANCHOR (IMMUTABLE - НЕ ЗМІНЮЙ):
@@ -784,17 +831,17 @@ SEMANTIC ANCHOR (IMMUTABLE - НЕ ЗМІНЮЙ):
 - Заборонено: ${params.anchor.forbiddenScope.join(', ')}
 
 Мова програмування: ${langName}
-${difficultyPrompt}
+${taskDifficultyPrompt}
 `;
 
-    const introInstructionsUa = params.topicIndex === 0 ? `
+    const introInstructionsUa = isIntroPractice ? `
 🚨 ПЕРША ТЕМА: це найперше завдання курсу.
 - Створи тільки Hello World: програма друкує точний текст "Hello, World!" один раз.
 - Заборонені ввід, Scanner/System.in, змінні, числа, арифметика, кілька обчислень, умови, цикли, функції та методи.
 - outputFormat має бути рівно "Hello, World!", examples[0].input — порожній рядок.
 - Не вигадуй сюжет про магазин, ціни, кількість товарів або користувача.
 ` : "";
-    const introInstructionsEn = params.topicIndex === 0 ? `
+    const introInstructionsEn = isIntroPractice ? `
 🚨 FIRST TOPIC: this is the learner's very first task.
 - Create only Hello World: the program prints the exact text "Hello, World!" once.
 - No input, Scanner/System.in, variables, numbers, arithmetic, multiple calculations, conditions, loops, functions, or methods.
@@ -802,7 +849,7 @@ ${difficultyPrompt}
 - Do not invent a shop, prices, quantities, or user interaction story.
 ` : "";
 
-    const qualityInstructionsUa = params.topicIndex === 0 ? `
+    const qualityInstructionsUa = isIntroPractice ? `
 ЯКІСТЬ ПЕРШОЇ УМОВИ:
 - practicalTask має бути дуже коротким: 1–2 прості речення, без міні-сюжету, зайвих пояснень і списків.
 - Скажи лише, що потрібно написати повну програму та один раз вивести точний текст "Hello, World!".
@@ -825,7 +872,7 @@ ${difficultyPrompt}
 - Якщо треба структуру, роби це через зв'язні речення; не перетворюй умову на список кроків.
 - Якщо завдання про змінні/типи/операції — вимагай ВИВЕСТИ результат (print) так, щоб автотест міг перевірити (детермінований stdout).
 `;
-    const qualityInstructionsEn = params.topicIndex === 0 ? `
+    const qualityInstructionsEn = isIntroPractice ? `
 QUALITY OF THE FIRST STATEMENT:
 - practicalTask must be very short: 1–2 simple sentences, with no mini-story, filler, or lists.
 - Say only that the student must write a complete program and print the exact text "Hello, World!" once.
@@ -865,6 +912,7 @@ NO-SOLUTION-LEAKAGE RULE:
 - Do not copy theory, explanations, code examples, a step checklist, or a solution walkthrough into practicalTask.
 `;
     const pythonBeforeStringsInstructionsUa = params.lang === "PYTHON"
+      && !olympiadContract
       && params.topicIndex !== undefined
       && params.topicIndex < 7
       ? `
@@ -875,6 +923,7 @@ NO-SOLUTION-LEAKAGE RULE:
 `
       : "";
     const pythonBeforeStringsInstructionsEn = params.lang === "PYTHON"
+      && !olympiadContract
       && params.topicIndex !== undefined
       && params.topicIndex < 7
       ? `
@@ -884,14 +933,14 @@ RESTRICTIONS BEFORE THE “STRINGS AND FORMATTING” TOPIC (topic index 7):
 - Matching one complete input value with match/case is allowed; do not require parsing multiple values from one line.
 `
       : "";
-    const depthInstructionsUa = stdinAllowed && params.topicIndex !== 0 ? `
+    const depthInstructionsUa = stdinAllowed && (!isIntroPractice || olympiadContract) ? `
 ГЛИБИНА ПОВЕДІНКИ (НЕ ЗМІНЮЄ СКЛАДНІСТЬ):
 - Не створюй задачу, де все зводиться до трьох очевидних значень або прямої таблиці "1 → ..., 2 → ..., 3 → ...".
 - Дай достатньо допустимих вхідних даних для щонайменше 6 змістовно різних тестів: кілька класів поведінки, межі/пороги, звичайний випадок і default/невідомий випадок, якщо це дозволено умовою.
 - Це не вимога до складного алгоритму. Зроби багатшою саме поведінку задачі, не додавай зайвих тем, формул чи структур даних.
 - Умова не повинна розкривати ці класи як покроковий план розв'язання; опиши лише правила предметної області.
 ` : "";
-    const depthInstructionsEn = stdinAllowed && params.topicIndex !== 0 ? `
+    const depthInstructionsEn = stdinAllowed && (!isIntroPractice || olympiadContract) ? `
 BEHAVIOURAL DEPTH (INDEPENDENT OF DIFFICULTY):
 - Do not create a task that reduces to three obvious values or a direct table such as "1 -> ..., 2 -> ..., 3 -> ...".
 - Provide a valid input domain for at least 6 meaningful tests: multiple behaviour classes, boundaries/thresholds, an ordinary case, and a default/unknown case when the statement allows it.
@@ -899,7 +948,7 @@ BEHAVIOURAL DEPTH (INDEPENDENT OF DIFFICULTY):
 - Do not expose these classes as a step-by-step solution plan; describe only the domain rules.
 ` : "";
 
-    const selfCheckUa = params.topicIndex === 0 ? `
+    const selfCheckUa = isIntroPractice ? `
 САМОПЕРЕВІРКА ПЕРЕД ВІДПОВІДДЮ:
 1) Переконайся, що програма виводить рівно "Hello, World!" один раз, без зайвих символів.
 2) Переконайся, що examples[0].input порожній, а examples[0].output збігається з очікуваним виводом символ-у-символ.
@@ -917,7 +966,7 @@ SELF-CHECK ПЕРЕД ВІДПОВІДДЮ:
 4) Сюжет, числа й формулювання НЕ банальні (заборонені кліше типу "сума двох чисел", "hello world", "знайдіть більше з двох") і відрізняються від типових прикладів.
 5) practicalTask читається як жива умова (3–5 зв'язних речень), а не сухий технічний рядок.
 `;
-    const selfCheckEn = params.topicIndex === 0 ? `
+    const selfCheckEn = isIntroPractice ? `
 SELF-CHECK BEFORE ANSWERING:
 1) Confirm that the program prints exactly "Hello, World!" once, with no extra characters.
 2) Confirm that examples[0].input is empty and examples[0].output matches the expected stdout character-by-character.
@@ -1009,11 +1058,28 @@ ${params.prevTopics && params.prevTopics.trim().length > 0 ? `Попередні
 Теорія з теми (для контексту):
 ${compactTheoryContext}
 
-КОНТРАКТ НАВЧАННЯ (якщо присутній, він є авторитетним):
+КОНТРАКТ НАВЧАННЯ (якщо присутній, він є авторитетним; це приховані машинні дані — не копіюй їх у видиму умову):
 ${learningContract || 'Структурований контракт не заданий; спирайся лише на видиму теорію та anchor теми.'}
 - Створи одну повну програму, яка перевіряє exercise_focus.
 - Використовуй objectives як центр вправи й не вимагай нічого з not_yet_taught.
 - Не перетворюй контракт на чекліст і не показуй приховані метадані учневі.
+${olympiadContract ? `
+ПОЛІТИКА ОЛІМПІАДНОЇ JUDGE-ПРАКТИКИ (має пріоритет над загальними порадами про вправи):
+- Це динамічно згенерована одна задача для Judge з ${olympiadContract.courseKey}/${olympiadContract.topicKey}. Не повертай проєкт, конспект уроку чи питання на пояснення.
+- Основна операція: ${olympiadContract.coreOperation}
+- Вхід: ${olympiadContract.requiredInput}
+- Вихід: ${olympiadContract.requiredOutput}
+- Обмеження: ${olympiadContract.constraints}
+- Точно повтори кожну нижню й верхню числову межу з контракту; не звужуй і не розширюй домен. Якщо контракт вимагає точних меж, навіть суворіша межа є порушенням.
+- Цільовий алгоритм: ${olympiadContract.algorithm}. Обмеження мають робити доречним алгоритм поточного уроку; не вимагай сторонніх алгоритмів.
+- Використовуй лише коректні вхідні дані; не вигадуй обробку некоректного вводу чи порожньої послідовності, якщо цього прямо не вимагає мета уроку.
+- Не вимагай поведінки для значень поза межами контракту: якщо n ≥ 1, порожній масив n=0 не є допустимим тестом і не потребує окремої умови.
+- Етап ${olympiadContract.stage} (${olympiadContract.sequence}/${olympiadContract.total}): ${olympiadContract.variation}
+- Точно визнач межі, нумерацію, правила нічиїх, числові обмеження та формат виводу, потрібні для однозначної Judge-відповіді.
+- Тести мають покривати: ${olympiadContract.requiredCases.join('; ')}.
+- Кожен публічний приклад має точно відповідати граматиці вводу: звір кількість елементів і рядків із кожним n, q та іншими лічильниками; не додавай і не пропускай токени. Вивід також має містити потрібну кількість рядків.
+- Умова має бути природною; не називай і не пояснюй алгоритм розв'язання, якщо цього явно не вимагає мета вправи.
+` : ''}
 ${uniquenessBlock}
 
 ШАБЛОН КОДУ (codeTemplate) - ЗАБОРОНЕНО писати реалізацію:
@@ -1132,11 +1198,28 @@ ${params.prevTopics && params.prevTopics.trim().length > 0 ? `Previous topics:\n
 Topic theory (for context):
 ${compactTheoryContext}
 
-LEARNING CONTRACT (authoritative when present):
+LEARNING CONTRACT (authoritative when present; hidden machine data, do not copy it into the learner-facing statement):
 ${learningContract || 'No structured contract was provided; use only the visible theory and the topic anchor.'}
 - Create one complete program that checks the exercise_focus.
 - Use the objectives as the center of the task and do not require anything named in not_yet_taught.
 - Do not turn the contract into a checklist or reveal hidden metadata to the learner.
+${olympiadContract ? `
+OLYMPIAD JUDGE-PRACTICE POLICY (higher priority than generic lesson-task advice):
+- This is one dynamically generated Judge problem for ${olympiadContract.courseKey}/${olympiadContract.topicKey}. Do not return a project, lesson recap, or explanation question.
+- Core operation: ${olympiadContract.coreOperation}
+- Input: ${olympiadContract.requiredInput}
+- Output: ${olympiadContract.requiredOutput}
+- Constraints: ${olympiadContract.constraints}
+- Repeat every numeric lower and upper bound from the contract exactly; do not narrow or widen the domain. If the contract requires exact bounds, a stricter bound is also a violation.
+- Target algorithm: ${olympiadContract.algorithm}. Choose bounds that make the lesson's algorithm appropriate; do not require an unrelated algorithm.
+- Use valid inputs only. Do not invent invalid-input recovery or empty-sequence behavior unless explicitly required by the objective.
+- Do not demand behavior for values outside the contract: if n ≥ 1, n=0 is not a valid test and needs no separate rule.
+- Stage ${olympiadContract.stage} (${olympiadContract.sequence}/${olympiadContract.total}): ${olympiadContract.variation}
+- Define all boundaries, indexing, tie rules, numeric bounds, and output formatting needed for an exact Judge answer.
+- Candidate tests must cover: ${olympiadContract.requiredCases.join('; ')}.
+- Every public example must exactly follow the input grammar: match each n, q, or other declared count to the number of supplied values and rows, with no extra or missing tokens. Match the required output line count too.
+- Keep the statement natural; do not name or explain the solution algorithm unless the exercise focus explicitly requires it.
+` : ''}
 ${uniquenessBlock}
 
 CODE TEMPLATE (codeTemplate) - FORBIDDEN to write the implementation:
@@ -1202,13 +1285,72 @@ LITERAL MATCHING RULES:
 Respond ONLY with JSON, without markdown blocks, without explanations.
 `;
 
+    const olympiadTaskInstructionsUa = olympiadContract ? `
+ДИНАМІЧНА ОЛІМПІАДНА JUDGE-ЗАДАЧА. Створи один новий варіант, який учень розв'язує повною програмою через stdin/stdout. Це не статична задача з каталогу.
+Поле topic має точно дорівнювати незмінній темі вище; ioType = STDIN_STDOUT.
+
+АВТОРИТЕТНИЙ НАВЧАЛЬНИЙ КОНТРАКТ (прихований; не копіюй його метадані в умову):
+- Мета: ${olympiadContract.objective}
+- Основна операція: ${olympiadContract.coreOperation}
+- Обов'язковий ввід: ${olympiadContract.requiredInput}
+- Обов'язковий вивід: ${olympiadContract.requiredOutput}
+- Обмеження: ${olympiadContract.constraints}
+- Дозволено: ${olympiadContract.allowedScope.join('; ')}
+- Заборонено: ${olympiadContract.forbiddenScope.join('; ')}
+- Етап ${olympiadContract.stage} (${olympiadContract.sequence}/${olympiadContract.total}): ${olympiadContract.variation}
+- Обов'язкові випадки для авторської перевірки: ${olympiadContract.requiredCases.join('; ')}
+
+ПРАВИЛА УМОВИ:
+- У practicalTask напиши 3–5 зв'язних речень довжиною від 180 символів: короткий природний сюжет, що дано, що визначити та що саме вивести. Не називай алгоритм чи спосіб реалізації; для TRANSFER використай новий контекст, з якого учень має сам обрати вивчений підхід.
+- inputFormat, outputFormat і constraints мають точно зберігати контракт. Повтори кожну числову нижню й верхню межу без звуження або розширення; не додавай поведінку для недопустимих входів (наприклад, n=0, якщо n≥1).
+- Узгодь сюжет з усім допустимим доменом вводу: якщо значення можуть бути від'ємними, поясни їх зміст або застосуй нейтральний контекст знакових змін.
+- outputFormat не може містити «тощо», «і т. д.», “etc.” або інше узагальнення. Точно вкажи результат, порядок і кількість рядків.
+- Додай щонайменше один публічний приклад. Кожен приклад має точно відповідати граматиці вводу: звір n/q та інші лічильники з кількістю значень і рядків, не пропускай і не додавай токени; перевір stdout і потрібну кількість вихідних рядків.
+- Для EDGE_CASES принаймні один публічний приклад має бути валідним входом, на якому наведений у практичній умові хибний зразок дає неправильну відповідь; очікуваний вивід у прикладі має бути правильним.
+- Кожен допустимий ввід має давати детермінований непорожній stdout у вказаному форматі.
+- theoryMarkdown має бути коротким повторенням ключової ідеї уроку, без повного розв'язку задачі та без копіювання прихованого контракту.
+- codeTemplate — лише порожній каркас повної програми з TODO-коментарем для ${langName}; жодної реалізації алгоритму.
+- Поверни тільки JSON за заданою схемою.
+` : '';
+    const olympiadTaskInstructionsEn = olympiadContract ? `
+DYNAMIC OLYMPIAD JUDGE TASK. Create one new variant for the learner to solve as a complete stdin/stdout program. This must be generated practice, not a static catalogue task.
+The topic field must exactly equal the immutable topic above; ioType = STDIN_STDOUT.
+
+AUTHORITATIVE LEARNING CONTRACT (hidden; never copy its metadata into the statement):
+- Objective: ${olympiadContract.objective}
+- Core operation: ${olympiadContract.coreOperation}
+- Required input: ${olympiadContract.requiredInput}
+- Required output: ${olympiadContract.requiredOutput}
+- Constraints: ${olympiadContract.constraints}
+- Allowed scope: ${olympiadContract.allowedScope.join('; ')}
+- Forbidden scope: ${olympiadContract.forbiddenScope.join('; ')}
+- Stage ${olympiadContract.stage} (${olympiadContract.sequence}/${olympiadContract.total}): ${olympiadContract.variation}
+- Required authoring cases: ${olympiadContract.requiredCases.join('; ')}
+
+STATEMENT RULES:
+- Write a connected 3–5 sentence practicalTask of at least 180 characters: a brief natural context, what is given, what to determine, and exactly what to print. Do not name the algorithm or implementation method; for TRANSFER, use a new context that asks the learner to infer the taught approach.
+- inputFormat, outputFormat, and constraints must preserve the contract exactly. Repeat every numeric lower and upper bound without narrowing or widening; do not add behavior for invalid inputs (for example n=0 when n≥1).
+- Keep the narrative consistent with the entire valid input domain. Explain negative values in the story or use a neutral signed-change context.
+- outputFormat must not use “etc.” or any other catch-all. Specify the exact result, output order, and number of lines.
+- Include at least one public example. Every example must exactly follow the input grammar: match n/q and other declared counts to supplied values and rows, add or omit no tokens, and verify stdout and its required line count.
+- For EDGE_CASES, at least one public example must be valid input on which the faulty draft in practicalTask produces the wrong answer; the example's expected output must be correct.
+- Every valid input must produce deterministic non-empty stdout in the stated format.
+- theoryMarkdown is a short refresher of the lesson's key idea, without the task solution or hidden contract.
+- codeTemplate is only an empty complete-program scaffold with a TODO comment for ${langName}; include no algorithm implementation.
+- Return only JSON matching the provided schema.
+` : '';
+
     const practicalTaskLengthInstruction = `
 PRACTICAL TASK LENGTH (mandatory): practicalTask must be a connected narrative of at least 180 characters and at least 2 complete sentences for every non-intro topic. It must explicitly state the input (or that the statement provides all values), the required operation, and the exact output. Do not return a one-line summary; expand the statement before returning JSON.
 OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empty stdout. Never describe an empty line/no output as a valid result; use and state an explicit non-empty sentinel instead.
 `;
-    const userPrompt = (isEnglish
-      ? (userPromptBaseEn + instructionsEn + practicalTaskLengthInstruction).trim()
-      : (userPromptBaseUa + instructionsUa + practicalTaskLengthInstruction).trim()) + TASK_PRECISION_INSTRUCTIONS
+    const userPromptBody = olympiadContract
+      ? `${(isEnglish ? userPromptBaseEn : userPromptBaseUa).trim()}\n${isEnglish ? olympiadTaskInstructionsEn : olympiadTaskInstructionsUa}\n
+LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${compactTheoryContext}${uniquenessBlock}`
+      : (isEnglish
+        ? (userPromptBaseEn + instructionsEn + practicalTaskLengthInstruction).trim()
+        : (userPromptBaseUa + instructionsUa + practicalTaskLengthInstruction).trim()) + TASK_PRECISION_INSTRUCTIONS;
+    const userPrompt = userPromptBody
       + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nResolve this issue in a complete corrected task.` : '');
     const maxRetries = (() => {
       const v = params.semanticRetries;
@@ -1230,16 +1372,32 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
         });
         const validated = await validateAndReviewGeneratedTask(provider, parsed, {
           expectedTopic: params.anchor.topic,
-          topicIndex: params.topicIndex,
+          topicIndex: params.topicIndex === 0 && olympiadContract ? 1 : params.topicIndex,
           allowedIoTypes: params.allowedIoTypes,
-        }, { signal: params.signal, userId: params.userId, topicId: params.topicId });
+        }, {
+          signal: params.signal,
+          userId: params.userId,
+          topicId: params.topicId,
+          learningContract: serializeOlympiadContractForReview(params.theory),
+          beforeReview: olympiadContract ? (task) => {
+            ensureOlympiadCompleteProgramRequest(olympiadContract, task);
+            validateOlympiadTaskNarrativeDomain(olympiadContract, task);
+            validateOlympiadTaskExamples(olympiadContract, task);
+            validateOlympiadDebuggingTask(olympiadContract, task);
+          } : undefined,
+        });
         const practicalTaskLower = validated.practicalTask.toLowerCase();
-        const coreOperationLower = params.anchor.coreOperation.toLowerCase();
         const titleLower = validated.title.toLowerCase();
-        const coreOperationWords = coreOperationLower.split(/\s+/).filter(w => w.length > 3);
-        const coreOperationMentioned = practicalTaskLower.includes(coreOperationLower) || titleLower.includes(coreOperationLower) || coreOperationWords.length > 0 && coreOperationWords.some(word => practicalTaskLower.includes(word) || titleLower.includes(word));
-        if (!coreOperationMentioned) {
-          throw new Error(`CORE_OPERATION_MISSING: Practical task or title does not contain core operation "${params.anchor.coreOperation}". Generation aborted.`);
+        if (!olympiadContract) {
+          // Preserve this legacy lexical guard for unconstrained anchor tasks.
+          // Olympiad tasks use canonical contract language, while their visible
+          // statements follow the learner locale and are checked semantically.
+          const coreOperationLower = params.anchor.coreOperation.toLowerCase();
+          const coreOperationWords = coreOperationLower.split(/\s+/).filter(w => w.length > 3);
+          const coreOperationMentioned = practicalTaskLower.includes(coreOperationLower) || titleLower.includes(coreOperationLower) || coreOperationWords.length > 0 && coreOperationWords.some(word => practicalTaskLower.includes(word) || titleLower.includes(word));
+          if (!coreOperationMentioned) {
+            throw new Error(`CORE_OPERATION_MISSING: Practical task or title does not contain core operation "${params.anchor.coreOperation}". Generation aborted.`);
+          }
         }
         for (const forbidden of params.anchor.forbiddenScope) {
           const forbiddenLower = forbidden.toLowerCase();
@@ -1302,7 +1460,15 @@ OUTPUT SAFETY (mandatory): every valid input must produce deterministic non-empt
     const provider = providerOverride ?? this.openRouterProvider;
     const isIntroTopic = params.topicIndex === 0;
     const isEnglish = params.language === "en";
-    const anchor = isIntroTopic
+    const olympiadContract = parseOlympiadPracticeContract(params.theory);
+    const anchor = olympiadContract
+      ? {
+          topic: params.topicTitle,
+          coreOperation: olympiadContract.coreOperation,
+          allowedScope: olympiadContract.allowedScope,
+          forbiddenScope: olympiadContract.forbiddenScope,
+        }
+      : isIntroTopic
       ? {
           topic: params.topicTitle,
           coreOperation: isEnglish
@@ -2207,6 +2373,7 @@ public class Main {
     signal?: AbortSignal;
     validationFeedback?: string;
     publicExamples?: TestDataExample[];
+    requiredCases?: string[];
     executeReference?: ReferenceTestExecutor;
   }): Promise<TestDataExample[]> {
     requireCompleteTaskDescription(params.taskDescription);
@@ -2229,13 +2396,19 @@ public class Main {
         lang: params.lang,
         count: generationCount,
         ioType: params.ioType,
+        requiredCases: params.requiredCases,
         validationFeedback: params.validationFeedback,
         userId: params.userId
       }, {
         signal: params.signal
       });
       const validated = AIResponseValidator.validateGenerateTestData(raw, generationCount, params.ioType);
-      await reviewGeneratedTests(this.cloudflareProvider, params.taskDescription, params.ioType, validated, { signal: params.signal, userId: params.userId });
+      await reviewGeneratedTests(this.cloudflareProvider, params.taskDescription, params.ioType, validated, {
+        signal: params.signal,
+        userId: params.userId,
+        requiredCases: params.requiredCases,
+        publicExamples: params.publicExamples,
+      });
       return validated;
     };
 
@@ -2299,6 +2472,7 @@ public class Main {
     signal?: AbortSignal;
     validationFeedback?: string;
     publicExamples?: TestDataExample[];
+    requiredCases?: string[];
     executeReference?: ReferenceTestExecutor;
   }, providerOverride?: LLMProvider): Promise<TestDataExample[]> {
     const provider = providerOverride ?? this.openRouterProvider;
@@ -2311,6 +2485,9 @@ public class Main {
     const needsInput = ioTypeLabel === 'STDIN_STDOUT';
     const desiredCount = needsInput ? Math.max(1, Math.floor(params.count)) : 1;
     const isEnglish = params.language === "en";
+    const requiredCoverage = params.requiredCases?.length
+      ? `\n${isEnglish ? "REQUIRED TEST COVERAGE (internal checklist, not part of the task statement)" : "ОБОВ’ЯЗКОВЕ ПОКРИТТЯ ТЕСТІВ (внутрішній чекліст, не частина умови)"}:\n${params.requiredCases.map(item => `- ${item}`).join("\n")}\n${isEnglish ? "Cover each case defined by the statement; this checklist does not authorize inventing task rules." : "Покрий кожний випадок, визначений умовою; чекліст не дозволяє вигадувати правила задачі."}`
+      : "";
     const languageInstruction = isEnglish
       ? "The task statement is the only source of truth. Return JSON only. Do not translate, rewrite, summarize, or copy theory into input/output."
       : "Умова задачі є єдиним джерелом істини. Поверни лише JSON. Не перекладай, не переписуй, не скорочуй і не копіюй теорію в input/output.";
@@ -2389,6 +2566,7 @@ Required new test count: ${desiredCount}
 --- TASK STATEMENT ---
 ${taskDesc}
 --- END TASK STATEMENT ---
+${requiredCoverage}
 
 GENERATION CONTRACT:
 ${needsInput
@@ -2420,7 +2598,12 @@ IMPORTANT:
         maxTokens: 3000
       });
     const validated = AIResponseValidator.validateGenerateTestData(parsed, desiredCount, ioTypeLabel);
-    await reviewGeneratedTests(provider, taskDesc, ioTypeLabel, validated, { signal: params.signal, userId: params.userId });
+    await reviewGeneratedTests(provider, taskDesc, ioTypeLabel, validated, {
+      signal: params.signal,
+      userId: params.userId,
+      requiredCases: params.requiredCases,
+      publicExamples: params.publicExamples,
+    });
     return validated;
   }
 }

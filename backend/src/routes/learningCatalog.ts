@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { z } from "zod";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
-import { checkCourseProject, completeCourseItem, enrollInCourseVariant, getCourseForUser, getCourseProject, getEnrollmentIad, getLearningCatalog, getLearningMe, passFinalAssessment, runCourseProject, saveCourseProject, setCurrentCourseEnrollment, submitCourseProject } from "../services/learningCatalogService";
+import { checkCourseProject, completeCourseItem, enrollInCourseVariant, getCourseForUser, getCourseProject, getCourseQuiz, getEnrollmentIad, getLearningCatalog, getLearningMe, passFinalAssessment, runCourseProject, saveCourseProject, setCurrentCourseEnrollment, submitCourseProject, submitCourseQuiz } from "../services/learningCatalogService";
 import { normalizeUiLocale, resolveUiLocaleFromHeaders, type UiLocale } from "../utils/uiLocale";
 
 export const learningCatalogRouter = Router();
@@ -86,6 +86,38 @@ learningCatalogRouter.post("/courses/:courseId/enroll", authRequired, async (req
   } catch (error: unknown) {
     const status = errorStatus(error);
     return res.status(status).json({ message: errorMessage(error), prerequisites: errorField(error, "prerequisites"), theoryItemId: errorField(error, "theoryItemId") });
+  }
+});
+
+learningCatalogRouter.get("/items/:itemId/quiz", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  const itemId = Number(req.params.itemId);
+  if (!Number.isInteger(itemId) || itemId <= 0) return res.status(400).json({ message: "INVALID_INPUT" });
+  try {
+    return res.json({ quiz: await getCourseQuiz(req.userId, itemId, requestLocale(req)) });
+  } catch (error: unknown) {
+    return res.status(errorStatus(error)).json({ message: errorMessage(error), prerequisites: errorField(error, "prerequisites") });
+  }
+});
+
+const quizAnswersSchema = z.object({
+  answers: z.array(z.object({
+    questionId: z.string().trim().min(1).max(32),
+    selectedIndex: z.number().int().min(0).max(4),
+  })).min(1).max(100),
+});
+
+learningCatalogRouter.post("/items/:itemId/quiz/submit", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  const itemId = Number(req.params.itemId);
+  const parsed = quizAnswersSchema.safeParse(req.body ?? {});
+  if (!Number.isInteger(itemId) || itemId <= 0 || !parsed.success) {
+    return res.status(400).json({ message: "INVALID_INPUT", issues: parsed.success ? undefined : parsed.error.issues });
+  }
+  try {
+    return res.json({ result: await submitCourseQuiz(req.userId, itemId, parsed.data.answers, requestLocale(req)) });
+  } catch (error: unknown) {
+    return res.status(errorStatus(error)).json({ message: errorMessage(error), prerequisites: errorField(error, "prerequisites") });
   }
 });
 

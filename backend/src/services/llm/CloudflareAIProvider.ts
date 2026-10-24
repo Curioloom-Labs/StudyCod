@@ -5,6 +5,7 @@ import { env } from '../../env';
 import { topicLanguageLabel, type TopicLanguage } from '../../utils/topicLanguage';
 import { requireCompleteTaskDescription, resolveTestDataIoType, TASK_PRECISION_INSTRUCTIONS } from './TaskContractReview';
 import { AIResponseValidator } from './AIResponseValidator';
+import { parseOlympiadPracticeContract } from '../learning/learningContract';
 interface CloudflareWorkerRequest {
   mode: string;
   language: "uk" | "en";
@@ -99,6 +100,7 @@ Return ONLY the Markdown statement.${responseLanguageInstruction}`
     lang: TopicLanguage;
     count: number;
     ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
+    requiredCases?: string[];
   }): { prompt: string; systemPrompt: string; schema: object } {
     const langName = topicLanguageLabel(params.lang);
     const taskDesc = requireCompleteTaskDescription(String(params.taskDescription || ""));
@@ -139,6 +141,8 @@ IO TYPE: ${ioType}
 --- ПОВНА УМОВА (ЄДИНЕ ДЖЕРЕЛО ІСТИНИ) ---
 ${taskDesc}
 --- КІНЕЦЬ УМОВИ ---
+
+${params.requiredCases?.length ? `ОБОВ’ЯЗКОВЕ ПОКРИТТЯ ДЛЯ ТЕСТІВ (прихований чекліст, не частина умови):\n${params.requiredCases.map(item => `- ${item}`).join("\n")}\nПокрий кожний випадок, який однозначно визначений умовою. Чекліст не дозволяє вигадувати нові правила задачі.` : ""}
 
 ВИМОГИ:
 - ${needsInput ? `Кожен тест має мати непорожній, валідний і унікальний input; поверни рівно ${count} тестів.` : 'input кожного тесту ОБОВ’ЯЗКОВО дорівнює порожньому рядку ""; поверни рівно один тест.'}
@@ -441,6 +445,12 @@ ${JSON.stringify(schema, null, 2)}
     userId?: number;
     topicId?: number;
   }, options?: LLMGenerateOptions): Promise<unknown> {
+    const olympiadContract = parseOlympiadPracticeContract(params.theory);
+    const olympiadPolicy = olympiadContract
+      ? options?.language === "en"
+        ? `\nOLYMPIAD JUDGE TASK POLICY: The structured contract embedded in theory is authoritative and overrides legacy topicIndex/isFirstTask hints. Generate exactly one dynamic stdin/stdout problem matching coreOperation, requiredInput, requiredOutput, constraints, and requiredCases. Make bounds appropriate for the target algorithm, use valid inputs only, and do not add unrelated algorithms or reveal the solution method in the statement. The hidden contract is not learner-facing text.`
+        : `\nПОЛІТИКА ОЛІМПІАДНОЇ JUDGE-ЗАДАЧІ: Структурований контракт у полі theory є авторитетним і має пріоритет над legacy-полями topicIndex/isFirstTask. Динамічно згенеруй рівно одну задачу зі stdin/stdout, яка відповідає coreOperation, requiredInput, requiredOutput, constraints і requiredCases. Обмеження мають підходити цільовому алгоритму; використовуй лише коректний ввід, не додавай сторонніх алгоритмів і не розкривай метод розв'язання в умові. Прихований контракт не є текстом для учня.`
+      : "";
     const taskTimeoutMs = (() => {
       const raw = String(env.LLM_TASK_TIMEOUT_MS ?? '').trim();
       const n = raw ? Number(raw) : NaN;
@@ -449,7 +459,7 @@ ${JSON.stringify(schema, null, 2)}
     })();
     const response = await this.callCloudflareWorker('generate-task', {
       prompt: JSON.stringify(params),
-      systemPrompt: TASK_PRECISION_INSTRUCTIONS + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nResolve this issue in a complete corrected task.` : '')
+      systemPrompt: TASK_PRECISION_INSTRUCTIONS + olympiadPolicy + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nResolve this issue in a complete corrected task.` : '')
     }, {
       userId: params.userId,
       topicId: params.topicId,
@@ -590,6 +600,7 @@ ${JSON.stringify(schema, null, 2)}
     ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
     userId?: number;
     validationFeedback?: string;
+    requiredCases?: string[];
   }, options?: LLMGenerateOptions): Promise<Array<{
     input: string;
     output: string;
@@ -600,7 +611,8 @@ ${JSON.stringify(schema, null, 2)}
       taskTitle: params.taskTitle,
       lang: params.lang,
       count: params.count,
-      ioType: params.ioType
+      ioType: params.ioType,
+      requiredCases: params.requiredCases,
     });
     const response = await this.callCloudflareWorker('generate-test-data', {
       prompt: built.prompt + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nReturn corrected tests and resolve every reported issue.` : ''),

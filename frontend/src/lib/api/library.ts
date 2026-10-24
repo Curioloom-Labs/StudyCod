@@ -104,10 +104,13 @@ export type LearningAttemptSummary = {
 };
 
 export type LearningSkillEvidence = {
+  totalAttempts: number;
   practicedTasks: number;
   solvedTasks: number;
   solvedAfterFailure: number;
   revisitedSolved: number;
+  hintedTasks: number;
+  hintLevelCounts: Array<{ level: 1 | 2 | 3; tasks: number }>;
   overcomeCategories: Array<{ name: string; tasks: number }>;
   topics: Array<{ name: string; practiced: number; solved: number; improving: boolean }>;
   recentSkills: Array<{ taskId: number; topic: string | null; category: string | null; outcome: "Evidence collected"; createdAt: string }>;
@@ -314,8 +317,10 @@ export type LearningEventType =
   | "solved_after_failure"
   | "recommended_task_opened";
 
-export async function getMyLearningEvidence(): Promise<LearningSkillEvidence> {
-  const res = await api.get("/library/learning/evidence");
+export async function getMyLearningEvidence(courseEnrollmentId?: number): Promise<LearningSkillEvidence> {
+  const res = await api.get("/library/learning/evidence", {
+    params: courseEnrollmentId ? { courseEnrollmentId } : undefined,
+  });
   return res.data as LearningSkillEvidence;
 }
 

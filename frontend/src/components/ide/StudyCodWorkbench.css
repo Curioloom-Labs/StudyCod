@@ -250,6 +250,7 @@
 }
 .ide-context-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   min-height: 48px;
@@ -264,6 +265,8 @@
 }
 .ide-context-status {
   display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 12px;
   flex-shrink: 0;

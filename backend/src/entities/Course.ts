@@ -64,6 +64,10 @@ export class Course {
   @Column({ type: "int", nullable: true, name: "created_by_user_id" })
   createdByUserId?: number | null;
 
+  /** Per-field edits made in Course Studio that must survive curriculum sync. */
+  @Column({ type: "simple-json", nullable: true, name: "authoring_overrides" })
+  authoringOverrides?: Record<string, unknown> | null;
+
   @OneToMany(() => CourseModule, (m) => m.course)
   modules!: CourseModule[];
 

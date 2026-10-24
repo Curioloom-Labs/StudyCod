@@ -41,7 +41,7 @@ import {
 } from "../services/webTaskValidationService";
 import { normalizeWebTaskTemplate } from "../utils/webTaskPayload";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
-import { getSkillEvidence, recordLearningEvent } from "../services/learning/failureToSkillEngine";
+import { getCourseSkillEvidence, getSkillEvidence, recordLearningEvent } from "../services/learning/failureToSkillEngine";
 import { compareLibraryJudgeGroups, hasLibrarySubtasks, libraryTestGroup, normalizeLibraryGroupScores } from "../services/libraryTaskScoring";
 import {
   ALL_JUDGE_LANGUAGES,
@@ -260,6 +260,14 @@ libraryRouter.get("/learning/evidence", authRequired, async (req: AuthRequest, r
   try {
     const principal = learningPrincipal(req);
     if (!principal) return res.status(401).json({ message: "UNAUTHORIZED" });
+    const enrollmentRaw = Array.isArray(req.query.courseEnrollmentId) ? req.query.courseEnrollmentId[0] : req.query.courseEnrollmentId;
+    if (enrollmentRaw != null) {
+      const enrollmentId = Number(enrollmentRaw);
+      if (!Number.isInteger(enrollmentId) || enrollmentId <= 0) return res.status(400).json({ message: "INVALID_COURSE_ENROLLMENT_ID" });
+      if (principal.principalType !== "USER") return res.status(403).json({ message: "USER_COURSE_ENROLLMENT_REQUIRED" });
+      const evidence = await getCourseSkillEvidence(principal.principalId, enrollmentId);
+      return res.json(evidence);
+    }
     const evidence = await getSkillEvidence(principal.principalType, principal.principalId);
     return res.json(evidence);
   } catch (error: unknown) {

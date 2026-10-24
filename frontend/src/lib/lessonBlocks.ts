@@ -113,5 +113,53 @@ export function normalizeInteractiveLesson(raw: unknown): InteractiveLesson | nu
 
   return { objectives: cleanList(root.objectives), sections, summary: cleanList(root.summary) };
 }
+
+export function interactiveLessonToMarkdown(
+  lesson: InteractiveLesson,
+  labels: {
+    objectives: string;
+    summary: string;
+    callout: Record<"info" | "tip" | "warning", string>;
+    correctAnswer: string;
+  }
+): string {
+  const parts: string[] = [];
+  if (lesson.objectives.length) {
+    parts.push(`## ${labels.objectives}\n\n${lesson.objectives.map(item => `- ${item}`).join("\n")}`);
+  }
+
+  for (const section of lesson.sections) {
+    if (section.heading.trim()) parts.push(`## ${section.heading.trim()}`);
+    for (const block of section.blocks) {
+      if (block.type === "prose") {
+        parts.push(block.markdown);
+      } else if (block.type === "callout") {
+        const quote = block.markdown.split("\n").map(line => `> ${line}`).join("\n");
+        parts.push(`> **${labels.callout[block.variant]}**\n${quote}`);
+      } else if (block.type === "code") {
+        let fence = "```";
+        while (block.code.includes(fence)) fence += "`";
+        parts.push(`${block.caption?.trim() ? `**${block.caption.trim()}**\n\n` : ""}${fence}${block.language}\n${block.code}\n${fence}`);
+      } else if (block.type === "keypoints") {
+        parts.push(block.items.map(item => `- ${item}`).join("\n"));
+      } else if (block.type === "runnable") {
+        let fence = "```";
+        while (block.code.includes(fence)) fence += "`";
+        parts.push(`${block.prompt?.trim() ? `**${block.prompt.trim()}**\n\n` : ""}${fence}${block.language.toLowerCase()}\n${block.code}\n${fence}`);
+      } else if (block.type === "check") {
+        const options = block.options.map((option, index) => `- ${index === block.correct ? "**✓** " : ""}${option}`).join("\n");
+        const explanation = block.explanation?.trim()
+          ? `\n\n> ${labels.correctAnswer}: ${block.options[block.correct]}\n> ${block.explanation.trim().replaceAll("\n", "\n> ")}`
+          : `\n\n> ${labels.correctAnswer}: ${block.options[block.correct]}`;
+        parts.push(`**${block.question}**\n\n${options}${explanation}`);
+      }
+    }
+  }
+
+  if (lesson.summary.length) {
+    parts.push(`## ${labels.summary}\n\n${lesson.summary.map(item => `- ${item}`).join("\n")}`);
+  }
+  return parts.filter(part => part.trim()).join("\n\n");
+}
 import type { JudgeLanguage } from "./judgeLanguages";
 import { JUDGE_LANGUAGES } from "./judgeLanguages";

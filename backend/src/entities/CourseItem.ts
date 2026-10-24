@@ -54,6 +54,10 @@ export class CourseItem {
   @Column({ type: "boolean", default: true, name: "is_active" })
   isActive!: boolean;
 
+  /** Per-field edits made in Course Studio that must survive curriculum sync. */
+  @Column({ type: "simple-json", nullable: true, name: "authoring_overrides" })
+  authoringOverrides?: Record<string, unknown> | null;
+
   /** Kind-specific payload (task template + tests, quiz questions, page HTML, …). */
   @Column({ type: "simple-json", nullable: true })
   content?: Record<string, unknown> | null;

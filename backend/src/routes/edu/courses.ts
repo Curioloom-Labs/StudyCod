@@ -9,7 +9,11 @@ import {
   getCourseTree,
   addModule,
   addItem,
-  setCourseStatus
+  setCourseStatus,
+  createGlobalCourse,
+  listGlobalCourses,
+  attachPrecedingTheoryReference,
+  authoredCoursePublishIssues,
 } from "../../services/edu/courses";
 import { assignCourseToClass, hashEduTask } from "../../services/edu/courseFork";
 import { computePullDiff, summarizePullDiff, applyPullUpdates, type LocalItemState } from "../../services/edu/coursePull";
@@ -22,6 +26,7 @@ import { EduTask } from "../../entities/EduTask";
 import { AppDataSource } from "../../data-source";
 import { writeAudit } from "../../services/audit/auditLog";
 import { logger } from "../../utils/logger";
+import { markCurriculumAuthoringOverrides } from "../../services/curriculumAuthoringOverrides";
 
 const router = Router();
 
@@ -53,19 +58,79 @@ async function requireOrgCapability(
   return true;
 }
 
-/** Resolve the org that owns a course (for nested module/item routes). */
-async function courseOrgId(courseId: number): Promise<number | null> {
-  const course = await AppDataSource.getRepository(Course).findOne({ where: { id: courseId } });
-  return course?.organizationId ?? null;
+async function getAuthorableCourse(req: AuthRequest, res: Response, courseId: number): Promise<Course | null> {
+  const course = await AppDataSource.getRepository(Course).findOne({ where: { id: courseId }, relations: ["organization"] });
+  if (!course) {
+    res.status(404).json({ message: "COURSE_NOT_FOUND" });
+    return null;
+  }
+  if (course.organizationId != null) {
+    if (!(await requireOrgCapability(req, res, course.organizationId, "CONTENT_AUTHOR"))) return null;
+    return course;
+  }
+  // YAML remains the baseline for catalog courses, while system-admin edits are
+  // recorded as per-field overrides so later syncs can update untouched fields.
+  if (req.userRole === "SYSTEM_ADMIN") return course;
+  res.status(404).json({ message: "COURSE_NOT_FOUND" });
+  return null;
 }
 
-async function moduleOrgId(moduleId: number): Promise<number | null> {
-  const mod = await AppDataSource.getRepository(CourseModule).findOne({
-    where: { id: moduleId },
-    relations: ["course"]
-  });
-  return mod?.course?.organizationId ?? null;
+async function getAuthorableModule(req: AuthRequest, res: Response, moduleId: number): Promise<CourseModule | null> {
+  const module = await AppDataSource.getRepository(CourseModule).findOne({ where: { id: moduleId }, relations: ["course"] });
+  if (!module) {
+    res.status(404).json({ message: "MODULE_NOT_FOUND" });
+    return null;
+  }
+  if (!(await getAuthorableCourse(req, res, module.courseId))) return null;
+  return module;
 }
+
+router.get("/global/courses", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    if (req.userRole !== "SYSTEM_ADMIN") return res.status(403).json({ message: "FORBIDDEN" });
+    const courses = await listGlobalCourses();
+    return res.json({ courses: courses.map((course) => ({
+      id: course.id,
+      title: course.title,
+      description: course.description ?? null,
+      catalogKey: course.catalogKey ?? null,
+      isSourceManagedCourse: Boolean(course.catalogKey),
+      hasAuthoringOverrides: Object.keys(course.authoringOverrides ?? {}).length > 0,
+      status: course.status,
+      variants: (course.variants ?? []).map((variant) => ({ id: variant.id, runtime: variant.runtime, status: variant.status })),
+      updatedAt: course.updatedAt,
+    })) });
+  } catch (error: unknown) {
+    logger.error("[edu/courses] global list failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.post("/global/courses", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    if (req.userRole !== "SYSTEM_ADMIN") return res.status(403).json({ message: "FORBIDDEN" });
+    const parsed = z.object({
+      title: z.string().trim().min(1).max(200),
+      description: z.string().max(50_000).optional(),
+      runtime: z.enum(["JAVA", "PYTHON", "CPP"]).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+    const course = await createGlobalCourse({ ...parsed.data, createdByUserId: req.userId! });
+    await writeAudit({
+      actorType: "USER", actorId: req.userId!, action: "global_course.create", targetType: "course", targetId: course.id,
+      requestId: req.requestId, ip: req.ip,
+    });
+    return res.status(201).json({ course: {
+      id: course.id, title: course.title, description: course.description ?? null, status: course.status,
+      variants: (course.variants ?? []).map((variant) => ({ id: variant.id, runtime: variant.runtime, status: variant.status })),
+    } });
+  } catch (error: unknown) {
+    logger.error("[edu/courses] global create failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
 
 // Create a course template within an org.
 router.post("/orgs/:orgId/courses", authRequired, async (req: AuthRequest, res: Response) => {
@@ -138,11 +203,10 @@ router.get("/courses/:courseId", authRequired, async (req: AuthRequest, res: Res
     if (!requireUser(req, res)) return;
     const courseId = parseInt(req.params.courseId, 10);
     if (!Number.isFinite(courseId)) return res.status(400).json({ message: "INVALID_ID" });
-    const orgId = await courseOrgId(courseId);
-    if (orgId == null) return res.status(404).json({ message: "COURSE_NOT_FOUND" });
-    if (!(await requireOrgCapability(req, res, orgId, "CONTENT_AUTHOR"))) return;
+    const authorable = await getAuthorableCourse(req, res, courseId);
+    if (!authorable) return;
 
-    const course = await getCourseTree(courseId, orgId);
+    const course = await getCourseTree(courseId, authorable.organizationId ?? null);
     if (!course) return res.status(404).json({ message: "COURSE_NOT_FOUND" });
     return res.json({
       course: {
@@ -150,6 +214,9 @@ router.get("/courses/:courseId", authRequired, async (req: AuthRequest, res: Res
         title: course.title,
         description: course.description ?? null,
         status: course.status,
+        isGlobalCatalogCourse: course.organizationId == null && !course.catalogKey,
+        isSourceManagedCourse: Boolean(course.catalogKey),
+        hasAuthoringOverrides: Object.keys(course.authoringOverrides ?? {}).length > 0,
         variants: (course.variants || []).map((v) => ({ id: v.id, runtime: v.runtime, title: v.title, status: v.status })),
         modules: course.modules.map((m) => ({
           id: m.id,
@@ -165,15 +232,52 @@ router.get("/courses/:courseId", authRequired, async (req: AuthRequest, res: Res
   }
 });
 
+router.put("/courses/:courseId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const courseId = parseInt(req.params.courseId, 10);
+    if (!Number.isInteger(courseId) || courseId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const authorable = await getAuthorableCourse(req, res, courseId);
+    if (!authorable) return;
+    const parsed = z.object({
+      title: z.string().trim().min(1).max(200).optional(),
+      description: z.string().max(50_000).nullable().optional(),
+    }).refine((value) => value.title !== undefined || value.description !== undefined).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+    if (parsed.data.title !== undefined) authorable.title = parsed.data.title;
+    if (parsed.data.description !== undefined) authorable.description = parsed.data.description;
+    if (authorable.catalogKey) {
+      authorable.authoringOverrides = markCurriculumAuthoringOverrides(
+        authorable.authoringOverrides,
+        [
+          ...(parsed.data.title !== undefined ? ["title"] : []),
+          ...(parsed.data.description !== undefined ? ["description"] : []),
+        ],
+      );
+    }
+    const saved = await AppDataSource.getRepository(Course).save(authorable);
+    await writeAudit({
+      actorType: "USER", actorId: req.userId!, action: "course.update", targetType: "course", targetId: saved.id,
+      orgId: saved.organizationId ?? null, requestId: req.requestId, ip: req.ip,
+    });
+    return res.json({ course: { id: saved.id, title: saved.title, description: saved.description ?? null, status: saved.status } });
+  } catch (error: unknown) {
+    logger.error("[edu/courses] update course failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 // Add a module to a course.
 router.post("/courses/:courseId/modules", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (!requireUser(req, res)) return;
     const courseId = parseInt(req.params.courseId, 10);
     if (!Number.isFinite(courseId)) return res.status(400).json({ message: "INVALID_ID" });
-    const orgId = await courseOrgId(courseId);
-    if (orgId == null) return res.status(404).json({ message: "COURSE_NOT_FOUND" });
-    if (!(await requireOrgCapability(req, res, orgId, "CONTENT_AUTHOR"))) return;
+    const authorableCourse = await getAuthorableCourse(req, res, courseId);
+    if (!authorableCourse) return;
+    if (authorableCourse.catalogKey && authorableCourse.status === "PUBLISHED") {
+      return res.status(409).json({ message: "COURSE_MUST_BE_DRAFT_TO_EDIT_STRUCTURE" });
+    }
 
     const parsed = z.object({ title: z.string().min(1).max(200), order: z.number().int().optional() }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
@@ -185,15 +289,48 @@ router.post("/courses/:courseId/modules", authRequired, async (req: AuthRequest,
   }
 });
 
+router.put("/modules/:moduleId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const moduleId = parseInt(req.params.moduleId, 10);
+    if (!Number.isInteger(moduleId) || moduleId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const module = await getAuthorableModule(req, res, moduleId);
+    if (!module) return;
+    const parsed = z.object({
+      title: z.string().trim().min(1).max(200).optional(),
+      order: z.number().int().min(0).max(100_000).optional(),
+    }).refine((value) => value.title !== undefined || value.order !== undefined).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+    if (parsed.data.title !== undefined) module.title = parsed.data.title;
+    if (parsed.data.order !== undefined) module.order = parsed.data.order;
+    if (module.course.catalogKey) {
+      module.authoringOverrides = markCurriculumAuthoringOverrides(
+        module.authoringOverrides,
+        [
+          ...(parsed.data.title !== undefined ? ["title"] : []),
+          ...(parsed.data.order !== undefined ? ["order"] : []),
+        ],
+      );
+    }
+    const saved = await AppDataSource.getRepository(CourseModule).save(module);
+    return res.json({ module: { id: saved.id, title: saved.title, order: saved.order } });
+  } catch (error: unknown) {
+    logger.error("[edu/courses] update module failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 // Add an item to a module.
 router.post("/modules/:moduleId/items", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (!requireUser(req, res)) return;
     const moduleId = parseInt(req.params.moduleId, 10);
     if (!Number.isFinite(moduleId)) return res.status(400).json({ message: "INVALID_ID" });
-    const orgId = await moduleOrgId(moduleId);
-    if (orgId == null) return res.status(404).json({ message: "MODULE_NOT_FOUND" });
-    if (!(await requireOrgCapability(req, res, orgId, "CONTENT_AUTHOR"))) return;
+    const authorableModule = await getAuthorableModule(req, res, moduleId);
+    if (!authorableModule) return;
+    if (authorableModule.course.catalogKey && authorableModule.course.status === "PUBLISHED") {
+      return res.status(409).json({ message: "COURSE_MUST_BE_DRAFT_TO_EDIT_STRUCTURE" });
+    }
 
     const parsed = z
       .object({
@@ -220,6 +357,73 @@ router.post("/modules/:moduleId/items", authRequired, async (req: AuthRequest, r
     }
   } catch (error: unknown) {
     logger.error("[edu/courses] add item failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.put("/items/:itemId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const itemId = parseInt(req.params.itemId, 10);
+    if (!Number.isInteger(itemId) || itemId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const item = await AppDataSource.getRepository(CourseItem).findOne({ where: { id: itemId }, relations: ["module", "module.course"] });
+    if (!item) return res.status(404).json({ message: "ITEM_NOT_FOUND" });
+    const authorableCourse = await getAuthorableCourse(req, res, item.module.courseId);
+    if (!authorableCourse) return;
+    const parsed = z.object({
+      kind: z.string().optional(),
+      title: z.string().trim().min(1).max(255).optional(),
+      order: z.number().int().min(0).max(100_000).optional(),
+      content: z.record(z.string(), z.unknown()).nullable().optional(),
+    }).refine((value) => value.kind !== undefined || value.title !== undefined || value.order !== undefined || value.content !== undefined).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+    if (parsed.data.kind !== undefined) {
+      if (!(["THEORY", "PAGE", "CODE_TASK", "WEB_TASK", "QUIZ", "MANUAL"] as string[]).includes(parsed.data.kind)) return res.status(400).json({ message: "INVALID_ITEM_KIND" });
+      item.kind = parsed.data.kind as CourseItem["kind"];
+    }
+    if (parsed.data.title !== undefined) item.title = parsed.data.title;
+    if (parsed.data.order !== undefined) item.order = parsed.data.order;
+    if (parsed.data.content !== undefined) item.content = parsed.data.content;
+    if (item.module.course.catalogKey) {
+      item.authoringOverrides = markCurriculumAuthoringOverrides(
+        item.authoringOverrides,
+        [
+          ...(parsed.data.kind !== undefined ? ["kind"] : []),
+          ...(parsed.data.title !== undefined ? ["title"] : []),
+          ...(parsed.data.order !== undefined ? ["order"] : []),
+          ...(parsed.data.content !== undefined ? ["content"] : []),
+        ],
+      );
+    }
+    if (authorableCourse.catalogKey && authorableCourse.status === "PUBLISHED") {
+      const modules = await AppDataSource.getRepository(CourseModule).find({
+        where: { course: { id: authorableCourse.id } },
+        relations: ["items"],
+        order: { order: "ASC" },
+      });
+      const issues = authoredCoursePublishIssues(modules.map((module) => ({
+        id: module.id,
+        items: module.items.map((entry) => entry.id === item.id ? item : entry),
+      })));
+      if (issues.length) return res.status(409).json({ message: "COURSE_CONTENT_INCOMPLETE", issues });
+    }
+    const saved = await AppDataSource.getRepository(CourseItem).save(item);
+    if (authorableCourse.organizationId == null && !authorableCourse.catalogKey) {
+      const moduleItems = await AppDataSource.getRepository(CourseItem).find({ where: { module: { id: item.moduleId } }, order: { order: "ASC" } });
+      const theoryItems = moduleItems.filter((entry) => entry.kind === "THEORY" || entry.kind === "PAGE");
+      const generatedPractice = moduleItems.filter((entry) => entry.kind === "CODE_TASK" && entry.content?.generatedAfterTheory === true);
+      for (const practice of generatedPractice) {
+        practice.content = attachPrecedingTheoryReference(practice.content ?? {}, practice.order, theoryItems, true);
+      }
+      if (generatedPractice.length) await AppDataSource.getRepository(CourseItem).save(generatedPractice);
+    }
+    await writeAudit({
+      actorType: "USER", actorId: req.userId!, action: "course_item.update", targetType: "course_item", targetId: saved.id,
+      orgId: item.module.course.organizationId ?? null, requestId: req.requestId, ip: req.ip,
+    });
+    return res.json({ item: { id: saved.id, kind: saved.kind, title: saved.title, order: saved.order, content: saved.content ?? null } });
+  } catch (error: unknown) {
+    logger.error("[edu/courses] update item failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -376,16 +580,19 @@ router.put("/courses/:courseId/status", authRequired, async (req: AuthRequest, r
     if (!requireUser(req, res)) return;
     const courseId = parseInt(req.params.courseId, 10);
     if (!Number.isFinite(courseId)) return res.status(400).json({ message: "INVALID_ID" });
-    const orgId = await courseOrgId(courseId);
-    if (orgId == null) return res.status(404).json({ message: "COURSE_NOT_FOUND" });
-    if (!(await requireOrgCapability(req, res, orgId, "CONTENT_AUTHOR"))) return;
+    const authorable = await getAuthorableCourse(req, res, courseId);
+    if (!authorable) return;
 
     const parsed = z.object({ status: z.enum(["DRAFT", "PUBLISHED"]) }).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
-    const course = await setCourseStatus(courseId, orgId, parsed.data.status);
+    const course = await setCourseStatus(courseId, authorable.organizationId ?? null, parsed.data.status);
     if (!course) return res.status(404).json({ message: "COURSE_NOT_FOUND" });
     return res.json({ course: { id: course.id, status: course.status } });
   } catch (error: unknown) {
+    if (errorMessage(error) === "COURSE_CONTENT_INCOMPLETE") {
+      const issues = typeof error === "object" && error !== null && "issues" in error && Array.isArray(error.issues) ? error.issues : [];
+      return res.status(409).json({ message: "COURSE_CONTENT_INCOMPLETE", issues });
+    }
     logger.error("[edu/courses] set status failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }

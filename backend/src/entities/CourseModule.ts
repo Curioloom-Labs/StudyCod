@@ -40,6 +40,10 @@ export class CourseModule {
   @Column({ type: "varchar", length: 64, nullable: true, name: "source_hash" })
   sourceHash?: string | null;
 
+  /** Per-field edits made in Course Studio that must survive curriculum sync. */
+  @Column({ type: "simple-json", nullable: true, name: "authoring_overrides" })
+  authoringOverrides?: Record<string, unknown> | null;
+
   @OneToMany(() => CourseItem, (i) => i.module)
   items!: CourseItem[];
 

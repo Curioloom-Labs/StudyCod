@@ -194,6 +194,14 @@ function sanitizeParams(mode: AIMode, params: unknown): JsonObject {
     // and Markdown fences. The generation/review system prompts treat it as data.
     p.taskDescription = mode === 'generateTestData' ? description : sanitizeText(description, 8000);
   }
+  if (mode === 'generateTestData' && Array.isArray(p.requiredCases)) {
+    const requiredCases = p.requiredCases
+      .map(value => sanitizeText(value, 240))
+      .filter(value => value.length > 0)
+      .slice(0, 24);
+    if (requiredCases.length) p.requiredCases = requiredCases;
+    else delete p.requiredCases;
+  }
   if ('taskTitle' in p) p.taskTitle = sanitizeText(p.taskTitle, 200);
   if ('description' in p) p.description = sanitizeText(p.description, 8000);
   if ('responseLanguage' in p) p.responseLanguage = sanitizeText(p.responseLanguage, 64);
@@ -264,6 +272,13 @@ function classifyAIProviderStatus(errorMessage: string): number {
     msg.includes('anchor_too_vague') ||
     msg.includes('topic_mismatch_hard_fail')
   ) return 400;
+  // OpenRouter's key-chain summary can hide the original per-key status
+  // behind "All API keys exhausted". Credit, authentication, and permission
+  // failures will not improve by repeating the same generation call, so keep
+  // them out of safeAICall's transient 503 retry loop.
+  if (/\b402\b/.test(msg) && /(credit|afford|billing|payment|insufficient funds)/.test(msg)) return 402;
+  if (/\b401\b/.test(msg) && /(unauthor|user not found|invalid api key|api key)/.test(msg)) return 401;
+  if (/\b403\b/.test(msg) && /(forbidden|unauthor|invalid api key|api key)/.test(msg)) return 403;
   // Be careful: random numeric strings can contain '429' (e.g., 429496...), so match more precisely.
   if (msg.includes('rate limit') || msg.includes('too many requests') || /\b429\b/.test(msg) || msg.includes('http 429') || msg.includes('status 429')) return 429;
   if (msg.includes('timeout') || msg.includes('timed out') || msg.includes('30s exceeded') || msg.includes('deadline exceeded') || msg.includes('request aborted')) return 504;
@@ -488,6 +503,11 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
             const taskTheory = requiredString(sanitizedParams.theory, 'theory');
             const taskLanguage = requiredTaskLanguage(sanitizedParams.lang);
             const taskAllowedIoTypes = optionalTaskIoTypes(sanitizedParams.allowedIoTypes);
+            const isOlympiadAlgorithmicPractice = /<!--\s*STUDYCOD_LEARNING_META_START[\s\S]*?"kind"\s*:\s*"OLYMPIAD_ALGORITHMIC_PRACTICE"[\s\S]*?STUDYCOD_LEARNING_META_END\s*-->/i.test(taskTheory);
+            const generationTopicIndex = optionalNumber(sanitizedParams.topicIndex);
+            const validationTopicIndex = isOlympiadAlgorithmicPractice && generationTopicIndex === 0
+              ? 1
+              : generationTopicIndex;
             result = await orchestrator.generateTaskWithAI({
               topicTitle: taskTopicTitle,
               theory: taskTheory,
@@ -511,13 +531,20 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
             const taskResult = AIResponseValidator.validateGenerateTask(
               result,
               taskTopicTitle,
-              optionalNumber(sanitizedParams.topicIndex),
+              validationTopicIndex,
               taskAllowedIoTypes
             );
             result = taskResult;
 
+            if (isOlympiadAlgorithmicPractice && taskResult.ioType !== 'STDIN_STDOUT') {
+              throw makeAIValidationError('generateTask', 'Olympiad algorithmic practice requires a stdin/stdout Judge problem.', {
+                ioType: taskResult.ioType ?? null,
+                topicTitle: taskTopicTitle,
+              });
+            }
+
             // Curriculum stage policy enforcement (e.g., prevent tasks requiring concepts not taught yet).
-            {
+            if (!isOlympiadAlgorithmicPractice) {
               const violation = getCurriculumPolicyViolationForGeneratedTask({
                 lang: taskLanguage,
                 topicIndex: optionalNumber(sanitizedParams.topicIndex),
@@ -682,6 +709,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
               lang: requiredTaskLanguage(sanitizedParams.lang),
               count: Number(sanitizedParams.count),
               ioType: testIoType,
+              requiredCases: Array.isArray(sanitizedParams.requiredCases) ? sanitizedParams.requiredCases as string[] : undefined,
               validationFeedback: optionalString(sanitizedParams.validationFeedback),
               publicExamples: Array.isArray(sanitizedParams.publicExamples) ? sanitizedParams.publicExamples.map(example => ({
                 input: requiredString(asJsonObject(example).input, 'publicExamples.input'),

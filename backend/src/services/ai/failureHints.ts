@@ -7,11 +7,91 @@ export type HintLanguage = TopicLanguage;
 export type HintGenerationStatus = "AI" | "FALLBACK" | "UNAVAILABLE";
 export interface FailureCase {
   testId?: number | string;
+  isPublic?: boolean;
   input: string;
   expected: string;
   actual: string;
   verdict?: string;
   stderr?: string | null;
+}
+
+/** Keep hidden-case outcomes useful for a generic hint without sending their contents to the model. */
+export function sanitizeFailuresForHintContext(failures: readonly FailureCase[]): FailureCase[] {
+  return failures.slice(0, 3).map((failure) => failure.isPublic === false
+    ? {
+        testId: "hidden",
+        isPublic: false,
+        input: "[hidden test input withheld]",
+        expected: "[hidden expected output withheld]",
+        actual: "[hidden actual output withheld]",
+        verdict: failure.verdict,
+        stderr: null,
+      }
+    : { ...failure });
+}
+
+export function buildEnglishFallbackHints(params: {
+  language: HintLanguage;
+  failures: FailureCase[];
+  maxHints: number;
+  taskText?: string;
+  code?: string;
+}): string[] {
+  const failures = sanitizeFailuresForHintContext(params.failures);
+  const maxHints = Math.max(0, Math.min(5, params.maxHints));
+  const hints: string[] = [];
+  const add = (hint: string) => {
+    if (hint && !hints.includes(hint) && hints.length < maxHints) hints.push(hint);
+  };
+  const stderr = failures.map(failure => String(failure.stderr ?? "")).join("\n");
+  const verdict = failures.map(failure => String(failure.verdict ?? "")).join(" ");
+  const combined = `${stderr}\n${verdict}`.toLowerCase();
+  const isCompile = /\b(ce|compile|compilation|cannot\s+find\s+symbol|syntax\s*error|error:|javac|g\+\+|clang\+\+)\b/i.test(combined);
+  const isPythonTrace = /traceback \(most recent call last\)/i.test(stderr);
+
+  if (isCompile || isPythonTrace) {
+    if (params.language === "PYTHON") {
+      if (/indentationerror|taberror/i.test(stderr)) add("Check indentation; Python treats it as part of the program structure.");
+      if (/syntaxerror/i.test(stderr)) add("Go to the reported line and check brackets, colons, and quotation marks.");
+      if (/nameerror/i.test(stderr)) add("Check whether every variable or function is defined and spelled consistently.");
+      if (/valueerror|typeerror/i.test(stderr)) add("Check the input format and the conversions used while parsing it.");
+      if (/eoferror/i.test(stderr)) add("Check whether the program reads more lines or values than the input provides.");
+    } else if (params.language === "JAVA") {
+      add("Check the reported line for syntax, type, import, or class and method declaration errors.");
+      if (/cannot\s+find\s+symbol/i.test(stderr)) add("A name may be undeclared or misspelled; inspect the symbol named by the compiler.");
+      if (/class\s+Main\s+is\s+public/i.test(stderr)) add("Check that the public class name matches the required entry-point file name.");
+    } else {
+      add("Check the reported line for syntax, type, bracket, semicolon, or missing-header errors.");
+      if (/undefined\s+reference|ld:|linker/i.test(stderr)) add("This looks like a linker error; check that declarations and definitions have matching signatures.");
+      if (/no\s+matching\s+function|ambiguous|invalid\s+conversion/i.test(stderr)) add("Check the argument types and conversions at the call named by the compiler.");
+      if (/cin|getline/i.test(params.code ?? "")) add("When mixing operator>> and getline, check whether a leftover newline is being read as an empty line.");
+    }
+    add("Fix the first build error and submit again; logic hints can help once the program runs against tests.");
+    return hints;
+  }
+
+  if (/\b(tle|timeout|time\s*limit|tl|killed|timelimit)\b/i.test(combined)) {
+    add("Estimate the work at the largest input size and look for repeated scans or nested loops.");
+    add("Consider whether a running sum, prefix data, or a frequency structure can avoid repeating the same work.");
+    add("For large input, check that parsing and output are efficient for this language.");
+    return hints;
+  }
+
+  const hasActual = failures.some(failure => String(failure.actual ?? "").trim());
+  const hasExpected = failures.some(failure => String(failure.expected ?? "").trim());
+  if (!hasActual && hasExpected) add("The program may not be writing its answer to standard output; check the final output step.");
+  const expected = String(failures.find(failure => String(failure.expected ?? "").trim())?.expected ?? "");
+  const actual = String(failures.find(failure => String(failure.actual ?? "").trim())?.actual ?? "");
+  if (expected && actual && expected.trim().toLowerCase() === actual.trim().toLowerCase() && expected.trim() !== actual.trim()) {
+    add("Check letter case; the required output may distinguish uppercase and lowercase answers.");
+  }
+  if (expected && actual && expected.replace(/\s+/g, " ").trim() === actual.replace(/\s+/g, " ").trim() && expected.trim() !== actual.trim()) {
+    add("Compare the required output format for extra spaces, line breaks, or blank lines.");
+  }
+  add("Check that the program reads exactly the values and lines listed in the input format.");
+  add("Check that the program prints only the answer in the required order and format.");
+  if (/two\s+lines/i.test(String(params.taskText ?? ""))) add("The statement specifies two lines; make sure both are read completely, including spaces if needed.");
+  return hints;
 }
 
 export function sanitizeGeneratedHints(raw: unknown, maxHints: number): string[] {
@@ -44,7 +124,7 @@ export async function generateAlgorithmicHints(params: {
   onResult?: (result: { status: HintGenerationStatus; count: number; error?: string }) => void;
 }): Promise<string[]> {
   const provider = getLLMProvider();
-  const failures = (params.failures || []).slice(0, 3);
+  const failures = sanitizeFailuresForHintContext(params.failures || []);
   if (failures.length === 0) return [];
   const maxHints = Math.max(0, Math.min(5, Number(params.maxHints ?? 3) || 3));
   const report = (status: HintGenerationStatus, hints: string[], error?: unknown) => {
@@ -56,6 +136,15 @@ export async function generateAlgorithmicHints(params: {
   };
 
   const buildFallbackHints = (): string[] => {
+    if (params.uiLanguage === "en") {
+      return buildEnglishFallbackHints({
+        language: params.language,
+        failures,
+        maxHints,
+        taskText: params.taskText,
+        code: params.code,
+      });
+    }
     // Deterministic, safe, non-solution hints for when LLM is unavailable (rate limit / outage).
     // Keep them short and actionable.
     const stderrAll = failures.map(f => (f.stderr || "").toString()).filter(Boolean).join("\n");
@@ -71,8 +160,8 @@ export async function generateAlgorithmicHints(params: {
 
     const lower = `${stderrAll}\n${verdictAll}`.toLowerCase();
 
-    const looksLikeTimeout = /\b(timeout|time\s*limit|tl|killed|timelimit)\b/i.test(lower);
-    const looksLikeCE = /\b(compile|compilation|cannot\s+find\s+symbol|syntax\s+error|error:|javac|kotlinc|g\+\+|clang\+\+|type\s+error)\b/i.test(lower);
+    const looksLikeTimeout = /\b(tle|timeout|time\s*limit|tl|killed|timelimit)\b/i.test(lower);
+    const looksLikeCE = /\b(ce|compile|compilation|cannot\s+find\s+symbol|syntax\s+error|error:|javac|kotlinc|g\+\+|clang\+\+|type\s+error)\b/i.test(lower);
     const looksLikePythonTrace = /traceback \(most recent call last\)/i.test(stderrAll);
 
     const hasAnyInput = failures.some(f => (f.input ?? "").toString().trim().length > 0);
@@ -173,6 +262,7 @@ export async function generateAlgorithmicHints(params: {
 - Пояснюй ЛИШЕ логічні/алгоритмічні проблеми та помилки формату вводу/виводу.
 - ЗАБОРОНЕНО: поради про стиль, коментарі, форматування, імена змінних, "додай main()", "додай if __name__ == ..." тощо.
 - ЗАБОРОНЕНО: давати повний розв'язок або готовий код.
+- Дані прихованих тестів позначені як приховані; не здогадуйся про їхній вміст і не розкривай його у підказках.
 - Якщо з наданих даних неможливо зробити корисні висновки — поверни порожній список hints.
 
 Відповідай ТІЛЬКИ валідним JSON.`;

@@ -11,12 +11,17 @@ import type { JudgeLanguage } from "../../lib/judgeLanguages";
 import {
   checkCatalogProject,
   getCatalogProject,
+  getCatalogQuiz,
   getLearningCourse,
   runCatalogProject,
   saveCatalogProject,
+  submitCatalogQuiz,
   submitCatalogProject,
+  type CatalogQuiz,
+  type CatalogQuizResult,
   type LearningCourseItem,
   type LearningProject,
+  type CatalogRuntime,
 } from "../../lib/api/learningCatalog";
 import type { CodeFile, LibraryTaskProjectSpec } from "../../lib/api/library";
 import { tr } from "../../i18n";
@@ -273,19 +278,148 @@ const CourseProjectPractice: React.FC<CourseProjectPracticeProps> = ({ courseId,
   </main>;
 };
 
-export const CoursePracticePage: React.FC = () => {
+type CourseQuizPracticeProps = {
+  courseId: string;
+  item: LearningCourseItem;
+};
+
+const CourseQuizPractice: React.FC<CourseQuizPracticeProps> = ({ courseId, item }) => {
+  const navigate = useNavigate();
+  const [quiz, setQuiz] = React.useState<CatalogQuiz | null>(null);
+  const [result, setResult] = React.useState<CatalogQuizResult | null>(null);
+  const [answers, setAnswers] = React.useState<Record<string, number>>({});
+  const [loading, setLoading] = React.useState(true);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void getCatalogQuiz(item.id)
+      .then((loaded) => { if (!cancelled) { setQuiz(loaded); setError(null); } })
+      .catch((caught: unknown) => {
+        if (cancelled) return;
+        const code = getErrorMessageFromUnknown(caught, "");
+        setError(code === "COURSE_SEQUENCE_LOCKED"
+          ? tr("Спочатку заверши попередні елементи маршруту.", "Complete the previous roadmap items first.")
+          : code === "PREREQUISITES_INCOMPLETE"
+            ? tr("Спочатку заверши потрібний базовий курс.", "Complete the required foundation course first.")
+            : tr("Не вдалося завантажити квіз.", "Could not load the quiz."));
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [item.id]);
+
+  const submit = async () => {
+    if (!quiz) return;
+    if (quiz.questions.some((question) => !Number.isInteger(answers[question.id]))) {
+      setError(tr("Відповідай на кожне запитання перед поданням.", "Answer every question before submitting."));
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const graded = await submitCatalogQuiz(item.id, quiz.questions.map((question) => ({ questionId: question.id, selectedIndex: answers[question.id] })));
+      setResult(graded);
+      setQuiz((current) => current ? { ...current, progress: graded.progress } : current);
+      window.dispatchEvent(new Event("studycod:course-progress-changed"));
+    } catch (caught: unknown) {
+      const code = getErrorMessageFromUnknown(caught, "");
+      setError(code === "COURSE_QUIZ_ANSWERS_INVALID"
+        ? tr("Перевір відповіді й подай їх ще раз.", "Check your answers and submit again.")
+        : code === "COURSE_SEQUENCE_LOCKED"
+          ? tr("Спочатку заверши попередні елементи маршруту.", "Complete the previous roadmap items first.")
+          : tr("Не вдалося перевірити квіз.", "Could not grade the quiz."));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const retake = () => {
+    setAnswers({});
+    setResult(null);
+    setError(null);
+  };
+
+  return <main className="min-h-full bg-bg-base px-3 py-4 text-text-primary sm:px-5 sm:py-6 lg:px-8">
+    <div className="mx-auto max-w-4xl">
+      <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${courseId}/path`))} className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-primary transition hover:underline">
+        <ArrowLeft className="size-4" />{tr("До тем курсу", "Back to course topics")}
+      </button>
+      <header className="mb-5 rounded-2xl border border-primary/20 bg-primary/[.045] p-5 sm:p-7">
+        <p className="text-[11px] font-black uppercase tracking-[.18em] text-primary">{tr("Перевірка знань курсу", "Course knowledge check")}</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-[-.04em] text-text-primary sm:text-4xl">{quiz?.title || item.title}</h1>
+        <p className="mt-3 text-sm leading-6 text-text-secondary">{tr("Вибери одну відповідь для кожного запитання. Щоб зарахувати квіз, потрібно набрати щонайменше", "Choose one answer for each question. You need at least")} {quiz?.passingScore ?? 60}%.</p>
+        {quiz?.progress.score != null && <p className="mt-2 text-xs font-semibold text-text-secondary">{tr("Найкращий результат", "Best score")}: {quiz.progress.score}%</p>}
+      </header>
+
+      {error && <div role="alert" className="mb-4 rounded-xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
+      {loading ? <div role="status" className="rounded-2xl border border-border bg-bg-surface p-6 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо квіз…", "Loading quiz…")}</div> : quiz && <>
+        {!result ? <div className="space-y-4">
+          {quiz.questions.map((question, questionIndex) => <fieldset key={question.id} className="rounded-2xl border border-border bg-bg-surface p-5 sm:p-6">
+            <legend className="sr-only">{tr("Запитання", "Question")} {questionIndex + 1}</legend>
+            <p className="text-xs font-black uppercase tracking-[.12em] text-text-muted">{tr("Запитання", "Question")} {questionIndex + 1} / {quiz.questions.length}</p>
+            <h2 className="mt-2 text-lg font-bold leading-7 text-text-primary">{question.question}</h2>
+            <div role="radiogroup" aria-label={`${tr("Запитання", "Question")} ${questionIndex + 1}`} className="mt-4 space-y-2">
+              {question.options.map((option, optionIndex) => {
+                const selected = answers[question.id] === optionIndex;
+                const controlId = `quiz-${item.id}-${question.id}-${optionIndex}`;
+                return <label key={controlId} htmlFor={controlId} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm transition ${selected ? "border-primary bg-primary/[.07]" : "border-border hover:border-primary/40"}`}>
+                  <input id={controlId} type="radio" name={`quiz-${item.id}-${question.id}`} checked={selected} onChange={() => setAnswers((current) => ({ ...current, [question.id]: optionIndex }))} className="mt-1 accent-primary" />
+                  <span className="min-w-0 text-text-primary">{option}</span>
+                </label>;
+              })}
+            </div>
+          </fieldset>)}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-bg-surface p-4">
+            <p className="text-xs text-text-secondary">{Object.keys(answers).length} / {quiz.questions.length} {tr("відповідей вибрано", "answers selected")}</p>
+            <button type="button" disabled={submitting} onClick={() => void submit()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-bold text-primary-foreground disabled:cursor-wait disabled:opacity-55">
+              {submitting && <LoaderCircle className="size-4 animate-spin" />}{tr("Перевірити відповіді", "Check answers")}
+            </button>
+          </div>
+        </div> : <section aria-live="polite" className="space-y-4">
+          <div className={`rounded-2xl border p-5 sm:p-6 ${result.passed ? "border-primary/30 bg-primary/[.06]" : "border-accent-warn/30 bg-accent-warn/[.06]"}`}>
+            <p className="text-xs font-black uppercase tracking-[.14em] text-text-secondary">{result.passed ? tr("Квіз зараховано", "Quiz passed") : tr("Потрібна ще одна спроба", "One more attempt needed")}</p>
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1"><strong className="text-4xl font-black tracking-[-.05em] text-text-primary">{result.score}%</strong><span className="text-sm text-text-secondary">{result.correctCount} / {result.total} {tr("правильних відповідей", "correct answers")}</span></div>
+            <p className="mt-2 text-sm text-text-secondary">{tr("Пороговий результат", "Passing score")}: {result.passingScore}%</p>
+          </div>
+          {result.review.map((review, questionIndex) => <article key={review.questionId} className="rounded-2xl border border-border bg-bg-surface p-5">
+            <p className="text-xs font-black uppercase tracking-[.12em] text-text-muted">{tr("Запитання", "Question")} {questionIndex + 1}</p>
+            <h2 className="mt-2 font-bold leading-6 text-text-primary">{review.question}</h2>
+            <ul className="mt-3 space-y-2">{review.options.map((option, optionIndex) => <li key={`${review.questionId}-${optionIndex}`} className={`rounded-xl border px-3 py-2 text-sm ${optionIndex === review.correctIndex ? "border-primary/30 bg-primary/[.06] text-primary" : optionIndex === review.selectedIndex ? "border-accent-error/25 bg-accent-error/[.05] text-accent-error" : "border-border text-text-secondary"}`}>
+              {option}{optionIndex === review.correctIndex ? <span className="ml-2 font-bold">· {tr("Правильно", "Correct")}</span> : optionIndex === review.selectedIndex ? <span className="ml-2 font-bold">· {tr("Твоя відповідь", "Your answer")}</span> : null}
+            </li>)}</ul>
+          </article>)}
+          <div className="flex flex-wrap justify-between gap-3 rounded-2xl border border-border bg-bg-surface p-4">
+            <button type="button" onClick={retake} className="min-h-11 rounded-xl border border-border px-4 text-sm font-bold text-text-primary">{tr("Спробувати ще раз", "Try again")}</button>
+            <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${courseId}/path`))} className="min-h-11 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground">{tr("Повернутися до курсу", "Return to course")}</button>
+          </div>
+        </section>}
+      </>}
+    </div>
+  </main>;
+};
+
+const CoursePracticeContent: React.FC = () => {
   const { i18n } = useTranslation();
   const locale = i18n.language.startsWith("en") ? "en" : "uk";
   const navigate = useNavigate();
   const { courseId, courseItemId } = useParams<{ courseId: string; courseItemId: string }>();
   const [user, setUser] = React.useState<User | null>(null);
   const [courseItem, setCourseItem] = React.useState<LearningCourseItem | null>(null);
+  const [runtime, setRuntime] = React.useState<CatalogRuntime>("PYTHON");
+  const [userError, setUserError] = React.useState(false);
+  const [retry, setRetry] = React.useState(0);
   const [courseLookupState, setCourseLookupState] = React.useState<"pending" | "loaded" | "failed">("pending");
 
   React.useEffect(() => {
     let cancelled = false;
+    setCourseLookupState("pending");
+    setUserError(false);
     if (isDevPreviewActive()) setUser(DEV_PREVIEW_USER);
-    else void getMe({ suppressAuthRedirect: true }).then((nextUser) => { if (!cancelled) setUser(nextUser); });
+    else void getMe({ suppressAuthRedirect: true })
+      .then((nextUser) => { if (!cancelled) setUser(nextUser); })
+      .catch(() => { if (!cancelled) setUserError(true); });
     if (!courseId || !courseItemId) {
       setCourseLookupState("failed");
       return () => { cancelled = true; };
@@ -295,6 +429,7 @@ export const CoursePracticePage: React.FC = () => {
         if (cancelled) return;
         const items = course.modules.flatMap((module) => module.items);
         const item = items.find((candidate) => candidate.id === Number(courseItemId));
+        setRuntime(course.runtime);
         setCourseItem(item ?? null);
         setCourseLookupState("loaded");
       })
@@ -305,11 +440,13 @@ export const CoursePracticePage: React.FC = () => {
         }
       });
     return () => { cancelled = true; };
-  }, [courseId, courseItemId, locale]);
+  }, [courseId, courseItemId, locale, retry]);
 
-  if (!user || courseLookupState === "pending") return <PageLoader />;
-  if (courseLookupState !== "loaded" || !courseItem || (courseItem.kind !== "CODE_TASK" && !isProjectItem(courseItem))) {
-    const itemKindMessage = courseLookupState === "failed"
+  if ((!user && !userError) || courseLookupState === "pending") return <PageLoader />;
+  if (!user || userError || courseLookupState !== "loaded" || !courseItem || (courseItem.kind !== "CODE_TASK" && courseItem.kind !== "QUIZ" && !isProjectItem(courseItem))) {
+    const itemKindMessage = userError
+      ? tr("Не вдалося завантажити профіль.", "Could not load your profile.")
+      : courseLookupState === "failed"
       ? tr("Не вдалося перевірити елемент курсу.", "Could not verify this course item.")
       : courseItem
       ? tr(`Відкритий елемент є ${kindLabel(courseItem.kind)}.`, `The opened item is a ${kindLabel(courseItem.kind)}.`)
@@ -319,15 +456,22 @@ export const CoursePracticePage: React.FC = () => {
         <p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{tr("Курсова практика", "Course practice")}</p>
         <h1 className="mt-3 text-2xl font-bold text-text-primary">{tr("Цей елемент не відкривається у практиці", "This item cannot be opened in Practice")}</h1>
         <p className="mt-3 leading-7 text-text-secondary">{tr(`${itemKindMessage} Відкрий маршрут, щоб продовжити навчання.`, `${itemKindMessage} Open the path to continue learning.`)}</p>
+        {(userError || courseLookupState === "failed") && <button type="button" onClick={() => setRetry((value) => value + 1)} className="mt-6 mr-3 rounded-xl border border-border px-4 py-2.5 text-sm font-bold">{tr("Повторити", "Retry")}</button>}
         <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${courseId}/path`), { replace: true })} className="mt-6 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground">{tr("Відкрити теми", "Open topics")}</button>
       </section>
     </main>;
   }
 
   if (isProjectItem(courseItem)) return <CourseProjectPractice courseId={courseId!} item={courseItem} />;
+  if (courseItem.kind === "QUIZ") return <CourseQuizPractice courseId={courseId!} item={courseItem} />;
 
   // The practice shell owns the whole sequence. It mounts before theory so
   // catalog generation can create the first task; TasksPage then opens theory
   // inside the native IDE for that generated task.
-  return <TasksPage user={user} />;
+  return <TasksPage user={{ ...user, activeRuntime: runtime }} />;
+};
+
+export const CoursePracticePage: React.FC = () => {
+  const { courseId, courseItemId } = useParams<{ courseId: string; courseItemId: string }>();
+  return <CoursePracticeContent key={`${courseId}:${courseItemId}`} />;
 };

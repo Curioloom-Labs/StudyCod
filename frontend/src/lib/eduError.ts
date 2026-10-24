@@ -78,6 +78,8 @@ export function getEduErrorMessage(error: unknown, fallback: string): string {
     INVALID_INPUT: ["Перевірте заповнені поля та спробуйте ще раз.", "Check the form fields and try again."],
     INVALID_ANSWERS: ["Перевірте відповіді та спробуйте надіслати їх ще раз.", "Check your answers and try submitting again."],
     AI_GENERATION_FAILED: ["Не вдалося згенерувати матеріал. Спробуйте ще раз або додайте його вручну.", "Material generation failed. Try again or add it manually."],
+    COURSE_MUST_BE_DRAFT_TO_EDIT_STRUCTURE: ["Щоб додати модуль або урок до синхронізованого курсу, спершу зніми курс з публікації. Наявний матеріал можна редагувати окремо.", "Unpublish a synced course before adding modules or lessons. Existing material can be edited in place."],
+    COURSE_CONTENT_INCOMPLETE: ["Зміна не збережена: матеріал має залишатися повним і коректним, поки курс опублікований.", "The change was not saved: published course content must remain complete and valid."],
     "Network Error": ["Немає зв’язку із сервером. Перевірте інтернет і спробуйте ще раз.", "Cannot reach the server. Check your connection and try again."],
   };
   const localized = messages[message];

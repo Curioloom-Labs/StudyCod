@@ -64,3 +64,27 @@ courses:
     level: SPECIALIZATION
     prerequisites: [ cpp-core ]
     source: theories/en/cpp_advanced_theory.yml
+  - key: olympiad-python
+    title: "Olympiad Programming: Python"
+    description: Python olympiad algorithms, from prefix sums to linear-time dynamic programming.
+    runtime: PYTHON
+    level: SPECIALIZATION
+    status: PUBLISHED
+    prerequisites: [ python-core ]
+    source: theories/en/olympiad_python_theory.yml
+  - key: olympiad-java
+    title: "Olympiad Programming: Java"
+    description: Java olympiad algorithms, with careful numeric types, fast input, and JVM-aware practice.
+    runtime: JAVA
+    level: SPECIALIZATION
+    status: PUBLISHED
+    prerequisites: [ java-core ]
+    source: theories/en/olympiad_java_theory.yml
+  - key: olympiad-cpp
+    title: "Olympiad Programming: C++"
+    description: C++ olympiad algorithms with STL, boundary reasoning, 64-bit sums, and fast input.
+    runtime: CPP
+    level: SPECIALIZATION
+    status: PUBLISHED
+    prerequisites: [ cpp-core ]
+    source: theories/en/olympiad_cpp_theory.yml

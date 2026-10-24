@@ -11,6 +11,44 @@ export const reducedMotionTransition: Transition = {
   duration: 0.18,
   ease: "linear"
 };
+export const pageVariants: Variants = {
+  initial: {
+    opacity: 0
+  },
+  animate: {
+    opacity: 1,
+    transition: {
+      duration: 0.15,
+      ease: easeOutExpo
+    }
+  },
+  exit: {
+    opacity: 0,
+    transition: {
+      duration: 0.12,
+      ease: easeOutQuint
+    }
+  }
+};
+export const reducedPageVariants: Variants = {
+  initial: {
+    opacity: 0
+  },
+  animate: {
+    opacity: 1,
+    transition: {
+      duration: 0.15,
+      ease: "linear"
+    }
+  },
+  exit: {
+    opacity: 0,
+    transition: {
+      duration: 0.12,
+      ease: "linear"
+    }
+  }
+};
 export const overlayVariants: Variants = {
   initial: {
     opacity: 0,

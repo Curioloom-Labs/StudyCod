@@ -15,6 +15,7 @@ type LocalizedCurriculum = {
   courses: Map<string, CurriculumCourseDefinition>;
   topics: Map<string, CurriculumTopic>;
   projects: Map<string, CurriculumMiniProject>;
+  moduleTitles: Map<string, string>;
 };
 
 const cache = new Map<CurriculumLocale, LocalizedCurriculum>();
@@ -80,7 +81,14 @@ function sanitizeProjectContent(content: Record<string, unknown>): Record<string
   return {
     ...content,
     ...(typeof content.markdown === "string" ? { markdown: withoutLegacyDocumentation(content.markdown) } : {}),
-    ...(projectSpec ? { projectSpec } : {}),
+    ...(projectSpec ? {
+      projectSpec: (() => {
+        // A roadmap response includes item content. Keep authored Judge tests
+        // on the server even when a learner opens the course path.
+        const { tests: _tests, checkSpec: _checkSpec, ...learnerSpec } = projectSpec;
+        return learnerSpec;
+      })(),
+    } : {}),
   };
 }
 
@@ -118,8 +126,12 @@ export function getLocalizedCurriculum(locale: CurriculumLocale): LocalizedCurri
   const courses = new Map(manifest.courses.map((course) => [course.key, course]));
   const topics = new Map<string, CurriculumTopic>();
   const projects = new Map<string, CurriculumMiniProject>();
+  const moduleTitles = new Map<string, string>();
   for (const course of manifest.courses) {
     const localizedTopics = loadCurriculumTopics(course, root, locale);
+    for (const topic of localizedTopics) {
+      if (topic.moduleKey && topic.moduleTitle) moduleTitles.set(topic.moduleKey, topic.moduleTitle);
+    }
     if (locale === "en") {
       // Course item IDs were created from the Ukrainian curriculum keys. The
       // English copies may have slugs derived from translated titles, so pair
@@ -137,7 +149,7 @@ export function getLocalizedCurriculum(locale: CurriculumLocale): LocalizedCurri
     }
     for (const project of loadCurriculumMiniProjects(course.key, root, locale)) projects.set(`${course.key}.${project.key}`, project);
   }
-  const value = { courses, topics, projects };
+  const value = { courses, topics, projects, moduleTitles };
   cache.set(locale, value);
   return value;
 }
@@ -145,6 +157,34 @@ export function getLocalizedCurriculum(locale: CurriculumLocale): LocalizedCurri
 export function localizedCourseMetadata(courseKey: string | null | undefined, locale: CurriculumLocale) {
   if (!courseKey) return null;
   return getLocalizedCurriculum(locale).courses.get(courseKey) ?? null;
+}
+
+type CurriculumAuthoringOverrides = Record<string, unknown> | null | undefined;
+
+function hasAuthoringOverride(overrides: CurriculumAuthoringOverrides, field: string): boolean {
+  return Boolean(overrides && typeof overrides === "object" && overrides[field] === true);
+}
+
+/** Keep authored catalog fields visible after the localized source overlay. */
+export function localizedCourseTitle(course: {
+  catalogKey?: string | null;
+  title: string;
+  authoringOverrides?: CurriculumAuthoringOverrides;
+}, locale: CurriculumLocale): string {
+  // Course Studio edits the Ukrainian source fields. English catalog metadata
+  // has its own source and remains authoritative until localized authoring is
+  // available in the editor.
+  if (locale === "uk" && hasAuthoringOverride(course.authoringOverrides, "title")) return course.title;
+  return localizedCourseMetadata(course.catalogKey, locale)?.title ?? course.title;
+}
+
+export function localizedCourseDescription(course: {
+  catalogKey?: string | null;
+  description?: string | null;
+  authoringOverrides?: CurriculumAuthoringOverrides;
+}, locale: CurriculumLocale): string | null | undefined {
+  if (locale === "uk" && hasAuthoringOverride(course.authoringOverrides, "description")) return course.description ?? null;
+  return localizedCourseMetadata(course.catalogKey, locale)?.description ?? course.description;
 }
 
 export function localizedPrerequisiteTitle(courseKey: string | null | undefined, locale: CurriculumLocale, fallback: string): string {
@@ -155,8 +195,15 @@ export function localizedPrerequisiteTitle(courseKey: string | null | undefined,
  * Overlay the authored locale onto the DB item while preserving its numeric ID
  * and progress relationship. Progress therefore remains shared by languages.
  */
-export function localizeCourseItem<T extends { contentKey?: string | null; title: string; content?: Record<string, unknown> | null }>(item: T, locale: CurriculumLocale): T {
+export function localizeCourseItem<T extends {
+  contentKey?: string | null;
+  title: string;
+  content?: Record<string, unknown> | null;
+}>(item: T, locale: CurriculumLocale): T {
   const baseContent = sanitizeProjectContent(item.content ?? {});
+  // DB content is the Ukrainian authoring source. English text is maintained
+  // in the localized curriculum files, so applying a Ukrainian override to
+  // that view would silently replace its translation.
   if (locale === "uk" || !item.contentKey) return { ...item, content: baseContent };
   const contentKey = String(item.contentKey);
   const courseKey = contentKey.split(".")[0] || "";
@@ -164,8 +211,8 @@ export function localizeCourseItem<T extends { contentKey?: string | null; title
   const topicMatch = contentKey.match(/^([a-z0-9-]+)\.([a-z0-9-]+)\.(theory|practice|practice-(\d+))$/);
   if (topicMatch) {
     const topic = curriculum.topics.get(`${topicMatch[1]}.${topicMatch[2]}`);
-    if (!topic) return item;
-     const content = { ...baseContent };
+    if (!topic) return { ...item, content: baseContent };
+    const content = { ...baseContent };
     if (topicMatch[3] === "theory") {
       content.markdown = topic.content;
       content.objectives = splitObjectives(topic.description);
@@ -174,6 +221,13 @@ export function localizeCourseItem<T extends { contentKey?: string | null; title
     const sequence = Number(topicMatch[4] || 1);
     const exercise = { ...((content.exercise as Record<string, unknown> | undefined) ?? {}) };
     exercise.prompt = topic.exerciseFocus;
+    if (exercise.learningContract && typeof exercise.learningContract === "object" && !Array.isArray(exercise.learningContract)) {
+      const learningContract = { ...(exercise.learningContract as Record<string, unknown>) };
+      if (learningContract.kind === "OLYMPIAD_ALGORITHMIC_PRACTICE") {
+        learningContract.objective = topic.exerciseFocus;
+      }
+      exercise.learningContract = learningContract;
+    }
     exercise.starterCode = starterCode(curriculum.courses.get(courseKey)?.runtime ?? "PYTHON", locale);
     content.exercise = exercise;
     const total = Number(exercise.total || content.total || 1);
@@ -186,8 +240,8 @@ export function localizeCourseItem<T extends { contentKey?: string | null; title
   const projectMatch = contentKey.match(/^([a-z0-9-]+)\.project\.([a-z0-9-]+)$/);
   if (projectMatch) {
     const project = curriculum.projects.get(`${projectMatch[1]}.${projectMatch[2]}`);
-    if (!project) return item;
-     const content = { ...baseContent };
+    if (!project) return { ...item, content: baseContent };
+    const content = { ...baseContent };
     content.markdown = projectMarkdown(project, locale);
     content.projectSpec = {
       ...(content.projectSpec as Record<string, unknown> | undefined),
@@ -196,19 +250,39 @@ export function localizeCourseItem<T extends { contentKey?: string | null; title
       requiredTopicKeys: project.requiredTopicKeys,
       milestones: project.milestones,
       acceptanceCriteria: project.acceptanceCriteria,
-       template: withoutLegacyDocumentation(project.template),
+      template: withoutLegacyDocumentation(project.template),
       ...(project.checkSpec ? { checkSpec: project.checkSpec } : {}),
     };
     return { ...item, title: `Mini-project: ${project.title}`, content };
   }
 
+  if (contentKey === `${courseKey}.final-assessment` && courseKey.startsWith("olympiad-")) {
+    const topic = curriculum.topics.get(`${courseKey}.combine-techniques`);
+    if (!topic) return { ...item, content: baseContent };
+    const content = { ...baseContent };
+    const exercise = { ...((content.exercise as Record<string, unknown> | undefined) ?? {}) };
+    exercise.prompt = topic.exerciseFocus;
+    if (exercise.learningContract && typeof exercise.learningContract === "object" && !Array.isArray(exercise.learningContract)) {
+      const learningContract = { ...(exercise.learningContract as Record<string, unknown>) };
+      if (learningContract.kind === "OLYMPIAD_ALGORITHMIC_PRACTICE") learningContract.objective = topic.exerciseFocus;
+      exercise.learningContract = learningContract;
+    }
+    exercise.starterCode = starterCode(curriculum.courses.get(courseKey)?.runtime ?? "PYTHON", locale);
+    content.exercise = exercise;
+    return {
+      ...item,
+      title: localeLabel(locale, "Підсумковий алгоритмічний залік", "Final algorithmic assessment"),
+      content,
+    };
+  }
+
   if (contentKey === `${courseKey}.final-assessment`) {
     const final = finalAssessment(locale);
     const content = {
-      ...(item.content ?? {}),
+      ...baseContent,
       markdown: final.markdown,
       projectSpec: {
-        ...((item.content ?? {}).projectSpec as Record<string, unknown> | undefined),
+        ...((baseContent.projectSpec as Record<string, unknown> | undefined) ?? {}),
         skills: localeLabel(locale, "інтеграція, документація, перевірка", "integration, documentation, verification").split(", "),
         milestones: [
           {
@@ -230,7 +304,7 @@ export function localizeCourseItem<T extends { contentKey?: string | null; title
         acceptanceCriteria: [
           localeLabel(locale, "Усі етапи виконані", "All milestones are complete"),
           localeLabel(locale, "Є короткі нотатки реалізації", "Short implementation notes are included"),
-           localeLabel(locale, "Є короткі нотатки про запуск і обмеження", "Short setup and limitation notes are included"),
+          localeLabel(locale, "Є короткі нотатки про запуск і обмеження", "Short setup and limitation notes are included"),
         ],
         template: localeLabel(locale, "# Фінальна робота\n\n## Рішення\n\n## Перевірка\n", "# Final work\n\n## Solution\n\n## Verification\n"),
       },
@@ -250,6 +324,11 @@ export function localizedModuleTitle(contentKey: string | null | undefined, loca
   if (topicMatch) {
     const topic = getLocalizedCurriculum(locale).topics.get(`${topicMatch[1]}.${topicMatch[2]}`);
     if (topic) return topic.title;
+  }
+  const groupedMatch = key.match(/^([a-z0-9-]+)\.module\.(\d+)$/i);
+  if (groupedMatch) {
+    const localizedModule = getLocalizedCurriculum(locale).moduleTitles.get(key);
+    if (localizedModule) return localizedModule;
   }
   return fallback;
 }

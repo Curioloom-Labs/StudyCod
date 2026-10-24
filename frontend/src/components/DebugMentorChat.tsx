@@ -12,20 +12,21 @@ type Props = {
   stderr?: string | null;
   taskTitle?: string;
   taskText?: string;
+  taskId?: number | string;
   failures?: ExplainErrorFailure[];
   className?: string;
 };
 
 /**
- * Multi-turn Socratic debug mentor. The student chats with an AI that guides
- * with questions and never hands over a full solution (enforced server-side).
+ * Multi-turn Socratic debug mentor. The student gets progressive guidance and,
+ * after using earlier hints, a full reasoning walkthrough without ready code.
  * Stateless: the whole (bounded) transcript is replayed on each turn.
  */
 export const DebugMentorChat: React.FC<Props> = (props) => {
   useTranslation();
   const intro = tr(
-    "Привіт! Я допоможу зрозуміти, ЧОМУ код не працює — навідними питаннями, без готового розв'язку. Опиши, що вже пробував, або просто запитай.",
-    "Hi! I'll help you figure out WHY your code fails — with guiding questions, never a ready solution. Tell me what you've tried, or just ask."
+    "Привіт! Я допоможу зрозуміти, ЧОМУ код не працює — поступовими підказками й розбором міркування, без готового коду. Опиши, що вже пробував, або просто запитай.",
+    "Hi! I'll help you figure out WHY your code fails with progressive hints and reasoning, without copyable code. Tell me what you've tried, or just ask."
   );
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<DebugChatMessage[]>([{ role: "mentor", content: intro }]);
@@ -47,8 +48,8 @@ export const DebugMentorChat: React.FC<Props> = (props) => {
     });
   };
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (requestedText?: string) => {
+    const text = String(requestedText ?? input).trim();
     if (!text || loading) return;
     const nextMessages: DebugChatMessage[] = [...messages, { role: "student", content: text }];
     setMessages(nextMessages);
@@ -63,6 +64,7 @@ export const DebugMentorChat: React.FC<Props> = (props) => {
         stderr: props.stderr ?? undefined,
         taskTitle: props.taskTitle,
         taskText: props.taskText,
+        taskId: props.taskId,
         failures: props.failures,
         messages: nextMessages,
       });
@@ -84,6 +86,25 @@ export const DebugMentorChat: React.FC<Props> = (props) => {
       void send();
     }
   };
+
+  const helpLevels = [
+    {
+      label: tr("1 · Запитання", "1 · Question"),
+      prompt: tr("Рівень 1: постав одне навідне запитання, яке допоможе мені самому помітити наступний крок. Не розкривай ідею.", "Help level 1: ask one guiding question that helps me notice the next step myself. Do not reveal the idea."),
+    },
+    {
+      label: tr("2 · Ідея", "2 · Idea"),
+      prompt: tr("Рівень 2: поясни напрямок ідеї для цієї задачі коротко, не даючи повний план.", "Help level 2: briefly explain the direction of the idea for this task without giving the full plan."),
+    },
+    {
+      label: tr("3 · План", "3 · Plan"),
+      prompt: tr("Рівень 3: дай частковий план або псевдокод і поясни, що мені ще потрібно завершити самому.", "Help level 3: give a partial plan or pseudocode and explain what I still need to work out myself."),
+    },
+    {
+      label: tr("4 · Повний розбір", "4 · Full walkthrough"),
+      prompt: tr("Рівень 4: якщо мої попередні спроби й використані підказки відповідають умовам, поясни повністю ідею, коректність, складність і крайові випадки; готового коду не давай.", "Help level 4: if my prior attempts and hints meet the criteria, fully explain the idea, correctness, complexity, and edge cases; do not provide ready code."),
+    },
+  ];
 
   if (!open) {
     return (
@@ -126,19 +147,28 @@ export const DebugMentorChat: React.FC<Props> = (props) => {
         )}
       </div>
 
-      <div className="flex items-end gap-2 border-t border-border p-2">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          rows={2}
-          disabled={loading}
-          placeholder={tr("Опиши, що думаєш або питай…", "Describe your thinking or ask…")}
-          className="flex-1 resize-none bg-bg-base border border-border text-text-primary font-mono text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
-        />
-        <Button variant="secondary" size="sm" onClick={send} disabled={loading || !input.trim()}>
-          {tr("Надіслати", "Send")}
-        </Button>
+      <div className="border-t border-border p-2">
+        <div role="group" className="mb-2 flex flex-wrap gap-1.5" aria-label={tr("Рівні допомоги", "Help levels")}>
+          {helpLevels.map((level) => (
+            <Button key={level.label} variant="ghost" size="sm" disabled={loading} onClick={() => void send(level.prompt)}>
+              {level.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-end gap-2">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            rows={2}
+            disabled={loading}
+            placeholder={tr("Опиши, що думаєш або питай…", "Describe your thinking or ask…")}
+            className="flex-1 resize-none bg-bg-base border border-border text-text-primary font-mono text-xs px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+          />
+          <Button variant="secondary" size="sm" onClick={() => void send()} disabled={loading || !input.trim()}>
+            {tr("Надіслати", "Send")}
+          </Button>
+        </div>
       </div>
     </div>
   );

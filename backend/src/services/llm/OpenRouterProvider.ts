@@ -1266,6 +1266,16 @@ export class OpenRouterProvider implements LLMProvider {
       const primaryParseError = errorMessage(error);
       let repairParseError: string | null = null;
 
+      // A repair request can only help when the model returned a JSON object
+      // candidate. Provider sentinels and plain text (for example
+      // "User Safety: safe") cannot be repaired into a trustworthy task; do
+      // not spend two more model calls asking a model to invent JSON from it.
+      const hasJsonCandidate = extractBalancedJsonObject(content) !== null
+        || /^\s*(?:```(?:json)?\s*)?\{/.test(content);
+      if (!hasJsonCandidate) {
+        throw new Error('AI_GENERATION_FAILED: Model returned non-JSON text; skipped JSON repair');
+      }
+
       logger.debug('OpenRouter JSON parse failed on primary response; attempting repair', {
         model,
         responseId: response.id || 'unknown',

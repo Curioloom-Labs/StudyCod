@@ -52,12 +52,16 @@ function hasFunctionTaskNoun(text: string): boolean {
 
 export function looksLikeFunctionImplementationTask(practicalText: string): boolean {
   const raw = String(practicalText ?? "");
-  const text = raw.toLowerCase();
+  // A generated debugging exercise intentionally embeds runnable code in the
+  // learner-facing statement. Function syntax inside that draft is not a
+  // request for a function-only submission; apply this policy to prose only.
+  const prose = raw.replace(/```[\s\S]*?```/g, " ");
+  const text = prose.toLowerCase();
 
   if (hasFunctionTaskNoun(text) && hasFunctionTaskVerb(text)) return true;
 
-  if (/\bdef\s+[a-z_][a-z0-9_]*\s*\(/i.test(raw)) return true;
-  if (/\bpublic\s+static\s+\w+\s+\w+\s*\(/i.test(raw)) return true;
+  if (/\bdef\s+[a-z_][a-z0-9_]*\s*\(/i.test(prose)) return true;
+  if (/\bpublic\s+static\s+\w+\s+\w+\s*\(/i.test(prose)) return true;
 
   if (hasFunctionTaskNoun(text) && /(must|should|has to)\s+return|повинн\w*\s+поверт|має\s+поверт/.test(text)) return true;
 

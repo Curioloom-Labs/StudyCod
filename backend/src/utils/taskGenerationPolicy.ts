@@ -12,3 +12,9 @@ export function canUseTaskExamplesAfterTestFailure(error: { statusCode?: unknown
   if (error?.details?.validationError) return false;
   return [429, 503, 504].includes(Number(error?.statusCode));
 }
+
+/** A Judge oracle can prove that the generated statement or its public examples need a fresh task variant. */
+export function shouldRegenerateOlympiadTask(error: { details?: { validationError?: unknown } } | undefined): boolean {
+  const validationError = String(error?.details?.validationError ?? "");
+  return /TASK_CONTRACT_REVIEW_FAILED\[(?:statement|publicExamples)\]/.test(validationError);
+}

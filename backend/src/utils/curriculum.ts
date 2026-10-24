@@ -15,6 +15,7 @@ export type CurriculumCourseDefinition = {
   runtime: CurriculumRuntime;
   level: CurriculumLevel;
   isBase?: boolean;
+  status?: "DRAFT" | "PUBLISHED";
   prerequisites?: string[];
   source: string;
 };
@@ -187,12 +188,32 @@ export type CurriculumManifest = {
 export type CurriculumTopic = {
   key: string;
   title: string;
+  order: number;
+  moduleKey?: string;
+  moduleTitle?: string;
+  moduleOrder?: number;
+  lessonOrder?: number;
   description: string;
   exerciseFocus: string;
   content: string;
   sourcePath: string;
   sourceHash: string;
 };
+
+const OLYMPIAD_MODULES = [
+  { first: 1, last: 3, uk: "Основи олімпіадного програмування", en: "Olympiad programming foundations" },
+  { first: 4, last: 7, uk: "Масиви та базові алгоритми", en: "Arrays and basic algorithms" },
+  { first: 8, last: 10, uk: "Префіксні суми", en: "Prefix sums" },
+  { first: 11, last: 12, uk: "Підмасиви", en: "Subarrays" },
+  { first: 13, last: 16, uk: "Сортування та пошук", en: "Sorting and searching" },
+  { first: 17, last: 20, uk: "Структури даних", en: "Data structures" },
+  { first: 21, last: 24, uk: "Метод двох вказівників", en: "Two pointers" },
+  { first: 25, last: 29, uk: "Теорія чисел", en: "Number theory" },
+  { first: 30, last: 33, uk: "Жадібні алгоритми", en: "Greedy algorithms" },
+  { first: 34, last: 38, uk: "Динамічне програмування", en: "Dynamic programming" },
+  { first: 39, last: 42, uk: "Комбіновані задачі", en: "Combined problems" },
+  { first: 43, last: 47, uk: "Олімпіадний практикум", en: "Olympiad workshop" },
+] as const;
 
 export type CurriculumQualityIssue = {
   severity: "error" | "warning";
@@ -235,6 +256,9 @@ const SPECIALIZATION_COURSE_KEYS = new Set([
   "computer-vision",
   "java-advanced",
   "cpp-advanced",
+  "olympiad-python",
+  "olympiad-java",
+  "olympiad-cpp",
 ]);
 
 const FORBIDDEN_LESSON_MARKUP_RE = /(?:STUDYCOD_LEARNING_META|exercise_focus:|^###\s+(?:Крок за кроком|Перед вправою|Підготовка до мініпроєкту)\b)/im;
@@ -259,6 +283,18 @@ function sectionText(content: string, entries: Array<{ title: string; index: num
   const next = entries[entryIndex + 1];
   return content.slice(entry.end, next ? next.index : content.length).trim();
 }
+
+const SUPPORTED_ALGORITHM_VISUALIZERS = [
+  "prefix-sums",
+  "enumerate-subarrays",
+  "kadane",
+  "insertion-sort",
+  "binary-search",
+  "two-pointers",
+  "sliding-window",
+  "sieve",
+  "dp-counting",
+] as const;
 
 function interactiveIssues(content: string, courseKey: string, topicKey: string): CurriculumQualityIssue[] {
   const issues: CurriculumQualityIssue[] = [];
@@ -296,6 +332,36 @@ function interactiveIssues(content: string, courseKey: string, topicKey: string)
       const steps = Array.isArray(spec.steps) ? spec.steps : [];
       if (!code.length || !steps.length) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs code and trace steps` });
       if (code.length && steps.length && steps.some((step: unknown) => !isRecord(step) || !Number.isInteger(step.line) || Number(step.line) < 1 || Number(step.line) > code.length)) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} contains a step outside the code range` });
+    } else if (spec.type === "algorithm") {
+      const examples = Array.isArray(spec.examples) ? spec.examples : [];
+      if (!(SUPPORTED_ALGORITHM_VISUALIZERS as readonly string[]).includes(String(spec.algorithm)) || !examples.length) {
+        issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs a supported algorithm and examples` });
+      }
+      for (const [exampleIndex, rawExample] of examples.entries()) {
+        const example = isRecord(rawExample) ? rawExample : {};
+        const values = Array.isArray(example.values) ? example.values : [];
+        if (!values.length || values.length > 8 || !values.every((value) => Number.isSafeInteger(value))) {
+          issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} example #${exampleIndex + 1} needs 1–8 safe integer values` });
+        }
+        if (example.queries != null && (!Array.isArray(example.queries) || example.queries.some((query: unknown) => !Array.isArray(query) || query.length !== 2 || !Number.isInteger(query[0]) || !Number.isInteger(query[1]) || Number(query[0]) < 0 || Number(query[0]) > Number(query[1]) || Number(query[1]) >= values.length))) {
+          issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} example #${exampleIndex + 1} has an invalid inclusive range query` });
+        }
+        if (example.target != null && !Number.isSafeInteger(example.target)) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} example #${exampleIndex + 1} needs an integer target` });
+        if (example.threshold != null && (!Number.isSafeInteger(example.threshold) || Number(example.threshold) < 0)) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} example #${exampleIndex + 1} needs a non-negative integer threshold` });
+        if (example.size != null && !Number.isInteger(example.size)) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} example #${exampleIndex + 1} needs an integer size` });
+        if (["binary-search", "two-pointers"].includes(String(spec.algorithm)) && values.some((value: number, valueIndex: number) => valueIndex > 0 && value < Number(values[valueIndex - 1]))) {
+          issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} example #${exampleIndex + 1} must be sorted for this algorithm` });
+        }
+        if (spec.algorithm === "sliding-window" && values.some((value: number) => value < 0)) {
+          issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} example #${exampleIndex + 1} must use non-negative values` });
+        }
+        if (spec.algorithm === "sieve" && (Number(example.size ?? values[0]) < 2 || Number(example.size ?? values[0]) > 50)) {
+          issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} sieve size must be between 2 and 50` });
+        }
+        if (spec.algorithm === "dp-counting" && (Number(example.size ?? values[0]) < 1 || Number(example.size ?? values[0]) > 20)) {
+          issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} DP size must be between 1 and 20` });
+        }
+      }
     } else if (spec.type === "memory") {
       if (!Array.isArray(spec.stack) && !Array.isArray(spec.heap)) issues.push({ severity: "error", courseKey, topicKey, message: `${prefix} needs stack or heap boxes` });
     } else if (spec.type === "dispatch") {
@@ -447,8 +513,9 @@ export function loadCurriculumManifest(root = repoRoot(), locale: CurriculumLoca
     assert(!keys.has(course.key), `duplicate course key ${course.key}`);
     keys.add(course.key);
     assert(typeof course.title === "string" && course.title.trim(), `${course.key}: title is required`);
-    assert(["JAVA", "PYTHON", "CPP"].includes(course.runtime as string), `${course.key}: invalid runtime`);
+      assert(["JAVA", "PYTHON", "CPP"].includes(course.runtime as string), `${course.key}: invalid runtime`);
     assert(["FOUNDATION", "SPECIALIZATION", "ADVANCED"].includes(course.level as string), `${course.key}: invalid level`);
+      assert(course.status == null || ["DRAFT", "PUBLISHED"].includes(course.status), `${course.key}: invalid status`);
     assert(typeof course.source === "string" && course.source.startsWith("theories/"), `${course.key}: source must be under theories/`);
     const prerequisites = Array.isArray(course.prerequisites) ? course.prerequisites.map(String) : [];
     assert(!prerequisites.includes(course.key), `${course.key}: cannot depend on itself`);
@@ -555,6 +622,9 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
     const theory = typeof theoryValue === "string" ? theoryValue : isRecord(theoryValue) ? theoryValue.content : undefined;
     const title = String(topicRecord.title || "").trim();
     const key = String(topicRecord.key || slug(title));
+    const order = Number.isInteger(Number(topicRecord.order)) && Number(topicRecord.order) > 0
+      ? Number(topicRecord.order)
+      : index + 1;
     if (locale === "uk" && SPECIALIZATION_COURSE_KEYS.has(course.key)) {
       const qualityError = topicQualityIssues(course.key, topic, index).find((issue) => issue.severity === "error");
       assert(!qualityError, `${course.key}/${key}: ${qualityError?.message || "quality check failed"}`);
@@ -588,7 +658,22 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
       } catch {
         throw new Error(`CURRICULUM_INVALID: ${course.key}/${key}: interactive block contains invalid JSON`);
       }
-      assert(isRecord(spec) && typeof spec.type === "string" && ["prediction", "spot-the-bug", "trace", "memory", "dispatch", "quiz"].includes(spec.type), `${course.key}/${key}: unsupported interactive block type`);
+    assert(isRecord(spec) && typeof spec.type === "string" && ["prediction", "spot-the-bug", "trace", "algorithm", "memory", "dispatch", "quiz"].includes(spec.type), `${course.key}/${key}: unsupported interactive block type`);
+    if (isRecord(spec) && spec.type === "algorithm") {
+      assert((SUPPORTED_ALGORITHM_VISUALIZERS as readonly string[]).includes(String(spec.algorithm)), `${course.key}/${key}: unsupported algorithm visualizer`);
+      assert(Array.isArray(spec.examples) && spec.examples.length > 0, `${course.key}/${key}: algorithm visualizer needs examples`);
+      for (const [exampleIndex, rawExample] of (Array.isArray(spec.examples) ? spec.examples : []).entries()) {
+        const example = isRecord(rawExample) ? rawExample : {};
+        assert(Array.isArray(example.values) && example.values.length > 0 && example.values.length <= 8, `${course.key}/${key}: visualizer example #${exampleIndex + 1} needs 1–8 values`);
+        assert((example.values as unknown[]).every((value) => Number.isSafeInteger(value)), `${course.key}/${key}: visualizer values must be safe integers`);
+        if (example.queries != null) {
+          assert(Array.isArray(example.queries), `${course.key}/${key}: visualizer queries must be an array`);
+          for (const query of example.queries as unknown[]) {
+            assert(Array.isArray(query) && query.length === 2 && Number.isInteger(query[0]) && Number.isInteger(query[1]) && Number(query[0]) >= 0 && Number(query[0]) <= Number(query[1]) && Number(query[1]) < (example.values as unknown[]).length, `${course.key}/${key}: range query must use inclusive zero-based indices`);
+          }
+        }
+      }
+    }
     }
     if (locale === "uk" && ["flask", "fastapi", "computer-vision"].includes(course.key)) {
       // Authoring metadata is stored next to the topic in YAML, not inside the
@@ -600,9 +685,22 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
       assert(content.includes('"type":"prediction"'), `${course.key}/${key}: specialised theory needs a prediction check`);
     }
     keys.add(key);
+    const olympiadModule = course.key.startsWith("olympiad-")
+      ? OLYMPIAD_MODULES.find((module) => order >= module.first && order <= module.last)
+      : undefined;
+    if (course.key.startsWith("olympiad-")) {
+      assert(olympiadModule, `${course.key}/${key}: order ${order} is outside the 12-module curriculum`);
+    }
     return {
       key,
       title,
+      order,
+      ...(olympiadModule ? {
+        moduleKey: `${course.key}.module.${OLYMPIAD_MODULES.indexOf(olympiadModule) + 1}`,
+        moduleTitle: olympiadModule[locale === "en" ? "en" : "uk"],
+        moduleOrder: OLYMPIAD_MODULES.indexOf(olympiadModule),
+        lessonOrder: order - olympiadModule.first,
+      } : {}),
       description: String(topicRecord.description || "").trim(),
       exerciseFocus,
       content,
