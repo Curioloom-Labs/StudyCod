@@ -3451,7 +3451,6 @@ tasksRouter.post("/debug-chat", authMiddleware, submissionRateLimitMiddleware, a
         taskTitle,
         taskText,
         ...(learningContext ? { learningContext } : {}),
-        uiLanguage: resolveUiLanguage(req),
         language,
         uiLanguage: resolveUiLanguage(req),
         code,
