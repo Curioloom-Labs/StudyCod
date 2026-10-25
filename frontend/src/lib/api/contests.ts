@@ -651,6 +651,58 @@ export async function addContestProblem(
   return res.data;
 }
 
+export type GeneratedPracticeCandidate = {
+  id: number;
+  title: string;
+  lesson: string;
+  runtime: "JAVA" | "PYTHON" | "CPP";
+  courseKey: string;
+  topicKey: string;
+  courseId: number | null;
+  courseItemId: number | null;
+  createdAt: string;
+};
+
+export type ContestLearningReview = {
+  contestId: number;
+  finished: true;
+  topics: Array<{
+    topicKey: string;
+    courseId: number | null;
+    courseItemId: number | null;
+    problemCount: number;
+    solvedProblems: number;
+    attempts: number;
+    failures: number;
+    problems: Array<{ label: string; title: string; attempts: number; bestScore: number; solved: boolean; verdicts: string[] }>;
+  }>;
+  recommendation: { topicKey: string; courseId: number | null; courseItemId: number | null; reason: string; suggestedAction: string } | null;
+};
+
+export async function getContestLearningReview(contestId: number): Promise<ContestLearningReview> {
+  const res = await api.get(`/contests/${contestId}/learning-review`);
+  return res.data as ContestLearningReview;
+}
+
+export async function listGeneratedPracticeCandidates(contestId: number): Promise<GeneratedPracticeCandidate[]> {
+  const res = await api.get(`/contests/${contestId}/problems/generated-practice-candidates`);
+  const data = res.data as { candidates?: unknown };
+  return Array.isArray(data?.candidates) ? data.candidates as GeneratedPracticeCandidate[] : [];
+}
+
+export async function addGeneratedPracticeToContest(contestId: number, taskId: number): Promise<{ problemId: number; libraryTaskId: number; order: number; label: string | null }> {
+  const res = await api.post(`/contests/${contestId}/problems/from-generated-practice`, { taskId });
+  return res.data as { problemId: number; libraryTaskId: number; order: number; label: string | null };
+}
+
+export async function addGeneratedPracticeSetToContest(
+  contestId: number,
+  payload: { mode: "THEMATIC" | "MIXED"; taskIds: number[] },
+): Promise<{ problemIds: number[]; firstOrder: number; count: number; mode: "THEMATIC" | "MIXED" }> {
+  const res = await api.post(`/contests/${contestId}/problems/from-generated-practice-set`, payload);
+  return res.data;
+}
+
 export async function deleteContestProblem(contestId: number, problemId: number): Promise<{ deleted: boolean; problemId: number }> {
   const res = await api.delete(`/contests/${contestId}/problems/${problemId}`);
   return res.data;
@@ -711,8 +763,7 @@ export async function postContestCommunityAnnouncement(
 
 export async function sendContestParticipantMessage(
   contestId: number,
-  payload: { title: string; text: string; retryEmails?: string[] },
-  attachments: File[] = []
+  payload: { title: string; text: string; retryEmails?: string[] }
 ): Promise<{
   contestId: number;
   participants: number;
@@ -722,10 +773,7 @@ export async function sendContestParticipantMessage(
   skipped: number;
   duplicateAddresses: number;
 }> {
-  const formData = new FormData();
-  formData.append("payload", JSON.stringify(payload));
-  for (const file of attachments) formData.append("attachments", file, file.name);
-  const res = await api.post(`/contests/${contestId}/messages`, formData);
+  const res = await api.post(`/contests/${contestId}/messages`, payload);
   return res.data;
 }
 

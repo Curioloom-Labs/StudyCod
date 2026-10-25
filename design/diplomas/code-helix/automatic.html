@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @page { size: A4 landscape; margin: 0; }
+      html, body { margin: 0; width: 297mm; height: 210mm; overflow: hidden; }
+      body { background: #ffffff; font-family: Arial, Helvetica, sans-serif; }
+      @page { size: A4 landscape; margin: 0; }
+* { box-sizing: border-box; }
+html, body { width:297mm; height:210mm; margin:0; padding:0; }
+.sc-diploma { --accent:#497b81; --pale:#9dc5c5; width:297mm; height:210mm; position:relative; display:flex; overflow:hidden; background:#faf8f1; color:#142c34; font-family:Arial,Helvetica,sans-serif; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.sc-for-participant { display:none; }
+.sc-diploma.rank- .sc-for-winner { display:none; }
+.sc-diploma.rank- .sc-for-participant { display:inline; }
+.sc-diploma.rank-1 { --accent:#9a7130; --pale:#dfc28a; }
+.sc-diploma.rank-2 { --accent:#597182; --pale:#c2d3de; }
+.sc-diploma.rank-3 { --accent:#a46447; --pale:#d6a184; }
+.sc-main { width:214mm; height:210mm; padding:17mm 17mm 12mm 19mm; position:relative; border-top:2mm solid var(--accent); }
+.sc-header { display:flex; justify-content:space-between; align-items:center; }
+.sc-brand { font-size:24px; font-weight:800; letter-spacing:-1px; }
+.sc-symbol { font-size:19px; font-weight:400; margin-right:5px; color:var(--accent); font-family:monospace; }
+.sc-brand-dot { color:var(--accent); }
+.sc-edition { text-align:right; font-size:8px; letter-spacing:1.1px; line-height:1.9; font-weight:700; }
+.sc-edition span { color:#647779; letter-spacing:.4px; font-weight:400; }
+.sc-intro { margin-top:20mm; }
+.sc-kicker { font-size:10px; font-weight:700; letter-spacing:2.6px; text-transform:uppercase; color:var(--accent); }
+.sc-intro h1 { font-family:Georgia,'Times New Roman',serif; font-size:88px; font-weight:400; letter-spacing:-4px; line-height:1.1; margin:9px 0 4px; }
+.sc-heading-dot { color:var(--accent); }
+.sc-award { color:var(--accent); font-size:21px; line-height:1.5; letter-spacing:.2px; }
+.sc-recipient { margin-top:13mm; }
+.sc-small { font-size:8px; letter-spacing:2px; color:#748180; }
+.sc-name { margin-top:9px; font-size:31px; font-weight:600; letter-spacing:-.6px; line-height:1.23; overflow-wrap:anywhere; max-width:178mm; }
+.sc-name-rule { height:1px; width:100%; background:#d7dace; margin-top:10px; }
+.sc-contest { margin:10px 0 0; font-size:15px; line-height:1.4; overflow-wrap:anywhere; max-width:174mm; color:#4d666a; }
+.sc-merit { position:absolute; bottom:45mm; left:19mm; font-family:Georgia,'Times New Roman',serif; font-style:italic; font-size:16px; line-height:1.6; color:#647575; }
+.sc-footer { position:absolute; bottom:12mm; left:19mm; right:17mm; }
+.sc-meta { display:flex; gap:10mm; border-bottom:1px solid #d7dace; padding-bottom:4mm; }
+.sc-meta-item { display:flex; flex-direction:column; gap:5px; min-width:26mm; }
+.sc-meta-item span { font-size:7px; letter-spacing:1.6px; color:#748180; }
+.sc-meta-item strong { font-size:11px; line-height:1.35; font-weight:500; overflow-wrap:anywhere; }
+.sc-organizer { max-width:132mm; }
+.sc-verification { display:flex; justify-content:space-between; align-items:center; padding-top:3mm; }
+.sc-verification-text { display:flex; flex-direction:column; gap:4px; }
+.sc-verification-text span { font-family:monospace; font-size:8px; color:#657b7c; }
+.sc-verification-text small { font-size:7px; color:#7d8c8b; }
+.sc-verification img { width:13mm; height:13mm; mix-blend-mode:multiply; }
+.sc-art { position:absolute; top:0; right:0; width:83mm; height:210mm; background:#102c38; color:var(--pale); overflow:hidden; }
+.sc-art-top { position:absolute; z-index:2; top:17mm; left:10mm; font-size:12px; font-weight:700; letter-spacing:3px; line-height:1.7; }
+.sc-art-top span { font-size:6px; letter-spacing:1.8px; font-weight:400; color:#8aa4ab; }
+.sc-numeral { position:absolute; top:20mm; right:4mm; color:var(--pale); opacity:.13; font-family:Georgia,'Times New Roman',serif; font-size:290px; line-height:1; }
+.sc-diploma.rank- .sc-numeral { top:35mm; font-size:115px; }
+.sc-orbit { position:absolute; width:135mm; height:135mm; border:1px solid #35515b; border-radius:50%; left:-26mm; top:55mm; opacity:.6; }
+.sc-orbit-two { width:116mm; height:116mm; left:-16.5mm; top:64.5mm; }
+.helix { position:absolute; width:87mm; height:150mm; left:-2mm; bottom:15mm; }
+.rank-2 .helix { height:137mm; bottom:18mm; }
+.rank-3 .helix { height:122mm; bottom:21mm; }
+.sc-medal { display:none; position:absolute; width:61mm; height:84mm; left:11mm; top:80mm; }
+.sc-diploma.rank- .helix { display:none; }
+.sc-diploma.rank- .sc-medal { display:block; }
+.sc-art-bottom { position:absolute; bottom:14mm; left:10mm; font-size:6px; letter-spacing:1.5px; color:#9eb3b8; display:flex; gap:8px; align-items:center; }
+.sc-circuit-node { width:5px; height:5px; border:1px solid var(--pale); }
+    </style>
+  </head>
+  <body><main class="sc-diploma rank-1">
+    <section class="sc-main">
+      <header class="sc-header"><div class="sc-brand"><span class="sc-symbol">[s]</span> StudyCod<span class="sc-brand-dot">.</span></div><div class="sc-edition">ТУРНІР З ПРОГРАМУВАННЯ<br/><span>Думай. Створюй. Досягай.</span></div></header>
+      <div class="sc-intro"><span class="sc-kicker"><span class="sc-for-winner">Призер турніру</span><span class="sc-for-participant">Учасник турніру</span></span><h1>Диплом<span class="sc-heading-dot">.</span></h1><div class="sc-award"><span class="sc-for-winner">За 1 місце</span><span class="sc-for-participant">За участь</span></div></div>
+      <div class="sc-recipient"><div class="sc-small">НАГОРОДЖУЄТЬСЯ</div><div class="sc-name">Ім’я та прізвище учасника</div><div class="sc-name-rule"></div><p class="sc-contest">Турнір із програмування StudyCod</p></div>
+      <div class="sc-merit">За наполегливість у пошуку рішень,<br/>силу логіки та майстерність програмування.</div>
+      <footer class="sc-footer"><div class="sc-meta"><div class="sc-meta-item"><span>ДАТА</span><strong>22.10.2026</strong></div><div class="sc-meta-item sc-organizer"><span>ОРГАНІЗАТОР</span><strong>StudyCod</strong></div></div><div class="sc-verification"><div class="sc-verification-text"><span>SC-SAMPLE · ЗРАЗОК</span><small>Перевірка справжності диплома</small></div><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtWK6eAAAAAklEQVR4AewaftIAAAXSSURBVO3BgU1sSRAEwazW+u9yHgZMIw16f4GjIuIHqupoqKrVUFWroapWQ1WthqpaDVW1evGJJPw2Kpsk3FC5lYRbKpsknKi8QxJOVDZJ+G1UToaqWg1VtRqqajVU1WqoqtWLL1D5bkm4pXKShJMkbFRuqbxDEp6i8hSV75aEG0NVrYaqWg1VtRqqajVU1WqoqtWLhyXhKSpPSsINlXdIwkbllspJEm4l4UTlSUl4ispThqpaDVW1GqpqNVTVaqiq1Ys/ROUkCSdJ2KicqGyScKKyScItlVsqJ0n4y4aqWg1VtRqqajVU1WqoqtVQVasX9SVJuKVyS+UkCZsknKhsknCi8pcNVbUaqmo1VNVqqKrVUFWrFw9T+amS8BSVkyTcSsItlXdIwonKk1R+oqGqVkNVrYaqWg1VtRqqajVU1erFFyTh/0TlJAnfTeUkCRuVkyRsVE6S8JQk/DZDVa2GqloNVbUaqmo1VNUqfuCPS8KJyq0k3FJ5UhJOVDZJuKHyFwxVtRqqajVU1WqoqtVQVauhqlYvPpGEE5VNEk5UnpSEWyonKj9VEk5UNionSbil8pQkbFRuJeFEZZOEE5WToapWQ1WthqpaDVW1Gqpq9eITKk9Jwi2VjcpJEjZJuKGyScKJyq0kbFROkvBTJeFE5VYSNir/2lBVq6GqVkNVrYaqWg1VtXrxA6jcSsKJyiYJJypPScI7qNxKwkblJAlPScKTknCi8pShqlZDVa2GqloNVbUaqmo1VNUqfmCRhBOVJyXhlsq/loSNyq0knKhsknCi8tskYaNykoSNykkSNio3hqpaDVW1GqpqNVTVaqiqVfzAIgm3VJ6ShFsqt5LwFJVbSdioPCUJt1TeIQknKk9KwonKyVBVq6GqVkNVrYaqWg1VtRqqavXiEyonSdgk4Skq76BykoSNyjsk4UTllsqtJNxSeYck/GtDVa2GqloNVbUaqmo1VNXqxReoPCkJJ0n4TipPSsItlZMkPEnlKUn4TiqbJNwYqmo1VNVqqKrVUFWroapWQ1Wt4gcWSbilcpKEjcpJEjYqt5JwQ+U3SsKJym+ThI3KvzZU1WqoqtVQVauhqlZDVa3iBxZJ+D9ROUnCU1Q2SXiKyiYJJyqbJJyonCRho3KShHdQ2SThROVkqKrVUFWroapWQ1WthqpaDVW1evEJlZMk3FLZJOFE5UlJOFE5ScJG5Skqt5KwUTlJwjsk4URlk4QTlVtJeMpQVauhqlZDVa2GqloNVbWKH1gk4ZbKrSS8g8pJEk5UfqMk3FI5ScKJyiYJt1TeIQknKidDVa2GqloNVbUaqmo1VNVqqKpV/MCDknCi8g5JeIrKrSTcUtkk4SkqT0nCLZVbSdionCThlsrJUFWroapWQ1WthqpaDVW1evGJJLxDEp6i8pQk3FLZJOGWylOS8J2S8NsMVbUaqmo1VNVqqKrVUFWr+IE/Ign/msqTknCicisJT1F5UhLeQeXGUFWroapWQ1WthqpaDVW1Gqpq9eITSfhtVJ6i8qQk3FI5ScItlU0SnpKEE5VbKk9KwonKyVBVq6GqVkNVrYaqWg1VtXrxBSrfLQm3VE6ScJKEjcotlZMk3FLZJOE7qTwlCRuVWyo3hqpaDVW1GqpqNVTVaqiq1VBVqxcPS8JTVH6qJLxDEk5UnqRykoSTJPxUSdio3BiqajVU1WqoqtVQVauhqlYvaqXypCTcUjlJwkblJAkblROVkyTcUtkk4SkqmyScqJwMVbUaqmo1VNVqqKrVUFWroapWL/6QJNxIwkblJAm3VJ6UhFtJuKGyScItlZMkbJLwrw1VtRqqajVU1WqoqtVQVasXD1P5qVSekoQTlVtJ2KicqGyScKLyDipPUflOQ1WthqpaDVW1GqpqNVTVaqiq1YsvSMJvlITvlIQTlSepnCThlsqtJLyDyq0knKicDFW1GqpqNVTVaqiq1VBVq/iBqjoaqmo1VNVqqKrVUFWroapW/wG23UWhGQJ+oQAAAABJRU5ErkJggg&#x3D;&#x3D;" alt="QR-код перевірки диплома"/></div></footer>
+    </section>
+    <aside class="sc-art"><div class="sc-art-top">STUDYCOD<br/><span>PROGRAMMING TOURNAMENT</span></div><div class="sc-orbit sc-orbit-one"></div><div class="sc-orbit sc-orbit-two"></div><div class="sc-numeral"><span class="sc-for-winner">1</span><span class="sc-for-participant">&lt;/&gt;</span></div><svg class="helix" viewBox="0 0 360 620" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <linearGradient id="metal" x1="0" x2="1"><stop stop-color="#69858c"/><stop offset=".35" stop-color="#e0e9e5"/><stop offset=".56" stop-color="#91a9ab"/><stop offset="1" stop-color="#3c5c65"/></linearGradient>
+      <linearGradient id="ribbon" x1="0" x2="1"><stop stop-color="#557881"/><stop offset=".48" stop-color="#d5e1dc"/><stop offset="1" stop-color="#6c8a8d"/></linearGradient>
+    </defs>
+    <ellipse cx="180" cy="563" rx="100" ry="13" fill="#010e16" opacity=".35"/>
+    <path d="M118 529 L242 529 L267 562 L93 562 Z" fill="url(#metal)"/>
+    <path d="M109 536 H251 L257 553 H103 Z" fill="#789495"/>
+    <path d="M151 503 C34 400 305 285 155 82" fill="none" stroke="#3c606b" stroke-width="18"/>
+    <path d="M219 512 C316 415 57 290 209 85" fill="none" stroke="#3c606b" stroke-width="10"/>
+    <path d="M131 99 L221 99 L229 515 L139 515 Z" fill="url(#metal)"/>
+    <path d="M131 99 L149 109 L157 511 L139 515 Z" fill="#577780"/>
+    <g fill="none" stroke="#3d626c" stroke-width="1.5" opacity=".75"><path d="M132 114 h44 v15 h18 M227 119 h-22 v18 h-15"/><circle cx="194" cy="129" r="2.5"/><path d="M132 149 h30 v15 h18 M227 154 h-22 v18 h-15"/><circle cx="180" cy="164" r="2.5"/><path d="M132 184 h44 v15 h18 M227 189 h-22 v18 h-15"/><circle cx="194" cy="199" r="2.5"/><path d="M132 219 h30 v15 h18 M227 224 h-22 v18 h-15"/><circle cx="180" cy="234" r="2.5"/><path d="M132 254 h44 v15 h18 M227 259 h-22 v18 h-15"/><circle cx="194" cy="269" r="2.5"/><path d="M132 289 h30 v15 h18 M227 294 h-22 v18 h-15"/><circle cx="180" cy="304" r="2.5"/><path d="M132 324 h44 v15 h18 M227 329 h-22 v18 h-15"/><circle cx="194" cy="339" r="2.5"/><path d="M132 359 h30 v15 h18 M227 364 h-22 v18 h-15"/><circle cx="180" cy="374" r="2.5"/><path d="M132 394 h44 v15 h18 M227 399 h-22 v18 h-15"/><circle cx="194" cy="409" r="2.5"/><path d="M158 109 V489 M211 109 V489"/></g>
+    <path d="M156 513 C304 398 34 280 207 77" fill="none" stroke="url(#ribbon)" stroke-width="25"/>
+    <path d="M211 508 C56 408 307 263 149 85" fill="none" stroke="url(#ribbon)" stroke-width="10"/>
+    <path d="M124 61 H225 V157 H124 Z" fill="url(#metal)"/>
+    <path d="M134 72 H215 V146 H134 Z M145 83 H204 V135 H145 Z M162 100 H188 V120 H162 Z" fill="none" stroke="#597a80" stroke-width="1.5"/>
+    <g stroke="#597a80" stroke-width="1.5"><path d="M152 72 V89 M166 72 V89 M180 72 V89 M194 72 V89 M152 129 V146 M166 129 V146 M180 129 V146 M194 129 V146 M134 94 H153 M134 108 H153 M134 122 H153 M196 94 H215 M196 108 H215 M196 122 H215"/></g>
+    <path d="M124 61 H225 V65 H124 Z" fill="#e3eeea"/>
+    <path d="M99 562 H263" stroke="#cbdad4" stroke-width="2"/>
+  </svg><svg class="sc-medal" viewBox="0 0 250 300" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M68 15 L123 0 L179 15 L150 115 H98 Z" fill="#517883"/><path d="M82 16 L123 5 L164 16 L139 106 H108 Z" fill="#92afb2"/><path d="M40 116 L56 100 H197 L212 116 V260 L197 277 H56 L40 260 Z" fill="#acc2c0"/><path d="M49 121 L61 109 H192 L203 121 V255 L192 267 H61 L49 255 Z" fill="#7f9fa4" stroke="#d0dfd9" stroke-width="2"/><path d="M78 141 H173 V235 H78 Z M92 154 H160 V221 H92 Z M110 174 H142 V202 H110 Z" fill="none" stroke="#d0dfd9" stroke-width="2"/><g stroke="#acc4c3" stroke-width="2"><path d="M103 142 V160 M119 142 V160 M135 142 V160 M151 142 V160 M103 215 V234 M119 215 V234 M135 215 V234 M151 215 V234 M79 169 H98 M79 185 H98 M79 201 H98 M155 169 H173 M155 185 H173 M155 201 H173"/></g><circle cx="59" cy="121" r="5" fill="#102c38"/><path d="M109 186 l-10 7 10 7 M142 186 l10 7 -10 7 M132 178 l-10 29" fill="none" stroke="#dbe8df" stroke-width="2"/></svg><div class="sc-art-bottom"><span class="sc-circuit-node"></span>ВІД ІДЕЇ ДО ПЕРЕМОГИ</div></aside>
+  </main></body>
+</html>

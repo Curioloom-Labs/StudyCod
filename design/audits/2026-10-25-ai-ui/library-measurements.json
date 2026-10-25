@@ -1,0 +1,16 @@
+{
+  "firstTask": {
+    "height": 250,
+    "y": 746.3624877929688
+  },
+  "heading": {
+    "size": "48px",
+    "text": "Знайди задачу під сьогоднішню ціль."
+  },
+  "url": "http://127.0.0.1:5173/lab/library?preview=true",
+  "viewport": [
+    1280,
+    720
+  ],
+  "visibleTaskCount": 0
+}

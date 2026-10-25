@@ -734,6 +734,48 @@ test('OpenRouterProvider generateJSON falls back to configured model when primar
   process.env.OPENROUTER_URL = old.OPENROUTER_URL;
 });
 
+test('OpenRouterProvider skips paid JSON repair when a provider returns a non-JSON sentinel', async () => {
+  const old = {
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+    OPENROUTER_BACKUP_API_KEYS: process.env.OPENROUTER_BACKUP_API_KEYS,
+    OPENROUTER_MODEL: process.env.OPENROUTER_MODEL,
+    OPENROUTER_TEXT_MODEL: process.env.OPENROUTER_TEXT_MODEL,
+    OPENROUTER_JSON_MODEL: process.env.OPENROUTER_JSON_MODEL,
+    OPENROUTER_FALLBACK_MODELS: process.env.OPENROUTER_FALLBACK_MODELS,
+    OPENROUTER_URL: process.env.OPENROUTER_URL
+  };
+
+  process.env.OPENROUTER_API_KEY = 'sk-or-v1-non_json_sentinel_test_key';
+  process.env.OPENROUTER_BACKUP_API_KEYS = '';
+  process.env.OPENROUTER_MODEL = 'openai/gpt-4o-mini';
+  process.env.OPENROUTER_TEXT_MODEL = '';
+  process.env.OPENROUTER_JSON_MODEL = '';
+  process.env.OPENROUTER_FALLBACK_MODELS = '';
+  process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return makeOkResponse('User Safety: safe');
+  };
+
+  try {
+    await assert.rejects(
+      new OpenRouterProvider().generateJSON('Return one task object', { type: 'object' }, 'JSON only', { maxRetries: 0 }),
+      /Model returned non-JSON text; skipped JSON repair/
+    );
+    assert.equal(calls, 1, 'invalid provider text must not trigger repair or regeneration requests');
+  } finally {
+    process.env.OPENROUTER_API_KEY = old.OPENROUTER_API_KEY;
+    process.env.OPENROUTER_BACKUP_API_KEYS = old.OPENROUTER_BACKUP_API_KEYS;
+    process.env.OPENROUTER_MODEL = old.OPENROUTER_MODEL;
+    process.env.OPENROUTER_TEXT_MODEL = old.OPENROUTER_TEXT_MODEL;
+    process.env.OPENROUTER_JSON_MODEL = old.OPENROUTER_JSON_MODEL;
+    process.env.OPENROUTER_FALLBACK_MODELS = old.OPENROUTER_FALLBACK_MODELS;
+    process.env.OPENROUTER_URL = old.OPENROUTER_URL;
+  }
+});
+
 test('OpenRouterProvider supports OPENROUTER_MODEL_FALLBACKS alias for model fallback chain', async () => {
   const old = {
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,

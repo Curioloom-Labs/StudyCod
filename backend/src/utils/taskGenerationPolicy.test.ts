@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { canUseTaskExamplesAfterTestFailure, shouldUseGenericPersonalFallback } from "./taskGenerationPolicy";
+import { canUseTaskExamplesAfterTestFailure, shouldRegenerateOlympiadTask, shouldUseGenericPersonalFallback } from "./taskGenerationPolicy";
 
 test("catalog practice disables the generic fallback", () => {
   assert.equal(shouldUseGenericPersonalFallback("CATALOG_ITEM:42"), false);
@@ -21,4 +21,11 @@ test('reviewed task examples remain available during genuine provider outages', 
   for (const statusCode of [429, 503, 504]) {
     assert.equal(canUseTaskExamplesAfterTestFailure({ statusCode }), true);
   }
+});
+
+test('only statement and public-example contract failures request a fresh generated Olympiad task', () => {
+  assert.equal(shouldRegenerateOlympiadTask({ details: { validationError: 'TASK_CONTRACT_REVIEW_FAILED[statement]: missing a boundary rule' } }), true);
+  assert.equal(shouldRegenerateOlympiadTask({ details: { validationError: 'TASK_CONTRACT_REVIEW_FAILED[publicExamples]: Example 1 contradicts the oracle' } }), true);
+  assert.equal(shouldRegenerateOlympiadTask({ details: { validationError: 'TASK_CONTRACT_REVIEW_FAILED[candidateTests]: missing one edge case' } }), false);
+  assert.equal(shouldRegenerateOlympiadTask({ details: { validationError: 'Reference program compilation failed' } }), false);
 });

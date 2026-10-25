@@ -23,6 +23,7 @@ import {
 import {
   checkContestProblem,
   getContestDetails,
+  getContestLearningReview,
   getContestMyProgress,
   getContestProblemStatement,
   getContestProblemSubmissions,
@@ -32,6 +33,7 @@ import {
   listContests,
   runContestProblem,
   type ContestDetails,
+  type ContestLearningReview,
   type ContestListItem,
   type ContestListQuery,
   type ContestMyProgressProblem,
@@ -40,6 +42,7 @@ import {
   type JudgeLanguage,
 } from "../../lib/api/contests";
 import { enabledJudgeLanguages, templateForJudgeLanguage } from "../../lib/judgeLanguages";
+import { contestFirstFailureToPublicTestResults } from "../../lib/contestFeedback";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { StudyCodIDEWorkspace, type StudyCodIdeCheckResult, type StudyCodIdeRunResult } from "../../components/ide/StudyCodIDEWorkspace";
 import { ContestSetupDialog } from "./ContestSetupDialog";
@@ -642,6 +645,9 @@ export const ContestDetailPage: React.FC = () => {
   );
   const [myProgress, setMyProgress] = React.useState<ContestMyProgressProblem[]>([]);
   const [myParticipantId, setMyParticipantId] = React.useState<number | null>(null);
+  const [learningReview, setLearningReview] = React.useState<ContestLearningReview | null>(null);
+  const [learningReviewLoading, setLearningReviewLoading] = React.useState(false);
+  const [learningReviewError, setLearningReviewError] = React.useState<string | null>(null);
   const [clockNow, setClockNow] = React.useState(Date.now());
   const [clockOffset, setClockOffset] = React.useState(0);
   const [loading, setLoading] = React.useState(true);
@@ -708,6 +714,28 @@ export const ContestDetailPage: React.FC = () => {
   React.useEffect(() => {
     if (!hasLegacySection) void load();
   }, [hasLegacySection, load]);
+  const contestEndMs = Date.parse(String(data?.contest.endsAt ?? ""));
+  const reviewAvailable = Boolean(data?.phase.finished || (Number.isFinite(contestEndMs) && contestEndMs <= clockNow + clockOffset));
+  const loadLearningReview = React.useCallback(async () => {
+    if (!reviewAvailable || !data?.access.isJoined || !data.access.canAccessContent) {
+      setLearningReview(null);
+      setLearningReviewError(null);
+      return;
+    }
+    setLearningReviewLoading(true);
+    setLearningReviewError(null);
+    try {
+      setLearningReview(await getContestLearningReview(contestId));
+    } catch (caught) {
+      setLearningReview(null);
+      setLearningReviewError(getErrorMessageFromUnknown(caught, tr("Не вдалося завантажити післязмагальний розбір.", "Could not load the post-contest review.")));
+    } finally {
+      setLearningReviewLoading(false);
+    }
+  }, [contestId, reviewAvailable, data?.access.isJoined, data?.access.canAccessContent]);
+  React.useEffect(() => {
+    void loadLearningReview();
+  }, [loadLearningReview]);
   React.useEffect(() => {
     if (!data || data.access.canManage || !data.contest.startsAt) return;
 
@@ -1013,6 +1041,37 @@ export const ContestDetailPage: React.FC = () => {
           </button>}
         </section>
       </div>
+      {reviewAvailable && joined && access ? <section className="mt-6 rounded-[28px] border border-primary/20 bg-primary/5 p-5 sm:p-6" aria-labelledby="contest-learning-review-title" data-contest-learning-review="true">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Навчальний підсумок", "Learning review")}</p>
+            <h2 id="contest-learning-review-title" className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.04em] text-text-primary dark:text-text-primary">{tr("Розбір після туру", "Post-contest review")}</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Результати Judge згруповані за темами у згенерованих задачах. Повернися до теми, щоб закріпити слабкі місця новою практикою.", "Judge results are grouped by topic across your generated problems. Revisit a topic to strengthen weak spots with fresh practice.")}</p>
+          </div>
+          <button type="button" onClick={() => void loadLearningReview()} disabled={learningReviewLoading} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border/15 bg-bg-surface px-3 py-2 text-sm font-bold text-text-primary transition hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-wait disabled:opacity-60 dark:border-white/10 dark:bg-white/[.04] dark:text-text-primary dark:hover:bg-white/[.08]">
+            <RotateCw className={`size-4 ${learningReviewLoading ? "animate-spin" : ""}`} aria-hidden="true" />{tr("Оновити", "Refresh")}
+          </button>
+        </div>
+        {learningReviewLoading ? <div role="status" className="mt-4 text-sm text-text-muted dark:text-text-secondary">{tr("Готуємо розбір…", "Preparing review…")}</div>
+          : learningReviewError ? <div role="alert" className="mt-4 text-sm text-accent-error">{learningReviewError}</div>
+            : learningReview?.topics.length ? <>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {learningReview.topics.map((topic) => <div key={topic.topicKey} className="rounded-2xl border border-border/10 bg-bg-surface px-4 py-3 dark:border-white/[.07]">
+                  <div className="font-bold text-text-primary dark:text-text-primary">{topic.topicKey}</div>
+                  <div className="mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr(`Розв’язано задач: ${topic.solvedProblems}/${topic.problemCount} · невдалих спроб: ${topic.failures}`, `Solved: ${topic.solvedProblems}/${topic.problemCount} · unsuccessful attempts: ${topic.failures}`)}</div>
+                  {topic.problems.map((problem) => <div key={`${topic.topicKey}:${problem.label}`} className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border/10 pt-2 text-xs dark:border-white/[.07]">
+                    <span className="min-w-0 truncate font-medium text-text-secondary dark:text-text-secondary">{problem.label}. {problem.title}</span>
+                    <span className="shrink-0 tabular-nums text-text-muted dark:text-text-secondary">{tr("Найкращий бал:", "Best score:")} {problem.bestScore} · {tr("спроб:", "attempts:")} {problem.attempts}</span>
+                  </div>)}
+                </div>)}
+              </div>
+              {learningReview.recommendation ? <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-bg-surface p-4 dark:bg-white/[.04]">
+                <p className="m-0 text-sm leading-6 text-text-secondary dark:text-text-secondary">{tr(`Повтори тему ${learningReview.recommendation.topicKey} на новій згенерованій задачі.`, `Review ${learningReview.recommendation.topicKey} with a fresh generated problem.`)}</p>
+                {learningReview.recommendation.courseId && learningReview.recommendation.courseItemId ? <button type="button" onClick={() => navigate(`/learning/course/${learningReview.recommendation!.courseId}/practice/${learningReview.recommendation!.courseItemId}`)} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground transition hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Почати нову практику", "Start fresh practice")} <ArrowRight className="size-4" aria-hidden="true" /></button> : null}
+              </div> : <p className="mb-0 mt-4 text-sm text-text-muted dark:text-text-secondary">{tr("У цьому турі не було невдалих спроб. Спробуй змішаний набір, щоб перевірити перенесення навичок.", "There were no unsuccessful attempts in this round. Try a mixed set to check skill transfer.")}</p>}
+            </>
+              : <p className="mb-0 mt-4 text-sm text-text-muted dark:text-text-secondary">{tr("У цьому турі немає задач, згенерованих олімпіадним курсом.", "This round has no problems generated by an Olympiad course.")}</p>}
+      </section> : null}
     </Shell>
   );
 };
@@ -1196,15 +1255,7 @@ export const ContestProblemPage: React.FC = () => {
         score: response.score,
         maxScore: response.maxScore,
         compileError: response.compileError,
-        publicTestResults: response.firstFailure ? [{
-          testId: response.firstFailure.index,
-          input: response.firstFailure.input,
-          expectedOutput: response.firstFailure.expected,
-          actualOutput: response.firstFailure.actual,
-          passed: false,
-          verdict: response.firstFailure.verdict,
-          stderr: response.firstFailure.stderr,
-        }] : [],
+        publicTestResults: contestFirstFailureToPublicTestResults(response.firstFailure),
       });
       setResult({
         kind: "check",

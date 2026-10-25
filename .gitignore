@@ -85,6 +85,9 @@ coverage/
 .cache/
 tmp/
 docs/
+!docs/
+docs/*
+!docs/olympiad-programming-audit.md
 _svg_renderer/
 
 # Uploads (user files)

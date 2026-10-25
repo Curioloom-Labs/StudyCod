@@ -34,6 +34,185 @@ test("authored theory has the learner-facing contract and generated exercise foc
   }
 });
 
+test("every Olympiad lesson states outcomes, prerequisites, and time and space complexity", () => {
+  for (const locale of ["uk", "en"] as const) {
+    const result = validateCurriculum(undefined, locale);
+    for (const courseKey of ["olympiad-python", "olympiad-java", "olympiad-cpp"]) {
+      for (const topic of result.topics[courseKey]) {
+        const prose = topic.content.replace(/```[\s\S]*?```/g, "");
+        const lines = prose.split(/\r?\n/);
+        assert.match(prose, /\*\*(?:Результати навчання|Learning outcomes):\*\*\s*\S/i, `${locale}/${courseKey}/${topic.key} learning outcomes`);
+        assert.match(prose, /\*\*(?:Попередні знання|Prerequisites):\*\*\s*\S/i, `${locale}/${courseKey}/${topic.key} prerequisites`);
+        assert.ok(lines.some((line) => /(?:час|time|runtime)/i.test(line) && /O\s*\(/i.test(line)), `${locale}/${courseKey}/${topic.key} time complexity`);
+        assert.ok(lines.some((line) => /(?:пам.?ят|простор|space|memory)/i.test(line) && /O\s*\(/i.test(line)), `${locale}/${courseKey}/${topic.key} space complexity`);
+      }
+    }
+  }
+});
+
+test("every Olympiad lesson has one topic-specific teaching scenario", () => {
+  for (const locale of ["uk", "en"] as const) {
+    const result = validateCurriculum(undefined, locale);
+    for (const courseKey of ["olympiad-python", "olympiad-java", "olympiad-cpp"]) {
+      const scenarios: string[] = [];
+      for (const topic of result.topics[courseKey]) {
+        const headings = [...topic.content.matchAll(/\*\*(?:Сценарій уроку|Lesson scenario):\*\*/gi)];
+        assert.equal(headings.length, 1, `${locale}/${courseKey}/${topic.key} must have exactly one scenario`);
+        const start = headings[0].index! + headings[0][0].length;
+        const following = topic.content.slice(start);
+        const end = following.search(/\n\s*\n/);
+        const scenario = (end < 0 ? following : following.slice(0, end)).trim();
+        assert.ok(scenario, `${locale}/${courseKey}/${topic.key} scenario is non-empty`);
+        const numberedSteps = [...scenario.matchAll(/(?:^|;\s*)\d+[.)]\s+/gm)].length;
+        const scenarioLines = scenario.split(/\r?\n/).filter((line) => line.trim()).length;
+        assert.ok(Math.max(numberedSteps, scenarioLines) >= 5, `${locale}/${courseKey}/${topic.key} has at least five scenario actions`);
+        scenarios.push(scenario.replace(/\s+/g, " ").trim().toLocaleLowerCase());
+      }
+      assert.equal(scenarios.length, 47, `${locale}/${courseKey} scenario count`);
+      assert.equal(new Set(scenarios).size, 47, `${locale}/${courseKey} scenarios are specific to each lesson`);
+    }
+  }
+});
+
+test("array foundations have topic-specific code explanations, scenarios, and honest memory claims", () => {
+  const keys = ["array-traversal", "extrema-and-counts", "interval-basics", "boundary-debugging"];
+  for (const locale of ["uk", "en"] as const) {
+    const result = validateCurriculum(undefined, locale);
+    for (const courseKey of ["olympiad-python", "olympiad-java", "olympiad-cpp"]) {
+      const explanations = new Set<string>();
+      for (const key of keys) {
+        const topic = result.topics[courseKey].find((entry) => entry.key === key);
+        assert.ok(topic, `${locale}/${courseKey}/${key}`);
+        const explanation = topic.content.match(/### (?:Пояснення кожного рядка прикладу|Line-by-line explanation)\s*\n([\s\S]*?)(?=\n### )/i)?.[1]?.trim();
+        assert.ok(explanation, `${locale}/${courseKey}/${key} has a code explanation`);
+        assert.doesNotMatch(explanation, /state variables keep only information|змінні стану зберігають лише інформацію/i, `${locale}/${courseKey}/${key} is not generic boilerplate`);
+        explanations.add(explanation.replace(/\s+/g, " "));
+
+        const scenario = topic.content.match(/\*\*(?:Сценарій уроку|Lesson scenario):\*\*\s*\n([\s\S]*?)(?=\n### )/i)?.[1] ?? "";
+        const steps = [...scenario.matchAll(/^\d+\.\s+/gm)].length;
+        assert.ok(steps >= 5, `${locale}/${courseKey}/${key} has a staged lesson scenario (${steps})`);
+        assert.match(topic.content, /(?:\*\*Judge practice is generated|\*\*Judge-практика генерується)/i, `${locale}/${courseKey}/${key} retains dynamic Judge practice`);
+      }
+      assert.equal(explanations.size, keys.length, `${locale}/${courseKey} explanations are topic-specific`);
+    }
+  }
+
+  const ukrainianPython = validateCurriculum().topics["olympiad-python"];
+  for (const key of ["array-traversal", "extrema-and-counts", "boundary-debugging"]) {
+    const topic = ukrainianPython.find((entry) => entry.key === key)!;
+    assert.match(topic.content, /пам’ять вводу — O\(n\)/i, `${key} accounts for Python's parsed input`);
+  }
+  const interval = ukrainianPython.find((entry) => entry.key === "interval-basics")!;
+  assert.match(interval.content, /пам’ять — O\(n\)/i, "the saved array is included in the space bound");
+});
+
+test("English Olympiad theory does not contain Ukrainian prose", () => {
+  const result = validateCurriculum(undefined, "en");
+  for (const courseKey of ["olympiad-python", "olympiad-java", "olympiad-cpp"]) {
+    for (const topic of result.topics[courseKey]) {
+      const prose = topic.content.replace(/```[\s\S]*?```/g, "");
+      assert.doesNotMatch(prose, /[\u0400-\u04FF]/u, `${courseKey}/${topic.key} English prose`);
+    }
+  }
+});
+
+test("fixed-window lessons explain rolling sums without prefix or remainder carryover", () => {
+  for (const locale of ["uk", "en"] as const) {
+    const result = validateCurriculum(undefined, locale);
+    for (const courseKey of ["olympiad-python", "olympiad-java", "olympiad-cpp"]) {
+      const topic = result.topics[courseKey].find((entry) => entry.key === "fixed-window-sum")!;
+      assert.doesNotMatch(topic.content, /negative remainder|від'ємний залишок|prefix list has n\+1|список префіксів має n\+1/i, `${locale}/${courseKey}/fixed-window-sum`);
+      assert.match(topic.content, /departing|leaves the window|що виходить|виходить зліва/i, `${locale}/${courseKey}/fixed-window-sum must explain the rolling update`);
+    }
+  }
+});
+
+test("language-runtime lessons demonstrate a sum beyond signed 32-bit range", () => {
+  const typeClaims = {
+    uk: {
+      "olympiad-python": /Python `int` зберігає її точно/,
+      "olympiad-java": /межу `int`.*`long`/,
+      "olympiad-cpp": /межу `int`.*`long long`/,
+    },
+    en: {
+      "olympiad-python": /Python `int` stores it exactly/,
+      "olympiad-java": /range of `int`.*`long`/,
+      "olympiad-cpp": /range of `int`.*`long long`/,
+    },
+  } as const;
+  for (const locale of ["uk", "en"] as const) {
+    const result = validateCurriculum(undefined, locale);
+    for (const courseKey of ["olympiad-python", "olympiad-java", "olympiad-cpp"] as const) {
+      const topic = result.topics[courseKey].find((entry) => entry.key === "language-runtime");
+      assert.ok(topic, `${locale}/${courseKey}/language-runtime`);
+      assert.match(topic.content, /2500000000/, `${locale}/${courseKey} demonstrates a large sum`);
+      assert.match(topic.content, typeClaims[locale][courseKey], `${locale}/${courseKey} explains the numeric type`);
+    }
+  }
+});
+
+test("Olympiad workshop quizzes explain the decision their question asks about", () => {
+  const checks = [
+    { key: "thematic-sets", uk: /перенесення.*запам|запам'ятовування/i, en: /transfer.*remember|apply it to different data/i },
+    { key: "mixed-set", uk: /обмеженн|n²|операц|ліміт/i, en: /constraints|n²|repeated operations|limit/i },
+    { key: "timed-mock", uk: /зафіксований набір|чесн|однаков.*умов/i, en: /freezing.*set|same conditions|unfair to compare/i },
+    { key: "post-contest-review", uk: /TLE.*час|TLE.*складн|WA.*логік/i, en: /TLE.*runtime|WA.*wrong result|complexity.*logic/i },
+    { key: "targeted-review", uk: /нова задача.*пау|нов.*задач.*пау|відкладен.*перенес/i, en: /new problem.*pause|delayed recall.*transfer/i },
+  ] as const;
+
+  for (const locale of ["uk", "en"] as const) {
+    const result = validateCurriculum(undefined, locale);
+    const expectedForLocale = locale === "uk" ? "uk" : "en";
+    for (const courseKey of ["olympiad-python", "olympiad-java", "olympiad-cpp"]) {
+      for (const check of checks) {
+        const topic = result.topics[courseKey].find((entry) => entry.key === check.key);
+        assert.ok(topic, `${locale}/${courseKey}/${check.key}`);
+        const blocks = [...topic.content.matchAll(/```interactive\s*\n([\s\S]*?)\n\s*```/g)];
+        const quiz = blocks.map(([, source]) => {
+          try {
+            return JSON.parse(source.trim()) as { type?: string; questions?: Array<{ explanation?: string }> };
+          } catch {
+            return undefined;
+          }
+        }).find((block) => block?.type === "quiz" && block.questions?.length);
+        assert.ok(quiz?.questions?.[0]?.explanation, `${locale}/${courseKey}/${check.key} has a quiz explanation`);
+        assert.match(quiz.questions[0].explanation, check[expectedForLocale], `${locale}/${courseKey}/${check.key} explains the decision`);
+      }
+    }
+  }
+});
+
+test("Olympiad quiz explanations are not copied verbatim from lesson prose", () => {
+  const duplicates: string[] = [];
+  for (const locale of ["uk", "en"] as const) {
+    const result = validateCurriculum(undefined, locale);
+    for (const courseKey of ["olympiad-python", "olympiad-java", "olympiad-cpp"]) {
+      for (const topic of result.topics[courseKey]) {
+        const prose = topic.content
+          .replace(/```interactive\s*\n[\s\S]*?\n\s*```/g, "")
+          .replace(/```[\s\S]*?```/g, "");
+        const blocks = [...topic.content.matchAll(/```interactive\s*\n([\s\S]*?)\n\s*```/g)];
+        for (const [, source] of blocks) {
+          let payload: { type?: string; questions?: Array<{ explanation?: string }> } | undefined;
+          try {
+            payload = JSON.parse(source.trim()) as typeof payload;
+          } catch {
+            continue;
+          }
+          if (payload?.type !== "quiz") continue;
+          for (const question of payload.questions ?? []) {
+            const explanation = question.explanation?.trim();
+            if (explanation && explanation.length >= 40 && prose.includes(explanation)) {
+              duplicates.push(`${locale}/${courseKey}/${topic.key}: ${explanation}`);
+            }
+          }
+        }
+      }
+    }
+  }
+  assert.deepEqual(duplicates, []);
+});
+
 test("topic identity stays stable when the same source is loaded twice", () => {
   const course = validateCurriculum().manifest.courses.find((entry) => entry.key === "python-core")!;
   const first = loadCurriculumTopics(course);
@@ -98,7 +277,7 @@ test("every mini-project has an explicit IO contract and at least 15 cases", () 
       assert.ok(project.tests?.every((test) => test.input !== undefined && test.expectedOutput !== undefined), `${course.key}/${project.key} test IO`);
     }
   }
-  assert.equal(projectCount, 45);
+  assert.equal(projectCount, 54);
 });
 
 test("mini-project contracts cannot be a generic all-OK placeholder", () => {
@@ -190,6 +369,9 @@ test("curriculum quality report is clean for all courses", () => {
       ["computer-vision", 19, 0, 0],
       ["java-advanced", 20, 0, 0],
       ["cpp-advanced", 20, 0, 0],
+      ["olympiad-python", 47, 0, 0],
+      ["olympiad-java", 47, 0, 0],
+      ["olympiad-cpp", 47, 0, 0],
     ],
   );
 });

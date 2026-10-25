@@ -2,7 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, KeyRound, RefreshCw, Eye, Ban, RotateCcw, MessageSquare, Megaphone, Send, ShieldCheck, Users2, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound, Type, FileText, Archive, X, Check, FileArchive, AlertCircle } from "lucide-react";
+import { ArrowLeft, KeyRound, RefreshCw, Eye, EyeOff, Ban, RotateCcw, MessageSquare, Megaphone, Send, ShieldCheck, Users2, Award, Sparkles, ImagePlus, Upload, FileSpreadsheet, Trash2, Copy, Download, CircleCheck, TriangleAlert, UsersRound, Layers3, Type, Square, ZoomIn, ZoomOut, ArrowUp, ArrowDown, FileText, Settings2, Archive, X, Check, FileArchive, AlertCircle } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { PageEyebrow } from "../../components/ui/PageEyebrow";
 import { Card } from "../../components/ui/Card";
@@ -15,10 +15,14 @@ import { CodeEditor } from "../../components/CodeEditor";
 import { Skeleton } from "../../components/ui/Skeleton";
 import {
   addContestProblem,
+  addGeneratedPracticeToContest,
+  addGeneratedPracticeSetToContest,
   addContestOrganizer,
   answerContestCommunityQuestion,
   getContestCommunity,
   getContestDetails,
+  getContestLearningReview,
+  listGeneratedPracticeCandidates,
   generateContestAccounts,
   listContestTemporaryAccounts,
   deleteContestTemporaryAccount,
@@ -49,6 +53,7 @@ import {
   type ContestTemporaryAccount,
   type ContestCommunityData,
   type ContestDetails,
+  type ContestLearningReview,
   type ContestAnnulmentItem,
   type ContestOrganizerListItem,
   type ContestMyProgressProblem,
@@ -59,12 +64,15 @@ import {
   type ContestScoreboardVisibility,
   type ContestSafetyRedLockMode,
   type ContestSafetyState,
+  type GeneratedPracticeCandidate,
 } from "../../lib/api/contests";
 import { getClasses, uploadStatementImage, type Class as EduClass } from "../../lib/api/edu";
+import { generateTask } from "../../lib/api/tasks";
 import { CONTEST_BANNER_THEMES, CONTEST_ICONS } from "./contestBranding";
+import { TournamentDiplomaImport, type DiplomaImport } from "./TournamentDiplomaImport";
 import { ContestAwardsPanel } from "./ContestAwardsPanel";
+import { CertificateRecipientsPreview } from "./CertificateRecipientsPreview";
 import { ContestDisqualificationDialog } from "./ContestDisqualificationDialog";
-import { ContestCertificatesPanel } from "./ContestCertificatesPanel";
 import { ContestSafetyGate } from "./ContestSafetyGate";
 import {
   importLibraryTaskArchives,
@@ -72,9 +80,28 @@ import {
   listMyLibraryTasks,
   type LibraryTaskListItem,
 } from "../../lib/api/library";
+import {
+  createCertificateTemplate,
+  getCertificateTemplateById,
+  listCertificateTemplates,
+  generateContestCertificates,
+  updateContestCertificateSettings,
+} from "../../lib/api/certificates";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { toast } from "../../lib/toast";
 import { ContestSectionNav, type ContestSection } from "./ContestSectionNav";
+import "./CertificateStudio.css";
+import {
+  CERTIFICATE_CANVAS_HEIGHT,
+  CERTIFICATE_CANVAS_WIDTH,
+  buildCustomAutoLayoutCss,
+  buildCustomAutoLayoutHtml,
+  isSupportedCertificateBackgroundFile,
+  isSvgCertificateBackgroundFile,
+  mergeAutoLayoutCss,
+  normalizeCertificateBackgroundSource,
+  toCssUrlValue,
+} from "../../lib/certificates/editorShared";
 
 type ParsedTestInput = {
   input?: unknown;
@@ -286,6 +313,492 @@ function mergeRosterRows(
 
 type TrFn = (uk: string, en: string) => string;
 
+type CertificateFieldKey =
+  | "contest_name"
+  | "name"
+  | "full_name"
+  | "place"
+  | "score"
+  | "max_score"
+  | "date"
+  | "organizer"
+  | "signature"
+  | "certificate_id"
+  | "qr_code";
+
+const CERTIFICATE_FIELD_KEYS: CertificateFieldKey[] = [
+  "contest_name",
+  "name",
+  "full_name",
+  "place",
+  "score",
+  "max_score",
+  "date",
+  "organizer",
+  "signature",
+  "certificate_id",
+  "qr_code",
+];
+
+type CertificateFieldLayout = {
+  x: number;
+  y: number;
+  fontSize: number;
+  align: "left" | "center" | "right";
+  fontWeight: number;
+  width: number;
+};
+
+type CertificateLayoutState = Record<CertificateFieldKey, CertificateFieldLayout>;
+
+const defaultCertificateFieldsState = (): Record<CertificateFieldKey, { isEnabled: boolean; isRequired: boolean }> => ({
+  contest_name: { isEnabled: true, isRequired: false },
+  name: { isEnabled: true, isRequired: true },
+  full_name: { isEnabled: false, isRequired: false },
+  place: { isEnabled: true, isRequired: false },
+  score: { isEnabled: true, isRequired: true },
+  max_score: { isEnabled: true, isRequired: false },
+  date: { isEnabled: true, isRequired: false },
+  organizer: { isEnabled: true, isRequired: false },
+  signature: { isEnabled: true, isRequired: true },
+  certificate_id: { isEnabled: true, isRequired: false },
+  qr_code: { isEnabled: true, isRequired: false },
+});
+
+const defaultCertificateLayoutState = (): CertificateLayoutState => ({
+  contest_name: { x: 50, y: 18, fontSize: 28, align: "center", fontWeight: 700, width: 76 },
+  name: { x: 50, y: 34, fontSize: 34, align: "center", fontWeight: 700, width: 80 },
+  full_name: { x: 50, y: 40, fontSize: 42, align: "center", fontWeight: 700, width: 84 },
+  place: { x: 50, y: 45, fontSize: 26, align: "center", fontWeight: 600, width: 52 },
+  score: { x: 50, y: 53, fontSize: 22, align: "center", fontWeight: 600, width: 44 },
+  max_score: { x: 62, y: 53, fontSize: 18, align: "left", fontWeight: 500, width: 20 },
+  date: { x: 12, y: 87, fontSize: 16, align: "left", fontWeight: 500, width: 24 },
+  organizer: { x: 50, y: 87, fontSize: 16, align: "center", fontWeight: 500, width: 40 },
+  signature: { x: 84, y: 87, fontSize: 16, align: "right", fontWeight: 500, width: 24 },
+  certificate_id: { x: 12, y: 93, fontSize: 12, align: "left", fontWeight: 500, width: 30 },
+  qr_code: { x: 86, y: 93, fontSize: 12, align: "right", fontWeight: 500, width: 12 },
+});
+
+type CertificateLayoutPresetItem = {
+  id: string;
+  name: string;
+  createdAt: string;
+  bgUrl: string;
+  layout: CertificateLayoutState;
+};
+
+type CertificateLayoutSnapshot = {
+  layout: CertificateLayoutState;
+  bgUrl: string;
+};
+
+type CertificateLayoutGuide = {
+  axis: "x" | "y";
+  value: number;
+  source: "center" | "field";
+};
+
+type CertificateExtraObjectType = "text" | "image" | "shape";
+
+type CertificateExtraObject = {
+  id: string;
+  type: CertificateExtraObjectType;
+  zIndex: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  align: "left" | "center" | "right";
+  fontSize: number;
+  fontWeight: number;
+  text: string;
+  imageUrl: string;
+  color: string;
+  backgroundColor: string;
+  opacity: number;
+  borderRadius: number;
+  rotation: number;
+  isVisible?: boolean;
+};
+
+function createDefaultCertificateExtraObject(type: CertificateExtraObjectType, x = 50, y = 50): CertificateExtraObject {
+  const id = createSecureClientId("extra");
+  if (type === "image") {
+    return {
+      id,
+      type,
+      zIndex: 20,
+      x,
+      y,
+      width: 18,
+      height: 18,
+      align: "center",
+      fontSize: 18,
+      fontWeight: 500,
+      text: "",
+      imageUrl: "",
+      color: "#0f172a",
+      backgroundColor: "rgba(255,255,255,0.0)",
+      opacity: 1,
+      borderRadius: 6,
+      rotation: 0,
+    };
+  }
+  if (type === "shape") {
+    return {
+      id,
+      type,
+      zIndex: 20,
+      x,
+      y,
+      width: 16,
+      height: 10,
+      align: "center",
+      fontSize: 14,
+      fontWeight: 500,
+      text: "",
+      imageUrl: "",
+      color: "#0f172a",
+      backgroundColor: "rgba(59,130,246,0.25)",
+      opacity: 1,
+      borderRadius: 6,
+      rotation: 0,
+    };
+  }
+  return {
+    id,
+    type,
+    zIndex: 20,
+    x,
+    y,
+    width: 28,
+    height: 8,
+    align: "center",
+    fontSize: 22,
+    fontWeight: 600,
+    text: "Additional text",
+    imageUrl: "",
+    color: "#0f172a",
+    backgroundColor: "rgba(255,255,255,0.0)",
+    opacity: 1,
+    borderRadius: 0,
+    rotation: 0,
+  };
+}
+
+function certificateExtraObjectTypeLabel(type: CertificateExtraObjectType, tr: TrFn): string {
+  switch (type) {
+    case "text":
+      return tr("Текст", "Text");
+    case "image":
+      return tr("Картинка", "Image");
+    case "shape":
+      return tr("Фігура", "Shape");
+    default:
+      return type;
+  }
+}
+
+function normalizeCertificateLayoutState(layout: CertificateLayoutState): CertificateLayoutState {
+  const base = defaultCertificateLayoutState();
+  const safe = { ...base };
+  for (const key of CERTIFICATE_FIELD_KEYS) {
+    const src = layout?.[key] ?? base[key];
+    const rawX = Number(src?.x ?? base[key].x);
+    const rawY = Number(src?.y ?? base[key].y);
+    const normalizedX = rawX > 100 ? (rawX / CERTIFICATE_CANVAS_WIDTH) * 100 : rawX;
+    const normalizedY = rawY > 100 ? (rawY / CERTIFICATE_CANVAS_HEIGHT) * 100 : rawY;
+    safe[key] = {
+      x: normalizedX,
+      y: normalizedY,
+      fontSize: Number(src?.fontSize ?? base[key].fontSize),
+      align: src?.align === "right" || src?.align === "center" ? src.align : "left",
+      fontWeight: Number(src?.fontWeight ?? base[key].fontWeight),
+      width: Number(src?.width ?? base[key].width),
+    };
+  }
+  return safe;
+}
+
+function certificateLayoutPresetStorageKey(contestId: number | null): string {
+  return `studycod:capture:certificate-layout-presets:${Number.isFinite(Number(contestId)) ? Number(contestId) : "global"}`;
+}
+
+const LAYOUT_PRESET_DB = "studycod-certificate-layouts";
+const LAYOUT_PRESET_STORE = "presets";
+
+function createSecureClientId(prefix: string): string {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === "function") return `${prefix}-${cryptoApi.randomUUID()}`;
+  const bytes = new Uint8Array(16);
+  cryptoApi?.getRandomValues(bytes);
+  return `${prefix}-${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function openLayoutPresetDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(LAYOUT_PRESET_DB, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(LAYOUT_PRESET_STORE)) {
+        request.result.createObjectStore(LAYOUT_PRESET_STORE, { keyPath: "key" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function normalizeStoredCertificatePresets(raw: unknown): CertificateLayoutPresetItem[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((p) => {
+      if (!p || typeof p !== "object") return null;
+      const anyPreset = p as Partial<CertificateLayoutPresetItem>;
+      const name = String(anyPreset.name ?? "").trim();
+      const id = String(anyPreset.id ?? "").trim();
+      if (!name || !id) return null;
+      return {
+        id,
+        name,
+        createdAt: String(anyPreset.createdAt ?? new Date().toISOString()),
+        bgUrl: String((anyPreset as { bgUrl?: unknown }).bgUrl ?? (anyPreset as { backgroundUrl?: unknown }).backgroundUrl ?? ""),
+        layout: normalizeCertificateLayoutState(anyPreset.layout as CertificateLayoutState),
+      } as CertificateLayoutPresetItem;
+    })
+    .filter((p): p is CertificateLayoutPresetItem => Boolean(p));
+}
+
+async function readCertificateLayoutPresets(contestId: number | null): Promise<CertificateLayoutPresetItem[]> {
+  if (typeof window === "undefined" || typeof indexedDB === "undefined") return [];
+  try {
+    const db = await openLayoutPresetDb();
+    return await new Promise<CertificateLayoutPresetItem[]>((resolve) => {
+      const request = db.transaction(LAYOUT_PRESET_STORE, "readonly").objectStore(LAYOUT_PRESET_STORE).get(certificateLayoutPresetStorageKey(contestId));
+      request.onsuccess = () => {
+        db.close();
+        resolve(normalizeStoredCertificatePresets((request.result as { presets?: unknown } | undefined)?.presets));
+      };
+      request.onerror = () => {
+        db.close();
+        resolve([]);
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function writeCertificateLayoutPresets(contestId: number | null, presets: CertificateLayoutPresetItem[]): Promise<void> {
+  if (typeof window === "undefined" || typeof indexedDB === "undefined") return;
+  try {
+    const db = await openLayoutPresetDb();
+    await new Promise<void>((resolve) => {
+      const transaction = db.transaction(LAYOUT_PRESET_STORE, "readwrite");
+      transaction.objectStore(LAYOUT_PRESET_STORE).put({
+        key: certificateLayoutPresetStorageKey(contestId),
+        presets: normalizeStoredCertificatePresets(presets),
+      });
+      transaction.oncomplete = () => { db.close(); resolve(); };
+      transaction.onerror = () => { db.close(); resolve(); };
+      transaction.onabort = () => { db.close(); resolve(); };
+    });
+  } catch {
+    // Ignore private-mode and unavailable IndexedDB errors.
+  }
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
+}
+
+function snapByStep(value: number, step: number): number {
+  if (!Number.isFinite(step) || step <= 0) return value;
+  return Math.round(value / step) * step;
+}
+
+function areCertificateLayoutSnapshotsEqual(a: CertificateLayoutSnapshot | null | undefined, b: CertificateLayoutSnapshot | null | undefined): boolean {
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function certificateFieldLabel(key: CertificateFieldKey, tr: TrFn): string {
+  switch (key) {
+    case "contest_name":
+      return tr("Назва контесту", "Contest name");
+    case "name":
+      return tr("Нікнейм", "Nickname");
+    case "full_name":
+      return tr("Ім'я Прізвище", "Full name");
+    case "place":
+      return tr("Місце", "Place");
+    case "score":
+      return tr("Бали", "Score");
+    case "max_score":
+      return tr("Макс. бали", "Max score");
+    case "date":
+      return tr("Дата", "Date");
+    case "organizer":
+      return tr("Організатор", "Organizer");
+    case "signature":
+      return tr("Підпис", "Signature");
+    case "certificate_id":
+      return tr("ID сертифіката", "Certificate ID");
+    case "qr_code":
+      return tr("QR-код", "QR code");
+    default:
+      return key;
+  }
+}
+
+function certificateCanvasSampleValue(key: CertificateFieldKey): string {
+  switch (key) {
+    case "contest_name":
+      return "StudyCod Open 2026";
+    case "name":
+      return "nikitosruban007_";
+    case "full_name":
+      return "Ada Lovelace";
+    case "place":
+      return "1 place";
+    case "score":
+      return "95";
+    case "max_score":
+      return "100";
+    case "date":
+      return "2026-03-15";
+    case "organizer":
+      return "StudyCod";
+    case "signature":
+      return "StudyCod Team";
+    case "certificate_id":
+      return "SC-DEMO-0001";
+    case "qr_code":
+      return "[QR]";
+    default:
+      return key;
+  }
+}
+
+function renderCertificatePreviewHtml(params: {
+  htmlTemplate: string;
+  cssTemplate: string;
+  fields: Record<CertificateFieldKey, { isEnabled: boolean; isRequired: boolean }>;
+  fitToCanvas?: boolean;
+}) {
+  const fallbackScoreLine = (() => {
+    const hasScore = Boolean(params.fields.score?.isEnabled);
+    const hasMaxScore = Boolean(params.fields.max_score?.isEnabled);
+    if (hasScore && hasMaxScore) return `<p>Score: <b>{{score}}</b> / {{max_score}}</p>`;
+    if (hasScore) return `<p>Score: <b>{{score}}</b></p>`;
+    if (hasMaxScore) return `<p>Max score: <b>{{max_score}}</b></p>`;
+    return "";
+  })();
+
+  const fallbackTemplate = `
+<div class="cert-wrap">
+  <h1>Certificate of Achievement</h1>
+  <p>This certifies that <b>{{name}}</b> participated in <b>{{contest_name}}</b>.</p>
+  ${fallbackScoreLine}
+  <p>Date: {{date}}</p>
+  <p>Organizer: {{organizer}}</p>
+  <p>ID: {{certificate_id}}</p>
+  <img src="{{qr_code}}" alt="QR" style="width:120px;height:120px;object-fit:contain;border:1px solid #334155;border-radius:8px;background:#fff;" />
+</div>
+`;
+
+  const sampleValues: Record<CertificateFieldKey, string> = {
+    contest_name: "StudyCod Open 2026",
+    name: "nikitosruban007_",
+    full_name: "Ada Lovelace",
+    place: "1",
+    score: "100",
+    max_score: "100",
+    date: "2026-03-15",
+    organizer: "StudyCod",
+    signature: "StudyCod Team",
+    certificate_id: "SC-DEMO-0001",
+    qr_code: "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Crect width='120' height='120' fill='white'/%3E%3Cpath d='M10 10h30v30H10zM80 10h30v30H80zM10 80h30v30H10z' fill='%231f2937'/%3E%3Cpath d='M55 55h10v10H55zM70 70h10v10H70zM55 85h10v10H55zM85 55h10v10H85z' fill='%230f172a'/%3E%3C/svg%3E",
+  };
+
+  let html = String(params.htmlTemplate || "").trim() || fallbackTemplate;
+  html = html.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, rawKey: string) => {
+    const key = String(rawKey ?? "") as CertificateFieldKey;
+    if (!Object.prototype.hasOwnProperty.call(sampleValues, key)) return "";
+    if (!params.fields[key]?.isEnabled) return "";
+    return sampleValues[key] ?? "";
+  });
+
+  const css = String(params.cssTemplate || "").trim();
+  const fitToCanvas = params.fitToCanvas !== false;
+
+  if (!fitToCanvas) {
+    return `<!doctype html><html><head><meta charset=\"utf-8\" /><style>
+    body { margin: 0; padding: 20px; font-family: Inter, Arial, sans-serif; background: #0f172a; color: #e2e8f0; }
+    .cert-wrap { border: 2px solid #334155; border-radius: 12px; padding: 24px; background: #111827; }
+    h1 { margin: 0 0 16px; font-size: 30px; }
+    p { margin: 8px 0; line-height: 1.4; }
+    ${css}
+    </style></head><body>${html}</body></html>`;
+  }
+
+  return `<!doctype html><html><head><meta charset=\"utf-8\" /><style>
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0f172a; }
+  body { font-family: Inter, Arial, sans-serif; }
+  #preview-viewport {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  #preview-scale-root {
+    width: 1123px;
+    height: 794px;
+    transform-origin: top left;
+    will-change: transform;
+  }
+  .cert-wrap {
+    box-sizing: border-box;
+  }
+  ${css}
+  </style></head><body>
+  <div id="preview-viewport"><div id="preview-scale-root">${html}</div></div>
+  <script>
+    (function () {
+      var BASE_W = 1123;
+      var BASE_H = 794;
+      var root = document.getElementById('preview-scale-root');
+      function applyScale() {
+        if (!root) return;
+        var scale = Math.min(window.innerWidth / BASE_W, window.innerHeight / BASE_H);
+        if (!isFinite(scale) || scale <= 0) scale = 1;
+        root.style.transform = 'scale(' + scale + ')';
+      }
+      window.addEventListener('resize', applyScale);
+      applyScale();
+    })();
+  </script>
+  </body></html>`;
+}
+
+function extractTemplatePlaceholders(template: string): string[] {
+  const text = String(template ?? "");
+  const regex = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+  const keys = new Set<string>();
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(text)) !== null) {
+    const key = String(match[1] ?? "").trim();
+    if (key) keys.add(key);
+  }
+  return Array.from(keys.values());
+}
+
+// buildCustomAutoLayoutHtml / buildCustomAutoLayoutCss / mergeAutoLayoutCss now live in
+// ../../lib/certificates/editorShared so the contest editor and the admin global-template
+// editor share one canonical layout→HTML/CSS engine (imported at the top of this file).
+
 function contestPhaseChip(params: { started: boolean; finished: boolean; paused?: boolean; tr: TrFn }) {
   if (params.paused) {
     return {
@@ -476,7 +989,7 @@ export const ContestPage: React.FC = () => {
   const [addOpen, setAddOpen] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
   const [addError, setAddError] = React.useState<string | null>(null);
-  const [addMode, setAddMode] = React.useState<"CREATE" | "COPY" | "IMPORT">("CREATE");
+  const [addMode, setAddMode] = React.useState<"CREATE" | "COPY" | "GENERATED" | "IMPORT">("CREATE");
   const [addTitle, setAddTitle] = React.useState("");
   const [addDescription, setAddDescription] = React.useState("");
   const [addTemplate, setAddTemplate] = React.useState("public class Main {\n  public static void main(String[] args) {\n    // TODO\n  }\n}\n");
@@ -486,6 +999,12 @@ export const ContestPage: React.FC = () => {
   const [copyQuery, setCopyQuery] = React.useState("");
   const [copyLoading, setCopyLoading] = React.useState(false);
   const [copyItems, setCopyItems] = React.useState<LibraryTaskListItem[]>([]);
+  const [generatedPracticeCandidates, setGeneratedPracticeCandidates] = React.useState<GeneratedPracticeCandidate[]>([]);
+  const [generatedPracticeLoading, setGeneratedPracticeLoading] = React.useState(false);
+  const [generatedPracticeTaskIds, setGeneratedPracticeTaskIds] = React.useState<string[]>([]);
+  const [generatedPracticeSetMode, setGeneratedPracticeSetMode] = React.useState<"THEMATIC" | "MIXED">("MIXED");
+  const [variantCourseItemId, setVariantCourseItemId] = React.useState("");
+  const [generatingCourseVariant, setGeneratingCourseVariant] = React.useState(false);
   const [archiveFiles, setArchiveFiles] = React.useState<File[]>([]);
   const [archiveImportResult, setArchiveImportResult] = React.useState<{ attached: string[]; failures: Array<{ name: string; message: string }> } | null>(null);
   const [archiveDropActive, setArchiveDropActive] = React.useState(false);
@@ -501,6 +1020,9 @@ export const ContestPage: React.FC = () => {
   const [progressLoading, setProgressLoading] = React.useState(false);
   const [progressError, setProgressError] = React.useState<string | null>(null);
   const [progress, setProgress] = React.useState<ContestMyProgressProblem[] | null>(null);
+  const [learningReviewLoading, setLearningReviewLoading] = React.useState(false);
+  const [learningReviewError, setLearningReviewError] = React.useState<string | null>(null);
+  const [learningReview, setLearningReview] = React.useState<ContestLearningReview | null>(null);
 
   const [disqualificationTarget, setDisqualificationTarget] = React.useState<ContestAdminParticipant | null>(null);
   const [adminParticipantsLoading, setAdminParticipantsLoading] = React.useState(false);
@@ -510,7 +1032,6 @@ export const ContestPage: React.FC = () => {
   const [adminParticipantsActionTone, setAdminParticipantsActionTone] = React.useState<"success" | "warn" | "error">("success");
   const [contestMessageTitle, setContestMessageTitle] = React.useState("");
   const [contestMessageText, setContestMessageText] = React.useState("");
-  const [contestMessageAttachments, setContestMessageAttachments] = React.useState<File[]>([]);
   const [contestMessageSending, setContestMessageSending] = React.useState(false);
   const [contestMessageError, setContestMessageError] = React.useState<string | null>(null);
   const [contestMessageResult, setContestMessageResult] = React.useState<{
@@ -545,6 +1066,96 @@ export const ContestPage: React.FC = () => {
   const [accountMailResult, setAccountMailResult] = React.useState<string | null>(null);
   const [accountMailCustomMessage, setAccountMailCustomMessage] = React.useState("");
   const [accountMailAttachments, setAccountMailAttachments] = React.useState<File[]>([]);
+
+  const [certificateMode, setCertificateMode] = React.useState<"none" | "studycod" | "custom">("studycod");
+  const certificateEditorOpen = true;
+  const certificateUiSimpleMode = true;
+  const [certificateUiAdvancedOpen, setCertificateUiAdvancedOpen] = React.useState(false);
+  const [certificateAutoSyncLayout, setCertificateAutoSyncLayout] = React.useState(true);
+  const certificateCanvasFocusMode = true;
+  const [certificateZoom, setCertificateZoom] = React.useState(100);
+  const [certificateInspectorTab, setCertificateInspectorTab] = React.useState<"design" | "page">("design");
+  const [certificateGlobalSettingsOpen, setCertificateGlobalSettingsOpen] = React.useState(false);
+  const [certificateSendEmailEnabled, setCertificateSendEmailEnabled] = React.useState(true);
+  const [certificateForceRegenerate, setCertificateForceRegenerate] = React.useState(false);
+  const [certificateTemplateId, setCertificateTemplateId] = React.useState("");
+  // True when the current Template ID was auto-created from the canvas (not manually linked).
+  // Lets us re-create a fresh template on every save so canvas edits always reach the PDF
+  // (templates are immutable — there is no update endpoint).
+  const [certificateTemplateAutoCreated, setCertificateTemplateAutoCreated] = React.useState(false);
+  // When true the saved template is global (contest_id = NULL) — reusable across every contest,
+  // so organizers can build a house style here instead of the separate Admin Panel editor.
+  const [certificateTemplateGlobal, setCertificateTemplateGlobal] = React.useState(false);
+  const [certificateTemplateName, setCertificateTemplateName] = React.useState("Custom template");
+  const [certificateTemplateHtml, setCertificateTemplateHtml] = React.useState("");
+  const [certificateTemplateCss, setCertificateTemplateCss] = React.useState("");
+  const [certificateLayoutBackgroundUrl, setCertificateLayoutBackgroundUrl] = React.useState<string>("");
+  const [certificateLayout, setCertificateLayout] = React.useState<CertificateLayoutState>(() => defaultCertificateLayoutState());
+  const [certificateLayoutSelectedField, setCertificateLayoutSelectedField] = React.useState<CertificateFieldKey | null>(null);
+  const [certificateLayoutExtraObjects, setCertificateLayoutExtraObjects] = React.useState<CertificateExtraObject[]>([]);
+  const [certificateLayoutSelectedExtraObjectId, setCertificateLayoutSelectedExtraObjectId] = React.useState<string | null>(null);
+  const [certificateLayoutDraggingExtraObjectId, setCertificateLayoutDraggingExtraObjectId] = React.useState<string | null>(null);
+  const [certificateLayoutResizingExtraObjectId, setCertificateLayoutResizingExtraObjectId] = React.useState<string | null>(null);
+  const [certificateLayoutDraggingField, setCertificateLayoutDraggingField] = React.useState<CertificateFieldKey | null>(null);
+  const [certificateLayoutResizingField, setCertificateLayoutResizingField] = React.useState<CertificateFieldKey | null>(null);
+  const [certificateLayoutResizeStart, setCertificateLayoutResizeStart] = React.useState<{
+    clientX: number;
+    clientY: number;
+    width: number;
+    fontSize: number;
+    x: number;
+    align: "left" | "center" | "right";
+    edge: "left" | "right" | "top" | "bottom";
+  } | null>(null);
+  const [certificateLayoutExtraResizeStart, setCertificateLayoutExtraResizeStart] = React.useState<{
+    clientX: number;
+    clientY: number;
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+    align: "left" | "center" | "right";
+    edge: "left" | "right" | "top" | "bottom";
+  } | null>(null);
+  const [certificateLayoutSnapEnabled, setCertificateLayoutSnapEnabled] = React.useState(true);
+  const [certificateLayoutSnapStep, setCertificateLayoutSnapStep] = React.useState(2);
+  const [certificateLayoutShowGuides, setCertificateLayoutShowGuides] = React.useState(true);
+  const [certificateLayoutActiveGuides, setCertificateLayoutActiveGuides] = React.useState<CertificateLayoutGuide[]>([]);
+  const [certificateLayoutContextMenu, setCertificateLayoutContextMenu] = React.useState<{
+    left: number;
+    top: number;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [certificateLayoutPresetName, setCertificateLayoutPresetName] = React.useState("");
+  const [certificateLayoutPresets, setCertificateLayoutPresets] = React.useState<CertificateLayoutPresetItem[]>([]);
+  const [certificateLayoutPresetId, setCertificateLayoutPresetId] = React.useState("");
+  const [certificateLayoutHistory, setCertificateLayoutHistory] = React.useState<CertificateLayoutSnapshot[]>(() => [
+    {
+      layout: defaultCertificateLayoutState(),
+      bgUrl: "",
+    },
+  ]);
+  const [certificateLayoutHistoryIndex, setCertificateLayoutHistoryIndex] = React.useState(0);
+  const [certificateLayoutBackgroundStatus, setCertificateLayoutBackgroundStatus] = React.useState<"none" | "loading" | "ready" | "error">("none");
+  const [certificateLayoutBackgroundError, setCertificateLayoutBackgroundError] = React.useState<string | null>(null);
+  const certificateLayoutCanvasRef = React.useRef<HTMLDivElement | null>(null);
+  const [certificateFields, setCertificateFields] = React.useState<Record<CertificateFieldKey, { isEnabled: boolean; isRequired: boolean }>>(() => defaultCertificateFieldsState());
+  const [certificateSaving, setCertificateSaving] = React.useState(false);
+  const [certificateCreatingTemplate, setCertificateCreatingTemplate] = React.useState(false);
+  const [certificateGenerating, setCertificateGenerating] = React.useState(false);
+  const [certificateTemplateChecking, setCertificateTemplateChecking] = React.useState(false);
+  const [certificateTemplateCheckResult, setCertificateTemplateCheckResult] = React.useState<{
+    ok: boolean;
+    message: string;
+    type?: "studycod" | "custom";
+  } | null>(null);
+  const [certificateError, setCertificateError] = React.useState<string | null>(null);
+  const [certificateMessage, setCertificateMessage] = React.useState<string | null>(null);
+  const [certificatePreviewOpen, setCertificatePreviewOpen] = React.useState(false);
+  const [certificatePreviewFitCanvas, setCertificatePreviewFitCanvas] = React.useState(true);
+  const [certificateTemplatesCatalog, setCertificateTemplatesCatalog] = React.useState<Array<{ id: number; contestId: number | null; name: string; type: "studycod" | "custom"; isActive: boolean; version: number }>>([]);
+  const [certificateTemplatesCatalogLoading, setCertificateTemplatesCatalogLoading] = React.useState(false);
 
   const [pauseSaving, setPauseSaving] = React.useState(false);
   const [organizersLoading, setOrganizersLoading] = React.useState(false);
@@ -615,6 +1226,28 @@ export const ContestPage: React.FC = () => {
     if (tab !== "problems") return;
     loadProgress();
   }, [tab, loadProgress]);
+
+  const loadLearningReview = React.useCallback(() => {
+    if (!contestId || !hasToken || !data?.access?.canAccessContent || !data?.access?.isJoined || !data?.phase?.finished) {
+      setLearningReview(null);
+      setLearningReviewError(null);
+      return;
+    }
+    setLearningReviewLoading(true);
+    setLearningReviewError(null);
+    getContestLearningReview(contestId)
+      .then(setLearningReview)
+      .catch((error: unknown) => {
+        const msg = getErrorMessage(error);
+        setLearningReviewError(msg || tr("Не вдалося завантажити післязмагальний розбір", "Could not load the post-contest review"));
+        setLearningReview(null);
+      })
+      .finally(() => setLearningReviewLoading(false));
+  }, [contestId, hasToken, data?.access?.canAccessContent, data?.access?.isJoined, data?.phase?.finished, tr]);
+
+  React.useEffect(() => {
+    loadLearningReview();
+  }, [loadLearningReview]);
 
   const loadCommunity = React.useCallback(async () => {
     if (!contestId) return;
@@ -728,7 +1361,7 @@ export const ContestPage: React.FC = () => {
         title: contestMessageTitle.trim(),
         text: contestMessageText.trim(),
         ...(retryEmails ? { retryEmails } : {}),
-      }, contestMessageAttachments);
+      });
       const combinedResult = retryEmails && contestMessageResult
         ? {
             ...contestMessageResult,
@@ -740,18 +1373,10 @@ export const ContestPage: React.FC = () => {
       if (combinedResult.sent > 0 && combinedResult.failed.length === 0) {
         setContestMessageTitle("");
         setContestMessageText("");
-        setContestMessageAttachments([]);
       }
     } catch (error: unknown) {
       const message = getErrorMessage(error);
-      const uploadErrorMessages: Record<string, string> = {
-        UNSUPPORTED_MEDIA_TYPE: tr("Цей тип файлу не підтримується.", "This file type is not supported."),
-        FILE_TOO_LARGE: tr("Файл завеликий. Максимум — 10 МБ.", "A file is too large. Maximum size is 10 MB."),
-        ATTACHMENTS_TOO_LARGE: tr("Загальний розмір вкладень не може перевищувати 20 МБ.", "Attachments cannot exceed 20 MB in total."),
-        TOO_MANY_FILES: tr("Можна прикріпити не більше 5 файлів.", "You can attach up to 5 files."),
-        UPLOAD_FAILED: tr("Не вдалося завантажити вкладення.", "Failed to upload attachments."),
-      };
-      setContestMessageError(uploadErrorMessages[message] || message || tr("Не вдалося надіслати листи учасникам.", "Failed to email participants."));
+      setContestMessageError(message || tr("Не вдалося надіслати листи учасникам.", "Failed to email participants."));
     } finally {
       setContestMessageSending(false);
     }
@@ -873,6 +1498,1219 @@ export const ContestPage: React.FC = () => {
     } finally {
       setDeleteContestLoading(false);
     }
+  };
+
+  const buildCurrentCustomTemplateDraft = React.useCallback(() => {
+    if (certificateAutoSyncLayout) {
+      const autoHtml = buildCustomAutoLayoutHtml(certificateFields, certificateLayoutExtraObjects);
+      const autoCss = buildCustomAutoLayoutCss({
+        layouts: certificateLayout,
+        backgroundImageUrl: certificateLayoutBackgroundUrl,
+        extraObjects: certificateLayoutExtraObjects,
+      });
+      const mergedCss = mergeAutoLayoutCss(certificateTemplateCss, autoCss);
+      return {
+        htmlTemplate: autoHtml,
+        cssTemplate: mergedCss,
+      };
+    }
+    return {
+      htmlTemplate: String(certificateTemplateHtml ?? "").trim(),
+      cssTemplate: String(certificateTemplateCss ?? "").trim(),
+    };
+  }, [certificateAutoSyncLayout, certificateFields, certificateLayout, certificateLayoutBackgroundUrl, certificateLayoutExtraObjects, certificateTemplateCss, certificateTemplateHtml]);
+
+  const applyImportedDiploma = (template: DiplomaImport) => {
+    setCertificateAutoSyncLayout(false);
+    setCertificateMode("custom");
+    setCertificateTemplateId("");
+    setCertificateTemplateAutoCreated(false);
+    setCertificateTemplateName(template.name);
+    setCertificateTemplateHtml(template.htmlTemplate);
+    setCertificateTemplateCss(template.cssTemplate);
+    const mapped = defaultCertificateFieldsState();
+    for (const key of CERTIFICATE_FIELD_KEYS) mapped[key] = { isEnabled: false, isRequired: false };
+    const fields = template.fields ?? extractTemplatePlaceholders(template.htmlTemplate).map(fieldKey => ({ fieldKey, isEnabled: true, isRequired: fieldKey === "name" }));
+    for (const field of fields) {
+      if (CERTIFICATE_FIELD_KEYS.includes(field.fieldKey as CertificateFieldKey)) mapped[field.fieldKey as CertificateFieldKey] = { isEnabled: field.isEnabled !== false, isRequired: field.isRequired === true };
+    }
+    setCertificateFields(mapped);
+    setCertificatePreviewOpen(true);
+    setCertificateUiAdvancedOpen(true);
+    setCertificateError(null);
+    setCertificateMessage(tr("Дизайн завантажено. Збережи налаштування, щоб використовувати його для дипломів.", "Design loaded. Save settings to use it for certificates."));
+  };
+
+  const createCustomCertificateTemplate = async (): Promise<number | null> => {
+    if (!contestId) return null;
+    const draft = buildCurrentCustomTemplateDraft();
+    const htmlTemplate = draft.htmlTemplate;
+    const cssTemplate = draft.cssTemplate;
+    if (certificateAutoSyncLayout) {
+      setCertificateTemplateHtml(htmlTemplate);
+      setCertificateTemplateCss(cssTemplate);
+    }
+    if (!htmlTemplate) {
+      setCertificateError(tr("Для custom-шаблону потрібен HTML", "Custom template requires HTML"));
+      return null;
+    }
+    const placeholders = extractTemplatePlaceholders(htmlTemplate);
+    const allowed = new Set<string>(CERTIFICATE_FIELD_KEYS);
+    const unknownPlaceholders = placeholders.filter((key) => !allowed.has(key));
+    const inTemplate = new Set<string>(placeholders);
+    const missingRequired = CERTIFICATE_FIELD_KEYS.filter((key) => {
+      const field = certificateFields[key];
+      return Boolean(field?.isEnabled && field?.isRequired) && !inTemplate.has(key);
+    });
+
+    if (unknownPlaceholders.length > 0) {
+      setCertificateError(
+        tr(
+          `Невідомі placeholders: ${unknownPlaceholders.join(", ")}`,
+          `Unknown placeholders: ${unknownPlaceholders.join(", ")}`
+        )
+      );
+      return null;
+    }
+    if (missingRequired.length > 0) {
+      setCertificateError(
+        tr(
+          `У шаблоні відсутні обов'язкові placeholders: ${missingRequired.join(", ")}`,
+          `Template is missing required placeholders: ${missingRequired.join(", ")}`
+        )
+      );
+      return null;
+    }
+
+    setCertificateCreatingTemplate(true);
+    setCertificateError(null);
+    try {
+      const created = await createCertificateTemplate({
+        contestId: certificateTemplateGlobal ? undefined : contestId,
+        name: certificateTemplateName.trim() || (certificateMode === "studycod" ? "StudyCod layout" : "Custom template"),
+        type: certificateMode === "studycod" ? "studycod" : "custom",
+        htmlTemplate,
+        cssTemplate: cssTemplate || undefined,
+        fields: CERTIFICATE_FIELD_KEYS.map((fieldKey) => ({
+          fieldKey,
+          isEnabled: Boolean(certificateFields[fieldKey]?.isEnabled),
+          isRequired: Boolean(certificateFields[fieldKey]?.isRequired),
+        })),
+      });
+      setCertificateTemplateId(String(created.templateId));
+      setCertificateTemplateAutoCreated(true);
+      setCertificateMessage(
+        tr(
+          `Шаблон створено. ID: ${created.templateId}`,
+          `Template created. ID: ${created.templateId}`
+        )
+      );
+      return created.templateId;
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e);
+      setCertificateError(msg || tr("Не вдалося створити шаблон", "Failed to create template"));
+      return null;
+    } finally {
+      setCertificateCreatingTemplate(false);
+    }
+  };
+
+  const saveCertificateSettings = async () => {
+    if (!contestId) return;
+    // The canvas is the single source of truth for BOTH StudyCod and Custom modes:
+    // whatever is on the canvas is compiled to HTML/CSS and rendered verbatim in the PDF.
+    if (certificateMode !== "none" && certificateAutoSyncLayout) {
+      const draft = buildCurrentCustomTemplateDraft();
+      setCertificateTemplateHtml(draft.htmlTemplate);
+      setCertificateTemplateCss(draft.cssTemplate);
+    }
+    // Placeholder validation only matters when the organizer edits raw HTML by hand.
+    // Auto-layout always emits valid placeholders for enabled fields.
+    if (!certificateAutoSyncLayout && certificateMode === "custom" && certificateUnknownPlaceholders.length > 0) {
+      setCertificateError(
+        tr(
+          `Невідомі placeholders: ${certificateUnknownPlaceholders.join(", ")}`,
+          `Unknown placeholders: ${certificateUnknownPlaceholders.join(", ")}`
+        )
+      );
+      return;
+    }
+    if (!certificateAutoSyncLayout && certificateMode === "custom" && certificateMissingRequiredPlaceholders.length > 0) {
+      setCertificateError(
+        tr(
+          `У шаблоні відсутні обов'язкові placeholders: ${certificateMissingRequiredPlaceholders.join(", ")}`,
+          `Template is missing required placeholders: ${certificateMissingRequiredPlaceholders.join(", ")}`
+        )
+      );
+      return;
+    }
+    setCertificateSaving(true);
+    setCertificateError(null);
+    setCertificateMessage(null);
+    try {
+      let defaultTemplateId: number | null = null;
+      const typedTemplateId = Number(certificateTemplateId);
+      if (Number.isFinite(typedTemplateId) && typedTemplateId > 0) {
+        defaultTemplateId = typedTemplateId;
+      }
+
+      // Persist the current canvas as a fresh template whenever there is no manually-linked
+      // template id — i.e. either nothing is linked yet, or the linked id was itself
+      // auto-created from a previous save (templates are immutable, so re-saving must create
+      // a new one to capture canvas edits). A manually entered / catalog-linked id is reused.
+      const shouldPersistCanvas =
+        certificateMode !== "none" &&
+        (!defaultTemplateId || (certificateAutoSyncLayout && certificateTemplateAutoCreated));
+      if (shouldPersistCanvas) {
+        const draftHtml = buildCurrentCustomTemplateDraft().htmlTemplate.trim();
+        if (draftHtml) {
+          const createdId = await createCustomCertificateTemplate();
+          if (!createdId) {
+            setCertificateSaving(false);
+            return;
+          }
+          defaultTemplateId = createdId;
+        }
+      }
+
+      if (certificateMode === "custom" && !defaultTemplateId) {
+        setCertificateError(
+          tr(
+            "Для custom-режиму потрібен Template ID або заповнений HTML шаблон",
+            "Custom mode requires a Template ID or a non-empty HTML template"
+          )
+        );
+        setCertificateSaving(false);
+        return;
+      }
+
+      // StudyCod with no template id and an empty canvas falls back to the built-in
+      // default design (backend auto-resolves it) — no error needed.
+
+      await updateContestCertificateSettings(contestId, {
+        mode: certificateMode,
+        defaultTemplateId,
+        sendEmailEnabled: certificateSendEmailEnabled,
+      });
+
+      setCertificateMessage(tr("Налаштування сертифікатів збережено", "Certificate settings saved"));
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e);
+      setCertificateError(msg || tr("Не вдалося зберегти налаштування сертифікатів", "Failed to save certificate settings"));
+    } finally {
+      setCertificateSaving(false);
+    }
+  };
+
+  const validateCertificateTemplateId = async () => {
+    if (certificateTemplateChecking) return;
+    const typedTemplateId = Number(certificateTemplateId);
+    if (!Number.isFinite(typedTemplateId) || typedTemplateId <= 0) {
+      setCertificateTemplateCheckResult({
+        ok: false,
+        message: tr("Вкажіть коректний числовий Template ID", "Provide a valid numeric Template ID"),
+      });
+      return;
+    }
+
+    setCertificateTemplateChecking(true);
+    setCertificateTemplateCheckResult(null);
+    try {
+      const result = await getCertificateTemplateById(typedTemplateId);
+      if (result.template.type !== "studycod" && certificateMode === "studycod") {
+        setCertificateTemplateCheckResult({
+          ok: false,
+          message: tr("Це не StudyCod шаблон", "This is not a StudyCod template"),
+          type: result.template.type,
+        });
+        return;
+      }
+
+      setCertificateTemplateCheckResult({
+        ok: true,
+        message: tr(
+          `Шаблон знайдено: ${result.template.name}`,
+          `Template found: ${result.template.name}`
+        ),
+        type: result.template.type,
+      });
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e);
+      setCertificateTemplateCheckResult({
+        ok: false,
+        message: msg || tr("Template ID не знайдено", "Template ID not found"),
+      });
+    } finally {
+      setCertificateTemplateChecking(false);
+    }
+  };
+
+  const autoValidateCertificateTemplateId = () => {
+    const typedTemplateId = Number(certificateTemplateId);
+    if (!Number.isFinite(typedTemplateId) || typedTemplateId <= 0) {
+      setCertificateTemplateCheckResult(null);
+      return;
+    }
+    void validateCertificateTemplateId();
+  };
+
+  React.useEffect(() => {
+    setCertificateTemplateCheckResult(null);
+  }, [certificateTemplateId, certificateMode]);
+
+  const enqueueCertificateGeneration = async () => {
+    if (!contestId) return;
+    setCertificateGenerating(true);
+    setCertificateError(null);
+    setCertificateMessage(null);
+    try {
+      const r = await generateContestCertificates(contestId, {
+        forceRegenerate: certificateForceRegenerate,
+      });
+      setCertificateMessage(
+        tr(
+          `Генерацію поставлено в чергу. Job ID: ${r.jobId}`,
+          `Generation queued. Job ID: ${r.jobId}`
+        )
+      );
+    } catch (e: unknown) {
+      const msg = getErrorMessage(e);
+      setCertificateError(msg || tr("Не вдалося запустити генерацію сертифікатів", "Failed to start certificate generation"));
+    } finally {
+      setCertificateGenerating(false);
+    }
+  };
+
+  const certificatePreviewSrcDoc = React.useMemo(
+    () =>
+      renderCertificatePreviewHtml({
+        htmlTemplate: certificateTemplateHtml,
+        cssTemplate: certificateTemplateCss,
+        fields: certificateFields,
+        fitToCanvas: certificatePreviewFitCanvas,
+      }),
+    [certificateTemplateHtml, certificateTemplateCss, certificateFields, certificatePreviewFitCanvas]
+  );
+  const certificateTemplatePlaceholders = React.useMemo(
+    () => extractTemplatePlaceholders(certificateTemplateHtml),
+    [certificateTemplateHtml]
+  );
+  const certificateUnknownPlaceholders = React.useMemo(() => {
+    const allowed = new Set<string>(CERTIFICATE_FIELD_KEYS);
+    return certificateTemplatePlaceholders.filter((key) => !allowed.has(key));
+  }, [certificateTemplatePlaceholders]);
+  const certificateMissingRequiredPlaceholders = React.useMemo(() => {
+    const inTemplate = new Set<string>(certificateTemplatePlaceholders);
+    return CERTIFICATE_FIELD_KEYS.filter((key) => {
+      const field = certificateFields[key];
+      return Boolean(field?.isEnabled && field?.isRequired) && !inTemplate.has(key);
+    });
+  }, [certificateFields, certificateTemplatePlaceholders]);
+  const certificateDisabledReferencedPlaceholders = React.useMemo(() => {
+    return certificateTemplatePlaceholders.filter((key) => {
+      if (!CERTIFICATE_FIELD_KEYS.includes(key as CertificateFieldKey)) return false;
+      return !certificateFields[key as CertificateFieldKey]?.isEnabled;
+    });
+  }, [certificateFields, certificateTemplatePlaceholders]);
+
+  const enableReferencedCertificateFields = () => {
+    if (certificateDisabledReferencedPlaceholders.length === 0) return;
+    setCertificateFields((prev) => {
+      const next = { ...prev };
+      for (const rawKey of certificateDisabledReferencedPlaceholders) {
+        const key = rawKey as CertificateFieldKey;
+        const current = next[key];
+        if (!current) continue;
+        next[key] = {
+          ...current,
+          isEnabled: true,
+        };
+      }
+      return next;
+    });
+  };
+
+  const insertMissingRequiredCertificatePlaceholders = () => {
+    if (certificateMissingRequiredPlaceholders.length === 0) return;
+    const toInsert = certificateMissingRequiredPlaceholders
+      .map((key) => `<div>{{${key}}}</div>`)
+      .join("\n");
+    setCertificateTemplateHtml((prev) => {
+      const base = String(prev ?? "").trimEnd();
+      if (!base) return toInsert;
+      const sep = base.endsWith("\n") ? "" : "\n";
+      return `${base}${sep}${toInsert}`;
+    });
+  };
+
+  const applyAutoLayoutToTemplate = () => {
+    const autoHtml = buildCustomAutoLayoutHtml(certificateFields, certificateLayoutExtraObjects);
+    const autoCss = buildCustomAutoLayoutCss({
+      layouts: certificateLayout,
+      backgroundImageUrl: certificateLayoutBackgroundUrl,
+      extraObjects: certificateLayoutExtraObjects,
+    });
+
+    setCertificateTemplateHtml(autoHtml);
+    setCertificateTemplateCss((prev) => mergeAutoLayoutCss(prev, autoCss));
+  };
+
+  const autoSyncLayoutToTemplate = React.useCallback(() => {
+    const autoHtml = buildCustomAutoLayoutHtml(certificateFields, certificateLayoutExtraObjects);
+    const autoCss = buildCustomAutoLayoutCss({
+      layouts: certificateLayout,
+      backgroundImageUrl: certificateLayoutBackgroundUrl,
+      extraObjects: certificateLayoutExtraObjects,
+    });
+    setCertificateTemplateHtml((prev) => (prev === autoHtml ? prev : autoHtml));
+    setCertificateTemplateCss((prev) => {
+      const merged = mergeAutoLayoutCss(prev, autoCss);
+      return prev === merged ? prev : merged;
+    });
+  }, [certificateFields, certificateLayout, certificateLayoutBackgroundUrl, certificateLayoutExtraObjects]);
+
+  React.useEffect(() => {
+    if (certificateMode === "none") return;
+    if (!certificateAutoSyncLayout) return;
+    // Debounced: while dragging, layout state changes on every pointer tick. Rebuilding
+    // the HTML/CSS strings + setState each tick is the main editor lag source. We only
+    // need the synced template for the preview and save flow, so coalesce rapid updates.
+    const handle = window.setTimeout(() => {
+      autoSyncLayoutToTemplate();
+    }, 140);
+    return () => window.clearTimeout(handle);
+  }, [autoSyncLayoutToTemplate, certificateAutoSyncLayout, certificateMode]);
+
+  const loadCertificateTemplatesCatalog = React.useCallback(async () => {
+    setCertificateTemplatesCatalogLoading(true);
+    try {
+      const result = await listCertificateTemplates({ includeInactive: true, limit: 300 });
+      setCertificateTemplatesCatalog(Array.isArray(result.templates) ? result.templates : []);
+    } catch {
+      setCertificateTemplatesCatalog([]);
+    } finally {
+      setCertificateTemplatesCatalogLoading(false);
+    }
+  }, []);
+
+  const applyTemplateFromCatalog = React.useCallback(
+    async (tpl: {
+      id: number;
+      name: string;
+      type: "studycod" | "custom";
+    }) => {
+      const nextMode: "studycod" | "custom" = tpl.type === "studycod" ? "studycod" : "custom";
+      setCertificateMode(nextMode);
+      setCertificateTemplateId(String(tpl.id));
+      setCertificateTemplateAutoCreated(false);
+      setCertificateTemplateCheckResult({
+        ok: true,
+        message: tr(`Вибрано шаблон: ${tpl.name}`, `Selected template: ${tpl.name}`),
+        type: tpl.type,
+      });
+
+      if (nextMode !== "custom") {
+        setCertificateMessage(tr(`Шаблон #${tpl.id} вибрано`, `Template #${tpl.id} selected`));
+        return;
+      }
+
+      try {
+        const result = await getCertificateTemplateById(tpl.id);
+        const template = result.template;
+        setCertificateTemplateName(String(template.name ?? "").trim() || "Custom template");
+        setCertificateTemplateHtml(String(template.htmlTemplate ?? ""));
+        setCertificateTemplateCss(String(template.cssTemplate ?? ""));
+        setCertificateAutoSyncLayout(false);
+
+        const defaults = defaultCertificateFieldsState();
+        const mapped = { ...defaults };
+        for (const row of Array.isArray(template.fields) ? template.fields : []) {
+          if (!Object.prototype.hasOwnProperty.call(mapped, row.fieldKey)) continue;
+          mapped[row.fieldKey as keyof typeof mapped] = {
+            isEnabled: Boolean(row.isEnabled),
+            isRequired: Boolean(row.isRequired),
+          };
+        }
+        setCertificateFields(mapped);
+        setCertificateMessage(tr(`Кастомний шаблон #${tpl.id} завантажено`, `Custom template #${tpl.id} loaded`));
+      } catch (e: unknown) {
+        setCertificateError(
+          getErrorMessage(e) || tr("Не вдалося завантажити шаблон з бібліотеки", "Failed to load template from library")
+        );
+      }
+    },
+    [tr]
+  );
+
+  React.useEffect(() => {
+    if (tab !== "certificates") return;
+    if (!data?.access?.canManage) return;
+    void loadCertificateTemplatesCatalog();
+  }, [data?.access?.canManage, loadCertificateTemplatesCatalog, tab]);
+
+  const resetCertificateLayout = () => {
+    const nextLayout = defaultCertificateLayoutState();
+    setCertificateLayout(nextLayout);
+    setCertificateLayoutSelectedField(null);
+    setCertificateLayoutSelectedExtraObjectId(null);
+    setCertificateLayoutDraggingExtraObjectId(null);
+    setCertificateLayoutDraggingField(null);
+    setCertificateLayoutResizingField(null);
+    setCertificateLayoutResizeStart(null);
+    setCertificateLayoutHistory((prev) => {
+      const base = prev.slice(0, certificateLayoutHistoryIndex + 1);
+      const snapshot: CertificateLayoutSnapshot = {
+        layout: normalizeCertificateLayoutState(nextLayout),
+        bgUrl: certificateLayoutBackgroundUrl,
+      };
+      const last = base[base.length - 1];
+      if (areCertificateLayoutSnapshotsEqual(last, snapshot)) return prev;
+      const appended = [...base, snapshot];
+      const trimmed = appended.length > 80 ? appended.slice(appended.length - 80) : appended;
+      setCertificateLayoutHistoryIndex(trimmed.length - 1);
+      return trimmed;
+    });
+  };
+
+  const pushCertificateLayoutSnapshot = React.useCallback(
+    (nextLayout: CertificateLayoutState, nextBackgroundUrl?: string) => {
+      const snapshot: CertificateLayoutSnapshot = {
+        layout: normalizeCertificateLayoutState(nextLayout),
+        bgUrl: String(nextBackgroundUrl ?? certificateLayoutBackgroundUrl),
+      };
+      setCertificateLayoutHistory((prev) => {
+        const base = prev.slice(0, certificateLayoutHistoryIndex + 1);
+        const last = base[base.length - 1];
+        if (areCertificateLayoutSnapshotsEqual(last, snapshot)) return prev;
+        const appended = [...base, snapshot];
+        const trimmed = appended.length > 80 ? appended.slice(appended.length - 80) : appended;
+        setCertificateLayoutHistoryIndex(trimmed.length - 1);
+        return trimmed;
+      });
+    },
+    [certificateLayoutBackgroundUrl, certificateLayoutHistoryIndex]
+  );
+
+  const updateCertificateLayout = React.useCallback(
+    (updater: (prev: CertificateLayoutState) => CertificateLayoutState, options?: { commit?: boolean; backgroundUrl?: string }) => {
+      setCertificateLayout((prev) => {
+        const next = normalizeCertificateLayoutState(updater(prev));
+        if (options?.commit !== false) {
+          pushCertificateLayoutSnapshot(next, options?.backgroundUrl);
+        }
+        return next;
+      });
+    },
+    [pushCertificateLayoutSnapshot]
+  );
+
+  const updateCertificateLayoutBackgroundUrl = React.useCallback(
+    (nextValue: string, options?: { commit?: boolean; layout?: CertificateLayoutState }) => {
+      const normalized = normalizeCertificateBackgroundSource(String(nextValue ?? ""));
+      setCertificateLayoutBackgroundUrl(normalized);
+      if (options?.commit !== false) {
+        pushCertificateLayoutSnapshot(options?.layout ?? certificateLayout, normalized);
+      }
+    },
+    [certificateLayout, pushCertificateLayoutSnapshot]
+  );
+
+  React.useEffect(() => {
+    const src = String(certificateLayoutBackgroundUrl ?? "").trim();
+    if (!src) {
+      setCertificateLayoutBackgroundStatus("none");
+      setCertificateLayoutBackgroundError(null);
+      return;
+    }
+
+    let disposed = false;
+    setCertificateLayoutBackgroundStatus("loading");
+    setCertificateLayoutBackgroundError(null);
+
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => {
+      if (disposed) return;
+      setCertificateLayoutBackgroundStatus("ready");
+      setCertificateLayoutBackgroundError(null);
+    };
+    image.onerror = () => {
+      if (disposed) return;
+      setCertificateLayoutBackgroundStatus("error");
+      setCertificateLayoutBackgroundError(
+        tr(
+          "Фон не вдалося завантажити. Використовую fallback-градієнт.",
+          "Background failed to load. Using gradient fallback."
+        )
+      );
+    };
+    image.src = src;
+
+    return () => {
+      disposed = true;
+      image.onload = null;
+      image.onerror = null;
+    };
+  }, [certificateLayoutBackgroundUrl, tr]);
+
+  const uploadCertificateLayoutBackgroundFile = (file: File | null) => {
+    if (!file) return;
+    if (!isSupportedCertificateBackgroundFile(file)) {
+      setCertificateError(tr("Оберіть файл зображення", "Please select an image file"));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result) {
+        setCertificateError(tr("Не вдалося прочитати файл", "Failed to read file"));
+        return;
+      }
+      const normalized = isSvgCertificateBackgroundFile(file)
+        ? normalizeCertificateBackgroundSource(result)
+        : result;
+      updateCertificateLayoutBackgroundUrl(normalized);
+      setCertificateError(null);
+      setCertificateMessage(tr("Фон завантажено з файлу", "Background uploaded from file"));
+    };
+    reader.onerror = () => {
+      setCertificateError(tr("Не вдалося прочитати файл", "Failed to read file"));
+    };
+    if (isSvgCertificateBackgroundFile(file)) {
+      reader.readAsText(file);
+      return;
+    }
+    reader.readAsDataURL(file);
+  };
+
+  React.useEffect(() => {
+    let active = true;
+    void readCertificateLayoutPresets(contestId).then((presets) => {
+      if (active) setCertificateLayoutPresets(presets);
+    });
+    setCertificateLayoutPresetId("");
+    setCertificateLayoutHistory([
+      {
+        layout: normalizeCertificateLayoutState(certificateLayout),
+        bgUrl: certificateLayoutBackgroundUrl,
+      },
+    ]);
+    setCertificateLayoutHistoryIndex(0);
+    return () => { active = false; };
+  }, [contestId]);
+
+  const applySnap = React.useCallback(
+    (value: number) => {
+      const bounded = clampNumber(value, 0, 100);
+      if (!certificateLayoutSnapEnabled) return Math.round(bounded * 10) / 10;
+      return Math.round(snapByStep(bounded, clampNumber(certificateLayoutSnapStep, 0.5, 20)) * 10) / 10;
+    },
+    [certificateLayoutSnapEnabled, certificateLayoutSnapStep]
+  );
+
+  const clampFontSize = React.useCallback((value: number) => clampNumber(value, 10, 72), []);
+  const clampFieldWidth = React.useCallback((value: number) => clampNumber(value, 8, 96), []);
+
+  const applySmartGuideSnap = React.useCallback(
+    (field: CertificateFieldKey, currentX: number, currentY: number) => {
+      const threshold = 1.25;
+      const enabledOthers = CERTIFICATE_FIELD_KEYS.filter((key) => key !== field && certificateFields[key]?.isEnabled);
+      const xCandidates: Array<{ value: number; source: "center" | "field"; edge: "left" | "center" | "right" }> = [
+        { value: 50, source: "center", edge: "center" },
+      ];
+      const yCandidates: Array<{ value: number; source: "center" | "field" }> = [{ value: 50, source: "center" }];
+
+      const edgeValuesForX = (anchorX: number, width: number, align: "left" | "center" | "right") => {
+        if (align === "center") {
+          return {
+            left: anchorX - width / 2,
+            center: anchorX,
+            right: anchorX + width / 2,
+          };
+        }
+        if (align === "right") {
+          return {
+            left: anchorX - width,
+            center: anchorX - width / 2,
+            right: anchorX,
+          };
+        }
+        return {
+          left: anchorX,
+          center: anchorX + width / 2,
+          right: anchorX + width,
+        };
+      };
+
+      const movingLayout = certificateLayout[field];
+      const movingAlign = movingLayout?.align === "center" || movingLayout?.align === "right" ? movingLayout.align : "left";
+      const movingWidth = clampFieldWidth(Number(movingLayout?.width ?? 40));
+      const movingEdges = edgeValuesForX(currentX, movingWidth, movingAlign);
+
+      for (const key of enabledOthers) {
+        const layout = certificateLayout[key];
+        if (!layout) continue;
+        const otherAlign = layout.align === "center" || layout.align === "right" ? layout.align : "left";
+        const otherWidth = clampFieldWidth(Number(layout.width ?? 40));
+        const otherEdges = edgeValuesForX(clampNumber(Number(layout.x), 0, 100), otherWidth, otherAlign);
+        xCandidates.push({ value: clampNumber(otherEdges.left, 0, 100), source: "field", edge: "left" });
+        xCandidates.push({ value: clampNumber(otherEdges.center, 0, 100), source: "field", edge: "center" });
+        xCandidates.push({ value: clampNumber(otherEdges.right, 0, 100), source: "field", edge: "right" });
+        yCandidates.push({ value: clampNumber(Number(layout.y), 0, 100), source: "field" });
+      }
+
+      const chooseClosest = (value: number, candidates: Array<{ value: number; source: "center" | "field" }>) => {
+        let best: { value: number; source: "center" | "field"; delta: number } | null = null;
+        for (const candidate of candidates) {
+          const delta = Math.abs(value - candidate.value);
+          if (delta > threshold) continue;
+          if (!best || delta < best.delta) {
+            best = { ...candidate, delta };
+          }
+        }
+        return best;
+      };
+
+      const xHit = (() => {
+        let best:
+          | {
+              value: number;
+              source: "center" | "field";
+              edge: "left" | "center" | "right";
+              delta: number;
+            }
+          | null = null;
+        const movingEdgeKeys: Array<"left" | "center" | "right"> = ["left", "center", "right"];
+        for (const movingEdge of movingEdgeKeys) {
+          const movingValue = movingEdges[movingEdge];
+          for (const candidate of xCandidates) {
+            const delta = Math.abs(movingValue - candidate.value);
+            if (delta > threshold) continue;
+            if (!best || delta < best.delta) {
+              best = {
+                value: candidate.value,
+                source: candidate.source,
+                edge: movingEdge,
+                delta,
+              };
+            }
+          }
+        }
+        return best;
+      })();
+      const yHit = chooseClosest(currentY, yCandidates);
+      const guides: CertificateLayoutGuide[] = [];
+      const x = xHit ? currentX + (xHit.value - movingEdges[xHit.edge]) : currentX;
+      const y = yHit ? yHit.value : currentY;
+      if (xHit) guides.push({ axis: "x", value: xHit.value, source: xHit.source });
+      if (yHit) guides.push({ axis: "y", value: yHit.value, source: yHit.source });
+      return {
+        x: clampNumber(x, 0, 100),
+        y,
+        guides,
+      };
+    },
+    [certificateFields, certificateLayout, clampFieldWidth]
+  );
+
+  const updateLayoutByPointer = (field: CertificateFieldKey, clientX: number, clientY: number, target: EventTarget & HTMLDivElement) => {
+    const rect = target.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const x = ((clientX - rect.left) / rect.width) * 100;
+    const y = ((clientY - rect.top) / rect.height) * 100;
+
+    const rawX = applySnap(Number.isFinite(x) ? x : 0);
+    const rawY = applySnap(Number.isFinite(y) ? y : 0);
+    const guided = applySmartGuideSnap(field, rawX, rawY);
+    const nextX = guided.x;
+    const nextY = guided.y;
+    setCertificateLayoutActiveGuides(guided.guides);
+
+    updateCertificateLayout((prev) => ({
+      ...prev,
+      [field]: {
+        ...prev[field],
+        x: nextX,
+        y: nextY,
+      },
+    }), { commit: false });
+  };
+
+  const updateLayoutResizeByPointer = (
+    field: CertificateFieldKey,
+    clientX: number,
+    clientY: number,
+    target: EventTarget & HTMLDivElement,
+    start: {
+      clientX: number;
+      clientY: number;
+      width: number;
+      fontSize: number;
+      x: number;
+      align: "left" | "center" | "right";
+      edge: "left" | "right" | "top" | "bottom";
+    },
+    options?: { oneSidedToRight?: boolean }
+  ) => {
+    const rect = target.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const deltaXPercent = ((clientX - start.clientX) / rect.width) * 100;
+    const deltaY = clientY - start.clientY;
+
+    const horizontalDelta = start.edge === "left" ? -deltaXPercent : start.edge === "right" ? deltaXPercent : 0;
+    const verticalDelta = start.edge === "top" ? -deltaY : start.edge === "bottom" ? deltaY : deltaY;
+
+    const rawWidth = start.width + horizontalDelta;
+    const rawFontSize = start.fontSize + verticalDelta * 0.15;
+
+    const nextWidth = certificateLayoutSnapEnabled
+      ? snapByStep(clampFieldWidth(rawWidth), clampNumber(certificateLayoutSnapStep, 0.5, 20))
+      : clampFieldWidth(rawWidth);
+    const nextFontSize = certificateLayoutSnapEnabled
+      ? snapByStep(clampFontSize(rawFontSize), 1)
+      : clampFontSize(rawFontSize);
+
+    const roundedWidth = Math.round(nextWidth * 10) / 10;
+    const roundedFontSize = Math.round(nextFontSize * 10) / 10;
+
+    updateCertificateLayout((prev) => {
+      const current = prev[field];
+      if (!current) return prev;
+
+      if (!options?.oneSidedToRight || (start.edge !== "left" && start.edge !== "right")) {
+        return {
+          ...prev,
+          [field]: {
+            ...current,
+            width: roundedWidth,
+            fontSize: roundedFontSize,
+          },
+        };
+      }
+
+      const initialLeftEdge = start.align === "center"
+        ? start.x - start.width / 2
+        : start.align === "right"
+          ? start.x - start.width
+          : start.x;
+
+      const initialRightEdge = initialLeftEdge + start.width;
+
+      const anchoredLeft = start.edge === "right";
+      const nextLeftEdge = anchoredLeft ? initialLeftEdge : initialRightEdge - roundedWidth;
+
+      const nextX = start.align === "center"
+        ? nextLeftEdge + roundedWidth / 2
+        : start.align === "right"
+          ? nextLeftEdge + roundedWidth
+          : nextLeftEdge;
+
+      return {
+        ...prev,
+        [field]: {
+          ...current,
+          x: applySnap(nextX),
+          width: roundedWidth,
+          fontSize: roundedFontSize,
+        },
+      };
+    }, { commit: false });
+  };
+
+  const stopCertificateLayoutInteractions = React.useCallback(
+    (options?: { commit?: boolean }) => {
+      const wasActive = Boolean(
+        certificateLayoutDraggingField
+        || certificateLayoutResizingField
+        || certificateLayoutDraggingExtraObjectId
+        || certificateLayoutResizingExtraObjectId
+      );
+      setCertificateLayoutDraggingField(null);
+      setCertificateLayoutDraggingExtraObjectId(null);
+      setCertificateLayoutResizingExtraObjectId(null);
+      setCertificateLayoutResizingField(null);
+      setCertificateLayoutResizeStart(null);
+      setCertificateLayoutExtraResizeStart(null);
+      setCertificateLayoutActiveGuides([]);
+      if (wasActive && options?.commit !== false) {
+        pushCertificateLayoutSnapshot(certificateLayout);
+      }
+    },
+    [
+      certificateLayout,
+      certificateLayoutDraggingExtraObjectId,
+      certificateLayoutDraggingField,
+      certificateLayoutResizingExtraObjectId,
+      certificateLayoutResizingField,
+      pushCertificateLayoutSnapshot,
+    ]
+  );
+
+  const addCertificateFieldAtPosition = (key: CertificateFieldKey, x: number, y: number) => {
+    const nextX = applySnap(x);
+    const nextY = applySnap(y);
+    setCertificateFields((prev) => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        isEnabled: true,
+      },
+    }));
+    updateCertificateLayout((prev) => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        x: nextX,
+        y: nextY,
+      },
+    }));
+    setCertificateLayoutSelectedField(key);
+    setCertificateLayoutSelectedExtraObjectId(null);
+    setCertificateLayoutContextMenu(null);
+  };
+
+  const moveSelectedCertificateFieldToPosition = (x: number, y: number) => {
+    if (!certificateLayoutSelectedField) return;
+    const key = certificateLayoutSelectedField;
+    updateCertificateLayout((prev) => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        x: applySnap(x),
+        y: applySnap(y),
+      },
+    }));
+    setCertificateLayoutContextMenu(null);
+  };
+
+  const hideSelectedCertificateField = () => {
+    if (!certificateLayoutSelectedField) return;
+    const key = certificateLayoutSelectedField;
+    setCertificateFields((prev) => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        isEnabled: false,
+        isRequired: false,
+      },
+    }));
+    setCertificateLayoutSelectedField(null);
+    setCertificateLayoutContextMenu(null);
+  };
+
+  React.useEffect(() => {
+    if (
+      !certificateLayoutDraggingField
+      && !certificateLayoutResizingField
+      && !certificateLayoutDraggingExtraObjectId
+      && !certificateLayoutResizingExtraObjectId
+    ) return;
+    const onRelease = () => stopCertificateLayoutInteractions();
+    window.addEventListener("mouseup", onRelease);
+    window.addEventListener("blur", onRelease);
+    return () => {
+      window.removeEventListener("mouseup", onRelease);
+      window.removeEventListener("blur", onRelease);
+    };
+  }, [
+    certificateLayoutDraggingExtraObjectId,
+    certificateLayoutDraggingField,
+    certificateLayoutResizingExtraObjectId,
+    certificateLayoutResizingField,
+    stopCertificateLayoutInteractions,
+  ]);
+
+  const addCertificateExtraObjectAtPosition = (type: CertificateExtraObjectType, x: number, y: number) => {
+    const obj = createDefaultCertificateExtraObject(type, applySnap(x), applySnap(y));
+    obj.isVisible = true;
+    const maxZ = certificateLayoutExtraObjects.reduce((m, o) => Math.max(m, Number(o.zIndex ?? 0)), 0);
+    obj.zIndex = Math.max(1, maxZ + 1);
+    setCertificateLayoutExtraObjects((prev) => [...prev, obj]);
+    setCertificateLayoutSelectedField(null);
+    setCertificateLayoutSelectedExtraObjectId(obj.id);
+    setCertificateLayoutContextMenu(null);
+  };
+
+  const duplicateSelectedCertificateExtraObject = React.useCallback(() => {
+    if (!certificateLayoutSelectedExtraObjectId) return;
+    const current = certificateLayoutExtraObjects.find((obj) => obj.id === certificateLayoutSelectedExtraObjectId);
+    if (!current) return;
+    const duplicated = {
+      ...current,
+      id: createSecureClientId("extra"),
+      x: clampNumber(current.x + 2, 0, 100),
+      y: clampNumber(current.y + 2, 0, 100),
+      zIndex: clampNumber(Number(current.zIndex ?? 20) + 1, 1, 999),
+    };
+    setCertificateLayoutExtraObjects((prev) => [...prev, duplicated]);
+    setCertificateLayoutSelectedExtraObjectId(duplicated.id);
+    setCertificateLayoutSelectedField(null);
+  }, [certificateLayoutExtraObjects, certificateLayoutSelectedExtraObjectId]);
+
+  const changeSelectedCertificateExtraObjectLayer = (delta: number) => {
+    if (!certificateLayoutSelectedExtraObjectId) return;
+    setCertificateLayoutExtraObjects((prev) => prev.map((obj) => {
+      if (obj.id !== certificateLayoutSelectedExtraObjectId) return obj;
+      return {
+        ...obj,
+        zIndex: clampNumber(Number(obj.zIndex ?? 20) + delta, 1, 999),
+      };
+    }));
+  };
+
+  const uploadSelectedCertificateExtraImageFile = (file: File | null) => {
+    if (!file || !certificateLayoutSelectedExtraObjectId) return;
+    if (!String(file.type ?? "").toLowerCase().startsWith("image/")) {
+      setCertificateError(tr("Оберіть файл зображення", "Please select an image file"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result) {
+        setCertificateError(tr("Не вдалося прочитати файл", "Failed to read file"));
+        return;
+      }
+      setCertificateLayoutExtraObjects((prev) => prev.map((obj) => (
+        obj.id === certificateLayoutSelectedExtraObjectId
+          ? { ...obj, imageUrl: result }
+          : obj
+      )));
+      setCertificateError(null);
+      setCertificateMessage(tr("Зображення об'єкта завантажено", "Object image uploaded"));
+    };
+    reader.onerror = () => setCertificateError(tr("Не вдалося прочитати файл", "Failed to read file"));
+    reader.readAsDataURL(file);
+  };
+
+  const moveSelectedCertificateObjectToPosition = (x: number, y: number) => {
+    const nextX = applySnap(x);
+    const nextY = applySnap(y);
+    if (certificateLayoutSelectedExtraObjectId) {
+      setCertificateLayoutExtraObjects((prev) =>
+        prev.map((obj) => (obj.id === certificateLayoutSelectedExtraObjectId ? { ...obj, x: nextX, y: nextY } : obj))
+      );
+      setCertificateLayoutContextMenu(null);
+      return;
+    }
+    moveSelectedCertificateFieldToPosition(nextX, nextY);
+  };
+
+  const removeSelectedCertificateObject = () => {
+    if (certificateLayoutSelectedExtraObjectId) {
+      if (!window.confirm(tr("Видалити вибраний об'єкт сертифіката?", "Delete the selected certificate object?"))) return;
+      setCertificateLayoutExtraObjects((prev) => prev.filter((obj) => obj.id !== certificateLayoutSelectedExtraObjectId));
+      setCertificateLayoutSelectedExtraObjectId(null);
+      setCertificateLayoutContextMenu(null);
+      return;
+    }
+    hideSelectedCertificateField();
+  };
+
+  const updateCertificateExtraObjectByPointer = (id: string, clientX: number, clientY: number, target: EventTarget & HTMLDivElement) => {
+    const rect = target.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    const x = ((clientX - rect.left) / rect.width) * 100;
+    const y = ((clientY - rect.top) / rect.height) * 100;
+    const nextX = applySnap(x);
+    const nextY = applySnap(y);
+    setCertificateLayoutExtraObjects((prev) => prev.map((obj) => (obj.id === id ? { ...obj, x: nextX, y: nextY } : obj)));
+  };
+
+  const updateCertificateExtraResizeByPointer = (
+    id: string,
+    clientX: number,
+    clientY: number,
+    target: EventTarget & HTMLDivElement,
+    start: {
+      clientX: number;
+      clientY: number;
+      width: number;
+      height: number;
+      x: number;
+      y: number;
+      align: "left" | "center" | "right";
+      edge: "left" | "right" | "top" | "bottom";
+    },
+    options?: { oneSided?: boolean }
+  ) => {
+    const rect = target.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const deltaXPercent = ((clientX - start.clientX) / rect.width) * 100;
+    const deltaYPercent = ((clientY - start.clientY) / rect.height) * 100;
+
+    const horizontalDelta = start.edge === "left" ? -deltaXPercent : start.edge === "right" ? deltaXPercent : 0;
+    const verticalDelta = start.edge === "top" ? -deltaYPercent : start.edge === "bottom" ? deltaYPercent : 0;
+
+    const rawWidth = start.width + horizontalDelta;
+    const rawHeight = start.height + verticalDelta;
+
+    const nextWidth = certificateLayoutSnapEnabled
+      ? snapByStep(clampNumber(rawWidth, 2, 96), clampNumber(certificateLayoutSnapStep, 0.5, 20))
+      : clampNumber(rawWidth, 2, 96);
+    const nextHeight = certificateLayoutSnapEnabled
+      ? snapByStep(clampNumber(rawHeight, 2, 96), clampNumber(certificateLayoutSnapStep, 0.5, 20))
+      : clampNumber(rawHeight, 2, 96);
+
+    const roundedWidth = Math.round(nextWidth * 10) / 10;
+    const roundedHeight = Math.round(nextHeight * 10) / 10;
+
+    setCertificateLayoutExtraObjects((prev) => prev.map((obj) => {
+      if (obj.id !== id) return obj;
+
+      if (!options?.oneSided) {
+        return {
+          ...obj,
+          width: roundedWidth,
+          height: roundedHeight,
+        };
+      }
+
+      let nextX = obj.x;
+      let nextY = obj.y;
+
+      if (start.edge === "left" || start.edge === "right") {
+        const initialLeftEdge = start.align === "center"
+          ? start.x - start.width / 2
+          : start.align === "right"
+            ? start.x - start.width
+            : start.x;
+        const initialRightEdge = initialLeftEdge + start.width;
+        const anchoredLeft = start.edge === "right";
+        const nextLeftEdge = anchoredLeft ? initialLeftEdge : initialRightEdge - roundedWidth;
+        nextX = start.align === "center"
+          ? nextLeftEdge + roundedWidth / 2
+          : start.align === "right"
+            ? nextLeftEdge + roundedWidth
+            : nextLeftEdge;
+      }
+
+      if (start.edge === "top" || start.edge === "bottom") {
+        const initialTopEdge = start.y - start.height / 2;
+        const initialBottomEdge = start.y + start.height / 2;
+        const anchoredTop = start.edge === "bottom";
+        const nextTopEdge = anchoredTop ? initialTopEdge : initialBottomEdge - roundedHeight;
+        nextY = nextTopEdge + roundedHeight / 2;
+      }
+
+      return {
+        ...obj,
+        x: applySnap(nextX),
+        y: applySnap(nextY),
+        width: roundedWidth,
+        height: roundedHeight,
+      };
+    }));
+  };
+
+  const canUndoCertificateLayout = certificateLayoutHistoryIndex > 0;
+  const canRedoCertificateLayout = certificateLayoutHistoryIndex < certificateLayoutHistory.length - 1;
+  const sortedCertificateLayoutExtraObjects = React.useMemo(
+    () => [...certificateLayoutExtraObjects].sort((a, b) => Number(a.zIndex ?? 0) - Number(b.zIndex ?? 0)),
+    [certificateLayoutExtraObjects]
+  );
+
+  const undoCertificateLayout = () => {
+    if (!canUndoCertificateLayout) return;
+    const nextIndex = certificateLayoutHistoryIndex - 1;
+    const snap = certificateLayoutHistory[nextIndex];
+    if (!snap) return;
+    setCertificateLayout(normalizeCertificateLayoutState(snap.layout));
+    setCertificateLayoutBackgroundUrl(String(snap.bgUrl ?? ""));
+    setCertificateLayoutHistoryIndex(nextIndex);
+    stopCertificateLayoutInteractions({ commit: false });
+  };
+
+  const redoCertificateLayout = () => {
+    if (!canRedoCertificateLayout) return;
+    const nextIndex = certificateLayoutHistoryIndex + 1;
+    const snap = certificateLayoutHistory[nextIndex];
+    if (!snap) return;
+    setCertificateLayout(normalizeCertificateLayoutState(snap.layout));
+    setCertificateLayoutBackgroundUrl(String(snap.bgUrl ?? ""));
+    setCertificateLayoutHistoryIndex(nextIndex);
+    stopCertificateLayoutInteractions({ commit: false });
+  };
+
+  const nudgeCertificateLayoutSelection = (dx: number, dy: number) => {
+    if (certificateLayoutSelectedExtraObjectId) {
+      setCertificateLayoutExtraObjects((prev) =>
+        prev.map((obj) => {
+          if (obj.id !== certificateLayoutSelectedExtraObjectId) return obj;
+          return {
+            ...obj,
+            x: applySnap(obj.x + dx),
+            y: applySnap(obj.y + dy),
+          };
+        })
+      );
+      return;
+    }
+    if (!certificateLayoutSelectedField) return;
+    updateCertificateLayout((prev) => {
+      const current = prev[certificateLayoutSelectedField];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [certificateLayoutSelectedField]: {
+          ...current,
+          x: applySnap(current.x + dx),
+          y: applySnap(current.y + dy),
+        },
+      };
+    });
+  };
+
+  const saveCertificateLayoutPreset = () => {
+    const name = String(certificateLayoutPresetName ?? "").trim();
+    if (!name) {
+      setCertificateError(tr("Вкажіть назву пресета", "Enter preset name"));
+      return;
+    }
+
+    const preset = {
+      id: createSecureClientId("preset"),
+      name,
+      createdAt: new Date().toISOString(),
+      bgUrl: certificateLayoutBackgroundUrl,
+      layout: normalizeCertificateLayoutState(certificateLayout),
+    } as CertificateLayoutPresetItem;
+    const next = [preset, ...certificateLayoutPresets].slice(0, 40);
+    setCertificateLayoutPresets(next);
+    setCertificateLayoutPresetId(preset.id);
+    setCertificateLayoutPresetName("");
+    void writeCertificateLayoutPresets(contestId, next);
+    setCertificateMessage(tr(`Пресет "${preset.name}" збережено`, `Preset "${preset.name}" saved`));
+    setCertificateError(null);
+  };
+
+  const loadCertificateLayoutPreset = () => {
+    const selected = certificateLayoutPresets.find((p) => p.id === certificateLayoutPresetId);
+    if (!selected) return;
+    const nextLayout = normalizeCertificateLayoutState(selected.layout);
+    setCertificateLayout(nextLayout);
+    setCertificateLayoutBackgroundUrl(selected.bgUrl);
+    setCertificateLayoutSelectedField(null);
+    setCertificateLayoutDraggingField(null);
+    setCertificateLayoutResizingField(null);
+    setCertificateLayoutResizeStart(null);
+    pushCertificateLayoutSnapshot(nextLayout, selected.bgUrl);
+    setCertificateMessage(tr(`Пресет "${selected.name}" завантажено`, `Preset "${selected.name}" loaded`));
+    setCertificateError(null);
+  };
+
+  const deleteCertificateLayoutPreset = () => {
+    if (!certificateLayoutPresetId) return;
+    if (!window.confirm(tr("Видалити цей пресет сертифіката?", "Delete this certificate preset?"))) return;
+    const next = certificateLayoutPresets.filter((p) => p.id !== certificateLayoutPresetId);
+    setCertificateLayoutPresets(next);
+    void writeCertificateLayoutPresets(contestId, next);
+    setCertificateLayoutPresetId("");
+    setCertificateMessage(tr("Пресет видалено", "Preset deleted"));
   };
 
   const addOrganizer = async () => {
@@ -1733,6 +3571,10 @@ export const ContestPage: React.FC = () => {
     setCopyLibraryTaskId("");
     setCopyQuery("");
     setCopyItems([]);
+    setGeneratedPracticeCandidates([]);
+    setGeneratedPracticeTaskIds([]);
+    setGeneratedPracticeSetMode("MIXED");
+    setVariantCourseItemId("");
     setArchiveFiles([]);
     setArchiveImportResult(null);
     setArchiveDropActive(false);
@@ -1805,6 +3647,32 @@ export const ContestPage: React.FC = () => {
     }
   };
 
+  const generateFreshCourseVariant = async () => {
+    const courseItemId = Number(variantCourseItemId);
+    if (!Number.isInteger(courseItemId) || courseItemId <= 0) {
+      setAddError(tr("Обери тему для нового варіанта", "Choose a topic for the new variant"));
+      return;
+    }
+    setGeneratingCourseVariant(true);
+    setAddError(null);
+    try {
+      const response = await generateTask(undefined, { courseItemId, generateCourseVariant: true });
+      const task = response && typeof response === "object" ? Reflect.get(response, "task") : null;
+      const taskId = task && typeof task === "object" ? Number(Reflect.get(task, "id")) : 0;
+      const refreshed = contestId ? await listGeneratedPracticeCandidates(contestId) : [];
+      setGeneratedPracticeCandidates(refreshed);
+      if (taskId > 0 && refreshed.some((candidate) => candidate.id === taskId)) {
+        setGeneratedPracticeTaskIds((current) => current.includes(String(taskId)) || current.length >= 8
+          ? current
+          : [...current, String(taskId)]);
+      }
+    } catch (error: unknown) {
+      setAddError(getErrorMessage(error) || tr("Не вдалося згенерувати новий варіант", "Could not generate a new variant"));
+    } finally {
+      setGeneratingCourseVariant(false);
+    }
+  };
+
   const submitAddProblem = async () => {
     if (!contestId) return;
     setAddError(null);
@@ -1846,6 +3714,32 @@ export const ContestPage: React.FC = () => {
           return;
         }
         await addContestProblem(contestId, { mode: "COPY", libraryTaskId });
+      } else if (addMode === "GENERATED") {
+        const taskIds = generatedPracticeTaskIds.map(Number);
+        if (taskIds.some((taskId) => !Number.isInteger(taskId) || taskId <= 0) || taskIds.length === 0 || taskIds.length > 8) {
+          setAddError(tr("Вибери від 1 до 8 згенерованих задач", "Select between 1 and 8 generated tasks"));
+          return;
+        }
+        const selected = generatedPracticeCandidates.filter((candidate) => taskIds.includes(candidate.id));
+        if (selected.length !== taskIds.length) {
+          setAddError(tr("Онови список згенерованих задач і вибери їх ще раз", "Refresh the generated task list and select them again"));
+          return;
+        }
+        if (taskIds.length > 1) {
+          if (new Set(selected.map((candidate) => candidate.courseKey)).size !== 1 || new Set(selected.map((candidate) => candidate.runtime)).size !== 1) {
+            setAddError(tr("Задачі набору мають бути з одного курсу та однієї мови", "Set problems must use one course and one runtime"));
+            return;
+          }
+          const topicCount = new Set(selected.map((candidate) => candidate.topicKey)).size;
+          if ((generatedPracticeSetMode === "THEMATIC" && topicCount !== 1) || (generatedPracticeSetMode === "MIXED" && topicCount < 2)) {
+            setAddError(generatedPracticeSetMode === "THEMATIC"
+              ? tr("Для тематичного набору вибери задачі з однієї теми", "Choose problems from one topic for a thematic set")
+              : tr("Для змішаного набору вибери щонайменше дві теми", "Choose problems from at least two topics for a mixed set"));
+            return;
+          }
+        }
+        if (taskIds.length === 1) await addGeneratedPracticeToContest(contestId, taskIds[0]);
+        else await addGeneratedPracticeSetToContest(contestId, { mode: generatedPracticeSetMode, taskIds });
       } else {
         await importArchiveAndAttach();
         return;
@@ -1868,6 +3762,17 @@ export const ContestPage: React.FC = () => {
     if (addMode !== "COPY") return;
     loadCopyItems();
   }, [addOpen, addMode, copyQuery, loadCopyItems]);
+
+  React.useEffect(() => {
+    if (!addOpen || addMode !== "GENERATED" || !contestId) return;
+    let cancelled = false;
+    setGeneratedPracticeLoading(true);
+    void listGeneratedPracticeCandidates(contestId)
+      .then((candidates) => { if (!cancelled) setGeneratedPracticeCandidates(candidates); })
+      .catch(() => { if (!cancelled) setGeneratedPracticeCandidates([]); })
+      .finally(() => { if (!cancelled) setGeneratedPracticeLoading(false); });
+    return () => { cancelled = true; };
+  }, [addOpen, addMode, contestId]);
 
   React.useEffect(() => {
     if (!manageOpen || !data?.problems) return;
@@ -1983,6 +3888,9 @@ export const ContestPage: React.FC = () => {
             <Button variant={addMode === "IMPORT" ? "secondary" : "ghost"} onClick={() => setAddMode("IMPORT")}>
               {tr("Імпорт", "Import")}
             </Button>
+            <Button variant={addMode === "GENERATED" ? "secondary" : "ghost"} onClick={() => setAddMode("GENERATED")}>
+              {tr("Моя згенерована практика", "My generated practice")}
+            </Button>
           </div>
 
           {addMode === "CREATE" ? (
@@ -2064,6 +3972,36 @@ export const ContestPage: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+          ) : addMode === "GENERATED" ? (
+            <div className="space-y-3">
+              <p className="text-sm text-text-secondary">{tr("Обирай задачі, уже згенеровані в олімпіадному курсі, або створи новий динамічний варіант за контрактом теми. Один вибір додає одну задачу; 2–8 виборів збирають приватний набір із прихованими Judge-тестами.", "Choose problems already generated in an Olympiad course, or create a fresh dynamic variant from the topic contract. One selection adds one problem; 2–8 selections compose a private set with hidden Judge tests.")}</p>
+              {generatedPracticeCandidates.length > 0 && <div className="flex flex-col gap-2 rounded-xl border border-border p-3 sm:flex-row sm:items-center">
+                <label htmlFor="contest-practice-variant-topic" className="sr-only">{tr("Тема нового варіанта", "Topic for new variant")}</label>
+                <select id="contest-practice-variant-topic" value={variantCourseItemId} onChange={(event) => setVariantCourseItemId(event.target.value)} className="min-h-10 min-w-0 flex-1 rounded-lg border border-border bg-bg-base px-3 text-sm">
+                  <option value="">{tr("Створи новий варіант теми…", "Generate a new topic variant…")}</option>
+                  {Array.from(new Map(generatedPracticeCandidates.filter((candidate) => candidate.courseItemId != null).map((candidate) => [`${candidate.courseItemId}:${candidate.courseKey}:${candidate.runtime}`, candidate])).values()).map((candidate) => <option key={`${candidate.courseItemId}:${candidate.courseKey}:${candidate.runtime}`} value={candidate.courseItemId!}>{candidate.lesson} · {candidate.runtime}</option>)}
+                </select>
+                <Button type="button" variant="secondary" onClick={() => void generateFreshCourseVariant()} disabled={generatingCourseVariant || !variantCourseItemId}>
+                  {generatingCourseVariant ? tr("Генеруємо умову й тести…", "Generating statement and tests…") : tr("Згенерувати варіант", "Generate variant")}
+                </Button>
+              </div>}
+              {generatedPracticeCandidates.length > 0 && <fieldset className="space-y-2 rounded-xl border border-border p-3">
+                <legend className="px-1 text-xs font-semibold text-text-secondary">{tr("Тип набору", "Set type")}</legend>
+                <label className="flex items-start gap-2 text-sm"><input type="radio" name="generated-practice-set-mode" checked={generatedPracticeSetMode === "MIXED"} onChange={() => setGeneratedPracticeSetMode("MIXED")} className="mt-1" /><span>{tr("Змішаний: різні теми", "Mixed: different topics")}</span></label>
+                <label className="flex items-start gap-2 text-sm"><input type="radio" name="generated-practice-set-mode" checked={generatedPracticeSetMode === "THEMATIC"} onChange={() => setGeneratedPracticeSetMode("THEMATIC")} className="mt-1" /><span>{tr("Тематичний: одна тема", "Thematic: one topic")}</span></label>
+                <p className="text-xs text-text-secondary">{tr("Для набору вибери 2–8 задач одного курсу й однієї мови виконання.", "For a set, select 2–8 problems from the same course and runtime.")}</p>
+              </fieldset>}
+              {generatedPracticeLoading ? <div role="status" className="p-3 text-sm text-text-secondary">{tr("Шукаємо згенеровані задачі…", "Looking for generated tasks…")}</div> : generatedPracticeCandidates.length ? <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl border border-border p-2" role="group" aria-label={tr("Згенеровані задачі курсу", "Generated course problems")}>
+                {generatedPracticeCandidates.map((candidate) => {
+                  const checked = generatedPracticeTaskIds.includes(String(candidate.id));
+                  return <label key={candidate.id} className={`flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2 text-sm transition ${checked ? "bg-primary/10" : "hover:bg-bg-hover"}`}>
+                    <input type="checkbox" checked={checked} disabled={!checked && generatedPracticeTaskIds.length >= 8} onChange={(event) => setGeneratedPracticeTaskIds((current) => event.target.checked ? [...current, String(candidate.id)] : current.filter((id) => id !== String(candidate.id)))} className="mt-1" />
+                    <span className="min-w-0"><span className="block truncate font-medium">{candidate.title}</span><span className="block text-xs text-text-secondary">{candidate.lesson} · {candidate.topicKey} · {candidate.runtime}</span></span>
+                  </label>;
+                })}
+              </div> : <div className="rounded-xl bg-bg-hover p-3 text-sm text-text-secondary dark:bg-white/[.04]">{tr("Тут з’являться задачі після того, як ти згенеруєш практику в олімпіадному курсі.", "Tasks appear here after you generate practice in an Olympiad course.")}</div>}
+              {generatedPracticeTaskIds.length > 1 && <p className="text-xs text-text-secondary">{tr(`Вибрано: ${generatedPracticeTaskIds.length} із 8`, `Selected: ${generatedPracticeTaskIds.length} of 8`)}</p>}
             </div>
           ) : (
             <div className="space-y-4">
@@ -2151,8 +4089,8 @@ export const ContestPage: React.FC = () => {
                 return;
               }
               return addMode === "IMPORT" ? importArchiveAndAttach() : submitAddProblem();
-            }} disabled={adding || importingArchive || (addMode === "IMPORT" && !archiveImportResult && archiveFiles.length === 0)}>
-              {addMode === "IMPORT" ? importingArchive ? tr("Імпорт і додавання…", "Importing and adding…") : archiveImportResult ? tr("Готово", "Done") : tr("Імпортувати й додати", "Import and add") : adding ? tr("Додавання…", "Adding…") : tr("Додати", "Add")}
+            }} disabled={adding || importingArchive || (addMode === "IMPORT" && !archiveImportResult && archiveFiles.length === 0) || (addMode === "GENERATED" && generatedPracticeTaskIds.length === 0)}>
+              {addMode === "IMPORT" ? importingArchive ? tr("Імпорт і додавання…", "Importing and adding…") : archiveImportResult ? tr("Готово", "Done") : tr("Імпортувати й додати", "Import and add") : adding ? tr("Додавання…", "Adding…") : addMode === "GENERATED" && generatedPracticeTaskIds.length > 1 ? tr(`Зібрати набір · ${generatedPracticeTaskIds.length}`, `Build set · ${generatedPracticeTaskIds.length}`) : tr("Додати", "Add")}
             </Button>
           </div>
         </div>
@@ -2690,6 +4628,30 @@ export const ContestPage: React.FC = () => {
                 </div>
               )}
 
+              {data.phase.finished && data.access.isJoined ? (
+                <section className="mt-5 rounded-2xl border border-primary/20 bg-primary/5 p-4" aria-labelledby="contest-learning-review-title">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 id="contest-learning-review-title" className="font-semibold text-text-primary">{tr("Розбір після туру", "Post-contest review")}</h3>
+                      <p className="mt-1 text-sm text-text-secondary">{tr("Результати Judge згруповані за темами з ваших згенерованих задач.", "Judge outcomes grouped by topic from your generated problems.")}</p>
+                    </div>
+                    <Button variant="ghost" onClick={loadLearningReview} disabled={learningReviewLoading}><RefreshCw className="mr-2 size-4" />{tr("Оновити", "Refresh")}</Button>
+                  </div>
+                  {learningReviewLoading ? <div role="status" className="mt-3 text-sm text-text-secondary">{tr("Готуємо розбір…", "Preparing review…")}</div> : learningReviewError ? <div role="alert" className="mt-3 text-sm text-accent-error">{learningReviewError}</div> : learningReview?.topics.length ? <>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {learningReview.topics.map((topic) => <div key={topic.topicKey} className="rounded-xl bg-bg-surface px-3 py-2 text-sm">
+                        <div className="font-medium text-text-primary">{topic.topicKey}</div>
+                        <div className="mt-1 text-xs text-text-secondary">{tr(`Розв’язано задач: ${topic.solvedProblems}/${topic.problemCount} · помилкових спроб: ${topic.failures}`, `Solved: ${topic.solvedProblems}/${topic.problemCount} · unsuccessful attempts: ${topic.failures}`)}</div>
+                      </div>)}
+                    </div>
+                    {learningReview.recommendation ? <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-bg-surface p-3">
+                      <p className="m-0 text-sm text-text-secondary">{tr(`Повторіть тему ${learningReview.recommendation.topicKey} на новій згенерованій задачі.`, `Review ${learningReview.recommendation.topicKey} with a fresh generated problem.`)}</p>
+                      {learningReview.recommendation.courseId && learningReview.recommendation.courseItemId ? <Link className="text-sm font-semibold text-primary-strong hover:underline" to={`/learning/course/${learningReview.recommendation.courseId}/practice/${learningReview.recommendation.courseItemId}`}>{tr("Почати нову практику", "Start fresh practice")} <span aria-hidden="true">→</span></Link> : null}
+                    </div> : <p className="mb-0 mt-3 text-sm text-text-secondary">{tr("У цій сесії немає невдалих спроб. Спробуйте новий змішаний набір, щоб перевірити перенесення навичок.", "There were no unsuccessful attempts in this round. Try a new mixed set to check skill transfer.")}</p>}
+                  </> : <p className="mb-0 mt-3 text-sm text-text-secondary">{tr("Для цього туру немає задач, згенерованих олімпіадним курсом.", "This round has no problems generated by an Olympiad course.")}</p>}
+                </section>
+              ) : null}
+
               {!data.access.canAccessContent ? (
                 <div className="text-sm text-text-secondary mt-4">
                   {data.contest.visibility === "PRIVATE_CODE"
@@ -2703,9 +4665,1386 @@ export const ContestPage: React.FC = () => {
             <div className="space-y-4">
               {hasToken && data.access.canManage ? (
                 <>
-                  {tab === "certificates" ? <ContestCertificatesPanel contestId={data.contest.id} onOpenParticipants={() => {
-                    const next = new URLSearchParams(searchParams); next.set("tab", "participants"); setSearchParams(next);
-                  }} /> : null}
+                  {tab === "certificates" ? (
+                  <Card className="certificate-studio-card rounded-2xl p-4 sm:p-5">
+                    <div className="certificate-studio-page-header">
+                      <div><span>{tr("СЕРТИФІКАТИ", "CERTIFICATES")}</span><h2>{tr("Редактор сертифікатів", "Certificate studio")}</h2><p>{tr("Створи макет і одразу побач результат на полотні.", "Create a layout and see it on the canvas as you work.")}</p></div>
+                      <div className="certificate-studio-page-header-actions">
+                        <Button variant={certificateGlobalSettingsOpen ? "secondary" : "ghost"} onClick={() => setCertificateGlobalSettingsOpen((v) => !v)}>{certificateGlobalSettingsOpen ? tr("Закрити налаштування", "Close settings") : tr("Параметри", "Settings")}</Button>
+                        <Button aria-expanded={certificateUiAdvancedOpen} variant={certificateUiAdvancedOpen ? "secondary" : "ghost"} onClick={() => setCertificateUiAdvancedOpen((open) => !open)}>{certificateUiAdvancedOpen ? tr("Сховати код", "Hide code") : tr("Розширений режим", "Advanced")}</Button>
+                      </div>
+                    </div>
+
+                    <TournamentDiplomaImport onLoad={applyImportedDiploma} />
+                    <CertificateRecipientsPreview contestId={data.contest.id} />
+
+                    {certificateEditorOpen ? <>
+                    {!certificateUiSimpleMode || certificateGlobalSettingsOpen ? (
+                      <div className="certificate-studio-settings-panel grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-text-secondary">{tr("Режим", "Mode")}</label>
+                          <select
+                            value={certificateMode}
+                            onChange={(e) => setCertificateMode(e.target.value as "none" | "studycod" | "custom")}
+                            className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono"
+                          >
+                            <option value="none">{tr("Вимкнено", "Disabled")}</option>
+                            <option value="studycod">StudyCod</option>
+                            <option value="custom">Custom</option>
+                          </select>
+                        </div>
+
+                        <label className="flex items-center gap-2 text-sm font-mono text-text-primary mt-6">
+                          <input
+                            type="checkbox"
+                            checked={certificateSendEmailEnabled}
+                            onChange={(e) => setCertificateSendEmailEnabled(e.target.checked)}
+                          />
+                          {tr("Надсилати PDF сертифіката на email", "Send certificate PDF by email")}
+                        </label>
+                      </div>
+                    ) : null}
+
+                    {certificateMode === "studycod" && (!certificateUiSimpleMode || certificateGlobalSettingsOpen) ? (
+                      <div className="space-y-2 mb-3 border border-border bg-bg-base p-3">
+                        <div className="rounded border border-border bg-bg-surface/60 px-3 py-2 text-xs text-text-secondary">
+                          {tr(
+                            "Налаштуйте сертифікат візуально в редакторі нижче — що бачите на Canvas, те й буде у PDF. Поле Template ID нижче необовʼязкове: лишіть порожнім, щоб зберегти власний дизайн, або вкажіть ID готового шаблону з Admin Panel, щоб прив'язати його.",
+                            "Design the certificate visually in the editor below — what you see on the Canvas is exactly what the PDF will contain. The Template ID field below is optional: leave it empty to save your own design, or enter the ID of a ready-made Admin Panel template to link it."
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto] gap-2 items-end">
+                          <Input
+                            label={tr("Template ID (з Admin Panel)", "Template ID (from Admin Panel)")}
+                            value={certificateTemplateId}
+                            onChange={(e) => { setCertificateTemplateId(e.target.value); setCertificateTemplateAutoCreated(false); }}
+                            onBlur={autoValidateCertificateTemplateId}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                autoValidateCertificateTemplateId();
+                              }
+                            }}
+                            inputMode="numeric"
+                          />
+                          <div className="flex items-center gap-2">
+                            <Button variant="secondary" onClick={() => void validateCertificateTemplateId()} disabled={certificateTemplateChecking}>
+                              {certificateTemplateChecking ? tr("Перевірка…", "Checking…") : tr("Перевірити ID", "Validate ID")}
+                            </Button>
+                            <Button variant="ghost" onClick={() => navigate("/admin")}>{tr("Відкрити Admin Panel", "Open Admin Panel")}</Button>
+                          </div>
+                        </div>
+                        {certificateTemplateCheckResult ? (
+                          <div className="inline-flex items-center gap-1.5 text-[11px] text-text-secondary">
+                            <span
+                              className={`inline-block w-2 h-2 rounded-full ${certificateTemplateCheckResult.ok ? "bg-accent-success" : "bg-accent-error"}`}
+                              aria-hidden="true"
+                            />
+                            <span>
+                              {certificateTemplateCheckResult.ok
+                                ? tr("Template ID валідний", "Template ID is valid")
+                                : tr("Template ID невалідний", "Template ID is invalid")}
+                            </span>
+                          </div>
+                        ) : null}
+                        {certificateTemplateCheckResult ? (
+                          <div className={`text-xs ${certificateTemplateCheckResult.ok ? "text-accent-success" : "text-accent-error"}`}>
+                            {certificateTemplateCheckResult.message}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {certificateMode !== "none" ? (
+                      <div className="mb-3 border border-border bg-bg-base p-3 certificate-studio" data-advanced={certificateUiAdvancedOpen}>
+                        {certificateUiSimpleMode ? (
+                          <div className="certificate-studio-intro rounded border border-border bg-bg-surface/60 px-2 py-1.5 text-xs text-text-secondary">
+                            {tr("Збирай макет на полотні: додай потрібні поля, перетягни їх і налаштуй справа.", "Build the layout on the canvas: add fields, drag them into place, and edit them on the right.")}
+                          </div>
+                        ) : null}
+                        {certificateUiSimpleMode ? (
+                          <aside className="certificate-studio-layers rounded-xl border border-border bg-bg-surface/60 px-3 py-3 space-y-2">
+                            <div className="certificate-studio-panel-title"><Layers3 aria-hidden="true" /><span>{tr("Шари", "Layers")}</span><span className="certificate-studio-layer-count">{CERTIFICATE_FIELD_KEYS.filter((key) => certificateFields[key]?.isEnabled).length + sortedCertificateLayoutExtraObjects.length}</span></div>
+                            <p className="text-xs text-text-secondary">{tr("Видимі на сертифікаті", "Shown on the certificate")}</p>
+                            <div className="certificate-studio-layer-group">
+                              <span className="certificate-studio-subtitle">{tr("Поля", "Fields")}</span>
+                              {CERTIFICATE_FIELD_KEYS.map((key) => {
+                                const enabled = Boolean(certificateFields[key]?.isEnabled);
+                                const selected = enabled && certificateLayoutSelectedField === key;
+                                return (
+                                  <div key={`quick-field-${key}`} className={`certificate-studio-layer-row ${selected ? "is-selected" : ""} ${enabled ? "" : "is-hidden"}`}>
+                                    <button type="button" className="certificate-studio-layer" onClick={() => {
+                                      if (!enabled) addCertificateFieldAtPosition(key, certificateLayout[key].x, certificateLayout[key].y);
+                                      else { setCertificateLayoutSelectedField(key); setCertificateLayoutSelectedExtraObjectId(null); setCertificateInspectorTab("design"); }
+                                    }}>
+                                      <span className="certificate-studio-layer-dot">{certificateFieldLabel(key, tr).slice(0, 1)}</span>
+                                      <span>{certificateFieldLabel(key, tr)}</span>
+                                    </button>
+                                    <button type="button" className="certificate-studio-layer-visibility" aria-label={enabled ? tr(`Приховати ${certificateFieldLabel(key, tr)}`, `Hide ${certificateFieldLabel(key, tr)}`) : tr(`Показати ${certificateFieldLabel(key, tr)}`, `Show ${certificateFieldLabel(key, tr)}`)} title={enabled ? tr("Приховати поле", "Hide field") : tr("Показати поле", "Show field")} onClick={() => {
+                                      if (enabled) {
+                                        setCertificateFields((prev) => ({ ...prev, [key]: { ...prev[key], isEnabled: false, isRequired: false } }));
+                                        if (certificateLayoutSelectedField === key) setCertificateLayoutSelectedField(null);
+                                      } else addCertificateFieldAtPosition(key, certificateLayout[key].x, certificateLayout[key].y);
+                                    }}>{enabled ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}</button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {sortedCertificateLayoutExtraObjects.length ? <>
+                              <div className="certificate-studio-layer-group">
+                              <span className="certificate-studio-subtitle">{tr("Елементи", "Elements")}</span>
+                                {sortedCertificateLayoutExtraObjects.slice().reverse().map((obj) => {
+                                  const selected = certificateLayoutSelectedExtraObjectId === obj.id;
+                                  const name = obj.type === "text" ? (obj.text.trim().slice(0, 22) || tr("Текст", "Text")) : certificateExtraObjectTypeLabel(obj.type, tr);
+                                  return <div key={obj.id} className={`certificate-studio-layer-row ${selected ? "is-selected" : ""} ${obj.isVisible === false ? "is-hidden" : ""}`}>
+                                    <button type="button" className="certificate-studio-layer" onClick={() => { setCertificateLayoutSelectedField(null); setCertificateLayoutSelectedExtraObjectId(obj.id); setCertificateInspectorTab("design"); }}>
+                                      <span className="certificate-studio-layer-dot">{obj.type === "text" ? <Type aria-hidden="true" /> : obj.type === "image" ? <ImagePlus aria-hidden="true" /> : <Square aria-hidden="true" />}</span>
+                                      <span>{name}</span>
+                                    </button>
+                                    <button type="button" className="certificate-studio-layer-visibility" aria-label={obj.isVisible === false ? tr("Показати елемент", "Show element") : tr("Приховати елемент", "Hide element")} title={obj.isVisible === false ? tr("Показати", "Show") : tr("Приховати", "Hide")} onClick={() => setCertificateLayoutExtraObjects((prev) => prev.map((item) => item.id === obj.id ? { ...item, isVisible: item.isVisible === false } : item))}>{obj.isVisible === false ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}</button>
+                                  </div>;
+                                })}
+                              </div>
+                            </> : null}
+                            <div className="certificate-studio-add-tools">
+                              <span className="certificate-studio-subtitle">{tr("Вставити", "Insert")}</span>
+                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("text", 50, 50)}><Type aria-hidden="true" /><span>{tr("Текст", "Text")}</span></button>
+                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("image", 50, 50)}><ImagePlus aria-hidden="true" /><span>{tr("Фото", "Image")}</span></button>
+                              <button type="button" onClick={() => addCertificateExtraObjectAtPosition("shape", 50, 50)}><Square aria-hidden="true" /><span>{tr("Фігура", "Shape")}</span></button>
+                            </div>
+                            <details className="text-xs text-text-secondary">
+                              <summary className="w-fit cursor-pointer font-semibold text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{tr("Як користуватися редактором", "How to use the editor")}</summary>
+                              <p className="mt-2 leading-5">{tr("Увімкни потрібні поля кнопками. Власний текст, зображення й фігури додаються над полотном або через контекстне меню. Перетягни елемент на місце; маркерами зміни його розмір.", "Enable the fields you need. Add custom text, images, and shapes above the canvas or from its context menu. Drag items into place and use their handles to resize them.")}</p>
+                            </details>
+                          </aside>
+                        ) : null}
+                        {!certificateCanvasFocusMode || !certificateUiSimpleMode ? (
+                          <Input
+                            label={tr("Назва шаблону", "Template name")}
+                            value={certificateTemplateName}
+                            onChange={(e) => setCertificateTemplateName(e.target.value)}
+                          />
+                        ) : null}
+                        {!certificateUiSimpleMode || certificateUiAdvancedOpen ? (
+                          <>
+                            <Input
+                              label={tr("Template ID (опційно)", "Template ID (optional)")}
+                              value={certificateTemplateId}
+                              onChange={(e) => { setCertificateTemplateId(e.target.value); setCertificateTemplateAutoCreated(false); }}
+                              inputMode="numeric"
+                            />
+                            <div className="border border-border rounded-lg p-3 bg-bg-surface/60">
+                              <div className="text-xs text-text-secondary mb-2">{tr("Поля сертифіката", "Certificate fields")}</div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {CERTIFICATE_FIELD_KEYS.map((key) => {
+                                  const field = certificateFields[key];
+                                  return (
+                                    <div key={key} className="border border-border rounded px-2 py-1.5">
+                                      <div className="text-xs font-mono text-text-primary mb-1">{certificateFieldLabel(key, tr)}</div>
+                                      <div className="flex items-center gap-3 text-xs text-text-secondary">
+                                        <label className="inline-flex items-center gap-1.5">
+                                          <input
+                                            type="checkbox"
+                                            checked={Boolean(field?.isEnabled)}
+                                            onChange={(e) =>
+                                              setCertificateFields((prev) => ({
+                                                ...prev,
+                                                [key]: {
+                                                  ...prev[key],
+                                                  isEnabled: e.target.checked,
+                                                  isRequired: e.target.checked ? prev[key].isRequired : false,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          {tr("Показувати", "Show")}
+                                        </label>
+                                        <label className="inline-flex items-center gap-1.5">
+                                          <input
+                                            type="checkbox"
+                                            checked={Boolean(field?.isRequired)}
+                                            disabled={!field?.isEnabled}
+                                            onChange={(e) =>
+                                              setCertificateFields((prev) => ({
+                                                ...prev,
+                                                [key]: {
+                                                  ...prev[key],
+                                                  isRequired: e.target.checked,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          {tr("Обов'язково", "Required")}
+                                        </label>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </>
+                        ) : null}
+                        <div className="space-y-1.5 certificate-studio-background">
+                          <Input
+                            label={tr("Фон layout-превʼю (опційно)", "Layout preview background (optional)")}
+                            value={certificateLayoutBackgroundUrl}
+                            onChange={(e) => updateCertificateLayoutBackgroundUrl(e.target.value)}
+                            placeholder="https://example.com/…"
+                          />
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <label className="inline-flex items-center gap-2 px-2 py-1 border border-border rounded bg-bg-base text-text-secondary cursor-pointer">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  uploadCertificateLayoutBackgroundFile(e.target.files?.[0] ?? null);
+                                  e.currentTarget.value = "";
+                                }}
+                              />
+                              {tr("Завантажити фон файлом", "Upload background file")}
+                            </label>
+                            <Button
+                              variant="ghost"
+                              onClick={() => updateCertificateLayoutBackgroundUrl("")}
+                              disabled={!certificateLayoutBackgroundUrl}
+                            >
+                              {tr("Очистити фон", "Clear background")}
+                            </Button>
+                          </div>
+                          {certificateLayoutBackgroundStatus === "loading" ? (
+                            <div className="text-[11px] text-text-secondary">
+                              {tr("Перевіряю фон…", "Checking background…")}
+                            </div>
+                          ) : null}
+                          {certificateLayoutBackgroundStatus === "error" && certificateLayoutBackgroundError ? (
+                            <div className="text-[11px] text-accent-error">
+                              {certificateLayoutBackgroundError}
+                            </div>
+                          ) : null}
+                          {certificateLayoutBackgroundStatus === "ready" ? (
+                            <div className="text-[11px] text-accent-success">
+                              {tr("Фон успішно завантажено", "Background loaded successfully")}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="border border-border rounded-lg p-3 bg-bg-surface/60 certificate-studio-layout" data-advanced={certificateUiAdvancedOpen}>
+                          <div className="flex flex-wrap items-center justify-between gap-2 certificate-studio-toolbar">
+                            <div className="certificate-studio-document-title">
+                              <FileText aria-hidden="true" />
+                              <input aria-label={tr("Назва шаблону", "Template name")} value={certificateTemplateName} onChange={(e) => setCertificateTemplateName(e.target.value)} />
+                        <span>{tr("Чернетка", "Draft")}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="inline-flex items-center gap-1.5 text-[11px] text-text-secondary border border-border rounded px-2 py-1 bg-bg-base">
+                                <input
+                                  type="checkbox"
+                                  checked={certificateAutoSyncLayout}
+                                  onChange={(e) => setCertificateAutoSyncLayout(e.target.checked)}
+                                />
+                                {tr("Автосинк HTML/CSS", "Auto-sync HTML/CSS")}
+                              </label>
+                              <Button variant="ghost" onClick={undoCertificateLayout} disabled={!canUndoCertificateLayout}>
+                                {tr("Скасувати", "Undo")}
+                              </Button>
+                              <Button variant="ghost" onClick={redoCertificateLayout} disabled={!canRedoCertificateLayout}>
+                                {tr("Повторити", "Redo")}
+                              </Button>
+                              <Button variant="ghost" onClick={resetCertificateLayout}>
+                                {tr("Скинути", "Reset")}
+                              </Button>
+                              <Button onClick={saveCertificateSettings} disabled={certificateSaving}>
+                                {certificateSaving ? tr("Збереження…", "Saving…") : tr("Зберегти", "Save")}
+                              </Button>
+                              <Button variant="ghost" onClick={applyAutoLayoutToTemplate}>
+                                {tr("Відобразити в HTML + CSS", "Apply to HTML + CSS")}
+                              </Button>
+                            </div>
+                          </div>
+
+                          {!certificateCanvasFocusMode || !certificateUiSimpleMode ? (
+                            <div className="text-[11px] text-text-secondary">
+                            {tr("Порада: drag + resize на canvas, або задавайте точні X/Y/Width вручну. Shift не потрібен — снап працює автоматично.", "Tip: drag + resize directly on canvas, or set exact X/Y/Width manually. Snap works automatically.")}
+                            </div>
+                          ) : null}
+                          {!certificateCanvasFocusMode || !certificateUiSimpleMode ? (
+                            <div className="text-[11px] text-text-secondary">
+                            {tr("Шорткати: ↑↓←→ — рух вибраного поля, Shift+стрілки — крок ×5, Ctrl/Cmd+Z — Undo, Ctrl/Cmd+Shift+Z — Redo, Ctrl/Cmd+D — дублювати об'єкт.", "Shortcuts: ↑↓←→ move selected field, Shift+arrows step ×5, Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z redo, Ctrl/Cmd+D duplicate object.")}
+                            </div>
+                          ) : null}
+
+                          <div className={`grid grid-cols-1 ${certificateCanvasFocusMode && certificateUiSimpleMode ? "md:grid-cols-3" : "md:grid-cols-4"} gap-2 certificate-studio-canvas-settings`}>
+                            <label className="inline-flex items-center gap-2 text-[11px] text-text-secondary border border-border rounded px-2 py-1.5 bg-bg-base">
+                              <input
+                                type="checkbox"
+                                checked={certificateLayoutSnapEnabled}
+                                onChange={(e) => setCertificateLayoutSnapEnabled(e.target.checked)}
+                              />
+                              {tr("Snap to grid", "Snap to grid")}
+                            </label>
+                            {!certificateCanvasFocusMode || !certificateUiSimpleMode ? (
+                              <label className="text-[11px] text-text-secondary border border-border rounded px-2 py-1.5 bg-bg-base">
+                                {tr("Крок снапу (%)", "Snap step (%)")}
+                                <input
+                                  type="number"
+                                  min={0.5}
+                                  max={20}
+                                  step={0.5}
+                                  value={certificateLayoutSnapStep}
+                                  onChange={(e) => setCertificateLayoutSnapStep(clampNumber(Number(e.target.value) || 2, 0.5, 20))}
+                                  className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono"
+                                />
+                              </label>
+                            ) : null}
+                            <label className="inline-flex items-center gap-2 text-[11px] text-text-secondary border border-border rounded px-2 py-1.5 bg-bg-base">
+                              <input
+                                type="checkbox"
+                                checked={certificateLayoutShowGuides}
+                                onChange={(e) => setCertificateLayoutShowGuides(e.target.checked)}
+                              />
+                              {tr("Показувати гайдлайни", "Show guides")}
+                            </label>
+                            <div className="text-[11px] text-text-secondary border border-border rounded px-2 py-1.5 bg-bg-base flex items-center">
+                              {tr("Bounds: 0..100%", "Bounds: 0..100%")}
+                            </div>
+                          </div>
+
+                          {!certificateCanvasFocusMode || !certificateUiSimpleMode ? (
+                            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] gap-2 items-end">
+                            <Input
+                              label={tr("Назва пресета", "Preset name")}
+                              value={certificateLayoutPresetName}
+                              onChange={(e) => setCertificateLayoutPresetName(e.target.value)}
+                              placeholder={tr("Напр. Diploma v1", "e.g. Diploma v1")}
+                            />
+                            <Button variant="secondary" onClick={saveCertificateLayoutPreset}>
+                              {tr("Зберегти пресет", "Save preset")}
+                            </Button>
+                            <select
+                              value={certificateLayoutPresetId}
+                              onChange={(e) => setCertificateLayoutPresetId(e.target.value)}
+                              className="h-[42px] min-w-[180px] px-3 py-2 bg-bg-base border border-border text-text-primary font-mono"
+                            >
+                              <option value="">{tr("Оберіть пресет", "Select preset")}</option>
+                              {certificateLayoutPresets.map((preset) => (
+                                <option key={preset.id} value={preset.id}>{preset.name}</option>
+                              ))}
+                            </select>
+                            <div className="flex items-center gap-2">
+                              <Button variant="ghost" onClick={loadCertificateLayoutPreset} disabled={!certificateLayoutPresetId}>
+                                {tr("Завантажити", "Load")}
+                              </Button>
+                              <Button variant="ghost" onClick={deleteCertificateLayoutPreset} disabled={!certificateLayoutPresetId}>
+                                {tr("Видалити", "Delete")}
+                              </Button>
+                            </div>
+                            </div>
+                          ) : null}
+
+                          {!certificateUiSimpleMode || certificateUiAdvancedOpen ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {CERTIFICATE_FIELD_KEYS.filter((k) => certificateFields[k]?.isEnabled).map((key) => {
+                                const l = certificateLayout[key];
+                                return (
+                                  <div key={`layout-${key}`} className="border border-border rounded px-2 py-2 space-y-1.5">
+                                  <div className="text-xs font-mono text-text-primary">{certificateFieldLabel(key, tr)}</div>
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    <label className="text-[11px] text-text-secondary">
+                                      X%
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        value={l.x}
+                                        onChange={(e) => {
+                                          const value = applySnap(Number(e.target.value) || 0);
+                                          updateCertificateLayout((prev) => ({ ...prev, [key]: { ...prev[key], x: value } }));
+                                        }}
+                                        className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono"
+                                      />
+                                    </label>
+                                    <label className="text-[11px] text-text-secondary">
+                                      Y%
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        value={l.y}
+                                        onChange={(e) => {
+                                          const value = applySnap(Number(e.target.value) || 0);
+                                          updateCertificateLayout((prev) => ({ ...prev, [key]: { ...prev[key], y: value } }));
+                                        }}
+                                        className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono"
+                                      />
+                                    </label>
+                                    <label className="text-[11px] text-text-secondary">
+                                      {tr("Розмір", "Size")}
+                                      <input
+                                        type="number"
+                                        min={10}
+                                        max={72}
+                                        value={l.fontSize}
+                                        onChange={(e) => {
+                                          const value = clampFontSize(Number(e.target.value) || 10);
+                                          updateCertificateLayout((prev) => ({ ...prev, [key]: { ...prev[key], fontSize: value } }));
+                                        }}
+                                        className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono"
+                                      />
+                                    </label>
+                                    <label className="text-[11px] text-text-secondary">
+                                      {tr("Вага", "Weight")}
+                                      <input
+                                        type="number"
+                                        min={300}
+                                        max={900}
+                                        step={100}
+                                        value={l.fontWeight}
+                                        onChange={(e) => {
+                                          const value = clampNumber(Number(e.target.value) || 500, 300, 900);
+                                          updateCertificateLayout((prev) => ({ ...prev, [key]: { ...prev[key], fontWeight: value } }));
+                                        }}
+                                        className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono"
+                                      />
+                                    </label>
+                                    <label className="text-[11px] text-text-secondary col-span-2">
+                                      {tr("Ширина (%)", "Width (%)")}
+                                      <input
+                                        type="number"
+                                        min={8}
+                                        max={96}
+                                        value={l.width}
+                                        onChange={(e) => {
+                                          const raw = clampFieldWidth(Number(e.target.value) || 8);
+                                          const value = certificateLayoutSnapEnabled
+                                            ? snapByStep(raw, clampNumber(certificateLayoutSnapStep, 0.5, 20))
+                                            : raw;
+                                          updateCertificateLayout((prev) => ({ ...prev, [key]: { ...prev[key], width: Math.round(value * 10) / 10 } }));
+                                        }}
+                                        className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono"
+                                      />
+                                    </label>
+                                  </div>
+                                  <label className="text-[11px] text-text-secondary block">
+                                    {tr("Вирівнювання", "Alignment")}
+                                    <select
+                                      value={l.align}
+                                      onChange={(e) => {
+                                        const value = e.target.value as "left" | "center" | "right";
+                                        updateCertificateLayout((prev) => ({ ...prev, [key]: { ...prev[key], align: value } }));
+                                      }}
+                                      className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono"
+                                    >
+                                      <option value="left">{tr("Ліво", "Left")}</option>
+                                      <option value="center">{tr("Центр", "Center")}</option>
+                                      <option value="right">{tr("Право", "Right")}</option>
+                                    </select>
+                                  </label>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+
+                          <div className="border border-border rounded-lg bg-bg-base p-2 certificate-studio-canvas-shell">
+                            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap certificate-studio-canvas-tools">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[11px] text-text-secondary mr-1">{tr("Додати:", "Add:")}</span>
+                                <button
+                                  type="button"
+                                  className="px-2 py-0.5 rounded border border-border bg-bg-surface hover:bg-bg-hover text-[11px] font-mono text-text-primary"
+                                  onClick={() => addCertificateExtraObjectAtPosition("text", 50, 50)}
+                                  title={tr("Вставити власний текст", "Insert your own text")}
+                                >
+                                  + {tr("Текст", "Text")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="px-2 py-0.5 rounded border border-border bg-bg-surface hover:bg-bg-hover text-[11px] font-mono text-text-primary"
+                                  onClick={() => addCertificateExtraObjectAtPosition("image", 50, 50)}
+                                  title={tr("Вставити картинку за URL", "Insert image by URL")}
+                                >
+                                  + {tr("Картинка", "Image")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="px-2 py-0.5 rounded border border-border bg-bg-surface hover:bg-bg-hover text-[11px] font-mono text-text-primary"
+                                  onClick={() => addCertificateExtraObjectAtPosition("shape", 50, 50)}
+                                  title={tr("Вставити фігуру", "Insert shape")}
+                                >
+                                  + {tr("Фігура", "Shape")}
+                                </button>
+                              </div>
+                              <div className="certificate-studio-zoom">
+                                <span>{tr("A4 · альбомна", "A4 · landscape")}</span>
+                                <button type="button" aria-label={tr("Зменшити масштаб", "Zoom out")} onClick={() => setCertificateZoom((zoom) => Math.max(50, zoom - 10))}><ZoomOut aria-hidden="true" /></button>
+                                <span className="certificate-studio-zoom-value">{certificateZoom}%</span>
+                                <button type="button" aria-label={tr("Збільшити масштаб", "Zoom in")} onClick={() => setCertificateZoom((zoom) => Math.min(150, zoom + 10))}><ZoomIn aria-hidden="true" /></button>
+                                <button type="button" onClick={() => setCertificateZoom(100)}>{tr("Вписати", "Fit")}</button>
+                              </div>
+                            </div>
+                            <div
+                              ref={certificateLayoutCanvasRef}
+                              className="relative w-full overflow-hidden rounded border border-border/70 certificate-studio-canvas"
+                              tabIndex={0}
+                              style={{
+                                aspectRatio: "1123 / 794",
+                                width: `${certificateZoom}%`,
+                                maxWidth: "none",
+                                marginInline: "auto",
+                                backgroundImage: certificateLayoutBackgroundUrl
+                                  ? `${toCssUrlValue(certificateLayoutBackgroundUrl)}, linear-gradient(135deg, #ffffff, #f1f5f9)`
+                                  : "linear-gradient(135deg, #ffffff, #f1f5f9)",
+                                backgroundSize: "100% 100%",
+                                backgroundPosition: "center",
+                                backgroundRepeat: "no-repeat",
+                              }}
+                              onMouseMove={(e) => {
+                                if (!(e.currentTarget instanceof HTMLDivElement)) return;
+                                if (certificateLayoutDraggingField) {
+                                  updateLayoutByPointer(certificateLayoutDraggingField, e.clientX, e.clientY, e.currentTarget);
+                                  return;
+                                }
+                                if (certificateLayoutDraggingExtraObjectId) {
+                                  updateCertificateExtraObjectByPointer(certificateLayoutDraggingExtraObjectId, e.clientX, e.clientY, e.currentTarget);
+                                  return;
+                                }
+                                if (certificateLayoutResizingExtraObjectId && certificateLayoutExtraResizeStart) {
+                                  updateCertificateExtraResizeByPointer(
+                                    certificateLayoutResizingExtraObjectId,
+                                    e.clientX,
+                                    e.clientY,
+                                    e.currentTarget,
+                                    certificateLayoutExtraResizeStart,
+                                    { oneSided: e.ctrlKey || e.metaKey }
+                                  );
+                                  return;
+                                }
+                                if (certificateLayoutResizingField && certificateLayoutResizeStart) {
+                                  updateLayoutResizeByPointer(
+                                    certificateLayoutResizingField,
+                                    e.clientX,
+                                    e.clientY,
+                                    e.currentTarget,
+                                    certificateLayoutResizeStart,
+                                    { oneSidedToRight: e.ctrlKey || e.metaKey }
+                                  );
+                                }
+                              }}
+                              onMouseUp={() => {
+                                stopCertificateLayoutInteractions();
+                              }}
+                              onMouseLeave={() => {
+                                stopCertificateLayoutInteractions();
+                              }}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                if (!(e.currentTarget instanceof HTMLDivElement)) return;
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                if (rect.width <= 0 || rect.height <= 0) return;
+                                const x = ((e.clientX - rect.left) / rect.width) * 100;
+                                const y = ((e.clientY - rect.top) / rect.height) * 100;
+                                const left = clampNumber(e.clientX - rect.left, 6, Math.max(6, rect.width - 220));
+                                const top = clampNumber(e.clientY - rect.top, 6, Math.max(6, rect.height - 240));
+                                setCertificateLayoutContextMenu({
+                                  left,
+                                  top,
+                                  x: clampNumber(x, 0, 100),
+                                  y: clampNumber(y, 0, 100),
+                                });
+                              }}
+                              onClick={() => {
+                                if (certificateLayoutContextMenu) setCertificateLayoutContextMenu(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.ctrlKey || e.metaKey) {
+                                  if (e.key.toLowerCase() === "d") {
+                                    e.preventDefault();
+                                    duplicateSelectedCertificateExtraObject();
+                                    return;
+                                  }
+                                  if (e.key.toLowerCase() === "z" && !e.shiftKey) {
+                                    e.preventDefault();
+                                    undoCertificateLayout();
+                                    return;
+                                  }
+                                  if (e.key.toLowerCase() === "z" && e.shiftKey) {
+                                    e.preventDefault();
+                                    redoCertificateLayout();
+                                    return;
+                                  }
+                                }
+                                const baseStep = certificateLayoutSnapEnabled
+                                  ? clampNumber(certificateLayoutSnapStep, 0.5, 20)
+                                  : 1;
+                                const step = e.shiftKey ? baseStep * 5 : baseStep;
+                                if (e.key === "ArrowLeft") {
+                                  e.preventDefault();
+                                  nudgeCertificateLayoutSelection(-step, 0);
+                                } else if (e.key === "ArrowRight") {
+                                  e.preventDefault();
+                                  nudgeCertificateLayoutSelection(step, 0);
+                                } else if (e.key === "ArrowUp") {
+                                  e.preventDefault();
+                                  nudgeCertificateLayoutSelection(0, -step);
+                                } else if (e.key === "ArrowDown") {
+                                  e.preventDefault();
+                                  nudgeCertificateLayoutSelection(0, step);
+                                } else if (e.key === "Delete" || e.key === "Backspace") {
+                                  e.preventDefault();
+                                  removeSelectedCertificateObject();
+                                }
+                              }}
+                            >
+                              {certificateLayoutShowGuides ? (
+                                <>
+                                  <div className="absolute inset-y-0 left-1/2 w-px bg-primary/20 pointer-events-none" />
+                                  <div className="absolute inset-x-0 top-1/2 h-px bg-primary/20 pointer-events-none" />
+                                  {certificateLayoutActiveGuides.map((guide, index) =>
+                                    guide.axis === "x" ? (
+                                      <div
+                                        key={`guide-x-${guide.value}-${index}`}
+                                        className={`absolute inset-y-0 w-px pointer-events-none ${guide.source === "center" ? "bg-primary/50" : "bg-accent-success/55"}`}
+                                        style={{ left: `${guide.value}%` }}
+                                      />
+                                    ) : (
+                                      <div
+                                        key={`guide-y-${guide.value}-${index}`}
+                                        className={`absolute inset-x-0 h-px pointer-events-none ${guide.source === "center" ? "bg-primary/50" : "bg-accent-success/55"}`}
+                                        style={{ top: `${guide.value}%` }}
+                                      />
+                                    )
+                                  )}
+                                  {certificateLayoutSelectedField ? (
+                                    <>
+                                      <div
+                                        className="absolute inset-x-0 h-px bg-accent-success/40 pointer-events-none"
+                                        style={{ top: `${certificateLayout[certificateLayoutSelectedField].y}%` }}
+                                      />
+                                      <div
+                                        className="absolute inset-y-0 w-px bg-accent-success/40 pointer-events-none"
+                                        style={{ left: `${certificateLayout[certificateLayoutSelectedField].x}%` }}
+                                      />
+                                    </>
+                                  ) : null}
+                                </>
+                              ) : null}
+                              {CERTIFICATE_FIELD_KEYS.filter((k) => certificateFields[k]?.isEnabled).map((key) => {
+                                const l = certificateLayout[key];
+                                const transform = l.align === "center" ? "translate(-50%, -50%)" : l.align === "right" ? "translate(-100%, -50%)" : "translate(0, -50%)";
+                                const selected = certificateLayoutSelectedField === key;
+                                return (
+                                  <div
+                                    key={`canvas-${key}`}
+                                    className={`absolute text-[#0f172a] cursor-move select-none rounded-sm ${selected ? "outline outline-2 outline-primary outline-offset-1 bg-primary/10" : ""}`}
+                                    style={{
+                                      left: `${l.x}%`,
+                                      top: `${l.y}%`,
+                                      transform,
+                                      fontSize: `${Math.max(10, l.fontSize)}px`,
+                                      fontWeight: l.fontWeight,
+                                      textAlign: l.align,
+                                      width: `${clampFieldWidth(l.width)}%`,
+                                      maxWidth: "96%",
+                                      whiteSpace: "normal",
+                                      // Match the backend `.cf-field` box exactly (no padding/border,
+                                      // same font + line-height) so the canvas is pixel-truthful vs PDF.
+                                      fontFamily: "Arial, Helvetica, sans-serif",
+                                      lineHeight: 1.2,
+                                    }}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      setCertificateLayoutSelectedField(key);
+                                      setCertificateInspectorTab("design");
+                                      setCertificateLayoutSelectedExtraObjectId(null);
+                                      setCertificateLayoutDraggingField(key);
+                                      certificateLayoutCanvasRef.current?.focus();
+                                      if (e.currentTarget.parentElement instanceof HTMLDivElement) {
+                                        updateLayoutByPointer(key, e.clientX, e.clientY, e.currentTarget.parentElement);
+                                      }
+                                    }}
+                                  >
+                                    {certificateCanvasSampleValue(key)}
+                                    {["left", "right", "top", "bottom"].map((edge) => {
+                                      const edgeKey = edge as "left" | "right" | "top" | "bottom";
+                                      const baseClass = "absolute w-3.5 h-3.5 rounded-sm border border-primary bg-bg-base";
+                                      const edgeClass = edgeKey === "left"
+                                        ? "-left-2 top-1/2 -translate-y-1/2 cursor-ew-resize"
+                                        : edgeKey === "right"
+                                          ? "-right-2 top-1/2 -translate-y-1/2 cursor-ew-resize"
+                                          : edgeKey === "top"
+                                            ? "left-1/2 -translate-x-1/2 -top-2 cursor-ns-resize"
+                                            : "left-1/2 -translate-x-1/2 -bottom-2 cursor-ns-resize";
+                                      return (
+                                        <button
+                                          key={`resize-${key}-${edgeKey}`}
+                                          type="button"
+                                          className={`${baseClass} ${edgeClass}`}
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setCertificateLayoutSelectedField(key);
+                                            setCertificateInspectorTab("design");
+                                            setCertificateLayoutDraggingField(null);
+                                            certificateLayoutCanvasRef.current?.focus();
+                                            setCertificateLayoutResizingField(key);
+                                            setCertificateLayoutResizeStart({
+                                              clientX: e.clientX,
+                                              clientY: e.clientY,
+                                              width: clampFieldWidth(l.width),
+                                              fontSize: clampFontSize(l.fontSize),
+                                              x: clampNumber(l.x, 0, 100),
+                                              align: l.align,
+                                              edge: edgeKey,
+                                            });
+                                          }}
+                                          title={tr("Змінити розмір (Ctrl: фіксувати протилежний бік)", "Resize (Ctrl: keep opposite side fixed)")}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              })}
+                              {sortedCertificateLayoutExtraObjects.map((obj) => {
+                                const transformBase = obj.align === "left"
+                                  ? "translate(0, -50%)"
+                                  : obj.align === "right"
+                                    ? "translate(-100%, -50%)"
+                                    : "translate(-50%, -50%)";
+                                const transform = `${transformBase} rotate(${clampNumber(obj.rotation, -180, 180)}deg)`;
+                                const selected = certificateLayoutSelectedExtraObjectId === obj.id;
+                                return (
+                                  <div
+                                    key={`canvas-extra-${obj.id}`}
+                                    className={`absolute select-none cursor-move ${selected ? "outline outline-2 outline-accent-success outline-offset-1" : ""}`}
+                                    style={{
+                                      left: `${obj.x}%`,
+                                      top: `${obj.y}%`,
+                                      transform,
+                                      width: `${clampNumber(obj.width, 2, 96)}%`,
+                                      height: `${clampNumber(obj.height, 2, 96)}%`,
+                                      opacity: clampNumber(obj.opacity, 0.05, 1),
+                                      display: obj.isVisible === false ? "none" : "flex",
+                                      textAlign: obj.align,
+                                      fontSize: `${Math.max(8, obj.fontSize)}px`,
+                                      fontWeight: obj.fontWeight,
+                                      fontFamily: "Arial, Helvetica, sans-serif",
+                                      lineHeight: 1.2,
+                                      color: obj.color,
+                                      background: obj.type === "shape" ? obj.backgroundColor : obj.type === "text" ? obj.backgroundColor : "transparent",
+                                      // Mirror the backend `.cf-extra` text box (padding 2px 6px, flex-centered).
+                                      padding: obj.type === "text" ? "2px 6px" : 0,
+                                      boxSizing: "border-box",
+                                      borderRadius: `${clampNumber(obj.borderRadius, 0, 48)}px`,
+                                      zIndex: clampNumber(Number(obj.zIndex ?? 20), 1, 999),
+                                      overflow: "hidden",
+                                      alignItems: "center",
+                                      justifyContent: obj.align === "left" ? "flex-start" : obj.align === "right" ? "flex-end" : "center",
+                                    }}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setCertificateLayoutSelectedField(null);
+                                      setCertificateInspectorTab("design");
+                                      setCertificateLayoutSelectedExtraObjectId(obj.id);
+                                      setCertificateLayoutDraggingField(null);
+                                      setCertificateLayoutResizingExtraObjectId(null);
+                                      setCertificateLayoutDraggingExtraObjectId(obj.id);
+                                      certificateLayoutCanvasRef.current?.focus();
+                                      if (e.currentTarget.parentElement instanceof HTMLDivElement) {
+                                        updateCertificateExtraObjectByPointer(obj.id, e.clientX, e.clientY, e.currentTarget.parentElement);
+                                      }
+                                    }}
+                                  >
+                                    {obj.type === "image" ? (
+                                      obj.imageUrl ? (
+                                        <img src={obj.imageUrl} alt="extra" width={800} height={600} loading="lazy" className="w-full h-full object-contain pointer-events-none" />
+                                      ) : (
+                                        <div className="w-full h-full border border-dashed border-border text-[10px] text-text-secondary flex items-center justify-center">
+                                          {tr("Встав URL картинки", "Set image URL")}
+                                        </div>
+                                      )
+                                    ) : obj.type === "shape" ? null : (
+                                      <span className="pointer-events-none whitespace-pre-wrap leading-tight">{obj.text || tr("Додатковий текст", "Additional text")}</span>
+                                    )}
+                                    {selected ? ["left", "right", "top", "bottom"].map((edge) => {
+                                      const edgeKey = edge as "left" | "right" | "top" | "bottom";
+                                      const baseClass = "absolute w-3.5 h-3.5 rounded-sm border border-accent-success bg-bg-base";
+                                      const edgeClass = edgeKey === "left"
+                                        ? "-left-2 top-1/2 -translate-y-1/2 cursor-ew-resize"
+                                        : edgeKey === "right"
+                                          ? "-right-2 top-1/2 -translate-y-1/2 cursor-ew-resize"
+                                          : edgeKey === "top"
+                                            ? "left-1/2 -translate-x-1/2 -top-2 cursor-ns-resize"
+                                            : "left-1/2 -translate-x-1/2 -bottom-2 cursor-ns-resize";
+                                      return (
+                                        <button
+                                          key={`resize-extra-${obj.id}-${edgeKey}`}
+                                          type="button"
+                                          className={`${baseClass} ${edgeClass}`}
+                                          onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setCertificateLayoutSelectedField(null);
+                                            setCertificateInspectorTab("design");
+                                            setCertificateLayoutSelectedExtraObjectId(obj.id);
+                                            setCertificateLayoutDraggingExtraObjectId(null);
+                                            setCertificateLayoutResizingExtraObjectId(obj.id);
+                                            setCertificateLayoutExtraResizeStart({
+                                              clientX: e.clientX,
+                                              clientY: e.clientY,
+                                              width: clampNumber(obj.width, 2, 96),
+                                              height: clampNumber(obj.height, 2, 96),
+                                              x: clampNumber(obj.x, 0, 100),
+                                              y: clampNumber(obj.y, 0, 100),
+                                              align: obj.align,
+                                              edge: edgeKey,
+                                            });
+                                            certificateLayoutCanvasRef.current?.focus();
+                                          }}
+                                          title={tr("Змінити розмір (Ctrl: фіксувати протилежний бік)", "Resize (Ctrl: keep opposite side fixed)")}
+                                        />
+                                      );
+                                    }) : null}
+                                  </div>
+                                );
+                              })}
+                              {certificateLayoutContextMenu ? (
+                                <div
+                                  className="absolute z-20 w-[220px] rounded border border-border bg-bg-base shadow-xl"
+                                  style={{ left: `${certificateLayoutContextMenu.left}px`, top: `${certificateLayoutContextMenu.top}px` }}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                >
+                                  <div className="px-2 py-1 text-[11px] font-mono text-text-secondary border-b border-border">
+                                    {tr("Додати об'єкт у цю точку", "Add object at this point")}
+                                  </div>
+                                  <div className="max-h-[220px] overflow-auto p-1">
+                                    {certificateLayoutSelectedField ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          className="w-full text-left px-2 py-1 rounded hover:bg-bg-surface text-[11px] font-mono text-text-primary"
+                                          onClick={() => moveSelectedCertificateObjectToPosition(certificateLayoutContextMenu.x, certificateLayoutContextMenu.y)}
+                                        >
+                                          ↦ {tr("Перемістити вибраний сюди", "Move selected here")}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="w-full text-left px-2 py-1 rounded hover:bg-bg-surface text-[11px] font-mono text-accent-error"
+                                          onClick={removeSelectedCertificateObject}
+                                        >
+                                          ✕ {tr("Прибрати вибраний об'єкт", "Remove selected object")}
+                                        </button>
+                                        <div className="my-1 border-t border-border" />
+                                      </>
+                                    ) : null}
+                                    {certificateLayoutSelectedExtraObjectId ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          className="w-full text-left px-2 py-1 rounded hover:bg-bg-surface text-[11px] font-mono text-text-primary"
+                                          onClick={duplicateSelectedCertificateExtraObject}
+                                        >
+                                          ⧉ {tr("Дублювати об'єкт", "Duplicate object")}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="w-full text-left px-2 py-1 rounded hover:bg-bg-surface text-[11px] font-mono text-text-primary"
+                                          onClick={() => moveSelectedCertificateObjectToPosition(certificateLayoutContextMenu.x, certificateLayoutContextMenu.y)}
+                                        >
+                                          ↦ {tr("Перемістити вибраний сюди", "Move selected here")}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="w-full text-left px-2 py-1 rounded hover:bg-bg-surface text-[11px] font-mono text-accent-error"
+                                          onClick={removeSelectedCertificateObject}
+                                        >
+                                          ✕ {tr("Прибрати вибраний об'єкт", "Remove selected object")}
+                                        </button>
+                                        <div className="my-1 border-t border-border" />
+                                      </>
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      className="w-full text-left px-2 py-1 rounded hover:bg-bg-surface text-[11px] font-mono text-text-primary"
+                                      onClick={() => addCertificateExtraObjectAtPosition("text", certificateLayoutContextMenu.x, certificateLayoutContextMenu.y)}
+                                    >
+                                      + {tr("Додатковий текст", "Additional text")}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="w-full text-left px-2 py-1 rounded hover:bg-bg-surface text-[11px] font-mono text-text-primary"
+                                      onClick={() => addCertificateExtraObjectAtPosition("image", certificateLayoutContextMenu.x, certificateLayoutContextMenu.y)}
+                                    >
+                                      + {tr("Картинка", "Image")}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="w-full text-left px-2 py-1 rounded hover:bg-bg-surface text-[11px] font-mono text-text-primary"
+                                      onClick={() => addCertificateExtraObjectAtPosition("shape", certificateLayoutContextMenu.x, certificateLayoutContextMenu.y)}
+                                    >
+                                      + {tr("Фігура", "Shape")}
+                                    </button>
+                                    <div className="my-1 border-t border-border" />
+                                    {CERTIFICATE_FIELD_KEYS.filter((k) => !certificateFields[k]?.isEnabled).length === 0 ? (
+                                      <div className="px-2 py-1 text-[11px] text-text-secondary">
+                                        {tr("Усі об'єкти вже додані", "All objects are already added")}
+                                      </div>
+                                    ) : (
+                                      CERTIFICATE_FIELD_KEYS.filter((k) => !certificateFields[k]?.isEnabled).map((key) => (
+                                        <button
+                                          key={`ctx-add-${key}`}
+                                          type="button"
+                                          className="w-full text-left px-2 py-1 rounded hover:bg-bg-surface text-[11px] font-mono text-text-primary"
+                                          onClick={() => addCertificateFieldAtPosition(key, certificateLayoutContextMenu.x, certificateLayoutContextMenu.y)}
+                                        >
+                                          + {certificateFieldLabel(key, tr)}
+                                        </button>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          {certificateCanvasFocusMode && certificateUiSimpleMode ? <aside className="certificate-studio-inspector">
+                            <div className="certificate-studio-inspector-header">
+                              <div className="certificate-studio-panel-title"><Settings2 aria-hidden="true" />{tr("Властивості", "Properties")}</div>
+                              <div className="certificate-studio-inspector-tabs" role="tablist" aria-label={tr("Панель властивостей", "Properties panel")}>
+                                <button type="button" role="tab" aria-selected={certificateInspectorTab === "design"} onClick={() => setCertificateInspectorTab("design")}>{tr("Елемент", "Element")}</button>
+                                <button type="button" role="tab" aria-selected={certificateInspectorTab === "page"} onClick={() => setCertificateInspectorTab("page")}>{tr("Сторінка", "Page")}</button>
+                              </div>
+                            </div>
+                            {certificateInspectorTab === "page" ? (
+                              <div className="certificate-studio-property-stack">
+                                <div className="certificate-studio-property-section">
+                                  <h3>{tr("Макет", "Document")}</h3>
+                                  <Input label={tr("Назва шаблону", "Template name")} value={certificateTemplateName} onChange={(e) => setCertificateTemplateName(e.target.value)} />
+                                  <p>{tr("A4 · альбомна орієнтація · 1123 × 794 px", "A4 · landscape · 1123 × 794 px")}</p>
+                                </div>
+                                <div className="certificate-studio-property-section">
+                                  <h3>{tr("Фон сторінки", "Page background")}</h3>
+                                  <Input label={tr("URL зображення", "Image URL")} value={certificateLayoutBackgroundUrl} onChange={(e) => updateCertificateLayoutBackgroundUrl(e.target.value)} placeholder="https://example.com/…" />
+                                  <div className="certificate-studio-page-actions">
+                                    <label className="certificate-studio-upload-button">
+                                      <input type="file" accept="image/*" onChange={(e) => { uploadCertificateLayoutBackgroundFile(e.target.files?.[0] ?? null); e.currentTarget.value = ""; }} />
+                                      <Upload aria-hidden="true" />{tr("Завантажити", "Upload")}
+                                    </label>
+                                    <button type="button" disabled={!certificateLayoutBackgroundUrl} onClick={() => updateCertificateLayoutBackgroundUrl("")}>{tr("Очистити фон", "Remove background")}</button>
+                                  </div>
+                                  {certificateLayoutBackgroundStatus === "error" && certificateLayoutBackgroundError ? <p className="text-accent-error">{certificateLayoutBackgroundError}</p> : null}
+                                </div>
+                                <div className="certificate-studio-property-section">
+                                  <h3>{tr("Допоміжні лінії", "Guides")}</h3>
+                                  <label className="certificate-studio-check"><input type="checkbox" checked={certificateLayoutSnapEnabled} onChange={(e) => setCertificateLayoutSnapEnabled(e.target.checked)} />{tr("Прив’язувати до сітки", "Snap to grid")}</label>
+                                  <label className="certificate-studio-check"><input type="checkbox" checked={certificateLayoutShowGuides} onChange={(e) => setCertificateLayoutShowGuides(e.target.checked)} />{tr("Показувати напрямні", "Show guides")}</label>
+                                </div>
+                              </div>
+                            ) : <>{(() => {
+                            const key = certificateLayoutSelectedField;
+                            const selectedExtra = certificateLayoutExtraObjects.find((obj) => obj.id === certificateLayoutSelectedExtraObjectId) ?? null;
+                            if (!key && !selectedExtra) {
+                              return (
+                                <div className="certificate-studio-empty-selection">
+                                  {tr("Оберіть елемент на canvas, щоб редагувати його властивості", "Select an element on canvas to edit its properties")}
+                                </div>
+                              );
+                            }
+                            if (!key && selectedExtra) {
+                              return (
+                                <div className="certificate-studio-property-stack">
+                                  <div className="certificate-studio-property-heading">{selectedExtra.type === "text" ? <Type aria-hidden="true" /> : selectedExtra.type === "image" ? <ImagePlus aria-hidden="true" /> : <Square aria-hidden="true" />}<h3>{certificateExtraObjectTypeLabel(selectedExtra.type, tr)}</h3></div>
+                                  <section className="certificate-studio-property-section">
+                                  <h4>{tr("Розташування", "Position and size")}</h4>
+                                  <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5">
+                                    <label className="text-[11px] text-text-secondary">X%
+                                      <input type="number" min={0} max={100} value={selectedExtra.x} onChange={(e) => {
+                                        const value = applySnap(Number(e.target.value) || 0);
+                                        setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, x: value } : obj));
+                                      }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                    </label>
+                                    <label className="text-[11px] text-text-secondary">Y%
+                                      <input type="number" min={0} max={100} value={selectedExtra.y} onChange={(e) => {
+                                        const value = applySnap(Number(e.target.value) || 0);
+                                        setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, y: value } : obj));
+                                      }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                    </label>
+                                    <label className="text-[11px] text-text-secondary">{tr("Width", "Width")}%
+                                      <input type="number" min={2} max={96} value={selectedExtra.width} onChange={(e) => {
+                                        const value = clampNumber(Number(e.target.value) || 2, 2, 96);
+                                        setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, width: value } : obj));
+                                      }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                    </label>
+                                    <label className="text-[11px] text-text-secondary">{tr("Height", "Height")}%
+                                      <input type="number" min={2} max={96} value={selectedExtra.height} onChange={(e) => {
+                                        const value = clampNumber(Number(e.target.value) || 2, 2, 96);
+                                        setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, height: value } : obj));
+                                      }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                    </label>
+                                    <label className="text-[11px] text-text-secondary">{tr("Rotate", "Rotate")}
+                                      <input type="number" min={-180} max={180} value={selectedExtra.rotation} onChange={(e) => {
+                                        const value = clampNumber(Number(e.target.value) || 0, -180, 180);
+                                        setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, rotation: value } : obj));
+                                      }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                    </label>
+                                  </div></section>
+                                  <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5">
+                                    <label className="text-[11px] text-text-secondary">Z-index
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={999}
+                                        value={selectedExtra.zIndex}
+                                        onChange={(e) => {
+                                          const value = clampNumber(Number(e.target.value) || 1, 1, 999);
+                                          setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, zIndex: value } : obj));
+                                        }}
+                                        className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono"
+                                      />
+                                    </label>
+                                    <label className="text-[11px] text-text-secondary">{tr("Opacity", "Opacity")}
+                                      <input
+                                        type="number"
+                                        min={0.05}
+                                        max={1}
+                                        step={0.05}
+                                        value={selectedExtra.opacity}
+                                        onChange={(e) => {
+                                          const value = clampNumber(Number(e.target.value) || 0.05, 0.05, 1);
+                                          setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, opacity: value } : obj));
+                                        }}
+                                        className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono"
+                                      />
+                                    </label>
+                                    <div className="col-span-2 md:col-span-3 flex items-end gap-1.5">
+                                      <Button variant="ghost" onClick={() => changeSelectedCertificateExtraObjectLayer(-1)}>
+                                        <ArrowDown aria-hidden="true" className="mr-1 inline size-3.5" />{tr("Нижче", "Send backward")}
+                                      </Button>
+                                      <Button variant="ghost" onClick={() => changeSelectedCertificateExtraObjectLayer(1)}>
+                                        <ArrowUp aria-hidden="true" className="mr-1 inline size-3.5" />{tr("Вище", "Bring forward")}
+                                      </Button>
+                                      <Button variant="ghost" onClick={duplicateSelectedCertificateExtraObject}>
+                                        {tr("Дублювати", "Duplicate")}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  {selectedExtra.type === "text" ? (
+                                    <>
+                                      <textarea
+                                        value={selectedExtra.text}
+                                        onChange={(e) => setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, text: e.target.value } : obj))}
+                                        className="w-full min-h-[64px] px-2 py-1 bg-bg-base border border-border text-text-primary font-mono text-xs"
+                                        placeholder={tr("Текст об'єкта", "Object text")}
+                                      />
+                                      <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
+                                        <label className="text-[11px] text-text-secondary">{tr("Size", "Size")}
+                                          <input type="number" min={8} max={96} value={selectedExtra.fontSize} onChange={(e) => {
+                                            const value = clampNumber(Number(e.target.value) || 8, 8, 96);
+                                            setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, fontSize: value } : obj));
+                                          }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                        </label>
+                                        <label className="text-[11px] text-text-secondary">{tr("Weight", "Weight")}
+                                          <input type="number" min={300} max={900} step={100} value={selectedExtra.fontWeight} onChange={(e) => {
+                                            const value = clampNumber(Number(e.target.value) || 500, 300, 900);
+                                            setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, fontWeight: value } : obj));
+                                          }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                        </label>
+                                        <label className="text-[11px] text-text-secondary">Color
+                                          <input type="text" value={selectedExtra.color} onChange={(e) => setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, color: e.target.value } : obj))} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                        </label>
+                                        <label className="text-[11px] text-text-secondary">BG
+                                          <input type="text" value={selectedExtra.backgroundColor} onChange={(e) => setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, backgroundColor: e.target.value } : obj))} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                        </label>
+                                      </div>
+                                    </>
+                                  ) : null}
+                                  {selectedExtra.type === "image" ? (
+                                    <div className="space-y-1.5">
+                                      <Input
+                                        label={tr("URL картинки", "Image URL")}
+                                        value={selectedExtra.imageUrl}
+                                        onChange={(e) => setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, imageUrl: e.target.value } : obj))}
+                                        placeholder="https://example.com/…"
+                                      />
+                                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                                        <label className="inline-flex items-center gap-2 px-2 py-1 border border-border rounded bg-bg-base text-text-secondary cursor-pointer">
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                              uploadSelectedCertificateExtraImageFile(e.target.files?.[0] ?? null);
+                                              e.currentTarget.value = "";
+                                            }}
+                                          />
+                                          {tr("Завантажити файлом", "Upload file")}
+                                        </label>
+                                        <Button
+                                          variant="ghost"
+                                          onClick={() => setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, imageUrl: "" } : obj))}
+                                          disabled={!selectedExtra.imageUrl}
+                                        >
+                                          {tr("Очистити", "Clear")}
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                  {selectedExtra.type === "shape" ? (
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                      <label className="text-[11px] text-text-secondary">BG
+                                        <input type="text" value={selectedExtra.backgroundColor} onChange={(e) => setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, backgroundColor: e.target.value } : obj))} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                      </label>
+                                      <label className="text-[11px] text-text-secondary">Radius
+                                        <input type="number" min={0} max={48} value={selectedExtra.borderRadius} onChange={(e) => {
+                                          const value = clampNumber(Number(e.target.value) || 0, 0, 48);
+                                          setCertificateLayoutExtraObjects((prev) => prev.map((obj) => obj.id === selectedExtra.id ? { ...obj, borderRadius: value } : obj));
+                                        }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                      </label>
+                                    </div>
+                                  ) : null}
+                                  <div className="flex items-center justify-end">
+                                    <Button variant="ghost" onClick={removeSelectedCertificateObject}>
+                                      {tr("Видалити об'єкт", "Delete object")}
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            if (!key) return null;
+                            const l = certificateLayout[key];
+                            return (
+                              <div className="certificate-studio-property-stack">
+                                <div className="certificate-studio-property-heading"><span className="certificate-studio-layer-dot">{certificateFieldLabel(key, tr).slice(0, 1)}</span><h3>{certificateFieldLabel(key, tr)}</h3></div>
+                                <section className="certificate-studio-property-section">
+                                <h4>{tr("Розташування та стиль", "Position and style")}</h4>
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5">
+                                  <label className="text-[11px] text-text-secondary">X%
+                                    <input type="number" min={0} max={100} value={l.x} onChange={(e) => {
+                                      const value = applySnap(Number(e.target.value) || 0);
+                                      updateCertificateLayout((prev) => ({ ...prev, [key]: { ...prev[key], x: value } }));
+                                    }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                  </label>
+                                  <label className="text-[11px] text-text-secondary">Y%
+                                    <input type="number" min={0} max={100} value={l.y} onChange={(e) => {
+                                      const value = applySnap(Number(e.target.value) || 0);
+                                      updateCertificateLayout((prev) => ({ ...prev, [key]: { ...prev[key], y: value } }));
+                                    }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                  </label>
+                                  <label className="text-[11px] text-text-secondary">{tr("Size", "Size")}
+                                    <input type="number" min={10} max={72} value={l.fontSize} onChange={(e) => {
+                                      const value = clampFontSize(Number(e.target.value) || 10);
+                                      updateCertificateLayout((prev) => ({ ...prev, [key]: { ...prev[key], fontSize: value } }));
+                                    }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                  </label>
+                                  <label className="text-[11px] text-text-secondary">{tr("Width", "Width")}
+                                    <input type="number" min={8} max={96} value={l.width} onChange={(e) => {
+                                      const raw = clampFieldWidth(Number(e.target.value) || 8);
+                                      const value = certificateLayoutSnapEnabled
+                                        ? snapByStep(raw, clampNumber(certificateLayoutSnapStep, 0.5, 20))
+                                        : raw;
+                                      updateCertificateLayout((prev) => ({ ...prev, [key]: { ...prev[key], width: Math.round(value * 10) / 10 } }));
+                                    }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono" />
+                                  </label>
+                                  <label className="text-[11px] text-text-secondary">{tr("Align", "Align")}
+                                    <select value={l.align} onChange={(e) => {
+                                      const value = e.target.value as "left" | "center" | "right";
+                                      updateCertificateLayout((prev) => ({ ...prev, [key]: { ...prev[key], align: value } }));
+                                    }} className="mt-1 w-full px-2 py-1 bg-bg-base border border-border text-text-primary font-mono">
+                                      <option value="left">{tr("Ліво", "Left")}</option>
+                                      <option value="center">{tr("Центр", "Center")}</option>
+                                      <option value="right">{tr("Право", "Right")}</option>
+                                    </select>
+                                  </label>
+                                </div></section>
+                                <Button variant="ghost" onClick={hideSelectedCertificateField}>{tr("Прибрати поле з макета", "Remove field from layout")}</Button>
+                              </div>
+                            );
+                          })()}</>}</aside> : null}
+                        </div>
+
+                        {!certificateUiSimpleMode || certificateUiAdvancedOpen ? (
+                          <>
+                            <div className="space-y-1.5 certificate-studio-code">
+                              <label className="text-xs text-text-secondary">HTML</label>
+                              <textarea
+                                value={certificateTemplateHtml}
+                                onChange={(e) => setCertificateTemplateHtml(e.target.value)}
+                                className="w-full min-h-[120px] px-3 py-2 bg-bg-code border border-border text-text-primary font-mono"
+                                placeholder="<div>{{name}}</div>"
+                              />
+                              <div className="text-[11px] text-text-secondary">
+                                {tr("Доступні placeholders", "Available placeholders")}: {CERTIFICATE_FIELD_KEYS.map((k) => `{{${k}}}`).join(", ")}
+                              </div>
+                              {certificateTemplatePlaceholders.length > 0 ? (
+                                <div className="text-[11px] text-text-secondary">
+                                  {tr("Знайдено в шаблоні", "Found in template")}: {certificateTemplatePlaceholders.map((k) => `{{${k}}}`).join(", ")}
+                                </div>
+                              ) : null}
+                              {certificateUnknownPlaceholders.length > 0 ? (
+                                <div className="text-[11px] text-accent-error">
+                                  {tr("Невідомі placeholders", "Unknown placeholders")}: {certificateUnknownPlaceholders.map((k) => `{{${k}}}`).join(", ")}
+                                </div>
+                              ) : null}
+                              {certificateMissingRequiredPlaceholders.length > 0 ? (
+                                <div className="text-[11px] text-accent-error flex flex-wrap items-center gap-2">
+                                  <span>
+                                    {tr("Відсутні обов'язкові placeholders", "Missing required placeholders")}: {certificateMissingRequiredPlaceholders.map((k) => `{{${k}}}`).join(", ")}
+                                  </span>
+                                  <Button variant="ghost" onClick={insertMissingRequiredCertificatePlaceholders}>
+                                    {tr("Вставити в HTML", "Insert into HTML")}
+                                  </Button>
+                                </div>
+                              ) : null}
+                              {certificateDisabledReferencedPlaceholders.length > 0 ? (
+                                <div className="text-[11px] text-accent-warn flex flex-wrap items-center gap-2">
+                                  <span>
+                                    {tr("У шаблоні використані вимкнені поля", "Template uses disabled fields")}: {certificateDisabledReferencedPlaceholders.map((k) => `{{${k}}}`).join(", ")}
+                                  </span>
+                                  <Button variant="ghost" onClick={enableReferencedCertificateFields}>
+                                    {tr("Увімкнути поля", "Enable fields")}
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </div>
+                            <div className="space-y-1.5 certificate-studio-code">
+                              <label className="text-xs text-text-secondary">CSS</label>
+                              <textarea
+                                value={certificateTemplateCss}
+                                onChange={(e) => setCertificateTemplateCss(e.target.value)}
+                                className="w-full min-h-[90px] px-3 py-2 bg-bg-code border border-border text-text-primary font-mono"
+                                placeholder="body { font-family: sans-serif; }"
+                              />
+                            </div>
+                          </>
+                        ) : null}
+                        <div className="flex flex-wrap items-center gap-2 certificate-studio-preview-actions">
+                          <Button variant="secondary" onClick={() => void createCustomCertificateTemplate()} disabled={certificateCreatingTemplate || certificateUnknownPlaceholders.length > 0 || certificateMissingRequiredPlaceholders.length > 0}>
+                            {certificateCreatingTemplate ? tr("Створення…", "Creating…") : tr("Створити шаблон", "Create template")}
+                          </Button>
+                          <Button variant="ghost" onClick={() => setCertificatePreviewOpen((v) => !v)}>
+                            {certificatePreviewOpen ? tr("Сховати прев'ю", "Hide preview") : tr("Показати прев'ю", "Show preview")}
+                          </Button>
+                          <Button variant={certificatePreviewFitCanvas ? "secondary" : "ghost"} onClick={() => setCertificatePreviewFitCanvas((v) => !v)}>
+                            {certificatePreviewFitCanvas ? tr("Fit до Canvas: ON", "Fit to canvas: ON") : tr("Fit до Canvas: OFF", "Fit to canvas: OFF")}
+                          </Button>
+                        </div>
+                        {certificatePreviewOpen ? (
+                          <div className="border border-border bg-bg-base rounded-lg overflow-hidden certificate-studio-preview">
+                            <div className="px-2 py-1 text-xs text-text-secondary border-b border-border">
+                              {tr("Локальне прев'ю шаблону", "Local template preview")}
+                            </div>
+                            <iframe
+                              title="certificate-template-preview"
+                              className="w-full h-[520px] bg-white"
+                              sandbox="allow-scripts"
+                              srcDoc={certificatePreviewSrcDoc}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-2 mb-3 border border-border bg-bg-base p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs text-text-secondary">{tr("Бібліотека шаблонів", "Template library")}</div>
+                        <Button variant="ghost" onClick={() => void loadCertificateTemplatesCatalog()} disabled={certificateTemplatesCatalogLoading}>
+                          {certificateTemplatesCatalogLoading ? tr("Оновлення…", "Refreshing…") : tr("Оновити", "Refresh")}
+                        </Button>
+                      </div>
+                      <div className="max-h-[240px] overflow-auto border border-border rounded bg-bg-base">
+                        <table className="min-w-[540px] md:min-w-[680px] w-full text-[11px] font-mono">
+                          <caption className="sr-only">{tr("Бібліотека шаблонів сертифіката", "Certificate template library")}</caption>
+                          <thead className="bg-bg-hover">
+                            <tr>
+                              <th className="hidden md:table-cell p-1.5 border-b border-border text-left">ID</th>
+                              <th className="p-1.5 border-b border-border text-left">{tr("Назва", "Name")}</th>
+                              <th className="p-1.5 border-b border-border text-left">{tr("Тип", "Type")}</th>
+                              <th className="hidden lg:table-cell p-1.5 border-b border-border text-left">{tr("Контест", "Contest")}</th>
+                              <th className="p-1.5 border-b border-border text-left">{tr("Статус", "Status")}</th>
+                              <th className="p-1.5 border-b border-border text-right">{tr("Дія", "Action")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {certificateTemplatesCatalog.length === 0 ? (
+                              <tr>
+                                <td colSpan={6} className="p-2 text-text-secondary">
+                                  {certificateTemplatesCatalogLoading
+                                    ? tr("Завантаження шаблонів…", "Loading templates…")
+                                    : tr("Шаблони не знайдено", "No templates found")}
+                                </td>
+                              </tr>
+                            ) : (
+                              certificateTemplatesCatalog.map((tpl) => (
+                                <tr key={`cert-tpl-${tpl.id}`} className="odd:bg-bg-base even:bg-bg-surface">
+                                  <td className="hidden md:table-cell p-1.5 border-b border-border">{tpl.id}</td>
+                                  <td className="p-1.5 border-b border-border truncate max-w-[250px]" title={tpl.name}>{tpl.name}</td>
+                                  <td className="p-1.5 border-b border-border">{tpl.type}</td>
+                                  <td className="hidden lg:table-cell p-1.5 border-b border-border">{tpl.contestId ?? "—"}</td>
+                                  <td className="p-1.5 border-b border-border">{tpl.isActive ? tr("Активний", "Active") : tr("Неактивний", "Inactive")}</td>
+                                  <td className="p-1.5 border-b border-border text-right">
+                                    <Button variant="ghost" onClick={() => void applyTemplateFromCatalog(tpl)}>
+                                      {tr("Вибрати", "Use")}
+                                    </Button>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <Button variant="secondary" onClick={saveCertificateSettings} disabled={certificateSaving || (certificateMode === "custom" && (certificateUnknownPlaceholders.length > 0 || certificateMissingRequiredPlaceholders.length > 0))}>
+                        {certificateSaving ? tr("Збереження…", "Saving…") : tr("Зберегти налаштування", "Save settings")}
+                      </Button>
+                      <label className="inline-flex items-center gap-2 text-sm text-text-primary">
+                        <input
+                          type="checkbox"
+                          checked={certificateForceRegenerate}
+                          onChange={(e) => setCertificateForceRegenerate(e.target.checked)}
+                        />
+                        {tr("Перегенерувати вже існуючі", "Regenerate existing")}
+                      </label>
+                      {certificateMode !== "none" ? (
+                        <label
+                          className="inline-flex items-center gap-2 text-sm text-text-primary"
+                          title={tr("Зберегти цей дизайн як багаторазовий шаблон, доступний у всіх контестах", "Save this design as a reusable template available in every contest")}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={certificateTemplateGlobal}
+                            onChange={(e) => { setCertificateTemplateGlobal(e.target.checked); setCertificateTemplateAutoCreated(false); }}
+                          />
+                          {tr("Глобальний шаблон (для всіх контестів)", "Global template (all contests)")}
+                        </label>
+                      ) : null}
+                      <Button onClick={enqueueCertificateGeneration} disabled={certificateGenerating}>
+                          {certificateGenerating ? tr("Запуск…", "Starting…") : tr("Згенерувати сертифікати", "Generate certificates")}
+                      </Button>
+                    </div>
+
+                    {certificateError ? <div className="text-sm text-accent-error">{certificateError}</div> : null}
+                    {certificateMessage ? <div className="text-sm text-accent-success">{certificateMessage}</div> : null}
+
+                    <div className="text-xs text-text-secondary mt-2">
+                      {tr(
+                        "Підказка: якщо Template ID порожній — для custom буде створено шаблон з HTML/CSS, а для StudyCod — зі стилем/полями з цієї форми.",
+                        "Tip: if Template ID is empty, custom mode creates a template from HTML/CSS and StudyCod mode creates one from the style/fields form above."
+                      )}
+                    </div>
+                    </> : (
+                      <div className="flex flex-col gap-3 rounded-xl border border-border bg-bg-surface/45 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-text-primary">{certificateMode === "none" ? tr("Сертифікати вимкнено", "Certificates are disabled") : certificateMode === "studycod" ? tr("Шаблон StudyCod", "StudyCod template") : tr("Власний HTML/CSS-шаблон", "Custom HTML/CSS template")}</p>
+                          <p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Макет, поля та надсилання поштою — у редакторі.", "Layout, fields, and email delivery are in the editor.")}</p>
+                        </div>
+                        <span className="inline-flex shrink-0 items-center rounded-full border border-border px-2.5 py-1 text-xs font-medium text-text-secondary">{certificateSendEmailEnabled ? tr("Email увімкнено", "Email enabled") : tr("Email вимкнено", "Email disabled")}</span>
+                      </div>
+                    )}
+                  </Card>
+                  ) : null}
 
                   {tab === "accounts" ? (
                   <Card id="contest-account-generation" className="scroll-mt-6 overflow-hidden rounded-2xl border border-border bg-bg-surface p-4 shadow-sm sm:p-5">
@@ -3313,8 +6652,6 @@ export const ContestPage: React.FC = () => {
                   </> : null}
 
                   {tab === "participants" ? <>
-                  <ContestAwardsPanel contestId={data.contest.id} refreshKey={adminParticipants} />
-                  {disqualificationTarget && <ContestDisqualificationDialog key={disqualificationTarget.id} participant={disqualificationTarget} onClose={() => setDisqualificationTarget(null)} onConfirm={options => toggleParticipantDisqualification(disqualificationTarget, options)} />}
                   <Card className="p-4 sm:p-5">
                     <div className="mb-4">
                       <h2 className="text-base font-semibold text-text-primary flex items-center gap-2">
@@ -3353,60 +6690,7 @@ export const ContestPage: React.FC = () => {
                           className="w-full resize-y rounded-lg border border-border bg-bg-base px-3 py-2 text-sm leading-6 text-text-primary outline-none focus:border-primary"
                           placeholder={tr("Напиши учасникам важливу інформацію або нагадування…", "Write an update or reminder for participants…")}
                         />
-                        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs text-text-muted">{tr("Посилання http://, https:// та www. у листі будуть клікабельними.", "http://, https:// and www. links in the email will be clickable.")}</p>
-                          <p className="text-right text-xs text-text-muted">{contestMessageText.length}/5000</p>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium text-text-primary transition-colors hover:bg-bg-hover">
-                            <Upload aria-hidden="true" className="h-4 w-4" />
-                            {tr("Додати файли", "Attach files")}
-                            <input
-                              type="file"
-                              multiple
-                              accept=".pdf,.txt,.csv,.json,.png,.jpg,.jpeg,.gif,.webp,.avif,.bmp,.tif,.tiff,.heic,.heif,.zip,.doc,.docx,.xls,.xlsx"
-                              className="sr-only"
-                              onChange={(event) => {
-                                const selected = Array.from(event.currentTarget.files ?? []);
-                                const unique = new Map(contestMessageAttachments.map((file) => [`${file.name}:${file.size}:${file.lastModified}`, file]));
-                                for (const file of selected) unique.set(`${file.name}:${file.size}:${file.lastModified}`, file);
-                                const nextAttachments = Array.from(unique.values());
-                                if (nextAttachments.some((file) => file.size > 10 * 1024 * 1024)) {
-                                  setContestMessageError(tr("Файл завеликий. Максимум — 10 МБ.", "A file is too large. Maximum size is 10 MB."));
-                                } else if (nextAttachments.length > 5) {
-                                  setContestMessageError(tr("Можна прикріпити не більше 5 файлів.", "You can attach up to 5 files."));
-                                } else if (nextAttachments.reduce((total, file) => total + file.size, 0) > 20 * 1024 * 1024) {
-                                  setContestMessageError(tr("Загальний розмір вкладень не може перевищувати 20 МБ.", "Attachments cannot exceed 20 MB in total."));
-                                } else {
-                                  setContestMessageAttachments(nextAttachments);
-                                  setContestMessageError(null);
-                                }
-                                event.currentTarget.value = "";
-                              }}
-                            />
-                          </label>
-                          <span className="text-xs text-text-muted">{tr("До 5 файлів, максимум 10 МБ кожен і 20 МБ разом.", "Up to 5 files, 10 MB each and 20 MB total.")}</span>
-                        </div>
-                        {contestMessageAttachments.length > 0 ? (
-                          <ul className="mt-2 flex flex-wrap gap-2" aria-label={tr("Вкладені файли", "Attached files")}>
-                            {contestMessageAttachments.map((file) => (
-                              <li key={`${file.name}:${file.size}:${file.lastModified}`} className="inline-flex max-w-full items-center gap-2 rounded-lg bg-bg-hover px-2.5 py-1.5 text-xs text-text-primary">
-                                <FileText aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                                <span className="max-w-[240px] truncate">{file.name}</span>
-                                <button
-                                  type="button"
-                                  aria-label={tr(`Прибрати файл ${file.name}`, `Remove ${file.name}`)}
-                                  onClick={() => setContestMessageAttachments((current) => current.filter((item) => item !== file))}
-                                  className="rounded p-0.5 hover:bg-black/10"
-                                >
-                                  <X aria-hidden="true" className="h-3.5 w-3.5" />
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
+                        <p className="mt-1 text-right text-xs text-text-muted">{contestMessageText.length}/5000</p>
                       </div>
                       {contestMessageError ? <p role="alert" className="text-sm text-accent-error">{contestMessageError}</p> : null}
                       {contestMessageResult ? (
@@ -3434,6 +6718,9 @@ export const ContestPage: React.FC = () => {
                       </div>
                     </div>
                   </Card>
+
+                  <ContestAwardsPanel contestId={data.contest.id} refreshKey={adminParticipants} />
+                  {disqualificationTarget && <ContestDisqualificationDialog key={disqualificationTarget.id} participant={disqualificationTarget} onClose={() => setDisqualificationTarget(null)} onConfirm={options => toggleParticipantDisqualification(disqualificationTarget, options)} />}
 
                   <Card className="p-4 sm:p-5">
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

@@ -10,6 +10,7 @@ import type {
   ContestCheckResult,
   ContestRunResult,
 } from "../../lib/api/contests";
+import { contestFirstFailureToPublicTestResults } from "../../lib/contestFeedback";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ChatCircleTextIcon as MessageSquareText,
@@ -56,8 +57,13 @@ import { isDevPreviewActive, withDevPreview } from "../../lib/devPreview";
 import { ContestSafetyGate } from "./ContestSafetyGate";
 
 type ContestMeta = {
+  contestId: number | null;
   title: string;
   endsAt: string | null;
+  serverTime: string | null;
+  syncedAt: number;
+  finished: boolean;
+  paused: boolean;
 };
 
 type ContestAnnouncementEvent = {
@@ -277,8 +283,13 @@ export const ContestProblemSolvePage: React.FC = () => {
   const [statement, setStatement] =
     React.useState<ContestProblemStatement | null>(null);
   const [contestMeta, setContestMeta] = React.useState<ContestMeta>({
+    contestId: null,
     title: "Contest",
     endsAt: null,
+    serverTime: null,
+    syncedAt: Date.now(),
+    finished: false,
+    paused: false,
   });
   const [contestProblems, setContestProblems] = React.useState<
     ContestProblemListItem[]
@@ -532,8 +543,13 @@ export const ContestProblemSolvePage: React.FC = () => {
         setContestProblems(previewContestProblems(en));
         setStatement(stmt);
         setContestMeta({
+          contestId,
           title: en ? "Algorithm Saturday" : "Алгоритмічна субота",
           endsAt: new Date(Date.now() + 60 * 60_000).toISOString(),
+          serverTime: new Date().toISOString(),
+          syncedAt: Date.now(),
+          finished: false,
+          paused: false,
         });
         if (!retainWorkspace) hydrateDraft(stmt);
         loadedProblemRef.current = problemKey;
@@ -553,8 +569,13 @@ export const ContestProblemSolvePage: React.FC = () => {
         ),
       );
       setContestMeta({
+        contestId,
         title: contest.contest.title,
         endsAt: contest.access.personalEndsAt ?? contest.contest.endsAt,
+        serverTime: contest.serverTime,
+        syncedAt: Date.now(),
+        finished: contest.phase.finished && !contest.access.isPaused,
+        paused: Boolean(contest.access.isPaused),
       });
       if (!retainWorkspace) hydrateDraft(stmt);
       loadedProblemRef.current = problemKey;
@@ -567,6 +588,51 @@ export const ContestProblemSolvePage: React.FC = () => {
       if (requestId === statementRequestRef.current) setLoading(false);
     }
   }, [contestId, problemId, hydrateDraft, en]);
+
+  React.useEffect(() => {
+    if (!contestId || contestMeta.contestId !== contestId || contestMeta.finished) return;
+    let disposed = false;
+    let timeoutId: number | undefined;
+    const delayUntilRecheck = (endsAt: string | null, serverTime: string | null, paused: boolean) => {
+      if (paused) return 5_000;
+      const remainingMs = Date.parse(endsAt ?? "") - Date.parse(serverTime ?? "");
+      return Number.isFinite(remainingMs)
+        ? Math.max(1_000, Math.min(5_000, remainingMs + 1_000))
+        : 5_000;
+    };
+    const refreshPhase = async () => {
+      let nextDelay = 5_000;
+      try {
+        const contest = await getContestDetails(contestId);
+        if (disposed) return;
+        const endsAt = contest.access.personalEndsAt ?? contest.contest.endsAt;
+        const paused = Boolean(contest.access.isPaused);
+        const finished = contest.phase.finished && !paused;
+        setContestMeta({
+          contestId,
+          title: contest.contest.title,
+          endsAt,
+          serverTime: contest.serverTime,
+          syncedAt: Date.now(),
+          finished,
+          paused,
+        });
+        if (!finished) nextDelay = delayUntilRecheck(endsAt, contest.serverTime, paused);
+      } catch {
+        // Retry while this contest remains active; a temporary phase-read
+        // failure must not expose post-contest assistance early.
+      }
+      if (!disposed) timeoutId = window.setTimeout(refreshPhase, nextDelay);
+    };
+    timeoutId = window.setTimeout(
+      refreshPhase,
+      delayUntilRecheck(contestMeta.endsAt, contestMeta.serverTime, contestMeta.paused),
+    );
+    return () => {
+      disposed = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [contestId, contestMeta.contestId, contestMeta.finished]);
 
   React.useEffect(() => {
     load();
@@ -822,8 +888,6 @@ export const ContestProblemSolvePage: React.FC = () => {
   }, [isPreview, contestId, hasToken]);
 
   const applyCheckResult = React.useCallback((res: ContestCheckResult) => {
-    const firstPublicFailure =
-      res.firstFailure && !res.firstFailure.hidden ? res.firstFailure : null;
     setCheckResult({
       verdict: res.verdict,
       testsPassed: res.testsPassed,
@@ -832,19 +896,7 @@ export const ContestProblemSolvePage: React.FC = () => {
       maxScore: res.maxScore,
       compileError: res.compileError,
       groupScores: res.groupScores,
-      publicTestResults: firstPublicFailure
-        ? [
-            {
-              testId: firstPublicFailure.index,
-              input: firstPublicFailure.input,
-              expectedOutput: firstPublicFailure.expected,
-              actualOutput: firstPublicFailure.actual,
-              passed: false,
-              verdict: firstPublicFailure.verdict,
-              stderr: firstPublicFailure.stderr,
-            },
-          ]
-        : [],
+        publicTestResults: contestFirstFailureToPublicTestResults(res.firstFailure),
     });
   }, []);
   React.useEffect(() => {
@@ -1345,7 +1397,7 @@ export const ContestProblemSolvePage: React.FC = () => {
             </section>
           ) : null
         }
-        disableAiAssistance
+        disableAiAssistance={!contestMeta.finished || contestMeta.paused || contestMeta.contestId !== contestId}
         submitMode
         saveStatus={draftSavedAt ? "saved" : "dirty"}
         lastSavedAt={draftSavedAt}

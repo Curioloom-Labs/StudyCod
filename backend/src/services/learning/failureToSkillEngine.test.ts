@@ -71,6 +71,8 @@ test("records a successful retry and derives evidence after failure", async () =
   assert.equal(solved.solvedAfterFailure, true);
   assert.equal(repos.eventsRows.filter((event) => event.eventType === "solved_after_failure").length, 1);
   const evidence = deriveSkillEvidence(repos.attemptsRows);
+  assert.equal(evidence.totalAttempts, 2);
+  assert.equal(evidence.practicedTasks, 1);
   assert.equal(evidence.solvedAfterFailure, 1);
   assert.deepEqual(evidence.overcomeCategories, [{ name: "logic", tasks: 1 }]);
   assert.equal(evidence.topics[0]?.improving, true);
@@ -86,10 +88,14 @@ test("deduplicates hint events and keeps the highest shown level", async () => {
 
   assert.equal(repos.eventsRows.filter((event) => event.eventType === "hint_viewed").length, 2);
   assert.equal(repos.attemptsRows[0]?.highestHintLevelShown, 3);
+  const evidence = deriveSkillEvidence(repos.attemptsRows);
+  assert.equal(evidence.hintedTasks, 1);
+  assert.deepEqual(evidence.hintLevelCounts, [{ level: 1, tasks: 0 }, { level: 2, tasks: 0 }, { level: 3, tasks: 1 }]);
 });
 
 test("returns empty evidence for a legacy user without learning history", () => {
   const evidence = deriveSkillEvidence([]);
+  assert.equal(evidence.totalAttempts, 0);
   assert.equal(evidence.practicedTasks, 0);
   assert.equal(evidence.solvedTasks, 0);
   assert.deepEqual(evidence.topics, []);

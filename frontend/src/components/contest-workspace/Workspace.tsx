@@ -27,6 +27,7 @@ import type { ContestWorkspaceProps, WorkspaceTab, WorkspaceTabKind } from "./ty
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { useMediaQuery } from "../../utils/useMediaQuery";
 import { DebugMentorChat } from "../DebugMentorChat";
+import { contestFirstFailureToPublicTestResults } from "../../lib/contestFeedback";
 
 type NavItem = { id: string; icon: LucideIcon; label: string };
 
@@ -224,6 +225,14 @@ export const Workspace: React.FC<ContestWorkspaceProps> = ({
       stderr={runResult?.stderr || checkResult?.compileError}
       taskTitle={statement.task.title}
       taskText={statement.task.description}
+      failures={contestFirstFailureToPublicTestResults(checkResult?.firstFailure).map((test) => ({
+        testId: test.testId,
+        input: test.input,
+        expected: test.expectedOutput,
+        actual: test.actualOutput,
+        verdict: test.verdict,
+        stderr: test.stderr,
+      }))}
       className="h-full overflow-auto"
     />
   ) : (

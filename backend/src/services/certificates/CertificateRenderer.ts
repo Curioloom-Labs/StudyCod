@@ -4,6 +4,8 @@ import { CertificateRenderInput } from "./types";
 import { CertificateTemplateEngine } from "./CertificateTemplateEngine";
 import { logger } from "../../utils/logger";
 import { env } from "../../env";
+import { createTournamentDiploma } from "../../../../shared/tournamentDiplomas";
+import { fitTournamentDiploma } from "./fitTournamentDiploma";
 
 let sharedBrowser: Browser | null = null;
 
@@ -30,6 +32,7 @@ function resolveExecutableCandidates(configuredExecutable: string): string[] {
         "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
         "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
         "C:\\Program Files\\Chromium\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
       ]
     : [];
 
@@ -166,16 +169,17 @@ export class CertificateRenderer {
           cssTemplate: input.template?.cssTemplate,
           payload: input.payload,
         })
-      : this.engine.renderStudyCodTemplate({
+      : this.engine.renderCustomTemplate({
+          ...createTournamentDiploma("automatic"),
           payload: input.payload,
-          fields: input.fields,
-          cssTemplate: input.template?.cssTemplate,
         });
 
     const browser = await getBrowser();
     const page = await browser.newPage({ javaScriptEnabled: false });
     try {
       await page.setContent(html, { waitUntil: "networkidle" });
+      await page.evaluate("document.fonts.ready");
+      await fitTournamentDiploma(page);
       const data = await page.pdf({
         printBackground: true,
         format: "A4",

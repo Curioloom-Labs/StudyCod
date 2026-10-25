@@ -6,12 +6,14 @@ import { generateReferenceTestData } from './ReferenceTestData';
 test('expected outputs come from execution and the reviewer receives the executed source', async () => {
   const source = 'a,b=map(int,input().split()); print(a+b)';
   const inputs = ['2 3', '-7 4'];
+  const candidates = [...inputs, '10 1', '0 0'];
   let calls = 0;
   const provider: LLMProvider = {
     async generateJSON<T>(prompt: string, schema: object): Promise<T> {
       if (++calls === 1) {
         assert.equal((schema as { properties: object }).properties.hasOwnProperty('tests'), false);
-        return { referenceSolution: source, inputs } as T;
+        assert.equal((schema as { properties: { inputs: { minItems: number; maxItems: number } } }).properties.inputs.minItems, 4);
+        return { referenceSolution: source, inputs: candidates } as T;
       }
       const payload = JSON.parse(prompt);
       assert.equal(payload.executedReference.source, source);
@@ -32,8 +34,32 @@ test('expected outputs come from execution and the reviewer receives the execute
   assert.equal(calls, 2);
 });
 
-test('invalid or repeated reference inputs cannot reach code execution', async () => {
-  for (const inputs of [['2 3', '2 3'], ['2 3'], ['2 3', ' ']]) {
+test('public example and repeated candidate inputs are discarded before execution', async () => {
+  let calls = 0;
+  const source = 'a,b=map(int,input().split()); print(a+b)';
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string): Promise<T> {
+      if (++calls === 1) return { referenceSolution: source, inputs: ['2 3', '4 5', '4 5', '6 7'] } as T;
+      const payload = JSON.parse(prompt);
+      assert.deepEqual(payload.candidateTests.map((test: { input: string }) => test.input), ['4 5', '6 7']);
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+  const tests = await generateReferenceTestData(provider, {
+    taskDescription: 'Read two integers a and b in [-100,100]. Print a+b as one integer.', lang: 'PYTHON', count: 2,
+    publicExamples: [{ input: '2 3', output: '5' }],
+    executeReference: async (program, stdin) => {
+      assert.equal(program, source);
+      assert.deepEqual(stdin, ['4 5', '6 7']);
+      return ['9', '13'];
+    },
+  });
+  assert.deepEqual(tests.map(test => test.output), ['9', '13']);
+});
+
+test('insufficient distinct non-public reference inputs cannot reach code execution', async () => {
+  for (const inputs of [['2 3', '2 3', '2 3', '2 3'], ['2 3'], ['2 3', ' ', '2 3', '2 3']]) {
     let executions = 0;
     const provider: LLMProvider = {
       async generateJSON<T>() { return { referenceSolution: 'print(5)', inputs } as T; },
@@ -41,8 +67,47 @@ test('invalid or repeated reference inputs cannot reach code execution', async (
     };
     await assert.rejects(generateReferenceTestData(provider, {
       taskDescription: 'Read two integers and print their sum.', lang: 'PYTHON', count: 2,
+      publicExamples: [{ input: '2 3', output: '5' }],
       executeReference: async () => { executions++; return ['5', '5']; },
-    }), /distinct non-empty inputs/);
+    }), /Reference test generation validation failed/);
     assert.equal(executions, 0);
   }
+});
+
+test('a Java or C++ reference is rejected before the Python executor runs', async () => {
+  for (const referenceSolution of [
+    'public class Main { public static void main(String[] args) { System.out.println(5); } }',
+    '#include <iostream>\nint main() { std::cout << 5; }',
+  ]) {
+    let executions = 0;
+    const provider: LLMProvider = {
+      async generateJSON<T>() { return { referenceSolution, inputs: ['1', '2', '3'] } as T; },
+      async generateText() { throw new Error('Unexpected text call'); },
+    };
+    await assert.rejects(generateReferenceTestData(provider, {
+      taskDescription: 'Read an integer and print its double.', lang: 'JAVA', count: 1,
+      executeReference: async () => { executions++; return ['2']; },
+    }), /referenceSolution is (JAVA|CPP) code; return a complete Python 3 oracle/);
+    assert.equal(executions, 0);
+  }
+});
+
+test('reference generation exposes validation feedback and clearly requires a Python oracle', async () => {
+  const seen: Array<{ payload: Record<string, unknown>; instructions: string }> = [];
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string, _schema: object, systemPrompt: string): Promise<T> {
+      seen.push({ payload: JSON.parse(prompt), instructions: systemPrompt });
+      if (seen.length === 1) return { referenceSolution: 'print(5)', inputs: ['1', '2', '3'] } as T;
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+  await generateReferenceTestData(provider, {
+    taskDescription: 'Read an integer and print 5.', lang: 'JAVA', count: 1,
+    validationFeedback: 'Previous oracle was Java; return Python.',
+    executeReference: async () => ['5'],
+  });
+  assert.equal(seen[0].payload.validationFeedback, 'Previous oracle was Java; return Python.');
+  assert.match(seen[0].instructions, /referenceSolution MUST be Python 3 source code/i);
+  assert.match(seen[0].instructions, /do not return Java or C\+\+/i);
 });

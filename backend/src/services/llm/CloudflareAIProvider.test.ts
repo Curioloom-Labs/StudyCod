@@ -2,11 +2,39 @@ import { test, describe } from "node:test";
 import assert from "node:assert";
 
 import { CloudflareAIProvider } from "./CloudflareAIProvider";
+import { buildOlympiadPracticeContract } from "../learning/learningContract";
 
 // Unit-level test: we don't call Cloudflare; we only verify prompt/schema shaping logic
 // via a thin access to private helpers using bracket notation.
 
 describe("CloudflareAIProvider prompt shaping", () => {
+  test("Olympiad task profile overrides the legacy intro hint on the Cloudflare path", async () => {
+    const p = new CloudflareAIProvider() as any;
+    let sent: { mode: string; params: { systemPrompt?: string; prompt: string } } | undefined;
+    p.callCloudflareWorker = async (mode: string, params: { systemPrompt?: string; prompt: string }) => {
+      sent = { mode, params };
+      return { content: JSON.stringify({ generated: true }) };
+    };
+    const contract = buildOlympiadPracticeContract({
+      courseKey: "olympiad-python", topicKey: "prefix-sums", topicTitle: "Prefix sums",
+      runtime: "PYTHON", objective: "Answer inclusive range-sum queries.", sequence: 1, total: 3,
+    });
+    const theory = `<!-- STUDYCOD_LEARNING_META_START\n${JSON.stringify(contract)}\nSTUDYCOD_LEARNING_META_END -->`;
+    await p.generateTaskWithAI({
+      topicTitle: "Practice 1/3: Prefix sums",
+      theory,
+      lang: "PYTHON",
+      topicIndex: 0,
+      numInTopic: 1,
+      isFirstTask: true,
+      allowedIoTypes: ["STDIN_STDOUT"],
+    }, { language: "en" });
+    assert.equal(sent?.mode, "generate-task");
+    assert.match(sent?.params.systemPrompt ?? "", /overrides legacy topicIndex\/isFirstTask hints/);
+    assert.match(sent?.params.systemPrompt ?? "", /requiredInput/);
+    assert.equal(JSON.parse(sent?.params.prompt ?? "{}").topicIndex, 0);
+  });
+
   test("provider response keeps significant stdin whitespace and rejects missing input", async () => {
     const p = new CloudflareAIProvider() as any;
     p.callCloudflareWorker = async () => ({ content: JSON.stringify({ tests: [{ input: '  text  ', output: 'text' }] }) });
@@ -30,11 +58,15 @@ describe("CloudflareAIProvider prompt shaping", () => {
       taskDescription: "Read N and print N.",
       taskTitle: "Echo",
       lang: "JAVA",
-      count: 5
+      count: 5,
+      requiredCases: ["n equals one", "maximum n"],
     });
 
     assert.ok(built);
     assert.equal(typeof built.prompt, "string");
+    assert.match(built.prompt, /n equals one/);
+    assert.match(built.prompt, /maximum n/);
+    assert.match(built.prompt, /не частина умови/);
     assert.ok(built.prompt.includes("РІВНО 5"));
     assert.equal(typeof built.systemPrompt, "string");
     assert.equal(typeof built.schema, "object");

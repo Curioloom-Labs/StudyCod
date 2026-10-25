@@ -1105,3 +1105,564 @@ courses:
         - Черга не має data race.
         - Shutdown розбуджує всі очікувані потоки.
         - Тести не залежать від випадкового планування потоків.
+
+  olympiad-python:
+    - key: python-rover-interval-reports
+      title: Звіти марсохода
+      description: Марсохід записує зміну висоти на кожному кроці. Відповідай на багато запитів диспетчера про сумарну зміну на неперервному відрізку.
+      inputFormat: Перший рядок містить n і q. Другий — n цілих змін. Наступні q рядків містять 1-based включні межі l і r.
+      outputFormat: Для кожного запиту виведи суму змін на відрізку в окремому рядку.
+      estimatedMinutes: 35
+      skills: [префіксні суми, індексація, швидкий ввід]
+      requiredTopicKeys: [prefix-sums]
+      template: main.py
+      milestones:
+        - id: prefix
+          title: Побудувати накопичення
+          description: Створи масив із нульовим префіксом і збережи тип кожного значення.
+        - id: query
+          title: Перетворити межі
+          description: Переклади 1-based включний запит у два індекси префіксів.
+        - id: scale
+          title: Перевірити обмеження
+          description: Перевір від'ємні значення, повторні запити й суму понад 32-бітний діапазон.
+      acceptanceCriteria:
+        - Побудова займає O(n), а один запит — O(1).
+        - Перший і останній елементи можуть входити у запит.
+        - Кожен запит виводиться в заданому порядку.
+      tests: &olympiadPrefixTests
+        - input: |-
+            5 3
+            2 -1 4 0 3
+            1 5
+            2 4
+            5 5
+          expectedOutput: |-
+            8
+            3
+            3
+          points: 7
+          hidden: false
+        - input: |-
+            3 2
+            1000000000 -1000000000 1000000000
+            1 2
+            2 3
+          expectedOutput: |-
+            0
+            0
+          points: 7
+          hidden: false
+        - input: |-
+            1 2
+            -9
+            1 1
+            1 1
+          expectedOutput: |-
+            -9
+            -9
+          points: 7
+          hidden: false
+        - input: |-
+            4 2
+            -5 -2 -8 -1
+            1 4
+            2 3
+          expectedOutput: |-
+            -16
+            -10
+          points: 7
+          hidden: false
+        - input: |-
+            6 3
+            3 -2 5 1 -4 6
+            1 1
+            2 5
+            3 6
+          expectedOutput: |-
+            3
+            0
+            8
+          points: 7
+          hidden: false
+        - input: |-
+            4 2
+            0 0 0 0
+            1 4
+            2 2
+          expectedOutput: |-
+            0
+            0
+          points: 7
+          hidden: false
+        - input: |-
+            3 1
+            1000000000 1000000000 1000000000
+            1 3
+          expectedOutput: 3000000000
+          points: 7
+          hidden: false
+        - input: |-
+            2 2
+            7 -3
+            1 2
+            2 2
+          expectedOutput: |-
+            4
+            -3
+          points: 7
+          hidden: false
+        - input: |-
+            1 1
+            0
+            1 1
+          expectedOutput: 0
+          points: 7
+          hidden: false
+        - input: |-
+            5 3
+            1 2 3 4 5
+            1 5
+            2 3
+            4 4
+          expectedOutput: |-
+            15
+            5
+            4
+          points: 7
+          hidden: false
+        - input: |-
+            5 2
+            9 -9 9 -9 9
+            1 4
+            2 5
+          expectedOutput: |-
+            0
+            0
+          points: 6
+          hidden: false
+        - input: |-
+            4 3
+            -1 0 1 0
+            1 1
+            2 4
+            1 4
+          expectedOutput: |-
+            -1
+            1
+            0
+          points: 6
+          hidden: false
+        - input: |-
+            4 3
+            1000000000 1000000000 -1000000000 -1000000000
+            1 2
+            3 4
+            2 3
+          expectedOutput: |-
+            2000000000
+            -2000000000
+            0
+          points: 6
+          hidden: true
+        - input: |-
+            3 3
+            -5 4 -2
+            2 2
+            1 2
+            2 3
+          expectedOutput: |-
+            4
+            -1
+            2
+          points: 6
+          hidden: true
+        - input: |-
+            6 1
+            -1 -1 -1 -1 -1 -1
+            3 6
+          expectedOutput: -4
+          points: 6
+          hidden: true
+
+    - key: python-cashier-streak
+      title: Смуга змін каси
+      description: У щоденному журналі крамниці є чисті зміни каси. Знайди один непорожній послідовний період із найбільшим підсумком.
+      inputFormat: Перший рядок містить n. Другий — n цілих змін за днями.
+      outputFormat: Виведи одну найбільшу суму серед усіх непорожніх неперервних періодів.
+      estimatedMinutes: 40
+      skills: [неперервні підмасиви, межі, повний перебір]
+      requiredTopicKeys: [maximum-subarray]
+      template: main.py
+      milestones:
+        - id: candidates
+          title: Описати кандидат
+          description: Кожен кандидат задається лівою і правою межею та містить принаймні один день.
+        - id: sums
+          title: Нарощувати суму
+          description: Для кожної лівої межі рухай праву, додаючи лише нову зміну.
+        - id: negative
+          title: Перевірити мінуси
+          description: Відповідь лишається непорожньою, навіть коли кожна зміна від'ємна.
+      acceptanceCriteria:
+        - Обчислено суму кожного непорожнього відрізка.
+        - Сума не перераховується від початку всередині кожного кандидата.
+        - Розв'язок відповідає обмеженню n ≤ 2000.
+      tests: &olympiadSubarrayTests
+        - input: |-
+            4
+            5 -8 6 2
+          expectedOutput: 8
+          points: 7
+          hidden: false
+        - input: |-
+            4
+            -8 -3 -6 -2
+          expectedOutput: -2
+          points: 7
+          hidden: false
+        - input: |-
+            1
+            11
+          expectedOutput: 11
+          points: 7
+          hidden: false
+        - input: |-
+            5
+            1 2 3 4 5
+          expectedOutput: 15
+          points: 7
+          hidden: false
+        - input: |-
+            6
+            3 -5 4 -1 2 -6
+          expectedOutput: 5
+          points: 7
+          hidden: false
+        - input: |-
+            4
+            0 0 0 0
+          expectedOutput: 0
+          points: 7
+          hidden: false
+        - input: |-
+            5
+            -1 4 -1 3 -2
+          expectedOutput: 6
+          points: 7
+          hidden: false
+        - input: |-
+            3
+            -9 -4 -7
+          expectedOutput: -4
+          points: 7
+          hidden: false
+        - input: |-
+            2
+            1 -1
+          expectedOutput: 1
+          points: 7
+          hidden: false
+        - input: |-
+            3
+            2 -1 2
+          expectedOutput: 3
+          points: 7
+          hidden: false
+        - input: |-
+            4
+            1 -1 1 -1
+          expectedOutput: 1
+          points: 6
+          hidden: false
+        - input: |-
+            3
+            -5 0 -1
+          expectedOutput: 0
+          points: 6
+          hidden: false
+        - input: |-
+            5
+            -2 3 -2 3 -2
+          expectedOutput: 4
+          points: 6
+          hidden: true
+        - input: |-
+            6
+            4 -10 5 5 -20 6
+          expectedOutput: 10
+          points: 6
+          hidden: true
+        - input: |-
+            8
+            1 -1 1 -1 1 -1 1 -1
+          expectedOutput: 1
+          points: 6
+          hidden: true
+
+    - key: python-radio-window
+      title: Найкраще вікно зв'язку
+      description: "Датчик вимірює зміни якості сигналу: плюс означає покращення, мінус — погіршення. Поверни найкращий непорожній часовий відрізок."
+      inputFormat: Перший рядок містить n. Другий — n цілих змін якості.
+      outputFormat: Виведи найбільшу суму, ліву і праву межі відрізка у форматі 1-based.
+      estimatedMinutes: 45
+      skills: [динамічне програмування, алгоритм Кадане, відновлення меж, правила нічиєї]
+      requiredTopicKeys: [kadane]
+      template: main.py
+      milestones:
+        - id: state
+          title: Визначити локальний стан
+          description: Поясни, що означає найкраща сума підмасиву, який закінчується в поточній позиції.
+        - id: bounds
+          title: Відновити межі
+          description: Збережи початок локального стану та межі глобальної відповіді.
+        - id: tie
+          title: Зафіксувати нічию
+          description: Обери меншу праву, а далі меншу ліву межу.
+      acceptanceCriteria:
+        - Час роботи лінійний за n.
+        - Порожній відрізок не є допустимою відповіддю.
+        - Виведені межі відповідають правилу нічиєї.
+      tests: &olympiadKadaneTests
+        - input: |-
+            5
+            -2 3 -1 4 -8
+          expectedOutput: 6 2 4
+          points: 7
+          hidden: false
+        - input: |-
+            4
+            -7 -3 -5 -4
+          expectedOutput: -3 2 2
+          points: 7
+          hidden: false
+        - input: |-
+            3
+            1 -1 1
+          expectedOutput: 1 1 1
+          points: 7
+          hidden: false
+        - input: |-
+            3
+            5 -4 5
+          expectedOutput: 6 1 3
+          points: 7
+          hidden: false
+        - input: |-
+            5
+            1 2 -3 1 2
+          expectedOutput: 3 1 2
+          points: 7
+          hidden: false
+        - input: |-
+            3
+            0 0 0
+          expectedOutput: 0 1 1
+          points: 7
+          hidden: false
+        - input: |-
+            5
+            2 -1 2 -1 2
+          expectedOutput: 4 1 5
+          points: 7
+          hidden: false
+        - input: |-
+            2
+            -1 -2
+          expectedOutput: -1 1 1
+          points: 7
+          hidden: false
+        - input: |-
+            1
+            5
+          expectedOutput: 5 1 1
+          points: 7
+          hidden: false
+        - input: |-
+            1
+            -5
+          expectedOutput: -5 1 1
+          points: 7
+          hidden: false
+        - input: |-
+            3
+            2 -1 2
+          expectedOutput: 3 1 3
+          points: 6
+          hidden: false
+        - input: |-
+            4
+            1 -1 1 -1
+          expectedOutput: 1 1 1
+          points: 6
+          hidden: false
+        - input: |-
+            3
+            -5 0 -1
+          expectedOutput: 0 2 2
+          points: 6
+          hidden: true
+        - input: |-
+            5
+            3 -3 3 -3 3
+          expectedOutput: 3 1 1
+          points: 6
+          hidden: true
+        - input: |-
+            4
+            1 2 -1 2
+          expectedOutput: 4 1 4
+          points: 6
+          hidden: true
+
+  olympiad-java:
+    - key: java-sensor-intervals
+      title: Інтервали сенсорів
+      description: Сенсор записує зміну вимірюваної величини. На багато запитів про суму неперервного інтервалу відповідай швидко, не допускаючи переповнення int.
+      inputFormat: Перший рядок містить n і q. Другий — n цілих змін. Далі йдуть q пар 1-based включних меж l і r.
+      outputFormat: Виведи суму для кожного запиту окремим рядком.
+      estimatedMinutes: 35
+      skills: [префіксні суми, long, BufferedReader, StringBuilder]
+      requiredTopicKeys: [prefix-sums]
+      template: Main.java
+      milestones:
+        - id: prefix
+          title: Побудувати long-масив
+          description: Збережи нульовий префікс і накопичуй значення в long.
+        - id: query
+          title: Обробити межі
+          description: Перетвори включні межі з одиниці на формулу префіксів.
+        - id: io
+          title: Перевірити ввід і вивід
+          description: Збери відповіді в StringBuilder і врахуй великі дані.
+      acceptanceCriteria:
+        - Кожен запит відповідає за O(1).
+        - Сума не переповнює int.
+        - Порядок відповідей збігається з порядком запитів.
+      tests: *olympiadPrefixTests
+
+    - key: java-relay-score
+      title: Відрізок естафети
+      description: У командній естафеті кожен етап додає або віднімає бали. Визнач максимальний приріст за один неперервний відрізок етапів.
+      inputFormat: Перший рядок містить n. Другий — n змін балів за етапами.
+      outputFormat: Виведи максимальну суму непорожнього відрізка.
+      estimatedMinutes: 40
+      skills: [підмасиви, перебір меж, long, складність O(n²)]
+      requiredTopicKeys: [maximum-subarray]
+      template: Main.java
+      milestones:
+        - id: intervals
+          title: Перелічити відрізки
+          description: Фіксуй початок і розширюй закінчення послідовно.
+        - id: sums
+          title: Оновлювати long-суму
+          description: Не перераховуй вже відомі елементи кожного відрізка.
+        - id: limits
+          title: Оцінити кількість кандидатів
+          description: Поясни, чому задане n дозволяє квадратичний перебір.
+      acceptanceCriteria:
+        - Відрізок непорожній і неперервний.
+        - Усі можливі межі розглянуті.
+        - Від'ємний масив не повертає нуль.
+      tests: *olympiadSubarrayTests
+
+    - key: java-radio-segment
+      title: Сегмент радіосигналу
+      description: Потік вимірів має позитивні та негативні коливання. Знайди непорожній сегмент із найбільшим сукупним покращенням і його межі.
+      inputFormat: Перший рядок містить n. Другий — n цілих змін сигналу.
+      outputFormat: Виведи суму, ліву та праву 1-based межі. При нічиїй обери найменшу праву, потім ліву межу.
+      estimatedMinutes: 45
+      skills: [Кадане, long, динамічне програмування, межі, нічия]
+      requiredTopicKeys: [kadane]
+      template: Main.java
+      milestones:
+        - id: recurrence
+          title: Обґрунтувати перехід
+          description: Порівняй новий відрізок і продовження попереднього стану.
+        - id: recovery
+          title: Відновити межі
+          description: Зберігай початок локального відрізка й глобальний оптимум.
+        - id: tie
+          title: Перевірити нічиї
+          description: Застосуй правило ранньої правої, а потім лівої межі.
+      acceptanceCriteria:
+        - Розв'язок обробляє кожне значення один раз.
+        - Суми зберігаються в long.
+        - Всі від'ємні значення та однакові оптимуми оброблено правильно.
+      tests: *olympiadKadaneTests
+
+  olympiad-cpp:
+    - key: cpp-tunnel-water-level
+      title: Рівень води в тунелі
+      description: Вимірювач записує зміну рівня після кожної секції тунелю. Відповідай на запити про сумарну зміну між двома секціями.
+      inputFormat: Перший рядок містить n і q. Другий — n цілих змін. Далі q пар 1-based включних меж l і r.
+      outputFormat: Для кожного запиту виведи суму між зазначеними секціями.
+      estimatedMinutes: 35
+      skills: [vector, префіксні суми, long long, швидкий ввід]
+      requiredTopicKeys: [prefix-sums]
+      template: main.cpp
+      milestones:
+        - id: vector
+          title: Створити префіксний vector
+          description: Додай нульову позицію та накопичуй long long значення.
+        - id: bounds
+          title: Вивести межі запиту
+          description: Переклади формат умови у позиції префіксного вектора.
+        - id: judge
+          title: Перевірити крайні дані
+          description: Запусти запити на повний масив, одному елементі й великих сумах.
+      acceptanceCriteria:
+        - Кожен запит обробляється за O(1).
+        - Проміжні суми використовують long long.
+        - Ввід 1-based переводиться без зсуву на один.
+      tests: *olympiadPrefixTests
+
+    - key: cpp-harvest-streak
+      title: Смуга врожаю
+      description: У журналі саду зафіксовано денні зміни врожаю. Знайди найкращий неперервний період, не допускаючи порожньої відповіді.
+      inputFormat: Перший рядок містить n. Другий — n цілих змін урожаю.
+      outputFormat: Виведи найбільшу суму непорожнього послідовного відрізка.
+      estimatedMinutes: 40
+      skills: [vector, вкладені цикли, long long, межі відрізка]
+      requiredTopicKeys: [maximum-subarray]
+      template: main.cpp
+      milestones:
+        - id: candidates
+          title: Перебрати початки
+          description: Для кожного початку розширюй відрізок вправо.
+        - id: accumulation
+          title: Накопичувати суму
+          description: Додавай лише новий елемент до long long акумулятора.
+        - id: proof
+          title: Перевірити базові випадки
+          description: Переконайся, що одиничний і повністю від'ємний масив мають відповідь.
+      acceptanceCriteria:
+        - Усі непорожні неперервні відрізки перевірено.
+        - Результат не допускає порожній підмасив.
+        - Складність відповідає малим обмеженням задачі.
+      tests: *olympiadSubarrayTests
+
+    - key: cpp-signal-boost
+      title: Посилення сигналу
+      description: Кожен ретранслятор змінює силу сигналу на додатне або від'ємне значення. Знайди найкращу послідовність ретрансляторів і надрукуй межі.
+      inputFormat: Перший рядок містить n. Другий — n змін сили сигналу.
+      outputFormat: Виведи максимальну суму, лівий і правий індекси у форматі 1-based. При нічиїй обери меншу праву, а потім меншу ліву межу.
+      estimatedMinutes: 45
+      skills: [Кадане, long long, відновлення меж, правило нічиєї]
+      requiredTopicKeys: [kadane]
+      template: main.cpp
+      milestones:
+        - id: ending
+          title: Пояснити ending
+          description: Назви стан найкращої суми, що закінчується на поточній позиції.
+        - id: intervals
+          title: Повернути межі
+          description: Оновлюй локальний початок і глобальні індекси разом із сумами.
+        - id: tie
+          title: Застосувати нічию
+          description: Збережи ранню праву межу, а потім найменший лівий індекс.
+      acceptanceCriteria:
+        - Кожен елемент масиву переглядається один раз.
+        - Сума та індекси виводяться у визначеному форматі.
+        - Порожня відповідь не допускається.
+      tests: *olympiadKadaneTests

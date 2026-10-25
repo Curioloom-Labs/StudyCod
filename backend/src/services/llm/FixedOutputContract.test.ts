@@ -4,6 +4,7 @@ import type { LLMProvider } from './LLMProvider';
 import { AIResponseValidator } from './AIResponseValidator';
 import { LLMOrchestrator, type AiTaskGenerationResult } from './LLMOrchestrator';
 import { validateAndReviewGeneratedTask } from './GeneratedTaskContract';
+import { buildOlympiadPracticeContract } from '../learning/learningContract';
 
 // Regression: the production model returned a correct answer with a prose
 // outputFormat. Literal comparison rejected the task before semantic review.
@@ -57,7 +58,7 @@ test('incorrect arithmetic and conflicting literal stdout remain rejected', asyn
 
 test('an unavailable or malformed reviewer cannot authorize canonicalization', async () => {
   await assert.rejects(validateAndReviewGeneratedTask(providerWith([]), cafeTask, {}), /Reviewer unavailable/);
-  await assert.rejects(validateAndReviewGeneratedTask(providerWith([{}]), cafeTask, {}), /invalid verdict/);
+  await assert.rejects(validateAndReviewGeneratedTask(providerWith([{}, {}]), cafeTask, {}), /invalid verdict/);
 });
 
 test('conflicting public outputs and nonempty stdin are never reconciled', async () => {
@@ -76,6 +77,37 @@ test('already canonical fixed output still receives independent semantic review'
   const result = await validateAndReviewGeneratedTask(providerWith([approved], calls), { ...cafeTask, outputFormat: '62.5' }, {});
   assert.equal(result.outputFormat, '62.5');
   assert.equal(calls.length, 1);
+});
+
+test('Olympiad tasks drop a vague output catch-all only after deterministic validation and review', async () => {
+  const contract = buildOlympiadPracticeContract({
+    courseKey: 'olympiad-python', topicKey: 'maximum-subarray', topicTitle: 'Maximum subarray',
+    runtime: 'PYTHON', objective: 'Find the maximum non-empty contiguous subarray sum.', sequence: 2, total: 3,
+  });
+  const task: AiTaskGenerationResult = {
+    ...cafeTask,
+    title: 'Максимальний підмасив: сума відрізка',
+    topic: 'Максимальний підмасив',
+    difficulty: 3,
+    practicalTask: 'Для масиву цілих чисел знайдіть найбільшу суму непорожнього суцільного відрізка та виведіть її одним цілим числом.',
+    ioType: 'STDIN_STDOUT',
+    inputFormat: 'Перший рядок містить n, другий — n цілих чисел.',
+    outputFormat: 'Виведіть найбільшу суму непорожнього відрізка тощо.',
+    constraints: '1 ≤ n ≤ 200000; |a[i]| ≤ 10^9.',
+    examples: [{ input: '5\n-2 3 -1 4 -5', output: '6', explanation: 'Сума 3 + -1 + 4 дорівнює 6.' }],
+  };
+  const reviewedPrompts: string[] = [];
+  let beforeReviewOutput: string | undefined;
+  const result = await validateAndReviewGeneratedTask(providerWith([approved], reviewedPrompts), task, {}, {
+    learningContract: JSON.stringify(contract),
+    beforeReview: (candidate) => { beforeReviewOutput = candidate.outputFormat; },
+  });
+
+  assert.equal(result.outputFormat, 'Виведіть найбільшу суму непорожнього відрізка.');
+  assert.equal(beforeReviewOutput, result.outputFormat);
+  assert.equal(JSON.parse(reviewedPrompts[0]).outputFormat, result.outputFormat);
+  assert.equal(reviewedPrompts.length, 1);
+  await assert.rejects(validateAndReviewGeneratedTask(providerWith([approved]), task, {}), /outputFormat is vague/);
 });
 
 test('the task generation pipeline accepts reviewed prose output without a fallback or regeneration', async () => {

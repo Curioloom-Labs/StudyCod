@@ -1,6 +1,8 @@
 (function () {
   try {
     var canonicalPath = window.location.pathname.replace(/\/+$/, "") || "/";
+    // `/landing` is the standalone version of the public homepage.
+    if (canonicalPath === "/landing") canonicalPath = "/";
     var canonicalHref = "https://studycod.space" + canonicalPath;
 
     var canonical = document.querySelector('link[rel="canonical"]');

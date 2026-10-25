@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getCurriculumPolicyViolationForGeneratedTask, rewriteNonJudgeablePracticalTaskToJudgeable } from "./curriculumPolicy";
+import { getCurriculumPolicyViolationForGeneratedTask, looksLikeFunctionImplementationTask, rewriteNonJudgeablePracticalTaskToJudgeable } from "./curriculumPolicy";
 
 test("curriculumPolicy: first topic only allows Hello World-style output", () => {
   const arithmetic = getCurriculumPolicyViolationForGeneratedTask({
@@ -189,6 +189,20 @@ test("curriculumPolicy: rejects function implementation tasks (UA)", () => {
   });
   assert.ok(v);
   assert.match(String(v), /NON_JUDGEABLE_TASK/i);
+});
+
+test("curriculumPolicy: ignores function syntax inside a fenced debugging draft", () => {
+  const practicalTask = [
+    "Знайдіть логічну помилку, виправте її та подайте повну програму.",
+    "```python",
+    "def prefix_sum(values):",
+    "    total = 0",
+    "    return total",
+    "print(prefix_sum([1, 2, 3]))",
+    "```",
+  ].join("\n");
+
+  assert.equal(looksLikeFunctionImplementationTask(practicalTask), false);
 });
 
 test("curriculumPolicy: allows mathematical function descriptions", () => {
