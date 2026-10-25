@@ -85,7 +85,7 @@ The program must produce non-empty stdout for each valid input. If rules are amb
   if (selectedInputs.length < count) {
     throw makeAIValidationError(
       'generateTestData',
-      `Reference test generation validation failed: received ${selectedInputs.length} distinct non-public inputs; ${count} are required. Return new valid inputs that differ from every public example and one another.`,
+      `Reference test generation validation failed: received ${selectedInputs.length} distinct non-empty inputs that are not public examples; ${count} are required. Return new valid inputs that differ from every public example and one another.`,
     );
   }
   const outputs = await params.executeReference(referenceSolution, selectedInputs, params.publicExamples ?? [], params.signal);

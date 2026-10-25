@@ -88,13 +88,22 @@ async function reviewContract(
     const prompt = attempt === 0
       ? serializedPayload
       : `${serializedPayload}\n\nRESPONSE FORMAT REPAIR: Your previous response did not satisfy the required verdict schema. Re-evaluate the same supplied data and return only a JSON object with exactly valid (boolean), invalidSource (none, statement, publicExamples, or candidateTests), and issues (up to three short strings). Use valid=true, invalidSource=none, issues=[] only if every check passes.`;
-    const raw = await provider.generateJSON<unknown>(prompt, reviewJsonSchema, reviewInstructions, {
-      ...options,
-      timeout: 15_000,
-      maxRetries: 0,
-      temperature: 0,
-      maxTokens: 800,
-    });
+    let raw: unknown;
+    try {
+      raw = await provider.generateJSON<unknown>(prompt, reviewJsonSchema, reviewInstructions, {
+        ...options,
+        timeout: 15_000,
+        maxRetries: 0,
+        temperature: 0,
+        maxTokens: 800,
+      });
+    } catch (error) {
+      // Keep the original provider error on the first call. If the optional
+      // schema-repair call also fails, report the malformed reviewer response
+      // rather than leaking an exhausted test double or retry transport error.
+      if (attempt === 0) throw error;
+      break;
+    }
     const parsed = ReviewSchema.safeParse(raw);
     if (!parsed.success) {
       formatFailure = 'invalid';

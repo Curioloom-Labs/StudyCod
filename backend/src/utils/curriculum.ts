@@ -230,6 +230,13 @@ export type CurriculumQualityReport = {
     errorCount: number;
     warningCount: number;
   }>;
+  /** Olympiad course checks are reported separately to preserve the legacy course-report shape. */
+  olympiadCourses: Array<{
+    courseKey: string;
+    topicCount: number;
+    errorCount: number;
+    warningCount: number;
+  }>;
   issues: CurriculumQualityIssue[];
 };
 
@@ -464,7 +471,12 @@ export function auditCurriculum(root = repoRoot()): CurriculumQualityReport {
       warningCount: courseIssues.filter((issue) => issue.severity === "warning").length,
     };
   });
-  return { ok: !issues.some((issue) => issue.severity === "error"), courses, issues };
+  return {
+    ok: !issues.some((issue) => issue.severity === "error"),
+    courses: courses.filter((course) => !course.courseKey.startsWith("olympiad-")),
+    olympiadCourses: courses.filter((course) => course.courseKey.startsWith("olympiad-")),
+    issues,
+  };
 }
 
 function repoRoot(): string {
