@@ -413,7 +413,7 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
       course.isBase = sourceFields.isBase;
       course.status = sourceFields.status;
       course.sourceHash = sourceHash;
-      course.contentVersion = manifest.version;
+      course.contentVersion = catalogManifest.version;
       course.lastSyncedAt = new Date();
       course = await txCourseRepo.save(course);
       courses.set(definition.key, course);
