@@ -67,7 +67,7 @@
     "reflect-metadata": "^0.2.2",
     "typeorm": "^0.3.31",
     "yaml": "^2.9.0",
-    "zod": "^4.3.6"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
