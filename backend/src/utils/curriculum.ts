@@ -722,12 +722,23 @@ export function loadCurriculumTopics(course: CurriculumCourseDefinition, root = 
   });
 }
 
-export function validateCurriculum(root = repoRoot(), locale: CurriculumLocale = "uk"): { manifest: CurriculumManifest; manifestHash: string; topics: Record<string, CurriculumTopic[]> } {
-  const { manifest, hash: manifestHash } = loadCurriculumManifest(root, locale);
+export function validateCurriculum(root = repoRoot(), locale: CurriculumLocale = "uk"): {
+  /** Legacy course list retained for the fixed 45-project integration catalog. */
+  manifest: CurriculumManifest;
+  /** Authoritative catalog, including the generated-practice Olympiad courses. */
+  catalogManifest: CurriculumManifest;
+  manifestHash: string;
+  topics: Record<string, CurriculumTopic[]>;
+} {
+  const { manifest: catalogManifest, hash: manifestHash } = loadCurriculumManifest(root, locale);
   const topics: Record<string, CurriculumTopic[]> = {};
-  for (const course of manifest.courses) topics[course.key] = loadCurriculumTopics(course, root, locale);
-  for (const course of manifest.courses) loadCurriculumMiniProjects(course.key, root, locale);
-  return { manifest, manifestHash, topics };
+  for (const course of catalogManifest.courses) topics[course.key] = loadCurriculumTopics(course, root, locale);
+  for (const course of catalogManifest.courses) loadCurriculumMiniProjects(course.key, root, locale);
+  const manifest = {
+    ...catalogManifest,
+    courses: catalogManifest.courses.filter((course) => !course.key.startsWith("olympiad-")),
+  };
+  return { manifest, catalogManifest, manifestHash, topics };
 }
 
 export { repoRoot };

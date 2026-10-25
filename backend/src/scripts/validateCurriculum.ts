@@ -2,7 +2,7 @@ import { validateCurriculum } from "../utils/curriculum";
 
 try {
   const result = validateCurriculum();
-  console.log(JSON.stringify({ manifestVersion: result.manifest.version, manifestHash: result.manifestHash, courses: Object.fromEntries(Object.entries(result.topics).map(([key, topics]) => [key, topics.length])) }, null, 2));
+  console.log(JSON.stringify({ manifestVersion: result.catalogManifest.version, manifestHash: result.manifestHash, courses: Object.fromEntries(Object.entries(result.topics).map(([key, topics]) => [key, topics.length])) }, null, 2));
 } catch (error: unknown) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

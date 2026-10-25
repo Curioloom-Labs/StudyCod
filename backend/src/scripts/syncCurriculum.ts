@@ -6,12 +6,12 @@ async function main() {
   const dryRun = process.argv.includes("--dry-run");
   const theoryOnly = process.argv.includes("--theory-only");
   if (dryRun) {
-    const { manifest, manifestHash, topics } = validateCurriculum();
+    const { catalogManifest, manifestHash, topics } = validateCurriculum();
     console.log(JSON.stringify({
       dryRun: true,
       theoryOnly,
       manifestHash,
-      courses: manifest.courses.map((course) => ({ key: course.key, topics: topics[course.key]?.length || 0 })),
+      courses: catalogManifest.courses.map((course) => ({ key: course.key, topics: topics[course.key]?.length || 0 })),
     }, null, 2));
     return;
   }

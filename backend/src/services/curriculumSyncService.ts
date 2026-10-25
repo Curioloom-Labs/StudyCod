@@ -381,7 +381,7 @@ async function saveCourseItem(itemRepo: Repository<CourseItem>, module: CourseMo
 export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: boolean } = {}): Promise<CurriculumSyncReport> {
   const dryRun = options.dryRun === true;
   const theoryOnly = options.theoryOnly === true;
-  const { manifest, manifestHash, topics } = validateCurriculum();
+  const { catalogManifest, manifestHash, topics } = validateCurriculum();
   const report: CurriculumSyncReport = { dryRun, theoryOnly, manifestHash, coursesCreated: 0, coursesUpdated: 0, modulesCreated: 0, itemsCreated: 0, itemsUpdated: 0, itemsArchived: 0, variantsCreated: 0, dependenciesCreated: 0, dependenciesRemoved: 0 };
   if (dryRun) return report;
 
@@ -393,7 +393,7 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
     const txDependencyRepo = manager.getRepository(CourseDependency);
     const courses = new Map<string, Course>();
 
-    for (const definition of manifest.courses) {
+    for (const definition of catalogManifest.courses) {
       const courseTopics = topics[definition.key] || loadCurriculumTopics(definition);
       const sourceHash = courseHash(definition, courseTopics);
       let course = await txCourseRepo.findOne({ where: { catalogKey: definition.key } });
@@ -556,7 +556,7 @@ export async function syncCurriculum(options: { dryRun?: boolean; theoryOnly?: b
       }
     }
 
-    for (const definition of manifest.courses) {
+    for (const definition of catalogManifest.courses) {
       const course = courses.get(definition.key)!;
       const desiredPrerequisiteIds = new Set((definition.prerequisites || []).map((key) => courses.get(key)!.id));
       for (const prerequisiteKey of definition.prerequisites || []) {
