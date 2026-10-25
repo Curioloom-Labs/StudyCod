@@ -70,6 +70,13 @@ function hintLevels(kind: string | null | undefined, compileError: string | null
       languageCopy(isEnglish, "Звір один невдалий приклад із форматом у задачі й зміни тільки побудову виводу.", "Compare one failing example with the required format and change only output construction."),
     ];
   }
+  if (value === "off_by_one") {
+    return [
+      languageCopy(isEnglish, "Порівняй очікувану суму з фактичним результатом на відкритому тесті.", "Compare the expected sum with the result on the visible test."),
+      languageCopy(isEnglish, "У Python верхня межа `range` не входить у послідовність.", "In Python, the upper bound of `range` is excluded."),
+      languageCopy(isEnglish, "Перевір, чи має цикл завершитися після додавання n.", "Check whether the loop should finish after adding n."),
+    ];
+  }
   if (value === "timeout") {
     return [
       languageCopy(isEnglish, "Знайди цикл або операцію, яка повторює зайву роботу.", "Find the loop or operation that repeats unnecessary work."),

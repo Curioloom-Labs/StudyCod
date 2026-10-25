@@ -6,7 +6,7 @@ test("curriculum manifest is valid and every course has theory", () => {
   const result = validateCurriculum();
   assert.equal(result.manifest.version, 1);
   assert.ok(result.manifest.courses.length >= 9);
-  for (const course of result.manifest.courses) {
+  for (const course of result.catalogManifest.courses) {
     assert.ok(result.topics[course.key]?.length, course.key);
     assert.equal(new Set(result.topics[course.key].map((topic) => topic.key)).size, result.topics[course.key].length);
   }
@@ -24,7 +24,7 @@ test("authored theory has the learner-facing contract and generated exercise foc
     /###\s+Підсумок/i,
   ];
 
-  for (const course of result.manifest.courses) {
+  for (const course of result.catalogManifest.courses) {
     for (const topic of result.topics[course.key]) {
       for (const section of requiredSections) assert.match(topic.content, section, `${course.key}/${topic.key}`);
       assert.ok(topic.exerciseFocus.length >= 20, `${course.key}/${topic.key} exerciseFocus`);
@@ -250,7 +250,7 @@ test("every course exposes positioned integration projects", () => {
   const result = validateCurriculum();
   assert.ok(result.topics.fastapi.length >= 24, "FastAPI needs a complete progression, not a short overview");
   assert.match(result.topics.fastapi[0].title, /Вступ|HTTP|ASGI/i);
-  for (const course of result.manifest.courses) {
+  for (const course of result.catalogManifest.courses) {
     const projects = loadCurriculumMiniProjects(course.key);
     assert.ok(projects.length >= 1, `${course.key} must expose a mini-project`);
     const topicKeys = new Set(result.topics[course.key].map((topic) => topic.key));
@@ -267,7 +267,7 @@ test("every course exposes positioned integration projects", () => {
 test("every mini-project has an explicit IO contract and at least 15 cases", () => {
   const result = validateCurriculum();
   let projectCount = 0;
-  for (const course of result.manifest.courses) {
+  for (const course of result.catalogManifest.courses) {
     for (const project of loadCurriculumMiniProjects(course.key)) {
       projectCount += 1;
       assert.ok(project.inputFormat.length >= 20, `${course.key}/${project.key} inputFormat`);
@@ -282,7 +282,7 @@ test("every mini-project has an explicit IO contract and at least 15 cases", () 
 
 test("mini-project contracts cannot be a generic all-OK placeholder", () => {
   const result = validateCurriculum();
-  for (const course of result.manifest.courses) {
+  for (const course of result.catalogManifest.courses) {
     for (const project of loadCurriculumMiniProjects(course.key)) {
       const outputs = project.tests.map((testCase) => testCase.expectedOutput.trim());
       const declaresOkBehavior = /\bOK\b|без помилки 5xx|without a 5xx/i.test(project.outputFormat);
@@ -358,7 +358,7 @@ test("curriculum quality report is clean for all courses", () => {
   assert.equal(report.ok, true);
   assert.deepEqual(report.issues, []);
   assert.deepEqual(
-    report.courses.map((course) => [course.courseKey, course.topicCount, course.errorCount, course.warningCount]),
+    [...report.courses, ...report.olympiadCourses].map((course) => [course.courseKey, course.topicCount, course.errorCount, course.warningCount]),
     [
       ["python-core", 30, 0, 0],
       ["java-core", 29, 0, 0],

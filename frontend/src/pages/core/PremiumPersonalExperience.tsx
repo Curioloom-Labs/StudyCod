@@ -18,6 +18,8 @@ import {
   Layers3,
   Play,
   Rocket,
+
+  Search,
   Sparkles,
   ShieldCheck,
   Target,
@@ -543,30 +545,181 @@ export const PremiumLibrary: React.FC<{
   onQuery: (value: string) => void;
   onOpen: (task: LibraryTaskListItem) => void;
   getTaskHref?: (task: LibraryTaskListItem) => string;
-}> = ({ tasks, total, solved, loading, query, onQuery, onOpen, getTaskHref }) => {
+  onShare?: () => void;
+  shareCopied?: boolean;
+  preview?: boolean;
+}> = ({ tasks, total, solved, loading, query, onQuery, onOpen, getTaskHref, onShare, shareCopied, preview = false }) => {
   const { i18n } = useTranslation();
   const en = i18n.language?.toLowerCase().startsWith("en");
   const [difficultyFilter, setDifficultyFilter] = React.useState<"ALL" | "EASY" | "MEDIUM" | "HARD">("ALL");
   const [modeFilter, setModeFilter] = React.useState<"ALL" | "CODE" | "WEB">("ALL");
   const copy = en ? {
-    eyebrow: "Task library", title: "Find the right challenge for today.", subtitle: "Search by skill, narrow the level, and move straight into the library task.", search: "Try arrays, loops, or a task title", available: "available problems", solved: "solved", open: "Open problem", all: "All", empty: "Nothing matches these filters yet.", easy: "Easy", medium: "Medium", hard: "Hard", code: "Code", web: "Web", project: "Mini-project",
+    eyebrow: "PRACTICE LIBRARY",
+    title: "Task library",
+    available: "available",
+    solved: "solved",
+    share: "Share filters",
+    copied: "Copied",
+    search: "Search by title, topic, or skill",
+    clear: "Clear",
+    level: "Level",
+    format: "Format",
+    all: "All",
+    easy: "Easy",
+    medium: "Medium",
+    hard: "Hard",
+    code: "Code",
+    web: "Web",
+    results: "results",
+    open: "Open task",
+    openNew: "Open in a new tab",
+    project: "Project",
+    notStarted: "Not started",
+    inProgress: "In progress",
+    completed: "Solved",
+    attempts: "attempts",
+    emptyTitle: query ? "No tasks match this search" : "No tasks are available yet",
+    emptyBody: query ? "Try another title or topic, or clear the filters." : "New practice tasks will appear here when they are published.",
+    reset: "Clear search and filters",
+    loading: "Loading tasks",
   } : {
-    eyebrow: "\u0411\u0456\u0431\u043b\u0456\u043e\u0442\u0435\u043a\u0430 \u0437\u0430\u0432\u0434\u0430\u043d\u044c", title: "\u0417\u043d\u0430\u0439\u0434\u0438 \u0437\u0430\u0434\u0430\u0447\u0443 \u043f\u0456\u0434 \u0441\u044c\u043e\u0433\u043e\u0434\u043d\u0456\u0448\u043d\u044e \u0446\u0456\u043b\u044c.", subtitle: "\u0428\u0443\u043a\u0430\u0439 \u0437\u0430 \u043d\u0430\u0432\u0438\u0447\u043a\u043e\u044e, \u0437\u0432\u0443\u0436\u0443\u0439 \u0440\u0456\u0432\u0435\u043d\u044c \u0456 \u043f\u0435\u0440\u0435\u0445\u043e\u0434\u044c \u043e\u0434\u0440\u0430\u0437\u0443 \u0434\u043e \u0437\u0430\u0434\u0430\u0447\u0456 \u0437 \u0431\u0456\u0431\u043b\u0456\u043e\u0442\u0435\u043a\u0438.", search: "\u041d\u0430\u043f\u0440\u0438\u043a\u043b\u0430\u0434: \u043c\u0430\u0441\u0438\u0432\u0438, \u0446\u0438\u043a\u043b\u0438 \u0430\u0431\u043e \u043d\u0430\u0437\u0432\u0430 \u0437\u0430\u0434\u0430\u0447\u0456", available: "\u0434\u043e\u0441\u0442\u0443\u043f\u043d\u0438\u0445 \u0437\u0430\u0434\u0430\u0447", solved: "\u0440\u043e\u0437\u0432\u2019\u044f\u0437\u0430\u043d\u043e", open: "\u0412\u0456\u0434\u043a\u0440\u0438\u0442\u0438 \u0437\u0430\u0434\u0430\u0447\u0443", all: "\u0423\u0441\u0456", empty: "\u0417\u0430 \u0446\u0438\u043c\u0438 \u0444\u0456\u043b\u044c\u0442\u0440\u0430\u043c\u0438 \u043d\u0456\u0447\u043e\u0433\u043e \u043d\u0435 \u0437\u043d\u0430\u0439\u0434\u0435\u043d\u043e.", easy: "\u041b\u0435\u0433\u043a\u0430", medium: "\u0421\u0435\u0440\u0435\u0434\u043d\u044f", hard: "\u0421\u043a\u043b\u0430\u0434\u043d\u0430", code: "\u041a\u043e\u0434", web: "\u0412\u0435\u0431", project: "\u041c\u0456\u043d\u0456\u043f\u0440\u043e\u0454\u043a\u0442",
+    eyebrow: "БІБЛІОТЕКА ПРАКТИКИ",
+    title: "Бібліотека задач",
+    available: "доступно",
+    solved: "розв’язано",
+    share: "Поділитися",
+    copied: "Скопійовано",
+    search: "Пошук за назвою, темою чи навичкою",
+    clear: "Очистити",
+    level: "Рівень",
+    format: "Формат",
+    all: "Усі",
+    easy: "Легка",
+    medium: "Середня",
+    hard: "Складна",
+    code: "Код",
+    web: "Веб",
+    results: "результатів",
+    open: "Відкрити задачу",
+    openNew: "Відкрити в новій вкладці",
+    project: "Проєкт",
+    notStarted: "Не почато",
+    inProgress: "Є спроби",
+    completed: "Розв’язано",
+    attempts: "спроб",
+    emptyTitle: query ? "За цим пошуком задач не знайдено" : "Задач поки немає",
+    emptyBody: query ? "Спробуй іншу назву або тему чи скинь фільтри." : "Нові задачі з’являться тут після публікації.",
+    reset: "Очистити пошук і фільтри",
+    loading: "Завантажуємо задачі",
   };
   const difficulty = (value: LibraryTaskListItem["difficulty"]) => value === "HARD" ? copy.hard : value === "MEDIUM" ? copy.medium : copy.easy;
-  const tone = (value: LibraryTaskListItem["difficulty"]) => value === "HARD" ? "bg-bg-hover text-accent-error dark:bg-accent-error/10 dark:text-accent-error" : value === "MEDIUM" ? "bg-bg-hover text-accent-warn dark:bg-accent-warn/10 dark:text-accent-warn" : "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft";
+  const difficultyTone = (value: LibraryTaskListItem["difficulty"]) => value === "HARD"
+    ? "text-accent-error"
+    : value === "MEDIUM" ? "text-accent-warn" : "text-primary-strong dark:text-primary-soft";
   const filteredTasks = tasks.filter((task) =>
     (difficultyFilter === "ALL" || task.difficulty === difficultyFilter) &&
     (modeFilter === "ALL" || (task.taskMode || "CODE") === modeFilter)
   );
-  const clearSearch = () => {
+  const hasFilters = Boolean(query.trim()) || difficultyFilter !== "ALL" || modeFilter !== "ALL";
+  const clearFilters = () => {
     onQuery("");
     setDifficultyFilter("ALL");
     setModeFilter("ALL");
   };
-  return <div className="min-h-full bg-bg-base px-4 py-6 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-10 lg:py-9"><div className="mx-auto max-w-7xl space-y-6 lg:space-y-8">
-    <section className="relative overflow-hidden rounded-[28px] border border-border/10 bg-bg-hover p-6 dark:border-white/10 dark:bg-bg-surface sm:p-8"><div className="absolute -right-16 top-0 h-full w-1/2 bg-[radial-gradient(circle_at_center,color-mix(in_srgb,var(--primary)_14%,transparent),transparent_62%)]" /><div className="relative max-w-3xl"><div className="text-sm font-semibold text-primary-strong dark:text-primary-soft">{copy.eyebrow}</div><h1 className="mt-4 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em] sm:text-4xl lg:text-5xl">{copy.title}</h1><p className="mt-4 max-w-2xl text-base leading-7 text-text-muted dark:text-text-secondary sm:text-lg">{copy.subtitle}</p><div className="mt-7 flex flex-wrap gap-7"><div><div className="text-3xl font-semibold tracking-[-.05em]">{total ?? tasks.length}</div><div className="mt-1 text-sm text-text-muted dark:text-text-secondary">{copy.available}</div></div><div><div className="text-3xl font-semibold tracking-[-.05em] text-primary-strong dark:text-primary-soft">{solved}</div><div className="mt-1 text-sm text-text-muted dark:text-text-secondary">{copy.solved}</div></div></div></div></section>
-    <section className="rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface sm:p-6"><div className="relative"><svg className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input autoComplete="off" value={query} onChange={(event) => onQuery(event.target.value)} placeholder={copy.search} className="h-14 w-full rounded-2xl border border-border/10 bg-bg-surface pl-12 pr-24 text-base font-medium outline-none transition placeholder:font-normal placeholder:text-text-secondary focus:border-primary focus:ring-4 focus:ring-primary/10 dark:border-white/10 dark:bg-white/[.035]" />{query && <button type="button" onClick={() => onQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg px-3 py-2 text-xs font-semibold text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.06]">{en ? "Clear" : "\u041e\u0447\u0438\u0441\u0442\u0438\u0442\u0438"}</button>}</div><p className="mt-2 text-xs text-text-muted dark:text-text-secondary">{en ? "Search titles, descriptions, topics and tags." : "\u041f\u043e\u0448\u0443\u043a \u043f\u0440\u0430\u0446\u044e\u0454 \u0437\u0430 \u043d\u0430\u0437\u0432\u0430\u043c\u0438, \u043e\u043f\u0438\u0441\u0430\u043c\u0438, \u0442\u0435\u043c\u0430\u043c\u0438 \u0439 \u0442\u0435\u0433\u0430\u043c\u0438."}</p><div className="mt-5 flex flex-col gap-4 border-t border-border/8 pt-5 dark:border-white/[.08] lg:flex-row lg:items-center lg:justify-between"><div className="flex flex-wrap items-center gap-2"><span className="mr-1 text-xs font-semibold text-text-muted">{en ? "Level" : "\u0420\u0456\u0432\u0435\u043d\u044c"}</span>{([['ALL', en ? 'All' : '\u0423\u0441\u0456'], ['EASY', copy.easy], ['MEDIUM', copy.medium], ['HARD', copy.hard]] as const).map(([value, label]) => <button type="button" key={value} onClick={() => setDifficultyFilter(value)} className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${difficultyFilter === value ? "bg-bg-base text-text-primary dark:bg-bg-hover dark:text-text-primary" : "bg-bg-hover text-text-muted dark:bg-white/[.05] dark:text-text-secondary"}`}>{label}</button>)}<span className="mx-1 hidden h-5 w-px bg-bg-hover dark:bg-white/10 sm:block" />{([['ALL', en ? 'Any format' : '\u0423\u0441\u0456 \u0444\u043e\u0440\u043c\u0430\u0442\u0438'], ['CODE', copy.code], ['WEB', copy.web]] as const).map(([value, label]) => <button type="button" key={value} onClick={() => setModeFilter(value)} className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${modeFilter === value ? "bg-bg-hover text-primary-strong ring-1 ring-primary/25 dark:bg-primary/10 dark:text-primary-soft" : "text-text-muted dark:text-text-secondary"}`}>{label}</button>)}</div><div className="flex items-center gap-3 text-sm text-text-muted dark:text-text-secondary"><b className="text-text-primary dark:text-white">{filteredTasks.length}</b> {en ? "results" : "\u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0456\u0432"}{(query || difficultyFilter !== "ALL" || modeFilter !== "ALL") && <button type="button" onClick={clearSearch} className="text-xs font-semibold text-primary-strong dark:text-primary-soft">{en ? "Reset" : "\u0421\u043a\u0438\u043d\u0443\u0442\u0438"}</button>}</div></div></section>
-    {loading ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" role="status" aria-label={en ? "Loading task library" : "Завантаження бібліотеки задач"}>{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-64 animate-pulse rounded-[24px] bg-bg-hover dark:bg-white/[.045]" />)}</div> : filteredTasks.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{filteredTasks.map((task) => <article key={task.id} className="group flex min-h-[250px] flex-col rounded-[24px] border border-border/10 bg-white p-5 shadow-[0_16px_38px_-34px_rgba(17,43,25,.45)] transition hover:-translate-y-1 hover:border-primary/40 hover:shadow-[0_20px_45px_-30px_rgba(17,58,31,.42)] dark:border-white/10 dark:bg-bg-surface dark:hover:bg-bg-base"><div className="flex items-start justify-between gap-3"><div className="flex flex-wrap gap-2"><span className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${tone(task.difficulty)}`}>{difficulty(task.difficulty)}</span>{task.projectSpec ? <span className="inline-flex items-center gap-1 rounded-lg bg-bg-hover px-2.5 py-1 text-xs font-semibold text-accent-warn dark:bg-accent-warn/10 dark:text-accent-warn"><Rocket className="h-3 w-3" aria-hidden="true" />{copy.project}</span> : null}</div><span className="text-xs font-medium text-text-muted dark:text-text-secondary">{task.taskMode === "WEB" ? copy.web : copy.code}</span></div><h2 className="mt-5 text-lg font-semibold tracking-tight">{task.title}</h2><p className="mt-2 line-clamp-3 text-sm leading-6 text-text-muted dark:text-text-secondary">{task.description || task.section || "Practice the concept in your own solution."}</p>{task.attempt?.lastCheckedAt ? <p className="mt-2 text-[11px] font-medium text-primary-strong dark:text-primary-soft">{en ? "Checked" : "Перевірено"}: {new Intl.DateTimeFormat(i18n.language || "uk", { dateStyle: "short", timeStyle: "short" }).format(new Date(task.attempt.lastCheckedAt))}</p> : null}<div className="mt-auto flex items-center justify-between gap-3 pt-5"><div className="flex flex-wrap gap-1.5">{(task.tags || []).slice(0, 2).map((tag) => <span key={tag} className="rounded-md bg-bg-hover px-2 py-1 text-[11px] font-medium text-text-muted dark:bg-white/[.06] dark:text-text-secondary">{tag}</span>)}</div><div className="flex items-center gap-2">{getTaskHref ? <a href={getTaskHref(task)} target="_blank" rel="noopener noreferrer" className="rounded-lg p-2 text-text-muted transition hover:bg-bg-hover hover:text-primary-strong dark:hover:bg-white/[.06] dark:hover:text-primary-soft" aria-label={en ? "Open task in a new tab" : "Відкрити задачу в новій вкладці"} title={en ? "Open in a new tab" : "Відкрити в новій вкладці"}><ExternalLink className="h-4 w-4" /></a> : null}<button type="button" onClick={() => onOpen(task)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-strong transition group-hover:text-primary-strong dark:text-primary-soft">{copy.open}<ArrowRight className="h-4 w-4" aria-hidden="true" /></button></div></div></article>)}</div> : <div className="rounded-[26px] border border-dashed border-border/15 bg-white px-5 py-16 text-center text-sm text-text-muted dark:border-white/10 dark:bg-bg-surface dark:text-text-secondary" role="status"><p>{copy.empty}</p>{(query || difficultyFilter !== "ALL" || modeFilter !== "ALL") && <button type="button" onClick={clearSearch} className="mt-4 rounded-xl bg-bg-base px-4 py-2.5 text-xs font-bold text-text-primary dark:bg-primary dark:text-primary-foreground">{en ? "Reset filters" : "Скинути фільтри"}</button>}</div>}
-  </div></div>;
+  const taskStatus = (task: LibraryTaskListItem) => task.attempt?.solved
+    ? copy.completed
+    : Number(task.attempt?.submissionsCount ?? 0) > 0 ? copy.inProgress : copy.notStarted;
+  const taskTopic = (task: LibraryTaskListItem) => task.section?.trim() || task.tags?.find(Boolean) || (en ? "Practice" : "Практика");
+
+  return (
+    <main className="min-h-full bg-bg-base px-4 pb-8 pt-3 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-8 lg:pt-4">
+      <div className="mx-auto max-w-7xl">
+        <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-border/70 pb-3 dark:border-white/10">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold tracking-[.14em] text-text-muted dark:text-text-secondary">{preview ? (en ? "DESIGN PREVIEW · SAMPLE TASKS" : "ПРЕВ’Ю ДИЗАЙНУ · ПРИКЛАДИ ЗАДАЧ") : copy.eyebrow}</p>
+            <h1 className="mt-1 font-[family-name:var(--font-display)] text-[26px] font-semibold leading-tight tracking-[-.045em] sm:text-[30px]">{copy.title}</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <dl className="flex items-center gap-4 text-xs tabular-nums sm:gap-5">
+              <div className="flex items-baseline gap-1.5"><dt className="text-text-muted dark:text-text-secondary">{copy.available}</dt><dd className="font-semibold text-text-primary">{loading && total == null ? "—" : total ?? tasks.length}</dd></div>
+              <div className="flex items-baseline gap-1.5"><dt className="text-text-muted dark:text-text-secondary">{copy.solved}</dt><dd className="font-semibold text-primary-strong dark:text-primary-soft">{solved}</dd></div>
+            </dl>
+            {onShare ? <button type="button" onClick={onShare} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-text-secondary dark:hover:bg-white/[.06] motion-reduce:transition-none">{shareCopied ? copy.copied : copy.share}</button> : null}
+          </div>
+        </header>
+
+        <section className="mt-3" aria-label={en ? "Search and filters" : "Пошук і фільтри"}>
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-text-muted" aria-hidden="true" />
+            <span className="sr-only">{copy.search}</span>
+            <input
+              type="search"
+              autoComplete="off"
+              value={query}
+              onChange={(event) => onQuery(event.target.value)}
+              placeholder={copy.search}
+              aria-controls="task-library-results"
+              className="h-11 w-full rounded-xl border border-border/70 bg-bg-surface pl-10 pr-20 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-white/10 dark:bg-bg-surface dark:placeholder:text-text-secondary motion-reduce:transition-none"
+            />
+            {query ? <button type="button" onClick={() => onQuery("")} className="absolute right-2 top-1/2 min-h-9 -translate-y-1/2 rounded-lg px-2.5 text-xs font-semibold text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-text-secondary dark:hover:bg-white/[.06] motion-reduce:transition-none">{copy.clear}</button> : null}
+          </label>
+
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-0.5 text-xs font-medium text-text-muted dark:text-text-secondary">{copy.level}</span>
+              {([ ["ALL", copy.all], ["EASY", copy.easy], ["MEDIUM", copy.medium], ["HARD", copy.hard] ] as const).map(([value, label]) => (
+                <button key={value} type="button" aria-pressed={difficultyFilter === value} onClick={() => setDifficultyFilter(value)} className={`min-h-9 rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none ${difficultyFilter === value ? "bg-bg-hover text-text-primary dark:bg-white/[.1]" : "text-text-muted hover:bg-bg-hover/70 hover:text-text-primary dark:text-text-secondary dark:hover:bg-white/[.06]"}`}>{label}</button>
+              ))}
+              <span className="mx-1 hidden h-5 w-px bg-border sm:block dark:bg-white/10" aria-hidden="true" />
+              <span className="mr-0.5 text-xs font-medium text-text-muted dark:text-text-secondary">{copy.format}</span>
+              {([ ["ALL", copy.all], ["CODE", copy.code], ["WEB", copy.web] ] as const).map(([value, label]) => (
+                <button key={value} type="button" aria-pressed={modeFilter === value} onClick={() => setModeFilter(value)} className={`min-h-9 rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none ${modeFilter === value ? "bg-bg-hover text-text-primary dark:bg-white/[.1]" : "text-text-muted hover:bg-bg-hover/70 hover:text-text-primary dark:text-text-secondary dark:hover:bg-white/[.06]"}`}>{label}</button>
+              ))}
+            </div>
+            <div className="flex min-h-8 items-center gap-3 text-xs text-text-muted dark:text-text-secondary" aria-live="polite">
+              <span><strong className="font-semibold text-text-primary dark:text-white">{filteredTasks.length}</strong> {copy.results}</span>
+              {hasFilters ? <button type="button" onClick={clearFilters} className="min-h-9 rounded-lg px-2 font-semibold text-primary-strong hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-primary-soft motion-reduce:transition-none">{en ? "Reset" : "Скинути"}</button> : null}
+            </div>
+          </div>
+        </section>
+
+        {loading && filteredTasks.length === 0 ? (
+          <div id="task-library-results" className="mt-2 divide-y divide-border/70 border-y border-border/70 dark:divide-white/10 dark:border-white/10" role="status" aria-label={copy.loading}>
+            {Array.from({ length: 5 }, (_, index) => <div key={index} className="grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-3 motion-safe:animate-pulse">
+              <div className="min-w-0"><div className="h-4 w-2/5 rounded bg-bg-hover dark:bg-white/[.08]" /><div className="mt-2 h-3 w-1/4 rounded bg-bg-hover dark:bg-white/[.06]" /></div><div className="h-8 w-24 rounded-lg bg-bg-hover dark:bg-white/[.08]" />
+            </div>)}
+          </div>
+        ) : filteredTasks.length > 0 ? (
+          <ol id="task-library-results" className="mt-2 divide-y divide-border/70 border-y border-border/70 dark:divide-white/10 dark:border-white/10" aria-label={en ? "Available practice tasks" : "Доступні задачі для практики"}>
+            {filteredTasks.map((task) => {
+              const mode = task.taskMode || "CODE";
+              const status = taskStatus(task);
+              const passed = task.attempt?.lastTestsPassed;
+              const testTotal = task.attempt?.lastTestsTotal;
+              const testSummary = passed != null && testTotal != null ? `${passed}/${testTotal} ${en ? "tests" : "тестів"}` : `${task.attempt?.submissionsCount ?? 0} ${copy.attempts}`;
+              return <li key={task.id} className="group grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(140px,.48fr)_minmax(92px,.3fr)_auto] sm:gap-4 sm:py-2">
+                <button type="button" onClick={() => onOpen(task)} aria-label={`${copy.open}: ${task.title}`} className="min-w-0 rounded-lg py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+                  <span className="block line-clamp-2 text-sm font-semibold leading-5 tracking-[-.01em] text-text-primary transition-colors group-hover:text-primary-strong dark:group-hover:text-primary-soft" title={task.title}>{task.title}</span>
+                  <span className="mt-1 block truncate text-xs text-text-muted dark:text-text-secondary sm:hidden">{taskTopic(task)} · {difficulty(task.difficulty)}{task.projectSpec ? ` · ${copy.project}` : ""}</span>
+                </button>
+                <div className="hidden min-w-0 items-center gap-2 sm:flex"><span className="truncate text-xs text-text-secondary" title={taskTopic(task)}>{taskTopic(task)}</span></div>
+                <div className="hidden min-w-0 sm:block"><span className={`block text-xs font-semibold ${difficultyTone(task.difficulty)}`}>{difficulty(task.difficulty)}</span><span className="mt-1 block truncate text-[11px] text-text-muted dark:text-text-secondary">{status === copy.notStarted ? (mode === "WEB" ? copy.web : copy.code) : `${status} · ${testSummary}`}</span></div>
+                <div className="flex items-center justify-end gap-2">
+                  {getTaskHref ? <a href={getTaskHref(task)} target="_blank" rel="noopener noreferrer" className="hidden min-h-10 items-center rounded-lg px-2 text-xs font-medium text-text-muted underline-offset-4 hover:text-text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:inline-flex" aria-label={`${copy.openNew}: ${task.title}`} title={copy.openNew}><ExternalLink className="size-4" aria-hidden="true" /></a> : null}
+                  <span className={`inline-flex min-h-8 items-center text-[11px] font-semibold sm:hidden ${task.attempt?.solved ? "text-primary-strong dark:text-primary-soft" : Number(task.attempt?.submissionsCount ?? 0) > 0 ? "text-accent-warn" : "text-text-muted dark:text-text-secondary"}`}>{status}</span>
+                  <button type="button" onClick={() => onOpen(task)} aria-label={`${copy.open}: ${task.title}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-primary-strong transition-colors hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-primary-soft motion-reduce:transition-none"><span className="hidden sm:inline">{copy.open}</span><ArrowRight className="size-4" aria-hidden="true" /></button>
+                </div>
+              </li>;
+            })}
+          </ol>
+        ) : (
+          <section id="task-library-results" className="mt-2 border-y border-border/70 py-12 text-center dark:border-white/10" role="status">
+            <h2 className="text-base font-semibold tracking-[-.02em]">{copy.emptyTitle}</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-muted dark:text-text-secondary">{copy.emptyBody}</p>
+            {hasFilters ? <button type="button" onClick={clearFilters} className="mt-4 inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold text-primary-strong hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-primary-soft motion-reduce:transition-none">{copy.reset}</button> : null}
+          </section>
+        )}
+      </div>
+    </main>
+  );
 };

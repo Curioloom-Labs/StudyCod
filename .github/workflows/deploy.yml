@@ -64,8 +64,12 @@ jobs:
         # Include build/deploy toolchains such as Wrangler and Miniflare.
         run: npm audit --audit-level=moderate
 
+  contracts:
+    name: browser and database contracts
+    uses: ./.github/workflows/contracts.yml
+
   deploy:
-    needs: verify
+    needs: [verify, contracts]
     runs-on: ubuntu-latest
 
     steps:

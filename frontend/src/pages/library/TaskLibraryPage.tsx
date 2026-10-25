@@ -35,6 +35,7 @@ import {
   type LibraryTaskStatus,
 } from "../../lib/api/library";
 import { JUDGE_LANGUAGE_LABELS, enabledJudgeLanguages } from "../../lib/judgeLanguages";
+import { makeLearningBoundaryDemoTask } from "../../lib/learningDemo";
 import { PremiumLibrary } from "../core/PremiumPersonalExperience";
 
 const RECENT_TASKS_STORAGE_KEY = "studycod:library:recent:v1";
@@ -124,7 +125,7 @@ const FRIENDLY_DIFFICULTY: Record<LibraryTaskDifficulty, { uk: string; en: strin
   HARD: { uk: "Складна", en: "Hard", color: "error" },
 };
 
-const PREVIEW_LIBRARY_TASKS = [
+const PREVIEW_LIBRARY_TASKS_BASE = [
   { id: -201, title: "Витрати за категоріями", description: "Побудуй невеликий звіт на основі списку транзакцій і зроби код читабельним.", lang: "PYTHON", difficulty: "EASY", tags: ["collections", "loops"], taskMode: "CODE", status: "APPROVED", maxAttempts: 0 },
   { id: -202, title: "Найдовша серія", description: "Знайди найдовшу послідовність значень та поясни складність свого рішення.", lang: "PYTHON", difficulty: "MEDIUM", tags: ["arrays", "algorithm"], taskMode: "CODE", status: "APPROVED", maxAttempts: 0 },
   { id: -203, title: "Картка події", description: "Зверстай адаптивну картку з чіткою ієрархією, станами та мікровзаємодіями.", lang: "PYTHON", difficulty: "EASY", tags: ["html", "css"], taskMode: "WEB", status: "APPROVED", maxAttempts: 0 },
@@ -343,6 +344,11 @@ const CountUp: React.FC<{ value: number; decimals?: number; className?: string }
 export const TaskLibraryPage: React.FC = () => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
+  const demoLanguage = i18n.language?.toLowerCase().startsWith("en") ? "en" : "uk";
+  const previewLibraryTasks = useMemo(
+    () => [makeLearningBoundaryDemoTask(demoLanguage), ...PREVIEW_LIBRARY_TASKS_BASE],
+    [demoLanguage],
+  );
   const navigate = useNavigate();
   const location = useLocation();
   const isDesignPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
@@ -638,8 +644,8 @@ export const TaskLibraryPage: React.FC = () => {
     setTotal(null);
     try {
       if (isDesignPreview) {
-        setTasks(PREVIEW_LIBRARY_TASKS);
-        setTotal(PREVIEW_LIBRARY_TASKS.length);
+        setTasks(previewLibraryTasks);
+        setTotal(previewLibraryTasks.length);
         return;
       }
       if (view === "mine" && canManage) {
@@ -671,6 +677,12 @@ export const TaskLibraryPage: React.FC = () => {
   }, [view, canManage]);
 
   useEffect(() => {
+    if (!isDesignPreview) return;
+    setTasks(previewLibraryTasks);
+    setTotal(previewLibraryTasks.length);
+  }, [isDesignPreview, previewLibraryTasks]);
+
+  useEffect(() => {
     if (view === "approved") reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, page, judgeLang]);
@@ -687,7 +699,7 @@ export const TaskLibraryPage: React.FC = () => {
       return;
     }
     if (isDesignPreview) {
-      const task = PREVIEW_LIBRARY_TASKS.find((candidate) => candidate.id === selectedId);
+      const task = previewLibraryTasks.find((candidate) => candidate.id === selectedId);
       setDetails(task ? { task, theory: null, tests: [] } : null);
       setLoadingDetails(false);
       return;
@@ -702,7 +714,7 @@ export const TaskLibraryPage: React.FC = () => {
         // statement and use the solve action instead of seeing an empty pane.
       })
       .finally(() => setLoadingDetails(false));
-  }, [isDesignPreview, selectedId]);
+  }, [isDesignPreview, previewLibraryTasks, selectedId]);
 
   const selectTask = (task: LibraryTaskListItem) => {
     setSelectedId(task.id);
@@ -1502,13 +1514,23 @@ export const TaskLibraryPage: React.FC = () => {
 
   const buildSolvePath = (task: LibraryTaskListItem) => {
     const from = `${location.pathname}${location.search || ""}`;
-    return `${solvePathPrefix}/${getStableSolveKey(task)}?from=${encodeURIComponent(from)}`;
+    const params = new URLSearchParams({ from });
+    if (isDesignPreview) {
+      params.set("preview", "true");
+      const persona = new URLSearchParams(location.search || "").get("persona");
+      if (persona) params.set("persona", persona);
+    }
+    return `${solvePathPrefix}/${getStableSolveKey(task)}?${params.toString()}`;
   };
 
   const buildSolveTarget = (task: LibraryTaskListItem) => {
     const params = new URLSearchParams();
     params.set("from", `${location.pathname}${location.search || ""}`);
-    if (isDesignPreview) params.set("preview", "true");
+    if (isDesignPreview) {
+      params.set("preview", "true");
+      const persona = new URLSearchParams(location.search || "").get("persona");
+      if (persona) params.set("persona", persona);
+    }
     return {
       pathname: `${solvePathPrefix}/${getStableSolveKey(task)}`,
       search: `?${params.toString()}`,
@@ -1630,30 +1652,30 @@ export const TaskLibraryPage: React.FC = () => {
   );
 
   const allVisibleDraftsSelected = visibleDraftTasks.length > 0 && selectedVisibleDraftCount === visibleDraftTasks.length;
-  const learnerTasks = visibleTasks.length
-    ? visibleTasks
-    : isDesignPreview
-      ? PREVIEW_LIBRARY_TASKS.filter((task) => {
+  const learnerTasks = isDesignPreview
+    ? previewLibraryTasks.filter((task) => {
         const needle = qDraft.trim().toLowerCase();
         return !needle || `${task.title} ${task.description} ${(task.tags || []).join(" ")}`.toLowerCase().includes(needle);
       })
-      : [];
+    : visibleTasks;
 
   // Learners see a new discovery-first library. Authoring/moderation remains on
   // the specialised workspace below, where its dense controls are necessary.
   if (!canManage && view === "approved") {
     return <>
-      <div className="mx-auto flex max-w-7xl justify-end px-4 pt-4 text-text-primary dark:text-text-primary sm:px-6 lg:px-10"><button type="button" onClick={() => void copyCurrentLibraryLink()} className="inline-flex items-center gap-1.5 rounded-lg border border-border/10 bg-white px-3 py-2 text-xs font-semibold text-text-muted transition hover:border-primary/40 hover:text-primary-strong dark:border-white/10 dark:bg-bg-surface dark:text-text-secondary dark:hover:text-primary-soft" aria-label={tr("Скопіювати посилання на бібліотеку", "Copy library link")} title={tr("Скопіювати посилання з фільтрами", "Copy link with filters")}><Share2 className="size-3.5" />{linkCopied ? tr("Скопійовано", "Copied") : tr("Поділитися", "Share")}</button></div>
       <RecentTasksBanner onOpen={rememberAndOpenTask} />
       <PremiumLibrary
         tasks={learnerTasks}
-        total={total ?? (isDesignPreview ? PREVIEW_LIBRARY_TASKS.length : null)}
+        total={total ?? (isDesignPreview ? previewLibraryTasks.length : null)}
         solved={solvedCount}
         loading={loading}
         query={qDraft}
         onQuery={setQDraft}
         onOpen={rememberAndOpenTask}
         getTaskHref={buildSolvePath}
+        onShare={() => void copyCurrentLibraryLink()}
+        shareCopied={linkCopied}
+        preview={isDesignPreview}
       />
     </>;
   }

@@ -32,7 +32,7 @@ import {
   ArrowsLeftRightIcon as SwapPanels,
 } from "@phosphor-icons/react";
 import "./StudyCodWorkbench.css";
-import { CodeEditor } from "../CodeEditor";
+import { CodeEditor, type CodeEditorHandle } from "../CodeEditor";
 import { MultiFileEditor } from "../MultiFileEditor";
 import { DebugMentorChat } from "../DebugMentorChat";
 import { ErrorExplainButton } from "../ErrorExplainButton";
@@ -187,6 +187,7 @@ type Props = {
   submitMode?: boolean;
   readOnly?: boolean;
   onBack?: () => void;
+  onCodeEditorMount?: (editor: CodeEditorHandle) => void;
   disableLanguageChange?: boolean;
   runResult: StudyCodIdeRunResult | null;
   checkResult: StudyCodIdeCheckResult | null;
@@ -347,6 +348,7 @@ type PracticeCodeEditorProps = {
   isWebTask: boolean;
   focusLine?: number | null;
   onChange: (nextCode: string) => void;
+  onEditorMount?: (editor: CodeEditorHandle) => void;
 };
 
 // Keep Monaco's draft isolated from the large IDE workspace. The workspace
@@ -363,6 +365,7 @@ const PracticeCodeEditor = React.memo<PracticeCodeEditorProps>(
     isWebTask,
     focusLine = null,
     onChange,
+    onEditorMount,
     enableSemanticLsp,
   }) => {
     const [draft, setDraft] = React.useState(value);
@@ -391,6 +394,7 @@ const PracticeCodeEditor = React.memo<PracticeCodeEditorProps>(
         wordWrap={wordWrap}
         minimap={false}
         focusLine={focusLine}
+        onEditorMount={onEditorMount}
       />
     );
   },
@@ -2904,6 +2908,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                       isWebTask={Boolean(props.isWebTask)}
                       focusLine={compilerErrorLine}
                       onChange={handleCodeChange}
+                      onEditorMount={props.onCodeEditorMount}
                     />
                   )}
                 </div>

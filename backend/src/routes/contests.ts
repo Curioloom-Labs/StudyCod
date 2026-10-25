@@ -15,6 +15,7 @@ import { User } from "../entities/User";
 import { Student } from "../entities/Student";
 import { Class } from "../entities/Class";
 import { LibraryTask } from "../entities/LibraryTask";
+import { Task } from "../entities/Task";
 import { TestData } from "../entities/TestData";
 import { applyAwardDecisions, proposeAwards, type AwardRow } from "../services/contest/awardRules";
 import { awardSourceVersion, contestSubmissionCounts, readConfirmedAwards } from "../services/contest/awards";
@@ -44,6 +45,7 @@ import { ALL_JUDGE_LANGUAGES } from "../config/judgeLanguages";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { askTutor } from "../services/edu/aiTutor";
 import { getActiveAirRaidAlert, isAirAlertProviderConfigured, listAirAlertLocations, type AirAlertLevel } from "../services/contest/airAlerts";
+import { dynamicOlympiadPracticeMetadata, validateGeneratedPracticeSet, type GeneratedPracticeSetMode } from "../services/contest/generatedPractice";
 
 const contestsRouter = Router();
 contestsRouter.use((req, res, next) => {
@@ -965,6 +967,14 @@ function labelFromOrder(order: number): string {
   const base = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   if (order >= 0 && order < base.length) return base[order];
   return `P${order + 1}`;
+}
+
+function generatedContestTemplates(runtime: string, template: string): Record<string, string> {
+  return {
+    python: runtime === "PYTHON" ? template : "import sys\n\n# Write your solution here\n",
+    java: runtime === "JAVA" ? template : "import java.io.*;\nimport java.util.*;\n\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        // Write your solution here\n    }\n}\n",
+    cpp: runtime === "CPP" ? template : "#include <iostream>\nusing namespace std;\n\nint main() {\n    ios::sync_with_stdio(false); cin.tie(nullptr);\n    // Write your solution here\n    return 0;\n}\n",
+  };
 }
 
 function scaleScoreToProblemPoints(rawScore: number, rawMax: number, problemPoints: number | null | undefined): { score: number; maxScore: number } {
@@ -3553,6 +3563,41 @@ contestsRouter.get("/:id/admin/participants/:participantId/submissions", authReq
 });
 
 // Add problem to contest (creator/admin)
+contestsRouter.get("/:id/problems/generated-practice-candidates", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    if (!Number.isInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (contest.createdBy.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") return res.status(403).json({ message: "ACCESS_DENIED" });
+    const tasks = await AppDataSource.getRepository(Task).find({
+      where: { user: { id: req.userId }, type: "TOPIC", taskMode: "CODE" },
+      relations: ["courseItem", "courseItem.module", "courseItem.module.course"],
+      order: { createdAt: "DESC" },
+      take: 200,
+    });
+    const candidates = tasks.flatMap((task) => {
+      const metadata = dynamicOlympiadPracticeMetadata(task);
+      return metadata ? [{
+        id: task.id,
+        title: task.title,
+        lesson: task.courseItem?.title ?? "Olympiad practice",
+        runtime: task.lang,
+        courseKey: metadata.courseKey,
+        topicKey: metadata.topicKey,
+        courseId: task.courseItem?.module?.course?.id ?? null,
+        courseItemId: task.courseItem?.id ?? null,
+        createdAt: task.createdAt,
+      }] : [];
+    }).slice(0, 100);
+    return res.json({ candidates });
+  } catch (error: unknown) {
+    logger.error("[contests] GET /:id/problems/generated-practice-candidates error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 contestsRouter.post("/:id/problems", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
@@ -3676,6 +3721,262 @@ contestsRouter.post("/:id/problems", authRequired, async (req: AuthRequest, res:
       return res.status(error.statusCode).json({ message: error.message });
     }
     logger.error("[contests] POST /:id/problems error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Attach a learner's freshly generated Olympiad practice to a Contest draft.
+// The server copies hidden tests into the contest-owned task snapshot.
+contestsRouter.post("/:id/problems/from-generated-practice", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    const taskId = Number(req.body?.taskId);
+    if (!Number.isInteger(contestId) || contestId <= 0 || !Number.isInteger(taskId) || taskId <= 0) {
+      return res.status(400).json({ message: "INVALID_INPUT" });
+    }
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (contest.createdBy.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const generatedTask = await AppDataSource.getRepository(Task).findOne({
+      where: { id: taskId, user: { id: req.userId } },
+      relations: ["courseItem", "courseItem.module", "courseItem.module.course"],
+    });
+    if (!generatedTask) return res.status(404).json({ message: "GENERATED_TASK_NOT_FOUND" });
+    const metadata = dynamicOlympiadPracticeMetadata(generatedTask);
+    if (!metadata) return res.status(409).json({ message: "OLYMPIAD_GENERATED_PRACTICE_REQUIRED" });
+
+    const tests = await testDataRepo().find({ where: { personalTask: { id: generatedTask.id } }, order: { id: "ASC" } });
+    if (tests.length < 12) return res.status(409).json({ message: "GENERATED_TASK_TEST_SET_INCOMPLETE" });
+
+    const result = await AppDataSource.transaction(async (manager) => {
+      const libraryTasks = manager.getRepository(LibraryTask);
+      const testData = manager.getRepository(TestData);
+      const problems = manager.getRepository(ContestProblem);
+      const snapshot = libraryTasks.create({
+        author: { id: req.userId } as User,
+        title: generatedTask.title,
+        description: generatedTask.description,
+        template: generatedTask.template,
+        taskMode: "CODE",
+        lang: generatedTask.lang,
+        templatesByLanguage: generatedContestTemplates(generatedTask.lang, generatedTask.template),
+        allowedLanguages: ["java", "python", "cpp"],
+        tags: ["olympiad", "generated-practice", `course:${metadata.courseKey}`, `topic:${metadata.topicKey}`,
+          `course-id:${generatedTask.courseItem?.module?.course?.id ?? 0}`, `source-item:${generatedTask.courseItem?.id ?? 0}`],
+        difficulty: "MEDIUM",
+        timeLimitMs: generatedTask.lang === "PYTHON" ? 2000 : 1000,
+        memoryLimitMb: 256,
+        outputLimitKb: 64,
+        checkerSpec: chooseDefaultCheckerFromExpectedOutputs(tests.map((test) => test.expectedOutput)),
+        maxAttempts: 999999,
+        isHiddenFromLibrary: true,
+        status: "DRAFT",
+      });
+      const savedTask = await libraryTasks.save(snapshot);
+      const hiddenRows = tests.map((test) => testData.create({
+        input: test.input,
+        expectedOutput: test.expectedOutput,
+        isHidden: true,
+        kind: "JUDGE",
+        source: "AI_GENERATED",
+        points: test.points || 1,
+        subtask: test.subtask ?? null,
+        libraryTask: { id: savedTask.id },
+      }));
+      await testData.save(hiddenRows);
+      const nextOrder = await problems.count({ where: { contest: { id: contestId } } });
+      const problem = problems.create({
+        contest: { id: contestId },
+        libraryTask: { id: savedTask.id },
+        order: nextOrder,
+        label: labelFromOrder(nextOrder),
+      });
+      const savedProblem = await problems.save(problem);
+      return { problemId: savedProblem.id, libraryTaskId: savedTask.id, order: savedProblem.order, label: savedProblem.label };
+    });
+    return res.json(result);
+  } catch (error: unknown) {
+    logger.error("[contests] POST /:id/problems/from-generated-practice error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Compose a timed training set from problems that the learner's course already generated.
+contestsRouter.post("/:id/problems/from-generated-practice-set", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId || req.userType !== "USER") return res.status(403).json({ message: "ONLY_USERS" });
+    const contestId = Number(req.params.id);
+    if (!Number.isInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const schema = z.object({ mode: z.enum(["THEMATIC", "MIXED"]), taskIds: z.array(z.number().int().positive()).min(2).max(8) });
+    const parsed = schema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+    if (new Set(parsed.data.taskIds).size !== parsed.data.taskIds.length) return res.status(400).json({ message: "DUPLICATE_GENERATED_TASKS" });
+
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (contest.createdBy.id !== req.userId && req.userRole !== "SYSTEM_ADMIN") return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const tasks = await AppDataSource.getRepository(Task).find({
+      where: { id: In(parsed.data.taskIds), user: { id: req.userId } },
+      relations: ["courseItem", "courseItem.module", "courseItem.module.course"],
+    });
+    if (tasks.length !== parsed.data.taskIds.length) return res.status(404).json({ message: "GENERATED_TASK_NOT_FOUND" });
+    const ordered = parsed.data.taskIds.map((id) => tasks.find((task) => task.id === id)!);
+    const entries = ordered.map((task) => ({ metadata: dynamicOlympiadPracticeMetadata(task), task }));
+    if (entries.some((entry) => !entry.metadata)) return res.status(409).json({ message: "OLYMPIAD_GENERATED_PRACTICE_REQUIRED" });
+    const practiceSetError = validateGeneratedPracticeSet(parsed.data.mode as GeneratedPracticeSetMode, entries.map(({ metadata, task }) => ({
+      courseKey: metadata!.courseKey,
+      topicKey: metadata!.topicKey,
+      runtime: task.lang,
+    })));
+    if (practiceSetError) return res.status(409).json({ message: practiceSetError });
+
+    const testsByTask = await Promise.all(ordered.map((task) => testDataRepo().find({
+      where: { personalTask: { id: task.id } }, order: { id: "ASC" },
+    })));
+    if (testsByTask.some((tests) => tests.length < 12)) return res.status(409).json({ message: "GENERATED_TASK_TEST_SET_INCOMPLETE" });
+
+    const result = await AppDataSource.transaction(async (manager) => {
+      const libraryTasks = manager.getRepository(LibraryTask);
+      const testData = manager.getRepository(TestData);
+      const problems = manager.getRepository(ContestProblem);
+      const nextOrder = await problems.count({ where: { contest: { id: contestId } } });
+      const problemIds: number[] = [];
+      for (const [index, { task, metadata }] of entries.entries()) {
+        const tests = testsByTask[index];
+        const snapshot = libraryTasks.create({
+          author: { id: req.userId } as User,
+          title: task.title,
+          description: task.description,
+          template: task.template,
+          taskMode: "CODE",
+          lang: task.lang,
+          templatesByLanguage: generatedContestTemplates(task.lang, task.template),
+          allowedLanguages: ["java", "python", "cpp"],
+          tags: ["olympiad", "generated-practice", `course:${metadata!.courseKey}`, `topic:${metadata!.topicKey}`,
+            `course-id:${task.courseItem?.module?.course?.id ?? 0}`, `source-item:${task.courseItem?.id ?? 0}`],
+          difficulty: "MEDIUM",
+          timeLimitMs: task.lang === "PYTHON" ? 2000 : 1000,
+          memoryLimitMb: 256,
+          outputLimitKb: 64,
+          checkerSpec: chooseDefaultCheckerFromExpectedOutputs(tests.map((test) => test.expectedOutput)),
+          maxAttempts: 999999,
+          isHiddenFromLibrary: true,
+          status: "DRAFT",
+        });
+        const savedTask = await libraryTasks.save(snapshot);
+        const hiddenRows = tests.map((test) => testData.create({
+          input: test.input,
+          expectedOutput: test.expectedOutput,
+          isHidden: true,
+          kind: "JUDGE",
+          source: "AI_GENERATED",
+          points: test.points || 1,
+          subtask: test.subtask ?? null,
+          libraryTask: { id: savedTask.id },
+        }));
+        await testData.save(hiddenRows);
+        const problem = problems.create({
+          contest: { id: contestId },
+          libraryTask: { id: savedTask.id },
+          order: nextOrder + index,
+          label: labelFromOrder(nextOrder + index),
+        });
+        problemIds.push((await problems.save(problem)).id);
+      }
+      return { problemIds, firstOrder: nextOrder, count: problemIds.length };
+    });
+    return res.json({ ...result, mode: parsed.data.mode });
+  } catch (error: unknown) {
+    logger.error("[contests] POST /:id/problems/from-generated-practice-set error", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+// Return a participant-safe, topic-level review after the official round ends.
+contestsRouter.get("/:id/learning-review", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const contestId = Number(req.params.id);
+    if (!Number.isInteger(contestId) || contestId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const contest = await contestRepo().findOne({ where: { id: contestId }, relations: ["createdBy", "class"] });
+    if (!contest) return res.status(404).json({ message: "NOT_FOUND" });
+    if (!(await canAccessContest({ contest, req }))) return res.status(403).json({ message: "ACCESS_DENIED" });
+    if (!getContestTimeState(contest).finished) return res.status(403).json({ message: "REVIEW_AVAILABLE_AFTER_CONTEST" });
+    const participant = await participantRepo().findOne({
+      where: {
+        contest: { id: contestId },
+        ...(req.userId ? { user: { id: req.userId } } : { student: { id: req.studentId } }),
+      },
+    });
+    if (!participant) return res.status(403).json({ message: "JOIN_CONTEST_FIRST" });
+
+    const problems = await problemRepo().find({
+      where: { contest: { id: contestId } },
+      relations: ["libraryTask"],
+      order: { order: "ASC" },
+    });
+    const submissions = await submissionRepo().find({
+      where: { contest: { id: contestId }, participant: { id: participant.id }, phase: "CONTEST" },
+      relations: ["problem"],
+      order: { createdAt: "ASC" },
+    });
+    if (submissions.some((submission) => ["queued", "running", "pending"].includes(String(submission.executionStatus).toLowerCase()))) {
+      return res.status(409).json({ message: "JUDGING_IN_PROGRESS" });
+    }
+    const byProblem = new Map<number, ContestSubmission[]>();
+    for (const submission of submissions) {
+      const id = Number(submission.problem?.id);
+      if (!Number.isFinite(id)) continue;
+      const list = byProblem.get(id) ?? [];
+      list.push(submission);
+      byProblem.set(id, list);
+    }
+
+    const topics = new Map<string, { topicKey: string; courseId: number | null; courseItemId: number | null; problemCount: number; solvedProblems: number; attempts: number; failures: number; problems: Array<Record<string, unknown>> }>();
+    for (const problem of problems) {
+      const tags = Array.isArray(problem.libraryTask?.tags) ? problem.libraryTask.tags : [];
+      const topicTag = tags.find((tag) => typeof tag === "string" && tag.startsWith("topic:"));
+      if (!topicTag) continue;
+      const topicKey = String(topicTag).slice("topic:".length);
+      const courseId = Number(tags.find((tag) => typeof tag === "string" && tag.startsWith("course-id:"))?.slice("course-id:".length) ?? 0) || null;
+      const courseItemId = Number(tags.find((tag) => typeof tag === "string" && tag.startsWith("source-item:"))?.slice("source-item:".length) ?? 0) || null;
+      const attempts = byProblem.get(problem.id) ?? [];
+      const group = topics.get(topicKey) ?? { topicKey, courseId, courseItemId, problemCount: 0, solvedProblems: 0, attempts: 0, failures: 0, problems: [] };
+      group.problemCount += 1;
+      group.attempts += attempts.length;
+      const bestScore = attempts.reduce((best, item) => Math.max(best, Number(item.score ?? 0)), 0);
+      const solved = attempts.some((item) => item.verdict === "AC" || (Number(item.maxScore ?? 0) > 0 && Number(item.score ?? 0) >= Number(item.maxScore)));
+      if (solved) group.solvedProblems += 1;
+      group.failures += attempts.filter((item) => item.verdict !== "AC").length;
+      group.problems.push({
+        label: problem.label ?? labelFromOrder(problem.order),
+        title: problem.libraryTask?.title ?? "Generated problem",
+        attempts: attempts.length,
+        bestScore,
+        solved,
+        verdicts: attempts.map((item) => item.verdict ?? "PENDING"),
+      });
+      topics.set(topicKey, group);
+    }
+    const orderedTopics = [...topics.values()].sort((a, b) => b.failures - a.failures || a.topicKey.localeCompare(b.topicKey));
+    const weakest = orderedTopics.find((topic) => topic.failures > 0) ?? null;
+    res.set("Cache-Control", "no-store");
+    return res.json({
+      contestId,
+      finished: true,
+      topics: orderedTopics,
+      recommendation: weakest ? {
+        topicKey: weakest.topicKey,
+        courseId: weakest.courseId,
+        courseItemId: weakest.courseItemId,
+        reason: "MOST_FAILED_GENERATED_TOPIC",
+        suggestedAction: "Generate a fresh course practice variant for this topic, then solve it outside the timed round.",
+      } : null,
+    });
+  } catch (error: unknown) {
+    logger.error("[contests] GET /:id/learning-review error", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

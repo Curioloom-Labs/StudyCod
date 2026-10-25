@@ -21,9 +21,9 @@ const courseDefinitions: Array<{ key: string; runtime: Runtime }> = [
 test("all three Olympiad courses are published in Ukrainian and English catalogs", () => {
   const root = repoRoot();
   for (const locale of ["uk", "en"] as const) {
-    const { manifest } = validateCurriculum(root, locale);
+    const { catalogManifest } = validateCurriculum(root, locale);
     for (const courseDefinition of courseDefinitions) {
-      const course = manifest.courses.find((entry) => entry.key === courseDefinition.key);
+      const course = catalogManifest.courses.find((entry) => entry.key === courseDefinition.key);
       assert.ok(course, `${locale}/${courseDefinition.key} course definition`);
       assert.equal(course.status, "PUBLISHED", `${locale}/${courseDefinition.key} must be available to learners`);
     }
@@ -31,9 +31,9 @@ test("all three Olympiad courses are published in Ukrainian and English catalogs
 });
 
 test("Olympiad final items generate a fresh transfer-stage Judge task", () => {
-  const { manifest, topics } = validateCurriculum(repoRoot());
+  const { catalogManifest, topics } = validateCurriculum(repoRoot());
   for (const courseDefinition of courseDefinitions) {
-    const course = manifest.courses.find((entry) => entry.key === courseDefinition.key);
+    const course = catalogManifest.courses.find((entry) => entry.key === courseDefinition.key);
     const capstoneTopic = topics[courseDefinition.key].find((topic) => topic.key === "combine-techniques");
     assert.ok(course, `${courseDefinition.key} course definition`);
     assert.ok(capstoneTopic, `${courseDefinition.key} combine-techniques lesson`);

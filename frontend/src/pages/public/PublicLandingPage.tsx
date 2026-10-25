@@ -24,6 +24,7 @@ import { Logo } from "../../components/Logo";
 import { BrandLockup } from "../../components/BrandLockup";
 import { PublicProductNav } from "../../components/layout/PublicProductNav";
 import { withDevPreview } from "../../lib/devPreview";
+import { LEARNING_BOUNDARY_DEMO } from "../../lib/learningDemo";
 
 type Translate = (uk: string, en: string) => string;
 
@@ -228,7 +229,7 @@ const PracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
       </section>
       <aside className="border-l border-border/10 bg-white/86 p-6 dark:border-white/10 dark:bg-white/[.04]">
         <div className="text-[10px] font-bold uppercase tracking-[.14em] text-text-muted">{tr("Приклад результату", "Example output")}</div>
-        <div className="mt-3 rounded-2xl bg-bg-code p-4 font-mono text-sm text-text-primary">15</div>
+        <div className="mt-3 rounded-2xl bg-bg-code p-4 font-mono text-sm text-text-primary">{LEARNING_BOUNDARY_DEMO.expectedOutput}</div>
         <div className="mt-5 text-[10px] font-bold uppercase tracking-[.14em] text-text-muted">{tr("Візуалізація", "Visualizer")}</div>
         <div className="mt-3 rounded-2xl border border-border/10 bg-bg-surface p-4 dark:border-white/10 dark:bg-white/[.045]">
           <div className="flex justify-between text-xs"><span>{tr("Остання ітерація", "Final iteration")}</span><strong className="text-primary-strong">line 4</strong></div>
@@ -242,29 +243,37 @@ const PracticePreview: React.FC<{ tr: Translate }> = ({ tr }) => (
   </div>
 );
 
-const FailureLoopPreview: React.FC<{ tr: Translate }> = ({ tr }) => {
-  const steps = [
-    { label: tr("Невдала спроба", "Failed attempt"), tone: "border-accent-error/30 bg-accent-error/10 text-accent-error", icon: "!" },
-    { label: tr("Знайдена проблема", "Problem found"), tone: "border-accent-warn/30 bg-accent-warn/10 text-accent-warn", icon: "?" },
-    { label: tr("Поступова підказка", "Guided hint"), tone: "border-primary/30 bg-[var(--surface-primary)]/10 text-primary-soft", icon: "→" },
-    { label: tr("Виправлений код", "Fixed code"), tone: "border-primary/30 bg-[var(--surface-primary)]/10 text-primary-soft", icon: "✓" },
-    { label: tr("Навичку закріплено", "Skill reinforced"), tone: "border-accent-warn/30 bg-accent-warn/10 text-accent-warn", icon: "★" },
-  ];
-  return (
-    <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-bg-code p-5 text-left text-text-primary shadow-[0_48px_110px_rgba(5,25,13,.28)] sm:p-7">
-      <div className="absolute -right-24 -top-28 size-72 rounded-full bg-primary/10 blur-3xl" />
-      <div className="relative flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-5">
-        <div><div className="text-[10px] font-black uppercase tracking-[.18em] text-primary-soft">{tr("Від помилки до навички", "From failure to skill")}</div><div className="mt-2 text-2xl font-black tracking-[-.05em] sm:text-3xl">{tr("Кожна спроба веде далі", "Every attempt moves you forward")}</div></div>
-        <span className="rounded-full border border-white/10 px-3 py-1.5 text-[10px] font-bold text-text-secondary">Python · {tr("цикли", "loops")}</span>
-      </div>
-      <div className="relative mt-6 grid gap-3 sm:grid-cols-5">
-        {steps.map((step, index) => <div key={step.label} className="relative">{index < steps.length - 1 ? <span className="absolute left-[calc(50%+22px)] right-[-12px] top-5 hidden h-px bg-white/15 sm:block" /> : null}<div className={`relative z-10 flex min-h-[126px] flex-col justify-between rounded-2xl border p-3 ${step.tone}`}><span className="grid size-8 place-items-center rounded-xl bg-white/10 text-sm font-black">{step.icon}</span><span className="text-xs font-bold leading-5">{step.label}</span></div></div>)}
-      </div>
-      <div className="relative mt-5 grid gap-3 rounded-2xl border border-white/10 bg-white/[.045] p-4 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="text-[10px] font-black uppercase tracking-[.16em] text-accent-warn">{tr("Приклад наступного кроку", "Next step example")}</div><div className="mt-2 font-mono text-xs text-text-primary">{tr("Перевір, що відбувається на межі циклу", "Check what happens at the loop boundary")}</div></div><div className="rounded-xl bg-primary/10 px-3 py-2 text-center text-xs font-bold text-primary-soft">{tr("Підказка", "Hint")}</div></div>
+const FailureLoopPreview: React.FC<{ tr: Translate }> = ({ tr }) => (
+  <article id="practice" aria-label={tr("Демонстраційний розбір задачі на суму", "Demo review of a sum task")} className="overflow-hidden rounded-[22px] border border-border/70 bg-bg-surface text-text-primary dark:border-white/10 dark:bg-bg-code">
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3 dark:border-white/10 sm:px-5">
+      <div className="flex items-center gap-2.5"><Code2 className="size-4 text-primary-strong dark:text-primary-soft" aria-hidden="true" /><span className="text-sm font-semibold">{tr("Сума від 1 до n", "Sum from 1 to n")}</span><span className="text-xs text-text-muted dark:text-text-secondary">Python</span></div>
+      <span className="inline-flex min-h-7 items-center gap-1.5 border-l-2 border-accent-warn pl-2.5 text-[10px] font-bold tracking-[.08em] text-accent-warn"><span aria-hidden="true">◇</span>{tr("ДЕМО", "DEMO")}</span>
+    </header>
+    <div className="grid lg:grid-cols-[1.05fr_.95fr]">
+      <section aria-label={tr("Код із помилкою", "Code with an error")} className="min-w-0 border-b border-border/70 bg-bg-code px-4 py-4 dark:border-white/10 lg:border-b-0 lg:border-r sm:px-5">
+        <div className="mb-3 flex items-center justify-between gap-3 text-[10px] text-text-secondary"><span>{tr("Поточна спроба", "Current attempt")}</span><span className="font-mono">main.py</span></div>
+        <pre className="m-0 overflow-x-auto whitespace-pre-wrap font-mono text-[12px] leading-[1.9] text-text-primary"><code>{LEARNING_BOUNDARY_DEMO.initialCode}</code></pre>
+        <div className="mt-4 flex items-center gap-2 border-t border-white/10 pt-3 text-xs"><span className="size-1.5 rounded-full bg-accent-error" aria-hidden="true" /><span>{tr("Перевірка: не пройдено", "Check: failed")}</span></div>
+      </section>
+      <section aria-label={tr("Результат демонстраційного тесту", "Demo test result")} className="min-w-0 p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3"><h2 className="m-0 text-[10px] font-bold tracking-[.12em] text-text-muted dark:text-text-secondary">{tr("ДЕМОНСТРАЦІЙНИЙ ТЕСТ", "DEMO TEST")}</h2><span className="font-mono text-[10px] text-text-muted dark:text-text-secondary">n = {LEARNING_BOUNDARY_DEMO.input}</span></div>
+        <dl className="mt-3 grid grid-cols-3 divide-x divide-border/70 border-y border-border/70 py-3 dark:divide-white/10 dark:border-white/10">
+          <div className="pr-2"><dt className="text-[10px] text-text-muted dark:text-text-secondary">{tr("Ввід", "Input")}</dt><dd className="mt-1 font-mono text-sm">{LEARNING_BOUNDARY_DEMO.input}</dd></div>
+          <div className="px-2"><dt className="text-[10px] text-text-muted dark:text-text-secondary">{tr("Очікується", "Expected")}</dt><dd className="mt-1 font-mono text-sm">{LEARNING_BOUNDARY_DEMO.expectedOutput}</dd></div>
+          <div className="pl-2"><dt className="text-[10px] text-text-muted dark:text-text-secondary">{tr("Отримано", "Got")}</dt><dd className="mt-1 font-mono text-sm font-semibold text-accent-error">{LEARNING_BOUNDARY_DEMO.failedOutput}</dd></div>
+        </dl>
+        <div className="mt-3 border-l-2 border-accent-warn pl-3">
+          <div className="text-[10px] font-semibold text-accent-warn">{tr("Підказка · напрям перевірки", "Hint · where to look")}</div>
+          <p className="mb-0 mt-1 text-xs leading-5 text-text-secondary">{tr(LEARNING_BOUNDARY_DEMO.hint.uk, LEARNING_BOUNDARY_DEMO.hint.en)}</p>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-3 dark:border-white/10">
+          <span className="text-[10px] text-text-muted dark:text-text-secondary">{tr("Після виправлення", "After the fix")}</span>
+          <code className="rounded-md bg-bg-hover px-2 py-1 font-mono text-[11px] text-text-primary dark:bg-white/[.07]">{LEARNING_BOUNDARY_DEMO.correctedRange}</code>
+        </div>
+      </section>
     </div>
-  );
-};
-
+  </article>
+);
 const TeacherRadarPreview: React.FC<{ tr: Translate }> = ({ tr }) => {
   const students = [
     { task: tr("Межі циклу", "Loop boundaries"), status: tr("Потрібна увага", "Needs attention"), tone: "text-accent-error", surface: "bg-bg-hover dark:bg-accent-error/10" },
@@ -308,8 +317,8 @@ export const PublicLandingPage: React.FC = () => {
           <motion.div className="relative z-10 max-w-[600px]" initial={reduceMotion ? undefined : { opacity: 0, y: 16 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: easing }}>
             <div className="mb-5 flex w-fit items-center gap-2.5 rounded-full border border-border/70 bg-bg-surface/85 py-1 pl-1 pr-3.5 text-xs font-semibold text-text-muted shadow-sm"><span className="grid size-7 place-items-center rounded-full bg-primary text-primary-foreground"><Sparkles className="size-3.5" /></span>{tr("Навчання, яке переходить у навичку", "Learning that becomes a skill")}</div>
             <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-[.14em] text-primary-strong">StudyCod — learn by building</div>
-            <h1 className="m-0 max-w-[620px] text-balance text-[clamp(42px,5.2vw,68px)] font-bold leading-[1.02] tracking-[-0.055em] max-md:text-[clamp(40px,12.4vw,54px)]">{tr("Перетворюй помилки в коді на навички.", "Turn coding mistakes into skills.")}</h1>
-            <p className="mt-5 max-w-[540px] text-balance text-base leading-7 text-text-muted sm:text-lg sm:leading-8">{tr("Напиши код, перевір його й побач, що виправити далі.", "Write code, test it, and see what to improve next.")}</p>
+            <h1 className="m-0 max-w-[620px] text-balance text-[clamp(42px,5.2vw,68px)] font-bold leading-[1.02] tracking-[-0.055em] max-md:text-[clamp(40px,12.4vw,54px)]">{tr("Зрозумій, чому код не пройшов тест.", "See why your code failed a test.")}</h1>
+            <p className="mt-5 max-w-[540px] text-balance text-base leading-7 text-text-muted sm:text-lg sm:leading-8">{tr("Поруч із кодом — результат доступного тесту й підказка, яка допомагає перевірити наступний крок.", "See an available test result beside your code, with a hint that helps you choose what to check next.")}</p>
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <button type="button" onClick={() => goToAuth("register")} className="group inline-flex min-h-12 items-center gap-2.5 rounded-xl bg-primary px-5 font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 motion-safe:active:translate-y-px">
                 <GraduationCap className="size-5" aria-hidden="true" />{tr("Почати практику", "Start practicing")}<ArrowRight className="size-4" aria-hidden="true" />
@@ -318,77 +327,51 @@ export const PublicLandingPage: React.FC = () => {
                 <Users className="size-4" aria-hidden="true" />{tr("Для викладача", "For teachers")}
               </button>
             </div>
-            <button type="button" onClick={() => scrollTo("loop")} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">{tr("Подивитися навчальний цикл", "See the learning loop")}<ArrowRight className="size-4" /></button>
+            <button type="button" onClick={() => scrollTo("loop")} className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg text-sm font-medium text-text-secondary transition-colors hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">{tr("Як працюють результати", "How results work")}<ArrowRight className="size-4" /></button>
             <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-xs text-text-muted">{[tr("Безкоштовний старт", "Free to start"), tr("Автоперевірка", "Auto-checked tasks"), tr("Самостійно й у класі", "Self-study and classroom")].map((item) => <span key={item} className="flex items-center gap-1.5"><CheckCircle2 className="size-4 text-primary-strong" />{item}</span>)}</div>
           </motion.div>
           <motion.div className="relative z-20 min-w-0" initial={reduceMotion ? undefined : { opacity: 0, y: 16 }} animate={reduceMotion ? undefined : { opacity: 1, y: 0 }} transition={{ duration: 0.24, ease: easing }}><FailureLoopPreview tr={tr} /></motion.div>
         </section>
 
-         <section id="loop" className="mx-auto flex w-[min(1120px,calc(100%_-_48px))] items-center justify-center gap-12 border-y border-border/10 py-9 text-text-muted max-md:w-[calc(100%_-_28px)] max-md:flex-col max-md:gap-4">
-          <p className="m-0 max-w-[420px] text-center text-lg font-bold tracking-[-.02em] text-text-primary dark:text-text-primary">{tr("Невдала спроба — це не кінець. Це наступний крок.", "A failed attempt is not the end. It is the next step.")}</p>
-          <div className="flex items-center gap-6 text-[12px] font-bold max-md:w-full max-md:justify-between max-md:gap-2">{[tr("Написати код", "Write code"),tr("Зрозуміти збій", "Understand the failure"),tr("Виправити самостійно", "Fix it yourself"),tr("Закріпити навичку", "Reinforce the skill")].map((label, index) => <span key={label} className="flex items-center gap-2 text-text-primary dark:text-text-primary"><span className="grid size-6 place-items-center rounded-full bg-primary/20 text-[10px] text-primary-strong">{index + 1}</span>{label}</span>)}</div>
-         </section>
+         <section id="loop" className="mx-auto w-[min(1120px,calc(100%_-_48px))] border-y border-border/70 py-6 max-md:w-[calc(100%_-_28px)] dark:border-white/10">
+  <div className="grid gap-5 sm:grid-cols-[.7fr_1.3fr] sm:items-start sm:gap-10">
+    <div><p className="m-0 text-[10px] font-bold tracking-[.12em] text-text-muted dark:text-text-secondary">{tr("ЩО ПОКАЗУЄ ПЕРЕВІРКА", "WHAT THE CHECK SHOWS")}</p><h2 className="mb-0 mt-2 text-lg font-semibold tracking-[-.03em]">{tr("Тільки доступні дані задачі", "Only the data available for the task")}</h2></div>
+    <ul className="m-0 grid gap-3 p-0 text-sm leading-5 text-text-secondary sm:grid-cols-3">
+      <li className="border-l-2 border-primary/50 pl-3">{tr("Ввід і вихід відкритого тесту, коли задача дозволяє їх перегляд.", "Input and output from a visible test when the task allows them to be shown.")}</li>
+      <li className="border-l-2 border-accent-warn/60 pl-3">{tr("Пояснення причини з’являється лише за наявності діагностики.", "A cause is explained only when diagnostic information is available.")}</li>
+      <li className="border-l-2 border-border pl-3 dark:border-white/20">{tr("Після перегляду результату можна повернутися до свого коду.", "After reviewing the result, you can return to your code.")}</li>
+    </ul>
+  </div>
+</section>
 
-         <section id="proof" className="mx-auto w-[min(1120px,calc(100%_-_48px))] pb-10 pt-[130px] max-md:w-[calc(100%_-_28px)] max-md:pt-24">
-           <motion.div {...reveal} className="mx-auto mb-12 max-w-[820px] text-center"><span className="text-[11px] font-extrabold uppercase tracking-[0.13em] text-primary-strong">{tr("Два докази. Один процес.", "Two proofs. One learning loop.")}</span><h2 className="mt-4 text-balance text-[clamp(36px,4.5vw,56px)] font-bold leading-[1.06] tracking-[-.045em]">{tr("Учень бачить наступний крок. Викладач бачить реальне розуміння.", "Learners see the next step. Teachers see real understanding.")}</h2><p className="mx-auto mt-5 max-w-[650px] text-base leading-7 text-text-muted">{tr("StudyCod з’єднує результат кожної спроби з дією для учня та сигналом для викладача.", "StudyCod connects every attempt’s result to a learner action and a teacher signal.")}</p></motion.div>
-           <div className="grid gap-[18px] lg:grid-cols-[.86fr_1.14fr]">
-             <motion.article key="learner-proof" {...reveal} className={`${card} p-7 sm:p-8`}><div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[.1em] text-primary-strong"><span className={iconTile}><GraduationCap className="size-5" /></span>{tr("Приклад для учня", "Learner example")}</div><h3 className="mt-7 text-[28px] font-bold leading-[1.1] tracking-[-.04em]">{tr("Не просто правильна відповідь — подолана помилка.", "Not just a correct answer — an overcome mistake.")}</h3><p className="mt-4 text-[15px] leading-7 text-text-muted">{tr("Кожна здача залишає зрозумілий слід: що не пройшло, яка підказка допомогла і що вдалося виправити.", "Every submission leaves a clear trail: what failed, which hint helped, and what was fixed.")}</p><div className="mt-7 space-y-2 rounded-2xl bg-bg-hover p-4 dark:bg-white/[.04]">{[tr("Частину тестів не пройдено", "Some tests did not pass"), tr("Помилка: межа діапазону", "Failure: boundary condition"), tr("Підказка допомагає зробити наступну спробу", "A hint guides the next attempt"), tr("Після виправлення — нова перевірка", "A new check follows the fix")].map((item, index) => <div key={item} className="flex items-center gap-2 text-xs font-semibold text-text-secondary dark:text-text-secondary"><span className={`grid size-5 place-items-center rounded-full text-[10px] ${index === 3 ? "bg-primary text-primary-foreground" : "bg-[var(--surface-primary)] text-primary-strong dark:bg-primary/10 dark:text-primary-soft"}`}>{index === 3 ? "✓" : index + 1}</span>{item}</div>)}</div></motion.article>
-             <motion.article key="teacher-proof" {...reveal} className={`${card} bg-[linear-gradient(145deg,#fff,rgba(255,180,84,.08))] p-7 sm:p-8 dark:bg-[linear-gradient(145deg,#151c17,rgba(255,180,84,.08))]`}><div className="mb-5 flex items-center justify-between gap-3"><div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[.1em] text-accent-warn"><span className={`${iconTile} bg-accent-warn/10 text-accent-warn`}><Users className="size-5" /></span>{tr("Приклад для викладача", "Teacher example")}</div><span className="rounded-full bg-accent-warn/15 px-2.5 py-1 text-[10px] font-bold text-accent-warn dark:text-accent-warn">{tr("Приклад", "Example")}</span></div><h3 className="text-[28px] font-bold leading-[1.1] tracking-[-.04em]">{tr("Не лише оцінка — карта того, де класу потрібна допомога.", "Not just a score — a map of where the class needs help.")}</h3><p className="mt-4 text-[15px] leading-7 text-text-muted">{tr("Огляд показує статуси робіт, повторювані помилки та можливу наступну дію.", "An overview shows work statuses, recurring errors, and a possible next action.")}</p><div className="mt-7"><TeacherRadarPreview tr={tr} /></div></motion.article>
-           </div>
-         </section>
+<section id="platform" className="mx-auto grid w-[min(1120px,calc(100%_-_48px))] gap-8 py-16 max-md:w-[calc(100%_-_28px)] lg:grid-cols-[.92fr_1.08fr] lg:items-center lg:gap-16">
+  <div>
+    <p className="m-0 text-[10px] font-bold tracking-[.13em] text-primary-strong">{tr("НАВЧАЛЬНИЙ МАРШРУТ", "LEARNING PATH")}</p>
+    <h2 className="mt-3 text-balance text-[clamp(30px,3.6vw,44px)] font-semibold leading-[1.08] tracking-[-.045em]">{tr("Від теми — до самостійної спроби.", "From a concept to an independent attempt.")}</h2>
+    <p className="mt-4 max-w-xl text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("У кабінеті курс показує наступне заняття. У бібліотеці можна знайти іншу задачу, а в практиці — перевірити власний код і повернутися до нього після результату.", "Your course points to the next lesson. The library helps you find another task; in practice, you check your own code and return to it after seeing the result.")}</p>
+    <button type="button" onClick={() => goToAuth("register")} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 motion-reduce:transition-none">{tr("Почати навчання", "Start learning")}<ArrowRight className="size-4" aria-hidden="true" /></button>
+  </div>
+  <ol className="m-0 divide-y divide-border/70 border-y border-border/70 p-0 dark:divide-white/10 dark:border-white/10">
+    {[
+      { n: "01", title: tr("Продовжити курс", "Continue the course"), detail: tr("Відкрий наступний урок або практику.", "Open the next lesson or practice task.") },
+      { n: "02", title: tr("Знайти задачу", "Find a task"), detail: tr("Пошукай за назвою, темою чи складністю.", "Search by title, topic, or difficulty.") },
+      { n: "03", title: tr("Розібрати результат", "Review the result"), detail: tr("Переглянь доступний тест, підказку та свій код.", "Review an available test, hint, and your code.") },
+    ].map((step) => <li key={step.n} className="grid grid-cols-[42px_1fr] gap-3 py-4 first:pt-2 last:pb-2">
+      <span className="font-mono text-xs tabular-nums text-text-muted dark:text-text-secondary">{step.n}</span><div><h3 className="m-0 text-sm font-semibold">{step.title}</h3><p className="mb-0 mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{step.detail}</p></div>
+    </li>)}
+  </ol>
+</section>
 
-        <section id="platform" className="mx-auto w-[min(1120px,calc(100%_-_48px))] pb-10 pt-[150px] max-md:w-[calc(100%_-_28px)] max-md:pt-24">
-          <motion.div {...reveal} className="mx-auto mb-14 max-w-[740px] text-center max-md:mb-10"><span className="mb-4 inline-block text-[11px] font-extrabold uppercase tracking-[0.13em] text-primary-strong">{tr("Навчання через спроби", "Learning through attempts")}</span><h2 className="m-0 text-balance text-[clamp(36px,4.5vw,56px)] font-bold leading-[1.06] tracking-[-0.045em]">{tr("Помилка стає зрозумілою, а наступний крок — очевидним.", "The mistake becomes clear. The next step becomes obvious.")}</h2><p className="mx-auto mt-5 max-w-[630px] text-base leading-7 text-text-muted">{tr("Код, тест і підказка працюють разом, щоб учень сам побачив, що змінилося після виправлення.", "Code, tests, and guided hints work together so learners can see what changed after the fix.")}</p></motion.div>
-          <motion.div {...reveal} className="grid grid-cols-2 gap-[18px] max-md:grid-cols-1">
-            <article className={`${card} row-span-2 min-h-[742px] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--primary)_5.5%,transparent),var(--bg-surface)_43%)] p-10 dark:bg-[linear-gradient(145deg,color-mix(in_srgb,var(--primary)_8%,transparent),#151d17_43%)] max-md:row-auto max-md:min-h-0 max-md:p-7`}><span className={iconTile}><BookOpen className="size-5" /></span><h3 className="mt-9 max-w-md text-[28px] font-bold leading-[1.1] tracking-[-0.04em] max-md:text-2xl">{tr("Курси з чітким маршрутом", "Courses with a clear path")}</h3><p className="mt-4 max-w-lg text-[15px] leading-7 text-text-muted">{tr("Теорія, приклади й практика зібрані в послідовність, яка не перевантажує.", "Theory, examples, and practice form a sequence that never overwhelms.")}</p><div className="mt-16 -rotate-1 rounded-[20px] border border-border/10 bg-white p-3.5 shadow-[0_24px_48px_rgba(16,34,22,0.09)] dark:border-white/10 dark:bg-bg-code dark:shadow-[0_24px_48px_rgba(0,0,0,.28)] max-md:mt-10">{[["done",tr("Змінні й типи даних","Variables and data types"),tr("Завершено","Complete")],["08",tr("Функції та модулі","Functions and modules"),tr("Поточна тема","Current topic")],["09",tr("Колекції","Collections"),tr("Далі","Up next")]].map(([n,label,value], index) => <div key={n} className={`grid h-[70px] grid-cols-[32px_1fr_auto] items-center gap-3 px-4 ${index === 1 ? "rounded-xl bg-primary/[0.08]" : index > 0 ? "border-t border-border/10 dark:border-white/10" : ""}`}><span className={`grid size-7 place-items-center rounded-lg text-[10px] font-bold ${n === "done" ? "bg-primary text-primary-foreground" : index === 1 ? "bg-primary/20 text-primary-strong" : "bg-bg-hover text-text-muted dark:bg-white/10"}`}>{n === "done" ? <Check className="size-3.5" /> : n}</span><strong className="text-xs">{label}</strong><small className={`text-[10px] ${index === 1 ? "font-bold text-primary-strong" : "text-text-muted"}`}>{value}</small></div>)}</div></article>
-            <article className={`${card} min-h-[362px] p-8 max-md:min-h-0 max-md:p-7`}><span className={`${iconTile} bg-accent-warn/10 text-accent-warn`}><Lightbulb className="size-5" /></span><h3 className="mt-8 text-[27px] font-bold leading-[1.1] max-md:text-2xl">{tr("Пояснення у потрібний момент", "Guidance at the right moment")}</h3><p className="mt-4 text-[15px] leading-7 text-text-muted">{tr("Підказки допомагають рухатися далі, не забираючи відчуття власного рішення.", "Hints keep learners moving without taking away the satisfaction of solving it themselves.")}</p><div className="mt-7 flex items-start gap-3 rounded-2xl border border-accent-warn/15 bg-accent-warn/[0.06] p-4 text-[13px] leading-5 text-text-muted"><Sparkles className="mt-0.5 size-4 shrink-0 text-accent-warn" />{tr("Подумай, яку структуру даних зручно перевіряти на унікальність.", "Which data structure makes uniqueness easy to check?")}</div></article>
-            <article className={`${card} min-h-[362px] p-8 max-md:min-h-0 max-md:p-7`}><span className={`${iconTile} bg-accent-warn/20 text-accent-warn`}><Trophy className="size-5" /></span><h3 className="mt-8 text-[27px] font-bold leading-[1.1] max-md:text-2xl">{tr("Прогрес, який мотивує", "Progress that motivates")}</h3><p className="mt-4 text-[15px] leading-7 text-text-muted">{tr("Цілі, серії та зрозуміла аналітика показують не просто бали, а реальний рух уперед.", "Goals, streaks, and clear analytics reveal real momentum—not just scores.")}</p><div className="mt-7 grid grid-cols-3 gap-3 border-t border-border/10 pt-5">{[[tr("Теми", "Topics"), tr("Бачити, що вже засвоїв", "See what you have practiced")], [tr("Цілі", "Goals"), tr("Обирати наступний крок", "Choose the next step")], [tr("Результати", "Results"), tr("Повертатися до складного", "Return to hard topics")]].map(([title, label]) => <div key={title} className="flex flex-col"><strong className="text-sm">{title}</strong><span className="mt-1 text-[11px] leading-4 text-text-muted">{label}</span></div>)}</div></article>
-          </motion.div>
-        </section>
-
-        <section className="mx-auto mt-28 w-[min(1240px,calc(100%_-_48px))] rounded-[32px] bg-bg-code px-14 py-24 text-text-primary shadow-[0_35px_82px_rgba(12,25,17,0.15)] max-md:mt-20 max-md:w-[calc(100%_-_28px)] max-md:rounded-[25px] max-md:px-7 max-md:py-16">
-          <motion.div {...reveal} className="text-center"><span className="text-[11px] font-extrabold uppercase tracking-[0.13em] text-primary-soft">{tr("Навчальний ритм", "Learning rhythm")}</span><h2 className="mt-4 text-balance text-[clamp(38px,4.5vw,58px)] font-bold leading-[1.05] tracking-[-0.045em]">{tr("Вивчай. Розв’язуй. Розумій.", "Learn. Solve. Understand.")}</h2></motion.div>
-          <motion.div {...reveal} className="mt-16 grid grid-cols-3 max-md:mt-10 max-md:grid-cols-1">{[
-            ["01",BookOpen,tr("Зрозумій тему","Understand the idea"),tr("Коротка теорія та приклади дають опору перед практикою.","Focused theory and examples build a foundation before practice.")],
-            ["02",Code2,tr("Закріпи кодом","Reinforce with code"),tr("Задачі ростуть разом із навичкою — від базових до комплексних.","Tasks grow with the skill—from foundational to complex.")],
-            ["03",BarChart3,tr("Побач прогрес","See the progress"),tr("Результати показують сильні теми й те, куди спрямувати увагу.","Results reveal strengths and where to focus next.")],
-          ].map(([number,Icon,title,text], index) => { const StepIcon = Icon as typeof BookOpen; return <article key={String(number)} className={`px-10 first:pl-0 last:pr-0 ${index ? "border-l border-white/10" : ""} max-md:border-l-0 max-md:border-t max-md:border-white/10 max-md:px-0 max-md:py-8 max-md:first:border-0 max-md:first:pt-0`}><span className="text-[10px] font-bold tracking-[0.15em] text-text-muted">{String(number)}</span><span className="my-7 grid size-12 place-items-center rounded-[15px] border border-white/10 bg-white/[0.055] text-primary-soft"><StepIcon className="size-5" /></span><h3 className="text-[22px] font-bold">{String(title)}</h3><p className="mt-3 text-sm leading-6 text-text-secondary">{String(text)}</p></article>; })}</motion.div>
-        </section>
-
-        <section id="practice" className="mx-auto w-[min(1120px,calc(100%_-_48px))] pb-10 pt-40 max-md:w-[calc(100%_-_28px)] max-md:pt-24">
-          <motion.div {...reveal} className="mb-14 grid grid-cols-[1.15fr_.72fr] items-end gap-20 max-md:mb-10 max-md:grid-cols-1 max-md:gap-5"><div><span className="text-[11px] font-extrabold uppercase tracking-[0.13em] text-primary-strong">{tr("Практика без зайвого тертя", "Practice without friction")}</span><h2 className="mt-4 text-balance text-[clamp(36px,4.5vw,56px)] font-bold leading-[1.06] tracking-[-0.045em]">{tr("Від умови до працюючого коду — в одному фокусі.", "From prompt to working code—in one focused space.")}</h2></div><p className="mb-1 text-[15px] leading-7 text-text-muted">{tr("Редактор, тести й зрозумілий результат поруч. Учень думає про алгоритм, а не про налаштування середовища.", "Editor, tests, and clear feedback stay together. Learners think about the algorithm, not environment setup.")}</p></motion.div>
-          <motion.div {...reveal}><PracticePreview tr={tr} /></motion.div>
-        </section>
-
-        <section id="roles" className="mx-auto w-[min(1120px,calc(100%_-_48px))] pb-12 pt-36 max-md:w-[calc(100%_-_28px)] max-md:pt-24">
-          <motion.div {...reveal} className="mx-auto mb-14 max-w-[830px] text-center"><span className="text-[11px] font-extrabold uppercase tracking-[0.13em] text-primary-strong">{tr("Дві перспективи. Один процес.", "Two perspectives. One learning loop.")}</span><h2 className="mt-4 text-balance text-[clamp(36px,4.5vw,56px)] font-bold leading-[1.06] tracking-[-0.045em]">{tr("Учню — ясність. Викладачу — контроль без мікроменеджменту.", "Clarity for students. Control without micromanagement for teachers.")}</h2></motion.div>
-          <div className="grid grid-cols-2 gap-[18px] max-md:grid-cols-1">{[
-            { teacher:false, Icon:GraduationCap, label:tr("Для учня","For learners"), title:tr("Зрозумій помилку й знай, що робити далі","Understand mistakes and know what to do next"), body:tr("Побач невдалий крок, отримай підказку потрібного рівня та виправ рішення самостійно.","See the failed step, get the right level of guidance, and fix the solution yourself."), bullets:[tr("Поступові підказки без готового коду","Progressive hints without the full code"),tr("Зрозумілий результат кожної спроби","Clear feedback after every attempt"),tr("Докази тем, які вже практикував","Evidence of practiced skills")]},
-            { teacher:true, Icon:Users, label:tr("Для викладача","For teachers"), title:tr("Побач, що учні справді розуміють","See what students actually understand"), body:tr("Дивись не лише на фінальний бал, а й на спроби, помилки та теми, де потрібен наступний крок.","See more than final scores: attempts, mistakes, and the topics that need a next step."), bullets:[tr("Розуміння за темами, а не лише оцінка","Understanding by topic, not only a score"),tr("Сигнали, де учень застряг","Signals when a learner is stuck"),tr("Зміни після виправлень","Changes after fixes")]},
-          ].map(({teacher,Icon,label,title,body,bullets}) => (
-            <motion.article key={label} {...reveal} className={`${card} min-h-[690px] overflow-hidden bg-[linear-gradient(160deg,var(--bg-surface),color-mix(in_srgb,var(--primary)_4%,var(--bg-surface)))] p-10 max-md:min-h-0 max-md:p-7 ${teacher ? "bg-[linear-gradient(160deg,var(--bg-surface),color-mix(in_srgb,var(--accent-warn)_7%,var(--bg-surface)))]" : ""}`}>
-              <div className="flex items-center gap-3 text-[11px] font-extrabold uppercase tracking-[0.1em] text-text-muted"><span className={`${iconTile} ${teacher ? "bg-accent-warn/10 text-accent-warn" : ""}`}><Icon className="size-5" /></span>{label}</div>
-              <h3 className="mt-8 text-[32px] font-bold leading-[1.08] max-md:text-[27px]">{title}</h3>
-              <p className="mt-4 text-[15px] leading-7 text-text-muted">{body}</p>
-              <ul className="mt-7 space-y-3.5 p-0">{bullets.map((bullet) => <li key={bullet} className="flex items-center gap-2.5 text-[13px] text-text-muted"><Check className="size-4 rounded-full bg-primary p-0.5 text-primary-foreground" />{bullet}</li>)}</ul>
-              {teacher ? (
-                <div className="mt-10 -rotate-1 rounded-[20px] border border-border/10 bg-bg-code p-5 shadow-[0_22px_50px_rgba(18,32,23,0.08)]">
-                  <div className="flex justify-between border-b border-border/10 pb-4 text-xs"><span>{tr("Приклад · група Python", "Example · Python group")}</span><small className="rounded-full bg-accent-warn/15 px-2 py-1 text-[10px] font-bold text-accent-warn">{tr("Зразок", "Sample")}</small></div>
-                  {[{task:tr("Межі циклу","Loop boundaries"),status:tr("Потрібна увага","Needs attention")},{task:tr("Списки","Lists"),status:tr("У процесі","In progress")},{task:tr("Функції","Functions"),status:tr("Перевірено","Reviewed")}].map(({task,status}) => <div key={task} className="flex min-h-14 items-center justify-between gap-3 border-b border-border/10 last:border-0"><strong className="text-[10px]">{task}</strong><span className="rounded-lg bg-bg-hover px-2.5 py-1.5 text-[9px] font-semibold text-text-secondary">{status}</span></div>)}
-                </div>
-              ) : (
-                <div className="mt-12 rotate-1 rounded-[20px] border border-border/10 bg-bg-code p-5 shadow-[0_22px_50px_rgba(18,32,23,0.08)]">
-                  <div className="text-xs font-semibold text-text-secondary">{tr("Приклад навчального маршруту", "Learning path example")}</div>
-                  <div className="relative mt-6 flex justify-between before:absolute before:left-[8%] before:right-[8%] before:top-4 before:h-0.5 before:bg-bg-hover">
-                    {[{label:tr("Завершено","Complete"),state:"done"},{label:tr("Поточне","Current"),state:"current"},{label:tr("Далі","Up next"),state:"next"}].map(({label,state}) => <div key={state} className="relative z-10 flex flex-col items-center gap-2"><span className={`grid size-8 place-items-center rounded-full border-[3px] border-bg-code text-[9px] ${state === "done" ? "bg-primary text-primary-foreground" : state === "current" ? "bg-primary/20 text-primary-strong" : "bg-bg-hover text-text-muted"}`}>{state === "done" ? <Check className="size-3.5" /> : <span className="size-2 rounded-full bg-current" />}</span><span className="text-[9px] font-semibold text-text-muted">{label}</span></div>)}
-                  </div>
-                </div>
-              )}
-            </motion.article>
-          ))}</div>
-        </section>
-
-        <section className="relative mx-auto mt-28 w-[min(1240px,calc(100%_-_48px))] overflow-hidden rounded-[33px] bg-bg-code px-6 py-28 text-center text-text-primary shadow-[0_40px_95px_rgba(12,25,17,0.18)] max-md:mt-20 max-md:w-[calc(100%_-_28px)] max-md:rounded-[25px] max-md:py-20">
+<section id="roles" className="mx-auto grid w-[min(1120px,calc(100%_-_48px))] gap-8 border-t border-border/70 py-14 max-md:w-[calc(100%_-_28px)] lg:grid-cols-[.8fr_1.2fr] lg:items-center lg:gap-14 dark:border-white/10">
+  <div>
+    <p className="m-0 text-[10px] font-bold tracking-[.13em] text-accent-warn">{tr("РОБОТА ВИКЛАДАЧА", "TEACHER WORKSPACE")}</p>
+    <h2 className="mt-3 text-balance text-[clamp(28px,3.2vw,40px)] font-semibold leading-[1.1] tracking-[-.04em]">{tr("Видно спробу, якій потрібна увага.", "See which attempt needs attention.")}</h2>
+    <p className="mt-4 text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Приклад показує стани навчальних робіт. Це демонстраційні дані; у класі викладач бачить доступні результати учнів і може відкрити відповідну роботу.", "This example shows learning-work states using demo data. In a class, teachers see available learner results and can open the corresponding work.")}</p>
+    <button type="button" onClick={() => goToAuth("register", "teacher")} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-border/70 px-4 text-sm font-semibold text-text-primary transition-colors hover:border-primary/50 hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none dark:border-white/15 dark:hover:bg-white/[.04]">{tr("Для викладача", "For teachers")}<ArrowRight className="size-4" aria-hidden="true" /></button>
+  </div>
+  <TeacherRadarPreview tr={tr} />
+</section>
+<section className="relative mx-auto mt-28 w-[min(1240px,calc(100%_-_48px))] overflow-hidden rounded-[33px] bg-bg-code px-6 py-28 text-center text-text-primary shadow-[0_40px_95px_rgba(12,25,17,0.18)] max-md:mt-20 max-md:w-[calc(100%_-_28px)] max-md:rounded-[25px] max-md:py-20">
           <div className="absolute -left-48 -top-56 size-[470px] rounded-full bg-primary/10 blur-[90px]" /><div className="absolute -bottom-64 -right-52 size-[470px] rounded-full bg-accent-warn/10 blur-[90px]" />
           <motion.div {...reveal} className="relative z-10 mx-auto max-w-[790px]"><span className="mx-auto mb-7 grid size-16 place-items-center rounded-[20px] brand-logo-surface text-white"><Logo size={38} /></span><h2 className="text-balance text-[clamp(40px,5vw,64px)] font-bold leading-[1.04] tracking-[-0.05em]">{tr("Побудуй навичку, яка залишиться з тобою.", "Build a skill that stays with you.")}</h2><p className="mx-auto mt-6 max-w-[600px] text-base leading-7 text-text-secondary">{tr("Почни з першого уроку сьогодні. StudyCod допоможе тримати темп далі.", "Start with your first lesson today. StudyCod will help you keep the momentum.")}</p><GreenButton onClick={() => goToAuth("register")} className="mx-auto mt-8">{tr("Створити акаунт", "Create an account")}<ArrowRight className="size-4" /></GreenButton><span className="mt-5 flex items-center justify-center gap-2 text-[13px] text-text-secondary"><ShieldCheck className="size-4" />{tr("Без картки · Початок за кілька хвилин", "No card required · Start in minutes")}</span></motion.div>
         </section>

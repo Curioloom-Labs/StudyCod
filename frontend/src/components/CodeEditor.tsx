@@ -15,6 +15,7 @@ const languageServicesRegistered = new Set<string>();
 const importCompletionLanguagesRegistered = new Set<string>();
 
 type MonacoApi = typeof Monaco;
+export type CodeEditorHandle = Monaco.editor.IStandaloneCodeEditor;
 type MonacoDebugWindow = Window & {
   __monacoDebug?: {
     editor: Monaco.editor.IStandaloneCodeEditor;

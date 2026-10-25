@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, CircleHelp } from "lucide-react";
@@ -33,33 +33,8 @@ import {
 import { JUDGE_ENTRY_FILES, enabledJudgeLanguages, defaultCompilerForFamily, templateForJudgeLanguage } from "../../lib/judgeLanguages";
 import { StudyCodIDEWorkspace } from "../../components/ide/StudyCodIDEWorkspace";
 import { tracePlayground, type TraceResult } from "../../lib/api/playground";
-
-const previewLibraryTask: LibraryTaskListItem = {
-  id: 901,
-  problemCode: "frequency-map",
-  slug: "frequency-map",
-  title: "Частоти без зайвих проходів",
-  description: "Порахуй, скільки разів кожне слово трапляється у вхідному рядку. Ігноруй регістр та виведи пари `слово: кількість` в алфавітному порядку.",
-  template: "from collections import Counter\n\nwords = input().lower().split()\ncounts = Counter(words)\n\nfor word in sorted(counts):\n    print(f\"{word}: {counts[word]}\")\n",
-  templatesByLanguage: null,
-  lang: "PYTHON",
-  difficulty: "MEDIUM",
-  tags: ["collections", "strings"],
-  section: "Основи Python",
-  maxAttempts: 5,
-  timeLimitMs: 1000,
-  memoryLimitMb: 64,
-  outputLimitKb: 64,
-  checkerSpec: { type: "whitespace" },
-  allowedLanguages: ["python", "java", "cpp"],
-  status: "APPROVED",
-  rejectionReason: null,
-  submittedAt: null,
-  publishedAt: "2026-01-01T00:00:00.000Z",
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-01T00:00:00.000Z",
-  author: { id: 1, username: "studycod" },
-};
+import { LEARNING_BOUNDARY_DEMO, LEARNING_DEMO_PUBLIC_TESTS, makeLearningBoundaryDemoTask, simulateLearningBoundaryDemo } from "../../lib/learningDemo";
+import type { CodeEditorHandle } from "../../components/CodeEditor";
 
 const isPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 
@@ -203,6 +178,7 @@ function entryContentFromFiles(fs: CodeFile[], entryFile: string): string {
 export const LibraryTaskSolvePage: React.FC = () => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
+  const demoLanguage = i18n.language?.toLowerCase().startsWith("en") ? "en" : "uk";
   const navigate = useNavigate();
   const location = useLocation();
   // The route is protected by the cookie-backed RequireToken guard.
@@ -213,6 +189,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   // Solve-replay capture: throttled code snapshots over the session.
   const replaySnapshotsRef = useRef<ReplaySnapshot[]>([]);
+  const codeEditorRef = useRef<CodeEditorHandle | null>(null);
   const replayStartRef = useRef<number>(Date.now());
   const lastSnapAtRef = useRef<number>(0);
   const params = useParams<{ taskKey?: string; taskId?: string; id?: string }>();
@@ -226,8 +203,12 @@ export const LibraryTaskSolvePage: React.FC = () => {
   const designPreview = import.meta.env.DEV && new URLSearchParams(location.search || "").get("preview") === "true";
   const libraryListPath = useMemo(() => {
     const path = location.pathname.startsWith("/edu/") ? "/edu/library" : "/lab/library";
-    return designPreview ? `${path}?preview=true` : path;
-  }, [designPreview, location.pathname]);
+    if (!designPreview) return path;
+    const params = new URLSearchParams({ preview: "true" });
+    const persona = new URLSearchParams(location.search || "").get("persona");
+    if (persona) params.set("persona", persona);
+    return `${path}?${params.toString()}`;
+  }, [designPreview, location.pathname, location.search]);
   const safeBackPath = useMemo(() => {
     const fromRaw = new URLSearchParams(location.search || "").get("from");
     if (!fromRaw) return libraryListPath;
@@ -345,6 +326,21 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const firstFailedTest = useMemo(() => {
     if (!checkResult) return null;
+    if (
+      isPreview() &&
+      task?.id === LEARNING_BOUNDARY_DEMO.id &&
+      String(checkResult.verdict ?? "").toUpperCase() !== "AC"
+    ) {
+      return {
+        testId: LEARNING_DEMO_PUBLIC_TESTS[0].id,
+        testPublicIndex: LEARNING_DEMO_PUBLIC_TESTS[0].id,
+        inputPreview: LEARNING_BOUNDARY_DEMO.input,
+        expectedPreview: LEARNING_BOUNDARY_DEMO.expectedOutput,
+        actualPreview: LEARNING_BOUNDARY_DEMO.failedOutput,
+        errorKind: "off_by_one",
+        verdict: "WA",
+      };
+    }
     const stored = checkResult.learningFeedback?.firstFailure;
     if (stored) return { testId: stored.testId, errorKind: stored.errorKind, verdict: stored.verdict };
     const detailed = (checkResult.publicTestResults || []).find((item) => !item.passed);
@@ -353,7 +349,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
     if (compact) return { testId: compact.testId, errorKind: compact.errorKind, verdict: compact.verdict };
     if (checkResult.compileError || checkResult.verdict === "CE") return { errorKind: checkResult.compileErrorKind || "compile", verdict: "CE" };
     return null;
-  }, [checkResult]);
+  }, [checkResult, task?.id]);
 
   const loadNextRecommendedTask = async () => {
     if (!task) return;
@@ -409,16 +405,21 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
   const scrollToSection = (id: "mission" | "task" | "console") => {
     setActiveRailItem(id);
+    const behavior: ScrollBehavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
     if (id === "mission") {
-      statementSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      statementSectionRef.current?.scrollIntoView({ behavior, block: "start" });
       return;
     }
     if (id === "task") {
-      editorSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      editorSectionRef.current?.scrollIntoView({ behavior, block: "start" });
       return;
     }
-    outputSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    outputSectionRef.current?.scrollIntoView({ behavior, block: "start" });
   };
+
+  const captureCodeEditor = React.useCallback((editor: CodeEditorHandle) => {
+    codeEditorRef.current = editor;
+  }, []);
 
   useEffect(() => {
     if (!taskKey) {
@@ -503,26 +504,27 @@ export const LibraryTaskSolvePage: React.FC = () => {
 
     load()
       .catch((e) => {
-        console.error("Failed to load library task", e);
         if (isPreview()) {
-          setTask(previewLibraryTask);
+          const previewTask = makeLearningBoundaryDemoTask(demoLanguage);
+          setTask(previewTask);
           setTheory(null);
-          setVisibleTests([]);
+          setVisibleTests(LEARNING_DEMO_PUBLIC_TESTS);
           setLoadError(null);
           setJudgeLanguage("python");
-          const starter = getTemplateForLanguage(previewLibraryTask, "python");
+          const starter = getTemplateForLanguage(previewTask, "python");
           setCode(starter);
           setLastSavedCode(starter);
           setLastSavedFiles([]);
           setUseFiles(false);
           return;
         }
+        console.error("Failed to load library task", e);
         setTask(null);
         setTheory(null);
         setLoadError(getErrorMessageFromUnknown(e, tr("Не вдалося завантажити задачу.", "Failed to load task.")));
       })
       .finally(() => setLoading(false));
-  }, [taskKey, taskId, hasToken, loadAttempt]);
+  }, [taskKey, taskId, hasToken, loadAttempt, demoLanguage]);
 
   // Load draft for selected language (and keep per-language in-memory cache to avoid losing edits)
   useEffect(() => {
@@ -545,6 +547,30 @@ export const LibraryTaskSolvePage: React.FC = () => {
     const numericId = task.id;
     const lang = judgeLanguage;
     const entryFile = entryFileForJudgeLanguage(lang);
+
+    if (isPreview() && task.id === LEARNING_BOUNDARY_DEMO.id) {
+      if (lang !== "python") {
+        setJudgeLanguage("python");
+        return;
+      }
+      const demoTemplate = decodeCodeTemplate(LEARNING_BOUNDARY_DEMO.initialCode, entryFile);
+      draftCacheRef.current[lang] = {
+        useFiles: demoTemplate.useFiles,
+        code: demoTemplate.code,
+        files: demoTemplate.files,
+        lastSavedUseFiles: demoTemplate.useFiles,
+        lastSavedCode: demoTemplate.code,
+        lastSavedFiles: demoTemplate.files,
+      };
+      setUseFiles(demoTemplate.useFiles);
+      setFiles(demoTemplate.files);
+      setCode(demoTemplate.code);
+      setLastSavedUseFiles(demoTemplate.useFiles);
+      setLastSavedFiles(demoTemplate.files);
+      setLastSavedCode(demoTemplate.code);
+      setDraftLoadReady(true);
+      return;
+    }
 
     // Persist language choice per task.
     try {
@@ -786,7 +812,13 @@ export const LibraryTaskSolvePage: React.FC = () => {
     setActionRecovery(null);
     try {
       if (isPreview()) {
-        setRunResult({ stdout: "code: 2\nstudycod: 1", stderr: "", exitCode: 0, success: true });
+        const simulation = simulateLearningBoundaryDemo(code);
+        setRunResult({
+          stdout: simulation?.output ?? "",
+          stderr: simulation ? "" : tr("Демо-прев’ю підтримує лише код прикладу та зміну межі range.", "This demo preview supports the example code and its range-boundary edit only."),
+          exitCode: simulation ? 0 : 1,
+          success: Boolean(simulation),
+        });
         setResultsTab("run");
         setResultsOpen(true);
         return;
@@ -846,16 +878,32 @@ export const LibraryTaskSolvePage: React.FC = () => {
     setActionRecovery(null);
     try {
       if (isPreview()) {
+        const simulation = simulateLearningBoundaryDemo(code);
+        if (!simulation) {
+          setActionRecovery({
+            tone: "warning",
+            message: tr("Це локальне демо перевіряє лише приклад і зміну верхньої межі range. Інший код потрібно перевірити у звичайній задачі.", "This local demo checks only the example and its range-boundary edit. Use a regular task to check other code."),
+            retry: "check",
+          });
+          return;
+        }
+        const passed = simulation.passed;
         setCheckResult({
-          verdict: "AC",
-          testsPassed: 5,
-          testsTotal: 5,
-          score: 100,
+          verdict: passed ? "AC" : "WA",
+          testsPassed: passed ? 1 : 0,
+          testsTotal: 1,
+          score: passed ? 100 : 0,
           maxScore: 100,
-          hidden: { passed: 3, total: 3 },
+          hidden: { passed: 0, total: 0 },
           publicTestResults: [
-            { testId: 1, input: "Code code StudyCod", actualOutput: "code: 2\nstudycod: 1", passed: true, verdict: "AC" },
-            { testId: 2, input: "one two one", actualOutput: "one: 2\ntwo: 1", passed: true, verdict: "AC" },
+            {
+              testId: LEARNING_DEMO_PUBLIC_TESTS[0].id,
+              input: LEARNING_DEMO_PUBLIC_TESTS[0].input,
+              actualOutput: simulation.output,
+              passed,
+              verdict: passed ? "AC" : "WA",
+              errorKind: passed ? null : "off_by_one",
+            },
           ],
         });
         setShowCompactStatuses(false);
@@ -1137,8 +1185,20 @@ export const LibraryTaskSolvePage: React.FC = () => {
       highestHintLevelShown={checkResult.learningAttempt?.highestHintLevelShown ?? 0}
       trackLearning={false}
       onTryAgain={() => {
+        const editor = codeEditorRef.current;
+        const viewState = editor?.saveViewState() ?? null;
         setCheckResult(null);
         scrollToSection("task");
+        window.requestAnimationFrame(() => {
+          if (!editor) return;
+          try {
+            if (!editor.getModel()) return;
+            if (viewState) editor.restoreViewState(viewState);
+            editor.focus();
+          } catch {
+            // The editor may have unmounted while the user navigated away.
+          }
+        });
       }}
     />
   ) : null;
@@ -1165,15 +1225,18 @@ export const LibraryTaskSolvePage: React.FC = () => {
       <div className="ide-library-container">
         <StudyCodIDEWorkspace
           onBack={goBackToLibrary}
-          toolbar={<button type="button" onClick={reportTaskIssue} className="ide-btn ide-btn-quiet" aria-label={tr("Повідомити про проблему із задачею", "Report a task issue")}><CircleHelp />{tr("Повідомити про проблему", "Report issue")}</button>}
+          toolbar={<div className="flex flex-wrap items-center gap-2">{designPreview && <span role="status" className="rounded-md border border-accent-warn/25 bg-accent-warn/[.08] px-2 py-1 text-[10px] font-semibold text-text-secondary">{tr("Демо: результат тесту змодельований локально", "Demo: test result is simulated locally")}</span>}<button type="button" onClick={reportTaskIssue} className="ide-btn ide-btn-quiet" aria-label={tr("Повідомити про проблему із задачею", "Report a task issue")}><CircleHelp />{tr("Повідомити про проблему", "Report issue")}</button></div>}
           task={task}
           theory={theory}
           language={judgeLanguage}
           onLanguageChange={setJudgeLanguage}
           compiler={judgeCompiler}
           onCompilerChange={setJudgeCompiler}
+          languageOptions={designPreview && task.id === LEARNING_BOUNDARY_DEMO.id ? ["python"] : enabledJudgeLanguages()}
+          disableLanguageChange={designPreview && task.id === LEARNING_BOUNDARY_DEMO.id}
           code={code}
           onCodeChange={setCode}
+          onCodeEditorMount={captureCodeEditor}
           files={files}
           onFilesChange={(next) => setFiles(normalizeFiles(next))}
           useFiles={useFiles}
