@@ -53,6 +53,15 @@ jobs:
       - name: Build package
         run: npm run build
 
+      - name: Upload prebuilt frontend distribution
+        if: matrix.package == 'frontend'
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Run package tests
         run: npm run test --if-present
 
@@ -164,6 +173,29 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
 
+      - name: Download prebuilt frontend distribution
+        if: steps.scope.outputs.frontend == '1'
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend-dist
+
+      - name: Package prebuilt frontend distribution
+        if: steps.scope.outputs.frontend == '1'
+        run: tar -czf "$RUNNER_TEMP/studycod-frontend-${GITHUB_RUN_ID}.tar.gz" -C frontend-dist .
+
+      - name: Transfer prebuilt frontend distribution
+        if: steps.scope.outputs.frontend == '1'
+        env:
+          DEPLOY_HOST: ${{ secrets.HOST }}
+          DEPLOY_USER: ${{ secrets.USER }}
+          FRONTEND_ARTIFACT_REMOTE: /var/www/studycod/.deploy-artifacts/frontend-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$FRONTEND_ARTIFACT_REMOTE'"
+          scp "$RUNNER_TEMP/studycod-frontend-${GITHUB_RUN_ID}.tar.gz" "$DEPLOY_USER@$DEPLOY_HOST:$FRONTEND_ARTIFACT_REMOTE.tar.gz"
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" "tar -xzf '$FRONTEND_ARTIFACT_REMOTE.tar.gz' -C '$FRONTEND_ARTIFACT_REMOTE' && rm -f '$FRONTEND_ARTIFACT_REMOTE.tar.gz'"
+
       - name: Run deploy script
         env:
           DEPLOY_HOST: ${{ secrets.HOST }}
@@ -174,23 +206,25 @@ jobs:
           BUILD_LSP_SERVICE: ${{ steps.scope.outputs.lsp_service }}
           BUILD_AI_WORKER: ${{ steps.scope.outputs.ai_worker }}
           BUILD_FRONTEND: ${{ steps.scope.outputs.frontend }}
+          FRONTEND_ARTIFACT_REMOTE: /var/www/studycod/.deploy-artifacts/frontend-${{ github.run_id }}
         run: |
           set -euo pipefail
           ssh "$DEPLOY_USER@$DEPLOY_HOST" "set -e
             repo=/var/www/studycod
+            artifact_dir='$FRONTEND_ARTIFACT_REMOTE'
+            deploy_script=/tmp/studycod-restart-all.next
+            trap 'rm -f \"\$deploy_script\"; rm -rf -- \"\$artifact_dir\" \"\$artifact_dir.tar.gz\"' EXIT
             if [[ -n \$(git -C \"\$repo\" status --porcelain --untracked-files=no) ]]; then
               echo 'Deploy blocked: the server worktree has tracked local changes.'
               git -C \"\$repo\" status --short
               exit 3
             fi
             git -C \"\$repo\" fetch --prune origin
-            deploy_script=/tmp/studycod-restart-all.next
             git -C \"\$repo\" show origin/main:ops/restart-all.sh > \"\$deploy_script\"
             chmod 755 \"\$deploy_script\"
-            trap 'rm -f \"\$deploy_script\"' EXIT
             # The Cloudflare Worker is deployed by the dedicated GitHub step
             # below. Do not build it on the application server.
-            BUILD_BACKEND=$BUILD_BACKEND BUILD_JUDGE=$BUILD_JUDGE BUILD_AI_SERVICE=$BUILD_AI_SERVICE BUILD_LSP_SERVICE=$BUILD_LSP_SERVICE BUILD_AI_WORKER=0 BUILD_FRONTEND=$BUILD_FRONTEND \"\$deploy_script\""
+            FRONTEND_BUILD_ARTIFACT=\"\$artifact_dir\" BUILD_BACKEND=$BUILD_BACKEND BUILD_JUDGE=$BUILD_JUDGE BUILD_AI_SERVICE=$BUILD_AI_SERVICE BUILD_LSP_SERVICE=$BUILD_LSP_SERVICE BUILD_AI_WORKER=0 BUILD_FRONTEND=$BUILD_FRONTEND \"\$deploy_script\""
 
       - name: Verify production readiness after deploy
         env:

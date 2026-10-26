@@ -204,12 +204,22 @@ build_frontend_release() {
   local release="$ROOT/.deploy-releases/frontend-$RELEASE_ID"
   mkdir -p "$ROOT/.deploy-releases"
   rm -rf "$release"
-  log "Installing and building frontend release: $release"
-  (
-    cd "$dir"
-    npm_install
-    STUDYCOD_BUILD_OUT_DIR="$release" npm run build
-  )
+  if [[ -n "${FRONTEND_BUILD_ARTIFACT:-}" ]]; then
+    case "$FRONTEND_BUILD_ARTIFACT" in
+      "$ROOT"/.deploy-artifacts/frontend-*) ;;
+      *) echo "Frontend artifact path is outside the deploy staging directory." >&2; exit 5 ;;
+    esac
+    [[ -f "$FRONTEND_BUILD_ARTIFACT/index.html" ]] || { echo "Prebuilt frontend artifact is missing index.html." >&2; exit 5; }
+    log "Activating prebuilt frontend release: $release"
+    mv "$FRONTEND_BUILD_ARTIFACT" "$release"
+  else
+    log "Installing and building frontend release: $release"
+    (
+      cd "$dir"
+      npm_install
+      STUDYCOD_BUILD_OUT_DIR="$release" npm run build
+    )
+  fi
   [[ -f "$release/index.html" ]] || { echo "Frontend release is missing index.html" >&2; exit 5; }
   local next="$ROOT/frontend/.dist-live.next"
   rm -f "$next"
