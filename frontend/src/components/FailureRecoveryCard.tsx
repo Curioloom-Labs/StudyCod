@@ -21,6 +21,7 @@ type Props = {
   learningAttemptId?: number | null;
   failureCategory?: string | null;
   highestHintLevelShown?: number;
+  availableHints?: readonly string[] | null;
   trackLearning?: boolean;
   nextTask?: { id: number; title: string } | null;
   onTryAgain?: () => void;
@@ -42,7 +43,8 @@ export function hasFailureHintContext({
   compileError,
   compileErrorKind,
   firstFailure,
-}: Pick<Props, "failureCategory" | "compileError" | "compileErrorKind" | "firstFailure">): boolean {
+  availableHints,
+}: Pick<Props, "failureCategory" | "compileError" | "compileErrorKind" | "firstFailure" | "availableHints">): boolean {
   return [
     failureCategory,
     compileError,
@@ -51,7 +53,8 @@ export function hasFailureHintContext({
     firstFailure?.inputPreview,
     firstFailure?.expectedPreview,
     firstFailure?.actualPreview,
-  ].some((value) => String(value ?? "").trim().length > 0);
+  ].some((value) => String(value ?? "").trim().length > 0)
+    || Boolean(availableHints?.some((hint) => String(hint ?? "").trim().length > 0));
 }
 
 const languageCopy = (isEnglish: boolean, uk: string, en: string) => isEnglish ? en : uk;
@@ -122,26 +125,28 @@ function hintStageLabel(level: number, isEnglish: boolean): string {
   return labels[Math.max(0, Math.min(labels.length - 1, level))];
 }
 
-export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0, testsTotal = 0, score, maxScore, firstFailure, compileError, compileErrorKind, taskId, taskKind = "LIBRARY", learningAttemptId, failureCategory, highestHintLevelShown = 0, trackLearning = true, onTryAgain }) => {
+export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0, testsTotal = 0, score, maxScore, firstFailure, compileError, compileErrorKind, taskId, taskKind = "LIBRARY", learningAttemptId, failureCategory, highestHintLevelShown = 0, availableHints, trackLearning = true, onTryAgain }) => {
   const { i18n } = useTranslation();
   const isEnglish = i18n.language?.toLowerCase().startsWith("en");
   const upperVerdict = String(verdict ?? "").toUpperCase();
   const persistedCategory = failureCategory ?? firstFailure?.errorKind ?? compileErrorKind;
-  const [hintLevel, setHintLevel] = useState(() => Math.max(0, Math.min(2, Number(highestHintLevelShown) || 0)));
+  const suppliedHints = (availableHints ?? []).map((hint) => String(hint ?? "").trim()).filter(Boolean).slice(0, 3);
+  const hints = suppliedHints.length ? suppliedHints : hintLevels(persistedCategory, compileError, isEnglish);
+  const [hintLevel, setHintLevel] = useState(() => Math.max(0, Math.min(hints.length - 1, Number(highestHintLevelShown) || 0)));
   const reportedHintKey = useRef<string | null>(null);
-  const hints = hintLevels(persistedCategory, compileError, isEnglish);
   const category = categoryLabel(persistedCategory, isEnglish);
   const hasTestCount = testsTotal > 0;
   const resultLabel = hasTestCount
     ? `${testsPassed}/${testsTotal} ${languageCopy(isEnglish, "тестів", "tests")}`
     : `${score ?? "—"}/${maxScore ?? 100}`;
   const hasActionableEvidence = Boolean(category || compileError || firstFailure?.errorKind || firstFailure?.expectedPreview || firstFailure?.actualPreview || firstFailure?.inputPreview);
-  const hasHintContext = hasFailureHintContext({ failureCategory, compileError, compileErrorKind, firstFailure });
+  const hasHintContext = hasFailureHintContext({ failureCategory, compileError, compileErrorKind, firstFailure, availableHints });
+  const hasSpecificHint = Boolean(category || suppliedHints.length);
 
   useEffect(() => {
-    setHintLevel(Math.max(0, Math.min(2, Number(highestHintLevelShown) || 0)));
+    setHintLevel(Math.max(0, Math.min(hints.length - 1, Number(highestHintLevelShown) || 0)));
     reportedHintKey.current = null;
-  }, [learningAttemptId, highestHintLevelShown, persistedCategory]);
+  }, [learningAttemptId, highestHintLevelShown, persistedCategory, hints.length]);
 
   useEffect(() => {
     if (!trackLearning || upperVerdict === "AC" || !taskId || !hasHintContext) return;
@@ -239,11 +244,11 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
         {hasHintContext ? (
           <div className="failure-recovery-hint rounded-xl border border-primary/20 bg-primary/[.06] p-4" aria-live="polite">
             <div className="flex items-center justify-between gap-3">
-              <div className="font-mono text-[10px] font-bold uppercase tracking-[.12em] text-primary-soft">{languageCopy(isEnglish, category ? `Підказка ${hintLevel + 1} з ${hints.length}` : `Напрям перевірки ${hintLevel + 1} з ${hints.length}`, category ? `Hint ${hintLevel + 1} of ${hints.length}` : `Direction to check ${hintLevel + 1} of ${hints.length}`)}</div>
+              <div className="font-mono text-[10px] font-bold uppercase tracking-[.12em] text-primary-soft">{languageCopy(isEnglish, hasSpecificHint ? `Підказка ${hintLevel + 1} з ${hints.length}` : `Напрям перевірки ${hintLevel + 1} з ${hints.length}`, hasSpecificHint ? `Hint ${hintLevel + 1} of ${hints.length}` : `Direction to check ${hintLevel + 1} of ${hints.length}`)}</div>
               <span className="border border-border px-2 py-1 font-mono text-[10px] font-semibold text-text-secondary">{hintStageLabel(hintLevel, isEnglish)}</span>
             </div>
             <p className="mt-2 text-sm leading-6 text-text-primary">{hints[hintLevel]}</p>
-            <p className="mt-2 text-[11px] leading-5 text-text-secondary">{languageCopy(isEnglish, category ? "Підказка спрямовує до власного рішення й не показує готовий код." : "Це загальний напрям для перевірки за доступними свідченнями, а не встановлена причина.", category ? "This hint points toward your own solution and does not reveal the finished code." : "This is a general direction based on available evidence, not a confirmed cause.")}</p>
+            <p className="mt-2 text-[11px] leading-5 text-text-secondary">{languageCopy(isEnglish, hasSpecificHint ? "Підказка спрямовує до власного рішення й не показує готовий код." : "Це загальний напрям для перевірки за доступними свідченнями, а не встановлена причина.", hasSpecificHint ? "This hint points toward your own solution and does not reveal the finished code." : "This is a general direction based on available evidence, not a confirmed cause.")}</p>
           </div>
         ) : (
           <div className="failure-recovery-no-hint rounded-xl border border-border bg-bg-surface p-4 text-sm leading-6 text-text-secondary" role="status">

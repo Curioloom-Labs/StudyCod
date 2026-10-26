@@ -4,6 +4,8 @@ import {
   getTask,
   runCode,
   submitCode,
+  type LearningAttemptSummary,
+  type LearningFeedback,
   type TaskWithGrade,
 } from "../../lib/api/edu";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
@@ -16,6 +18,7 @@ import { defaultCompilerForFamily, JUDGE_ENTRY_FILES } from "../../lib/judgeLang
 import type { JudgeLanguage } from "../../lib/judgeLanguages";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
+import { FailureRecoveryCard } from "../../components/FailureRecoveryCard";
 
 const preview = () =>
   import.meta.env.DEV &&
@@ -64,6 +67,8 @@ export const PracticeCanvasPage: React.FC = () => {
     "idle",
   );
   const [hints, setHints] = React.useState<string[]>([]);
+  const [learningFeedback, setLearningFeedback] = React.useState<LearningFeedback | null>(null);
+  const [learningAttempt, setLearningAttempt] = React.useState<LearningAttemptSummary | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState<"run" | "submit" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -76,6 +81,8 @@ export const PracticeCanvasPage: React.FC = () => {
         result.savedCode || result.template || starter[result.language] || "",
       );
       setHints([]);
+      setLearningFeedback(null);
+      setLearningAttempt(null);
       setError(null);
     } catch (caught) {
       if (preview()) {
@@ -145,11 +152,39 @@ export const PracticeCanvasPage: React.FC = () => {
       const passed = response.grade.testsPassed;
       const total = response.grade.testsTotal;
       setHints(Array.isArray(response.hints) ? response.hints : []);
+      setLearningFeedback(response.learningFeedback ?? null);
+      setLearningAttempt(response.learningAttempt ?? null);
+      const score = response.scoring?.score ?? response.grade.total ?? 0;
+      setTask((current) => current ? {
+        ...current,
+        hasGrade: true,
+        grade: {
+          ...current.grade,
+          id: response.grade.id,
+          total: score,
+          score,
+          maxScore: response.scoring?.maxScore ?? 100,
+          testsPassed: passed,
+          testsTotal: total,
+          isCompleted: response.learningFeedback?.verdict?.toUpperCase() === "AC" || (total > 0 && passed >= total),
+          submittedCode: code,
+          groupScores: response.scoring?.groupScores ?? null,
+          testResults: (response.testResults ?? []).map((test) => ({
+            passed: test.passed,
+            testId: test.testId,
+            verdict: test.verdict,
+            errorKind: test.errorKind,
+            input: test.input,
+            expected: test.expected,
+            actual: test.actual,
+            stderr: test.stderr,
+          })),
+        },
+      } : current);
       setConsoleTone(passed === total ? "ok" : "bad");
       setConsoleText(
         `${passed} / ${total} ${tr("тестів пройдено", "tests passed")}\n${response.hints?.join("\n") || tr("Результат збережено.", "Result saved.")}`,
       );
-      await load();
     } catch (caught) {
       setConsoleTone("bad");
       setConsoleText(
@@ -174,7 +209,7 @@ export const PracticeCanvasPage: React.FC = () => {
   */
   const ideCheckResult: StudyCodIdeCheckResult | null = grade
     ? {
-        verdict: grade.isCompleted ? "AC" : "WA",
+        verdict: learningFeedback?.verdict ?? (grade.isCompleted ? "AC" : "WA"),
         testsPassed: grade.testsPassed,
         testsTotal: grade.testsTotal,
         score: grade.total,
@@ -247,6 +282,25 @@ export const PracticeCanvasPage: React.FC = () => {
       runResult={ideRunResult}
       checkResult={ideCheckResult}
       hints={hints}
+      resultCards={({ onReturnToCode }) => {
+        const verdict = String(learningFeedback?.verdict ?? ideCheckResult?.verdict ?? "").toUpperCase();
+        if (!ideCheckResult || !verdict || verdict === "AC" || grade?.isManuallyGraded) return null;
+        return <FailureRecoveryCard
+          verdict={verdict}
+          testsPassed={ideCheckResult.testsPassed}
+          testsTotal={ideCheckResult.testsTotal}
+          score={ideCheckResult.score}
+          maxScore={ideCheckResult.maxScore}
+          firstFailure={learningFeedback?.firstFailure ?? null}
+          availableHints={hints}
+          taskId={task.id}
+          taskKind="EDU"
+          learningAttemptId={learningAttempt?.id}
+          failureCategory={learningAttempt?.failureCategory ?? learningFeedback?.firstFailure?.errorKind ?? null}
+          highestHintLevelShown={learningAttempt?.highestHintLevelShown ?? 0}
+          onTryAgain={onReturnToCode}
+        />;
+      }}
     />
   );
   /* Legacy task canvas retained below for reference; the shared IDE is the live renderer.

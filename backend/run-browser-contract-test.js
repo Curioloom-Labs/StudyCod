@@ -15,22 +15,49 @@ if (!baseUrl) {
       ...(executablePath ? { executablePath } : {})
     });
     const page = await browser.newPage();
+    const waitForEditor = async (label) => {
+      try {
+        await page.locator(".monaco-editor").waitFor({ state: "attached", timeout: 30_000 });
+      } catch (error) {
+        const body = await page.locator("body").innerText().catch(() => "(body unavailable)");
+        console.error(`${label} editor debug: ${page.url()}\n${body.slice(0, 1800)}\nRuntime errors: ${runtimeErrors.join(" | ")}`);
+        throw error;
+      }
+    };
     let contestFinished = false;
     let contestEndsAt = Date.now() + 5 * 60_000;
     let contestCheckSubmitted = false;
     let extendDeadlineOnRecheck = false;
     let contestExtensionApplied = false;
     let earlyContestReviewRequests = 0;
+    let eduReviewMode = false;
+    let eduSubmitReceived = false;
+    let eduSubmittedCode = "";
     // The browser contract runs against the static frontend preview and
     // deterministic API fixtures. It verifies rendered flows; backend route
     // and database contracts are covered by the backend suite.
-    await page.route("**/api/**", async route => {
+    await page.route(url => new URL(String(url)).pathname.startsWith("/api/"), async route => {
       const pathname = new URL(route.request().url()).pathname;
       const method = route.request().method();
       const isCsrf = pathname.endsWith("/csrf-token");
       const isProfileProbe = pathname.endsWith("/profile/me");
       let payload = isProfileProbe
-        ? {
+        ? eduReviewMode ? {
+            id: -998,
+            username: "browser-contract-student",
+            firstName: "Browser",
+            lastName: "Student",
+            activeRuntime: "PYTHON",
+            difus: 0,
+            avatarUrl: null,
+            userMode: "EDUCATIONAL",
+            role: "TEACHER",
+            placementDone: true,
+            placementLevel: "INTERMEDIATE",
+            studentId: 3101,
+            classId: 31,
+            className: "10-A · Browser contract"
+          } : {
             id: -999,
             username: "browser-contract",
             firstName: "Browser",
@@ -155,6 +182,37 @@ if (!baseUrl) {
           review: [{ questionId: "question-1", question: "Select the prefix range formula.", options: ["P[r] - P[l]", "P[l] - P[r]"], selectedIndex: 0, correctIndex: 0 }],
           progress: { status: "COMPLETED", score: 100, completedAt: null },
           enrollment: { id: 991, status: "IN_PROGRESS", completionPercent: 100, masteryScore: 0 } } };
+      } else if (method === "GET" && pathname.endsWith("/edu/tasks/501")) {
+        payload = { task: {
+          id: 501,
+          title: "Boundary sum practice",
+          description: "Given n, return the sum from 1 through n inclusive.\n\nExample input: 5\nExpected output: 15",
+          template: "n = int(input())\ntotal = 0\nfor value in range(1, n):\n    total += value\nprint(total)\n",
+          language: "PYTHON",
+          testDataCount: 1,
+          savedCode: "n = int(input())\ntotal = 0\nfor value in range(1, n):\n    total += value\nprint(total)\n",
+          maxAttempts: 3,
+          attemptsUsed: 0,
+          isClosed: false,
+          hasGrade: false,
+          lesson: { id: 601, title: "Loop boundaries", type: "LESSON", hasTheory: false }
+        } };
+      } else if (method === "POST" && pathname.endsWith("/edu/tasks/501/submit")) {
+        eduSubmitReceived = true;
+        try { eduSubmittedCode = String(route.request().postDataJSON()?.code ?? ""); } catch { eduSubmittedCode = ""; }
+        payload = {
+          grade: { id: 2001, total: 0, testsPassed: 0, testsTotal: 1, isManuallyGraded: false },
+          testResults: [{ testId: 17, passed: false, verdict: "WA", errorKind: "off_by_one", input: "5", expected: "15", actual: "10" }],
+          hints: ["Compare the inclusive task boundary with Python's range endpoint.", "Check whether the loop should include n."],
+          scoring: { score: 0, maxScore: 100, groupScores: [{ group: "public", score: 0, maxScore: 100 }] },
+          learningFeedback: {
+            verdict: "WA",
+            firstFailure: { testPublicIndex: 1, testId: 17, inputPreview: "5", expectedPreview: "15", actualPreview: "10", errorKind: "off_by_one" },
+            analysis: null
+          },
+          learningAttempt: { id: 2201, outcome: "failed", failureCategory: "off_by_one", firstFailedTestId: 17, highestHintLevelShown: 0, solvedAfterFailure: false },
+          submissionMeta: { submissionId: "2001", clientSubmissionId: "browser-contract-edu", codeHash: "browser-contract-edu-hash" }
+        };
       }
       await route.fulfill({
         status: isCsrf ? 204 : 200,
@@ -179,7 +237,7 @@ if (!baseUrl) {
     const editorUrl = new URL("__dev/editor", baseUrl).toString();
     const editorResponse = await page.goto(editorUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
     if (!editorResponse || editorResponse.status() >= 500) throw new Error(`editor route returned ${editorResponse?.status() ?? "no response"}`);
-    await page.locator(".monaco-editor").waitFor({ state: "attached", timeout: 30_000 });
+    await waitForEditor("dev editor");
     const pathUrl = new URL("learning/course/990/path", baseUrl).toString();
     const pathResponse = await page.goto(pathUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
     if (!pathResponse || pathResponse.status() >= 500) throw new Error(`course path route returned ${pathResponse?.status() ?? "no response"}`);
@@ -195,6 +253,33 @@ if (!baseUrl) {
     if (!progressResponse || progressResponse.status() >= 500) throw new Error(`course progress route returned ${progressResponse?.status() ?? "no response"}`);
     const attemptCountCard = page.getByText(/Judge attempts|Спроб у Judge/i).locator("..");
     await attemptCountCard.getByText("2", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+    eduReviewMode = true;
+    const eduTaskUrl = new URL("edu/tasks/501", baseUrl).toString();
+    const eduTaskResponse = await page.goto(eduTaskUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    if (!eduTaskResponse || eduTaskResponse.status() >= 500) throw new Error(`EDU task route returned ${eduTaskResponse?.status() ?? "no response"}`);
+    await page.getByText("Boundary sum practice", { exact: true }).first().waitFor({ state: "visible", timeout: 30_000 });
+    await waitForEditor("EDU task");
+    const retainedEduCode = "n = 5\ntotal = sum(range(1, n + 1))\nprint(total)\n";
+    const eduEditorInput = page.getByRole("textbox", { name: "Editor content" });
+    await eduEditorInput.evaluate((element) => element.focus());
+    await page.keyboard.press("Control+A");
+    await page.keyboard.insertText(retainedEduCode);
+    const editorTextBeforeSubmit = (await page.locator(".monaco-editor .view-lines").innerText()).replace(/\u00a0/g, " ");
+    if (!editorTextBeforeSubmit.includes("sum(range(1, n + 1))")) {
+      throw new Error(`EDU editor did not accept the test input: ${editorTextBeforeSubmit}`);
+    }
+    await page.getByRole("button", { name: /^check$|^перевірити$/i }).click();
+    const eduFailureReview = page.locator(".failure-recovery-card");
+    await eduFailureReview.getByText(/Compare the inclusive task boundary/i).waitFor({ state: "visible", timeout: 10_000 });
+    await eduFailureReview.getByText("15", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await eduFailureReview.getByText("10", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    if (!eduSubmitReceived || !eduSubmittedCode.includes("total = sum(range(1, n + 1))")) {
+      throw new Error(`EDU submit did not preserve and send the learner's edited code (received=${eduSubmitReceived}, code=${JSON.stringify(eduSubmittedCode)})`);
+    }
+    await page.getByRole("button", { name: /return to code|повернутися до коду|до свого коду/i }).click();
+    const retainedEditorText = (await page.locator(".monaco-editor .view-lines").innerText()).replace(/\u00a0/g, " ");
+    if (!retainedEditorText.includes("total = sum(range(1, n + 1))")) throw new Error("returning to the EDU code lost the learner's input");
     const contestProblemUrl = new URL("contest/contests/778/problems/201", baseUrl).toString();
     const contestProblemResponse = await page.goto(contestProblemUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
     if (!contestProblemResponse || contestProblemResponse.status() >= 500) throw new Error(`contest problem route returned ${contestProblemResponse?.status() ?? "no response"}`);
@@ -204,7 +289,7 @@ if (!baseUrl) {
       console.error(`CONTEST WORKSPACE DEBUG: ${page.url()}\n${(await page.locator("body").innerText()).slice(0, 1600)}\nAPI errors: ${runtimeErrors.join(" | ")}`);
       throw error;
     }
-    await page.locator(".monaco-editor").waitFor({ state: "attached", timeout: 30_000 });
+    await waitForEditor("contest problem");
     await page.getByText(/Time left|Залишилось/i).waitFor({ state: "visible", timeout: 10_000 });
     if (await page.getByRole("tab", { name: /Mentor|Ментор/i }).count() !== 0) {
       throw new Error("AI mentor was visible while the contest was active");
@@ -235,7 +320,7 @@ if (!baseUrl) {
     if (!endedProblemResponse || endedProblemResponse.status() >= 500) throw new Error(`final contest workspace returned ${endedProblemResponse?.status() ?? "no response"}`);
     const mentorTab = page.getByRole("tab", { name: /Mentor|Ментор/i });
     await page.getByText(/Generated prefix sums challenge/i).first().waitFor({ state: "visible", timeout: 30_000 });
-    await page.locator(".monaco-editor").waitFor({ state: "attached", timeout: 30_000 });
+    await waitForEditor("ended contest problem");
     if (await mentorTab.count() !== 0) throw new Error("AI mentor was visible before the contest deadline on the open workspace");
     await mentorTab.waitFor({ state: "visible", timeout: 20_000 });
     await mentorTab.click();
@@ -254,7 +339,7 @@ if (!baseUrl) {
 
     if (runtimeErrors.length > 0) throw new Error(`browser runtime errors: ${runtimeErrors.join(" | ")}`);
     await browser.close();
-    console.log("BROWSER CONTRACT PASS: public shell, accessible buttons, Monaco, course quiz and Judge-attempt progress, timed contest workspace submission, generated-topic post-contest review, and mentor controls hidden through an extended deadline before appearing with four help levels load without runtime errors");
+    console.log("BROWSER CONTRACT PASS: public shell, accessible buttons, Monaco, course quiz and Judge-attempt progress, EDU public-test failure evidence and hint with retained editor code, timed contest workspace submission, generated-topic post-contest review, and mentor controls hidden through an extended deadline before appearing with four help levels load without runtime errors");
   } catch (error) {
     console.error(`BROWSER CONTRACT ${required ? "FAILED" : "UNVERIFIED"}: ${error.message}`);
     process.exit(required ? 1 : 0);
