@@ -374,9 +374,23 @@ export const PremiumProfileV2: React.FC<{
     : label("Тут зберігається твій навчальний контекст — без зайвого шуму.", "Your learning context lives here, without unnecessary noise.");
   const roleLabel = user.studentId ? label("Учень", "Student") : label("Викладач", "Teacher");
   const contextLabel = isEducational ? className || roleLabel : courseName;
+  const focusTopic = [...(skillEvidence?.topics ?? [])]
+    .filter((topic) => topic.practiced > 0)
+    .sort((a, b) => {
+      const aGap = a.practiced - a.solved;
+      const bGap = b.practiced - b.solved;
+      if ((aGap > 0) !== (bGap > 0)) return aGap > 0 ? -1 : 1;
+      if (aGap > 0 && bGap > 0) {
+        const rateDifference = a.solved / a.practiced - b.solved / b.practiced;
+        if (rateDifference !== 0) return rateDifference;
+        return bGap - aGap;
+      }
+      return a.practiced - b.practiced;
+    })[0];
+  const focusNeedsPractice = Boolean(focusTopic && focusTopic.solved < focusTopic.practiced);
   const [badgesOpen, setBadgesOpen] = React.useState(false);
   const badgeStats: PersonalBadgeStats = {
-    librarySolved: stats.librarySolved,
+    librarySolved: skillEvidence?.solvedTasks ?? stats.librarySolved,
     bestWeekActiveDays,
     solvedAfterFailure: skillEvidence?.solvedAfterFailure ?? 0,
     topicsPracticed: skillEvidence?.topics.length ?? 0,
@@ -408,15 +422,23 @@ export const PremiumProfileV2: React.FC<{
                   <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/70 text-primary-strong dark:bg-white/[.08] dark:text-primary-soft">{dailyMissionCompletedToday ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}</span>
                   <div><div className="font-semibold">{dailyMissionCompletedToday ? label("Крок зроблено", "Today's step complete") : label("Перевір одну задачу", "Get one task checked")}</div><p className="mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{dailyMissionCompletedToday ? label("Практика за сьогодні вже зарахована. Завтра буде новий крок.", "Today's practice is recorded. A new step will be ready tomorrow.") : label("Одна спроба з перевіреним результатом. Без серій, які можна втратити.", "One attempt with a checked result. No streak to lose.")}</p></div>
                 </div>
-                <span className="shrink-0 rounded-lg bg-white/70 px-2 py-1 text-xs font-bold text-accent-warn dark:bg-white/[.08] dark:text-accent-warn">+15 XP</span>
+                <span className="shrink-0 rounded-lg bg-white/70 px-2 py-1 text-xs font-bold text-accent-warn dark:bg-white/[.08] dark:text-accent-warn">{dailyMissionCompletedToday ? label("+15 XP · отримано", "+15 XP · earned") : "+15 XP"}</span>
               </div>
-              <button type="button" onClick={() => window.location.assign("/lab/library")} className="mt-4 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[.99]">
-                {dailyMissionCompletedToday ? label("Продовжити практику", "Keep practicing") : label("Обрати задачу", "Choose a task")}<ArrowRight className="h-4 w-4" />
-              </button>
+              {focusTopic ? <div className="mt-4 rounded-xl bg-white/65 px-3 py-3 dark:bg-white/[.05]">
+                <div className="text-[10px] font-bold uppercase tracking-[.12em] text-primary-strong dark:text-primary-soft">{label(focusNeedsPractice ? "Зона росту" : "Наступний фокус", focusNeedsPractice ? "Room to grow" : "Next focus")}</div>
+                <div className="mt-1 font-semibold">{focusTopic.name}</div>
+                <div className="mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{focusNeedsPractice ? label(`${focusTopic.solved} із ${focusTopic.practiced} задач мають перевірене рішення. Спробуй ще одну й закріпи підхід.`, `${focusTopic.solved} of ${focusTopic.practiced} tasks have a checked solution. Try another and strengthen the approach.`) : label("Тут уже виходить. Закріпи навичку або обери іншу тему, щоб розширити карту.", "You are doing well here. Deepen the skill or choose another topic to widen your map.")}</div>
+              </div> : <p className="mt-4 rounded-xl bg-white/65 px-3 py-3 text-xs leading-5 text-text-muted dark:bg-white/[.05] dark:text-text-secondary">{label("Перша перевірена задача створить карту твоїх сильних тем і підкаже точніший наступний крок.", "Your first checked task will build a skill map and make the next recommendation more specific.")}</p>}
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <button type="button" onClick={() => window.location.assign(focusTopic ? `/lab/library?q=${encodeURIComponent(focusTopic.name)}` : "/lab/library")} className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:scale-[.99]">
+                  {focusTopic ? label("Практикувати цю тему", "Practice this topic") : label("Обрати задачу", "Choose a task")}<ArrowRight className="h-4 w-4" />
+                </button>
+                {focusTopic && <button type="button" onClick={() => window.location.assign("/lab/library")} className="inline-flex min-h-10 items-center justify-center rounded-xl border border-border/10 px-4 text-sm font-semibold text-text-secondary transition hover:bg-white/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:text-text-primary dark:hover:bg-white/[.06]">{label("Обрати самостійно", "Choose for myself")}</button>}
+              </div>
             </div>
             <div className="mt-4 rounded-2xl bg-bg-hover p-4 dark:bg-white/[.04]">
               <div className="flex items-center justify-between gap-3"><div><div className="text-sm font-semibold">{label("Тижнева ціль", "Weekly goal")}</div><div className="mt-1 text-xs text-text-muted dark:text-text-secondary">{label("Практикуйся у 3 різні дні", "Practice on 3 different days")}</div></div><span className="rounded-lg bg-white/70 px-2.5 py-1.5 text-xs font-bold text-primary-strong dark:bg-white/[.08] dark:text-primary-soft">{completedWeeklyChallenges} {label("тижнів закрито", "weeks completed")}</span></div>
-              <div className="mt-4 flex items-end justify-between gap-3"><div><span className="text-3xl font-semibold tracking-[-.06em]">{Math.min(activeDaysThisWeek, 3)}</span><span className="ml-1 text-sm text-text-muted dark:text-text-secondary">/ 3 {label("дні цього тижня", "days this week")}</span></div><span className="rounded-lg bg-white/70 px-2.5 py-1 text-xs font-bold text-accent-warn dark:bg-white/[.08] dark:text-accent-warn">+60 XP</span></div>
+              <div className="mt-4 flex items-end justify-between gap-3"><div><span className="text-3xl font-semibold tracking-[-.06em]">{Math.min(activeDaysThisWeek, 3)}</span><span className="ml-1 text-sm text-text-muted dark:text-text-secondary">/ 3 {label("дні цього тижня", "days this week")}</span></div><span className="rounded-lg bg-white/70 px-2.5 py-1 text-xs font-bold text-accent-warn dark:bg-white/[.08] dark:text-accent-warn">{activeDaysThisWeek >= 3 ? label("+60 XP · отримано", "+60 XP · earned") : "+60 XP"}</span></div>
               <div className="mt-3 grid grid-cols-3 gap-1.5" role="progressbar" aria-label={label("Тижнева ціль", "Weekly goal")} aria-valuemin={0} aria-valuemax={3} aria-valuenow={Math.min(activeDaysThisWeek, 3)}>{Array.from({ length: 3 }, (_, index) => <span key={index} className={`h-2 rounded-full ${index < activeDaysThisWeek ? "bg-primary" : "bg-white dark:bg-white/10"}`} />)}</div>
               <p className="mt-3 text-xs leading-5 text-text-muted dark:text-text-secondary">{label("Кожен активний день рахується один раз. Виконані тижні залишаються в історії, а XP не згорає.", "Each active day counts once. Completed weeks stay in your history and XP never expires.")}</p>
             </div>

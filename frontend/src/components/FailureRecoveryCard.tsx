@@ -18,6 +18,7 @@ type Props = {
   success?: boolean;
   taskId?: number;
   taskKind?: "LIBRARY" | "PERSONAL" | "EDU" | "UNKNOWN";
+  comebackRewardAvailable?: boolean;
   learningAttemptId?: number | null;
   failureCategory?: string | null;
   highestHintLevelShown?: number;
@@ -125,7 +126,7 @@ function hintStageLabel(level: number, isEnglish: boolean): string {
   return labels[Math.max(0, Math.min(labels.length - 1, level))];
 }
 
-export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0, testsTotal = 0, score, maxScore, firstFailure, compileError, compileErrorKind, taskId, taskKind = "LIBRARY", learningAttemptId, failureCategory, highestHintLevelShown = 0, availableHints, trackLearning = true, onTryAgain }) => {
+export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0, testsTotal = 0, score, maxScore, firstFailure, compileError, compileErrorKind, taskId, taskKind = "LIBRARY", comebackRewardAvailable = false, learningAttemptId, failureCategory, highestHintLevelShown = 0, availableHints, trackLearning = true, onTryAgain }) => {
   const { i18n } = useTranslation();
   const isEnglish = i18n.language?.toLowerCase().startsWith("en");
   const upperVerdict = String(verdict ?? "").toUpperCase();
@@ -195,6 +196,11 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
         </div>
         <span className="shrink-0 border border-white/20 px-2.5 py-1 font-mono text-[11px] font-bold tracking-[.12em] text-white">{upperVerdict || "—"}</span>
       </div>
+
+      {comebackRewardAvailable && <div className="mt-4 flex items-start justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[.06] px-3 py-2.5">
+        <p className="text-xs leading-5 text-text-secondary">{languageCopy(isEnglish, "Якщо повернешся й розв’яжеш цю задачу, це зарахується як подолана помилка.", "If you come back and solve this task, it will count as learning from an error.")}</p>
+        <span className="shrink-0 rounded-lg bg-primary/10 px-2 py-1 text-xs font-bold text-primary-soft">+10 XP</span>
+      </div>}
 
       <div className="failure-recovery-steps" aria-label={languageCopy(isEnglish, trackLearning ? "Шлях від помилки до навички" : "Шлях до завершення задачі", trackLearning ? "Path from failure to skill" : "Path to task completion")}>
         {displayedWorkflowSteps.map((step, index) => {

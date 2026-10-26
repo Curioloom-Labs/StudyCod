@@ -63,14 +63,16 @@ const LearningSuccessCard: React.FC<{
   topic: string;
   testsPassed: number;
   testsTotal: number;
+  xpEarned: number;
   nextTask?: LibraryTaskListItem | null;
   onNextTask: () => void;
-}> = ({ topic, testsPassed, testsTotal, nextTask, onNextTask }) => {
+}> = ({ topic, testsPassed, testsTotal, xpEarned, nextTask, onNextTask }) => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => i18n.language?.toLowerCase().startsWith("en") ? en : uk;
   return <div className="mt-4 rounded-2xl border border-primary/25 bg-primary/[.07] p-4 text-text-primary">
-    <div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary-soft" /><div><div className="text-sm font-bold text-primary-soft">{tr("Рішення перевірено", "Solution verified")}</div><p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Рішення пройшло всі доступні перевірки. Це результат цієї задачі, а не навчальна навичка.", "The solution passed all available checks. This is a result for this task, not a learning skill.")} {testsPassed}/{testsTotal}</p></div></div>
-    <div className="mt-4 grid gap-2 sm:grid-cols-2"><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{tr("Задача", "Task")}</span><strong className="mt-1 block text-sm">{topic}</strong></div><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{tr("Статус", "Status")}</span><strong className="mt-1 block text-sm">{tr("Завершено", "Completed")}</strong></div></div>
+    <div className="flex items-start gap-3"><CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary-soft" /><div><div className="text-sm font-bold text-primary-soft">{tr("Рішення перевірено", "Solution verified")}</div><p className="mt-1 text-xs leading-5 text-text-secondary">{tr("Усі доступні перевірки пройдено. Це новий доказ твоєї майстерності.", "All available checks passed. This is new evidence of your skill.")} {testsPassed}/{testsTotal}</p></div></div>
+    <div className="mt-4 grid gap-2 sm:grid-cols-2"><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{tr("Задача", "Task")}</span><strong className="mt-1 block text-sm">{topic}</strong></div><div className="rounded-xl bg-white/[.05] p-3"><span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{tr("XP за цю задачу", "Task reward")}</span><strong className="mt-1 block text-sm">{xpEarned > 0 ? `+${xpEarned} XP` : tr("Цю задачу вже зараховано", "This task was already counted")}</strong></div></div>
+    <p className="mt-3 text-xs leading-5 text-text-secondary">{xpEarned > 0 ? tr("Перше перевірене рішення дає +8 XP. Якщо ти подолав попередню помилку — ще +10 XP. Це додає доказ до твого шляху, а не просто збільшує лічильник спроб.", "A first checked solution earns +8 XP. Solving after an earlier error adds +10 more. This adds proof to your path, not just another attempt to a counter.") : tr("Повторне відправлення вже зарахованої задачі не фармить XP. Обери наступну задачу й розширюй свій набір навичок.", "Resubmitting an already counted task does not farm XP. Choose another task and expand your skills.")}</p>
     {nextTask ? <button type="button" onClick={onNextTask} className="mt-4 flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[.05] p-3 text-left transition hover:bg-white/[.09]"><span><span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{tr("Наступна рекомендована задача", "Next recommended task")}</span><strong className="mt-1 block text-sm">{nextTask.title}</strong></span><ArrowLeft className="size-4 rotate-180 text-primary-soft" /></button> : <p className="mt-4 text-xs text-text-secondary">{tr("Відкрий бібліотеку, щоб обрати наступну задачу з цієї теми.", "Open the library to choose the next task from this topic.")}</p>}
   </div>;
 };
@@ -1189,6 +1191,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
       topic={task.section || task.tags?.[0] || tr("практична тема", "the practice topic")}
       testsPassed={checkResult.testsPassed}
       testsTotal={checkResult.testsTotal}
+      xpEarned={task.attempt?.solved ? 0 : 8 + (checkResult.learningAttempt?.solvedAfterFailure ? 10 : 0)}
       nextTask={nextTask}
       onNextTask={() => {
         if (!nextTask) return;
@@ -1206,6 +1209,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
       compileErrorKind={checkResult.compileErrorKind}
       taskId={task.id}
       taskKind="LIBRARY"
+      comebackRewardAvailable={!task.attempt?.solved}
       learningAttemptId={checkResult.learningAttempt?.id ?? null}
       failureCategory={checkResult.learningAttempt?.failureCategory ?? firstFailedTest?.errorKind ?? null}
       highestHintLevelShown={checkResult.learningAttempt?.highestHintLevelShown ?? 0}

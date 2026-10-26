@@ -41,7 +41,7 @@ import {
 } from "../services/webTaskValidationService";
 import { normalizeWebTaskTemplate } from "../utils/webTaskPayload";
 import { normalizeWebTaskInput } from "../utils/normalizeWebTaskInput";
-import { getCourseSkillEvidence, getSkillEvidence, recordLearningEvent } from "../services/learning/failureToSkillEngine";
+import { getCourseSkillEvidence, getLibrarySkillEvidence, getSkillEvidence, recordLearningEvent } from "../services/learning/failureToSkillEngine";
 import { compareLibraryJudgeGroups, hasLibrarySubtasks, libraryTestGroup, normalizeLibraryGroupScores } from "../services/libraryTaskScoring";
 import {
   ALL_JUDGE_LANGUAGES,
@@ -260,6 +260,12 @@ libraryRouter.get("/learning/evidence", authRequired, async (req: AuthRequest, r
   try {
     const principal = learningPrincipal(req);
     if (!principal) return res.status(401).json({ message: "UNAUTHORIZED" });
+    const taskKind = String(req.query.taskKind ?? "").trim().toUpperCase();
+    if (taskKind && taskKind !== "LIBRARY") return res.status(400).json({ message: "INVALID_TASK_KIND" });
+    if (taskKind === "LIBRARY") {
+      const evidence = await getLibrarySkillEvidence(principal.principalType, principal.principalId);
+      return res.json(evidence);
+    }
     const enrollmentRaw = Array.isArray(req.query.courseEnrollmentId) ? req.query.courseEnrollmentId[0] : req.query.courseEnrollmentId;
     if (enrollmentRaw != null) {
       const enrollmentId = Number(enrollmentRaw);

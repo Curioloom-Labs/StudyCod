@@ -17,7 +17,7 @@ import { getEmailSubscription, updateEmailSubscription, updateProfile } from "..
 import { prepareGoogleLinkSession } from "../../lib/api/auth";
 import { listGrades } from "../../lib/api/grades";
 import { getClasses, getPendingReviews } from "../../lib/api/edu";
-import { getMyLearningEvidence, listApprovedLibraryTasks, type JudgeLanguage, type LibraryTaskListItem, type LearningSkillEvidence } from "../../lib/api/library";
+import { getMyLearningEvidence, getMyLibraryLearningEvidence, listApprovedLibraryTasks, type JudgeLanguage, type LibraryTaskListItem, type LearningSkillEvidence } from "../../lib/api/library";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
 import { EduProfileV2, PremiumProfileV2, SkillEvidenceDetails, type EduProfileClassSummary, type EduProfileReviewSummary, type SkillEvidence } from "../core/PremiumPersonalExperience";
@@ -194,6 +194,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryTasks, setLibraryTasks] = useState<LibraryTaskListItem[]>([]);
   const [learningEvidence, setLearningEvidence] = useState<LearningSkillEvidence | null>(null);
+  const [libraryLearningEvidence, setLibraryLearningEvidence] = useState<LearningSkillEvidence | null>(null);
   const [eduClasses, setEduClasses] = useState<EduProfileClassSummary[]>([]);
   const [eduReviews, setEduReviews] = useState<EduProfileReviewSummary[]>([]);
 
@@ -289,11 +290,12 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   }, []);
 
   const loadLearningEvidence = useCallback(async () => {
-    try {
-      setLearningEvidence(await getMyLearningEvidence());
-    } catch {
-      setLearningEvidence(null);
-    }
+    const [generalEvidence, libraryEvidence] = await Promise.all([
+      getMyLearningEvidence().catch(() => null),
+      getMyLibraryLearningEvidence().catch(() => null),
+    ]);
+    setLearningEvidence(generalEvidence);
+    setLibraryLearningEvidence(libraryEvidence);
   }, []);
 
   useEffect(() => {
@@ -376,15 +378,16 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   }, [solvedLibraryTasks, validGrades]);
 
   const skillEvidence = useMemo<SkillEvidence>(() => {
-    if (learningEvidence) {
+    const evidence = isEducational ? learningEvidence : libraryLearningEvidence;
+    if (evidence) {
       return {
-        practicedTasks: learningEvidence.practicedTasks,
-        solvedTasks: learningEvidence.solvedTasks,
-        solvedAfterFailure: learningEvidence.solvedAfterFailure,
-        revisitedSolved: learningEvidence.revisitedSolved,
-        topics: learningEvidence.topics.map(({ name, practiced, solved }) => ({ name, practiced, solved })),
-        overcomeCategories: learningEvidence.overcomeCategories,
-        recentSkills: learningEvidence.recentSkills,
+        practicedTasks: evidence.practicedTasks,
+        solvedTasks: evidence.solvedTasks,
+        solvedAfterFailure: evidence.solvedAfterFailure,
+        revisitedSolved: evidence.revisitedSolved,
+        topics: evidence.topics.map(({ name, practiced, solved }) => ({ name, practiced, solved })),
+        overcomeCategories: evidence.overcomeCategories,
+        recentSkills: evidence.recentSkills,
       };
     }
     return {
@@ -396,16 +399,16 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
       overcomeCategories: [],
       recentSkills: [],
     };
-  }, [learningEvidence]);
+  }, [isEducational, learningEvidence, libraryLearningEvidence]);
 
   const activitySummary = useMemo(
-    () => getPracticeActivitySummary(validGrades.map((grade) => grade.createdAt)),
-    [validGrades]
+    () => getPracticeActivitySummary(libraryLearningEvidence?.practiceTimestamps ?? []),
+    [libraryLearningEvidence]
   );
 
   const bestWeekActiveDays = useMemo(
-    () => getBestSevenDayActivityDays(validGrades.map((grade) => grade.createdAt)),
-    [validGrades]
+    () => getBestSevenDayActivityDays(libraryLearningEvidence?.practiceTimestamps ?? []),
+    [libraryLearningEvidence]
   );
 
   const legacyIad = (user as User & { iad?: number | null }).iad;

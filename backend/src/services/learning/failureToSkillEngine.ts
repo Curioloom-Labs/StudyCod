@@ -46,6 +46,7 @@ export type SkillEvidence = {
   overcomeCategories: Array<{ name: string; tasks: number }>;
   topics: Array<{ name: string; practiced: number; solved: number; improving: boolean }>;
   recentSkills: Array<{ taskId: number; topic: string | null; category: string | null; outcome: "Evidence collected"; createdAt: Date }>;
+  practiceTimestamps: string[];
 };
 
 export function learningRepositories(): LearningRepositories {
@@ -251,6 +252,9 @@ export function deriveSkillEvidence(attempts: LearningAttempt[]): SkillEvidence 
       .map(([name, value]) => ({ name, practiced: value.practiced.size, solved: value.solved.size, improving: value.improving.size > 0 }))
       .sort((a, b) => Number(b.improving) - Number(a.improving) || b.solved - a.solved || a.name.localeCompare(b.name)),
     recentSkills,
+    practiceTimestamps: attempts
+      .map((attempt) => new Date(attempt.createdAt).toISOString())
+      .filter((timestamp) => Number.isFinite(new Date(timestamp).getTime())),
   };
 }
 
@@ -261,6 +265,14 @@ export async function getSkillEvidence(principalType: LearningPrincipalType, pri
   });
   // Library exercises are independent practice and must not become lesson skill evidence.
   return deriveSkillEvidence(attempts.filter((attempt) => attempt.taskKind !== "LIBRARY"));
+}
+
+export async function getLibrarySkillEvidence(principalType: LearningPrincipalType, principalId: number, repos = learningRepositories()): Promise<SkillEvidence> {
+  const attempts = await repos.attempts.find({
+    where: { principalType, principalId },
+    order: { createdAt: "ASC" },
+  });
+  return deriveSkillEvidence(attempts.filter((attempt) => attempt.taskKind === "LIBRARY"));
 }
 
 export async function getCourseSkillEvidence(principalId: number, courseEnrollmentId: number, repos = learningRepositories()): Promise<SkillEvidence> {

@@ -114,6 +114,7 @@ export type LearningSkillEvidence = {
   overcomeCategories: Array<{ name: string; tasks: number }>;
   topics: Array<{ name: string; practiced: number; solved: number; improving: boolean }>;
   recentSkills: Array<{ taskId: number; topic: string | null; category: string | null; outcome: "Evidence collected"; createdAt: string }>;
+  practiceTimestamps?: string[];
 };
 
 export type LibraryTaskListItem = {
@@ -321,6 +322,11 @@ export async function getMyLearningEvidence(courseEnrollmentId?: number): Promis
   const res = await api.get("/library/learning/evidence", {
     params: courseEnrollmentId ? { courseEnrollmentId } : undefined,
   });
+  return res.data as LearningSkillEvidence;
+}
+
+export async function getMyLibraryLearningEvidence(): Promise<LearningSkillEvidence> {
+  const res = await api.get("/library/learning/evidence", { params: { taskKind: "LIBRARY" } });
   return res.data as LearningSkillEvidence;
 }
 
