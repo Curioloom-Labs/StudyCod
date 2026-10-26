@@ -16,6 +16,10 @@ export type PersonalBadgeStats = {
   topicsPracticed: number;
   revisitedSolved: number;
   masteredTopics: number;
+  activePracticeDays: number;
+  activeDaysThisWeek: number;
+  completedWeeklyChallenges: number;
+  dailyMissionCompletedToday: boolean;
 };
 
 export type PersonalBadgeEmblem = "proof" | "rhythm" | "return" | "explore" | "depth" | "foundation";
@@ -25,6 +29,7 @@ export type PersonalBadgeLevel = {
   nameUk: string;
   nameEn: string;
   threshold: number;
+  xpReward: number;
 };
 
 export type PersonalBadge = {
@@ -43,6 +48,29 @@ export type PersonalBadge = {
   levels: PersonalBadgeLevel[];
 };
 
+export type LearningRank = {
+  level: number;
+  nameUk: string;
+  nameEn: string;
+  threshold: number;
+};
+
+export const LEARNING_RANKS: LearningRank[] = [
+  { level: 1, nameUk: "Початківець", nameEn: "Starter", threshold: 0 },
+  { level: 2, nameUk: "Практик", nameEn: "Practitioner", threshold: 100 },
+  { level: 3, nameUk: "Дослідник", nameEn: "Explorer", threshold: 250 },
+  { level: 4, nameUk: "Стратег", nameEn: "Strategist", threshold: 500 },
+  { level: 5, nameUk: "Майстер", nameEn: "Master", threshold: 900 },
+  { level: 6, nameUk: "Експерт", nameEn: "Expert", threshold: 1500 },
+];
+
+export type PracticeActivitySummary = {
+  activePracticeDays: number;
+  activeDaysThisWeek: number;
+  completedWeeklyChallenges: number;
+  dailyMissionCompletedToday: boolean;
+};
+
 /** Permanent emblems describe distinct kinds of learning evidence, not a spendable currency. */
 export const PERSONAL_BADGES: PersonalBadge[] = [
   {
@@ -59,10 +87,10 @@ export const PERSONAL_BADGES: PersonalBadge[] = [
     valueEn: "You distinguish a completed solution from an attempt.",
     Icon: Target,
     levels: [
-      { rank: 1, nameUk: "Перший крок", nameEn: "First Step", threshold: 1 },
-      { rank: 2, nameUk: "Практик", nameEn: "Practitioner", threshold: 5 },
-      { rank: 3, nameUk: "Досвідчений", nameEn: "Experienced", threshold: 15 },
-      { rank: 4, nameUk: "Майстер", nameEn: "Master", threshold: 40 },
+      { rank: 1, nameUk: "Перший крок", nameEn: "First Step", threshold: 1, xpReward: 15 },
+      { rank: 2, nameUk: "Практик", nameEn: "Practitioner", threshold: 5, xpReward: 25 },
+      { rank: 3, nameUk: "Досвідчений", nameEn: "Experienced", threshold: 15, xpReward: 40 },
+      { rank: 4, nameUk: "Майстер", nameEn: "Master", threshold: 40, xpReward: 75 },
     ],
   },
   {
@@ -79,10 +107,10 @@ export const PERSONAL_BADGES: PersonalBadge[] = [
     valueEn: "You spread learning over time and give knowledge room to stick.",
     Icon: CalendarDays,
     levels: [
-      { rank: 1, nameUk: "Зародження звички", nameEn: "A New Habit", threshold: 2 },
-      { rank: 2, nameUk: "Регулярність", nameEn: "Regularity", threshold: 3 },
-      { rank: 3, nameUk: "Опора", nameEn: "A Steady Base", threshold: 5 },
-      { rank: 4, nameUk: "Власний ритм", nameEn: "Your Rhythm", threshold: 7 },
+      { rank: 1, nameUk: "Зародження звички", nameEn: "A New Habit", threshold: 2, xpReward: 25 },
+      { rank: 2, nameUk: "Регулярність", nameEn: "Regularity", threshold: 3, xpReward: 40 },
+      { rank: 3, nameUk: "Опора", nameEn: "A Steady Base", threshold: 5, xpReward: 60 },
+      { rank: 4, nameUk: "Власний ритм", nameEn: "Your Rhythm", threshold: 7, xpReward: 90 },
     ],
   },
   {
@@ -99,10 +127,10 @@ export const PERSONAL_BADGES: PersonalBadge[] = [
     valueEn: "An error becomes information for the next step, not the end of the work.",
     Icon: RotateCcw,
     levels: [
-      { rank: 1, nameUk: "Повернувся", nameEn: "Returned", threshold: 1 },
-      { rank: 2, nameUk: "Змінив підхід", nameEn: "Adjusted", threshold: 3 },
-      { rank: 3, nameUk: "Відновився", nameEn: "Recovered", threshold: 7 },
-      { rank: 4, nameUk: "Наполегливість", nameEn: "Persistent", threshold: 15 },
+      { rank: 1, nameUk: "Повернувся", nameEn: "Returned", threshold: 1, xpReward: 25 },
+      { rank: 2, nameUk: "Змінив підхід", nameEn: "Adjusted", threshold: 3, xpReward: 40 },
+      { rank: 3, nameUk: "Відновився", nameEn: "Recovered", threshold: 7, xpReward: 60 },
+      { rank: 4, nameUk: "Наполегливість", nameEn: "Persistent", threshold: 15, xpReward: 90 },
     ],
   },
   {
@@ -119,10 +147,10 @@ export const PERSONAL_BADGES: PersonalBadge[] = [
     valueEn: "You notice connections between topics instead of staying with one problem type.",
     Icon: Compass,
     levels: [
-      { rank: 1, nameUk: "Перший маршрут", nameEn: "First Route", threshold: 1 },
-      { rank: 2, nameUk: "Дослідник", nameEn: "Explorer", threshold: 3 },
-      { rank: 3, nameUk: "Картограф", nameEn: "Cartographer", threshold: 5 },
-      { rank: 4, nameUk: "Навігатор", nameEn: "Navigator", threshold: 8 },
+      { rank: 1, nameUk: "Перший маршрут", nameEn: "First Route", threshold: 1, xpReward: 15 },
+      { rank: 2, nameUk: "Дослідник", nameEn: "Explorer", threshold: 3, xpReward: 30 },
+      { rank: 3, nameUk: "Картограф", nameEn: "Cartographer", threshold: 5, xpReward: 50 },
+      { rank: 4, nameUk: "Навігатор", nameEn: "Navigator", threshold: 8, xpReward: 75 },
     ],
   },
   {
@@ -139,10 +167,10 @@ export const PERSONAL_BADGES: PersonalBadge[] = [
     valueEn: "You identify what failed and test a different approach.",
     Icon: Brain,
     levels: [
-      { rank: 1, nameUk: "Не здався", nameEn: "Kept Going", threshold: 1 },
-      { rank: 2, nameUk: "Розбір", nameEn: "Analysis", threshold: 2 },
-      { rank: 3, nameUk: "Глибина", nameEn: "Depth", threshold: 5 },
-      { rank: 4, nameUk: "Осмислена практика", nameEn: "Deliberate Practice", threshold: 10 },
+      { rank: 1, nameUk: "Не здався", nameEn: "Kept Going", threshold: 1, xpReward: 35 },
+      { rank: 2, nameUk: "Розбір", nameEn: "Analysis", threshold: 2, xpReward: 55 },
+      { rank: 3, nameUk: "Глибина", nameEn: "Depth", threshold: 5, xpReward: 80 },
+      { rank: 4, nameUk: "Осмислена практика", nameEn: "Deliberate Practice", threshold: 10, xpReward: 120 },
     ],
   },
   {
@@ -159,10 +187,10 @@ export const PERSONAL_BADGES: PersonalBadge[] = [
     valueEn: "You can apply a skill to different problems within a topic.",
     Icon: Layers3,
     levels: [
-      { rank: 1, nameUk: "Перша опора", nameEn: "First Anchor", threshold: 1 },
-      { rank: 2, nameUk: "Впевненість", nameEn: "Confidence", threshold: 3 },
-      { rank: 3, nameUk: "Системність", nameEn: "Fluency", threshold: 6 },
-      { rank: 4, nameUk: "Майстерність", nameEn: "Mastery", threshold: 10 },
+      { rank: 1, nameUk: "Перша опора", nameEn: "First Anchor", threshold: 1, xpReward: 30 },
+      { rank: 2, nameUk: "Впевненість", nameEn: "Confidence", threshold: 3, xpReward: 50 },
+      { rank: 3, nameUk: "Системність", nameEn: "Fluency", threshold: 6, xpReward: 80 },
+      { rank: 4, nameUk: "Майстерність", nameEn: "Mastery", threshold: 10, xpReward: 120 },
     ],
   },
 ];

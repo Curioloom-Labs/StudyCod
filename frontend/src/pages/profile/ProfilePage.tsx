@@ -40,8 +40,8 @@ const DEFAULT_PUBLIC_PROFILE_PRIVACY: PublicProfilePrivacy = {
   showLanguageBreakdown: true,
 };
 
-type BadgeMilestone = 25 | 50 | 100 | 250 | 500 | 1000;
-const BADGES: BadgeMilestone[] = [25, 50, 100, 250, 500, 1000];
+type BadgeMilestone = 1 | 5 | 15 | 40;
+const BADGES: BadgeMilestone[] = [1, 5, 15, 40];
 
 type BadgeMeta = {
   nameUk: string;
@@ -51,63 +51,47 @@ type BadgeMeta = {
   Icon: React.ComponentType<{ className?: string }>;
 };
 
-type BadgeRarityMeta = {
+type BadgeStageMeta = {
   uk: string;
   en: string;
   chipTone: string;
 };
 
-const BADGE_RARITY: Record<BadgeMilestone, BadgeRarityMeta> = {
-  25: { uk: "Звичайний", en: "Common", chipTone: "border-border bg-bg-code text-text-secondary" },
-  50: { uk: "Рідкісний", en: "Rare", chipTone: "border-secondary/45 bg-secondary/12 text-secondary" },
-  100: { uk: "Епічний", en: "Epic", chipTone: "border-accent-info/45 bg-accent-info/12 text-accent-info" },
-  250: { uk: "Міфічний", en: "Mythic", chipTone: "border-primary/45 bg-primary/12 text-primary" },
-  500: { uk: "Легендарний", en: "Legendary", chipTone: "border-accent-warning/45 bg-accent-warning/12 text-accent-warning" },
-  1000: { uk: "Артефакт", en: "Artifact", chipTone: "border-accent-error/45 bg-accent-error/12 text-accent-error" },
+const BADGE_STAGE: Record<BadgeMilestone, BadgeStageMeta> = {
+  1: { uk: "Етап 1", en: "Stage 1", chipTone: "border-border bg-bg-code text-text-secondary" },
+  5: { uk: "Етап 2", en: "Stage 2", chipTone: "border-secondary/45 bg-secondary/12 text-secondary" },
+  15: { uk: "Етап 3", en: "Stage 3", chipTone: "border-accent-info/45 bg-accent-info/12 text-accent-info" },
+  40: { uk: "Етап 4", en: "Stage 4", chipTone: "border-primary/45 bg-primary/12 text-primary" },
 };
 
 const BADGE_META: Record<BadgeMilestone, BadgeMeta> = {
-  25: {
+  1: {
     nameUk: "Перший крок",
-    nameEn: "First Steps",
-    flavorUk: "Початок серії перемог",
-    flavorEn: "The beginning of your streak",
+    nameEn: "First Step",
+    flavorUk: "Перше рішення з перевіреним результатом",
+    flavorEn: "Your first verified solution",
     Icon: Star,
   },
-  50: {
-    nameUk: "Стабільний ритм",
-    nameEn: "Steady Rhythm",
-    flavorUk: "Рухаємось без зупинок",
-    flavorEn: "Consistent and unstoppable",
+  5: {
+    nameUk: "Практик",
+    nameEn: "Practitioner",
+    flavorUk: "П’ять задач із підтвердженим результатом",
+    flavorEn: "Five tasks with verified results",
     Icon: Shield,
   },
-  100: {
-    nameUk: "Сотка",
-    nameEn: "Century",
-    flavorUk: "Потужний рубіж досягнуто",
-    flavorEn: "A major milestone unlocked",
+  15: {
+    nameUk: "Досвідчений",
+    nameEn: "Experienced",
+    flavorUk: "П’ятнадцять завершених практик",
+    flavorEn: "Fifteen completed tasks",
     Icon: Medal,
   },
-  250: {
+  40: {
     nameUk: "Майстер",
     nameEn: "Master",
-    flavorUk: "Твоя форма вже еталон",
-    flavorEn: "Your form is now elite",
+    flavorUk: "Сорок рішень, підтверджених перевіркою",
+    flavorEn: "Forty solutions confirmed by the checker",
     Icon: Crown,
-  },
-  500: {
-    nameUk: "Легенда",
-    nameEn: "Legend",
-    flavorUk: "Півтисячі — це серйозно",
-    flavorEn: "500 solved — serious level",
-    Icon: Rocket,
-  },
-  1000: {
-    nameUk: "Космічний рівень",
-    nameEn: "Cosmic Tier",
-    flavorUk: "1000+ — режим боса",
-    flavorEn: "1000+ solved — boss mode",
-    Icon: Gem,
   },
 };
 
@@ -126,12 +110,12 @@ function courseToJudgeLanguage(course: CourseLanguage): JudgeLanguage {
 
 const ProgressBadge: React.FC<{ milestone: BadgeMilestone; solvedCount: number; unlocked: boolean; tr: (uk: string, en: string) => string }> = ({ milestone, solvedCount, unlocked, tr }) => {
   const meta = BADGE_META[milestone];
-  const rarity = BADGE_RARITY[milestone];
+  const stage = BADGE_STAGE[milestone];
   const progress = Math.max(0, Math.min(100, Math.round((solvedCount / milestone) * 100)));
   const remaining = Math.max(0, milestone - solvedCount);
   const Icon = meta.Icon;
   const badgeHint = unlocked
-    ? tr("Бейдж відкрито. Продовжуй серію!", "Badge unlocked. Keep the streak alive!")
+    ? tr("Етап підтверджено перевіреним розв’язанням.", "Stage confirmed by a verified solution.")
     : tr(`Ще ${remaining} задач до розблокування`, `${remaining} tasks left to unlock`);
 
   const reduce = useReducedMotion();
@@ -150,8 +134,8 @@ const ProgressBadge: React.FC<{ milestone: BadgeMilestone; solvedCount: number; 
       }
     >
       <div className="flex items-center justify-between gap-2 mb-2">
-        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-mono tracking-wide ${rarity.chipTone}`}>
-          {tr(rarity.uk, rarity.en)}
+        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-mono tracking-wide ${stage.chipTone}`}>
+          {tr(stage.uk, stage.en)}
         </span>
         <div className="text-[11px] font-mono text-text-muted">#{milestone}</div>
       </div>
@@ -679,12 +663,12 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
           className="grid grid-cols-1 md:grid-cols-2 gap-4"
         >
           <motion.div variants={fadeUpItem} className="rounded-xl border border-border bg-bg-surface p-5">
-            <div className="text-xs font-mono text-text-secondary">{tr("Бібліотека (бейджі/заохочення)", "Library (badges/encouragement)")}</div>
+            <div className="text-xs font-mono text-text-secondary">{tr("Шлях перевірених рішень", "Verified solution path")}</div>
             <div className="mt-2 flex items-center gap-2 text-3xl font-mono font-semibold text-primary">
               <Trophy className="w-6 h-6" /> <CountUp value={profileStats.librarySolved} />
             </div>
             <div className="mt-2 text-xs text-text-secondary">
-              {tr("Відкрито бейджів", "Badges unlocked")}: <span className="text-text-primary font-mono">{profileStats.badgesUnlocked}/{BADGES.length}</span>
+              {tr("Етапів відкрито", "Stages unlocked")}: <span className="text-text-primary font-mono">{profileStats.badgesUnlocked}/{BADGES.length}</span>
             </div>
           </motion.div>
 
@@ -723,7 +707,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
         <section className="space-y-4">
           <div className="flex items-center gap-2 text-sm font-mono uppercase tracking-[0.08em] text-text-muted">
             <Award className="w-4 h-4 text-primary" />
-            {tr("Бейджі прогресу", "Progress badges")}
+            {tr("Етапи перевіреної практики", "Verified practice stages")}
           </div>
           <motion.div
             variants={staggerContainer}
@@ -744,8 +728,8 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
           </motion.div>
           <div className="text-[11px] text-text-secondary">
             {tr(
-              "Бейдж відкривається, коли кількість зарахованих задач Бібліотеки досягає порогу.",
-              "A badge unlocks when your completed Library tasks reach the milestone."
+              "Етап відкривається, коли кількість зарахованих задач Бібліотеки досягає порогу.",
+              "A stage unlocks when your completed Library tasks reach the milestone."
             )}
           </div>
         </section>

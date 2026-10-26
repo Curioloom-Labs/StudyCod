@@ -315,7 +315,8 @@ async function buildLinkedStudentProfile(student: Student, userId: number) {
     eduContexts: await buildEduContexts(userId) };
 }
 
-const PROFILE_BADGES: ReadonlyArray<number> = [25, 50, 100, 250, 500, 1000];
+// Public profile exposes the verified-solution path only; keep its stages aligned with the private path.
+const PROFILE_BADGES: ReadonlyArray<number> = [1, 5, 15, 40];
 
 function denyContestProfileAccess(req: AuthRequest, res: Response): boolean {
   if (req.userType === "USER" && req.userMode === "CONTEST") {
