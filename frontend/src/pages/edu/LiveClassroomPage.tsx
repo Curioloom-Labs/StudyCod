@@ -14,6 +14,7 @@ import { RaiseHandButton, RaisedHandsBar } from "../../components/LiveRaiseHand"
 import { StudentCodeStream } from "../../components/StudentCodeStream";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
+import { getCurrentTheme, type AppTheme } from "../../theme";
 import {
   endLiveSession,
   getActiveLiveSession,
@@ -52,10 +53,10 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
   const classId = Number(classIdParam);
   const navigate = useNavigate();
   const isTeacher = !user?.studentId;
+  const [appTheme, setAppTheme] = useState<AppTheme>(() => getCurrentTheme());
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [session, setSession] = useState<LiveSession | null>(null);
-  const [sessionStartedHere, setSessionStartedHere] = useState(false);
   const [classLessons, setClassLessons] = useState<LessonBrief[]>([]);
   const [classLessonsLoading, setClassLessonsLoading] = useState(false);
   const [classLessonsError, setClassLessonsError] = useState(false);
@@ -74,6 +75,22 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
   const [error, setError] = useState<string | null>(null);
   const [roomConn, setRoomConn] = useState<"connecting" | "connected" | "failed">("connecting");
   const [retryNonce, setRetryNonce] = useState(0);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const syncTheme = () => setAppTheme(getCurrentTheme());
+    syncTheme();
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "studycod_theme") syncTheme();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
 
   const switchingRef = useRef(false);
   const connTimerRef = useRef<number | null>(null);
@@ -198,7 +215,6 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
     setError(null);
     try {
       const info = await startLiveSession(classId, selectedLessonId === "" ? undefined : selectedLessonId);
-      setSessionStartedHere(true);
       setJoinInfo(info);
       setSession(info.session);
       setPhase("prejoin");
@@ -215,7 +231,6 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
     setError(null);
     try {
       const info = await joinLiveSession(session.id);
-      setSessionStartedHere(false);
       setJoinInfo(info);
       setSession(info.session);
       setPhase("prejoin");
@@ -234,15 +249,6 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
   }, [joinInfo]);
 
   const handleLeave = useCallback(async () => {
-    if (phase === "prejoin" && sessionStartedHere && session) {
-      try {
-        await endLiveSession(session.id);
-      } catch {
-        setError(tr("Не вдалося закрити кімнату. Спробуйте ще раз.", "Could not close the room. Please try again."));
-        return;
-      }
-    }
-    setSessionStartedHere(false);
     setJoinInfo(null);
     setChoices(null);
     setActiveRoom(null);
@@ -250,7 +256,19 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
     setMyBreakoutIndex(null);
     setPhase("loading");
     await refreshActive();
-  }, [phase, sessionStartedHere, session, refreshActive]);
+  }, [refreshActive]);
+
+  const handleBackToLobby = useCallback(async () => {
+    // Returning to device setup must not end the room: students may already be
+    // waiting there. The teacher can still end it from the active room.
+    setJoinInfo(null);
+    setChoices(null);
+    setActiveRoom(null);
+    setParticipants([]);
+    setMyBreakoutIndex(null);
+    setPhase("loading");
+    await refreshActive();
+  }, [refreshActive]);
 
   const handleEnd = useCallback(async () => {
     if (!session) return;
@@ -289,7 +307,7 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
               <div className="text-xs font-bold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{tr("Перед входом · перевірка пристроїв", "Before you join · device check")}</div>
                 <h1 className="mt-1 text-xl font-bold text-text-primary">{joinInfo.session.title || tr("Живий урок", "Live lesson")}</h1>
               </div>
-              <button type="button" onClick={() => void handleLeave()} className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg-base px-4 py-2 text-sm font-bold text-text-primary hover:bg-bg-hover"><ArrowLeft className="size-4" />{tr("Назад", "Back")}</button>
+              <button type="button" onClick={() => void handleBackToLobby()} className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg-base px-4 py-2 text-sm font-bold text-text-primary hover:bg-bg-hover"><ArrowLeft className="size-4" />{tr("До лобі", "Back to lobby")}</button>
             </div>
             {error && <p role="alert" className="edu-live-prejoin__error">{error}</p>}
             <div className="edu-live-prejoin__layout">
@@ -412,17 +430,17 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
               <PanelHeading panel={sidePanel} />
               <div className="edu-live-room__panel-body h-[calc(100%-56px)] min-h-0">
                 <section id="live-panel-people" role="region" aria-label={tr("Учасники уроку", "Lesson participants")} aria-hidden={sidePanel !== "people"} className="h-full min-h-0 overflow-auto p-3" hidden={sidePanel !== "people"}>
-                  {isTeacher && Number.isFinite(classId) && (watched ? <StudentCodeStream classId={classId} studentId={watched.studentId} studentName={watched.name} onBack={() => setWatched(null)} /> : <ClassLiveOverview classId={classId} enableCopilot onSelectStudent={(studentId, name) => setWatched({ studentId, name })} />)}
-                  {!isTeacher && <StudentSide participants={participants} />}
+                  {sidePanel === "people" && isTeacher && Number.isFinite(classId) && (watched ? <StudentCodeStream classId={classId} studentId={watched.studentId} studentName={watched.name} onBack={() => setWatched(null)} /> : <ClassLiveOverview classId={classId} enableCopilot onSelectStudent={(studentId, name) => setWatched({ studentId, name })} />)}
+                  {sidePanel === "people" && !isTeacher && <StudentSide participants={participants} />}
                 </section>
                 <section id="live-panel-materials" role="region" aria-label={tr("Матеріали уроку", "Lesson materials")} aria-hidden={sidePanel !== "materials"} className="h-full min-h-0 overflow-auto" hidden={sidePanel !== "materials"}>
-                  <LessonMaterialsPanel classId={classId} sessionId={joinInfo.session.id} isTeacher={isTeacher} />
+                  {sidePanel === "materials" && <LessonMaterialsPanel classId={classId} sessionId={joinInfo.session.id} isTeacher={isTeacher} />}
                 </section>
                 <section id="live-panel-board" role="region" aria-label={tr("Спільна дошка", "Shared board")} aria-hidden={sidePanel !== "board"} className="edu-live-room__collaboration-surface h-full min-h-0" hidden={sidePanel !== "board"}>
-                  <LiveCodeBoard isTeacher={isTeacher} />
+                  {sidePanel === "board" && <LiveCodeBoard isTeacher={isTeacher} />}
                 </section>
                 <section id="live-panel-code" role="region" aria-label={tr("Спільний код", "Shared code")} aria-hidden={sidePanel !== "code"} className="edu-live-room__collaboration-surface h-full min-h-0" hidden={sidePanel !== "code"}>
-                  <LivePairEditor topic={`class-${classId}-collab`} userName={isTeacher ? tr("Викладач", "Teacher") : tr("Учень", "Student")} height="100%" />
+                  {sidePanel === "code" && <LivePairEditor topic={`class-${classId}-collab`} userName={isTeacher ? tr("Викладач", "Teacher") : tr("Учень", "Student")} theme={appTheme} height="100%" />}
                 </section>
               </div>
             </aside>
@@ -437,8 +455,9 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
     <LiveShell>
       <section className="edu-live-lobby">
         <div className="edu-live-lobby__intro">
+          <button type="button" onClick={() => navigate(`/edu/classes/${classId}`)} className="edu-live-lobby__back"><ArrowLeft className="size-4" />{tr("До класу", "Back to class")}</button>
           <p className="edu-live-lobby__eyebrow"><Radio className="size-4" />StudyCod EDU <span>/</span> {tr("онлайн-урок", "live lesson")}</p>
-          <h1>{tr("Навчання наживо", "Learn together, live")}</h1>
+          <h1>{tr("Урок наживо", "Live lesson")}</h1>
           <p>{tr("Відеозустріч, матеріали й спільна робота з кодом зібрані в одному місці.", "Video, lesson materials, and shared coding tools are together in one classroom.")}</p>
         </div>
         <div className="edu-live-lobby__card">

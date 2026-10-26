@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Check } from "lucide-react";
 import { Button } from "../../components/ui/Button";
-import { PageHero } from "../../components/ui/PageHero";
 import { api } from "../../lib/api/client";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
@@ -112,43 +111,32 @@ export const TeacherQuizReviewPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div role="status" aria-live="polite" style={{ padding: 24 }}>{tr("Завантаження…", "Loading…")}</div>;
+  if (loading) return <div className="edu-workspace edu-quiz-review__loading" role="status" aria-live="polite">{tr("Завантажуємо спроби…", "Loading attempts…")}</div>;
 
   return (
-    <div className="edu-workspace mx-auto max-w-[860px] px-4 pb-12 sm:px-6">
-      <Button variant="ghost" onClick={() => navigate(-1)} style={{ marginTop: 16 }}>
-        <ArrowLeft size={16} /> {tr("Назад", "Back")}
+    <main className="edu-workspace edu-quiz-review mx-auto max-w-[860px] px-4 pb-12 sm:px-6">
+      <Button variant="ghost" onClick={() => navigate(-1)} className="edu-quiz-review__back">
+        <ArrowLeft size={16} /> {tr("До уроку", "Back to lesson")}
       </Button>
-      <PageHero
-        eyebrow="// quiz review"
-        title={tr("Спроби вікторини", "Quiz attempts")}
-      />
+      <header className="edu-quiz-review__header"><p>{tr("EDU / перевірка відповідей", "EDU / answer review")}</p><h1>{tr("Спроби вікторини", "Quiz attempts")}</h1><span>{attempts.length} {tr("учнів", "learners")}</span></header>
 
       {error && (
-        <div role="alert" style={{ marginTop: 16, padding: 12, borderRadius: 8, background: "rgba(220, 70, 100, 0.12)" }}>
+        <div role="alert" className="edu-quiz-review__error">
           <div>{error}</div>
-          <Button variant="ghost" onClick={() => void loadAttempts()} style={{ marginTop: 8 }}>
+          <Button variant="ghost" onClick={() => void loadAttempts()}>
             {tr("Спробувати ще раз", "Try again")}
           </Button>
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }}>
-        {attempts.length === 0 && <p style={{ opacity: 0.6 }}>{tr("Ще немає спроб.", "No attempts yet.")}</p>}
+      <div className="edu-quiz-review__attempts">
+        {!error && attempts.length === 0 && <p className="edu-quiz-review__empty">{tr("Ще немає спроб. Відповіді учнів з’являться після надсилання вікторини.", "No attempts yet. Learner responses will appear here after they submit the quiz.")}</p>}
         {attempts.map(a => (
-          <div key={a.studentId} style={{ border: "1px solid rgba(128,128,128,0.25)", borderRadius: 8, padding: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <article key={a.studentId} className="edu-quiz-review__attempt">
+            <div className="edu-quiz-review__student">
               <strong>{a.studentName || `#${a.studentId}`}</strong>
-              <span className="text-sm tabular-nums text-text-secondary">{a.finalPercent ?? a.autoPercent}%</span>
-              <span
-                style={{
-                  fontSize: 11,
-                  padding: "2px 8px",
-                  borderRadius: 999,
-                  border: "1px solid rgba(128,128,128,0.3)",
-                  color: a.status === "NEEDS_MANUAL" ? "rgb(220,150,40)" : undefined
-                }}
-              >
+              <span className="edu-quiz-review__score">{a.finalPercent ?? a.autoPercent}%</span>
+              <span className={`edu-quiz-review__status ${a.status === "NEEDS_MANUAL" ? "is-pending" : ""}`}>
                 {a.status === "NEEDS_MANUAL"
                   ? tr("Потребує перевірки", "Needs review")
                   : a.status === "MANUAL_GRADED"
@@ -156,20 +144,20 @@ export const TeacherQuizReviewPage: React.FC = () => {
                   : tr("Авто", "Auto")}
               </span>
               {a.status !== "AUTO_GRADED" && (
-                <Button variant="ghost" disabled={busy || loadingAnswers} aria-expanded={openFor === a.studentId} className="text-xs" onClick={() => expand(a.studentId)} style={{ marginLeft: "auto" }}>
+                <Button variant="ghost" disabled={busy || loadingAnswers} aria-expanded={openFor === a.studentId} className="edu-quiz-review__grade" onClick={() => expand(a.studentId)}>
                   {openFor === a.studentId ? tr("Сховати", "Hide") : tr("Оцінити", "Grade")}
                 </Button>
               )}
             </div>
 
             {openFor === a.studentId && (
-              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
-                {questions.length === 0 && <p style={{ opacity: 0.6 }}>{tr("Немає відкритих питань.", "No open questions.")}</p>}
+              <div className="edu-quiz-review__answers">
+                {questions.length === 0 && <p className="edu-quiz-review__empty">{tr("Немає відкритих питань.", "No open questions.")}</p>}
                 {questions.map(q => (
-                  <div key={q.id} style={{ padding: 10, background: "rgba(128,128,128,0.06)", borderRadius: 6 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{q.prompt ?? q.id}</div>
-                    <div style={{ whiteSpace: "pre-wrap", fontSize: 14, margin: "6px 0", opacity: 0.9 }}>{q.answer || tr("(порожньо)", "(empty)")}</div>
-                    <label style={{ fontSize: 13 }}>
+                  <div key={q.id} className="edu-quiz-review__answer">
+                    <div className="edu-quiz-review__prompt">{q.prompt ?? q.id}</div>
+                    <div className="edu-quiz-review__response">{q.answer || tr("(порожньо)", "(empty)")}</div>
+                    <label className="edu-quiz-review__points">
                       {tr("Бали", "Points")} (0–{q.points}):{" "}
                       <input
                         type="number"
@@ -179,7 +167,7 @@ export const TeacherQuizReviewPage: React.FC = () => {
                         disabled={busy}
                         value={scores[q.id] ?? ""}
                         onChange={e => setScores(prev => ({ ...prev, [q.id]: e.target.value }))}
-                        style={{ width: 70, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)" }}
+                        className="edu-quiz-review__points-input"
                       />
                     </label>
                   </div>
@@ -189,9 +177,9 @@ export const TeacherQuizReviewPage: React.FC = () => {
                 </Button>
               </div>
             )}
-          </div>
+          </article>
         ))}
       </div>
-    </div>
+    </main>
   );
 };

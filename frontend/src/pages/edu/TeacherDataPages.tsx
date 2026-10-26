@@ -37,7 +37,7 @@ import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
-const root = "mx-auto max-w-[1480px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12";
+const root = "edu-workspace edu-data-workspace mx-auto max-w-[1480px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12";
 
 type Column = {
   id: string;

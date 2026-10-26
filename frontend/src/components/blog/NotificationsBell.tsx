@@ -84,6 +84,9 @@ export const NotificationsBell: React.FC = () => {
 
   const label = (n: AppNotification): string => {
     const who = n.actorName ?? tr("Хтось", "Someone");
+    if (n.type === "COMPANY_TEAM_INVITATION") return tr(`${who} запросив вас до команди компанії`, `${who} invited you to a company team`);
+    if (n.type === "COMPANY_ASSESSMENT_INVITATION") return tr(`${who} запросив вас до оцінювання кандидата`, `${who} invited you to a candidate assessment`);
+    if (n.type === "COMPANY_ASSESSMENT_UPDATED") return tr(`${who} оновив процес оцінювання в компанії`, `${who} updated a company assessment`);
     if (n.type === "GROWTH_REVIEW_INVITATION") return tr(`${who} запросив вас до рецензії проєкту`, `${who} invited you to review a project`);
     if (n.type === "GROWTH_REVIEW_ASSIGNED") return tr(`${who} призначив вам рецензію проєкту`, `${who} assigned you a project review`);
     if (n.type === "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR") return tr("До вашої роботи призначено рецензента", "A reviewer was assigned to your work");

@@ -75,7 +75,7 @@ export const AgendaWorkspacePage: React.FC = () => {
   if (loading) return <div className="edu-workspace mx-auto max-w-[1280px] px-4 py-10 sm:px-6 lg:px-10"><div className="h-[620px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" role="status" aria-label={copy("Завантаження календаря", "Loading calendar")} /></div>;
 
   return (
-    <div className="edu-workspace mx-auto max-w-[1280px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+    <div className="edu-workspace edu-calendar-page mx-auto max-w-[1280px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
       <header className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
           <p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">EDU / {copy("ритм навчання", "learning schedule")}</p>
@@ -91,16 +91,16 @@ export const AgendaWorkspacePage: React.FC = () => {
 
       {error && <div className="mb-5 rounded-2xl border border-accent-error/25 bg-accent-error/[.08] px-4 py-3 text-sm font-medium text-accent-error dark:text-accent-error">{error}</div>}
       <div className="grid gap-6 xl:grid-cols-[1.35fr_.65fr]">
-        <section className="rounded-[28px] border border-border/10 bg-white p-4 shadow-[0_16px_45px_rgba(28,44,32,.05)] dark:border-white/[.09] dark:bg-bg-surface dark:shadow-none sm:p-6">
+        <section className="edu-calendar__month rounded-[28px] border border-border/10 bg-white p-4 shadow-[0_16px_45px_rgba(28,44,32,.05)] dark:border-white/[.09] dark:bg-bg-surface dark:shadow-none sm:p-6">
           <div className="mb-6 flex items-center justify-between"><h2 className="font-[family-name:var(--font-display)] text-2xl font-bold capitalize tracking-[-.04em]">{month}</h2><span className="rounded-full bg-bg-hover px-3 py-1.5 text-xs font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-soft">{items.length} {copy("подій", "events")}</span></div>
-          <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
-            {shortDays.map((day) => <span key={day} className="py-1 text-center text-[11px] font-bold uppercase tracking-[.1em] text-text-muted">{day}</span>)}
+          <div className="edu-calendar__grid grid grid-cols-7 gap-1.5 sm:gap-2">
+            {shortDays.map((day) => <span key={day} className="edu-calendar__weekday py-1 text-center text-[11px] font-bold uppercase tracking-[.1em] text-text-muted">{day}</span>)}
             {cells.map((cell) => {
               const cellKey = key(cell);
               const events = grouped.get(cellKey) || [];
               const inMonth = cell.getMonth() === cursor.getMonth();
               const selectedDay = cellKey === chosen;
-              return <button type="button" key={cellKey} aria-label={`${new Intl.DateTimeFormat(locale, { dateStyle: "full" }).format(cell)}, ${events.length} ${copy("подій", "events")}`} aria-pressed={selectedDay} onClick={() => setChosen(cellKey)} className={`min-h-[76px] rounded-xl border p-2 text-left transition sm:min-h-[104px] ${selectedDay ? "border-primary-strong bg-bg-hover shadow-[inset_0_0_0_1px_rgba(22,131,77,.16)] dark:border-primary/50 dark:bg-primary/[.07]" : inMonth ? "border-border/8 hover:border-primary-strong/35 hover:bg-bg-hover dark:border-white/[.07] dark:hover:bg-white/[.04]" : "border-transparent opacity-40"}`}>
+              return <button type="button" key={cellKey} aria-label={`${new Intl.DateTimeFormat(locale, { dateStyle: "full" }).format(cell)}, ${events.length} ${copy("подій", "events")}`} aria-pressed={selectedDay} onClick={() => setChosen(cellKey)} className={`edu-calendar__day min-h-[76px] rounded-xl border p-2 text-left transition sm:min-h-[104px] ${selectedDay ? "border-primary-strong bg-bg-hover shadow-[inset_0_0_0_1px_rgba(22,131,77,.16)] dark:border-primary/50 dark:bg-primary/[.07]" : inMonth ? "border-border/8 hover:border-primary-strong/35 hover:bg-bg-hover dark:border-white/[.07] dark:hover:bg-white/[.04]" : "border-transparent opacity-40"}`}>
                 <span className={`text-xs font-bold ${isToday(cell) ? "text-primary-strong dark:text-primary-soft" : "text-text-muted dark:text-text-secondary"}`}>{cell.getDate()}</span>
                 <div className="mt-1.5 space-y-1">{events.slice(0, 2).map((item) => <span key={`${item.kind}-${item.lessonId ?? item.topicId}-${item.id}`} className={`block truncate rounded-md px-1.5 py-1 text-[10px] font-bold ${item.kind === "CONTROL" ? "bg-bg-hover text-accent-warn dark:bg-accent-warn/15 dark:text-accent-warn" : "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"}`}>{item.title}</span>)}{events.length > 2 && <span className="block text-[10px] font-bold text-text-muted">+{events.length - 2}</span>}</div>
               </button>;

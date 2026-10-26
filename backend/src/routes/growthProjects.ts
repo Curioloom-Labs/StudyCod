@@ -36,7 +36,7 @@ function v3NextAction(byKind?: Map<string, Set<string>>): string {
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const bad = (res: Response, status: number, code: string) => res.status(status).json({ code, message: code });
 const text = (value: unknown, max: number) => typeof value === "string" ? value.trim().slice(0, max) : "";
-type GrowthReviewNotice = "GROWTH_REVIEW_INVITATION" | "GROWTH_REVIEW_ASSIGNED" | "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR" | "GROWTH_REVIEW_ACCEPTED" | "GROWTH_REVIEW_DECLINED" | "GROWTH_REVIEW_SUBMITTED" | "GROWTH_REVIEW_REQUESTED";
+type GrowthReviewNotice = "GROWTH_REVIEW_INVITATION" | "GROWTH_REVIEW_ASSIGNED" | "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR" | "GROWTH_REVIEW_ACCEPTED" | "GROWTH_REVIEW_DECLINED" | "GROWTH_REVIEW_SUBMITTED" | "GROWTH_REVIEW_REQUESTED" | "COMPANY_ASSESSMENT_UPDATED";
 async function notifyGrowthReview(recipientId: number | null, actorId: number, type: GrowthReviewNotice, relatedPath: string): Promise<void> {
   if (!recipientId || recipientId === actorId) return;
   try {
@@ -477,7 +477,7 @@ growthProjectsRouter.post("/:projectId/executions", authRequired, async (req: Au
 growthProjectsRouter.get("/executions/:jobId", authRequired, async (req: AuthRequest, res: Response) => {
   const ownerId = await ownerOnly(req, res); if (!ownerId) return;
   if (!UUID_RE.test(req.params.jobId)) return bad(res, 404, "JOB_NOT_FOUND");
-  const rows = await AppDataSource.query("SELECT id,state,result_json,error_code,context_key,created_at,started_at,completed_at FROM growth_project_jobs WHERE id=? AND owner_id=?", [req.params.jobId, ownerId]) as Array<Record<string, unknown>>;
+  const rows = await AppDataSource.query("SELECT id,state,result_json,error_code,context_key,created_at,started_at,completed_at FROM growth_project_jobs WHERE id=? AND owner_id=? AND project_id IS NOT NULL", [req.params.jobId, ownerId]) as Array<Record<string, unknown>>;
   const row = rows[0]; if (!row) return bad(res, 404, "JOB_NOT_FOUND");
   return res.json({ job: { id: row.id, state: row.state, context: row.context_key, result: json(row.result_json, null), errorCode: row.error_code, createdAt: row.created_at, startedAt: row.started_at, completedAt: row.completed_at } });
 });
@@ -733,7 +733,16 @@ growthProjectsRouter.post("/:projectId/assessments/:assessmentId/finish", authRe
   if (!job || job.state !== "COMPLETED" || job.artifact_id !== artifactId || job.tests_hash !== testsHash) return bad(res, 409, "CHECK_STALE");
   const result = json<{ passed?: boolean }>(job.result_json, {});
   const status = result.passed ? "PASSED" : "FAILED";
-  await AppDataSource.query("UPDATE growth_project_assessments SET status=?,explanation=?,completed_at=NOW(3),duration_seconds=? WHERE id=? AND owner_id=? AND status='ACTIVE'", [status, explanation, Math.max(0, Math.min(86_400, Number(req.body?.durationSeconds) || 0)), req.params.assessmentId, ownerId]);
+  const update = await AppDataSource.query("UPDATE growth_project_assessments SET status=?,explanation=?,completed_at=NOW(3),duration_seconds=? WHERE id=? AND owner_id=? AND status='ACTIVE'", [status, explanation, Math.max(0, Math.min(86_400, Number(req.body?.durationSeconds) || 0)), req.params.assessmentId, ownerId]);
+  if (!update.affectedRows) return bad(res, 409, "ASSESSMENT_NOT_ACTIVE");
+  if (loaded.row.company_assessment_id) {
+    await AppDataSource.query(
+      "UPDATE growth_company_assessments SET status='TASK_SUBMITTED' WHERE id=? AND technical_assessment_id=? AND status='TASK_ASSIGNED'",
+      [loaded.row.company_assessment_id, req.params.assessmentId]
+    );
+    const companyCase = await AppDataSource.query("SELECT company_id,created_by FROM growth_company_assessments WHERE id=? LIMIT 1", [loaded.row.company_assessment_id]) as Array<{ company_id: string; created_by: number }>;
+    if (companyCase[0]) await notifyGrowthReview(companyCase[0].created_by, ownerId, "COMPANY_ASSESSMENT_UPDATED", `/companies?company=${companyCase[0].company_id}&assessment=${loaded.row.company_assessment_id}`);
+  }
   return res.json({ assessment: { id: req.params.assessmentId, status, result } });
 });
 

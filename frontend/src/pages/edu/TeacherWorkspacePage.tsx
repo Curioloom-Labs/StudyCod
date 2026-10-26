@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, BookOpen, CalendarDays, ClipboardCheck, Library, Plus, RefreshCw, Users } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarDays, ClipboardCheck, Library, Plus, Radio, RefreshCw, Users } from "lucide-react";
 import { createClass, getClasses, getPendingReviews, type Class, type PendingReview } from "../../lib/api/edu";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { Modal } from "../../components/ui/Modal";
@@ -147,11 +147,16 @@ export const TeacherWorkspacePage: React.FC = () => {
         </div>
         {loading ? <div className="mt-1 divide-y divide-border" role="status" aria-label={tr("Завантаження класів", "Loading classes")}><div className="h-16 animate-pulse bg-bg-hover/60" /><div className="h-16 animate-pulse bg-bg-hover/40" /></div>
           : classes.length ? <ul className="divide-y divide-border">
-            {classes.map((item) => <li key={item.id}><button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${item.id}`))} className="grid min-h-[68px] w-full grid-cols-[36px_1fr_auto] items-center gap-3 py-3 text-left hover:bg-bg-hover/50">
-              <span className="grid size-9 place-items-center rounded-lg bg-bg-hover text-text-secondary"><Users className="size-4" aria-hidden="true" /></span>
+            {classes.map((item) => <li key={item.id} className="edu-teacher-class-row">
+              <button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${item.id}`))} className="edu-teacher-class-row__main">
+                <span className="edu-teacher-class-row__mark"><Users className="size-4" aria-hidden="true" /></span>
                 <span className="min-w-0"><span className="block truncate text-sm font-semibold">{item.name}</span><span className="mt-1 block text-xs text-text-muted">{item.studentsCount} {tr("учнів", "students")}</span></span>
-              <ArrowRight className="size-4 text-text-muted" aria-hidden="true" />
-            </button></li>)}
+                <ArrowRight className="size-4 text-text-muted" aria-hidden="true" />
+              </button>
+              <button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${item.id}/live`))} className="edu-teacher-class-row__live" aria-label={`${tr("Відкрити онлайн-урок для класу", "Open live lesson for class")} ${item.name}`}>
+                <Radio className="size-4" aria-hidden="true" /><span>{tr("Онлайн-урок", "Live lesson")}</span>
+              </button>
+            </li>)}
           </ul>
           : error ? <p className="py-5 text-sm text-text-secondary">{tr("Не вдалося завантажити класи.", "We couldn’t load classes.")}</p>
             : <div className="flex flex-wrap items-center justify-between gap-3 py-5"><p className="text-sm text-text-secondary">{organizations.length ? tr("Створи клас, щоб запросити учнів і призначати їм завдання.", "Create a class to invite learners and assign work.") : organizationsLoading ? tr("Перевіряємо доступ до закладів…", "Checking organization access…") : tr("Адміністратор має призначити вам клас для роботи з учнями.", "Ask your administrator to assign a class so you can work with learners.")}</p>{organizations.length > 0 && <button type="button" onClick={() => { setCreateError(null); setOpenCreate(true); }} className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold hover:bg-bg-hover">{tr("Створити клас", "Create a class")}</button>}{createError && <button type="button" onClick={() => setOrganizationReload(value => value + 1)} className="min-h-11 px-3 text-sm font-semibold text-primary-strong">{tr("Повторити завантаження закладів", "Reload organizations")}</button>}</div>}

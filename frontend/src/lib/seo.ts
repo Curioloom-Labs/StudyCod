@@ -101,6 +101,11 @@ function isPrivatePath(path: string): boolean {
 }
 
 function getSeoData(path: string, language: SeoLanguage): SeoData {
+  if (path === "/companies" || path.startsWith("/companies/")) return {
+    title: language === "uk" ? "StudyCod Talent — співбесіди та розвиток" : "StudyCod Talent — Interviews and development",
+    description: language === "uk" ? "Робочий простір команди для співбесід, технічних змін у проєктах і структурованих відгуків." : "A team workspace for interviews, project requirement changes, and structured feedback.",
+    indexable: false,
+  };
   if (isPrivatePath(path)) {
     return {
       title: "StudyCod — learn by building",

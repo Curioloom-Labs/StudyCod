@@ -21,6 +21,9 @@ function deferMonacoStyles() {
 function manualChunks(id: string): string | undefined {
   if (!id) return undefined;
   const norm = id.replace(/\\/g, "/");
+  // Rollup may otherwise put shared virtual helpers into an editor language
+  // chunk. Every lazy route then imports that chunk and eagerly loads Monaco.
+  if (norm.includes("vite/preload-helper") || norm.includes("commonjsHelpers.js") || norm.includes("vite/modulepreload-polyfill")) return "runtime-helpers";
   if (!norm.includes("/node_modules/")) return undefined;
 
   if (norm.includes("/node_modules/react/") || norm.includes("/node_modules/react-dom/") || norm.includes("/node_modules/scheduler/")) return "react-vendor";

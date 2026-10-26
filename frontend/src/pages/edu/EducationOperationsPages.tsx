@@ -9,7 +9,7 @@ import { DEFAULT_GRADING_SYSTEM, formatGradeForSystem, getGradeToneForSystem, no
 import { tr } from "../../i18n";
 
 const devPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
-const root = "mx-auto max-w-[1260px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12";
+const root = "edu-workspace mx-auto w-full max-w-[80rem] px-4 py-8 sm:px-6 lg:px-10 lg:py-12";
 const appealLabel = (status: string) => ({ SUBMITTED: tr("Нова", "New"), IN_REVIEW: tr("На розгляді", "In review"), NEEDS_INFO: tr("Потрібна відповідь", "Needs a reply"), RESOLVED_ACCEPTED: tr("Задоволено", "Accepted"), RESOLVED_PARTIAL: tr("Частково", "Partially accepted"), RESOLVED_REJECTED: tr("Відхилено", "Rejected"), CANCELLED: tr("Скасовано", "Cancelled") }[status] || status);
 const appealStyle = (status: string) => status.includes("ACCEPTED") ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : status.includes("REJECTED") || status === "CANCELLED" ? "bg-bg-hover text-accent-error dark:bg-accent-error/12 dark:text-accent-error" : status === "NEEDS_INFO" ? "bg-bg-hover text-accent-warn dark:bg-accent-warn/14 dark:text-accent-warn" : "bg-bg-hover text-[#545db9] dark:bg-[#8791ff]/12 dark:text-[#b8beff]";
 const errorView = (error: string) => <div role="alert" aria-live="assertive" className="mb-5 rounded-2xl border border-accent-error/25 bg-accent-error/[.08] px-4 py-3 text-sm font-medium text-accent-error dark:text-accent-error">{error}</div>;

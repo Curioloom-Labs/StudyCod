@@ -2,7 +2,7 @@ import type { JudgeFile, JudgeLanguage, JudgeTestCase } from "../services/judgeW
 
 export type GrowthProjectRuntime = "PYTHON" | "JAVA" | "CPP";
 export type GrowthProjectStageKey = "V1" | "V2" | "V3";
-export type GrowthProjectAssessmentKind = "DEFENSE" | "TRANSFER";
+export type GrowthProjectAssessmentKind = "DEFENSE" | "TRANSFER" | "COMPANY_TASK";
 
 export type GrowthTest = { input: string; output: string; hidden?: boolean; group: string };
 export type GrowthStage = {

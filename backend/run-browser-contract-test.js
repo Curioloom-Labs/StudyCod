@@ -13,6 +13,7 @@ if (!baseUrl) {
     const { chromium } = require("playwright");
     const browser = await chromium.launch({
       headless: true,
+      args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
       ...(executablePath ? { executablePath } : {})
     });
     const page = await browser.newPage();
@@ -66,6 +67,12 @@ if (!baseUrl) {
     let eduLoginAuthenticated = false;
     let eduSubmitReceived = false;
     let eduSubmittedCode = "";
+    let eduQuizSubmitReceived = false;
+    let eduQuizSubmittedAnswers = null;
+    let eduLiveTeacherMode = false;
+    let eduLiveStartReceived = false;
+    let eduLiveJoinReceived = false;
+    let eduLiveEndReceived = false;
     let libraryCheckCount = 0;
     const librarySubmittedCode = [];
     const librarySubmittedLanguages = [];
@@ -100,7 +107,22 @@ if (!baseUrl) {
       const isProfileProbe = pathname.endsWith("/profile/me");
       let responseStatus = isCsrf ? 204 : 200;
       let payload = isProfileProbe
-        ? eduReviewMode ? {
+        ? eduLiveTeacherMode ? {
+            id: -996,
+            username: "browser-contract-teacher",
+            firstName: "Browser",
+            lastName: "Teacher",
+            activeRuntime: "PYTHON",
+            difus: 0,
+            avatarUrl: null,
+            userMode: "EDUCATIONAL",
+            role: "TEACHER",
+            placementDone: true,
+            placementLevel: "INTERMEDIATE",
+            studentId: null,
+            classId: 31,
+            className: "10-A · Browser contract"
+          } : eduReviewMode ? {
             id: -998,
             username: "browser-contract-student",
             firstName: "Browser",
@@ -194,7 +216,10 @@ if (!baseUrl) {
       } else if (method === "POST" && pathname.endsWith("/contests/778/problems/201/check")) {
         contestCheckSubmitted = true;
         contestFinished = false;
-        contestEndsAt = Date.now() + 3_500;
+        // The browser contract navigates from the editor through the Judge
+        // result into the contest overview; leave enough time for the active
+        // state to render before the next deadline-gated assertion.
+        contestEndsAt = Date.now() + 20_000;
         payload = {
           jobId: "browser-contract-contest-check", status: "completed", statusUrl: "/api/contests/jobs/browser-contract-contest-check",
           result: { submissionId: 1901, phase: "CONTEST", verdict: "AC", testsPassed: 12, testsTotal: 12, score: 100, maxScore: 100,
@@ -283,6 +308,53 @@ if (!baseUrl) {
         };
       } else if (method === "GET" && pathname.endsWith("/edu/classes")) {
         payload = { classes: [] };
+      } else if (method === "GET" && pathname.endsWith("/edu/classes/31/live-sessions/active")) {
+        payload = { session: eduLiveStartReceived ? {
+          id: 880, classId: 31, lessonId: 601, title: "Loop boundaries", status: "LIVE", roomName: "browser-contract-live",
+          createdAt: new Date().toISOString(), endedAt: null,
+        } : null, enabled: true };
+      } else if (method === "GET" && pathname.endsWith("/edu/classes/31/live-overview")) {
+        payload = { totals: { stuck: 0, in_progress: 0, passed: 0, not_started: 0 }, students: [], generatedAtMs: Date.now() };
+      } else if (method === "GET" && pathname.endsWith("/edu/classes/31/lessons-list")) {
+        payload = { lessons: [{ id: 601, title: "Loop boundaries", type: "LESSON" }] };
+      } else if (method === "POST" && pathname.endsWith("/edu/classes/31/live-sessions")) {
+        eduLiveStartReceived = true;
+        payload = {
+          session: { id: 880, classId: 31, lessonId: 601, title: "Loop boundaries", status: "LIVE", roomName: "browser-contract-live", createdAt: new Date().toISOString(), endedAt: null },
+          token: "browser-contract-live-token", url: "wss://live.example.test", identity: "teacher-31", room: "browser-contract-live", role: "host",
+        };
+      } else if (method === "POST" && pathname.endsWith("/edu/live-sessions/880/join")) {
+        eduLiveJoinReceived = true;
+        payload = {
+          session: { id: 880, classId: 31, lessonId: 601, title: "Loop boundaries", status: "LIVE", roomName: "browser-contract-live", createdAt: new Date().toISOString(), endedAt: null },
+          token: "browser-contract-live-token", url: "wss://live.example.test", identity: "teacher-31", room: "browser-contract-live", role: "host",
+        };
+      } else if (method === "POST" && pathname.endsWith("/edu/live-sessions/880/end")) {
+        eduLiveEndReceived = true;
+        payload = { session: { id: 880, classId: 31, lessonId: 601, title: "Loop boundaries", status: "ENDED", roomName: "browser-contract-live", createdAt: new Date().toISOString(), endedAt: new Date().toISOString() } };
+      } else if (method === "GET" && pathname.endsWith("/edu/lessons/601")) {
+        payload = { lesson: {
+          id: 601, type: "LESSON", source: "course", title: "Loop boundaries", parentTopicTitle: "Python · loops",
+          hasTheory: true, theory: "# Include the last value\n\nPython's range stops before its upper bound. For n = 5, use range(1, n + 1) to include 5 and produce 15.",
+          tasksCount: 1, quizJson: "[]", createdAt: "2026-01-01T00:00:00.000Z", courseAttempt: null,
+          tasks: [{ id: 501, title: "Boundary sum practice", description: "Given n, print the sum from 1 through n inclusive.", template: "", testDataCount: 1, taskMode: "CODE", progressCompleted: false }],
+        } };
+      } else if (method === "GET" && pathname.endsWith("/edu/lessons/601/quiz")) {
+        payload = {
+          quiz: { questions: [
+            { id: "q1", type: "SINGLE_CHOICE", prompt: "Which range includes n?", options: ["range(1, n)", "range(1, n + 1)"], points: 1 },
+            { id: "q2", type: "OPEN_TEXT", prompt: "Why does Python stop before the upper bound?", points: 2 },
+          ] },
+          submittedAnswers: null,
+          submissionAllowed: true,
+          submissionBlockedReason: null,
+          attempt: null,
+        };
+      } else if (method === "POST" && pathname.endsWith("/edu/lessons/601/quiz/submit")) {
+        eduQuizSubmitReceived = true;
+        try { eduQuizSubmittedAnswers = route.request().postDataJSON()?.answers ?? null; } catch { eduQuizSubmittedAnswers = null; }
+        responseStatus = 201;
+        payload = { result: { autoScore: 1, maxScore: 3, autoPercent: 33.3, needsManual: true, results: [] } };
       } else if (method === "GET" && pathname.endsWith("/edu/tasks/pending-review")) {
         payload = { pendingReviews: [] };
       } else if (method === "POST" && pathname.endsWith("/library/tasks/901/check")) {
@@ -350,7 +422,13 @@ if (!baseUrl) {
     });
     const runtimeErrors = [];
     const eduLoginResponses = [];
-    page.on("pageerror", error => runtimeErrors.push(`pageerror: ${error.message}`));
+    page.on("pageerror", error => {
+      // The test fixture intentionally uses an unavailable LiveKit host; the
+      // client reports these transport-close errors while its UI is being
+      // checked. Application and editor exceptions still fail the contract.
+      if (eduLiveTeacherMode && /PC manager is closed|cannot negotiate on closed engine/i.test(error.message)) return;
+      runtimeErrors.push(`pageerror: ${error.message}`);
+    });
     page.on("response", response => {
       if (eduLoginFlow && new URL(response.url()).pathname.startsWith("/api/")) {
         eduLoginResponses.push(`${response.status()} ${response.request().method()} ${new URL(response.url()).pathname}`);
@@ -359,8 +437,18 @@ if (!baseUrl) {
     page.on("console", message => {
       if (message.type() === "error") {
         const text = message.text();
+        const sourceUrl = message.location()?.url;
+        // The browser contract intentionally uses an unavailable LiveKit test
+        // endpoint. Its socket failure can arrive after the teacher has left
+        // the room, so scope this exception to that exact fixture hostname.
+        const sourceHost = (() => {
+          try { return sourceUrl ? new URL(sourceUrl).hostname : ""; }
+          catch { return ""; }
+        })();
+        if (sourceHost === "live.example.test" || /wss:\/\/live\.example\.test\/rtc/i.test(text)) return;
+        if (eduLiveTeacherMode && /NegotiationError: cannot negotiate on closed engine/i.test(text)) return;
         if (eduLoginFlow && !eduLoginAuthenticated && /failed to load resource.*401/i.test(text)) return;
-        runtimeErrors.push(`console: ${text}`);
+        runtimeErrors.push(`console: ${text}${sourceUrl ? ` (${sourceUrl})` : ""}`);
       }
     });
     const response = await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
@@ -513,9 +601,39 @@ if (!baseUrl) {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
     eduReviewMode = true;
-    const eduTaskUrl = new URL("edu/tasks/501", baseUrl).toString();
-    const eduTaskResponse = await page.goto(eduTaskUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    if (!eduTaskResponse || eduTaskResponse.status() >= 500) throw new Error(`EDU task route returned ${eduTaskResponse?.status() ?? "no response"}`);
+    const eduLessonUrl = new URL("edu/lessons/601?source=course", baseUrl).toString();
+    const eduLessonResponse = await page.goto(eduLessonUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    if (!eduLessonResponse || eduLessonResponse.status() >= 500) throw new Error(`EDU lesson route returned ${eduLessonResponse?.status() ?? "no response"}`);
+    await page.getByRole("heading", { name: "Loop boundaries", exact: true }).waitFor({ state: "visible", timeout: 30_000 });
+    await captureScreenshot("contract-edu-lesson-1280x720");
+    await page.getByRole("button", { name: /Read lesson material|Перейти до матеріалу/i }).click();
+    await page.getByRole("button", { name: /Lesson started|Урок розпочато/i }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: /Open lesson quiz|Відкрити квіз уроку/i }).click();
+    await page.getByRole("heading", { name: /Check your understanding|Перевір себе/i }).waitFor({ state: "visible", timeout: 30_000 });
+    const quizSubmit = page.locator(".edu-quiz__primary[type=submit]");
+    if (!(await quizSubmit.isDisabled())) throw new Error("EDU quiz allowed submitting unanswered questions");
+    await page.locator('input[name="quiz-q1"]').nth(1).check();
+    await page.locator(".edu-quiz__question textarea").fill("range excludes its upper bound, so add one to include n.");
+    await page.waitForFunction(() => {
+      const button = [...document.querySelectorAll(".edu-quiz__primary")].find(item => item.textContent?.match(/Submit answers|Здати відповіді/i));
+      return button && !button.disabled;
+    }, undefined, { timeout: 5_000 });
+    await captureScreenshot("contract-edu-quiz-1280x720");
+    await quizSubmit.click();
+    await page.getByRole("heading", { name: /Answers saved|Відповіді збережено/i }).waitFor({ state: "visible", timeout: 10_000 });
+    if (!eduQuizSubmitReceived || eduQuizSubmittedAnswers?.q1 !== 1 || !String(eduQuizSubmittedAnswers?.q2 || "").includes("upper bound")) {
+      throw new Error(`active EDU lesson quiz did not submit its answers: ${JSON.stringify({ eduQuizSubmitReceived, eduQuizSubmittedAnswers })}`);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    const eduQuizMobileLayout = await page.evaluate(() => ({ viewportWidth: window.innerWidth, documentWidth: document.documentElement.scrollWidth }));
+    if (eduQuizMobileLayout.documentWidth > eduQuizMobileLayout.viewportWidth) throw new Error(`EDU lesson quiz overflows horizontally on mobile: ${JSON.stringify(eduQuizMobileLayout)}`);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole("button", { name: /Return to lesson|Повернутися до уроку/i }).click();
+    await page.getByRole("heading", { name: "Loop boundaries", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    const lessonTask = page.getByRole("button", { name: /Boundary sum practice/ });
+    await lessonTask.scrollIntoViewIfNeeded();
+    await lessonTask.click();
+    if (!page.url().includes("/edu/tasks/501")) throw new Error(`lesson practice did not open its assigned task: ${page.url()}`);
     try {
       await page.getByText("Boundary sum practice", { exact: true }).first().waitFor({ state: "visible", timeout: 30_000 });
     } catch (error) {
@@ -546,6 +664,112 @@ if (!baseUrl) {
     await page.getByRole("button", { name: /return to code|повернутися до коду|до свого коду/i }).click();
     const retainedEditorText = (await page.locator(".monaco-editor .view-lines").innerText()).replace(/\u00a0/g, " ");
     if (!retainedEditorText.includes("current_sum += value")) throw new Error("returning to the EDU code lost the learner's input");
+    eduLiveTeacherMode = true;
+    await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+    const liveLessonUrl = new URL("edu/classes/31/live", baseUrl).toString();
+    const liveResponse = await page.goto(liveLessonUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    if (!liveResponse || liveResponse.status() >= 500) throw new Error(`EDU live lesson route returned ${liveResponse?.status() ?? "no response"}`);
+    try {
+      await page.getByRole("heading", { name: /Live lesson|Урок наживо/i }).waitFor({ state: "visible", timeout: 30_000 });
+    } catch (error) {
+      console.error(`EDU LIVE LOBBY LOAD DEBUG: ${page.url()}\n${(await page.locator("body").innerText().catch(() => "(body unavailable)")).slice(0, 2200)}\nRuntime errors: ${runtimeErrors.join(" | ")}`);
+      await captureScreenshot("contract-edu-live-lobby-load-failure");
+      throw error;
+    }
+    try {
+      await page.getByRole("button", { name: /Start live lesson|Почати онлайн-урок/i }).click({ timeout: 10_000 });
+    } catch (error) {
+      console.error(`EDU LIVE LOBBY DEBUG: ${page.url()}\n${(await page.locator("body").innerText().catch(() => "(body unavailable)")).slice(0, 2200)}\nRuntime errors: ${runtimeErrors.join(" | ")}`);
+      await captureScreenshot("contract-edu-live-lobby-failure");
+      throw error;
+    }
+    await page.getByRole("heading", { name: /Get ready for the lesson|Підготуйтеся до заняття/i }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.locator(".lk-prejoin").waitFor({ state: "visible", timeout: 10_000 });
+    await captureScreenshot("contract-edu-live-prejoin-1280x720");
+    const prejoinActionBounds = await page.locator(".lk-prejoin .lk-join-button").evaluate(element => {
+      const bounds = element.getBoundingClientRect();
+      return { top: bounds.top, bottom: bounds.bottom, height: bounds.height, viewportHeight: window.innerHeight };
+    });
+    if (prejoinActionBounds.bottom > prejoinActionBounds.viewportHeight) throw new Error(`EDU live lesson join action is clipped at 1280x720: ${JSON.stringify(prejoinActionBounds)}`);
+    await page.locator("html").evaluate(element => { element.dataset.theme = "dark"; });
+    await captureScreenshot("contract-edu-live-prejoin-dark-1280x720");
+    await page.locator("html").evaluate(element => { delete element.dataset.theme; });
+    await page.setViewportSize({ width: 390, height: 844 });
+    const livePrejoinMobileLayout = await page.evaluate(() => ({ viewportWidth: window.innerWidth, documentWidth: document.documentElement.scrollWidth }));
+    if (livePrejoinMobileLayout.documentWidth > livePrejoinMobileLayout.viewportWidth) throw new Error(`EDU live lesson prejoin overflows horizontally on mobile: ${JSON.stringify(livePrejoinMobileLayout)}`);
+    await page.getByRole("button", { name: /Back to lobby|До лобі/i }).click();
+    await page.getByRole("button", { name: /Join lesson|Приєднатися до уроку/i }).waitFor({ state: "visible", timeout: 10_000 });
+    if (!eduLiveStartReceived || eduLiveEndReceived) throw new Error(`EDU live lesson lobby/prejoin transition ended or did not start the room: ${JSON.stringify({ eduLiveStartReceived, eduLiveEndReceived })}`);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole("button", { name: /Join lesson|Приєднатися до уроку/i }).click();
+    await page.locator(".lk-prejoin").waitFor({ state: "visible", timeout: 10_000 });
+    if (!eduLiveJoinReceived) throw new Error("EDU teacher could not re-enter the live room after returning to the lobby");
+    await page.getByRole("button", { name: /Join lesson|Увійти в урок|Приєднатися до уроку/i }).last().click();
+    try {
+      await page.getByRole("region", { name: /Video meeting|Відеозустріч/i }).waitFor({ state: "visible", timeout: 10_000 });
+    } catch (error) {
+      console.error(`EDU LIVE ROOM DEBUG: ${page.url()}\n${(await page.locator("body").innerText()).slice(0, 2200)}\nRuntime errors: ${runtimeErrors.join(" | ")}`);
+      await captureScreenshot("contract-edu-live-room-failure");
+      throw error;
+    }
+    await page.locator("html").evaluate(element => { element.dataset.theme = "dark"; });
+    for (const panel of [
+      { key: "materials", button: /Materials|Матеріали/i, region: /Lesson materials|Матеріали уроку/i },
+      { key: "board", button: /Board|Дошка/i, region: /Shared board|Спільна дошка/i },
+      { key: "code", button: /Code|Код/i, region: /Shared code|Спільний код/i },
+      { key: "people", button: /People|Люди/i, region: /Lesson participants|Учасники уроку/i },
+    ]) {
+      const control = page.getByRole("button", { name: panel.button }).first();
+      try {
+        await control.click({ timeout: 6_000 });
+      } catch (error) {
+        console.error(`EDU LIVE TOOL DEBUG (${String(panel.button)}): ${page.url()}\n${(await page.locator("body").innerText()).slice(0, 2200)}\nRuntime errors: ${runtimeErrors.join(" | ")}`);
+        await captureScreenshot("contract-edu-live-tool-failure");
+        throw error;
+      }
+      if (await control.getAttribute("aria-pressed") !== "true") throw new Error(`EDU live lesson ${String(panel.button)} panel did not become active`);
+      const region = page.getByRole("region", { name: panel.region });
+      if (await region.getAttribute("aria-hidden") !== "false") throw new Error(`EDU live lesson ${String(panel.region)} panel did not become visible`);
+      if (panel.key === "board" || panel.key === "code") {
+        const editor = region.locator(".monaco-editor");
+        await editor.waitFor({ state: "visible", timeout: 15_000 });
+        await page.waitForFunction(({ selector, color }) => {
+          const element = document.querySelector(`${selector} .monaco-editor-background`);
+          return !!element && getComputedStyle(element).backgroundColor === color;
+        }, { selector: `#live-panel-${panel.key}`, color: "rgb(23, 27, 25)" }, { timeout: 10_000 });
+      }
+      await captureScreenshot(`contract-edu-live-${panel.key}-1280x720`);
+    }
+    await page.locator("html").evaluate(element => { element.dataset.theme = "light"; });
+    await page.getByRole("button", { name: /Code|Код/i }).click();
+    const liveCodeEditor = page.locator("#live-panel-code .monaco-editor");
+    await liveCodeEditor.waitFor({ state: "visible", timeout: 15_000 });
+    await page.waitForFunction(() => {
+      const element = document.querySelector("#live-panel-code .monaco-editor-background");
+      return !!element && getComputedStyle(element).backgroundColor === "rgb(255, 255, 255)";
+    }, undefined, { timeout: 10_000 });
+    await captureScreenshot("contract-edu-live-code-light-1280x720");
+    await page.locator("html").evaluate(element => { element.dataset.theme = "dark"; });
+    await page.waitForFunction(() => {
+      const element = document.querySelector("#live-panel-code .monaco-editor-background");
+      return !!element && getComputedStyle(element).backgroundColor === "rgb(23, 27, 25)";
+    }, undefined, { timeout: 10_000 });
+    await captureScreenshot("contract-edu-live-room-dark-1280x720");
+    await page.setViewportSize({ width: 390, height: 844 });
+    const liveRoomMobileLayout = await page.evaluate(() => ({ viewportWidth: window.innerWidth, documentWidth: document.documentElement.scrollWidth }));
+    if (liveRoomMobileLayout.documentWidth > liveRoomMobileLayout.viewportWidth) throw new Error(`EDU live lesson room overflows horizontally on mobile: ${JSON.stringify(liveRoomMobileLayout)}`);
+    await captureScreenshot("contract-edu-live-room-390x844");
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole("button", { name: /^(End|Завершити)$/i }).click();
+    await page.waitForURL(url => url.pathname === "/edu/classes/31", { timeout: 10_000 });
+    if (!eduLiveEndReceived) throw new Error("Ending the online lesson did not reach the EDU session endpoint");
+    eduLiveTeacherMode = false;
+    if (process.env.BROWSER_CONTRACT_EDU_ONLY === "1") {
+      if (runtimeErrors.length > 0) throw new Error(`browser runtime errors: ${runtimeErrors.join(" | ")}`);
+      await browser.close();
+      console.log("EDU BROWSER CONTRACT PASS: lesson material → quiz → assigned task → public-test feedback → preserved editor state, login without reload, live lesson start/re-entry/device check, classroom panels and teacher end-session action");
+      return;
+    }
     const contestProblemUrl = new URL("contest/contests/778/problems/201", baseUrl).toString();
     const contestProblemResponse = await page.goto(contestProblemUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
     if (!contestProblemResponse || contestProblemResponse.status() >= 500) throw new Error(`contest problem route returned ${contestProblemResponse?.status() ?? "no response"}`);
@@ -566,7 +790,13 @@ if (!baseUrl) {
     const contestUrl = new URL("contest/contests/778", baseUrl).toString();
     const contestResponse = await page.goto(contestUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
     if (!contestResponse || contestResponse.status() >= 500) throw new Error(`contest overview route returned ${contestResponse?.status() ?? "no response"}`);
-    await page.getByText(/Time remaining|До фінішу/i).waitFor({ state: "visible", timeout: 10_000 });
+    try {
+      await page.getByText(/Time remaining|До фінішу/i).waitFor({ state: "visible", timeout: 10_000 });
+    } catch (error) {
+      console.error(`CONTEST OVERVIEW DEBUG: ${page.url()}\n${(await page.locator("body").innerText()).slice(0, 1800)}\nAPI errors: ${runtimeErrors.join(" | ")}`);
+      await captureScreenshot("contract-contest-overview-failure");
+      throw error;
+    }
     if (await page.getByRole("heading", { name: /Post-contest review|Розбір після туру/i }).count()) throw new Error("post-contest review appeared before the contest ended");
     try {
       await page.getByRole("heading", { name: /Post-contest review|Розбір після туру/i }).waitFor({ state: "visible", timeout: 30_000 });
@@ -633,7 +863,7 @@ if (!baseUrl) {
 
     if (runtimeErrors.length > 0) throw new Error(`browser runtime errors: ${runtimeErrors.join(" | ")}`);
     await browser.close();
-    console.log("BROWSER CONTRACT PASS: public shell, accessible buttons, Monaco, course quiz and Judge-attempt progress, five library rows above y=300 at 1280x720 with a mobile layout and task-management entry point, EDU public-test failure evidence and hint with retained editor code, EDU login reaches the teacher workspace without a document reload, timed contest workspace submission, generated-topic post-contest review, and mentor controls hidden through an extended deadline before appearing with four help levels load without runtime errors");
+    console.log("BROWSER CONTRACT PASS: public shell, accessible buttons, Monaco, course quiz and Judge-attempt progress, five library rows above y=300 at 1280x720 with a mobile layout and task-management entry point, connected EDU lesson → quiz → assigned task flow, public-test failure evidence and hint with retained editor code, active lesson quiz with required answers and manual-review result on desktop and mobile, EDU login without document reload, live lesson lobby/start/device-check/back transition with visible desktop join action, dark-theme and mobile layouts, timed contest workspace submission, generated-topic post-contest review, and mentor controls hidden through an extended deadline before appearing with four help levels load without runtime errors");
   } catch (error) {
     console.error(`BROWSER CONTRACT ${required ? "FAILED" : "UNVERIFIED"}: ${error.message}`);
     process.exit(required ? 1 : 0);

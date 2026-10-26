@@ -6,6 +6,7 @@ import type { JudgeFile, JudgeResponse, JudgeTestCase } from "./judgeWorker/type
 import { logger } from "../utils/logger";
 import { executionScheduler } from "./execution/executionSchedulerSingleton";
 import { summarizeGrowthProjectCheck } from "./growthProjectCheckSummary";
+import { summarizeTalentInterviewExecution } from "./talentInterviewResult";
 
 let started = false;
 let active = false;
@@ -15,7 +16,7 @@ const jobControllers = new Map<string, AbortController>();
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 
 type ClaimedJob = {
-  id: string; project_id: string; owner_id: number; context_key: string; artifact_id: string;
+  id: string; project_id: string | null; interview_id?: string | null; execution_kind?: string | null; owner_id: number; context_key: string; artifact_id: string;
   tests_json: string; files_json: string; examples_json: string; runtime: "PYTHON" | "JAVA" | "CPP";
 };
 
@@ -32,10 +33,10 @@ async function claimOne(): Promise<ClaimedJob | null> {
       return null;
     }
     const jobs = await runner.query(
-      `SELECT j.id, j.project_id, j.owner_id, j.context_key, j.artifact_id, j.tests_json,
-              p.runtime, a.files_json, a.examples_json
+      `SELECT j.id, j.project_id, j.interview_id, j.execution_kind, j.owner_id, j.context_key, j.artifact_id, j.tests_json,
+              COALESCE(j.runtime_override,p.runtime) AS runtime, a.files_json, a.examples_json
        FROM growth_project_jobs j
-       JOIN growth_projects p ON p.id = j.project_id
+       LEFT JOIN growth_projects p ON p.id = j.project_id
        JOIN growth_project_artifacts a ON a.id = j.artifact_id
        WHERE (j.state = 'QUEUED' OR (j.state = 'RUNNING' AND j.lease_until < NOW(3) AND j.attempts < 2))
        ORDER BY j.created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED`
@@ -83,7 +84,7 @@ async function runJob(job: ClaimedJob): Promise<void> {
       limits: { time_limit_ms: 5_000, memory_limit_mb: 256, output_limit_kb: 64 },
       checker: { type: "exact" },
     }, { signal: controller.signal });
-    const summary = summarizeGrowthProjectCheck(result, tests);
+    const summary = job.interview_id ? summarizeTalentInterviewExecution(result, tests, job.execution_kind) : summarizeGrowthProjectCheck(result, tests);
     await AppDataSource.query(
       `UPDATE growth_project_jobs SET state='COMPLETED', result_json=?, completed_at=NOW(3), lease_until=NULL, lease_owner=NULL WHERE id=? AND lease_owner=? AND state='RUNNING'`,
       [JSON.stringify(summary), job.id, workerId]

@@ -47,6 +47,8 @@ const PublicProfilePage = React.lazy(() => import("./pages/public/PublicProfileP
 const IadPage = React.lazy(() => import("./pages/core/IadPage").then(mod => ({ default: mod.IadPage })));
 const LearningCatalogPage = React.lazy(() => import("./pages/learning/LearningCatalogPage").then(mod => ({ default: mod.LearningCatalogPage })));
 const GrowthProjectsPage = React.lazy(() => import("./pages/projects/GrowthProjectsPage").then(mod => ({ default: mod.GrowthProjectsPage })));
+const ProjectCompaniesPage = React.lazy(() => import("./pages/projects/ProjectCompaniesPage").then(mod => ({ default: mod.ProjectCompaniesPage })));
+const TalentInterviewRoom = React.lazy(() => import("./pages/projects/TalentInterviewRoom").then(mod => ({ default: mod.TalentInterviewRoom })));
 const PublicGrowthPortfolioPage = React.lazy(() => import("./pages/projects/PublicGrowthPortfolioPage").then(mod => ({ default: mod.PublicGrowthPortfolioPage })));
 const GrowthReviewInboxPage = React.lazy(() => import("./pages/projects/GrowthReviewInboxPage").then(mod => ({ default: mod.GrowthReviewInboxPage })));
 const GrowthAdminReviewQueuePage = React.lazy(() => import("./pages/projects/GrowthAdminReviewQueuePage").then(mod => ({ default: mod.GrowthAdminReviewQueuePage })));
@@ -360,6 +362,8 @@ const AppContent: React.FC = React.memo(() => {
   } = useTranslation();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const isPublicAuthIntent = location.pathname === "/"
+    && (searchParams.get("auth") === "login" || searchParams.get("auth") === "register");
   const navigate = useNavigate();
   const [page, setPage] = useState<Page>("home");
   const [user, setUser] = useState<User | null>(() => getCachedMeUser());
@@ -655,6 +659,14 @@ const AppContent: React.FC = React.memo(() => {
       setLoading(false);
       return;
     }
+    if (searchParams.has("auth")) {
+      // The login/register route is public by design. Do not hold its first
+      // paint on a session probe that is expected to return 401.
+      initialRootResumeConsumed = true;
+      setBootResumeHandled(true);
+      setLoading(false);
+      return;
+    }
     const run = async () => {
       const requestGeneration = bootAuthGenerationRef.current;
       try {
@@ -773,7 +785,7 @@ const AppContent: React.FC = React.memo(() => {
     return () => {
       cancelled = true;
     };
-  }, [isDevPreview, previewPersona]);
+  }, [isDevPreview, previewPersona, searchParams]);
   const handleLogout = useCallback(() => {
     bootAuthGenerationRef.current += 1;
     if (isDevPreviewActive(location.search)) {
@@ -816,7 +828,7 @@ const AppContent: React.FC = React.memo(() => {
         <GeoBlockedPage state={geoBlock} />
       </Suspense>;
   }
-  if (!maintenanceChecked) {
+  if (!maintenanceChecked && !isPublicAuthIntent) {
     return <PageLoader />;
   }
   if (loading) {
@@ -868,6 +880,7 @@ const AppContent: React.FC = React.memo(() => {
           });
         } else if (u.userMode === "EDUCATIONAL") {
           removeSessionHint("fromAuth");
+          navigate("/edu", { replace: true });
         } else {
           writeSessionHint("fromAuth", "true");
         }
@@ -1046,13 +1059,14 @@ const PersonalWorkspaceFrame: React.FC<React.PropsWithChildren<{ routeLocation: 
 const ContestOnlySurfaceGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const isContestPath = /^\/(?:contest|contests)(?:\/|$)/.test(location.pathname);
+  const isAuthIntent = location.pathname === "/" && new URLSearchParams(location.search).has("auth");
   const isDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
   const cachedUser = getCachedMeUser();
   const [result, setResult] = React.useState<{ path: string; decision: "checking" | "allowed" | "contest-only" }>(() => ({
     path: "",
     decision: "checking",
   }));
-  const decision = isDevPreview || isContestPath
+  const decision = isDevPreview || isContestPath || isAuthIntent
     ? "allowed"
     : cachedUser
       ? cachedUser.userMode === "CONTEST" ? "contest-only" : "allowed"
@@ -1060,7 +1074,7 @@ const ContestOnlySurfaceGuard: React.FC<{ children: React.ReactNode }> = ({ chil
 
   React.useEffect(() => {
     const path = location.pathname;
-    if (isDevPreview || isContestPath) {
+    if (isDevPreview || isContestPath || isAuthIntent) {
       setResult({ path, decision: "allowed" });
       return;
     }
@@ -1079,7 +1093,7 @@ const ContestOnlySurfaceGuard: React.FC<{ children: React.ReactNode }> = ({ chil
       if (active) setResult({ path, decision: "allowed" });
     });
     return () => { active = false; };
-  }, [isContestPath, isDevPreview, location.pathname]);
+  }, [isAuthIntent, isContestPath, isDevPreview, location.pathname]);
 
   if (decision === "checking") return <PageLoader />;
   if (decision === "contest-only") return <Navigate to="/contest/contests" replace state={{ from: `${location.pathname}${location.search}` }} />;
@@ -1108,6 +1122,7 @@ const ContestEntryRoute: React.FC = () => {
 export const App: React.FC = () => {
   const location = useLocation();
   const isContestSurface = /^\/(?:contest|contests)(?:\/|$)/.test(location.pathname);
+  const isTalentSurface = /^\/companies(?:\/|$)/.test(location.pathname);
   const { i18n } = useTranslation();
   const topLevelRouteKey = useMemo(() => {
     const path = location.pathname || "/";
@@ -1141,9 +1156,9 @@ export const App: React.FC = () => {
   return <PageLoadingProvider>
     <TheoryModalProvider>
         <ToastViewport />
-        {!isContestSurface && <GlobalQuickSearch />}
+        {!isContestSurface && !isTalentSurface && <GlobalQuickSearch />}
         <NetworkStatus />
-        {!isContestSurface && <MascotCompanion />}
+        {!isContestSurface && !isTalentSurface && <MascotCompanion />}
         <AnimatedPage key={productRouteKey} className="w-full">
         <PersonalWorkspaceFrame routeLocation={location}><ContestOnlySurfaceGuard>
           <AnimatedPage key={topLevelRouteKey} className="w-full">
@@ -1302,6 +1317,8 @@ export const App: React.FC = () => {
                 </PersonalRouteShell>
               </RequireToken>} />
           <Route path="/projects" element={<RequireToken><PersonalRouteShell><Suspense fallback={<PageLoader />}><AnimatedPage><GrowthProjectsPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/companies" element={<RequireToken><Suspense fallback={<PageLoader />}><ProjectCompaniesPage /></Suspense></RequireToken>} />
+          <Route path="/companies/interviews/:interviewId" element={<RequireToken><Suspense fallback={<PageLoader />}><TalentInterviewRoom /></Suspense></RequireToken>} />
           <Route path="/projects/reviews" element={<RequireToken><PersonalRouteShell><Suspense fallback={<PageLoader />}><AnimatedPage><GrowthReviewInboxPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
           <Route path="/projects/admin/reviews" element={<RequireToken><Suspense fallback={<PageLoader />}><GrowthAdminReviewQueuePage /></Suspense></RequireToken>} />
           <Route path="/portfolio/:publicId" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}><PublicGrowthPortfolioPage /></Suspense></PublicPageWithFooter>} />

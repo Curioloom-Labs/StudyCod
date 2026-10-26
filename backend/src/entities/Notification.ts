@@ -6,7 +6,7 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 
  * comment activity (a new comment on your post, a reply to your comment).
  */
 export type NotificationPrincipalType = "USER" | "STUDENT";
-export type NotificationType = "BLOG_COMMENT" | "BLOG_REPLY" | "GROWTH_REVIEW_INVITATION" | "GROWTH_REVIEW_ASSIGNED" | "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR" | "GROWTH_REVIEW_ACCEPTED" | "GROWTH_REVIEW_DECLINED" | "GROWTH_REVIEW_SUBMITTED" | "GROWTH_REVIEW_REQUESTED";
+export type NotificationType = "BLOG_COMMENT" | "BLOG_REPLY" | "GROWTH_REVIEW_INVITATION" | "GROWTH_REVIEW_ASSIGNED" | "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR" | "GROWTH_REVIEW_ACCEPTED" | "GROWTH_REVIEW_DECLINED" | "GROWTH_REVIEW_SUBMITTED" | "GROWTH_REVIEW_REQUESTED" | "COMPANY_TEAM_INVITATION" | "COMPANY_ASSESSMENT_INVITATION" | "COMPANY_ASSESSMENT_UPDATED";
 
 @Entity("notifications")
 @Index("idx_notifications_recipient", ["recipientType", "recipientId", "readAt"])
@@ -20,7 +20,7 @@ export class Notification {
   @Column({ type: "int", name: "recipient_id" })
   recipientId!: number;
 
-  @Column({ type: "enum", enum: ["BLOG_COMMENT", "BLOG_REPLY", "GROWTH_REVIEW_INVITATION", "GROWTH_REVIEW_ASSIGNED", "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR", "GROWTH_REVIEW_ACCEPTED", "GROWTH_REVIEW_DECLINED", "GROWTH_REVIEW_SUBMITTED", "GROWTH_REVIEW_REQUESTED"] })
+  @Column({ type: "enum", enum: ["BLOG_COMMENT", "BLOG_REPLY", "GROWTH_REVIEW_INVITATION", "GROWTH_REVIEW_ASSIGNED", "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR", "GROWTH_REVIEW_ACCEPTED", "GROWTH_REVIEW_DECLINED", "GROWTH_REVIEW_SUBMITTED", "GROWTH_REVIEW_REQUESTED", "COMPANY_TEAM_INVITATION", "COMPANY_ASSESSMENT_INVITATION", "COMPANY_ASSESSMENT_UPDATED"] })
   type!: NotificationType;
 
   /** Display name of whoever triggered the notification. */

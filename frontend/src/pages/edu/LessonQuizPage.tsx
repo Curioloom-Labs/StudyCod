@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Send } from "lucide-react";
 import { Button } from "../../components/ui/Button";
-import { PageHero } from "../../components/ui/PageHero";
 import { api } from "../../lib/api/client";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
@@ -31,20 +30,25 @@ export const LessonQuizPage: React.FC = () => {
   const [result, setResult] = useState<QuizResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     (async () => {
+      setLoading(true);
+      setErrorMessage(null);
       try {
         const { data } = await api.get(`/edu/lessons/${lessonId}/quiz`);
         setQuestions(data?.quiz?.questions ?? null);
         setAttempt(data?.attempt ?? null);
       } catch (error) {
+        setErrorMessage(getErrorMessageFromUnknown(error, tr("Не вдалося завантажити вікторину.", "Could not load the quiz.")));
         showToast({ message: getErrorMessageFromUnknown(error, tr("Помилка", "Error")), type: "error" });
       } finally {
         setLoading(false);
       }
     })();
-  }, [lessonId]);
+  }, [lessonId, reload]);
 
   const setAnswer = (qid: string, value: QuizAnswer) => setAnswers(prev => ({ ...prev, [qid]: value }));
 
@@ -61,45 +65,30 @@ export const LessonQuizPage: React.FC = () => {
     }
   };
 
-  if (loading) return <div role="status" aria-live="polite" style={{ padding: 24 }}>{tr("Завантаження…", "Loading…")}</div>;
+  if (loading) return <main className="edu-workspace edu-lesson-quiz" role="status" aria-live="polite"><div className="edu-lesson-quiz__loading"><span />{tr("Завантажуємо запитання…", "Loading questions…")}</div></main>;
 
   return (
-    <div style={{ maxWidth: 680, margin: "0 auto", padding: "0 16px 48px" }}>
-      <Button variant="ghost" onClick={() => navigate(-1)} style={{ marginTop: 16 }}>
-        <ArrowLeft size={16} /> {tr("Назад", "Back")}
-      </Button>
-      <PageHero eyebrow="// quiz" title={tr("Вікторина уроку", "Lesson quiz")} />
+    <main className="edu-workspace edu-lesson-quiz">
+      <button type="button" onClick={() => navigate(-1)} className="edu-lesson-quiz__back"><ArrowLeft size={16} />{tr("До уроку", "Back to lesson")}</button>
+      <header className="edu-lesson-quiz__header">
+        <p>{tr("EDU / самоперевірка", "EDU / knowledge check")}</p>
+        <h1>{tr("Вікторина уроку", "Lesson quiz")}</h1>
+        <span>{questions?.length ?? 0} {tr("запитань", "questions")}</span>
+      </header>
 
-      {!questions ? (
-        <p style={{ opacity: 0.6, marginTop: 16 }}>{tr("У цьому уроці немає вікторини.", "This lesson has no quiz.")}</p>
+      {errorMessage ? (
+        <section className="edu-lesson-quiz__empty" role="alert"><strong>{tr("Не вдалося відкрити перевірку", "Could not open the quiz")}</strong><p>{errorMessage}</p><button type="button" onClick={() => setReload(value => value + 1)}>{tr("Спробувати ще раз", "Try again")}</button></section>
+      ) : !questions ? (
+        <section className="edu-lesson-quiz__empty"><strong>{tr("У цьому уроці немає вікторини", "This lesson has no quiz")}</strong><p>{tr("Поверніться до матеріалу уроку або запитайте викладача, коли з’явиться перевірка.", "Return to the lesson material or ask your teacher when a check will be available.")}</p></section>
       ) : attempt || result ? (
-        <div style={{ marginTop: 16, padding: 16, border: "1px solid rgba(128,128,128,0.25)", borderRadius: 8 }}>
-          <h3 style={{ marginTop: 0 }}>{tr("Результат", "Result")}</h3>
-          <p>
-            {tr("Автоматично", "Auto")}: <strong>{(result ?? attempt)?.autoPercent}%</strong>
-            {(result ?? attempt)?.needsManual && (
-              <span style={{ marginLeft: 8, fontSize: 13, opacity: 0.7 }}>
-                {tr("(є питання на ручну перевірку)", "(some answers await manual grading)")}
-              </span>
-            )}
-          </p>
-        </div>
+        <section className="edu-lesson-quiz__result" role="status"><div><p>{tr("СПРОБУ ЗБЕРЕЖЕНО", "ATTEMPT SAVED")}</p><h2>{tr("Результат", "Result")}</h2></div><strong>{(result ?? attempt)?.autoPercent ?? "—"}<small>%</small></strong>{(result ?? attempt)?.needsManual && <p className="edu-lesson-quiz__pending">{tr("Відкриті відповіді ще має перевірити викладач.", "Your teacher still needs to review the open responses.")}</p>}</section>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 20, marginTop: 16 }}>
-          {questions.map((q, idx) => (
-            <div key={q.id} style={{ padding: 14, border: "1px solid rgba(128,128,128,0.25)", borderRadius: 8 }}>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>
-                {idx + 1}. {q.prompt ?? q.id} {q.points ? <span style={{ opacity: 0.5, fontSize: 12 }}>({q.points})</span> : null}
-              </div>
-              <QuestionInput q={q} value={answers[q.id]} onChange={v => setAnswer(q.id, v)} />
-            </div>
-          ))}
-          <Button onClick={submit} disabled={busy}>
-            <Send size={16} /> {busy ? tr("Надсилання…", "Submitting…") : tr("Надіслати", "Submit")}
-          </Button>
-        </div>
+        <form className="edu-lesson-quiz__questions" onSubmit={event => { event.preventDefault(); void submit(); }}>
+          {questions.map((q, idx) => <fieldset key={q.id} className="edu-lesson-quiz__question"><legend><span>{String(idx + 1).padStart(2, "0")}</span><strong>{q.prompt ?? q.id}</strong>{q.points ? <small>{q.points} {tr("балів", "points")}</small> : null}</legend><QuestionInput q={q} value={answers[q.id]} onChange={v => setAnswer(q.id, v)} /></fieldset>)}
+          <div className="edu-lesson-quiz__submit-row"><span>{Object.keys(answers).length} / {questions.length} {tr("відповідей обрано", "answers selected")}</span><Button type="submit" disabled={busy || Object.keys(answers).length === 0}><Send size={16} />{busy ? tr("Надсилання…", "Submitting…") : tr("Надіслати відповіді", "Submit answers")}</Button></div>
+        </form>
       )}
-    </div>
+    </main>
   );
 };
 
@@ -107,9 +96,9 @@ const QuestionInput: React.FC<{ q: Question; value: QuizAnswer; onChange: (v: Qu
   switch (q.type) {
     case "SINGLE_CHOICE":
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="edu-lesson-quiz__options">
           {(q.options ?? []).map((opt, i) => (
-            <label key={i} style={{ display: "flex", gap: 8 }}>
+            <label key={i} className="edu-lesson-quiz__option">
               <input type="radio" name={q.id} checked={value === i} onChange={() => onChange(i)} /> {opt}
             </label>
           ))}
@@ -118,9 +107,9 @@ const QuestionInput: React.FC<{ q: Question; value: QuizAnswer; onChange: (v: Qu
     case "MULTIPLE_CHOICE": {
       const arr: number[] = Array.isArray(value) ? value.filter((item): item is number => typeof item === "number") : [];
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="edu-lesson-quiz__options">
           {(q.options ?? []).map((opt, i) => (
-            <label key={i} style={{ display: "flex", gap: 8 }}>
+            <label key={i} className="edu-lesson-quiz__option">
               <input
                 type="checkbox"
                 checked={arr.includes(i)}
@@ -134,11 +123,11 @@ const QuestionInput: React.FC<{ q: Question; value: QuizAnswer; onChange: (v: Qu
     }
     case "TRUE_FALSE":
       return (
-        <div style={{ display: "flex", gap: 16 }}>
-          <label style={{ display: "flex", gap: 6 }}>
+        <div className="edu-lesson-quiz__options edu-lesson-quiz__options--inline">
+          <label className="edu-lesson-quiz__option">
             <input type="radio" name={q.id} checked={value === true} onChange={() => onChange(true)} /> {tr("Правда", "True")}
           </label>
-          <label style={{ display: "flex", gap: 6 }}>
+          <label className="edu-lesson-quiz__option">
             <input type="radio" name={q.id} checked={value === false} onChange={() => onChange(false)} /> {tr("Хибність", "False")}
           </label>
         </div>
@@ -147,7 +136,7 @@ const QuestionInput: React.FC<{ q: Question; value: QuizAnswer; onChange: (v: Qu
       const blanks = q.blanks ?? [];
       const arr: string[] = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
       return (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <div className="edu-lesson-quiz__options edu-lesson-quiz__options--inline">
           {blanks.map((_, i) => (
             <input
               key={i}
@@ -158,7 +147,7 @@ const QuestionInput: React.FC<{ q: Question; value: QuizAnswer; onChange: (v: Qu
                 onChange(next);
               }}
               placeholder={`#${i + 1}`}
-              style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)" }}
+              className="edu-lesson-quiz__answer edu-lesson-quiz__answer--blank"
             />
           ))}
         </div>
@@ -168,9 +157,9 @@ const QuestionInput: React.FC<{ q: Question; value: QuizAnswer; onChange: (v: Qu
       const n = q.pairCount ?? 0;
       const arr: number[] = Array.isArray(value) ? value.filter((item): item is number => typeof item === "number") : [];
       return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div className="edu-lesson-quiz__options">
           {Array.from({ length: n }).map((_, i) => (
-            <label key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <label key={i} className="edu-lesson-quiz__option">
               {tr("Пара", "Pair")} {i + 1}:
               <input
                 type="number"
@@ -181,7 +170,7 @@ const QuestionInput: React.FC<{ q: Question; value: QuizAnswer; onChange: (v: Qu
                   next[i] = Number(e.target.value);
                   onChange(next);
                 }}
-                style={{ width: 70, padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)" }}
+                className="edu-lesson-quiz__answer edu-lesson-quiz__answer--pair"
               />
             </label>
           ))}
@@ -194,7 +183,7 @@ const QuestionInput: React.FC<{ q: Question; value: QuizAnswer; onChange: (v: Qu
           value={typeof value === "string" ? value : ""}
           onChange={e => onChange(e.target.value)}
           rows={4}
-          style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)", boxSizing: "border-box" }}
+          className="edu-lesson-quiz__answer edu-lesson-quiz__answer--text"
         />
       );
     case "SHORT_ANSWER":
@@ -203,7 +192,7 @@ const QuestionInput: React.FC<{ q: Question; value: QuizAnswer; onChange: (v: Qu
         <input
           value={typeof value === "string" ? value : ""}
           onChange={e => onChange(e.target.value)}
-          style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid rgba(128,128,128,0.3)", boxSizing: "border-box" }}
+          className="edu-lesson-quiz__answer"
         />
       );
   }

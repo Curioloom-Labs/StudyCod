@@ -59,7 +59,7 @@ import {
 } from "../../lib/gradingSystems";
 
 const root =
-  "min-h-[100dvh] bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-10 lg:py-10";
+  "edu-workspace edu-class-management min-h-[100dvh] bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-10 lg:py-10";
 const initials = (student: Student) =>
   `${student.firstName?.[0] || ""}${student.lastName?.[0] || ""}`.toUpperCase() ||
   tr("У", "S");
