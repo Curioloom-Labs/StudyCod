@@ -37,6 +37,23 @@ export type FailureRecoveryData = {
   verdict?: string | null;
 };
 
+export function hasFailureHintContext({
+  failureCategory,
+  compileError,
+  compileErrorKind,
+  firstFailure,
+}: Pick<Props, "failureCategory" | "compileError" | "compileErrorKind" | "firstFailure">): boolean {
+  return [
+    failureCategory,
+    compileError,
+    compileErrorKind,
+    firstFailure?.errorKind,
+    firstFailure?.inputPreview,
+    firstFailure?.expectedPreview,
+    firstFailure?.actualPreview,
+  ].some((value) => String(value ?? "").trim().length > 0);
+}
+
 const languageCopy = (isEnglish: boolean, uk: string, en: string) => isEnglish ? en : uk;
 
 function categoryLabel(kind: string | null | undefined, isEnglish: boolean): string | null {
@@ -119,6 +136,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
     ? `${testsPassed}/${testsTotal} ${languageCopy(isEnglish, "тестів", "tests")}`
     : `${score ?? "—"}/${maxScore ?? 100}`;
   const hasActionableEvidence = Boolean(category || compileError || firstFailure?.errorKind || firstFailure?.expectedPreview || firstFailure?.actualPreview || firstFailure?.inputPreview);
+  const hasHintContext = hasFailureHintContext({ failureCategory, compileError, compileErrorKind, firstFailure });
 
   useEffect(() => {
     setHintLevel(Math.max(0, Math.min(2, Number(highestHintLevelShown) || 0)));
@@ -126,7 +144,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
   }, [learningAttemptId, highestHintLevelShown, persistedCategory]);
 
   useEffect(() => {
-    if (!trackLearning || upperVerdict === "AC" || !taskId) return;
+    if (!trackLearning || upperVerdict === "AC" || !taskId || !hasHintContext) return;
     const key = `${taskKind}:${taskId}:${learningAttemptId ?? "none"}:${hintLevel + 1}`;
     if (reportedHintKey.current === key) return;
     reportedHintKey.current = key;
@@ -138,7 +156,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
       failureCategory: persistedCategory,
       hintLevel: hintLevel + 1,
     }).catch(() => undefined);
-  }, [trackLearning, upperVerdict, taskId, taskKind, learningAttemptId, persistedCategory, hintLevel]);
+  }, [trackLearning, upperVerdict, taskId, taskKind, learningAttemptId, persistedCategory, hintLevel, hasHintContext]);
 
   useEffect(() => {
     if (upperVerdict === "AC") return;
@@ -218,17 +236,23 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
       </div>
 
       <div className="failure-recovery-guidance">
-        <div className="failure-recovery-hint rounded-xl border border-primary/20 bg-primary/[.06] p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="font-mono text-[10px] font-bold uppercase tracking-[.12em] text-primary-soft">{languageCopy(isEnglish, `Підказка ${hintLevel + 1} з ${hints.length}`, `Hint ${hintLevel + 1} of ${hints.length}`)}</div>
-            <span className="border border-border px-2 py-1 font-mono text-[10px] font-semibold text-text-secondary">{hintStageLabel(hintLevel, isEnglish)}</span>
+        {hasHintContext ? (
+          <div className="failure-recovery-hint rounded-xl border border-primary/20 bg-primary/[.06] p-4" aria-live="polite">
+            <div className="flex items-center justify-between gap-3">
+              <div className="font-mono text-[10px] font-bold uppercase tracking-[.12em] text-primary-soft">{languageCopy(isEnglish, category ? `Підказка ${hintLevel + 1} з ${hints.length}` : `Напрям перевірки ${hintLevel + 1} з ${hints.length}`, category ? `Hint ${hintLevel + 1} of ${hints.length}` : `Direction to check ${hintLevel + 1} of ${hints.length}`)}</div>
+              <span className="border border-border px-2 py-1 font-mono text-[10px] font-semibold text-text-secondary">{hintStageLabel(hintLevel, isEnglish)}</span>
+            </div>
+            <p className="mt-2 text-sm leading-6 text-text-primary">{hints[hintLevel]}</p>
+            <p className="mt-2 text-[11px] leading-5 text-text-secondary">{languageCopy(isEnglish, category ? "Підказка спрямовує до власного рішення й не показує готовий код." : "Це загальний напрям для перевірки за доступними свідченнями, а не встановлена причина.", category ? "This hint points toward your own solution and does not reveal the finished code." : "This is a general direction based on available evidence, not a confirmed cause.")}</p>
           </div>
-          <p className="mt-2 text-sm leading-6 text-text-primary">{hints[hintLevel]}</p>
-          <p className="mt-2 text-[11px] leading-5 text-text-secondary">{languageCopy(isEnglish, "Підказка спрямовує до власного рішення й не показує готовий код.", "This hint points toward your own solution and does not reveal the finished code.")}</p>
-        </div>
+        ) : (
+          <div className="failure-recovery-no-hint rounded-xl border border-border bg-bg-surface p-4 text-sm leading-6 text-text-secondary" role="status">
+            {languageCopy(isEnglish, "У результаті немає даних для змістовної підказки. Звір умову зі своїм кодом або повернися до редактора.", "The result has no details for a useful hint. Compare the task with your code, or return to the editor.")}
+          </div>
+        )}
 
         <div className="failure-recovery-actions mt-4 flex flex-wrap gap-2">
-          <button type="button" onClick={() => {
+          {hasHintContext && <button type="button" onClick={() => {
             const nextLevel = Math.min(hints.length - 1, hintLevel + 1);
             setHintLevel(nextLevel);
             if (trackLearning && taskId && nextLevel > hintLevel) {
@@ -243,7 +267,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
             }
           }} disabled={hintLevel >= hints.length - 1} className="failure-recovery-action inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-3.5 py-2.5 text-xs font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45">
             {languageCopy(isEnglish, "Показати ще одну підказку", "Show another hint")} <ArrowRight className="size-3.5" />
-          </button>
+          </button>}
           {onTryAgain ? <button type="button" onClick={() => {
             if (trackLearning && taskId) {
               void recordLearningEvent({ eventType: "retry_started", taskId, taskKind, learningAttemptId, failureCategory: persistedCategory }).catch(() => undefined);
