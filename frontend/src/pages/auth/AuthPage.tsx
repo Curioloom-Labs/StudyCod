@@ -90,7 +90,7 @@ const SecurityCheckPanel = React.forwardRef<HTMLDivElement, {
     </div>
     {!enabled ? (
       <div className="px-4 py-4 text-[11px] leading-5 text-text-muted dark:text-text-muted">
-        {tr("Захист Cloudflare буде активним на робочому домені.", "Cloudflare protection is enabled on the production domain.")}
+        {tr("Перевірка Cloudflare не налаштована для цього середовища.", "Cloudflare verification isn't configured for this environment.")}
       </div>
     ) : failed ? (
       <div className="flex items-start gap-3 px-4 py-4"><AlertCircle className="mt-0.5 size-4 shrink-0 text-accent-error" /><div><strong className="text-[12px]">{tr("Перевірка зараз недоступна", "Verification is currently unavailable")}</strong><p className="mt-1 text-[11px] leading-5 text-text-muted dark:text-text-muted">{tr("На робочому домені модуль відкриється тут автоматично. Локальне середовище може блокувати з’єднання з Cloudflare.", "On the production domain the check will appear here automatically. Local environments may block Cloudflare connections.")}</p></div></div>

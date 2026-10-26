@@ -621,6 +621,11 @@ content).
 and at least 32 characters in production for scheduled maintenance/email jobs),
 `METRICS_ENABLED`.
 
+The production deploy builds the frontend in GitHub Actions. Set the repository Actions
+variable `VITE_TURNSTILE_SITE_KEY` to the public Turnstile site key; the deploy build
+enables the auth widget and fails before deployment if this key is missing. The backend
+must also have the matching `TURNSTILE_SECRET_KEY` and `TURNSTILE_ENFORCE_AUTH=1`.
+
 ### Web tasks
 
 `WEB_TASKS_ENABLED`, `WEB_TASK_MAX_FILE_SIZE`, `WEB_TASK_MAX_TOTAL_SIZE`,

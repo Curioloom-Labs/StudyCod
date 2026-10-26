@@ -50,7 +50,20 @@ jobs:
       - name: Type-check package
         run: npm run typecheck --if-present
 
+      - name: Verify frontend Turnstile deployment config
+        if: matrix.package == 'frontend'
+        env:
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
+        run: |
+          if [[ -z "$VITE_TURNSTILE_SITE_KEY" ]]; then
+            echo "::error::Set the repository Actions variable VITE_TURNSTILE_SITE_KEY before deploying. Production auth enforces Turnstile."
+            exit 1
+          fi
+
       - name: Build package
+        env:
+          VITE_ENABLE_AUTH_TURNSTILE: ${{ matrix.package == 'frontend' && 'true' || '' }}
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
         run: npm run build
 
       - name: Upload prebuilt frontend distribution
