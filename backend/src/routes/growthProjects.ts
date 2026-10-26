@@ -217,7 +217,7 @@ growthProjectsRouter.get("/legacy", authRequired, async (req: AuthRequest, res: 
   const courseSql = "SELECT DISTINCT p.item_id AS sourceId,ci.title,c.title AS courseTitle,v.runtime FROM course_item_progress p " +
     "JOIN user_course_enrollments e ON e.id=p.enrollment_id JOIN course_variants v ON v.id=e.variant_id " +
     "JOIN course_items ci ON ci.id=p.item_id JOIN course_modules cm ON cm.id=ci.module_id JOIN courses c ON c.id=cm.course_id " +
-    "WHERE e.user_id=? AND c.organization_id IS NULL AND p.status='COMPLETED' AND JSON_EXTRACT(ci.content,'$.projectSpec') IS NOT NULL " +
+    "WHERE e.user_id=? AND c.org_id IS NULL AND p.status='COMPLETED' AND JSON_EXTRACT(ci.content,'$.projectSpec') IS NOT NULL " +
     "ORDER BY p.item_id DESC LIMIT 50";
   const courseRows = await AppDataSource.query(courseSql, [ownerId]) as Array<Record<string, unknown>>;
   const libraryRows = await AppDataSource.query("SELECT a.library_task_id AS sourceId,t.title,t.description,t.allowed_languages,a.updated_at FROM library_task_attempts a JOIN library_tasks t ON t.id=a.library_task_id WHERE a.user_id=? AND t.project_spec IS NOT NULL ORDER BY a.updated_at DESC LIMIT 50", [ownerId]) as Array<Record<string, unknown>>;
