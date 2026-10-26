@@ -1,0 +1,21 @@
+{
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "task": "Sum from 1 through n",
+  "publicTest": {
+    "input": "5",
+    "expected": "15",
+    "firstActual": "10",
+    "retryActual": "15"
+  },
+  "submittedLanguages": [
+    "python",
+    "python"
+  ],
+  "originalResultPanelHeight": 240,
+  "expandedResultPanelHeight": 333,
+  "restoredResultPanelHeight": 240,
+  "submittedCodePreserved": true
+}

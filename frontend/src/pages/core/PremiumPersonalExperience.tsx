@@ -548,7 +548,8 @@ export const PremiumLibrary: React.FC<{
   onShare?: () => void;
   shareCopied?: boolean;
   preview?: boolean;
-}> = ({ tasks, total, solved, loading, query, onQuery, onOpen, getTaskHref, onShare, shareCopied, preview = false }) => {
+  onManage?: () => void;
+}> = ({ tasks, total, solved, loading, query, onQuery, onOpen, getTaskHref, onShare, shareCopied, preview = false, onManage }) => {
   const { i18n } = useTranslation();
   const en = i18n.language?.toLowerCase().startsWith("en");
   const [difficultyFilter, setDifficultyFilter] = React.useState<"ALL" | "EASY" | "MEDIUM" | "HARD">("ALL");
@@ -560,6 +561,7 @@ export const PremiumLibrary: React.FC<{
     solved: "solved",
     share: "Share filters",
     copied: "Copied",
+    manage: "My materials",
     search: "Search by title, topic, or skill",
     clear: "Clear",
     level: "Level",
@@ -590,6 +592,7 @@ export const PremiumLibrary: React.FC<{
     solved: "розв’язано",
     share: "Поділитися",
     copied: "Скопійовано",
+    manage: "Мої матеріали",
     search: "Пошук за назвою, темою чи навичкою",
     clear: "Очистити",
     level: "Рівень",
@@ -633,7 +636,7 @@ export const PremiumLibrary: React.FC<{
   return (
     <main className="min-h-full bg-bg-base px-4 pb-8 pt-3 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-8 lg:pt-3">
       <div className="mx-auto max-w-7xl">
-        <header className="relative grid overflow-hidden rounded-[22px] bg-[#19382d] px-5 py-4 text-[#f3f2e9] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-7 sm:py-5 lg:min-h-[104px] lg:px-8">
+        <header className="relative grid overflow-hidden rounded-[22px] bg-[#19382d] px-5 py-4 text-[#f3f2e9] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-7 sm:py-5 lg:min-h-[96px] lg:px-8">
           <div className="pointer-events-none absolute -right-8 -top-24 size-56 rounded-full border border-white/[.08]" aria-hidden="true" />
           <div className="pointer-events-none absolute -right-1 -top-16 size-40 rounded-full border border-[#cce890]/20" aria-hidden="true" />
           <div className="relative min-w-0">
@@ -646,6 +649,7 @@ export const PremiumLibrary: React.FC<{
               <div className="border-l border-white/20 pl-3"><dd className="font-mono text-2xl font-bold leading-none tabular-nums text-[#cce890] sm:text-3xl">{solved}</dd><dt className="mt-1.5 text-[10px] font-semibold uppercase tracking-[.1em] text-white/60">{copy.solved}</dt></div>
             </dl>
             {onShare ? <button type="button" onClick={onShare} className="mb-0.5 inline-flex min-h-10 items-center rounded-lg border border-white/20 px-3 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#cce890] motion-reduce:transition-none">{shareCopied ? copy.copied : copy.share}</button> : null}
+            {onManage ? <button type="button" onClick={onManage} className="mb-0.5 inline-flex min-h-10 items-center rounded-lg px-3 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#cce890] motion-reduce:transition-none">{copy.manage}<ArrowUpRight className="ml-1.5 size-3.5" aria-hidden="true" /></button> : null}
           </div>
         </header>
 

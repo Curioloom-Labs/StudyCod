@@ -1,6 +1,7 @@
 const baseUrl = process.env.BROWSER_CONTRACT_BASE_URL;
 const required = process.env.BROWSER_CONTRACT_REQUIRED === "1";
 const executablePath = String(process.env.BROWSER_CONTRACT_EXECUTABLE_PATH || "").trim();
+const captureDir = String(process.env.BROWSER_CONTRACT_CAPTURE_DIR || "").trim();
 
 if (!baseUrl) {
   console.log("BROWSER CONTRACT UNVERIFIED: set BROWSER_CONTRACT_BASE_URL to run against a live frontend");
@@ -15,6 +16,20 @@ if (!baseUrl) {
       ...(executablePath ? { executablePath } : {})
     });
     const page = await browser.newPage();
+    const captureScreenshot = async (name) => {
+      if (!captureDir) return;
+      const fs = require("node:fs/promises");
+      const path = require("node:path");
+      await fs.mkdir(captureDir, { recursive: true });
+      await page.screenshot({ path: path.join(captureDir, `${name}.png`), fullPage: false });
+    };
+    const captureData = async (name, value) => {
+      if (!captureDir) return;
+      const fs = require("node:fs/promises");
+      const path = require("node:path");
+      await fs.mkdir(captureDir, { recursive: true });
+      await fs.writeFile(path.join(captureDir, name), `${JSON.stringify(value, null, 2)}\n`);
+    };
     const waitForEditor = async (label) => {
       try {
         await page.locator(".monaco-editor").waitFor({ state: "attached", timeout: 30_000 });
@@ -33,6 +48,30 @@ if (!baseUrl) {
     let eduReviewMode = false;
     let eduSubmitReceived = false;
     let eduSubmittedCode = "";
+    let libraryCheckCount = 0;
+    const librarySubmittedCode = [];
+    const librarySubmittedLanguages = [];
+    const libraryTasks = [
+      [901, "Sum from 1 to n", "Python basics", "EASY", ["loops", "range boundary"]],
+      [902, "Category expenses", "Collections", "EASY", ["collections", "loops"]],
+      [903, "Longest streak", "Arrays", "MEDIUM", ["arrays", "algorithm"]],
+      [904, "Event card", "Web basics", "EASY", ["html", "css"]],
+      [905, "Schedule validator", "Logic", "HARD", ["logic", "practice"]],
+    ].map(([id, title, section, difficulty, tags], index) => ({
+      id, title, section, difficulty, tags,
+      description: `Browser contract task ${index + 1}`,
+      template: "print('ready')\n",
+      lang: "PYTHON",
+      taskMode: index === 3 ? "WEB" : "CODE",
+      maxAttempts: 0,
+      status: "APPROVED",
+      rejectionReason: null,
+      submittedAt: null,
+      publishedAt: "2026-01-01T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      author: null,
+    }));
     // The browser contract runs against the static frontend preview and
     // deterministic API fixtures. It verifies rendered flows; backend route
     // and database contracts are covered by the backend suite.
@@ -182,6 +221,50 @@ if (!baseUrl) {
           review: [{ questionId: "question-1", question: "Select the prefix range formula.", options: ["P[r] - P[l]", "P[l] - P[r]"], selectedIndex: 0, correctIndex: 0 }],
           progress: { status: "COMPLETED", score: 100, completedAt: null },
           enrollment: { id: 991, status: "IN_PROGRESS", completionPercent: 100, masteryScore: 0 } } };
+      } else if (method === "GET" && pathname.endsWith("/library/tasks")) {
+        payload = { tasks: libraryTasks, total: libraryTasks.length, page: 1, pageSize: 20 };
+      } else if (method === "GET" && pathname.endsWith("/library/tasks/mine")) {
+        payload = { tasks: [] };
+      } else if (method === "GET" && pathname.endsWith("/library/tasks/901/attempt")) {
+        payload = { attempt: null };
+      } else if (method === "GET" && pathname.endsWith("/library/tasks/901")) {
+        payload = {
+          task: {
+            ...libraryTasks[0],
+            title: "Sum from 1 through n",
+            description: "Given n, print the sum from 1 through n inclusive.\n\nExample input: 5\nExpected output: 15",
+            template: "n = int(input())\ntotal = 0\nfor value in range(1, n):\n    total += value\nprint(total)\n",
+            templatesByLanguage: { python: "n = int(input())\ntotal = 0\nfor value in range(1, n):\n    total += value\nprint(total)\n" },
+            allowedLanguages: ["python"],
+          },
+          theory: null,
+          tests: [{ id: 17, input: "5", expectedOutput: "15", isHidden: false, kind: "SAMPLE", points: 100 }],
+        };
+      } else if (method === "POST" && pathname.endsWith("/library/tasks/901/check")) {
+        libraryCheckCount += 1;
+        try {
+          const body = route.request().postDataJSON();
+          librarySubmittedCode.push(String(body?.code ?? ""));
+          librarySubmittedLanguages.push(String(body?.language ?? ""));
+        } catch {
+          librarySubmittedCode.push("");
+          librarySubmittedLanguages.push("");
+        }
+        const passed = librarySubmittedCode[librarySubmittedCode.length - 1].includes("range(1, n + 1)");
+        payload = {
+          verdict: passed ? "AC" : "WA",
+          testsPassed: passed ? 1 : 0,
+          testsTotal: 1,
+          score: passed ? 100 : 0,
+          maxScore: 100,
+          hidden: { passed: 0, total: 0 },
+          publicTestResults: [{ testId: 17, input: "5", actualOutput: passed ? "15" : "10", passed, verdict: passed ? "AC" : "WA", errorKind: passed ? null : "off_by_one" }],
+          learningFeedback: passed ? { verdict: "AC", firstFailure: null } : {
+            verdict: "WA",
+            firstFailure: { testId: 17, testPublicIndex: 1, inputPreview: "5", expectedPreview: "15", actualPreview: "10", errorKind: "off_by_one", verdict: "WA" },
+          },
+          learningAttempt: { id: 2202, outcome: passed ? "solved_after_failure" : "failed", failureCategory: passed ? null : "off_by_one", firstFailedTestId: passed ? null : 17, highestHintLevelShown: 0, solvedAfterFailure: passed },
+        };
       } else if (method === "GET" && pathname.endsWith("/edu/tasks/501")) {
         payload = { task: {
           id: 501,
@@ -253,20 +336,114 @@ if (!baseUrl) {
     if (!progressResponse || progressResponse.status() >= 500) throw new Error(`course progress route returned ${progressResponse?.status() ?? "no response"}`);
     const attemptCountCard = page.getByText(/Judge attempts|Спроб у Judge/i).locator("..");
     await attemptCountCard.getByText("2", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const libraryUrl = new URL("lab/library", baseUrl).toString();
+    const libraryResponse = await page.goto(libraryUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    if (!libraryResponse || libraryResponse.status() >= 500) throw new Error(`task library route returned ${libraryResponse?.status() ?? "no response"}`);
+    await page.getByRole("heading", { name: /Task library|Бібліотека задач/i }).waitFor({ state: "visible", timeout: 30_000 });
+    const libraryRows = page.locator("#task-library-results > li");
+    await libraryRows.first().waitFor({ state: "visible", timeout: 10_000 });
+    const libraryLayout = await libraryRows.evaluateAll((rows) => ({
+      count: rows.length,
+      firstRowTop: rows[0]?.getBoundingClientRect().top ?? null,
+      visibleRows: rows.filter((row) => {
+        const bounds = row.getBoundingClientRect();
+        return bounds.top >= 0 && bounds.bottom <= window.innerHeight;
+      }).length,
+      documentWidth: document.documentElement.scrollWidth,
+    }));
+    if (libraryLayout.count < 5 || libraryLayout.visibleRows < 5 || libraryLayout.firstRowTop > 300) {
+      throw new Error(`task library misses the first-screen target at 1280x720: ${JSON.stringify(libraryLayout)}`);
+    }
+    await captureData("library-first-screen-1280x720.json", { viewport: { width: 1280, height: 720 }, ...libraryLayout });
+    await captureScreenshot("contract-library-1280x720");
+    if (await page.getByRole("button", { name: /My materials|Мої матеріали/i }).count() === 0) {
+      throw new Error("a regular personal account lost its explicit task-management entry point");
+    }
+    await page.getByRole("button", { name: /Open task: Sum from 1 to n|Відкрити задачу: Sum from 1 to n/i }).first().click();
+    await waitForEditor("library task");
+    await page.getByText("Sum from 1 through n", { exact: true }).first().waitFor({ state: "visible", timeout: 30_000 });
+    const libraryResultPanel = page.locator(".ide-runner").first();
+    const originalLibraryResultHeight = await libraryResultPanel.evaluate((panel) => panel.getBoundingClientRect().height);
+    const libraryEditor = page.getByRole("textbox", { name: "Editor content" });
+    await libraryEditor.evaluate((element) => element.focus());
+    await page.keyboard.press("Control+A");
+    const firstLibraryCode = "n = int(input())\ntotal = 0\nfor value in range(1, n):\n    total += value\nprint(total)\n";
+    await page.keyboard.insertText(firstLibraryCode);
+    await page.getByRole("button", { name: /^check$|^перевірити$/i }).click();
+    const libraryFailureReview = page.locator(".failure-recovery-card");
+    await libraryFailureReview.getByText("15", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await libraryFailureReview.getByText("10", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await libraryFailureReview.getByText(/Compare the expected sum with the result on the visible test|Порівняй очікувану суму з результатом на відкритому тесті/i).waitFor({ state: "visible", timeout: 10_000 });
+    await libraryFailureReview.getByRole("button", { name: /Show another hint|Показати ще одну підказку/i }).click();
+    await libraryFailureReview.getByText(/upper bound of `range`|верхня межа `range`/i).waitFor({ state: "visible", timeout: 10_000 });
+    const expandedLibraryResultHeight = await libraryResultPanel.evaluate((panel) => panel.getBoundingClientRect().height);
+    if (expandedLibraryResultHeight < originalLibraryResultHeight + 60) {
+      throw new Error(`library failure review did not expand its results panel: ${JSON.stringify({ originalLibraryResultHeight, expandedLibraryResultHeight })}`);
+    }
+    await libraryFailureReview.scrollIntoViewIfNeeded();
+    await captureScreenshot("contract-library-recovery-1280x720");
+    await page.getByRole("button", { name: /return to code|повернутися до коду|до свого коду/i }).click();
+    await page.waitForFunction((originalHeight) => {
+      const panel = document.querySelector(".ide-runner");
+      return Boolean(panel) && Math.abs(panel.getBoundingClientRect().height - originalHeight) < 3;
+    }, originalLibraryResultHeight, { timeout: 5_000 });
+    const restoredLibraryResultHeight = await libraryResultPanel.evaluate((panel) => panel.getBoundingClientRect().height);
+    const firstReturnedLibraryCode = (await page.locator(".monaco-editor .view-lines").innerText()).replace(/\u00a0/g, " ");
+    if (!firstReturnedLibraryCode.includes("range(1, n)")) throw new Error("returning to library code lost the learner's first attempt");
+    const correctedLibraryCode = "n = int(input())\ntotal = 0\nfor value in range(1, n + 1):\n    total += value\nprint(total)\n";
+    await libraryEditor.evaluate((element) => element.focus());
+    await page.keyboard.press("Control+A");
+    await page.keyboard.insertText(correctedLibraryCode);
+    const correctedLibraryEditorText = (await page.locator(".monaco-editor .view-lines").innerText()).replace(/\u00a0/g, " ");
+    if (!correctedLibraryEditorText.includes("range(1, n + 1)")) throw new Error("the library editor did not accept the corrected boundary");
+    await page.getByRole("button", { name: /^check$|^перевірити$/i }).click();
+    await page.getByText(/Solution verified|Рішення перевірено/i).waitFor({ state: "visible", timeout: 10_000 });
+    if (libraryCheckCount !== 2 || !librarySubmittedCode[0].includes("range(1, n)") || !librarySubmittedCode[1].includes("range(1, n + 1)") || librarySubmittedLanguages.some((language) => language !== "python")) {
+      throw new Error(`library recovery flow did not submit the failed and corrected Python code in order: ${JSON.stringify({ libraryCheckCount, librarySubmittedCode, librarySubmittedLanguages })}`);
+    }
+    await captureData("library-recovery-flow-1280x720.json", {
+      viewport: { width: 1280, height: 720 },
+      task: "Sum from 1 through n",
+      publicTest: { input: "5", expected: "15", firstActual: "10", retryActual: "15" },
+      submittedLanguages: librarySubmittedLanguages,
+      originalResultPanelHeight: originalLibraryResultHeight,
+      expandedResultPanelHeight: expandedLibraryResultHeight,
+      restoredResultPanelHeight: restoredLibraryResultHeight,
+      submittedCodePreserved: firstReturnedLibraryCode.includes("range(1, n):")
+        && correctedLibraryEditorText.includes("range(1, n + 1):"),
+    });
+    const libraryReturnResponse = await page.goto(libraryUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    if (!libraryReturnResponse || libraryReturnResponse.status() >= 500) throw new Error(`return to task library failed: ${libraryReturnResponse?.status() ?? "no response"}`);
+    await page.getByRole("heading", { name: /Task library|Бібліотека задач/i }).waitFor({ state: "visible", timeout: 30_000 });
+    await page.getByRole("button", { name: /My materials|Мої матеріали/i }).click();
+    await page.getByRole("heading", { name: /My tasks|Мої задачі/i }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileLibraryLayout = await page.evaluate(() => ({ viewportWidth: window.innerWidth, documentWidth: document.documentElement.scrollWidth }));
+    if (mobileLibraryLayout.documentWidth > mobileLibraryLayout.viewportWidth) {
+      throw new Error(`task library overflows horizontally on mobile: ${JSON.stringify(mobileLibraryLayout)}`);
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
     eduReviewMode = true;
     const eduTaskUrl = new URL("edu/tasks/501", baseUrl).toString();
     const eduTaskResponse = await page.goto(eduTaskUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
     if (!eduTaskResponse || eduTaskResponse.status() >= 500) throw new Error(`EDU task route returned ${eduTaskResponse?.status() ?? "no response"}`);
-    await page.getByText("Boundary sum practice", { exact: true }).first().waitFor({ state: "visible", timeout: 30_000 });
+    try {
+      await page.getByText("Boundary sum practice", { exact: true }).first().waitFor({ state: "visible", timeout: 30_000 });
+    } catch (error) {
+      const body = await page.locator("body").innerText().catch(() => "(body unavailable)");
+      console.error(`EDU task route debug: ${page.url()}\n${body.slice(0, 1800)}\nRuntime errors: ${runtimeErrors.join(" | ")}`);
+      throw error;
+    }
     await waitForEditor("EDU task");
-    const retainedEduCode = "n = 5\ntotal = sum(range(1, n + 1))\nprint(total)\n";
+    const retainedEduCode = "n = 5\ncurrent_sum = 0\nfor value in range(1, n):\n    current_sum += value\nprint(current_sum)\n";
     const eduEditorInput = page.getByRole("textbox", { name: "Editor content" });
     await eduEditorInput.evaluate((element) => element.focus());
     await page.keyboard.press("Control+A");
     await page.keyboard.insertText(retainedEduCode);
     const editorTextBeforeSubmit = (await page.locator(".monaco-editor .view-lines").innerText()).replace(/\u00a0/g, " ");
-    if (!editorTextBeforeSubmit.includes("sum(range(1, n + 1))")) {
+    if (!editorTextBeforeSubmit.includes("current_sum += value")) {
       throw new Error(`EDU editor did not accept the test input: ${editorTextBeforeSubmit}`);
     }
     await page.getByRole("button", { name: /^check$|^перевірити$/i }).click();
@@ -274,12 +451,14 @@ if (!baseUrl) {
     await eduFailureReview.getByText(/Compare the inclusive task boundary/i).waitFor({ state: "visible", timeout: 10_000 });
     await eduFailureReview.getByText("15", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     await eduFailureReview.getByText("10", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    if (!eduSubmitReceived || !eduSubmittedCode.includes("total = sum(range(1, n + 1))")) {
+    await eduFailureReview.scrollIntoViewIfNeeded();
+    await captureScreenshot("contract-edu-review-1280x720");
+    if (!eduSubmitReceived || !eduSubmittedCode.includes("current_sum += value")) {
       throw new Error(`EDU submit did not preserve and send the learner's edited code (received=${eduSubmitReceived}, code=${JSON.stringify(eduSubmittedCode)})`);
     }
     await page.getByRole("button", { name: /return to code|повернутися до коду|до свого коду/i }).click();
     const retainedEditorText = (await page.locator(".monaco-editor .view-lines").innerText()).replace(/\u00a0/g, " ");
-    if (!retainedEditorText.includes("total = sum(range(1, n + 1))")) throw new Error("returning to the EDU code lost the learner's input");
+    if (!retainedEditorText.includes("current_sum += value")) throw new Error("returning to the EDU code lost the learner's input");
     const contestProblemUrl = new URL("contest/contests/778/problems/201", baseUrl).toString();
     const contestProblemResponse = await page.goto(contestProblemUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
     if (!contestProblemResponse || contestProblemResponse.status() >= 500) throw new Error(`contest problem route returned ${contestProblemResponse?.status() ?? "no response"}`);
@@ -339,7 +518,7 @@ if (!baseUrl) {
 
     if (runtimeErrors.length > 0) throw new Error(`browser runtime errors: ${runtimeErrors.join(" | ")}`);
     await browser.close();
-    console.log("BROWSER CONTRACT PASS: public shell, accessible buttons, Monaco, course quiz and Judge-attempt progress, EDU public-test failure evidence and hint with retained editor code, timed contest workspace submission, generated-topic post-contest review, and mentor controls hidden through an extended deadline before appearing with four help levels load without runtime errors");
+    console.log("BROWSER CONTRACT PASS: public shell, accessible buttons, Monaco, course quiz and Judge-attempt progress, five library rows above y=300 at 1280x720 with a mobile layout and task-management entry point, EDU public-test failure evidence and hint with retained editor code, timed contest workspace submission, generated-topic post-contest review, and mentor controls hidden through an extended deadline before appearing with four help levels load without runtime errors");
   } catch (error) {
     console.error(`BROWSER CONTRACT ${required ? "FAILED" : "UNVERIFIED"}: ${error.message}`);
     process.exit(required ? 1 : 0);

@@ -192,6 +192,7 @@ type Props = {
   runResult: StudyCodIdeRunResult | null;
   checkResult: StudyCodIdeCheckResult | null;
   resultCards?: React.ReactNode | ((actions: { onReturnToCode: () => void }) => React.ReactNode);
+  expandResultsOnFailure?: boolean;
   actionRecovery?: {
     tone: "error" | "warning";
     message: string;
@@ -440,6 +441,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     }
   });
   const [layout, setLayout] = React.useState<LayoutState>(readLayout);
+  const failureReviewLayoutRef = React.useRef<{ originalBottom: number; appliedBottom: number } | null>(null);
   const [simpleMode, setSimpleMode] = React.useState(() => {
     try {
       return localStorage.getItem(SIMPLE_MODE_KEY) !== "0";
@@ -792,6 +794,36 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
 
   const updateLayout = (patch: Partial<LayoutState>) =>
     setLayout((current) => ({ ...current, ...patch }));
+
+  React.useEffect(() => {
+    const failedCheck = Boolean(
+      props.expandResultsOnFailure &&
+      props.checkResult &&
+      !verdictIsAccepted(props.checkResult.verdict),
+    );
+    if (failedCheck && bodySize.width >= 900 && bodySize.height >= 420) {
+      const maxBottom = Math.max(100, bodySize.height - 160);
+      const preferredBottom = Math.min(maxBottom, Math.max(300, Math.round(bodySize.height * 0.7)));
+      let shouldApplyPreferredHeight = false;
+      if (!failureReviewLayoutRef.current) {
+        failureReviewLayoutRef.current = { originalBottom: layout.bottom, appliedBottom: preferredBottom };
+        shouldApplyPreferredHeight = true;
+      } else if (failureReviewLayoutRef.current.appliedBottom !== preferredBottom) {
+        failureReviewLayoutRef.current.appliedBottom = preferredBottom;
+        shouldApplyPreferredHeight = true;
+      }
+      if (shouldApplyPreferredHeight && layout.bottom < preferredBottom) {
+        setLayout((current) => current.bottom < preferredBottom ? { ...current, bottom: preferredBottom } : current);
+      }
+      return;
+    }
+    const previousLayout = failureReviewLayoutRef.current;
+    if (!previousLayout) return;
+    failureReviewLayoutRef.current = null;
+    setLayout((current) => current.bottom === previousLayout.originalBottom
+      ? current
+      : { ...current, bottom: previousLayout.originalBottom });
+  }, [bodySize.height, bodySize.width, layout.bottom, props.checkResult?.verdict, props.expandResultsOnFailure]);
 
   const getResizeBounds = (axis: "right" | "bottom") => {
     const rect = bodyRef.current?.getBoundingClientRect();

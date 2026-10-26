@@ -342,14 +342,31 @@ export const LibraryTaskSolvePage: React.FC = () => {
       };
     }
     const stored = checkResult.learningFeedback?.firstFailure;
-    if (stored) return { testId: stored.testId, errorKind: stored.errorKind, verdict: stored.verdict };
-    const detailed = (checkResult.publicTestResults || []).find((item) => !item.passed);
-    if (detailed) return { testId: detailed.testId, errorKind: detailed.errorKind, verdict: detailed.verdict };
-    const compact = (checkResult.publicTestResultsCompact || []).find((item) => !item.passed);
-    if (compact) return { testId: compact.testId, errorKind: compact.errorKind, verdict: compact.verdict };
+    const detailed = (checkResult.publicTestResults || []).find((item) =>
+      !item.passed && (stored?.testId == null || item.testId === stored.testId),
+    );
+    const compact = (checkResult.publicTestResultsCompact || []).find((item) =>
+      !item.passed && (stored?.testId == null || item.testId === stored.testId),
+    );
+    if (stored || detailed || compact) {
+      const testId = stored?.testId ?? detailed?.testId ?? compact?.testId;
+      const publicTestIndex = testId == null
+        ? -1
+        : visibleTests.findIndex((test) => test.id === testId);
+      const publicTest = publicTestIndex >= 0 ? visibleTests[publicTestIndex] : null;
+      return {
+        testId,
+        testPublicIndex: publicTestIndex >= 0 ? publicTestIndex + 1 : undefined,
+        inputPreview: detailed?.input ?? publicTest?.input,
+        expectedPreview: publicTest?.expectedOutput,
+        actualPreview: detailed?.actualOutput,
+        errorKind: stored?.errorKind ?? detailed?.errorKind ?? compact?.errorKind,
+        verdict: stored?.verdict ?? detailed?.verdict ?? compact?.verdict ?? checkResult.verdict,
+      };
+    }
     if (checkResult.compileError || checkResult.verdict === "CE") return { errorKind: checkResult.compileErrorKind || "compile", verdict: "CE" };
     return null;
-  }, [checkResult, task?.id]);
+  }, [checkResult, task?.id, visibleTests]);
 
   const loadNextRecommendedTask = async () => {
     if (!task) return;
@@ -470,6 +487,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
       setTheory(d.theory);
 
       const allowed = getAllowedJudgeLanguages(d.task);
+      const taskDefaultLanguage: JudgeLanguage = d.task.lang === "PYTHON"
+        ? "python"
+        : d.task.lang === "CPP"
+          ? "cpp"
+          : "java";
       const saved = (() => {
         try {
           const v = localStorage.getItem(`library_task_lang_${d.task.id}`);
@@ -478,7 +500,11 @@ export const LibraryTaskSolvePage: React.FC = () => {
           return null;
         }
       })();
-      const initialLang = saved && allowed.includes(saved) ? saved : allowed[0];
+      const initialLang = saved && allowed.includes(saved)
+        ? saved
+        : allowed.includes(taskDefaultLanguage)
+          ? taskDefaultLanguage
+          : allowed[0];
       setJudgeLanguage(initialLang);
 
       if (!hasToken) {
@@ -1228,6 +1254,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
           onBack={goBackToLibrary}
           toolbar={<div className="flex flex-wrap items-center gap-2">{designPreview && <span role="status" className="rounded-md border border-accent-warn/25 bg-accent-warn/[.08] px-2 py-1 text-[10px] font-semibold text-text-secondary">{tr("Демо: результат тесту змодельований локально", "Demo: test result is simulated locally")}</span>}<button type="button" onClick={reportTaskIssue} className="ide-btn ide-btn-quiet" aria-label={tr("Повідомити про проблему із задачею", "Report a task issue")}><CircleHelp />{tr("Повідомити про проблему", "Report issue")}</button></div>}
           task={task}
+          expandResultsOnFailure
           theory={theory}
           language={judgeLanguage}
           onLanguageChange={setJudgeLanguage}

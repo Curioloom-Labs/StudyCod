@@ -244,6 +244,7 @@ export const PracticeCanvasPage: React.FC = () => {
         description: task.description,
         section: task.lesson.title,
       }}
+      expandResultsOnFailure
       theory={task.lesson.theory || null}
       language={ideLanguage}
       onLanguageChange={() => undefined}

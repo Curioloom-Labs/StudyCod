@@ -341,6 +341,8 @@ const CountUp: React.FC<{ value: number; decimals?: number; className?: string }
   return <span ref={ref} className={className}>{value.toFixed(decimals)}</span>;
 };
 
+const isApprovedCatalogView = (view: "approved" | "mine"): boolean => view === "approved";
+
 export const TaskLibraryPage: React.FC = () => {
   const { i18n } = useTranslation();
   const tr = (uk: string, en: string) => (i18n.language?.toLowerCase().startsWith("en") ? en : uk);
@@ -1659,9 +1661,9 @@ export const TaskLibraryPage: React.FC = () => {
       })
     : visibleTasks;
 
-  // Learners see a new discovery-first library. Authoring/moderation remains on
-  // the specialised workspace below, where its dense controls are necessary.
-  if (!canManage && view === "approved") {
+  // Everyone starts in the discovery-first catalog. Authoring and moderation
+  // stay available through an explicit action for roles that can manage tasks.
+  if (isApprovedCatalogView(view)) {
     return <>
       <RecentTasksBanner onOpen={rememberAndOpenTask} />
       <PremiumLibrary
@@ -1676,6 +1678,7 @@ export const TaskLibraryPage: React.FC = () => {
         onShare={() => void copyCurrentLibraryLink()}
         shareCopied={linkCopied}
         preview={isDesignPreview}
+        onManage={canManage ? () => setView("mine") : undefined}
       />
     </>;
   }
