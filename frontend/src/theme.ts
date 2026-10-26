@@ -2,8 +2,12 @@ export type AppTheme = "dark" | "light";
 const STORAGE_KEY = "studycod_theme";
 export function getSavedTheme(): AppTheme | null {
   if (typeof window === "undefined") return null;
-  const raw = localStorage.getItem(STORAGE_KEY);
-  return raw === "light" || raw === "dark" ? raw : null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    return raw === "light" || raw === "dark" ? raw : null;
+  } catch {
+    return null;
+  }
 }
 export function getPreferredTheme(): AppTheme {
   if (typeof window === "undefined") return "dark";
@@ -25,7 +29,11 @@ export function applyTheme(theme: AppTheme) {
     document.documentElement.setAttribute("data-theme", theme);
   }
   if (typeof window !== "undefined") {
-    localStorage.setItem(STORAGE_KEY, theme);
+    try {
+      window.localStorage.setItem(STORAGE_KEY, theme);
+    } catch {
+      // The active theme still applies for this page even when persistence is blocked.
+    }
   }
 }
 export function initTheme() {

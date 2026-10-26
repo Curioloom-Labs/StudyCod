@@ -9,6 +9,7 @@ import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduE
 import { withDevPreview } from "../../lib/devPreview";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
+import "./eduWorkspace.css";
 
 export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
   const { i18n } = useTranslation();
@@ -98,7 +99,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
   const recentGrades = [...grades].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 8);
 
   return (
-    <div className="min-h-full bg-bg-base px-4 py-7 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-10 lg:py-10">
+    <div className="edu-journal-page min-h-full bg-bg-base px-4 py-7 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-10 lg:py-10">
       <div className="mx-auto max-w-[1480px] space-y-6">
         <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border/70 pb-5 dark:border-white/10">
           <div>
@@ -115,7 +116,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
 
         {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-bg-hover p-4 text-sm text-accent-error dark:bg-accent-error/10 dark:text-accent-error"><span>{error}</span><button type="button" onClick={() => void load()} className="inline-flex items-center gap-1 rounded-xl border border-current px-3 py-2 text-xs font-bold"><RefreshCw className="size-3" />{tr("Повторити", "Retry")}</button></div>}
 
-        <div className="grid gap-5 xl:grid-cols-[.95fr_1.05fr]">
+        <div className="edu-journal-page__overview grid items-start gap-5 xl:grid-cols-[.95fr_1.05fr]">
           <section className="rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-bg-surface">
             <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{tr("Наступний крок", "Next step")}</div>
             {loading ? <div className="mt-5 h-44 animate-pulse rounded-2xl bg-bg-hover dark:bg-white/[.045]" /> : next ? (
@@ -159,7 +160,7 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
           </section>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[1fr_.75fr]">
+        <div className="edu-journal-page__details grid items-start gap-5 lg:grid-cols-[1fr_.75fr]">
           <section className="rounded-[26px] border border-border/10 bg-bg-hover p-5 dark:border-accent-warn/20 dark:bg-accent-warn/[.07]">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.16em] text-accent-warn"><NotebookTabs className="size-4" />{tr("Тематичні", "Topic summaries")}</div>
             <div className="mt-5 space-y-2">

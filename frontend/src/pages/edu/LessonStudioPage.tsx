@@ -91,29 +91,19 @@ const shell = "edu-workspace mx-auto max-w-[1260px] px-4 py-7 sm:px-6 lg:px-10 l
 const exampleLesson: Lesson & { tasks: Task[] } = {
   id: 41,
   type: "LESSON",
-  title: "Колекції: мислити даними",
-  parentTopicTitle: "Python · базовий рівень",
+  title: "Цикли: від ідеї до коду",
+  parentTopicTitle: "Python · межа циклу",
   hasTheory: true,
-  theory:
-    "# Колекції\n\nКолекція — це спосіб зібрати пов’язані значення так, щоб із ними було зручно працювати разом.\n\n## Сьогодні\n\n- оберемо правильну структуру даних\n- пройдемося по списку\n- зберемо простий словник",
-  tasksCount: 2,
+  theory: "# Сума від 1 до n\n\nРозглянемо, як межі циклу змінюють результат. Для n = 5 сума чисел від 1 до 5 включно дорівнює 15.\n\n## Спостереження\n\nУ Python права межа range не входить до послідовності. Перевір результат на публічному тесті, перш ніж змінювати код.",
+  tasksCount: 1,
   createdAt: new Date().toISOString(),
   tasks: [
     {
       id: 501,
-      title: "Словник частот",
-      description:
-        "Порахуйте, скільки разів кожне слово трапляється у реченні.",
+      title: "Сума від 1 до n",
+      description: "Реалізуйте sum_to(n), яка повертає суму чисел від 1 до n включно. Публічний тест: n = 5, очікуване значення — 15.",
       template: "",
-      testDataCount: 3,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 502,
-      title: "Мій список покупок",
-      description: "Відфільтруйте й відсортуйте значення без зайвих циклів.",
-      template: "",
-      testDataCount: 2,
+      testDataCount: 1,
       createdAt: new Date().toISOString(),
     },
   ],
@@ -323,7 +313,7 @@ const LessonTeacherStudio: React.FC = () => {
   const isControl =
     lesson.type === "CONTROL" || Boolean(lesson.timeLimitMinutes);
   return (
-    <div className={shell}>
+    <div className={`${shell} edu-teacher-lesson`}>
       <button type="button"
         onClick={() => {
           const back = (location.state as { from?: string } | null)?.from;
@@ -334,8 +324,8 @@ const LessonTeacherStudio: React.FC = () => {
         <ArrowLeft className="h-4 w-4" />
         {tr("До навчального плану", "Back to learning plan")}
       </button>
-      <header className="overflow-hidden rounded-[34px] bg-bg-hover p-6 dark:bg-bg-base sm:p-10">
-        <div className="flex flex-col justify-between gap-8 xl:flex-row xl:items-end">
+      <header className="edu-teacher-lesson__hero overflow-hidden rounded-[34px] bg-bg-hover p-6 dark:bg-bg-base sm:p-10">
+        <div className="edu-teacher-lesson__top flex flex-col justify-between gap-8 xl:flex-row xl:items-end">
           <div className="max-w-3xl">
             <p className="text-xs font-bold uppercase tracking-[.16em] text-accent-warn">
               {lesson.parentTopicTitle || tr("Навчальний модуль", "Learning module")}
@@ -349,7 +339,7 @@ const LessonTeacherStudio: React.FC = () => {
                 : tr("Пройдіть матеріал у власному темпі, закріпіть його практикою та короткою перевіркою.", "Work through the material at your own pace, practice, and finish with a short check.")}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="edu-teacher-lesson__actions flex flex-wrap gap-2">
             {lesson.source === "course" && lesson.type === "CONTROL" && <button type="button" onClick={() => navigate(`/edu/lessons/${id}/results`)} className="min-h-11 rounded-xl border border-border px-4 py-3 text-sm font-semibold">{tr("Результати контрольної", "Assessment results")}</button>}
             {lesson.quizJson && <button type="button" onClick={() => navigate(withDevPreview(`/edu/lessons/${id}/quiz/review`))} className="min-h-11 rounded-xl border border-border px-4 py-3 text-sm font-semibold">{tr("Перевірити відповіді учнів", "Review student answers")}</button>}
             <button type="button"
@@ -368,8 +358,8 @@ const LessonTeacherStudio: React.FC = () => {
             </button>
           </div>
         </div>
-        <div className="mt-10 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl bg-white/85 px-4 py-4 dark:bg-white/[.06]">
+        <aside className="edu-teacher-lesson__stats mt-10" aria-label={tr("Склад уроку", "Lesson setup")}>
+          <div className="edu-teacher-lesson__stat rounded-2xl bg-white/85 px-4 py-4 dark:bg-white/[.06]">
             <p className="text-xs font-bold uppercase tracking-[.12em] text-text-muted dark:text-text-secondary">
               {tr("Матеріал", "Material")}
             </p>
@@ -379,7 +369,7 @@ const LessonTeacherStudio: React.FC = () => {
                 : tr("Додайте пояснення", "Add an explanation")}
             </p>
           </div>
-          <div className="rounded-2xl bg-white/85 px-4 py-4 dark:bg-white/[.06]">
+          <div className="edu-teacher-lesson__stat rounded-2xl bg-white/85 px-4 py-4 dark:bg-white/[.06]">
             <p className="text-xs font-bold uppercase tracking-[.12em] text-text-muted dark:text-text-secondary">
               {tr("Практика", "Practice")}
             </p>
@@ -387,7 +377,7 @@ const LessonTeacherStudio: React.FC = () => {
               {tasks.length} {tasks.length === 1 ? tr("завдання", "task") : tr("завдань", "tasks")}
             </p>
           </div>
-          <div className="rounded-2xl bg-white/85 px-4 py-4 dark:bg-white/[.06]">
+          <div className="edu-teacher-lesson__stat rounded-2xl bg-white/85 px-4 py-4 dark:bg-white/[.06]">
             <p className="text-xs font-bold uppercase tracking-[.12em] text-text-muted dark:text-text-secondary">
               {tr("Режим", "Mode")}
             </p>
@@ -397,15 +387,15 @@ const LessonTeacherStudio: React.FC = () => {
                 : tr("Вільний темп", "Self-paced")}
             </p>
           </div>
-        </div>
+        </aside>
       </header>
       {error && (
         <div className="mt-5 rounded-2xl border border-accent-error/25 bg-accent-error/[.08] px-4 py-3 text-sm text-accent-error dark:text-accent-error">
           {error}
         </div>
       )}
-      <main className="mt-8 grid gap-7 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <article className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-9">
+      <main className="edu-teacher-lesson__overview mt-8 grid gap-7 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <article className="edu-teacher-lesson__theory rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-9">
           <div className="flex items-center gap-3">
             <span className="grid h-10 w-10 place-items-center rounded-2xl bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
               <BookOpen className="h-5 w-5" />
@@ -432,7 +422,7 @@ const LessonTeacherStudio: React.FC = () => {
             )}
           </div>
         </article>
-        <aside className="space-y-5">
+        <aside className="edu-teacher-lesson__rail space-y-5">
           <section className="rounded-[30px] bg-bg-surface p-6 text-text-primary shadow-[0_16px_45px_rgba(13,51,27,.16)] dark:bg-bg-surface">
             <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-soft">
               {tr("Наступний крок", "Next step")}
@@ -487,7 +477,7 @@ const LessonTeacherStudio: React.FC = () => {
           </section>
         </aside>
       </main>
-      <section id="lesson-practice" className="mt-8">
+      <section id="lesson-practice" className="edu-teacher-lesson__practice mt-8">
         {lesson.source === "course" && tasks.some(entry => entry.taskMode === "CODE" && entry.testDataCount === 0) && <p role="status" className="mb-4 rounded-xl border border-accent-warn/30 bg-accent-warn/10 p-4 text-sm">{tr("Для деяких завдань ще немає тестів. Відкрийте завдання й оберіть «Тести та спроби», щоб налаштувати перевірку. До цього автоматична здача й початок контрольної недоступні.", "Some tasks have no tests yet. Open a task and choose ‘Tests and attempts’ to configure grading. Automatic submission and assessment start remain unavailable until then.")}</p>}
         <div className="flex items-end justify-between">
           <div>
@@ -505,14 +495,14 @@ const LessonTeacherStudio: React.FC = () => {
             + {tr("Додати", "Add")}
           </button>
         </div>
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <div className="edu-teacher-lesson__task-list mt-5 grid gap-3 md:grid-cols-2">
           {tasks.map((entry, index) => (
             <button type="button"
               key={entry.id}
               onClick={() =>
                 (entry.taskMode === "MANUAL" ? navigate(withDevPreview(`/edu/manual-tasks/${entry.id}/submissions`)) : setSelectedTask(entry))
               }
-              className="group rounded-[24px] border border-border/10 bg-white p-5 text-left transition  hover:shadow-lg dark:border-white/[.09] dark:bg-bg-surface"
+              className="edu-teacher-lesson__task group rounded-[24px] border border-border/10 bg-white p-5 text-left transition hover:shadow-lg dark:border-white/[.09] dark:bg-bg-surface"
             >
               <div className="flex gap-4">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-bg-hover text-sm font-extrabold text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn">
@@ -804,6 +794,7 @@ const StudentLessonWorkspace: React.FC = () => {
     );
   const courseControl = lesson.source === "course" && lesson.type === "CONTROL";
   const tasks = courseControl && lesson.controlHasPractice === false ? [] : lesson.tasks || [];
+  const completedTaskCount = tasks.filter((task) => task.progressCompleted || task.grade?.isCompleted).length;
   let quiz: Quiz[] = [];
   if (isControl && lesson.quizJson) {
     try {
@@ -845,7 +836,7 @@ const StudentLessonWorkspace: React.FC = () => {
     } finally { finishPending.current = false; setFinishBusy(false); }
   };
   return (
-    <div className={shell}>
+    <div className={`${shell} edu-student-lesson`}>
       <button
         type="button"
         onClick={() =>
@@ -856,16 +847,16 @@ const StudentLessonWorkspace: React.FC = () => {
         <ArrowLeft className="size-4" />
         {tr("До моїх уроків", "Back to my lessons")}
       </button>
-      <header className="overflow-hidden rounded-[34px] bg-bg-surface p-7 text-text-primary sm:p-10">
-        <div className="max-w-3xl">
-          <p className="text-xs font-bold uppercase tracking-[.16em] text-primary-strong">
+      <header className="edu-student-lesson__hero overflow-hidden rounded-[34px] bg-bg-surface p-7 text-text-primary sm:p-10">
+        <div className="edu-student-lesson__hero-copy max-w-3xl">
+          <p className="edu-student-lesson__eyebrow text-xs font-bold uppercase tracking-[.16em] text-primary-strong">
             {courseControl ? tr("Контрольна робота", "Assessment") : tr("Призначений урок", "Assigned lesson")} · {lesson.parentTopicTitle || tr("Навчальний модуль", "Learning module")}
           </p>
-          <h1 className="mt-4 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.06em] sm:text-6xl">
+          <h1 className="edu-student-lesson__title mt-4 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.06em] sm:text-6xl">
             {lesson.title}
           </h1>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-text-secondary">
-            {courseControl ? quizRequired ? tr("Почніть контрольну, здайте квіз, а потім виконайте практичні завдання. Коли всі відповіді надіслано, завершіть контрольну.", "Start the assessment, submit the quiz, then complete the practice tasks. Finish the assessment once all your answers have been submitted.") : tr("Почніть контрольну й надішліть відповіді на завдання. Коли все готово, завершіть контрольну.", "Start the assessment and submit your task answers. Finish the assessment when you are ready.") : tr("Ознайомтеся з матеріалом, пройдіть квіз і виконайте призначені завдання.", "Review the material, take the quiz, and complete the assigned tasks.")}
+          <p className="edu-student-lesson__summary mt-5 max-w-2xl text-base leading-7 text-text-secondary">
+            {courseControl ? quizRequired ? tr("Почніть контрольну, здайте квіз, а потім виконайте практичні завдання. Коли всі відповіді надіслано, завершіть контрольну.", "Start the assessment, submit the quiz, then complete the practice tasks. Finish the assessment once all your answers have been submitted.") : tr("Почніть контрольну й надішліть відповіді на завдання. Коли все готово, завершіть контрольну.", "Start the assessment and submit your task answers. Finish the assessment when you are ready.") : (lesson.quizJson ? tr("Ознайомтеся з матеріалом, пройдіть квіз і виконайте призначені завдання.", "Review the material, take the quiz, and complete the assigned tasks.") : tr("Ознайомтеся з матеріалом і виконайте призначену практику.", "Review the material and complete the assigned practice."))}
           </p>
           <button
             type="button"
@@ -879,20 +870,37 @@ const StudentLessonWorkspace: React.FC = () => {
                   if (currentLessonId.current !== id) return;
                   if (courseControl) setLesson(current => current ? { ...current, courseAttempt: { status: "IN_PROGRESS", startedAt: attempt.startedAt, remainingSeconds: attempt.remainingSeconds, timeLimitMinutes: attempt.timeLimitMinutes } } : current);
                 }
-                if (currentLessonId.current === id) setStarted(true);
+                if (currentLessonId.current === id) {
+                  if (isControl || courseControl) setStarted(true);
+                else {
+                  setStarted(true);
+                  document.getElementById("edu-lesson-content")?.scrollIntoView({
+                    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+                    block: "start",
+                  });
+                }
+                }
               } catch (caught) {
                 if (currentLessonId.current === id) setError(getErrorMessageFromUnknown(caught, tr("Не вдалося розпочати урок. Спробуйте ще раз.", "Could not start the lesson. Please try again.")));
               } finally {
                 setStartBusy(false);
               }
             })()}
-            className="mt-7 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground"
+            className="edu-student-lesson__start mt-7 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-primary-foreground"
           >
-            {attemptCompleted ? lesson.courseAttempt?.reason === "FINISHED" ? tr("Контрольну здано", "Assessment submitted") : tr("Час контрольної завершено", "Assessment time has ended") : startBusy ? tr("Запускаємо…", "Starting…") : started ? tr("Урок розпочато", "Lesson started") : tr("Почати урок", "Start lesson")}
+            {attemptCompleted ? lesson.courseAttempt?.reason === "FINISHED" ? tr("Контрольну здано", "Assessment submitted") : tr("Час контрольної завершено", "Assessment time has ended") : startBusy ? tr("Запускаємо…", "Starting…") : started ? tr("Урок розпочато", "Lesson started") : tr(isControl || courseControl ? "Почати контрольну" : "Перейти до матеріалу", isControl || courseControl ? "Start assessment" : "Read lesson material")}
           </button>
           {courseSetupPending && <div role="status" className="mt-4 max-w-2xl rounded-xl border border-accent-warn/30 bg-accent-warn/10 p-4 text-sm"><p>{tr("Викладач ще готує контрольну. Вашу спробу й таймер не запущено. Оновіть дані після налаштування квізу та перевірки завдань.", "Your teacher is still preparing this assessment. Your attempt and timer have not started. Refresh after the quiz and task grading are configured.")}</p><button type="button" onClick={() => void getLesson(id, requestedType || undefined, source).then(next => { if (currentLessonId.current === id) { setLesson(next as Lesson & { tasks: Task[] }); setError(null); } }).catch(caught => { if (currentLessonId.current === id) setError(getErrorMessageFromUnknown(caught, tr("Не вдалося оновити урок.", "Could not refresh the lesson."))); })} className="mt-3 min-h-11 rounded-xl border border-border px-4 font-semibold">{tr("Оновити готовність", "Refresh readiness")}</button></div>}
           {remainingSeconds !== null && <p className="mt-3 text-sm tabular-nums text-text-secondary">{tr("Залишилось часу", "Time remaining")}: {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, "0")}</p>}
         </div>
+        <aside className="edu-student-lesson__sequence" aria-label={tr("План уроку", "Lesson sequence")}>
+          <p>{tr("У цьому уроці", "In this lesson")}</p>
+          <ol>
+            <li className={started ? "is-done" : "is-current"}><span>01</span><div><strong>{tr("Матеріал", "Material")}</strong><small>{lesson.theory ? started ? tr("Матеріал відкрито", "Material opened") : tr("Пояснення теми", "Lesson explanation") : tr("Матеріалу немає", "No reading material")}</small></div></li>
+            {(quizRequired || lesson.quizJson) && <li className={quizSubmitted ? "is-done" : ""}><span>02</span><div><strong>{tr("Квіз", "Quiz")}</strong><small>{quizSubmitted ? tr("Відповіді надіслано", "Answers submitted") : `${quiz.length} ${tr("запитань", "questions")}`}</small></div></li>}
+            <li className={tasks.length > 0 && completedTaskCount === tasks.length ? "is-done" : ""}><span>{quizRequired || lesson.quizJson ? "03" : "02"}</span><div><strong>{tr("Практика", "Practice")}</strong><small>{tasks.length ? `${completedTaskCount}/${tasks.length} ${tr("виконано", "completed")}` : tr("Задачі ще не додані", "No tasks added yet")}</small></div></li>
+          </ol>
+        </aside>
       </header>
       {!isControl && lesson.quizJson && <button type="button" disabled={courseControl && !started && !attemptCompleted} onClick={() => navigate(withDevPreview(`/edu/lessons/${id}/quiz?source=course`))} className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm font-semibold text-primary-strong"><ClipboardCheck className="size-4" aria-hidden="true" />{tr("Відкрити квіз уроку", "Open lesson quiz")}</button>}
       {courseControl && started && !attemptCompleted && <section className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-bg-surface p-5"><div><p className="font-semibold">{tr("Завершення контрольної", "Finish assessment")}</p><p className="mt-1 text-sm text-text-secondary">{lesson.courseReport?.submittedTasks ?? 0}/{lesson.courseReport?.totalTasks ?? tasks.length} {tr("практичних робіт надіслано", "practice submissions saved")}</p></div><button type="button" onClick={() => setFinishOpen(true)} className="min-h-11 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground">{tr("Завершити контрольну", "Finish assessment")}</button></section>}
@@ -902,8 +910,8 @@ const StudentLessonWorkspace: React.FC = () => {
           {error}
         </div>
       )}
-      {(!courseControl || lesson.theory) && <main className="mt-7 grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <article className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-9">
+      {(!courseControl || lesson.theory) && <main id="edu-lesson-content" className="edu-student-lesson__content mt-7 grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <article className="edu-student-lesson__material rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-9">
           <div className="flex items-center gap-3">
             <span className="grid size-10 place-items-center rounded-2xl bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft">
               <BookOpen className="size-5" />
@@ -925,7 +933,7 @@ const StudentLessonWorkspace: React.FC = () => {
             )}
           </div>
         </article>
-        <aside className="rounded-[30px] bg-bg-hover p-6 dark:bg-accent-warn/[.08]">
+        <aside className="edu-student-lesson__path rounded-[30px] bg-bg-hover p-6 dark:bg-accent-warn/[.08]">
           <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn dark:text-accent-warn">
             {tr("Твій маршрут", "Your path")}
           </p>
@@ -946,7 +954,7 @@ const StudentLessonWorkspace: React.FC = () => {
         </aside>
       </main>}
       {isControl && quizRequired && (
-        <section className="mt-8 rounded-[30px] border border-accent-warn/30 bg-white p-6 dark:border-accent-warn/30 dark:bg-bg-surface sm:p-9">
+        <section className="edu-student-lesson__quiz mt-8 rounded-[30px] border border-accent-warn/30 bg-white p-6 dark:border-accent-warn/30 dark:bg-bg-surface sm:p-9">
           <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn dark:text-accent-warn">{tr("Теоретична частина", "Theory section")}</p>
           <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">{tr("Пройдіть короткий квіз перед практикою", "Complete a short quiz before practice")}</h2>
           {!quiz.length ? (
@@ -955,7 +963,7 @@ const StudentLessonWorkspace: React.FC = () => {
             <p className="mt-4 rounded-2xl bg-primary/10 p-4 text-sm font-bold text-primary-strong dark:bg-primary/10 dark:text-primary-strong">{tr("Квіз завершено. Практичні задачі відкриті.", "Quiz complete. Practice tasks are now available.")}</p>
           ) : (
             <>
-              <div className="mt-7 space-y-5">
+              <div className="edu-student-lesson__questions mt-7 space-y-5">
                 {quiz.map((question, index) => (
                   <fieldset key={`${question.question}-${index}`} className="rounded-2xl bg-bg-hover p-5 dark:bg-white/[.045]">
                     <legend className="text-base font-bold leading-7">{index + 1}. {question.question}</legend>
@@ -975,14 +983,14 @@ const StudentLessonWorkspace: React.FC = () => {
           )}
         </section>
       )}
-      {(!courseControl || lesson.controlHasPractice !== false) && <section className="mt-8">
+      {(!courseControl || lesson.controlHasPractice !== false) && <section className="edu-student-lesson__tasks mt-8">
         <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">
           {tr("Призначена практика", "Assigned practice")}
         </p>
         <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">
           {tr("Завдання уроку", "Lesson tasks")}
         </h2>
-        <div className="mt-5 grid gap-3 md:grid-cols-2">
+        <div className="edu-student-lesson__task-grid mt-5 grid gap-3 md:grid-cols-2">
           {tasks.map((task, index) => (
             <button
               type="button"
@@ -994,18 +1002,20 @@ const StudentLessonWorkspace: React.FC = () => {
                   { state: { from: withDevPreview(eduLessonPath(lesson)) } },
                 )
               }
-              className="group rounded-[24px] border border-border/10 bg-white p-5 text-left transition  hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[.09] dark:bg-bg-surface"
+              className="edu-student-lesson__task group rounded-[24px] border border-border/10 bg-white p-5 text-left transition hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[.09] dark:bg-bg-surface"
             >
               <span className="grid size-10 place-items-center rounded-2xl bg-bg-hover text-sm font-extrabold text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn">
                 {String(index + 1).padStart(2, "0")}
               </span>
-              <h3 className="mt-5 font-bold group-hover:text-primary-strong dark:group-hover:text-primary-soft">
-                {task.title}
-              </h3>
-              <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
-                {task.description}
-              </p>
-              <span className="mt-4 inline-flex items-center gap-1 text-sm font-bold text-primary-strong dark:text-primary-soft">
+              <div className="edu-student-lesson__task-copy">
+                <h3 className="font-bold group-hover:text-primary-strong dark:group-hover:text-primary-soft">
+                  {task.title}
+                </h3>
+                <p className="line-clamp-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
+                  {task.description}
+                </p>
+              </div>
+              <span className="edu-student-lesson__task-action inline-flex items-center gap-1 text-sm font-bold text-primary-strong dark:text-primary-soft">
                 {attemptCompleted ? tr("Переглянути", "Review") : lesson.source === "course" && task.taskMode === "CODE" && task.testDataCount === 0 ? tr("Викладач налаштовує перевірку", "Teacher is configuring grading") : tr("Відкрити", "Open")} <ArrowRight className="size-4" />
               </span>
             </button>

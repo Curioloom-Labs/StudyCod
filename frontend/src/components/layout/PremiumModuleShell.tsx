@@ -17,6 +17,7 @@ import { Logo } from "../Logo";
 import { PlatformFooter } from "./PlatformFooter";
 import { DialogA11yObserver } from "../ui/DialogA11yObserver";
 import { WorkspaceTopNavigation } from "./WorkspaceTopNavigation";
+import "../../pages/edu/eduWorkspace.css";
 import type { AppTheme } from "../../theme";
 import type { User } from "../../types";
 
@@ -26,6 +27,7 @@ type Props = {
   theme: AppTheme;
   currentPath: string;
   navigationHidden?: boolean;
+  footerHidden?: boolean;
   onNavigate: (path: string) => void;
   onToggleTheme: () => void;
   onLogout: () => void | Promise<void>;
@@ -39,6 +41,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
   theme,
   currentPath,
   navigationHidden = false,
+  footerHidden = false,
   onNavigate,
   onToggleTheme,
   onLogout,
@@ -216,10 +219,10 @@ export const PremiumModuleShell: React.FC<Props> = ({
   }, [accountOpen]);
 
   return (
-    <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary">
+    <div ref={shellRef} className={`mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary ${product === "EDU" ? "edu-product" : ""}`}>
       <a className="skip-link" href="#main-content">{uk ? "Перейти до основного вмісту" : "Skip to main content"}</a>
       <DialogA11yObserver rootRef={shellRef} />
-      <header data-material="premium-header" className="sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl">
+      <header data-material="premium-header" className={`sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl ${product === "EDU" ? "edu-product__header" : ""}`}>
         <div className="mx-auto flex h-14 w-full max-w-[1600px] items-center justify-between gap-2 px-3 sm:h-16 sm:px-6 lg:px-8">
           <button
             type="button"
@@ -420,7 +423,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
       <div data-material="workspace-canvas" className="mobile-app-viewport min-w-0 flex-1">
         {children}
       </div>
-      {!navigationHidden && !isContestOnly && <PlatformFooter />}
+      {!navigationHidden && !footerHidden && !isContestOnly && <PlatformFooter />}
       </div>
     </div>
   );

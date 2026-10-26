@@ -4,7 +4,7 @@ import { getEduErrorMessage } from "../eduError";
 import { tr } from "../../i18n";
 import type { ClassGradingSystem, GradeScaleMode } from "../gradingSystems";
 import type { JudgeLanguage } from "../judgeLanguages";
-import { clearGetMeCache, getMe } from "./profile";
+import { clearGetMeCache, getMe, primeGetMeCache } from "./profile";
 import { setActiveEduStudentId } from "../eduContext";
 import { selectEducationalContext } from "../eduSession";
 import type { User } from "../../types";
@@ -48,7 +48,9 @@ export interface StudentLoginResponse {
     className: string;
   };
 }
-export async function studentLogin(username: string, password: string, turnstileToken?: string): Promise<StudentLoginResponse> {
+export type StudentLoginResult = StudentLoginResponse & { user: User };
+
+export async function studentLogin(username: string, password: string, turnstileToken?: string): Promise<StudentLoginResult> {
   const res = await api.post("/edu/student-login", {
     username,
     password,
@@ -56,15 +58,36 @@ export async function studentLogin(username: string, password: string, turnstile
   }, { headers: { "X-Skip-Auth-Redirect": "1" } });
   setActiveEduStudentId(null);
   clearGetMeCache({ clearSnapshot: true });
-  localStorage.setItem("userType", "STUDENT");
-  return res.data;
+  try { localStorage.setItem("userType", "STUDENT"); } catch { /* login is cookie-backed; storage is only a legacy hint */ }
+  // The student-login response already has the identity needed to render EDU.
+  // Do not block navigation on an immediate /profile/me round-trip: that
+  // request can race the newly written auth cookie and return a stale 401.
+  const student = res.data.student as StudentLoginResponse["student"];
+  const user: User = {
+    id: student.id,
+    username: student.username,
+    difus: 0,
+    avatarUrl: null,
+    userMode: "EDUCATIONAL",
+    role: "USER",
+    accountSettingsScope: "CLASS",
+    studentId: student.id,
+    classId: student.classId,
+    className: student.className,
+    firstName: student.firstName,
+    lastName: student.lastName,
+    middleName: student.middleName,
+    email: student.email,
+  };
+  primeGetMeCache(user);
+  return { ...res.data, user };
 }
 
 export async function educationalAccountLogin(username: string, password: string, turnstileToken?: string): Promise<User> {
   await api.post("/auth/login", { username, password, ...(turnstileToken ? { turnstileToken } : {}) }, { headers: { "X-Skip-Auth-Redirect": "1" } });
   setActiveEduStudentId(null);
   clearGetMeCache({ clearSnapshot: true });
-  localStorage.removeItem("userType");
+  try { localStorage.removeItem("userType"); } catch { /* the cookie session is authoritative */ }
   return selectEducationalContext(await getMe({ force: true, suppressAuthRedirect: true }));
 }
 

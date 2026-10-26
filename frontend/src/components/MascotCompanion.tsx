@@ -126,6 +126,10 @@ function isAuthenticatedSurface(pathname: string, app: string | null, search: st
     || /^\/edu\/(?:tasks|lessons\/[^/]+|library\/solve)(?:\/|$)/.test(pathname);
 }
 
+function isFocusedWorkSurface(pathname: string): boolean {
+  return /^\/edu\/(?:tasks(?:\/|$)|lessons\/[^/]+(?:\/|$)|library\/solve(?:\/|$)|classes\/[^/]+\/live(?:\/|$))/.test(pathname);
+}
+
 export function announceMascot(detail: MascotSignalDetail): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent<MascotSignalDetail>("studycod:mascot", { detail }));
@@ -211,7 +215,7 @@ export const MascotCompanion: React.FC = () => {
     navigate(href);
   }, [navigate]);
 
-  if (!visible || dismissed) return null;
+  if (!visible || dismissed || isFocusedWorkSurface(location.pathname)) return null;
 
   return (
     <aside className="mascot-companion" aria-label={isEnglish ? "StudyCod companion" : "Напарник StudyCod"}>

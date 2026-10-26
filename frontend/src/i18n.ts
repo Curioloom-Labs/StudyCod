@@ -26,7 +26,11 @@ i18n.use(initReactI18next).init({
 });
 i18n.on('languageChanged', lng => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(LANGUAGE_STORAGE_KEY, lng);
+    try {
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, lng);
+    } catch {
+      // Language persistence is optional; the active session can still change locale.
+    }
     document.documentElement.lang = lng === 'en' ? 'en' : 'uk';
   }
 });

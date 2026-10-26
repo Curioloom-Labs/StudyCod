@@ -165,14 +165,16 @@ export async function recordLearningOutcome(input: LearningOutcomeInput, repos =
 }
 
 export function deriveSkillEvidence(attempts: LearningAttempt[]): SkillEvidence {
-  const taskStates = new Map<number, { topic: string | null; practiced: boolean; solved: boolean; failed: boolean; solvedAfterFailure: boolean; categories: Set<string>; lastSolved: LearningAttempt | null; highestHintLevelShown: number }>();
+  const taskStates = new Map<number, { topic: string | null; practiced: boolean; solved: boolean; failed: boolean; failedAttempts: number; solvedAfterFailure: boolean; solvedAfterTwoFailures: boolean; categories: Set<string>; lastSolved: LearningAttempt | null; highestHintLevelShown: number }>();
   for (const attempt of [...attempts].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())) {
     const state = taskStates.get(attempt.taskId) ?? {
       topic: attempt.topicLabel || (attempt.topicId ? `topic:${attempt.topicId}` : null),
       practiced: false,
       solved: false,
       failed: false,
+      failedAttempts: 0,
       solvedAfterFailure: false,
+      solvedAfterTwoFailures: false,
       categories: new Set<string>(),
       lastSolved: null,
       highestHintLevelShown: 0,
@@ -182,11 +184,13 @@ export function deriveSkillEvidence(attempts: LearningAttempt[]): SkillEvidence 
     if (attempt.topicLabel) state.topic = attempt.topicLabel;
     if (attempt.outcome === "FAILED") {
       state.failed = true;
+      state.failedAttempts += 1;
       const category = safeCategory(attempt.failureCategory);
       if (category) state.categories.add(category);
     } else {
       state.solved = true;
       state.solvedAfterFailure = state.solvedAfterFailure || state.failed;
+      state.solvedAfterTwoFailures = state.solvedAfterTwoFailures || state.failedAttempts >= 2;
       state.lastSolved = attempt;
     }
     taskStates.set(attempt.taskId, state);
@@ -194,7 +198,8 @@ export function deriveSkillEvidence(attempts: LearningAttempt[]): SkillEvidence 
 
   const practicedTasks = taskStates.size;
   const solvedTasks = Array.from(taskStates.values()).filter((s) => s.solved).length;
-  const revisitedSolved = Array.from(taskStates.values()).filter((s) => s.solvedAfterFailure).length;
+  const solvedAfterFailure = Array.from(taskStates.values()).filter((s) => s.solvedAfterFailure).length;
+  const revisitedSolved = Array.from(taskStates.values()).filter((s) => s.solvedAfterTwoFailures).length;
   const hintLevelCounts = ([1, 2, 3] as const).map((level) => ({
     level,
     tasks: Array.from(taskStates.values()).filter((state) => state.highestHintLevelShown === level).length,
@@ -235,7 +240,7 @@ export function deriveSkillEvidence(attempts: LearningAttempt[]): SkillEvidence 
     totalAttempts: attempts.length,
     practicedTasks,
     solvedTasks,
-    solvedAfterFailure: revisitedSolved,
+    solvedAfterFailure,
     revisitedSolved,
     hintedTasks: Array.from(taskStates.values()).filter((state) => state.highestHintLevelShown > 0).length,
     hintLevelCounts,

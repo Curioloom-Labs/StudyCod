@@ -1,0 +1,177 @@
+.personal-course-next {
+  --next-panel: #19382d;
+  --next-panel-text: #f3f2e9;
+  --next-progress-panel: #e3e8db;
+  --next-progress-text: #1c2e23;
+  --next-progress-muted: #56715d;
+  --next-track: #c7d2c1;
+  --next-fill: #345b42;
+  --next-accent: #cce890;
+  background: var(--next-panel);
+  color: var(--next-panel-text);
+}
+
+:root[data-theme="dark"] .personal-course-next {
+  --next-panel: #182c24;
+  --next-panel-text: #f0f4ea;
+  --next-progress-panel: #202b25;
+  --next-progress-text: #edf2e9;
+  --next-progress-muted: #a4b3a6;
+  --next-track: #39483d;
+  --next-fill: #cce890;
+  --next-accent: #d2ed97;
+}
+
+.personal-course-next__content {
+  background:
+    radial-gradient(ellipse at 15% 115%, color-mix(in srgb, var(--next-accent) 8%, transparent), transparent 46%),
+    var(--next-panel);
+}
+
+.personal-course-next__eyebrow { color: var(--next-accent); }
+.personal-course-next__description { color: color-mix(in srgb, var(--next-panel-text) 75%, transparent); }
+
+.personal-course-next__orbit {
+  border: 1px solid color-mix(in srgb, var(--next-accent) 20%, transparent);
+}
+
+.personal-course-next__orbit--outer { opacity: .55; }
+.personal-course-next__orbit--inner { opacity: .8; }
+
+.personal-course-next__action {
+  background: var(--next-accent);
+  color: #19382d;
+}
+
+.personal-course-next__action:hover { background: #daf2a5; }
+
+.personal-course-next__progress {
+  border-color: color-mix(in srgb, var(--next-progress-muted) 18%, transparent);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--next-fill) 5%, transparent), transparent 58%),
+    var(--next-progress-panel);
+  color: var(--next-progress-text);
+}
+
+.personal-course-next__progress-label,
+.personal-course-next__progress-caption { color: var(--next-progress-muted); }
+.personal-course-next__progress-unit { color: var(--next-progress-muted); }
+.personal-course-next__progress-track { background: var(--next-track); }
+.personal-course-next__progress-fill { background: var(--next-fill); }
+.personal-course-next__segments { min-height: 8px; }
+.personal-course-next__segment {
+  height: 6px;
+  flex: 1 1 0%;
+  border-radius: 999px;
+  background: var(--next-track);
+  transition: background-color 180ms ease-out;
+}
+.personal-course-next__segment.is-complete { background: var(--next-fill); }
+.personal-course-next__segment.is-next { background: color-mix(in srgb, var(--next-accent) 72%, var(--next-track)); }
+
+.personal-course-map { align-items: start; }
+
+.personal-course-module {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-top: 3px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  border-radius: 18px;
+  padding: 18px 18px 12px;
+  background: color-mix(in srgb, var(--bg-surface) 68%, var(--bg-base));
+  transition: border-color 160ms ease-out, background-color 160ms ease-out;
+}
+
+.personal-course-module.is-current {
+  border-top-color: var(--primary-strong);
+  background: color-mix(in srgb, var(--primary) 3%, var(--bg-surface));
+}
+
+.personal-course-module__index { color: color-mix(in srgb, var(--primary-strong) 80%, var(--text-muted)); }
+.personal-course-module__title { color: var(--text-primary); }
+.personal-course-module__count { color: var(--text-secondary); }
+
+.personal-course-module__track {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 70%, var(--bg-base));
+}
+
+.personal-course-module__track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary-strong);
+}
+
+.personal-course-module__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.personal-course-module__item + .personal-course-module__item {
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.personal-course-module__link {
+  padding-inline: 9px;
+  color: var(--text-secondary);
+  border-radius: 10px;
+}
+
+.personal-course-module__link:hover { background: color-mix(in srgb, var(--bg-hover) 78%, transparent); }
+.personal-course-module__item.is-next .personal-course-module__link { color: var(--text-primary); }
+.personal-course-module__item-title { color: inherit; }
+.personal-course-module__item.is-done .personal-course-module__item-title { color: var(--text-secondary); }
+.personal-course-module__link:hover .personal-course-module__item-title { color: var(--text-primary); }
+
+.personal-course-module__marker {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg-surface);
+  color: var(--primary-strong);
+}
+
+.personal-course-module__marker > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.personal-course-module__item.is-done .personal-course-module__marker {
+  border-color: color-mix(in srgb, var(--primary-strong) 40%, var(--border));
+  background: color-mix(in srgb, var(--primary-strong) 12%, var(--bg-surface));
+  color: var(--primary-strong);
+}
+
+.personal-course-module__item.is-next .personal-course-module__marker {
+  border-color: var(--primary-strong);
+  background: var(--primary-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-strong) 16%, transparent);
+}
+
+.personal-course-module__item.is-next .personal-course-module__marker > span { background: var(--primary-foreground); }
+.personal-course-module__status { color: var(--text-muted); }
+.personal-course-module__item.is-done .personal-course-module__status { color: var(--primary-strong); }
+.personal-course-module__item.is-next .personal-course-module__status { color: var(--primary-strong); }
+
+@media (max-width: 640px) {
+  .personal-course-next__progress { min-height: 220px; }
+  .personal-course-module { padding: 15px 13px 10px; }
+  .personal-course-module__link { padding-inline: 7px; }
+  .personal-course-module__status { font-size: 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .personal-course-next__segment,
+  .personal-course-module,
+  .personal-course-module__link { transition: none; }
+}

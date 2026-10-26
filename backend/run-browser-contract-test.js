@@ -16,6 +16,22 @@ if (!baseUrl) {
       ...(executablePath ? { executablePath } : {})
     });
     const page = await browser.newPage();
+    await page.addInitScript(() => {
+      // Auth-flow browser checks run with deterministic API fixtures. Provide
+      // a local Turnstile widget so they can verify the client-side login
+      // transition without depending on Cloudflare's remote challenge.
+      Object.defineProperty(window, "turnstile", {
+        configurable: true,
+        value: {
+          render: (_container, options) => {
+            queueMicrotask(() => options.callback?.("browser-contract-turnstile"));
+            return "browser-contract-turnstile-widget";
+          },
+          reset: () => {},
+          remove: () => {},
+        },
+      });
+    });
     const captureScreenshot = async (name) => {
       if (!captureDir) return;
       const fs = require("node:fs/promises");
@@ -46,6 +62,8 @@ if (!baseUrl) {
     let contestExtensionApplied = false;
     let earlyContestReviewRequests = 0;
     let eduReviewMode = false;
+    let eduLoginFlow = false;
+    let eduLoginAuthenticated = false;
     let eduSubmitReceived = false;
     let eduSubmittedCode = "";
     let libraryCheckCount = 0;
@@ -80,6 +98,7 @@ if (!baseUrl) {
       const method = route.request().method();
       const isCsrf = pathname.endsWith("/csrf-token");
       const isProfileProbe = pathname.endsWith("/profile/me");
+      let responseStatus = isCsrf ? 204 : 200;
       let payload = isProfileProbe
         ? eduReviewMode ? {
             id: -998,
@@ -114,7 +133,29 @@ if (!baseUrl) {
           : pathname.endsWith("/auth/maintenance")
             ? { maintenance: false, title: "", message: "", until: null }
             : { current: null };
-      if (pathname.endsWith("/contests/778/events")) {
+      if (isProfileProbe && eduLoginFlow && !eduLoginAuthenticated) {
+        responseStatus = 401;
+        payload = { message: "UNAUTHORIZED" };
+      } else if (isProfileProbe && eduLoginFlow) {
+        payload = {
+          id: -997,
+          username: "browser-contract-teacher",
+          firstName: "Browser",
+          lastName: "Teacher",
+          activeRuntime: "PYTHON",
+          difus: 0,
+          avatarUrl: null,
+          userMode: "EDUCATIONAL",
+          role: "TEACHER",
+          placementDone: true,
+          placementLevel: "INTERMEDIATE",
+          eduContexts: { organizations: [{ orgId: 31, name: "Browser contract school", role: "TEACHER" }], students: [] }
+        };
+      }
+      if (method === "POST" && pathname.endsWith("/auth/login")) {
+        eduLoginAuthenticated = true;
+        payload = { ok: true };
+      } else if (pathname.endsWith("/contests/778/events")) {
         return route.fulfill({ status: 200, contentType: "text/event-stream", body: "event: ready\ndata: {}\n\n" });
       } else if (method === "GET" && pathname.endsWith("/contests/778")) {
         const now = Date.now();
@@ -240,6 +281,10 @@ if (!baseUrl) {
           theory: null,
           tests: [{ id: 17, input: "5", expectedOutput: "15", isHidden: false, kind: "SAMPLE", points: 100 }],
         };
+      } else if (method === "GET" && pathname.endsWith("/edu/classes")) {
+        payload = { classes: [] };
+      } else if (method === "GET" && pathname.endsWith("/edu/tasks/pending-review")) {
+        payload = { pendingReviews: [] };
       } else if (method === "POST" && pathname.endsWith("/library/tasks/901/check")) {
         libraryCheckCount += 1;
         try {
@@ -298,18 +343,55 @@ if (!baseUrl) {
         };
       }
       await route.fulfill({
-        status: isCsrf ? 204 : 200,
+        status: responseStatus,
         contentType: isCsrf ? undefined : "application/json",
         body: isCsrf ? "" : JSON.stringify(payload)
       });
     });
     const runtimeErrors = [];
+    const eduLoginResponses = [];
     page.on("pageerror", error => runtimeErrors.push(`pageerror: ${error.message}`));
+    page.on("response", response => {
+      if (eduLoginFlow && new URL(response.url()).pathname.startsWith("/api/")) {
+        eduLoginResponses.push(`${response.status()} ${response.request().method()} ${new URL(response.url()).pathname}`);
+      }
+    });
     page.on("console", message => {
-      if (message.type() === "error") runtimeErrors.push(`console: ${message.text()}`);
+      if (message.type() === "error") {
+        const text = message.text();
+        if (eduLoginFlow && !eduLoginAuthenticated && /failed to load resource.*401/i.test(text)) return;
+        runtimeErrors.push(`console: ${text}`);
+      }
     });
     const response = await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
     if (!response || response.status() >= 500) throw new Error(`frontend returned ${response?.status() ?? "no response"}`);
+    if (process.env.BROWSER_CONTRACT_AUTH_ONLY === "1") {
+      eduLoginFlow = true;
+      eduLoginAuthenticated = false;
+      await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+      let authDocumentLoads = 0;
+      page.on("load", () => { authDocumentLoads += 1; });
+      const authEntryResponse = await page.goto(new URL("?auth=login&audience=teacher", baseUrl).toString(), { waitUntil: "domcontentloaded", timeout: 30_000 });
+      if (!authEntryResponse || authEntryResponse.status() >= 500) throw new Error(`EDU auth entry returned ${authEntryResponse?.status() ?? "no response"}`);
+      await page.locator('input[name="username"]').waitFor({ state: "visible", timeout: 30_000 });
+      const authDocumentLoadsBeforeSubmit = authDocumentLoads;
+      await page.locator('input[name="username"]').fill("teacher@browser-contract.test");
+      await page.locator('input[name="password"]').fill("browser-contract-password");
+      await page.locator("form button[type=submit]").click();
+      try {
+        await page.getByRole("heading", { name: /Teacher workspace|Кабінет викладача/i }).waitFor({ state: "visible", timeout: 30_000 });
+      } catch (error) {
+        console.error(`EDU LOGIN DEBUG: ${page.url()}\n${(await page.locator("body").innerText().catch(() => "(body unavailable)")).slice(0, 1800)}\nAPI responses: ${eduLoginResponses.join(" | ")}\nRuntime errors: ${runtimeErrors.join(" | ")}`);
+        await captureScreenshot("contract-edu-login-failure");
+        throw error;
+      }
+      await page.waitForURL(url => url.pathname === "/edu", { timeout: 10_000 });
+      if (authDocumentLoads !== authDocumentLoadsBeforeSubmit) throw new Error("EDU login required a full document reload instead of rendering the authenticated workspace");
+      if (runtimeErrors.length > 0) throw new Error(`browser runtime errors: ${runtimeErrors.join(" | ")}`);
+      await browser.close();
+      console.log("EDU LOGIN CONTRACT PASS: a fresh 401 auth probe is followed by login, and the EDU workspace renders without a document reload");
+      return;
+    }
     const title = await page.title();
     if (!title.trim()) throw new Error("document title is empty");
     const inaccessibleButtons = await page.locator("button").evaluateAll((buttons) => buttons.filter((button) => {
@@ -346,17 +428,22 @@ if (!baseUrl) {
     const libraryLayout = await libraryRows.evaluateAll((rows) => ({
       count: rows.length,
       firstRowTop: rows[0]?.getBoundingClientRect().top ?? null,
+      sections: [".premium-task-library__hero", ".premium-task-library__filters", ".premium-task-library__filter-row", "#task-library-results"].map(selector => {
+        const element = document.querySelector(selector);
+        const bounds = element?.getBoundingClientRect();
+        return { selector, top: bounds?.top ?? null, bottom: bounds?.bottom ?? null, height: bounds?.height ?? null };
+      }),
       visibleRows: rows.filter((row) => {
         const bounds = row.getBoundingClientRect();
         return bounds.top >= 0 && bounds.bottom <= window.innerHeight;
       }).length,
       documentWidth: document.documentElement.scrollWidth,
     }));
+    await captureData("library-first-screen-1280x720.json", { viewport: { width: 1280, height: 720 }, ...libraryLayout });
+    await captureScreenshot("contract-library-1280x720");
     if (libraryLayout.count < 5 || libraryLayout.visibleRows < 5 || libraryLayout.firstRowTop > 300) {
       throw new Error(`task library misses the first-screen target at 1280x720: ${JSON.stringify(libraryLayout)}`);
     }
-    await captureData("library-first-screen-1280x720.json", { viewport: { width: 1280, height: 720 }, ...libraryLayout });
-    await captureScreenshot("contract-library-1280x720");
     if (await page.getByRole("button", { name: /My materials|Мої матеріали/i }).count() === 0) {
       throw new Error("a regular personal account lost its explicit task-management entry point");
     }
@@ -519,9 +606,34 @@ if (!baseUrl) {
       throw new Error(`AI mentor help levels are incomplete: ${mentorLevelLabels.join(" | ")}`);
     }
 
+    eduReviewMode = false;
+    eduLoginFlow = true;
+    eduLoginAuthenticated = false;
+    await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+    let authDocumentLoads = 0;
+    page.on("load", () => { authDocumentLoads += 1; });
+    const authEntryResponse = await page.goto(new URL("?auth=login&audience=teacher", baseUrl).toString(), { waitUntil: "domcontentloaded", timeout: 30_000 });
+    if (!authEntryResponse || authEntryResponse.status() >= 500) throw new Error(`EDU auth entry returned ${authEntryResponse?.status() ?? "no response"}`);
+    await page.locator('input[name="username"]').waitFor({ state: "visible", timeout: 30_000 });
+    const authDocumentLoadsBeforeSubmit = authDocumentLoads;
+    await page.locator('input[name="username"]').fill("teacher@browser-contract.test");
+    await page.locator('input[name="password"]').fill("browser-contract-password");
+    await page.locator("form button[type=submit]").click();
+    try {
+      await page.getByRole("heading", { name: /Teacher workspace|Кабінет викладача/i }).waitFor({ state: "visible", timeout: 30_000 });
+    } catch (error) {
+      console.error(`EDU LOGIN DEBUG: ${page.url()}\n${(await page.locator("body").innerText().catch(() => "(body unavailable)")).slice(0, 1800)}\nAPI responses: ${eduLoginResponses.join(" | ")}\nRuntime errors: ${runtimeErrors.join(" | ")}`);
+      await captureScreenshot("contract-edu-login-failure");
+      throw error;
+    }
+    await page.waitForURL(url => url.pathname === "/edu", { timeout: 10_000 });
+    if (authDocumentLoads !== authDocumentLoadsBeforeSubmit) {
+      throw new Error("EDU login required a full document reload instead of rendering the authenticated workspace");
+    }
+
     if (runtimeErrors.length > 0) throw new Error(`browser runtime errors: ${runtimeErrors.join(" | ")}`);
     await browser.close();
-    console.log("BROWSER CONTRACT PASS: public shell, accessible buttons, Monaco, course quiz and Judge-attempt progress, five library rows above y=300 at 1280x720 with a mobile layout and task-management entry point, EDU public-test failure evidence and hint with retained editor code, timed contest workspace submission, generated-topic post-contest review, and mentor controls hidden through an extended deadline before appearing with four help levels load without runtime errors");
+    console.log("BROWSER CONTRACT PASS: public shell, accessible buttons, Monaco, course quiz and Judge-attempt progress, five library rows above y=300 at 1280x720 with a mobile layout and task-management entry point, EDU public-test failure evidence and hint with retained editor code, EDU login reaches the teacher workspace without a document reload, timed contest workspace submission, generated-topic post-contest review, and mentor controls hidden through an extended deadline before appearing with four help levels load without runtime errors");
   } catch (error) {
     console.error(`BROWSER CONTRACT ${required ? "FAILED" : "UNVERIFIED"}: ${error.message}`);
     process.exit(required ? 1 : 0);

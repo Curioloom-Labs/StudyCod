@@ -1,0 +1,124 @@
+.premium-task-library {
+  --library-hero: #183a2d;
+  --library-hero-text: #f0f3e9;
+  --library-hero-accent: #d0ec91;
+  --library-row-hover: color-mix(in srgb, var(--primary) 5%, var(--bg-surface));
+}
+
+:root[data-theme="dark"] .premium-task-library {
+  --library-hero: #1a2721;
+  --library-hero-text: #eef2ea;
+  --library-hero-accent: #cce890;
+  --library-row-hover: color-mix(in srgb, var(--primary) 7%, var(--bg-surface));
+}
+
+.premium-task-library__hero {
+  isolation: isolate;
+  border: 1px solid color-mix(in srgb, var(--library-hero-accent) 18%, transparent);
+  background:
+    linear-gradient(115deg, transparent 0 69%, color-mix(in srgb, var(--library-hero-accent) 5%, transparent) 69% 69.15%, transparent 69.15%),
+    var(--library-hero);
+  color: var(--library-hero-text);
+  box-shadow: 0 18px 45px -38px color-mix(in srgb, var(--library-hero) 72%, transparent);
+}
+
+.premium-task-library__hero::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--library-hero-accent);
+  content: "";
+}
+
+.premium-task-library__eyebrow {
+  color: var(--library-hero-accent);
+  letter-spacing: .16em;
+}
+
+.premium-task-library__title {
+  max-width: 22ch;
+  color: var(--library-hero-text);
+  text-wrap: balance;
+}
+
+.premium-task-library__metrics { flex-wrap: wrap; }
+
+.premium-task-library__metric {
+  min-width: 76px;
+  padding-inline-start: 13px;
+  border-inline-start: 1px solid color-mix(in srgb, var(--library-hero-text) 23%, transparent);
+}
+
+.premium-task-library__metric dd { color: var(--library-hero-text); }
+.premium-task-library__metric dt { color: color-mix(in srgb, var(--library-hero-text) 65%, transparent); }
+.premium-task-library__metric--solved dd { color: var(--library-hero-accent); }
+
+.premium-task-library__filters {
+  padding: 10px 14px 6px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-surface) 72%, var(--bg-base));
+}
+
+.premium-task-library__search {
+  border-radius: 11px !important;
+  background: var(--bg-base) !important;
+}
+
+.premium-task-library__filter-row { border-color: color-mix(in srgb, var(--border) 80%, transparent) !important; }
+
+.premium-task-library__filter-row button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--primary) 12%, var(--bg-base));
+  color: var(--primary-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+:root[data-theme="dark"] .premium-task-library__filter-row button[aria-pressed="true"] {
+  color: var(--primary-soft);
+}
+
+.premium-task-library__list {
+  overflow: hidden;
+  border-radius: 15px;
+  border-color: var(--border) !important;
+  background: var(--bg-surface);
+}
+
+.premium-task-library__row {
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  background: var(--bg-surface);
+}
+
+.premium-task-library__row:hover { background: var(--library-row-hover); }
+.premium-task-library__row.is-featured { background: color-mix(in srgb, var(--primary) 5%, var(--bg-surface)); }
+.premium-task-library__row.is-featured::before {
+  position: absolute;
+  inset-block: 13px;
+  inset-inline-start: 0;
+  width: 2px;
+  border-radius: 3px;
+  background: var(--primary-strong);
+  content: "";
+}
+
+.premium-task-library__index {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.premium-task-library__row.is-featured .premium-task-library__index { color: var(--primary-strong); }
+.premium-task-library__task-link { text-decoration: none; }
+.premium-task-library__task-link:hover > span:first-child { color: var(--primary-strong); }
+
+@media (max-width: 639px) {
+  .premium-task-library__hero { padding: 17px 18px; }
+  .premium-task-library__metrics { gap: 14px; }
+  .premium-task-library__metric { min-width: 62px; padding-inline-start: 9px; }
+  .premium-task-library__filters { padding: 11px 11px 7px; }
+  .premium-task-library__list { border-radius: 12px; }
+  .premium-task-library__row { padding-inline: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .premium-task-library__row { transition: none; }
+}

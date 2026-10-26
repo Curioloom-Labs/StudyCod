@@ -189,6 +189,16 @@ type MaintenanceEventDetail = {
   until?: string | null;
 };
 
+const readSessionHint = (key: string): string | null => {
+  try { return window.sessionStorage.getItem(key); } catch { return null; }
+};
+const writeSessionHint = (key: string, value: string): void => {
+  try { window.sessionStorage.setItem(key, value); } catch { /* optional navigation hint */ }
+};
+const removeSessionHint = (key: string): void => {
+  try { window.sessionStorage.removeItem(key); } catch { /* optional navigation hint */ }
+};
+
 type MaintenanceApiData = {
   maintenance: boolean;
   title?: unknown;
@@ -353,6 +363,7 @@ const AppContent: React.FC = React.memo(() => {
   const navigate = useNavigate();
   const [page, setPage] = useState<Page>("home");
   const [user, setUser] = useState<User | null>(() => getCachedMeUser());
+  const bootAuthGenerationRef = useRef(0);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
   const [loading, setLoading] = useState(() => !getCachedMeUser());
   const [maintenance, setMaintenance] = useState<MaintenancePayload | null>(() => {
@@ -417,24 +428,29 @@ const AppContent: React.FC = React.memo(() => {
   }, [page, requestedAppPage, location.pathname, user?.id, user?.role, user?.userMode, user?.studentId]);
   useEffect(() => {
     const cleanupOldStorage = () => {
-      const keys = Object.keys(localStorage);
-      const now = Date.now();
-      const maxAge = 30 * 24 * 60 * 60 * 1000;
-      keys.forEach(key => {
-        if (key.startsWith("quiz_") || key.startsWith("task_")) {
-          const timestampKey = `${key}_timestamp`;
-          const timestamp = localStorage.getItem(timestampKey);
-          if (timestamp) {
-            const age = now - parseInt(timestamp, 10);
-            if (age > maxAge) {
+      // Browser privacy settings may deny storage access; cleanup is optional.
+      try {
+        const keys = Object.keys(localStorage);
+        const now = Date.now();
+        const maxAge = 30 * 24 * 60 * 60 * 1000;
+        keys.forEach(key => {
+          if (key.startsWith("quiz_") || key.startsWith("task_")) {
+            const timestampKey = `${key}_timestamp`;
+            const timestamp = localStorage.getItem(timestampKey);
+            if (timestamp) {
+              const age = now - parseInt(timestamp, 10);
+              if (age > maxAge) {
+                localStorage.removeItem(key);
+                localStorage.removeItem(timestampKey);
+              }
+            } else {
               localStorage.removeItem(key);
-              localStorage.removeItem(timestampKey);
             }
-          } else {
-            localStorage.removeItem(key);
           }
-        }
-      });
+        });
+      } catch {
+        // Keep the application usable when local storage is unavailable.
+      }
     };
     cleanupOldStorage();
     const interval = setInterval(cleanupOldStorage, 24 * 60 * 60 * 1000);
@@ -444,14 +460,14 @@ const AppContent: React.FC = React.memo(() => {
     // Allow cross-area navigation (e.g., from /edu) to request a specific page.
     if (!user) return;
     try {
-      const requested = sessionStorage.getItem("studycod.openPage");
+      const requested = readSessionHint("studycod.openPage");
       if (!requested) return;
       const next = asPage(requested);
       if (next && isPageAvailableForUser(next, user)) {
         if (user.userMode === "EDUCATIONAL") startTransition(() => setPage(next));
         else navigate(next === "home" ? "/" : `/?app=${next}`, { replace: true });
       }
-      sessionStorage.removeItem("studycod.openPage");
+      removeSessionHint("studycod.openPage");
     } catch {
       // ignore
     }
@@ -467,6 +483,11 @@ const AppContent: React.FC = React.memo(() => {
     const next = getSafeNextAfterAuth(searchParams);
     if (next) {
       navigate(next, { replace: true });
+      return;
+    }
+    if (user.userMode === "EDUCATIONAL"
+      && requestedAppPage !== "profile" && requestedAppPage !== "admin") {
+      navigate("/edu", { replace: true });
       return;
     }
 
@@ -554,7 +575,7 @@ const AppContent: React.FC = React.memo(() => {
         } else {
           setGeoBlock(null);
           try {
-            sessionStorage.removeItem("studycod.geoblock");
+            removeSessionHint("studycod.geoblock");
           } catch {}
         }
       })
@@ -599,7 +620,7 @@ const AppContent: React.FC = React.memo(() => {
           } else {
             setMaintenance(null);
             try {
-              sessionStorage.removeItem("studycod.maintenance");
+              removeSessionHint("studycod.maintenance");
             } catch {}
           }
           checked = true;
@@ -635,9 +656,10 @@ const AppContent: React.FC = React.memo(() => {
       return;
     }
     const run = async () => {
+      const requestGeneration = bootAuthGenerationRef.current;
       try {
         const u = await getCurrentUserWithRetry(6);
-        if (cancelled) return;
+        if (cancelled || requestGeneration !== bootAuthGenerationRef.current) return;
         const mayResumeInitialRoot = initialRootEntry && !initialRootResumeConsumed;
         initialRootResumeConsumed = true;
 
@@ -647,10 +669,10 @@ const AppContent: React.FC = React.memo(() => {
           setBootResumeHandled(true);
           return;
         }
-        const fromAuth = sessionStorage.getItem("fromAuth");
+        const fromAuth = readSessionHint("fromAuth");
         if (fromAuth && u.role === "SYSTEM_ADMIN") {
           navigate("/?app=admin", { replace: true });
-          sessionStorage.removeItem("fromAuth");
+          removeSessionHint("fromAuth");
         } else if (fromAuth && (!u.userMode || u.userMode === "PERSONAL")) {
           // Post-auth routing must be presentation-agnostic.
           const resume = resolveResumeRoute(u, loadResumeState(u.id));
@@ -658,11 +680,11 @@ const AppContent: React.FC = React.memo(() => {
             navigate(resume.path, { replace: true });
           } else if (resume.type === "appPage") {
             if (resume.extras?.openTaskId) {
-              sessionStorage.setItem("openTaskId", resume.extras.openTaskId);
+              writeSessionHint("openTaskId", resume.extras.openTaskId);
             }
             navigate(resume.page === "home" ? "/" : `/?app=${resume.page}`, { replace: true });
           }
-          sessionStorage.removeItem("fromAuth");
+          removeSessionHint("fromAuth");
         } else if (fromAuth && u.userMode === "EDUCATIONAL" && u.studentId) {
           const resume = resolveResumeRoute(u, loadResumeState(u.id));
           if (resume.type === "path") {
@@ -670,7 +692,7 @@ const AppContent: React.FC = React.memo(() => {
           } else if (resume.type === "appPage") {
             startTransition(() => setPage(resume.page));
           }
-          sessionStorage.removeItem("fromAuth");
+          removeSessionHint("fromAuth");
         } else if (fromAuth && u.userMode === "EDUCATIONAL" && !u.studentId) {
           const resume = resolveResumeRoute(u, loadResumeState(u.id));
           if (resume.type === "path") {
@@ -678,7 +700,7 @@ const AppContent: React.FC = React.memo(() => {
           } else if (resume.type === "appPage") {
             startTransition(() => setPage(resume.page));
           }
-          sessionStorage.removeItem("fromAuth");
+          removeSessionHint("fromAuth");
         } else {
           // Boot-time resume: when opening the app root without an explicit intent,
           // restore the last valid cognitive session immediately.
@@ -687,7 +709,7 @@ const AppContent: React.FC = React.memo(() => {
             const sp = new URLSearchParams(window.location.search);
             const authIntent = sp.get("auth");
             const nextAfterAuth = sp.get("next");
-            const requestedPage = sessionStorage.getItem("studycod.openPage");
+            const requestedPage = readSessionHint("studycod.openPage");
 
             const isRootEntry = path === "/";
             const hasExplicitIntent = Boolean(authIntent || nextAfterAuth || requestedPage || sp.has("app"));
@@ -700,7 +722,7 @@ const AppContent: React.FC = React.memo(() => {
                   navigate(resolved.path, { replace: true });
                 } else if (resolved.type === "appPage") {
                   if (resolved.extras?.openTaskId) {
-                    sessionStorage.setItem("openTaskId", resolved.extras.openTaskId);
+                    writeSessionHint("openTaskId", resolved.extras.openTaskId);
                   }
                   if (u.userMode === "EDUCATIONAL") startTransition(() => setPage(resolved.page));
                   else navigate(resolved.page === "home" ? "/" : `/?app=${resolved.page}`, { replace: true });
@@ -713,7 +735,7 @@ const AppContent: React.FC = React.memo(() => {
         }
         setBootResumeHandled(true);
       } catch (error: unknown) {
-        if (cancelled) return;
+        if (cancelled || requestGeneration !== bootAuthGenerationRef.current) return;
         initialRootResumeConsumed = true;
 
         const extracted = extractMaintenanceData(error);
@@ -734,7 +756,7 @@ const AppContent: React.FC = React.memo(() => {
         }
 
         const status = getHttpStatusFromError(error);
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && !isAuthErrorStatus(status)) {
           console.error("Failed to get user:", getErrorMessageFromUnknown(error, "unknown error"));
         }
 
@@ -742,7 +764,7 @@ const AppContent: React.FC = React.memo(() => {
 
         setBootResumeHandled(true);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && requestGeneration === bootAuthGenerationRef.current) setLoading(false);
       }
     };
 
@@ -753,6 +775,7 @@ const AppContent: React.FC = React.memo(() => {
     };
   }, [isDevPreview, previewPersona]);
   const handleLogout = useCallback(() => {
+    bootAuthGenerationRef.current += 1;
     if (isDevPreviewActive(location.search)) {
       setUser(null);
       navigate("/", { replace: true });
@@ -832,15 +855,21 @@ const AppContent: React.FC = React.memo(() => {
     const audienceIntent = searchParams.get("audience");
     return <PublicPageWithFooter><Suspense fallback={<PageLoader />}>
       <AuthPage initialMode={authIntent === "register" ? "register" : "login"} initialUserMode={audienceIntent === "teacher" ? "EDUCATIONAL" : undefined} showBackToLanding={location.pathname === "/"} onAuth={(u: User) => {
+        // A login can finish while the anonymous boot-time /profile/me probe is
+        // still pending. Ignore that older 401 instead of clearing the new user.
+        bootAuthGenerationRef.current += 1;
         setUser(u);
+        setLoading(false);
         setBootResumeHandled(true);
         if (nextAfterAuth) {
-          sessionStorage.removeItem("fromAuth");
+          removeSessionHint("fromAuth");
           navigate(nextAfterAuth, {
             replace: true
           });
+        } else if (u.userMode === "EDUCATIONAL") {
+          removeSessionHint("fromAuth");
         } else {
-          sessionStorage.setItem("fromAuth", "true");
+          writeSessionHint("fromAuth", "true");
         }
       }} />
       </Suspense></PublicPageWithFooter>;
@@ -1588,6 +1617,10 @@ const EduRoutes: React.FC = React.memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
   const isEduDevPreview = import.meta.env.DEV && new URLSearchParams(location.search).get("preview") === "true";
+  const cachedEduUser = getCachedMeUser();
+  const initialEduUser = isDevPreviewActive(location.search)
+    ? getDevPreviewUser(location.search)
+    : cachedEduUser?.userMode === "EDUCATIONAL" ? cachedEduUser : null;
   const eduPreviewPersona = new URLSearchParams(location.search).get("persona");
   const eduPreviewStudent = eduPreviewPersona !== "teacher" && (
     eduPreviewPersona === "student" || (/^\/edu\/(journal|lessons(?:\/|$)|tasks\/|grades\/|appeals(?:\/|$))/).test(location.pathname)
@@ -1595,9 +1628,9 @@ const EduRoutes: React.FC = React.memo(() => {
   const eduRouteOwnsMainLandmark = (path: string) => path === "/edu"
     || path === "/edu/tutor"
     || /^\/edu\/(?:topics\/\d+|control-works\/\d+|classes\/\d+\/live|lessons\/\d+(?:\/quiz)?|manual-tasks\/\d+(?:\/submissions)?)\/?$/.test(path);
-  const [user, setUser] = useState<User | null>(() => isDevPreviewActive(location.search) ? getDevPreviewUser(location.search) : null);
+  const [user, setUser] = useState<User | null>(() => initialEduUser);
   const [theme, setTheme] = useState<AppTheme>(() => getCurrentTheme());
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !initialEduUser);
   const [loggingOut, setLoggingOut] = useState(false);
   const authGenerationRef = useRef(0);
   const [controlExamSession, setControlExamSession] = useState(() => getControlExamSession());
@@ -1692,7 +1725,7 @@ const EduRoutes: React.FC = React.memo(() => {
     const requestGeneration = authGenerationRef.current;
     const run = async () => {
       try {
-        let u = await getCurrentUserWithRetry(6, true);
+        let u = await getCurrentUserWithRetry(6);
         if (cancelled || requestGeneration !== authGenerationRef.current) return;
 
         if (!chooseEducationalContext(u).allowed) {
@@ -1713,7 +1746,7 @@ const EduRoutes: React.FC = React.memo(() => {
         if (cancelled || requestGeneration !== authGenerationRef.current) return;
 
         const status = getHttpStatusFromError(error);
-        if (import.meta.env.DEV) {
+        if (import.meta.env.DEV && !isAuthErrorStatus(status)) {
           console.error("EduRoutes: Failed to get user", error);
         }
         if (isAuthErrorStatus(status)) setUser(null);
@@ -1847,7 +1880,7 @@ const EduRoutes: React.FC = React.memo(() => {
             <Route path="manual-tasks/:taskId/submissions" element={teacherOnly(<AnimatedPage><ManualTaskSubmissionsPage /></AnimatedPage>)} />
             <Route path="organization" element={orgAdminOnly(<AnimatedPage><OrgMembersPage /></AnimatedPage>)} />
             <Route path="profile" element={<Navigate to="/profile" replace />} />
-            <Route path="classes/:classId/live" element={teacherOnly(<AnimatedPage><LiveClassroomPage user={user} /></AnimatedPage>)} />
+            <Route path="classes/:classId/live" element={<AnimatedPage><LiveClassroomPage user={user} /></AnimatedPage>} />
             <Route path="classes/:classId/appeals" element={teacherOnly(<AnimatedPage><TeacherClassAppealsPage /></AnimatedPage>)} />
             <Route path="journal" element={studentOnly(<AnimatedPage><StudentDashboardPage user={user} /></AnimatedPage>)} />
             <Route path="student" element={<Navigate to="/edu/journal" replace />} />
@@ -1869,6 +1902,7 @@ const EduRoutes: React.FC = React.memo(() => {
       user={user}
       theme={theme}
       currentPath={location.pathname}
+      footerHidden={/^\/edu\/classes\/\d+\/live$/.test(location.pathname)}
       navigationHidden={isControlExamActive}
       onNavigate={(path) => navigate(withDevPreview(path, location.search))}
       onToggleTheme={toggleTheme}
@@ -1893,7 +1927,7 @@ VerifyEmailWrapper.displayName = "VerifyEmailWrapper";
 const GoogleAuthWrapper: React.FC = React.memo(() => {
   const navigate = useNavigate();
   const handleAuth = useCallback((_user: User) => {
-    sessionStorage.setItem("fromAuth", "true");
+    writeSessionHint("fromAuth", "true");
     navigate("/");
     window.location.reload();
   }, [navigate]);
@@ -1912,7 +1946,7 @@ const GoogleAuthSuccessWrapper: React.FC = React.memo(() => {
     exchangeAttemptRef.current = attemptKey;
     let cancelled = false;
     const finishSuccess = () => {
-      sessionStorage.setItem("fromAuth", "true");
+      writeSessionHint("fromAuth", "true");
       window.location.replace("/");
     };
 

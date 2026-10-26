@@ -14,6 +14,8 @@ import {
   type StudyCodIdeCheckResult,
   type StudyCodIdeRunResult,
 } from "../../components/ide/StudyCodIDEWorkspace";
+import { type CodeEditorHandle } from "../../components/CodeEditor";
+import { scopedStorageKey } from "../../lib/storageScope";
 import { defaultCompilerForFamily, JUDGE_ENTRY_FILES } from "../../lib/judgeLanguages";
 import type { JudgeLanguage } from "../../lib/judgeLanguages";
 import { useTranslation } from "react-i18next";
@@ -23,26 +25,37 @@ import { FailureRecoveryCard } from "../../components/FailureRecoveryCard";
 const preview = () =>
   import.meta.env.DEV &&
   new URLSearchParams(window.location.search).get("preview") === "true";
+const getSafeEduReturnTo = (search: string): string | null => {
+  const requested = new URLSearchParams(search).get("returnTo");
+  if (!requested || requested.startsWith("//") || requested.includes("\\")) return null;
+  try {
+    const target = new URL(requested, window.location.origin);
+    if (target.origin !== window.location.origin || !/^\/edu(?:\/|$)/.test(target.pathname)) return null;
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return null;
+  }
+};
 const starter: Record<string, string> = {
   PYTHON:
     "def solve(numbers):\n    # write your solution\n    return 0\n\nprint(solve([]))",
   JAVA: "public class Main {\n  public static void main(String[] args) {\n    // write your solution\n  }\n}",
   CPP: "#include <iostream>\nusing namespace std;\n\nint main() {\n  // write your solution\n  return 0;\n}",
 };
+const loopBoundaryStarter = "def sum_to(n):\n    total = 0\n    for value in range(1, n):\n        total += value\n    return total\n\nprint(sum_to(5))";
 const demoTask: TaskWithGrade = {
   id: 501,
-  title: "Словник частот",
-  description:
-    "Створіть функцію, яка отримує список слів і повертає словник з кількістю появ кожного слова. Ігноруйте регістр, але збережіть ключі в нижньому регістрі.",
-  template: starter.PYTHON,
+  title: "Сума від 1 до n",
+  description: "Напишіть sum_to(n), яка повертає суму цілих чисел від 1 до n включно. Для n = 5 очікуємо 15.",
+  template: loopBoundaryStarter,
   language: "PYTHON",
-  testDataCount: 5,
-  savedCode: starter.PYTHON,
+  testDataCount: 1,
+  savedCode: loopBoundaryStarter,
   maxAttempts: 3,
   attemptsUsed: 1,
   lesson: {
     id: 41,
-    title: "Колекції: мислити даними",
+    title: "Цикли: від ідеї до коду",
     type: "LESSON",
     hasTheory: true,
   },
@@ -50,6 +63,26 @@ const demoTask: TaskWithGrade = {
 };
 const workspace = "mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-10";
 const entryFileForLanguage = (language: string) => JUDGE_ENTRY_FILES[String(language).toLowerCase() as JudgeLanguage] || "main.py";
+type PracticeDraft = {
+  code: string;
+  viewState: ReturnType<CodeEditorHandle["saveViewState"]>;
+  savedAt: number;
+};
+const practiceDraftKey = (taskId: number) => scopedStorageKey("studycod:edu:practice-draft:v1", taskId);
+const readPracticeDraft = (taskId: number): PracticeDraft | null => {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(practiceDraftKey(taskId)) || "null");
+    if (!value || typeof value !== "object") return null;
+    const draft = value as Partial<PracticeDraft>;
+    return typeof draft.code === "string" ? {
+      code: draft.code,
+      viewState: draft.viewState ?? null,
+      savedAt: typeof draft.savedAt === "number" ? draft.savedAt : 0,
+    } : null;
+  } catch {
+    return null;
+  }
+};
 
 export const PracticeCanvasPage: React.FC = () => {
   useTranslation();
@@ -57,6 +90,7 @@ export const PracticeCanvasPage: React.FC = () => {
   const id = Number(taskId);
   const navigate = useNavigate();
   const location = useLocation();
+  const returnTo = getSafeEduReturnTo(location.search);
   const [task, setTask] = React.useState<TaskWithGrade | null>(null);
   const [code, setCode] = React.useState("");
   const [input, setInput] = React.useState("");
@@ -72,14 +106,74 @@ export const PracticeCanvasPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState<"run" | "submit" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const codeRef = React.useRef(code);
+  const draftReadyRef = React.useRef(false);
+  const codeEditorRef = React.useRef<CodeEditorHandle | null>(null);
+  const draftSaveTimerRef = React.useRef<number | null>(null);
+  const editorStateSubscriptionsRef = React.useRef<Array<{ dispose: () => void }>>([]);
+  React.useEffect(() => { codeRef.current = code; }, [code]);
+  const persistDraft = React.useCallback(() => {
+    if (!draftReadyRef.current || !Number.isFinite(id) || id <= 0) return;
+    try {
+      const draft: PracticeDraft = {
+        code: codeRef.current,
+        viewState: codeEditorRef.current?.saveViewState() ?? null,
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(practiceDraftKey(id), JSON.stringify(draft));
+    } catch {
+      // A private window or full storage quota must not interrupt the editor.
+    }
+  }, [id]);
+  const scheduleDraftSave = React.useCallback(() => {
+    if (draftSaveTimerRef.current != null) window.clearTimeout(draftSaveTimerRef.current);
+    draftSaveTimerRef.current = window.setTimeout(() => {
+      draftSaveTimerRef.current = null;
+      persistDraft();
+    }, 280);
+  }, [persistDraft]);
+  const handleCodeChange = React.useCallback((nextCode: string) => {
+    codeRef.current = nextCode;
+    setCode(nextCode);
+    scheduleDraftSave();
+  }, [scheduleDraftSave]);
+  const handleCodeEditorMount = React.useCallback((editor: CodeEditorHandle) => {
+    codeEditorRef.current = editor;
+    editorStateSubscriptionsRef.current.forEach(subscription => subscription.dispose());
+    editorStateSubscriptionsRef.current = [];
+    const draft = readPracticeDraft(id);
+    if (draft?.viewState && editor.getModel()) {
+      window.requestAnimationFrame(() => {
+        try {
+          if (editor.getModel()) editor.restoreViewState(draft.viewState);
+        } catch {
+          // Ignore a view state produced by a different editor/model version.
+        }
+      });
+    }
+    editorStateSubscriptionsRef.current = [
+      editor.onDidChangeCursorPosition(scheduleDraftSave),
+      editor.onDidScrollChange(scheduleDraftSave),
+    ];
+  }, [id, scheduleDraftSave]);
+  React.useEffect(() => () => {
+    if (draftSaveTimerRef.current != null) window.clearTimeout(draftSaveTimerRef.current);
+    draftSaveTimerRef.current = null;
+    persistDraft();
+    editorStateSubscriptionsRef.current.forEach(subscription => subscription.dispose());
+    editorStateSubscriptionsRef.current = [];
+    codeEditorRef.current = null;
+  }, [persistDraft]);
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
       const result = await getTask(id);
       setTask(result);
-      setCode(
-        result.savedCode || result.template || starter[result.language] || "",
-      );
+      const savedDraft = readPracticeDraft(id);
+      const nextCode = savedDraft?.code ?? (result.savedCode || result.template || starter[result.language] || "");
+      codeRef.current = nextCode;
+      draftReadyRef.current = true;
+      setCode(nextCode);
       setHints([]);
       setLearningFeedback(null);
       setLearningAttempt(null);
@@ -87,7 +181,11 @@ export const PracticeCanvasPage: React.FC = () => {
     } catch (caught) {
       if (preview()) {
         setTask(demoTask);
-        setCode(demoTask.savedCode || demoTask.template);
+        const savedDraft = readPracticeDraft(id);
+        const nextCode = savedDraft?.code ?? (demoTask.savedCode || demoTask.template);
+        codeRef.current = nextCode;
+        draftReadyRef.current = true;
+        setCode(nextCode);
       } else
         setError(
           getErrorMessageFromUnknown(caught, tr("Не вдалося відкрити задачу.", "Could not open the problem.")),
@@ -104,8 +202,9 @@ export const PracticeCanvasPage: React.FC = () => {
     setBusy("run");
     try {
       if (preview()) {
+        const includesLastNumber = /\brange\s*\(\s*1\s*,\s*n\s*\+\s*1\s*\)/.test(code);
         setConsoleTone("ok");
-        setConsoleText(`4\n\n${tr("Код виконано без помилок.", "Code ran without errors.")}`);
+        setConsoleText(includesLastNumber ? `15\n\n${tr("Код виконано без помилок.", "Code ran without errors.")}` : `10\n\n${tr("Для n = 5 очікувалося 15. Цикл зупинився перед числом 5.", "For n = 5, expected 15. The loop stopped before 5.")}`);
         return;
       }
       const result = await runCode(task.id, code, input);
@@ -129,21 +228,25 @@ export const PracticeCanvasPage: React.FC = () => {
     setBusy("submit");
     try {
       if (preview()) {
-        setConsoleTone("ok");
-        setConsoleText(tr("5 / 5 тестів пройдено\nРоботу надіслано на перевірку.", "5 / 5 tests passed\nYour solution was submitted for review."));
-        setHints([
-          tr("Перевір, де саме формується словник частот, і чи всі слова проходять через lower().", "Check where the frequency map is built and whether every word passes through lower()."),
-          tr("Спробуй використати один прохід по списку та оновлювати значення ключа під час зустрічі слова.", "Try a single pass through the list, updating each key when you encounter a word."),
+        const passed = /\brange\s*\(\s*1\s*,\s*n\s*\+\s*1\s*\)/.test(code);
+        setConsoleTone(passed ? "ok" : "bad");
+        setConsoleText(passed
+          ? tr("Публічний тест 1/1 пройдено: n = 5 → 15", "Public test 1/1 passed: n = 5 → 15")
+          : tr("Публічний тест 0/1 · n = 5\nОчікувалося: 15\nОтримано: 10\n\nУ range права межа не входить у послідовність.", "Public test 0/1 · n = 5\nExpected: 15\nReceived: 10\n\nrange excludes its upper bound."));
+        setHints(passed ? [] : [
+          tr("Щоб включити n до циклу, додай 1 до правої межі range.", "Add 1 to range's upper bound so the loop includes n."),
         ]);
         setTask({
           ...task,
           hasGrade: true,
           grade: {
             id: 1,
-            total: 100,
-            testsPassed: 5,
-            testsTotal: 5,
-            isCompleted: true,
+            total: passed ? 100 : 0,
+            testsPassed: passed ? 1 : 0,
+            testsTotal: 1,
+            isCompleted: passed,
+            submittedCode: code,
+            testResults: [{ passed, testId: 1, verdict: passed ? "AC" : "WA", errorKind: passed ? null : "WRONG_ANSWER", input: "5", expected: "15", actual: passed ? "15" : "10" }],
           },
         });
         return;
@@ -238,6 +341,7 @@ export const PracticeCanvasPage: React.FC = () => {
   const ideLanguage = String(task.language).toLowerCase() as JudgeLanguage;
   return (
     <StudyCodIDEWorkspace
+      toolbar={preview() ? <span role="status" className="rounded-md border border-accent-warn/25 bg-accent-warn/[.08] px-2 py-1 text-[10px] font-semibold text-text-secondary">{tr("Демо: перевірка одного публічного тесту змодельована локально", "Demo: one public test is simulated locally")}</span> : undefined}
       task={{
         id: task.id,
         title: task.title,
@@ -252,7 +356,8 @@ export const PracticeCanvasPage: React.FC = () => {
       compiler={defaultCompilerForFamily(ideLanguage)}
       onCompilerChange={() => undefined}
       code={code}
-      onCodeChange={setCode}
+      onCodeChange={handleCodeChange}
+      onCodeEditorMount={handleCodeEditorMount}
       files={[
         {
           path: entryFileForLanguage(task.language),
@@ -277,6 +382,7 @@ export const PracticeCanvasPage: React.FC = () => {
       onBack={() =>
         navigate(
           (location.state as { from?: string } | null)?.from ||
+            returnTo ||
             `/edu/lessons/${task.lesson.id}`,
         )
       }

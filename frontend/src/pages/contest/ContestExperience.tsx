@@ -50,6 +50,7 @@ import { CONTEST_BANNER_THEMES, contestTheme } from "./contestBranding";
 import { withDevPreview } from "../../lib/devPreview";
 import { previewStandings } from "./contestPreviewData";
 import { tr } from "../../i18n";
+import "./ContestSectionNav.css";
 
 const isPreview = () =>
   import.meta.env.DEV &&
@@ -265,16 +266,18 @@ function Shell({
   title,
   aside,
   children,
+  surface = "lobby",
 }: {
   eyebrow: string;
   title: string;
   aside?: React.ReactNode;
   children: React.ReactNode;
+  surface?: "lobby" | "detail";
 }) {
   return (
-    <div className="mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
-      <div className="mb-9 flex flex-col justify-between gap-5 md:flex-row md:items-end">
-        <div>
+    <div className={`contest-surface contest-surface--${surface} mx-auto w-full max-w-[1320px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12`}>
+      <header className="contest-surface__heading mb-9 flex flex-col justify-between gap-5 md:flex-row md:items-end">
+        <div className="contest-surface__title-block">
           <p className="mb-3 text-xs font-bold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">
             {eyebrow}
           </p>
@@ -283,7 +286,7 @@ function Shell({
           </h1>
         </div>
         {aside}
-      </div>
+      </header>
       {children}
     </div>
   );
@@ -450,18 +453,18 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
         </div>
       }
     >
-      <div className="mb-6 flex flex-wrap items-center gap-2">
+      <div className="contest-lobby-filters mb-6 flex flex-wrap items-center gap-2">
         {(["all", "live", "soon", "ended"] as const).map((item) => (
           <button type="button"
             key={item}
             onClick={() => { setFilter(item); setPage(1); }}
             aria-pressed={filter === item}
-            className={`rounded-full px-4 py-2 text-sm font-bold transition ${filter === item ? "bg-bg-base text-text-primary dark:bg-bg-hover dark:text-text-primary" : "text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.06]"}`}
+            className={`contest-lobby-filter-chip rounded-full px-4 py-2 text-sm font-bold transition ${filter === item ? "bg-bg-base text-text-primary dark:bg-bg-hover dark:text-text-primary" : "text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.06]"}`}
           >
             {item === "all" ? tr("Усі", "All") : phaseCopy(item)}
           </button>
         ))}
-        <button type="button" onClick={() => { setShowSaved((value) => !value); setPage(1); }} aria-pressed={showSaved} className={`rounded-full px-4 py-2 text-sm font-bold transition ${showSaved ? "bg-bg-base text-text-primary dark:bg-bg-hover dark:text-text-primary" : "text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.06]"}`}>
+        <button type="button" onClick={() => { setShowSaved((value) => !value); setPage(1); }} aria-pressed={showSaved} className={`contest-lobby-filter-chip rounded-full px-4 py-2 text-sm font-bold transition ${showSaved ? "bg-bg-base text-text-primary dark:bg-bg-hover dark:text-text-primary" : "text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.06]"}`}>
           {tr("Збережені", "Saved")}{favoriteIds.length ? ` · ${favoriteIds.length}` : ""}
         </button>
         <label className="relative min-w-[220px] flex-1 sm:max-w-sm">
@@ -474,7 +477,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={tr("Назва або опис…", "Title or description…")}
-            className="w-full rounded-xl border border-border/10 bg-white py-2.5 pl-9 pr-3 text-sm text-text-primary outline-none transition placeholder:text-text-secondary focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-text-primary"
+            className="contest-lobby-input w-full rounded-xl border border-border/10 bg-white py-2.5 pl-9 pr-3 text-sm text-text-primary outline-none transition placeholder:text-text-secondary focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-text-primary"
           />
         </label>
         <label className="sr-only" htmlFor="contest-sort">{tr("Сортування контестів", "Sort contests")}</label>
@@ -483,23 +486,23 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
           name="contest-sort"
           value={sort}
           onChange={(event) => { setSort(event.target.value as NonNullable<ContestListQuery["sort"]>); setPage(1); }}
-          className="rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm font-semibold text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-text-primary"
+          className="contest-lobby-input rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm font-semibold text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-text-primary"
         >
           <option value="newest">{tr("Найновіші", "Newest")}</option>
           <option value="soonest">{tr("Найближчий старт", "Soonest start")}</option>
           <option value="title">{tr("За назвою", "By title")}</option>
         </select>
         <label className="sr-only" htmlFor="contest-difficulty">{tr("Рівень складності", "Difficulty")}</label>
-        <select id="contest-difficulty" name="contest-difficulty" value={difficulty} onChange={(event) => { setDifficulty(event.target.value as typeof difficulty); setPage(1); }} className="rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm font-semibold text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-text-primary">
+        <select id="contest-difficulty" name="contest-difficulty" value={difficulty} onChange={(event) => { setDifficulty(event.target.value as typeof difficulty); setPage(1); }} className="contest-lobby-input rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm font-semibold text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary dark:border-white/10 dark:bg-bg-surface dark:text-text-primary">
           <option value="all">{tr("Будь-який рівень", "Any level")}</option>
           <option value="EASY">{tr("Початковий", "Beginner")}</option>
           <option value="MEDIUM">{tr("Середній", "Intermediate")}</option>
           <option value="HARD">{tr("Складний", "Advanced")}</option>
         </select>
-        <span className="text-xs font-semibold tabular-nums text-text-muted dark:text-text-secondary">{tr(`Контестів: ${total}`, `Contests: ${total}`)}</span>
+        <span className="contest-lobby-count text-xs font-semibold tabular-nums text-text-muted dark:text-text-secondary">{tr(`Контестів: ${total}`, `Contests: ${total}`)}</span>
         <button type="button"
           onClick={() => void refresh()}
-          className="ml-auto flex h-9 w-9 items-center justify-center rounded-full text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.06]"
+          className="contest-lobby-refresh ml-auto flex h-9 w-9 items-center justify-center rounded-full text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.06]"
           aria-label={tr("Оновити контести", "Refresh contests")}
         >
           <RotateCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
@@ -516,7 +519,7 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
         </div>
       )}
       {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="contest-list-grid grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {[1, 2, 3].map((key) => (
             <div
               key={key}
@@ -534,16 +537,23 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
         </div>
       ) : (
         <>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="contest-list-grid grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {filtered.map((item) => {
             const state = phaseFor(item);
             return (
               <article
                 key={item.id}
                 className="contest-list-card group relative flex min-h-[300px] flex-col overflow-hidden rounded-[24px] border border-border/10 bg-white shadow-[0_16px_45px_rgba(28,44,32,.05)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_50px_rgba(28,44,32,.11)] dark:border-white/[.09] dark:bg-bg-surface dark:shadow-none"
+                data-contest-phase={item.isPublished ? state : "draft"}
               >
-                <div className={`contest-list-card__art${item.bannerImageUrl ? " contest-list-card__art--image" : ""}`}>
-                  {item.bannerImageUrl ? <img src={item.bannerImageUrl} alt="" aria-hidden="true" className="transition duration-500 group-hover:scale-[1.03]" /> : <div className="size-full" style={{ background: CONTEST_BANNER_THEMES[contestTheme(item.bannerTheme)].background }} />}
+                <div className={`contest-list-card__art${item.bannerImageUrl ? " contest-list-card__art--image" : ""}`} style={{ background: CONTEST_BANNER_THEMES[contestTheme(item.bannerTheme)].background }}>
+                  {item.bannerImageUrl ? <img src={item.bannerImageUrl} alt="" aria-hidden="true" className="contest-list-card__image transition duration-500 group-hover:scale-[1.03]" /> : null}
+                  <div className="contest-list-card__art-overlay" aria-hidden="true" />
+                  <div className="contest-list-card__art-copy" aria-hidden="true">
+                    <span className="contest-list-card__art-series">STUDYCOD <i /> CONTESTS</span>
+                    <span className="contest-list-card__art-symbol">{item.iconImageUrl ? <img src={item.iconImageUrl} alt="" /> : item.icon || "🏆"}</span>
+                    <span className="contest-list-card__art-index">{String(item.id).padStart(3, "0")}</span>
+                  </div>
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col p-5">
                   <div className="flex min-w-0 items-center gap-2">
@@ -792,13 +802,13 @@ export const ContestDetailPage: React.FC = () => {
   };
   if (loading)
     return (
-      <Shell eyebrow="Contest" title={tr("Відкриваємо контест", "Opening contest")}>
+      <Shell surface="detail" eyebrow="Contest" title={tr("Відкриваємо контест", "Opening contest")}>
         <div className="h-[480px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" />
       </Shell>
     );
   if (!data)
     return (
-      <Shell eyebrow="Contest" title={tr("Контест недоступний", "Contest unavailable")}>
+      <Shell surface="detail" eyebrow="Contest" title={tr("Контест недоступний", "Contest unavailable")}>
         <Notice tone="error">{error || tr("Такого контесту не знайдено.", "Contest not found.")}</Notice>
         <button type="button"
           onClick={() => navigate("/contest/contests")}
@@ -823,6 +833,7 @@ export const ContestDetailPage: React.FC = () => {
   const shouldSetUpAccounts = canManage && searchParams.get("setup") === "accounts";
   return (
     <Shell
+      surface="detail"
       eyebrow={
         state === "live"
           ? tr("Зараз у грі", "Live now")
@@ -946,8 +957,8 @@ export const ContestDetailPage: React.FC = () => {
           <UsersRound className="size-4" aria-hidden="true" /> {tr("Додати учасників", "Add participants")}
         </button>
       </section>}
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.32fr_.68fr]">
-        <section className="rounded-[28px] border border-border/10 bg-white p-5 shadow-[0_18px_50px_-44px_rgba(16,41,24,.65)] dark:border-white/[.09] dark:bg-bg-surface sm:p-6">
+      <div className="contest-detail-grid mt-6 grid gap-6 xl:grid-cols-[1.32fr_.68fr]">
+        <section className="contest-detail-card contest-detail-card--problems rounded-[28px] border border-border/10 bg-white p-5 shadow-[0_18px_50px_-44px_rgba(16,41,24,.65)] dark:border-white/[.09] dark:bg-bg-surface sm:p-6">
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">
@@ -993,7 +1004,7 @@ export const ContestDetailPage: React.FC = () => {
             {data.problems.length === 0 && <p className="rounded-xl border border-dashed border-border/15 px-4 py-6 text-center text-sm text-text-muted dark:border-white/10 dark:text-text-secondary">{tr("Задачі ще не додано.", "No problems have been added yet.")}</p>}
           </div>
         </section>
-        <section className="rounded-[28px] border border-border/10 bg-bg-hover p-5 dark:border-white/[.09] dark:bg-bg-code sm:p-6">
+        <section className="contest-detail-card contest-detail-card--standings rounded-[28px] border border-border/10 bg-bg-hover p-5 dark:border-white/[.09] dark:bg-bg-code sm:p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">

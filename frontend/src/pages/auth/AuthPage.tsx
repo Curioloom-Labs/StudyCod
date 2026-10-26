@@ -307,22 +307,7 @@ export const AuthPage: React.FC<Props> = ({
           if (userMode === "EDUCATIONAL") {
             if (isQaStudentLogin) {
               const studentResult = await studentLogin(username.trim(), password);
-              const studentUser: User = {
-                id: studentResult.student.id,
-                username: studentResult.student.username,
-                difus: 0,
-                avatarUrl: null,
-                userMode: "EDUCATIONAL" as const,
-                accountSettingsScope: "CLASS",
-                studentId: studentResult.student.id,
-                classId: studentResult.student.classId,
-                className: studentResult.student.className,
-                firstName: studentResult.student.firstName,
-                lastName: studentResult.student.lastName,
-                middleName: studentResult.student.middleName,
-                email: studentResult.student.email
-              };
-              notifyAuth(studentUser);
+              notifyAuth(studentResult.user);
               return;
             }
             try {
@@ -336,22 +321,7 @@ export const AuthPage: React.FC<Props> = ({
               if (!classOnlyFallback && !invalidCredentialsFallback) throw teacherErr;
               try {
                 const studentResult = await studentLogin(username.trim(), password, currentTurnstileToken || undefined);
-                const studentUser: User = {
-                  id: studentResult.student.id,
-                  username: studentResult.student.username,
-                  difus: 0,
-                  avatarUrl: null,
-                  userMode: "EDUCATIONAL" as const,
-                  accountSettingsScope: "CLASS",
-                  studentId: studentResult.student.id,
-                  classId: studentResult.student.classId,
-                  className: studentResult.student.className,
-                  firstName: studentResult.student.firstName,
-                  lastName: studentResult.student.lastName,
-                  middleName: studentResult.student.middleName,
-                  email: studentResult.student.email
-                };
-                notifyAuth(studentUser);
+                notifyAuth(studentResult.user);
                 return;
               } catch (studentErr: unknown) {
                 if (classOnlyFallback && isAxiosError(studentErr) && [400, 401].includes(studentErr.response?.status || 0) && studentErr.response?.data?.message === "INVALID_CREDENTIALS") throw teacherErr;
@@ -598,10 +568,8 @@ export const AuthPage: React.FC<Props> = ({
                     {accountSetup.classLoginAvailable && <button type="button" className="min-h-11 w-full rounded-lg px-3 py-2 text-left font-semibold text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" disabled={loading} onClick={async () => {
                       setLoading(true); setError(null);
                       try {
-                        const { student } = await studentLogin(username.trim(), password, String(turnstileToken || "") || undefined);
-                        notifyAuth({ id: student.id, username: student.username, difus: 0, avatarUrl: null, userMode: "EDUCATIONAL", accountSettingsScope: "CLASS",
-                          studentId: student.id, classId: student.classId, className: student.className,
-                          firstName: student.firstName, lastName: student.lastName, middleName: student.middleName, email: student.email });
+                        const result = await studentLogin(username.trim(), password, String(turnstileToken || "") || undefined);
+                        notifyAuth(result.user);
                       } catch (err) { setError(formatApiError(err, tr("Не вдалося ввійти в клас", "Could not sign in to the class"))); }
                       finally { setLoading(false); }
                     }}>{tr("Продовжити як учень класу", "Continue as a class student")}</button>}

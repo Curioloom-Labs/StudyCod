@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowRight, Clock3, Flag, Play, Trophy } from "lucide-react";
 import { tr } from "../i18n";
 import {
   listClassPracticeTasks,
@@ -25,7 +26,13 @@ function fmtClock(totalSec: number): string {
   return `${m}:${String(r).padStart(2, "0")}`;
 }
 
-const MEDALS = ["🥇", "🥈", "🥉"];
+function openChallengeTask(taskId: number) {
+  const url = new URL(`/edu/tasks/${taskId}`, window.location.origin);
+  url.searchParams.set("returnTo", `${window.location.pathname}${window.location.search}`);
+  window.open(url.toString(), "_blank", "noopener,noreferrer");
+}
+
+const RANKS = ["01", "02", "03"];
 
 /**
  * Live challenge strip for the live lesson. The teacher fires a timed mini-task;
@@ -40,6 +47,8 @@ export const LiveChallengePanel: React.FC<Props> = ({ classId, isTeacher }) => {
 
   // Teacher launcher state
   const [tasks, setTasks] = useState<ChallengeTask[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksError, setTasksError] = useState(false);
   const [taskId, setTaskId] = useState<number | "">("");
   const [durationSec, setDurationSec] = useState(90);
   const [busy, setBusy] = useState(false);
@@ -79,22 +88,29 @@ export const LiveChallengePanel: React.FC<Props> = ({ classId, isTeacher }) => {
     };
   }, [classId]);
 
+  const loadTasks = useCallback(async (canUpdate: () => boolean = () => true) => {
+    if (!isTeacher) return;
+    setTasksLoading(true);
+    try {
+      const list = await listClassPracticeTasks(classId);
+      if (!canUpdate()) return;
+      setTasks(list);
+      setTaskId((current) => current === "" || list.some((task) => task.id === current) ? current : "");
+      setTasksError(false);
+    } catch {
+      if (canUpdate()) setTasksError(true);
+    } finally {
+      if (canUpdate()) setTasksLoading(false);
+    }
+  }, [isTeacher, classId]);
+
   // Teacher: load the task list for the launcher once.
   useEffect(() => {
     if (!isTeacher) return;
     let cancelled = false;
-    void (async () => {
-      try {
-        const list = await listClassPracticeTasks(classId);
-        if (!cancelled) setTasks(list);
-      } catch {
-        /* picker stays empty */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isTeacher, classId]);
+    void loadTasks(() => !cancelled);
+    return () => { cancelled = true; };
+  }, [isTeacher, loadTasks]);
 
   const handleStart = useCallback(async () => {
     if (taskId === "") return;
@@ -104,6 +120,7 @@ export const LiveChallengePanel: React.FC<Props> = ({ classId, isTeacher }) => {
       const ch = await startLiveChallenge(classId, Number(taskId), durationSec);
       setChallenge(ch);
       setEntries([]);
+      setError(null);
     } catch {
       setError(tr("Не вдалося запустити челендж.", "Failed to start challenge."));
     } finally {
@@ -118,53 +135,29 @@ export const LiveChallengePanel: React.FC<Props> = ({ classId, isTeacher }) => {
       setChallenge(null);
       setEntries([]);
     } catch {
-      /* ignore */
+      setError(tr("Не вдалося завершити практику. Спробуйте ще раз.", "Could not end the challenge. Please try again."));
     } finally {
       setBusy(false);
     }
   }, [classId]);
 
-  // No active challenge: teacher sees a compact launcher; students see nothing.
+  // No active challenge: teacher sees the launcher; students see no empty panel.
   if (!challenge) {
     if (!isTeacher) return null;
     return (
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-bg-base/40 px-4 py-2 text-xs font-mono">
-        <span className="text-primary">🏁 {tr("Челендж", "Challenge")}</span>
-        <select
-          id="live-challenge-task"
-          name="challengeTask"
-          aria-label={tr("Задача челенджу", "Challenge task")}
-          value={taskId}
-          onChange={(e) => setTaskId(e.target.value === "" ? "" : Number(e.target.value))}
-          className="max-w-[16rem] rounded border border-border bg-bg-code px-2 py-1 text-text-primary focus:border-primary focus:outline-none"
-        >
-          <option value="">{tr("Оберіть задачу…", "Pick a task…")}</option>
-          {tasks.map((t) => (
-            <option key={t.id} value={t.id}>{t.title}</option>
-          ))}
-        </select>
-        <select
-          id="live-challenge-duration"
-          name="challengeDuration"
-          aria-label={tr("Тривалість челенджу", "Challenge duration")}
-          value={durationSec}
-          onChange={(e) => setDurationSec(Number(e.target.value))}
-          className="rounded border border-border bg-bg-code px-2 py-1 text-text-primary focus:border-primary focus:outline-none"
-        >
-          {DURATION_OPTIONS.map((d) => (
-            <option key={d} value={d}>{d}s</option>
-          ))}
-        </select>
-        <button
-          type="button"
-          disabled={busy || taskId === ""}
-          onClick={() => void handleStart()}
-          className="rounded-md bg-primary/20 px-3 py-1 text-primary hover:bg-primary/30 disabled:opacity-50"
-        >
-          {tr("Запустити", "Launch")}
-        </button>
-        {error && <span className="text-secondary">{error}</span>}
-      </div>
+      <section className="edu-live-challenge edu-live-challenge--setup" aria-label={tr("Швидка практика", "Quick practice")}>
+        <div className="edu-live-challenge__identity"><span><Flag className="size-4" /></span><div><strong>{tr("Швидка практика", "Quick practice")}</strong><small>{tr("Коротка задача для всього класу", "A short task for the class")}</small></div></div>
+        <label><span>{tr("Задача", "Problem")}</span><select id="live-challenge-task" name="challengeTask" aria-label={tr("Задача челенджу", "Challenge task")} value={taskId} onChange={(e) => setTaskId(e.target.value === "" ? "" : Number(e.target.value))}>
+          <option value="">{tasksLoading ? tr("Завантажуємо задачі…", "Loading problems…") : tasksError ? tr("Не вдалося завантажити задачі", "Could not load problems") : tasks.length ? tr("Оберіть задачу…", "Choose a problem…") : tr("Задачі поки недоступні", "No problems available")}</option>
+          {tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}
+        </select></label>
+        <label className="edu-live-challenge__duration"><span>{tr("Час", "Time")}</span><select id="live-challenge-duration" name="challengeDuration" aria-label={tr("Тривалість челенджу", "Challenge duration")} value={durationSec} onChange={(e) => setDurationSec(Number(e.target.value))}>
+          {DURATION_OPTIONS.map((duration) => <option key={duration} value={duration}>{Math.floor(duration / 60)}:{String(duration % 60).padStart(2, "0")}</option>)}
+        </select></label>
+        <button type="button" disabled={busy || taskId === ""} onClick={() => void handleStart()} className="edu-live-challenge__launch"><Play className="size-4" />{busy ? tr("Запускаємо…", "Starting…") : tr("Запустити", "Start")}</button>
+        {tasksError && <span role="status" className="edu-live-challenge__error">{tr("Не вдалося завантажити задачі класу.", "Could not load class problems.")} <button type="button" onClick={() => void loadTasks()}>{tasksLoading ? tr("Завантажуємо…", "Loading…") : tr("Повторити", "Retry")}</button></span>}
+        {error && <span role="alert" className="edu-live-challenge__error">{error}</span>}
+      </section>
     );
   }
 
@@ -172,49 +165,16 @@ export const LiveChallengePanel: React.FC<Props> = ({ classId, isTeacher }) => {
   const expired = remaining <= 0;
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-bg-base/40 px-4 py-2 text-xs font-mono">
-      <span className="flex items-center gap-2">
-        <span className="text-primary">🏁 {challenge.taskTitle}</span>
-        <span className={expired ? "text-secondary" : "text-text-primary"}>
-          ⏱ {expired ? tr("час вийшов", "time up") : fmtClock(remaining)}
-        </span>
-      </span>
-
-      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-text-secondary">
-        {entries.length === 0 ? (
-          <span className="text-text-muted">{tr("Ще ніхто не склав…", "Nobody solved yet…")}</span>
-        ) : (
-          entries.slice(0, 3).map((e, i) => (
-            <span key={e.studentId} className="rounded bg-bg-hover/50 px-2 py-0.5 text-text-primary">
-              {MEDALS[i] ?? "•"} {e.name} <span className="text-text-muted">{e.solveSeconds}s</span>
-            </span>
-          ))
-        )}
-        {entries.length > 3 && <span className="text-text-muted">+{entries.length - 3}</span>}
-        {entries.length > 0 && (
-          <span className="text-accent-success">{tr(`${entries.length} склали`, `${entries.length} solved`)}</span>
-        )}
-      </span>
-
-      {isTeacher ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void handleEnd()}
-          className="rounded-md bg-secondary/15 px-3 py-1 text-secondary hover:bg-secondary/25 disabled:opacity-50"
-        >
-          {tr("Завершити", "End")}
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={() => window.open(`/edu/tasks/${challenge.taskId}`, "_blank", "noopener")}
-          className="rounded-md bg-primary/20 px-3 py-1 text-primary hover:bg-primary/30"
-        >
-          {tr("Розвʼязати →", "Solve →")}
-        </button>
-      )}
-    </div>
+    <section className="edu-live-challenge edu-live-challenge--active" aria-live="polite" aria-label={tr("Активна швидка практика", "Active quick practice")}>
+      <div className="edu-live-challenge__identity"><span><Trophy className="size-4" /></span><div><small>{tr("Завдання для класу", "Class challenge")}</small><strong title={challenge.taskTitle}>{challenge.taskTitle}</strong></div></div>
+      <div className={`edu-live-challenge__timer ${expired ? "is-expired" : ""}`}><Clock3 className="size-4" /><span>{expired ? tr("Час вийшов", "Time is up") : fmtClock(remaining)}</span></div>
+      <div className="edu-live-challenge__results">
+        <span className="edu-live-challenge__results-label">{entries.length ? tr("Вже розв’язали", "Solved so far") : tr("Перші результати з’являться тут", "Results will appear here")}</span>
+        {entries.length > 0 && <ol className="edu-live-challenge__leaders">{entries.slice(0, 3).map((entry, index) => <li key={entry.studentId}><span className="edu-live-challenge__rank">{RANKS[index] ?? String(index + 1).padStart(2, "0")}</span><span className="edu-live-challenge__leader-name">{entry.name}</span><small>{entry.solveSeconds}s</small></li>)}{entries.length > 3 && <li className="edu-live-challenge__more">+{entries.length - 3}</li>}</ol>}
+      </div>
+      {isTeacher ? <button type="button" disabled={busy} onClick={() => void handleEnd()} className="edu-live-challenge__end">{busy ? tr("Завершуємо…", "Ending…") : tr("Завершити", "End")}</button> : <button type="button" disabled={expired} onClick={() => openChallengeTask(challenge.taskId)} className="edu-live-challenge__solve">{expired ? tr("Час вийшов", "Time is up") : tr("Розв’язати", "Solve")}<ArrowRight className="size-4" /></button>}
+      {error && <span role="alert" className="edu-live-challenge__error">{error}</span>}
+    </section>
   );
 };
 

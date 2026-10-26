@@ -234,7 +234,7 @@ export const ScoreboardPage: React.FC = () => {
   };
 
   return (
-    <div className="w-full bg-bg-base px-3 py-4 sm:px-6 md:py-6">
+    <div className="contest-standings-page w-full bg-bg-base px-3 py-4 sm:px-6 md:py-6">
       <div className="mx-auto w-full max-w-6xl space-y-5">
         <header className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>

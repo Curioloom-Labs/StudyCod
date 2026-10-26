@@ -246,17 +246,6 @@
   content: "";
 }
 
-.edu-workspace__page-heading {
-  padding-bottom: 1.25rem;
-  border-inline-start: 2px solid color-mix(in srgb, var(--primary) 70%, var(--border));
-  padding-inline-start: 1rem;
-}
-
-.workshop-admin > div > header {
-  padding-inline-start: 1rem;
-  border-inline-start: 2px solid color-mix(in srgb, var(--primary) 70%, var(--border));
-}
-
 .edu-workspace__dashboard-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(17rem, 0.85fr);
@@ -273,27 +262,6 @@
   background: color-mix(in srgb, var(--bg-surface) 78%, var(--bg-base));
 }
 
-.student-lessons-page > header {
-  padding-bottom: 1.25rem;
-  border-bottom: 1px solid var(--border);
-  border-inline-start: 2px solid color-mix(in srgb, var(--primary) 70%, var(--border));
-  padding-inline-start: 1rem;
-}
-
-.student-lessons-page__interactive {
-  border-inline-start: 3px solid var(--primary-strong) !important;
-}
-
-.student-lessons-page__topic {
-  border-inline-start: 2px solid transparent !important;
-  transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
-}
-
-.student-lessons-page__topic:hover {
-  border-inline-start-color: var(--primary-strong) !important;
-  background: color-mix(in srgb, var(--primary) 4%, var(--bg-surface)) !important;
-}
-
 @media (max-width: 800px) {
   .edu-workspace__dashboard-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -303,13 +271,4 @@
     padding: 0.95rem;
   }
 
-  .workshop-page-hero > div {
-    padding-inline-start: 0.8rem;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .student-lessons-page__topic {
-    transition: none;
-  }
 }

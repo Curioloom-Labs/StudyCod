@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { usePersonalLearning } from "../../components/learning/PersonalLearningProvider";
 import { getLearningContentState } from "../../lib/learningContentState";
 import { withDevPreview } from "../../lib/devPreview";
+import "./PersonalCourseDashboard.css";
 
 export const PersonalCourseDashboard: React.FC = () => {
   const { currentCourse, loading, error, refresh } = usePersonalLearning();
@@ -67,39 +68,39 @@ export const PersonalCourseDashboard: React.FC = () => {
       <button type="button" onClick={() => navigate(withDevPreview("/learning/catalog"))} className="inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl border border-border px-4 text-sm font-semibold text-text-secondary transition-colors duration-150 hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none sm:self-auto">{uk ? "Інші курси" : "Other courses"}<ArrowRight className="size-4" aria-hidden="true" /></button>
     </header>
 
-    <section className="grid overflow-hidden rounded-[26px] bg-[#19382d] text-[#f3f2e9] shadow-[0_20px_55px_rgba(20,45,32,.14)] lg:grid-cols-[minmax(0,1.45fr)_minmax(275px,.55fr)]" aria-labelledby="next-step-heading">
-      <div className="relative flex min-h-[250px] flex-col items-start justify-between overflow-hidden p-5 sm:p-7 lg:min-h-[286px] lg:p-9">
-        <div className="pointer-events-none absolute -right-16 -top-20 size-72 rounded-full border border-white/[.08]" aria-hidden="true" />
-        <div className="pointer-events-none absolute -right-3 -top-7 size-48 rounded-full border border-[#cce890]/20" aria-hidden="true" />
+    <section className="personal-course-next grid overflow-hidden rounded-[26px] shadow-[0_20px_55px_rgba(20,45,32,.14)] lg:grid-cols-[minmax(0,1.45fr)_minmax(275px,.55fr)]" aria-labelledby="next-step-heading">
+      <div className="personal-course-next__content relative flex min-h-[250px] flex-col items-start justify-between overflow-hidden p-5 sm:p-7 lg:min-h-[286px] lg:p-9">
+        <div className="personal-course-next__orbit personal-course-next__orbit--outer pointer-events-none absolute -right-16 -top-20 size-72 rounded-full" aria-hidden="true" />
+        <div className="personal-course-next__orbit personal-course-next__orbit--inner pointer-events-none absolute -right-3 -top-7 size-48 rounded-full" aria-hidden="true" />
         <div className="relative z-10">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] font-bold uppercase tracking-[.15em] text-[#cce890]">
+          <div className="personal-course-next__eyebrow flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[11px] font-bold uppercase tracking-[.15em]">
             <span>{uk ? "Наступна спроба" : "Up next"}</span>{nextItem ? <><span className="text-white/40" aria-hidden="true">/</span><span>{itemLabel(nextItem.kind)}</span><span className="text-white/40" aria-hidden="true">/</span><span className="text-white/65">{nextItem.moduleTitle}</span></> : null}
           </div>
           <h2 id="next-step-heading" className="mt-4 max-w-[18ch] font-[family-name:var(--font-display)] text-3xl font-bold leading-[1.02] tracking-[-.05em] text-balance sm:text-4xl">{next?.title || (uk ? "Маршрут завершено" : "Path complete")}</h2>
-          <p className="mt-3 max-w-[54ch] text-sm leading-6 text-white/70">{next ? (uk ? "Повернись до задачі й продовжуй з того місця, де зупинився." : "Return to the task and pick up where you left off.") : (uk ? "Переглянь виконані заняття або обери наступний курс." : "Review completed lessons or choose another course.")}</p>
+          <p className="personal-course-next__description mt-3 max-w-[54ch] text-sm leading-6">{next ? (uk ? "Повернись до задачі й продовжуй з того місця, де зупинився." : "Return to the task and pick up where you left off.") : (uk ? "Переглянь виконані заняття або обери наступний курс." : "Review completed lessons or choose another course.")}</p>
         </div>
-        <button type="button" onClick={() => navigate(withDevPreview(nextUrl))} className="relative z-10 mt-6 inline-flex min-h-12 items-center gap-2 rounded-xl bg-[#cce890] px-5 font-bold text-[#19382d] transition hover:-translate-y-0.5 hover:bg-[#daf2a5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#19382d] motion-reduce:transform-none motion-reduce:transition-none">
+        <button type="button" onClick={() => navigate(withDevPreview(nextUrl))} className="personal-course-next__action relative z-10 mt-6 inline-flex min-h-12 items-center gap-2 rounded-xl px-5 font-bold transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 motion-reduce:transform-none motion-reduce:transition-none">
           <Play className="size-4 fill-current" aria-hidden="true" />{next ? (uk ? "Продовжити навчання" : "Continue learning") : (uk ? "Переглянути маршрут" : "Review course path")}<ArrowRight className="size-4" aria-hidden="true" />
         </button>
       </div>
 
-      <aside className="relative flex flex-col justify-between border-t border-white/10 bg-[#e3e8db] p-5 text-[#1c2e23] sm:p-7 lg:border-l lg:border-t-0 lg:p-8" aria-label={uk ? "Прогрес курсу" : "Course progress"}>
+      <aside className="personal-course-next__progress relative flex flex-col justify-between border-t p-5 sm:p-7 lg:border-l lg:border-t-0 lg:p-8" aria-label={uk ? "Прогрес курсу" : "Course progress"}>
         <div className="flex items-center justify-between gap-3">
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[.15em] text-[#56715d]">{uk ? "Прогрес маршруту" : "Route progress"}</p>
+          <p className="personal-course-next__progress-label font-mono text-[11px] font-bold uppercase tracking-[.15em]">{uk ? "Прогрес маршруту" : "Route progress"}</p>
           <span className="font-mono text-xs font-bold tabular-nums">{String(currentCourse.modules.length).padStart(2, "0")} {uk ? "розділи" : "units"}</span>
         </div>
         <div className="mt-7 sm:mt-8">
           <div className="flex items-end gap-2">
-            <span className="font-[family-name:var(--font-display)] text-6xl font-bold leading-none tracking-[-.07em] tabular-nums sm:text-7xl">{progressPercent}<span className="ml-1 text-3xl text-[#56715d]">%</span></span>
-            <span className="mb-1.5 font-mono text-[11px] uppercase tracking-[.12em] text-[#56715d]">{uk ? "завершено" : "complete"}</span>
+            <span className="personal-course-next__progress-value font-[family-name:var(--font-display)] text-6xl font-bold leading-none tracking-[-.07em] tabular-nums sm:text-7xl">{progressPercent}<span className="personal-course-next__progress-unit ml-1 text-3xl">%</span></span>
+            <span className="personal-course-next__progress-caption mb-1.5 font-mono text-[11px] uppercase tracking-[.12em]">{uk ? "завершено" : "complete"}</span>
           </div>
-          <div className="mt-5 h-2 overflow-hidden rounded-full bg-[#c7d2c1]" role="progressbar" aria-label={uk ? "Завершення курсу" : "Course completion"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent}>
-            <div className="h-full rounded-full bg-[#345b42] transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${progressPercent}%` }} />
+          <div className="personal-course-next__progress-track mt-5 h-2 overflow-hidden rounded-full" role="progressbar" aria-label={uk ? "Завершення курсу" : "Course completion"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent}>
+            <div className="personal-course-next__progress-fill h-full rounded-full transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${progressPercent}%` }} />
           </div>
-          <p className="mt-3 font-mono text-xs tabular-nums text-[#56715d]">{completedItems} / {allItems.length} {uk ? "занять пройдено" : "steps completed"}</p>
+          <p className="personal-course-next__progress-caption mt-3 font-mono text-xs tabular-nums">{completedItems} / {allItems.length} {uk ? "занять пройдено" : "steps completed"}</p>
         </div>
-        <div className="mt-7 flex items-center gap-1.5" aria-hidden="true">
-          {allItems.slice(0, 12).map((item, index) => <span key={item.id} className={`h-1.5 flex-1 rounded-full ${item.progress.status === "COMPLETED" ? "bg-[#345b42]" : item.id === next?.itemId ? "bg-[#8ba361]" : "bg-[#c7d2c1]"}`} style={{ transitionDelay: `${index * 30}ms` }} />)}
+        <div className="personal-course-next__segments mt-7 flex items-center gap-1.5" aria-hidden="true">
+          {allItems.slice(0, 12).map((item, index) => <span key={item.id} className={`personal-course-next__segment${item.progress.status === "COMPLETED" ? " is-complete" : item.id === next?.itemId ? " is-next" : ""}`} style={{ transitionDelay: `${index * 30}ms` }} />)}
         </div>
       </aside>
     </section>
@@ -113,29 +114,34 @@ export const PersonalCourseDashboard: React.FC = () => {
         <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${currentCourse.id}/path`))} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold text-text-secondary transition-colors duration-150 hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary motion-reduce:transition-none">{uk ? "Повна програма" : "Full course"}<ArrowRight className="size-4" aria-hidden="true" /></button>
       </div>
 
-      <div className="grid gap-x-8 gap-y-5 lg:grid-cols-[.9fr_1.1fr]">
-        {previewModules.map((module, moduleIndex) => <section key={module.id} className={`relative min-w-0 border-t-2 pt-4 ${moduleIndex === 0 ? "border-[#345b42]" : "border-border"}`} aria-label={module.title}>
-          <div className="flex items-start justify-between gap-4">
+      <div className="personal-course-map grid gap-x-6 gap-y-5 lg:grid-cols-2">
+        {previewModules.map((module, moduleIndex) => {
+          const moduleCompleted = module.items.filter((item) => item.progress.status === "COMPLETED").length;
+          const modulePercent = module.totalItems > 0 ? Math.round((moduleCompleted / module.totalItems) * 100) : 0;
+          return <section key={module.id} className={`personal-course-module${moduleIndex === 0 ? " is-current" : ""}`} aria-label={module.title}>
+          <div className="personal-course-module__heading flex items-start justify-between gap-4">
             <div className="flex min-w-0 items-start gap-3">
-              <span className="font-mono text-3xl font-bold leading-none tracking-[-.07em] text-primary-strong/70 tabular-nums">{String(moduleIndex + 1).padStart(2, "0")}</span>
-              <div className="min-w-0"><h3 className="text-lg font-bold leading-tight tracking-[-.03em] text-text-primary">{module.title}</h3><p className="mt-1 font-mono text-[11px] uppercase tracking-[.1em] text-text-muted">{module.items.length < module.totalItems ? (uk ? `${module.items.length} з ${module.totalItems} занять` : `${module.items.length} of ${module.totalItems} steps`) : (uk ? `${module.totalItems} занять` : `${module.totalItems} steps`)}</p></div>
+              <span className="personal-course-module__index font-mono text-3xl font-bold leading-none tracking-[-.07em] tabular-nums">{String(moduleIndex + 1).padStart(2, "0")}</span>
+              <div className="min-w-0"><h3 className="personal-course-module__title text-lg font-bold leading-tight tracking-[-.03em]">{module.title}</h3><p className="mt-1 font-mono text-[11px] uppercase tracking-[.1em] text-text-muted">{module.items.length < module.totalItems ? (uk ? `${module.items.length} з ${module.totalItems} занять` : `${module.items.length} of ${module.totalItems} steps`) : (uk ? `${module.totalItems} занять` : `${module.totalItems} steps`)}</p></div>
             </div>
-            <span className="mt-1 shrink-0 text-xs font-semibold text-text-muted">{module.items.filter((item) => item.progress.status === "COMPLETED").length}/{module.totalItems}</span>
+            <span className="personal-course-module__count mt-1 shrink-0 font-mono text-xs font-semibold tabular-nums">{moduleCompleted}/{module.totalItems}</span>
           </div>
-          <ol className="relative mt-4 ml-1 border-l border-border pl-5">
+          <div className="personal-course-module__track mt-4" aria-hidden="true"><span style={{ width: `${modulePercent}%` }} /></div>
+          <ol className="personal-course-module__list relative mt-3">
             {module.items.map((item) => {
               const isNext = item.id === next?.itemId;
               const done = item.progress.status === "COMPLETED";
-              return <li key={item.id} className="border-b border-border/70 last:border-0">
-                <button type="button" aria-current={isNext ? "step" : undefined} onClick={() => navigate(withDevPreview(`/learning/course/${currentCourse.id}/${item.kind === "CODE_TASK" ? `practice/${item.id}` : "path"}`))} className={`group relative grid min-h-[62px] w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-2.5 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary motion-reduce:transition-none ${isNext ? "text-text-primary" : "text-text-secondary hover:text-text-primary"}`}>
-                  <span className={`absolute -left-[27px] top-1/2 grid size-3 -translate-y-1/2 place-items-center rounded-full ring-4 ring-bg-base ${done ? "bg-[#345b42]" : isNext ? "bg-[#cce890]" : "bg-border"}`} aria-hidden="true">{done ? <CheckCircle2 className="size-3.5 text-[#345b42]" /> : null}</span>
-                  <span className="min-w-0"><span className={`block truncate text-sm font-semibold ${isNext ? "text-text-primary" : "text-text-secondary group-hover:text-text-primary"}`}>{item.title}</span><span className="mt-1 block truncate font-mono text-[10px] uppercase tracking-[.09em] text-text-muted">{itemLabel(item.kind)}</span></span>
-                  <span className={`font-mono text-[10px] font-bold uppercase tracking-[.1em] ${done ? "text-primary-strong" : isNext ? "text-primary-strong" : "text-text-muted"}`}>{done ? (uk ? "Готово" : "Done") : isNext ? (uk ? "Наступне →" : "Next →") : String(module.items.indexOf(item) + 1).padStart(2, "0")}</span>
+              return <li key={item.id} className={`personal-course-module__item${done ? " is-done" : isNext ? " is-next" : ""}`}>
+                <button type="button" aria-current={isNext ? "step" : undefined} onClick={() => navigate(withDevPreview(`/learning/course/${currentCourse.id}/${item.kind === "CODE_TASK" ? `practice/${item.id}` : "path"}`))} className="personal-course-module__link group relative grid min-h-[62px] w-full grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 py-2.5 text-left transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary motion-reduce:transition-none">
+                  <span className="personal-course-module__marker" aria-hidden="true">{done ? <CheckCircle2 className="size-4" /> : <span />}</span>
+                  <span className="min-w-0"><span className="personal-course-module__item-title block truncate text-sm font-semibold">{item.title}</span><span className="mt-1 block truncate font-mono text-[10px] uppercase tracking-[.09em] text-text-muted">{itemLabel(item.kind)}</span></span>
+                  <span className="personal-course-module__status font-mono text-[10px] font-bold uppercase tracking-[.1em]">{done ? (uk ? "Готово" : "Done") : isNext ? (uk ? "Наступне →" : "Next →") : String(module.items.indexOf(item) + 1).padStart(2, "0")}</span>
                 </button>
               </li>;
             })}
           </ol>
-        </section>)}
+        </section>;
+        })}
       </div>
       {allItems.length > shownItems ? <p className="mt-3 text-sm text-text-muted">{uk ? `Показано ${shownItems} із ${allItems.length} занять` : `Showing ${shownItems} of ${allItems.length} course items`}</p> : null}
     </section>

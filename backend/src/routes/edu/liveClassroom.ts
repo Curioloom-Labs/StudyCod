@@ -687,8 +687,8 @@ router.put("/live-sessions/:id/lesson", authRequired, async (req: AuthRequest, r
       const lesson = await lessonRepo().findOne({ where: { id: lessonId, class: { id: session.class.id } } });
       if (!lesson) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
       session.lesson = lesson;
-      session.title = lesson.title;
     }
+    session.title = session.lesson?.title ?? null;
     await liveRepo().save(session);
 
     const fresh = (await liveRepo().findOne({ where: { id: sessionId }, relations: ["class", "lesson"] }))!;

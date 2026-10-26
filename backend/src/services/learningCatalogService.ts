@@ -170,6 +170,19 @@ function projectProgressOrDefault(progress?: CourseItemProgress | null): CourseP
     } : null,
     status: data.status === "SUBMITTED" ? "SUBMITTED" : "DRAFT",
     submittedAt: data.submittedAt || null,
+    submissionHistory: Array.isArray(data.submissionHistory) ? data.submissionHistory.filter(isRecord).map(version => ({
+      milestoneIds: Array.isArray(version.milestoneIds) ? version.milestoneIds.map(String) : [],
+      draft: typeof version.draft === "string" ? version.draft : "",
+      files: Array.isArray(version.files) ? version.files.filter(isRecord).filter(file => typeof file.path === "string" && typeof file.content === "string").map(file => ({ path: String(file.path), content: String(file.content) })) : undefined,
+      lastCheck: version.lastCheck && typeof version.lastCheck === "object" ? {
+        score: percent(readProperty(version.lastCheck, "score")), verdict: String(readProperty(version.lastCheck, "verdict") || ""),
+        testsPassed: Math.max(0, Number(readProperty(version.lastCheck, "testsPassed")) || 0),
+        testsTotal: Math.max(0, Number(readProperty(version.lastCheck, "testsTotal")) || 0),
+        checkedAt: String(readProperty(version.lastCheck, "checkedAt") || ""),
+        filesHash: typeof readProperty(version.lastCheck, "filesHash") === "string" ? String(readProperty(version.lastCheck, "filesHash")) : undefined,
+      } : null,
+      submittedAt: String(version.submittedAt || ""),
+    })).filter(version => version.submittedAt) : [],
   } : { milestoneIds: [], draft: "", files: undefined, lastCheck: null, status: "DRAFT", submittedAt: null };
 }
 
@@ -1208,16 +1221,27 @@ async function recordCourseProjectScore(
   progress.score = bestScore;
   const previousData = projectProgressOrDefault(progress);
   const preserveCompletion = progress.status === "COMPLETED" && previousData.status === "SUBMITTED";
+  // A later check is new draft evidence. It must not undo a course completion
+  // or replace the immutable snapshot of an already submitted project.
   if (!preserveCompletion) {
     progress.status = "IN_PROGRESS";
     progress.completedAt = null;
   }
   const checkedAt = new Date().toISOString();
-  progress.projectData = applyCourseProjectCheckData(previousData, files, projectEntryFile(projectRuntime(enrollment)), {
-    score: normalizedScore, verdict, testsPassed, testsTotal, filesHash: projectFilesHash(files), checkedAt,
-  });
-  progress.score = preserveCompletion ? previousScore : bestScore;
-  await progressRepo().save(progress);
+  progress.projectData = applyCourseProjectCheckData(
+    previousData,
+    files,
+    projectEntryFile(projectRuntime(enrollment)),
+    { score: normalizedScore, verdict, testsPassed, testsTotal, filesHash: projectFilesHash(files), checkedAt },
+  );
+  if (!preserveCompletion) {
+    progress.score = bestScore;
+    await progressRepo().save(progress);
+  } else {
+    // Keep the completed grade and original submitted version byte-for-byte.
+    progress.score = previousScore;
+    await progressRepo().save(progress);
+  }
   const updatedEnrollment = await recalculateEnrollmentProgress(enrollment);
   return {
     progress: projectProgressOrDefault(progress),
@@ -1241,13 +1265,31 @@ async function saveProjectProgress(userId: number, itemId: number, input: { mile
   }
   const progress = existing || progressRepo().create({ enrollment: { id: enrollment.id }, item: { id: item.id } });
   const preserveCompletion = progress.status === "COMPLETED" && previousData.status === "SUBMITTED";
+  const submissionHistory = [...(previousData.submissionHistory ?? [])];
+  const priorVersion = {
+    milestoneIds: previousData.milestoneIds,
+    draft: previousData.draft,
+    files: previousData.files,
+    lastCheck: previousData.lastCheck,
+    submittedAt: previousData.submittedAt || "",
+  };
+  if (preserveCompletion && submissionHistory.length === 0 && priorVersion.submittedAt) submissionHistory.push(priorVersion);
+  const nextSubmittedAt = submit ? new Date().toISOString() : previousData.submittedAt || null;
+  if (submit) submissionHistory.push({
+    milestoneIds,
+    draft: input.draft,
+    files: savedFiles,
+    lastCheck,
+    submittedAt: nextSubmittedAt!,
+  });
   progress.projectData = {
     milestoneIds,
     draft: input.draft,
     files: savedFiles,
     lastCheck,
     status: submit || preserveCompletion ? "SUBMITTED" : "DRAFT",
-    submittedAt: submit ? new Date().toISOString() : (previousData.submittedAt || null),
+    submittedAt: nextSubmittedAt,
+    submissionHistory,
   };
   if (submit) {
     progress.status = "COMPLETED";

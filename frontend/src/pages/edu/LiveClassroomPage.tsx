@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { ConnectionStateToast, LiveKitRoom, PreJoin, VideoConference } from "@livekit/components-react";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { ConnectionStateToast, LiveKitRoom, PreJoin, useParticipants, VideoConference } from "@livekit/components-react";
 import "@livekit/components-styles";
-import { ArrowLeft, BookOpen, Code2, Loader2, Mic, MonitorUp, PenSquare, PhoneOff, PlayCircle, Radio, RotateCcw, Users, Video, WifiOff } from "lucide-react";
+import { DisconnectReason } from "livekit-client";
+import { ArrowLeft, ArrowRight, BookOpen, Code2, Loader2, PenSquare, PhoneOff, PlayCircle, Radio, RotateCcw, Users, Video, WifiOff } from "lucide-react";
 import { BreakoutPanel } from "../../components/BreakoutPanel";
 import { ClassLiveOverview } from "../../components/ClassLiveOverview";
 import { LessonMaterialsPanel } from "../../components/LessonMaterialsPanel";
@@ -16,6 +17,7 @@ import { tr } from "../../i18n";
 import {
   endLiveSession,
   getActiveLiveSession,
+  getClassLessonsList,
   getBreakouts,
   getMyBreakoutToken,
   getTeacherBreakoutToken,
@@ -23,11 +25,14 @@ import {
   startLiveSession,
   type LiveJoinInfo,
   type LiveSession,
+  type LessonBrief,
 } from "../../lib/api/liveClassroom";
+import "./eduWorkspace.css";
 
 type Phase = "loading" | "lobby" | "prejoin" | "in_room" | "disabled" | "error";
 type SidePanel = "people" | "materials" | "code" | "board";
 type ActiveRoom = { token: string; url: string; kind: string };
+type LiveParticipant = { identity: string; name: string; isLocal: boolean };
 type DeviceChoices = {
   username: string;
   videoEnabled: boolean;
@@ -35,12 +40,13 @@ type DeviceChoices = {
   videoDeviceId: string;
   audioDeviceId: string;
 };
-type LiveClassroomUser = { studentId?: number; userMode?: string; username?: string; firstName?: string } | null | undefined;
+type LiveClassroomUser = { studentId?: number; classId?: number; userMode?: string; username?: string; firstName?: string } | null | undefined;
 
-const isPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
+const isInterfacePreview = () => import.meta.env.DEV
+  && new URLSearchParams(window.location.search).get("preview") === "true"
+  && new URLSearchParams(window.location.search).get("liveRoomPreview") === "design";
 
 const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) => {
-  useTranslation();
   useTranslation();
   const { classId: classIdParam } = useParams<{ classId: string }>();
   const classId = Number(classIdParam);
@@ -49,10 +55,18 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [session, setSession] = useState<LiveSession | null>(null);
+  const [sessionStartedHere, setSessionStartedHere] = useState(false);
+  const [classLessons, setClassLessons] = useState<LessonBrief[]>([]);
+  const [classLessonsLoading, setClassLessonsLoading] = useState(false);
+  const [classLessonsError, setClassLessonsError] = useState(false);
+  const [selectedLessonId, setSelectedLessonId] = useState<number | "">("");
   const [joinInfo, setJoinInfo] = useState<LiveJoinInfo | null>(null);
   const [choices, setChoices] = useState<DeviceChoices | null>(null);
   const [activeRoom, setActiveRoom] = useState<ActiveRoom | null>(null);
-  const [sidePanel, setSidePanel] = useState<SidePanel>("people");
+  const [participants, setParticipants] = useState<LiveParticipant[]>([]);
+  // Students land directly on the lesson, while teachers land on their live
+  // class overview. Both roles can switch tools without unmounting their state.
+  const [sidePanel, setSidePanel] = useState<SidePanel>(() => user?.studentId ? "materials" : "people");
   const [breakoutsOpen, setBreakoutsOpen] = useState(false);
   const [myBreakoutIndex, setMyBreakoutIndex] = useState<number | null>(null);
   const [watched, setWatched] = useState<{ studentId: number; name: string } | null>(null);
@@ -65,6 +79,13 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
   const connTimerRef = useRef<number | null>(null);
   const activeRoomRef = useRef<ActiveRoom | null>(null);
   activeRoomRef.current = activeRoom;
+  const syncParticipants = useCallback((next: LiveParticipant[]) => setParticipants((current) => {
+    const unchanged = current.length === next.length && current.every((item, index) => {
+      const candidate = next[index];
+      return item.identity === candidate.identity && item.name === candidate.name && item.isLocal === candidate.isLocal;
+    });
+    return unchanged ? current : next;
+  }), []);
 
   const refreshActive = useCallback(async () => {
     if (!Number.isFinite(classId)) {
@@ -89,6 +110,28 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
   useEffect(() => {
     void refreshActive();
   }, [refreshActive]);
+
+  const loadClassLessons = useCallback(async (canUpdate: () => boolean = () => true) => {
+    if (!isTeacher || !Number.isFinite(classId)) return;
+    setClassLessonsLoading(true);
+    try {
+      const items = await getClassLessonsList(classId);
+      if (!canUpdate()) return;
+      setClassLessons(items);
+      setClassLessonsError(false);
+    } catch {
+      if (canUpdate()) setClassLessonsError(true);
+    } finally {
+      if (canUpdate()) setClassLessonsLoading(false);
+    }
+  }, [isTeacher, classId]);
+
+  useEffect(() => {
+    if (!isTeacher || !Number.isFinite(classId)) return;
+    let cancelled = false;
+    void loadClassLessons(() => !cancelled);
+    return () => { cancelled = true; };
+  }, [isTeacher, classId, loadClassLessons]);
 
   useEffect(() => {
     if (phase !== "lobby" || !Number.isFinite(classId)) return;
@@ -154,7 +197,8 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
     setBusy(true);
     setError(null);
     try {
-      const info = await startLiveSession(classId);
+      const info = await startLiveSession(classId, selectedLessonId === "" ? undefined : selectedLessonId);
+      setSessionStartedHere(true);
       setJoinInfo(info);
       setSession(info.session);
       setPhase("prejoin");
@@ -163,7 +207,7 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
     } finally {
       setBusy(false);
     }
-  }, [classId]);
+  }, [classId, selectedLessonId]);
 
   const handleJoin = useCallback(async () => {
     if (!session) return;
@@ -171,6 +215,7 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
     setError(null);
     try {
       const info = await joinLiveSession(session.id);
+      setSessionStartedHere(false);
       setJoinInfo(info);
       setSession(info.session);
       setPhase("prejoin");
@@ -189,23 +234,35 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
   }, [joinInfo]);
 
   const handleLeave = useCallback(async () => {
+    if (phase === "prejoin" && sessionStartedHere && session) {
+      try {
+        await endLiveSession(session.id);
+      } catch {
+        setError(tr("Не вдалося закрити кімнату. Спробуйте ще раз.", "Could not close the room. Please try again."));
+        return;
+      }
+    }
+    setSessionStartedHere(false);
     setJoinInfo(null);
     setChoices(null);
     setActiveRoom(null);
+    setParticipants([]);
     setMyBreakoutIndex(null);
     setPhase("loading");
     await refreshActive();
-  }, [refreshActive]);
+  }, [phase, sessionStartedHere, session, refreshActive]);
 
   const handleEnd = useCallback(async () => {
     if (!session) return;
     setBusy(true);
     try {
       await endLiveSession(session.id);
-    } finally {
-      setBusy(false);
       setJoinInfo(null);
       navigate(`/edu/classes/${classId}`);
+    } catch {
+      setError(tr("Не вдалося завершити урок. Спробуйте ще раз.", "Could not end the lesson. Please try again."));
+    } finally {
+      setBusy(false);
     }
   }, [session, classId, navigate]);
 
@@ -218,27 +275,48 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
     if (joinInfo) switchRoom({ token: joinInfo.token, url: joinInfo.url, kind: "main" });
   }, [joinInfo, switchRoom]);
 
+  if (user?.studentId && user.classId && Number.isFinite(classId) && user.classId !== classId) {
+    return <Navigate to="/edu/lessons" replace />;
+  }
+
   if (phase === "prejoin" && joinInfo) {
     return (
       <LiveShell>
-        <section className="mx-auto grid h-full w-full max-w-6xl place-items-center px-4 py-8">
-          <div className="w-full overflow-hidden rounded-[32px] border border-white/10 bg-bg-code shadow-[0_34px_90px_-56px_rgba(0,0,0,.95)]">
-            <div className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
+        <section className="edu-live-prejoin mx-auto grid w-full max-w-6xl place-items-center px-4 py-8">
+          <div className="edu-live-prejoin__card w-full overflow-hidden rounded-[28px] border border-border bg-bg-surface shadow-[var(--workshop-panel-shadow)]">
+            <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
               <div>
-              <div className="text-xs font-bold uppercase tracking-[.16em] text-primary-soft">{tr("Перевірка пристроїв", "Device check")}</div>
+              <div className="text-xs font-bold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{tr("Перед входом · перевірка пристроїв", "Before you join · device check")}</div>
                 <h1 className="mt-1 text-xl font-bold text-text-primary">{joinInfo.session.title || tr("Живий урок", "Live lesson")}</h1>
               </div>
-              <button type="button" onClick={() => void handleLeave()} className="inline-flex items-center gap-2 rounded-xl bg-white/8 px-4 py-2 text-sm font-bold text-text-primary hover:bg-white/12"><ArrowLeft className="size-4" />{tr("Назад", "Back")}</button>
+              <button type="button" onClick={() => void handleLeave()} className="inline-flex items-center gap-2 rounded-xl border border-border bg-bg-base px-4 py-2 text-sm font-bold text-text-primary hover:bg-bg-hover"><ArrowLeft className="size-4" />{tr("Назад", "Back")}</button>
             </div>
-            <div className="min-h-[560px] p-4" data-lk-theme="default">
-              <PreJoin
-                defaults={{ username: user?.firstName || user?.username || tr("Учасник", "Participant"), videoEnabled: true, audioEnabled: true }}
-                onSubmit={(values) => enterRoom(values)}
-                onError={() => setError(tr("Помилка доступу до камери або мікрофона.", "Could not access the camera or microphone."))}
-                joinLabel={tr("Увійти в урок", "Join lesson")}
-                micLabel={tr("Мікрофон", "Microphone")}
-                camLabel={tr("Камера", "Camera")}
-              />
+            {error && <p role="alert" className="edu-live-prejoin__error">{error}</p>}
+            <div className="edu-live-prejoin__layout">
+              <aside className="edu-live-prejoin__intro">
+                <span className="edu-live-prejoin__class"><BookOpen className="size-4" />{tr("Клас", "Class")} {classId}</span>
+                <h2>{tr("Підготуйтеся до заняття", "Get ready for the lesson")}</h2>
+                <p>{tr("Перевірте ім’я та пристрої. Після входу поруч із відео будуть матеріали уроку, спільна дошка й код.", "Check your name and devices. After joining, you’ll find lesson materials, a shared board, and code beside the video.")}</p>
+                <ol aria-label={tr("Що буде в кімнаті", "What is in the classroom")}>
+                  <li><span>01</span>{tr("Відео й учасники класу", "Video and your class")}</li>
+                  <li><span>02</span>{tr("Матеріал поточного уроку", "Materials for this lesson")}</li>
+                  <li><span>03</span>{tr("Дошка та спільний код", "A shared board and code")}</li>
+                </ol>
+                <p className="edu-live-prejoin__privacy">{tr("Якщо камера або мікрофон недоступні, їх можна вимкнути й усе одно приєднатися.", "If your camera or microphone is unavailable, turn it off and join anyway.")}</p>
+              </aside>
+              <div className="edu-live-prejoin__device-check">
+                <div className="edu-live-prejoin__device-title"><span>{tr("Перевірка пристроїв", "Device check")}</span><small>{tr("Камера · мікрофон · ім’я", "Camera · microphone · name")}</small></div>
+                <div className="edu-live-prejoin__body" data-lk-theme="default">
+                  <PreJoin
+                    defaults={{ username: user?.firstName || user?.username || tr("Учасник", "Participant"), videoEnabled: true, audioEnabled: true }}
+                    onSubmit={(values) => enterRoom(values)}
+                    onError={() => setError(tr("Помилка доступу до камери або мікрофона.", "Could not access the camera or microphone."))}
+                    joinLabel={tr("Увійти в урок", "Join lesson")}
+                    micLabel={tr("Мікрофон", "Microphone")}
+                    camLabel={tr("Камера", "Camera")}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -249,63 +327,75 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
   if (phase === "in_room" && joinInfo && choices && activeRoom) {
     return (
       <LiveShell>
-        <div className="flex h-[calc(100dvh-72px)] flex-col gap-3 p-3 sm:p-4">
-          <header className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-bg-code/92 px-4 py-3 text-text-primary shadow-[0_20px_60px_-46px_rgba(0,0,0,.95)]">
+        <div className="edu-live-room">
+          <LiveKitRoom
+            key={`${activeRoom.token}:${retryNonce}`}
+            token={activeRoom.token}
+            serverUrl={activeRoom.url}
+            connect
+            video={choices.videoEnabled}
+            audio={choices.audioEnabled}
+            options={{
+              videoCaptureDefaults: { deviceId: choices.videoDeviceId || undefined },
+              audioCaptureDefaults: { deviceId: choices.audioDeviceId || undefined },
+            }}
+            className="edu-live-room__provider"
+            style={{ height: "100%" }}
+            onConnected={() => {
+              switchingRef.current = false;
+              setRoomConn("connected");
+              if (connTimerRef.current) window.clearTimeout(connTimerRef.current);
+            }}
+            onError={() => setRoomConn("failed")}
+            onDisconnected={(reason) => {
+              if (switchingRef.current) return;
+              if (reason === DisconnectReason.CLIENT_INITIATED) {
+                void handleLeave();
+                return;
+              }
+              setRoomConn("failed");
+            }}
+          >
+            <ConnectionStateToast />
+            <ParticipantReporter onChange={syncParticipants} />
+          <header className="edu-live-room__header flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-bg-surface px-4 py-3 text-text-primary shadow-[var(--workshop-panel-shadow)]">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="relative flex size-3 shrink-0">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/50" />
-                <span className="relative inline-flex size-3 rounded-full bg-primary" />
-              </span>
+              <span className={`edu-live-room__status-dot is-${roomConn}`} aria-hidden="true" />
               <div className="min-w-0">
                 <div className="truncate font-bold">{joinInfo.session.title || tr("Живий урок", "Live lesson")}</div>
-                <div className="text-xs text-text-secondary">{joinInfo.role === "host" ? tr("Викладач", "Teacher") : tr("Учасник", "Participant")} · {activeRoom.kind === "main" ? tr("головна кімната", "main room") : `${tr("група", "group")} ${activeRoom.kind.split(":")[1]}`}</div>
+                <div className="edu-live-room__session-meta" aria-live="polite">
+                  <span>{joinInfo.role === "host" ? tr("Викладач", "Teacher") : tr("Учасник", "Participant")}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{activeRoom.kind === "main" ? tr("основна кімната", "main room") : `${tr("група", "group")} ${activeRoom.kind.split(":")[1]}`}</span>
+                  <span className="edu-live-room__connection-state">
+                    {roomConn === "connected" ? tr("З’єднано", "Connected") : roomConn === "failed" ? tr("Немає з’єднання", "Connection lost") : tr("Підключення…", "Connecting…")}
+                  </span>
+                  <span className="edu-live-room__participant-count">{participants.length} {participants.length === 1 ? tr("учасник", "participant") : tr("учасників", "participants")}</span>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 overflow-x-auto">
-              <Tool active={sidePanel === "people"} onClick={() => setSidePanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
-              <Tool active={sidePanel === "materials"} onClick={() => setSidePanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
-              <Tool active={sidePanel === "board"} onClick={() => setSidePanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
-              <Tool active={sidePanel === "code"} onClick={() => setSidePanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
+            <nav aria-label={tr("Інструменти онлайн-уроку", "Live lesson tools")} className={`edu-live-room__tools flex items-center gap-2 overflow-x-auto${isTeacher ? " edu-live-room__tools--teacher" : ""}`}>
+              <Tool active={sidePanel === "people"} controls="live-panel-people" onClick={() => setSidePanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
+              <Tool active={sidePanel === "materials"} controls="live-panel-materials" onClick={() => setSidePanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
+              <Tool active={sidePanel === "board"} controls="live-panel-board" onClick={() => setSidePanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
+              <Tool active={sidePanel === "code"} controls="live-panel-code" onClick={() => setSidePanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
               {isTeacher && <Tool active={breakoutsOpen} onClick={() => setBreakoutsOpen((value) => !value)} icon={<Users className="size-4" />} label={tr("Групи", "Groups")} />}
-              {isTeacher && <button type="button" disabled={busy} onClick={() => void handleEnd()} className="inline-flex items-center gap-2 rounded-xl border border-accent-error/35 bg-accent-error/12 px-3 py-2 text-sm font-bold text-accent-error hover:bg-accent-error/18 disabled:opacity-50"><PhoneOff className="size-4" />{tr("Завершити", "End")}</button>}
-            </div>
+              {!isTeacher && <button type="button" onClick={() => void handleLeave()} className="edu-live-room__leave inline-flex shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-bold text-text-secondary hover:bg-bg-hover"><ArrowLeft className="size-4" />{tr("Вийти з уроку", "Leave lesson")}</button>}
+              {isTeacher && <button type="button" disabled={busy} onClick={() => void handleEnd()} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent-error/35 bg-accent-error/10 px-3 py-2 text-sm font-bold text-accent-error hover:bg-accent-error/15 disabled:opacity-50"><PhoneOff className="size-4" />{tr("Завершити", "End")}</button>}
+            </nav>
           </header>
 
+          {error && <div role="alert" className="edu-live-room__error rounded-xl border border-accent-error/30 bg-accent-error/10 px-4 py-2 text-sm text-accent-error">{error}</div>}
           {Number.isFinite(classId) && <LiveChallengePanel classId={classId} isTeacher={isTeacher} />}
           {isTeacher && breakoutsOpen && <BreakoutPanel classId={classId} currentKind={activeRoom.kind} onJoinGroup={(index) => void teacherJoinGroup(index)} onReturnMain={teacherReturnMain} />}
           {!isTeacher && myBreakoutIndex != null && <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-bold text-primary-soft">{tr("Ви в групі", "You are in group")} {myBreakoutIndex + 1}</div>}
 
-          <main className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <section className="relative min-h-0 overflow-hidden rounded-[28px] border border-white/10 bg-bg-code shadow-[0_30px_80px_-56px_rgba(0,0,0,.95)]" data-lk-theme="default">
-              <LiveKitRoom
-                key={`${activeRoom.token}:${retryNonce}`}
-                token={activeRoom.token}
-                serverUrl={activeRoom.url}
-                connect
-                video={choices.videoEnabled}
-                audio={choices.audioEnabled}
-                options={{
-                  videoCaptureDefaults: { deviceId: choices.videoDeviceId || undefined },
-                  audioCaptureDefaults: { deviceId: choices.audioDeviceId || undefined },
-                }}
-                style={{ height: "100%" }}
-                onConnected={() => {
-                  switchingRef.current = false;
-                  setRoomConn("connected");
-                  if (connTimerRef.current) window.clearTimeout(connTimerRef.current);
-                }}
-                onError={() => setRoomConn("failed")}
-                onDisconnected={() => {
-                  if (switchingRef.current) return;
-                  void handleLeave();
-                }}
-              >
-                <ConnectionStateToast />
-                <div className="flex h-full min-h-0 flex-col">
-                  {isTeacher ? <RaisedHandsBar /> : <div className="flex items-center justify-end border-b border-white/10 px-4 py-2"><RaiseHandButton /></div>}
-                  <div className="min-h-0 flex-1"><VideoConference /></div>
-                </div>
-              </LiveKitRoom>
+          <main className="edu-live-room__body grid min-h-0 flex-1 gap-3">
+            <section aria-label={tr("Відеозустріч", "Video meeting")} className="edu-live-room__stage relative min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-code shadow-[0_28px_64px_-46px_rgba(0,0,0,.82)]" data-lk-theme="default">
+              <div className="flex h-full min-h-0 flex-col">
+                {isTeacher ? <RaisedHandsBar /> : <div className="flex items-center justify-end border-b border-white/10 px-4 py-2"><RaiseHandButton /></div>}
+                <div className="min-h-0 flex-1"><VideoConference /></div>
+              </div>
 
               {roomConn === "connecting" && <ConnectionOverlay icon={<Loader2 className="size-6 animate-spin text-primary-soft" />} title={tr("Підключення до відеосервера…", "Connecting to video server…")} subtitle={activeRoom.url} />}
               {roomConn === "failed" && (
@@ -318,17 +408,26 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
               )}
             </section>
 
-            <aside className="min-h-0 overflow-hidden rounded-[28px] border border-border/10 bg-white dark:border-white/10 dark:bg-bg-surface">
-              <PanelHeader panel={sidePanel} onPanel={setSidePanel} />
-              <div className="h-[calc(100%-56px)] min-h-0 overflow-auto p-3">
-                {sidePanel === "people" && isTeacher && Number.isFinite(classId) && (watched ? <StudentCodeStream classId={classId} studentId={watched.studentId} studentName={watched.name} onBack={() => setWatched(null)} /> : <ClassLiveOverview classId={classId} enableCopilot onSelectStudent={(studentId, name) => setWatched({ studentId, name })} />)}
-                {sidePanel === "people" && !isTeacher && <StudentSide />}
-                {sidePanel === "materials" && <LessonMaterialsPanel classId={classId} sessionId={joinInfo.session.id} isTeacher={isTeacher} />}
-                {sidePanel === "board" && <div className="h-full min-h-[560px] overflow-hidden rounded-2xl border border-border/10 dark:border-white/10"><LiveCodeBoard isTeacher={isTeacher} /></div>}
-                {sidePanel === "code" && <div className="h-full min-h-[560px] overflow-hidden rounded-2xl border border-border/10 dark:border-white/10"><LivePairEditor topic={`class-${classId}-collab`} userName={isTeacher ? tr("Викладач", "Teacher") : tr("Учень", "Student")} height="100%" /></div>}
+            <aside className="edu-live-room__aside min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-surface">
+              <PanelHeading panel={sidePanel} />
+              <div className="edu-live-room__panel-body h-[calc(100%-56px)] min-h-0">
+                <section id="live-panel-people" role="region" aria-label={tr("Учасники уроку", "Lesson participants")} aria-hidden={sidePanel !== "people"} className="h-full min-h-0 overflow-auto p-3" hidden={sidePanel !== "people"}>
+                  {isTeacher && Number.isFinite(classId) && (watched ? <StudentCodeStream classId={classId} studentId={watched.studentId} studentName={watched.name} onBack={() => setWatched(null)} /> : <ClassLiveOverview classId={classId} enableCopilot onSelectStudent={(studentId, name) => setWatched({ studentId, name })} />)}
+                  {!isTeacher && <StudentSide participants={participants} />}
+                </section>
+                <section id="live-panel-materials" role="region" aria-label={tr("Матеріали уроку", "Lesson materials")} aria-hidden={sidePanel !== "materials"} className="h-full min-h-0 overflow-auto" hidden={sidePanel !== "materials"}>
+                  <LessonMaterialsPanel classId={classId} sessionId={joinInfo.session.id} isTeacher={isTeacher} />
+                </section>
+                <section id="live-panel-board" role="region" aria-label={tr("Спільна дошка", "Shared board")} aria-hidden={sidePanel !== "board"} className="edu-live-room__collaboration-surface h-full min-h-0" hidden={sidePanel !== "board"}>
+                  <LiveCodeBoard isTeacher={isTeacher} />
+                </section>
+                <section id="live-panel-code" role="region" aria-label={tr("Спільний код", "Shared code")} aria-hidden={sidePanel !== "code"} className="edu-live-room__collaboration-surface h-full min-h-0" hidden={sidePanel !== "code"}>
+                  <LivePairEditor topic={`class-${classId}-collab`} userName={isTeacher ? tr("Викладач", "Teacher") : tr("Учень", "Student")} height="100%" />
+                </section>
               </div>
             </aside>
           </main>
+          </LiveKitRoom>
         </div>
       </LiveShell>
     );
@@ -336,33 +435,42 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
 
   return (
     <LiveShell>
-      <section className="grid min-h-[calc(100dvh-72px)] place-items-center px-4 py-10">
-        <div className="w-full max-w-xl overflow-hidden rounded-[32px] border border-border/10 bg-white shadow-[0_28px_80px_-54px_rgba(0,0,0,.65)] dark:border-white/10 dark:bg-bg-surface">
-          <div className="border-b border-border/10 p-6 dark:border-white/10">
-            <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft"><Radio className="size-4" />Live classroom</div>
-            <h1 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.055em]">{tr("Живий урок", "Live lesson")}</h1>
-            <p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Одна кімната для відео, матеріалів, коду й швидкої допомоги учням.", "One room for video, materials, code, and quick help for students.")}</p>
+      <section className="edu-live-lobby">
+        <div className="edu-live-lobby__intro">
+          <p className="edu-live-lobby__eyebrow"><Radio className="size-4" />StudyCod EDU <span>/</span> {tr("онлайн-урок", "live lesson")}</p>
+          <h1>{tr("Навчання наживо", "Learn together, live")}</h1>
+          <p>{tr("Відеозустріч, матеріали й спільна робота з кодом зібрані в одному місці.", "Video, lesson materials, and shared coding tools are together in one classroom.")}</p>
+        </div>
+        <div className="edu-live-lobby__card">
+          <div className="edu-live-lobby__card-head">
+            <div className="edu-live-lobby__class-icon"><BookOpen className="size-5" /></div>
+            <div className="min-w-0"><span>{tr("Клас", "Class")} {classId}</span><h2>{session?.title || tr("Кімната класу", "Classroom")}</h2></div>
+            {session && <span className="edu-live-lobby__live-badge"><span />{tr("Урок триває", "Live now")}</span>}
           </div>
-          <div className="p-6">
-            {phase === "loading" && <StatusLine icon={<Loader2 className="size-4 animate-spin" />} text={tr("Завантаження…", "Loading…")} />}
-            {phase === "disabled" && <StatusCard tone="warn" title={tr("LiveKit не налаштовано", "LiveKit is not configured")} text={tr("Відеоуроки вимкнені на цьому сервері. Потрібно налаштувати LiveKit перед запуском кімнат.", "Video lessons are disabled on this server. Configure LiveKit before starting a room.")} />}
-            {phase === "error" && <StatusCard tone="danger" title={tr("Помилка live-кімнати", "Live room error")} text={error || tr("Не вдалося завантажити live-сесію.", "Could not load the live session.")} action={<button type="button" onClick={() => void refreshActive()} className="mt-4 rounded-xl bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">{tr("Спробувати ще раз", "Try again")}</button>} />}
+          <div className="edu-live-lobby__content">
+            {phase === "loading" && <StatusLine icon={<Loader2 className="size-4 animate-spin" />} text={tr("Перевіряємо кімнату класу…", "Checking the classroom…")} />}
+            {phase === "disabled" && <StatusCard tone="warn" title={tr("Онлайн-уроки тимчасово недоступні", "Live lessons are temporarily unavailable")} text={tr("Відеозв’язок ще не налаштований на цьому сервері. Повідомлення про уроки та матеріали класу залишаються доступними.", "Video calling is not configured on this server yet. Class announcements and lesson materials remain available.")} />}
+            {phase === "error" && <StatusCard tone="danger" title={tr("Не вдалося завантажити кімнату", "Could not load the classroom")} text={error || tr("Перевірте з’єднання та спробуйте ще раз.", "Check your connection and try again.")} action={<button type="button" onClick={() => void refreshActive()} className="mt-4 inline-flex items-center gap-2 rounded-xl border border-accent-error/35 px-4 py-2 text-sm font-bold text-accent-error"><RotateCcw className="size-4" />{tr("Спробувати ще раз", "Try again")}</button>} />}
             {phase === "lobby" && (
               session ? (
-                <div className="rounded-2xl border border-primary/25 bg-primary/8 p-5">
-                  <div className="flex items-center gap-2 text-sm font-bold text-primary-strong dark:text-primary-soft"><span className="size-2 rounded-full bg-primary" />{tr("Урок уже триває", "Lesson is in progress")}</div>
-                  <div className="mt-2 text-lg font-bold">{session.title || tr("Без назви", "Untitled")}</div>
-                  <button type="button" disabled={busy} onClick={() => void handleJoin()} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-50"><PlayCircle className="size-4" />{tr("Приєднатися", "Join")}</button>
+                <div className="edu-live-lobby__state">
+                  <div><strong>{tr("Зустріч відкрита", "The room is open")}</strong><p>{tr("Перевірте камеру та мікрофон перед входом. Матеріали уроку будуть у боковій панелі.", "Check your camera and microphone before joining. Lesson materials will be in the side panel.")}</p></div>
+                  <button type="button" disabled={busy} onClick={() => void handleJoin()} className="edu-live-lobby__primary"><PlayCircle className="size-4" />{busy ? tr("Підключаємо…", "Connecting…") : tr("Приєднатися до уроку", "Join lesson")}<ArrowLeft className="size-4 rotate-180" /></button>
                 </div>
               ) : isTeacher ? (
-                <div>
-                  <p className="text-sm text-text-muted dark:text-text-secondary">{tr("Активного уроку зараз немає. Запустіть кімнату, перевірте камеру й запросіть клас.", "There is no active lesson. Start a room, check your camera, and invite the class.")}</p>
-                  <button type="button" disabled={busy} onClick={() => void handleStart()} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-50"><PlayCircle className="size-4" />{tr("Розпочати урок", "Start lesson")}</button>
+                <div className="edu-live-lobby__state">
+                  <div><strong>{tr("Кімната готова до уроку", "Your classroom is ready")}</strong><p>{tr("За бажанням прикріпіть тему: учні одразу побачать її теорію й задачі поруч із відео.", "Optionally attach a topic so students see its explanation and practice beside the video.")}</p></div>
+                  <label className="edu-live-lobby__lesson-field"><span>{tr("Тема уроку", "Lesson topic")}</span><select value={selectedLessonId} onChange={(event) => setSelectedLessonId(event.target.value ? Number(event.target.value) : "")} disabled={busy || classLessonsLoading}>
+                    <option value="">{classLessonsLoading ? tr("Завантажуємо теми…", "Loading topics…") : classLessonsError ? tr("Не вдалося завантажити теми", "Could not load topics") : classLessons.length ? tr("Без прив’язаної теми", "No topic attached") : tr("У класі ще немає тем", "No class topics yet")}</option>
+                    {classLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
+                  </select>{classLessonsError && <span role="status" className="edu-live-lobby__lesson-error">{tr("Можна повторити завантаження або почати без теми.", "Retry loading topics, or start without an attached lesson.")} <button type="button" onClick={() => void loadClassLessons()}>{classLessonsLoading ? tr("Завантажуємо…", "Loading…") : tr("Повторити", "Retry")}</button></span>}</label>
+                  <button type="button" disabled={busy || classLessonsLoading} onClick={() => void handleStart()} className="edu-live-lobby__primary"><PlayCircle className="size-4" />{busy ? tr("Створюємо кімнату…", "Starting the room…") : tr("Почати онлайн-урок", "Start live lesson")}<ArrowLeft className="size-4 rotate-180" /></button>
                 </div>
               ) : (
-                <StatusCard title={tr("Очікуємо викладача", "Waiting for the teacher")} text={tr("Кімната відкриється автоматично, коли викладач розпочне урок.", "The room will open automatically when the teacher starts the lesson.")} />
+                <div className="edu-live-lobby__waiting"><div className="edu-live-lobby__waiting-icon"><Radio className="size-5" /></div><div><strong>{tr("Тут з’явиться ваш онлайн-урок", "Your live lesson will appear here")}</strong><p>{tr("Кімната оновлюється автоматично. Коли викладач розпочне заняття, кнопка входу з’явиться на цій сторінці.", "This room updates automatically. When your teacher starts a lesson, the join button will appear here.")}</p></div><span>{tr("Перевіряємо кожні 5 секунд", "Checks every 5 seconds")}</span></div>
               )
             )}
+            {error && phase === "lobby" && <p role="alert" className="mt-4 text-sm text-accent-error">{error}</p>}
           </div>
         </div>
       </section>
@@ -374,57 +482,77 @@ const LiveClassroomPreview: React.FC = () => {
   useTranslation();
   const navigate = useNavigate();
   const { classId } = useParams<{ classId: string }>();
-  const [panel, setPanel] = useState<SidePanel>("people");
+  const [panel, setPanel] = useState<SidePanel>("materials");
 
   return (
     <LiveShell>
-      <div className="flex h-[calc(100dvh-72px)] flex-col gap-3 p-3 sm:p-4">
-        <header className="flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-bg-code/92 px-4 py-3 text-text-primary">
-          <button type="button" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)} className="inline-flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-sm font-bold hover:bg-white/12"><ArrowLeft className="size-4" />{tr("11-А · Python", "Class 11-A · Python")}</button>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-2 rounded-full bg-primary/12 px-3 py-1.5 text-xs font-bold text-primary-soft"><span className="size-1.5 animate-pulse rounded-full bg-current" />LIVE · 32:14</span>
-            <Tool active={panel === "people"} onClick={() => setPanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
-            <Tool active={panel === "materials"} onClick={() => setPanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
-            <Tool active={panel === "code"} onClick={() => setPanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
+      <div className="edu-live-room edu-live-room--preview">
+        <header className="edu-live-room__header">
+          <div className="flex min-w-0 items-center gap-3">
+            <button type="button" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-bold hover:bg-bg-hover"><ArrowLeft className="size-4" />{tr("11-А · Python", "Class 11-A · Python")}</button>
+            <div className="min-w-0"><p className="edu-live-room__preview-label">{tr("Приклад інтерфейсу", "Interface preview")}</p><h1 className="truncate font-bold">{tr("Цикли: від ідеї до коду", "Loops: from idea to code")}</h1></div>
           </div>
+          <nav aria-label={tr("Інструменти уроку", "Lesson tools")} className="edu-live-room__tools">
+            <Tool active={panel === "people"} controls="live-preview-panel-people" onClick={() => setPanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
+            <Tool active={panel === "materials"} controls="live-preview-panel-materials" onClick={() => setPanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
+            <Tool active={panel === "board"} controls="live-preview-panel-board" onClick={() => setPanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
+            <Tool active={panel === "code"} controls="live-preview-panel-code" onClick={() => setPanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
+          </nav>
         </header>
 
-        <main className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] bg-bg-code text-text-primary shadow-[0_30px_80px_-56px_rgba(0,0,0,.95)]">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-              <div>
-                <div className="text-xs font-bold uppercase tracking-[.16em] text-primary-soft">Live classroom</div>
-                <h1 className="mt-1 text-xl font-bold">{tr("Цикли: від ідеї до коду", "Loops: from idea to code")}</h1>
-              </div>
-              <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-text-primary">{tr("24 учні онлайн", "24 students online")}</span>
+        <main className="edu-live-room__body grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <section aria-label={tr("Демонстраційний онлайн-урок", "Live lesson preview")} className="edu-live-room__stage relative flex min-h-0 flex-col overflow-hidden rounded-[24px] border border-border bg-bg-code text-text-primary">
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
+              <div><p className="text-xs font-bold uppercase tracking-[.12em] text-primary-soft">{tr("Онлайн-урок · демо", "Live lesson · demo")}</p><h2 className="mt-1 font-semibold">{tr("Цикл і його верхня межа", "A loop and its upper bound")}</h2></div>
+              <span className="rounded-lg border border-white/10 bg-white/[.04] px-2.5 py-1.5 font-mono text-[10px] text-white/75">{tr("Зразок інтерфейсу", "Interface sample")}</span>
             </div>
-            <div className="grid min-h-0 flex-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_240px]">
-              <div className="relative grid min-h-[380px] place-items-center overflow-hidden rounded-[22px] bg-bg-base">
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_15%,color-mix(in_srgb,var(--primary)_16%,transparent),transparent_36%),linear-gradient(135deg,#1d3a28,#0f1711)]" />
-                <div className="relative text-center">
-                  <span className="mx-auto grid size-24 place-items-center rounded-[30px] bg-bg-hover text-3xl font-bold text-primary-strong">{tr("ОК", "OK")}</span>
-                  <h2 className="mt-5 text-3xl font-bold tracking-[-.04em]">Олена Кравець</h2>
-                  <p className="mt-2 text-sm text-text-secondary">{tr("пояснює приклад на дошці", "explaining an example on the board")}</p>
+            <div className="edu-live-room__demo-content grid min-h-0 flex-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+              <section className="edu-live-room__demo-board" aria-label={tr("Фрагмент спільної дошки", "Shared board excerpt")}>
+                <p className="edu-live-room__demo-board-label"><span />{tr("Спільна дошка · пояснюємо на прикладі", "Shared board · working through an example")}</p>
+                <h2>{tr("Чому сума для 5 дорівнює 10, а не 15?", "Why does the sum for 5 equal 10 instead of 15?")}</h2>
+                <div className="edu-live-room__demo-code" aria-label={tr("Приклад коду Python", "Python code example")}>
+                  <span>n = 5</span><span>total = 0</span><span className="is-focus">for value in range(1, n):</span><span>    total += value</span><span>print(total)  <span className="text-white/45"># 10</span></span>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-1">
-                {["Марія", "Андрій", "Софія", "Данило"].map((name, index) => <div key={name} className="relative min-h-28 overflow-hidden rounded-2xl bg-bg-surface p-3"><span className="grid size-11 place-items-center rounded-2xl bg-white/10 text-sm font-bold text-primary-strong">{name[0]}</span><div className="absolute bottom-3 left-3 right-3 truncate text-xs font-semibold">{name}</div>{index === 1 && <span className="absolute right-3 top-3 rounded-full bg-accent-warn px-2 py-0.5 text-[10px] font-bold text-accent-warn">{tr("рука", "hand raised")}</span>}</div>)}
-              </div>
+                <p className="edu-live-room__demo-note">{tr("У Python права межа range не входить у послідовність. Додаємо n + 1, щоб цикл захопив число 5.", "Python's range excludes its right endpoint. Add n + 1 so the loop includes 5.")}</p>
+              </section>
+              <aside className="edu-live-room__demo-side" aria-label={tr("Викладач і план уроку", "Teacher and lesson plan")}>
+                <div className="edu-live-room__demo-speaker">
+                  <p className="edu-live-room__demo-speaker-label">{tr("Стан кімнати", "Room status")}</p>
+                  <div className="edu-live-room__demo-speaker-top"><span><Video className="size-5" /></span><span className="edu-live-room__demo-camera-state"><i />{tr("Відео не підключене", "Video is not connected")}</span></div>
+                  <strong>{tr("Відео не запускається в макеті", "Video is not started in this preview")}</strong><small>{tr("Камера й мікрофон працюють після входу до реальної кімнати.", "Camera and microphone work after joining a live room.")}</small>
+                </div>
+                <div className="edu-live-room__demo-agenda">
+                  <p>{tr("План уроку", "Lesson plan")}</p>
+                  <ol>
+                    <li className={panel === "materials" ? "is-current" : ""}><span>01</span>{tr("Матеріал", "Material")}</li>
+                    <li className={panel === "board" ? "is-current" : ""}><span>02</span>{tr("Розбір на дошці", "Work through the board")}</li>
+                    <li className={panel === "code" ? "is-current" : ""}><span>03</span>{tr("Практика в коді", "Practice in code")}</li>
+                  </ol>
+                </div>
+              </aside>
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-2 border-t border-white/10 px-4 py-3">
-              <MeetButton icon={<Mic className="size-4" />} label={tr("Мікрофон", "Microphone")} />
-              <MeetButton icon={<Video className="size-4" />} label={tr("Камера", "Camera")} />
-              <MeetButton icon={<MonitorUp className="size-4" />} label={tr("Екран", "Screen")} />
-              <button type="button" className="rounded-full bg-accent-error px-4 py-2 text-sm font-bold text-[var(--accent-error-foreground)]"><PhoneOff className="mr-2 inline size-4" />{tr("Вийти", "Leave")}</button>
+            <div className="edu-live-room__demo-controls">
+              <span className="edu-live-room__demo-controls-note">{tr("Камера, мікрофон і реакції доступні після входу до реальної кімнати.", "Camera, microphone, and reactions are available after joining a live room.")}</span>
+              <button type="button" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)} className="edu-live-room__demo-leave"><PhoneOff className="size-4" />{tr("Вийти з перегляду", "Leave preview")}</button>
             </div>
           </section>
 
-          <aside className="min-h-0 overflow-hidden rounded-[28px] border border-border/10 bg-white dark:border-white/10 dark:bg-bg-surface">
-            <PanelHeader panel={panel} onPanel={setPanel} />
-            <div className="min-h-0 overflow-auto p-5">
-              {panel === "people" && <StudentSide />}
-              {panel === "materials" && <div className="space-y-4"><h2 className="font-bold">{tr("Матеріали уроку", "Lesson materials")}</h2><p className="text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Після пояснення учні відкривають практику, виконують задачу й повертаються до обговорення помилок.", "After the explanation, students open the practice task and return to discuss mistakes.")}</p><button type="button" className="rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground dark:bg-primary dark:text-primary-foreground">{tr("Відкрити задачу", "Open task")}</button></div>}
-              {panel === "code" && <pre className="rounded-2xl bg-bg-code p-4 text-xs leading-6 text-primary-strong">{`total = 0\nfor number in values:\n    if number % 2 == 0:\n        total += number\nprint(total)`}</pre>}
+          <aside className="edu-live-room__aside min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-surface">
+            <PanelHeading panel={panel} />
+            <div className="edu-live-room__panel-body h-[calc(100%-56px)] min-h-0 overflow-auto p-5">
+              <p className="edu-live-room__preview-notice mb-4">{tr("Демонстраційний макет. Камера, мікрофон та учасники не підключені.", "Design preview only. Camera, microphone, and participants are not connected.")}</p>
+              <section id="live-preview-panel-people" role="region" aria-label={tr("Учасники уроку", "Lesson participants")} hidden={panel !== "people"}>
+                {panel === "people" && <div className="edu-live-room__preview-not-connected"><Users className="size-5" /><strong>{tr("Учасників не підключено", "No participants connected")}</strong><p>{tr("Це макет інтерфейсу. Реальний список з’явиться після входу до кімнати.", "This is an interface preview. The real participant list appears after joining a room.")}</p></div>}
+              </section>
+              <section id="live-preview-panel-materials" role="region" aria-label={tr("Матеріали уроку", "Lesson materials")} hidden={panel !== "materials"}>
+                {panel === "materials" && <div className="space-y-4"><div className="edu-live-room__demo-material"><p className="text-xs font-semibold uppercase tracking-[.12em] text-primary-strong dark:text-primary-soft">{tr("Матеріал до зустрічі", "Lesson material")}</p><h2 className="mt-2 text-lg font-bold">{tr("Цикли: діапазон і сума", "Loops: range and sum")}</h2><p className="mt-2 text-sm leading-6 text-text-secondary">{tr("Розберіть приклад разом із викладачем, а потім перевірте ту саму ідею у практиці.", "Work through the example with the teacher, then test the same idea in practice.")}</p></div><div><p className="mb-1 text-xs font-bold uppercase tracking-[.1em] text-text-secondary">{tr("Практика уроку", "Lesson practice")}</p><button type="button" onClick={() => setPanel("code")} className="edu-live-room__demo-task"><strong>{tr("Сума від 1 до n", "Sum from 1 to n")}</strong><span>PY · 1 test</span></button><button type="button" onClick={() => setPanel("board")} className="edu-live-room__demo-task"><strong>{tr("Знайди межу циклу", "Find the loop boundary")}</strong><span>{tr("дошка", "board")}</span></button></div></div>}
+              </section>
+              <section id="live-preview-panel-board" role="region" aria-label={tr("Спільна дошка", "Shared board")} hidden={panel !== "board"}>
+                {panel === "board" && <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-primary-strong dark:text-primary-soft">{tr("Спільна дошка · демо", "Shared board · demo")}</p><h2 className="mt-2 font-bold">{tr("Крок 1. Знайди межу циклу", "Step 1. Find the loop boundary")}</h2><div className="mt-5 grid grid-cols-5 gap-2 text-center text-xs"><span>1</span><span>2</span><span>3</span><span>4</span><span className="rounded-lg bg-primary/15 py-2 font-bold text-primary-strong dark:text-primary-soft">5</span></div><p className="mt-4 text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Верхня межа range у Python не входить до послідовності.", "The upper bound of Python's range is exclusive.")}</p></div>}
+              </section>
+              <section id="live-preview-panel-code" role="region" aria-label={tr("Спільний код", "Shared code")} hidden={panel !== "code"}>
+                {panel === "code" && <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-primary-strong dark:text-primary-soft">Python · {tr("приклад", "example")}</p><pre className="mt-3 overflow-auto rounded-xl bg-bg-code p-4 text-xs leading-6 text-emerald-200"><code>{`n = 5\ntotal = 0\nfor number in range(1, n):\n    total += number\nprint(total)  # 10`}</code></pre><p className="mt-3 text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Очікувана сума від 1 до 5 — 15. Зараз range зупиняється перед 5.", "The expected sum from 1 through 5 is 15. This range stops before 5.")}</p></div>}
+              </section>
             </div>
           </aside>
         </main>
@@ -433,15 +561,39 @@ const LiveClassroomPreview: React.FC = () => {
   );
 };
 
-const LiveShell: React.FC<{ children: React.ReactNode }> = ({ children }) => <div className="min-h-[calc(100dvh-72px)] bg-bg-code text-text-primary">{children}</div>;
-const Tool: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, onClick, icon, label }) => <button type="button" onClick={onClick} className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition ${active ? "bg-bg-hover text-text-primary" : "bg-white/8 text-text-primary hover:bg-white/12"}`}>{icon}{label}</button>;
-const MeetButton: React.FC<{ icon: React.ReactNode; label: string }> = ({ icon, label }) => <button type="button" className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-text-primary hover:bg-white/15">{icon}{label}</button>;
-const PanelHeader: React.FC<{ panel: SidePanel; onPanel: (panel: SidePanel) => void }> = ({ panel, onPanel }) => <div className="grid grid-cols-4 gap-1 border-b border-border/10 p-2 dark:border-white/10">{(["people", "materials", "board", "code"] as SidePanel[]).map((item) => <button type="button" key={item} onClick={() => onPanel(item)} className={`rounded-xl px-2 py-2 text-xs font-bold ${panel === item ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover dark:text-text-secondary dark:hover:bg-white/[.06]"}`}>{item === "people" ? tr("Люди", "People") : item === "materials" ? tr("Матеріали", "Materials") : item === "board" ? tr("Дошка", "Board") : tr("Код", "Code")}</button>)}</div>;
-const StudentSide: React.FC = () => <div className="space-y-3">{["Олена Кравець", "Марія Бондар", "Андрій Шевченко", "Софія Ткаченко"].map((name, index) => <div key={name} className="flex items-center justify-between rounded-2xl bg-bg-hover p-3 dark:bg-white/[.045]"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-xl bg-primary text-sm font-bold text-primary-soft">{name[0]}</span><span className="text-sm font-semibold">{name}</span></div>{index === 2 ? <span className="rounded-full bg-accent-warn px-2 py-0.5 text-[10px] font-bold text-accent-warn">{tr("рука", "hand raised")}</span> : <span className="size-2 rounded-full bg-primary" />}</div>)}</div>;
+const LiveShell: React.FC<{ children: React.ReactNode }> = ({ children }) => <div className="edu-live-shell min-h-[calc(100dvh-72px)] bg-bg-base text-text-primary">{children}</div>;
+const Tool: React.FC<{ active: boolean; controls?: string; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, controls, onClick, icon, label }) => <button type="button" aria-pressed={active} aria-controls={controls} onClick={onClick} className={`edu-live-tool inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition ${active ? "bg-primary/12 text-primary-strong dark:text-primary-soft" : "bg-bg-hover text-text-muted hover:text-text-primary dark:bg-white/[.045] dark:text-text-secondary dark:hover:bg-white/[.08]"}`}>{icon}{label}</button>;
+const PanelHeading: React.FC<{ panel: SidePanel }> = ({ panel }) => {
+  const icon = panel === "people" ? <Users className="size-4" /> : panel === "materials" ? <BookOpen className="size-4" /> : panel === "board" ? <PenSquare className="size-4" /> : <Code2 className="size-4" />;
+  const title = panel === "people" ? tr("Учасники уроку", "Lesson participants") : panel === "materials" ? tr("Матеріали уроку", "Lesson materials") : panel === "board" ? tr("Спільна дошка", "Shared board") : tr("Спільний код", "Shared code");
+  return <div className="edu-live-panel-heading" aria-live="polite"><span>{icon}</span><strong>{title}</strong></div>;
+};
+const ParticipantReporter: React.FC<{ onChange: (participants: LiveParticipant[]) => void }> = ({ onChange }) => {
+  const participants = useParticipants();
+  useEffect(() => {
+    onChange(participants.map((participant) => ({
+      identity: participant.identity,
+      name: participant.name?.trim() || participant.identity,
+      isLocal: participant.isLocal,
+    })));
+  }, [participants, onChange]);
+  return null;
+};
+
+const StudentSide: React.FC<{ participants: LiveParticipant[] }> = ({ participants }) => (
+  <section aria-live="polite" aria-label={tr("Учасники кімнати", "Room participants")}>
+    <div className="mb-3 flex items-center justify-between gap-2"><h2 className="text-sm font-bold">{tr("Учасники кімнати", "Room participants")}</h2><span className="rounded-full bg-bg-hover px-2 py-1 text-xs font-semibold text-text-secondary">{participants.length}</span></div>
+    {participants.length ? <ul className="space-y-2">{participants.map((participant) => <li key={participant.identity} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2.5">
+      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-xs font-bold text-primary-strong dark:text-primary-soft">{participant.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">{participant.name}{participant.isLocal ? ` · ${tr("ви", "you")}` : ""}</span>
+      <span className="size-2 shrink-0 rounded-full bg-primary" aria-label={tr("У кімнаті", "In room")} />
+    </li>)}</ul> : <div className="rounded-xl border border-dashed border-border p-4 text-sm leading-6 text-text-secondary">{tr("Підключаємо учасників кімнати…", "Loading room participants…")}</div>}
+  </section>
+);
 const StatusLine: React.FC<{ icon: React.ReactNode; text: string }> = ({ icon, text }) => <div className="flex items-center gap-2 text-sm font-semibold text-text-muted dark:text-text-secondary">{icon}{text}</div>;
 const StatusCard: React.FC<{ tone?: "default" | "warn" | "danger"; title: string; text: string; action?: React.ReactNode }> = ({ tone = "default", title, text, action }) => <div className={`rounded-2xl p-5 ${tone === "danger" ? "bg-bg-hover text-accent-error dark:bg-accent-error/10 dark:text-accent-error" : tone === "warn" ? "bg-bg-hover text-accent-warn dark:bg-accent-warn/10 dark:text-accent-warn" : "bg-bg-hover text-text-muted dark:bg-white/[.045] dark:text-text-secondary"}`}><div className="font-bold">{title}</div><p className="mt-2 text-sm leading-6">{text}</p>{action}</div>;
 const ConnectionOverlay: React.FC<{ icon: React.ReactNode; title: string; subtitle: string; action?: React.ReactNode }> = ({ icon, title, subtitle, action }) => <div className="absolute inset-0 grid place-items-center bg-bg-code/80 px-6 backdrop-blur-sm"><div className="max-w-md rounded-3xl border border-white/10 bg-bg-code p-6 text-center text-text-primary shadow-2xl">{<div className="mx-auto grid size-12 place-items-center rounded-2xl bg-white/8">{icon}</div>}<h2 className="mt-4 font-bold">{title}</h2><p className="mt-2 break-words text-xs leading-5 text-text-secondary">{subtitle}</p>{action && <div className="mt-4">{action}</div>}</div></div>;
 
-export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user }) => isPreview() ? <LiveClassroomPreview /> : <LiveClassroomRuntime user={user} />;
+export const LiveClassroomPage: React.FC<{ user?: LiveClassroomUser }> = ({ user }) => isInterfacePreview() ? <LiveClassroomPreview /> : <LiveClassroomRuntime user={user} />;
 
 export default LiveClassroomPage;

@@ -153,7 +153,15 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
     await csrfBootstrap;
   }
 
-  const uiLanguage = localStorage.getItem("studycod_language") || "en";
+  // Locale persistence is optional. Some browsers deny Storage even on the
+  // first-party origin; a failed preference read must never prevent the API
+  // request (especially the request that completes an EDU sign-in).
+  let uiLanguage = "en";
+  try {
+    uiLanguage = localStorage.getItem("studycod_language") || "en";
+  } catch {
+    // Fall back to English request headers when storage is unavailable.
+  }
   if (typeof document !== "undefined") {
     const csrf = readCsrfCookie();
     if (csrf) {

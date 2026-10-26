@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { ArrowRight, ClipboardCheck, Plus, RefreshCw, Users } from "lucide-react";
+import { ArrowRight, BookOpen, CalendarDays, ClipboardCheck, Library, Plus, RefreshCw, Users } from "lucide-react";
 import { createClass, getClasses, getPendingReviews, type Class, type PendingReview } from "../../lib/api/edu";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { Modal } from "../../components/ui/Modal";
@@ -92,16 +92,27 @@ export const TeacherWorkspacePage: React.FC = () => {
     }
   };
 
-  return <main className="edu-workspace min-h-full bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-8 lg:py-8">
+  const studentCount = classes.reduce((total, item) => total + item.studentsCount, 0);
+  return <main className="edu-workspace edu-teacher-home min-h-full bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-8 lg:py-8">
     <div className="mx-auto max-w-7xl">
-      <header className="edu-workspace__page-heading flex flex-col justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-end">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{tr("Освітній простір", "Education")}</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-[-.04em]">{tr("Кабінет викладача", "Teacher workspace")}</h1>
-          <p className="mt-2 text-sm text-text-secondary">{tr("Перевір роботи учнів і керуй класами з одного місця.", "Review student work and manage classes from one place.")}</p>
+      <header className="edu-teacher-home__hero">
+        <div className="edu-teacher-home__intro">
+          <p className="edu-teacher-home__eyebrow">StudyCod EDU <span>/</span> {tr("Викладач", "Teacher")}</p>
+          <h1>{tr("Кабінет викладача", "Teacher workspace")}</h1>
+          <p>{tr("Перевір роботи й продовжуй заняття з того місця, де потрібна твоя увага.", "Review student work and pick up the classes that need your attention.")}</p>
+          {organizations.length > 0 && <button type="button" onClick={() => { setCreateError(null); setOpenCreate(true); }} className="edu-teacher-home__create"><Plus className="size-4" aria-hidden="true" />{tr("Створити клас", "Create a class")}<ArrowRight className="size-4" aria-hidden="true" /></button>}
         </div>
-        {organizations.length > 0 && <button type="button" onClick={() => { setCreateError(null); setOpenCreate(true); }} className="inline-flex min-h-11 items-center justify-center gap-2 self-start rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:bg-primary-hover sm:self-auto"><Plus className="size-4" aria-hidden="true" />{tr("Новий клас", "New class")}</button>}
+        <dl className="edu-teacher-home__stats" aria-label={tr("Огляд навчального простору", "Learning workspace overview")}>
+          <div><dt>{tr("Класи", "Classes")}</dt><dd>{loading ? "—" : classes.length}</dd></div>
+          <div><dt>{tr("Учні", "Students")}</dt><dd>{loading ? "—" : studentCount}</dd></div>
+          <div><dt>{tr("На перевірку", "To review")}</dt><dd>{loading ? "—" : reviews.length}</dd></div>
+        </dl>
       </header>
+      <nav className="edu-teacher-home__shortcuts" aria-label={tr("Швидкий перехід", "Quick links")}>
+        <button type="button" onClick={() => navigate(withDevPreview("/edu/calendar"))}><CalendarDays className="size-4" />{tr("Календар", "Calendar")}<ArrowRight className="edu-teacher-home__shortcut-arrow size-4" /></button>
+        <button type="button" onClick={() => navigate(withDevPreview("/edu/courses"))}><BookOpen className="size-4" />{tr("Курси", "Courses")}<ArrowRight className="edu-teacher-home__shortcut-arrow size-4" /></button>
+        <button type="button" onClick={() => navigate(withDevPreview("/edu/library"))}><Library className="size-4" />{tr("Бібліотека задач", "Task library")}<ArrowRight className="edu-teacher-home__shortcut-arrow size-4" /></button>
+      </nav>
       {!openCreate && createError && <div role="alert" className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-accent-error/30 p-3 text-sm"><p>{createError}</p><button type="button" onClick={() => setOrganizationReload(value => value + 1)} className="min-h-11 px-3 font-semibold text-primary-strong">{tr("Повторити завантаження закладів", "Reload organizations")}</button></div>}
 
       {error ? <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent-warn/35 bg-accent-warn/5 px-4 py-3 text-sm" role="status">

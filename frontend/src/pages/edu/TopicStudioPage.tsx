@@ -76,7 +76,7 @@ type Topic = {
 };
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
-const root = "min-h-[100dvh] bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-10 lg:py-10";
+const root = "edu-workspace edu-topic-studio min-h-[100dvh] bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-10 lg:py-10";
 const defaultControlFormula = "0.35 * test + 0.65 * avg(practice)";
 const defaultAssignmentDeadline = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 const toDateTimeLocalValue = (value?: string | null) => {
@@ -742,9 +742,9 @@ export const TopicStudioPage: React.FC = () => {
   return (
     <div className={root}>
       <div className="mx-auto max-w-[1480px] space-y-6">
-        <header className="overflow-hidden rounded-[36px] border border-border/10 bg-bg-code text-text-primary shadow-[0_28px_90px_rgba(7,24,13,.20)] dark:border-white/10">
-          <div className="grid lg:grid-cols-[1.25fr_.75fr]">
-            <div className="p-6 sm:p-9 lg:p-11">
+        <header className="edu-topic-hero overflow-hidden rounded-[36px] border border-border/10 text-text-primary shadow-[0_28px_90px_rgba(7,24,13,.20)] dark:border-white/10">
+          <div className="edu-topic-hero__layout grid lg:grid-cols-[1.25fr_.75fr]">
+            <div className="edu-topic-hero__main p-6 sm:p-9 lg:p-11">
               <button type="button" onClick={() => navigate(backPath)} className="inline-flex items-center gap-2 text-sm font-bold text-text-primary transition hover:text-white">
                 <ArrowLeft className="size-4" />
                 {tr("До класу", "Back to class")}
@@ -765,7 +765,8 @@ export const TopicStudioPage: React.FC = () => {
                 </button>
               </div>
             </div>
-            <div className="border-t border-white/10 bg-white/[.045] p-6 sm:p-9 lg:border-l lg:border-t-0 lg:p-10">
+            <div className="edu-topic-hero__aside border-t border-white/10 bg-white/[.045] p-6 sm:p-9 lg:border-l lg:border-t-0 lg:p-10">
+              <p className="edu-topic-hero__aside-label">{tr("Стан теми", "Topic at a glance")}</p>
               <div className="grid gap-3">
                 {[
                   { label: tr("практик", "practice tasks"), value: tasks.length, icon: TerminalSquare },
@@ -774,7 +775,7 @@ export const TopicStudioPage: React.FC = () => {
                 ].map((item) => {
                   const Icon = item.icon;
                   return (
-                    <div key={item.label} className="rounded-[24px] border border-white/10 bg-white/[.055] p-5">
+                    <div key={item.label} className="edu-topic-hero__stat rounded-[24px] border border-white/10 bg-white/[.055] p-5">
                       <div className="flex items-center justify-between">
                         <span className="grid size-11 place-items-center rounded-2xl bg-primary/15 text-primary-soft"><Icon className="size-5" /></span>
                         <strong className="text-4xl font-black tracking-[-.07em]">{item.value}</strong>
@@ -897,9 +898,9 @@ export const TopicStudioPage: React.FC = () => {
               </button>
             </section>
 
-            <section className="rounded-[32px] bg-bg-hover p-6 dark:bg-primary">
-              <p className="text-xs font-black uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Правило теми", "Topic guideline")}</p>
-              <p className="mt-3 text-sm leading-6 text-text-muted dark:text-text-primary">
+            <section className="edu-topic-guideline rounded-[24px] p-5">
+              <p className="text-xs font-black uppercase tracking-[.14em]">{tr("Правило теми", "Topic guideline")}</p>
+              <p className="mt-3 text-sm leading-6">
                 {tr("Тема спершу збирається в чернетку. Відкривайте учням лише ті практики й контрольні, які вже мають теорію, тести або зрозумілу схему оцінювання.", "Build the topic as a draft first. Give students access only to practice tasks and tests with theory, test cases, or clear grading rules.")}
               </p>
             </section>

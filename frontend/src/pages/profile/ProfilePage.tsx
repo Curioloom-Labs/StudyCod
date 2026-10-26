@@ -8,6 +8,7 @@ import type { User, CourseLanguage, Grade, PublicProfilePrivacy } from "../../ty
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
+import { getBestSevenDayActivityDays } from "../../lib/personalBadges";
 
 const CountUp: React.FC<{ value: number; decimals?: number; className?: string }> = ({ value, decimals = 0, className }) => {
   return <span className={className}>{value.toFixed(decimals)}</span>;
@@ -391,7 +392,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
   }, [solvedLibraryTasks, validGrades]);
 
   const skillEvidence = useMemo<SkillEvidence>(() => {
-    if (isEducational && learningEvidence) {
+    if (learningEvidence) {
       return {
         practicedTasks: learningEvidence.practicedTasks,
         solvedTasks: learningEvidence.solvedTasks,
@@ -411,7 +412,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
       overcomeCategories: [],
       recentSkills: [],
     };
-  }, [isEducational, learningEvidence]);
+  }, [learningEvidence]);
 
   const weeklyActiveDays = useMemo(() => {
     const startOfWindow = Date.now() - 6 * 24 * 60 * 60 * 1000;
@@ -421,6 +422,11 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
         .map((grade) => new Date(grade.createdAt).toDateString())
     ).size;
   }, [validGrades]);
+
+  const bestWeekActiveDays = useMemo(
+    () => getBestSevenDayActivityDays(validGrades.map((grade) => grade.createdAt)),
+    [validGrades]
+  );
 
   const legacyIad = (user as User & { iad?: number | null }).iad;
   const currentIad = Number(legacyIad ?? user.difus ?? 0);
@@ -564,7 +570,19 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
           : profileStats}
         currentIad={currentIad}
         weeklyActiveDays={isDesignPreview && weeklyActiveDays === 0 ? 4 : weeklyActiveDays}
-        skillEvidence={undefined}
+        bestWeekActiveDays={isDesignPreview && bestWeekActiveDays === 0 ? 4 : bestWeekActiveDays}
+        skillEvidence={isDesignPreview ? {
+          practicedTasks: 27,
+          solvedTasks: 18,
+          solvedAfterFailure: 3,
+          revisitedSolved: 1,
+          topics: [
+            { name: "Цикли", practiced: 6, solved: 5 },
+            { name: "Масиви", practiced: 5, solved: 4 },
+            { name: "Функції", practiced: 4, solved: 4 },
+            { name: "Рядки", practiced: 3, solved: 1 },
+          ],
+        } : skillEvidence}
         saving={saving}
         message={msg}
         onAvatar={onSelectFile}
