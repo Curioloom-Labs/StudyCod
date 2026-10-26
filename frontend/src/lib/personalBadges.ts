@@ -241,6 +241,67 @@ export function countTotalBadgeLevels(): number {
   return PERSONAL_BADGES.reduce((total, badge) => total + badge.levels.length, 0);
 }
 
+export function getLearningRank(xp: number): LearningRank {
+  const totalXp = Math.max(0, Number.isFinite(xp) ? xp : 0);
+  return LEARNING_RANKS.reduce((current, rank) => totalXp >= rank.threshold ? rank : current, LEARNING_RANKS[0]);
+}
+
+export function getNextLearningRank(xp: number): LearningRank | null {
+  const totalXp = Math.max(0, Number.isFinite(xp) ? xp : 0);
+  return LEARNING_RANKS.find((rank) => totalXp < rank.threshold) ?? null;
+}
+
+export function getLearningRankProgressPercent(xp: number): number {
+  const totalXp = Math.max(0, Number.isFinite(xp) ? xp : 0);
+  const current = getLearningRank(totalXp);
+  const next = getNextLearningRank(totalXp);
+  if (!next) return 100;
+  return Math.max(0, Math.min(100, Math.round(((totalXp - current.threshold) / (next.threshold - current.threshold)) * 100)));
+}
+
+/** XP is a permanent summary of verified work; no action can spend or remove it. */
+export function getLearningXp(stats: PersonalBadgeStats): number {
+  const evidenceXp = Math.max(0, stats.librarySolved) * 8
+    + Math.max(0, stats.solvedAfterFailure) * 10
+    + Math.max(0, stats.topicsPracticed) * 4
+    + Math.max(0, stats.activePracticeDays) * 15
+    + Math.max(0, stats.completedWeeklyChallenges) * 60;
+  const stageXp = PERSONAL_BADGES.reduce((total, badge) => {
+    const value = getBadgeMetricValue(badge, stats);
+    return total + badge.levels.reduce((earned, level) => earned + (value >= level.threshold ? level.xpReward : 0), 0);
+  }, 0);
+  return evidenceXp + stageXp;
+}
+
+function toLocalDayOrdinal(value: string | Date): number | null {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000);
+}
+
+/** Current calendar-week missions plus permanent unique practice-day evidence. Weeks start on Monday. */
+export function getPracticeActivitySummary(dates: Iterable<string | Date>, now = new Date()): PracticeActivitySummary {
+  const today = toLocalDayOrdinal(now);
+  if (today === null) return { activePracticeDays: 0, activeDaysThisWeek: 0, completedWeeklyChallenges: 0, dailyMissionCompletedToday: false };
+  const activeDays = new Set(Array.from(dates, toLocalDayOrdinal).filter((day): day is number => day !== null && day <= today));
+  const weekday = new Date(today * 86_400_000).getUTCDay();
+  const currentWeekStart = today - ((weekday + 6) % 7);
+  const activeDaysThisWeek = Array.from(activeDays).filter((day) => day >= currentWeekStart).length;
+  const activeDaysByWeek = new Map<number, number>();
+  for (const day of activeDays) {
+    const dayOfWeek = new Date(day * 86_400_000).getUTCDay();
+    const weekStart = day - ((dayOfWeek + 6) % 7);
+    activeDaysByWeek.set(weekStart, (activeDaysByWeek.get(weekStart) ?? 0) + 1);
+  }
+
+  return {
+    activePracticeDays: activeDays.size,
+    activeDaysThisWeek,
+    completedWeeklyChallenges: Array.from(activeDaysByWeek.values()).filter((count) => count >= 3).length,
+    dailyMissionCompletedToday: activeDays.has(today),
+  };
+}
+
 /** Best number of distinct active calendar days in any rolling 7-day span. */
 export function getBestSevenDayActivityDays(dates: Iterable<string | Date>): number {
   const days = Array.from(new Set(Array.from(dates, (value) => {

@@ -8,7 +8,7 @@ import type { User, CourseLanguage, Grade, PublicProfilePrivacy } from "../../ty
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { staggerContainer, fadeUpItem } from "../../lib/motion";
-import { getBestSevenDayActivityDays } from "../../lib/personalBadges";
+import { getBestSevenDayActivityDays, getPracticeActivitySummary } from "../../lib/personalBadges";
 
 const CountUp: React.FC<{ value: number; decimals?: number; className?: string }> = ({ value, decimals = 0, className }) => {
   return <span className={className}>{value.toFixed(decimals)}</span>;
@@ -398,14 +398,10 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
     };
   }, [learningEvidence]);
 
-  const weeklyActiveDays = useMemo(() => {
-    const startOfWindow = Date.now() - 6 * 24 * 60 * 60 * 1000;
-    return new Set(
-      validGrades
-        .filter((grade) => new Date(grade.createdAt).getTime() >= startOfWindow)
-        .map((grade) => new Date(grade.createdAt).toDateString())
-    ).size;
-  }, [validGrades]);
+  const activitySummary = useMemo(
+    () => getPracticeActivitySummary(validGrades.map((grade) => grade.createdAt)),
+    [validGrades]
+  );
 
   const bestWeekActiveDays = useMemo(
     () => getBestSevenDayActivityDays(validGrades.map((grade) => grade.createdAt)),
@@ -553,7 +549,10 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
           ? { librarySolved: 18, badgesUnlocked: 2, totalGrades: 11, avgGrade: 84.6, excellent: 7 }
           : profileStats}
         currentIad={currentIad}
-        weeklyActiveDays={isDesignPreview && weeklyActiveDays === 0 ? 4 : weeklyActiveDays}
+        activeDaysThisWeek={isDesignPreview && activitySummary.activeDaysThisWeek === 0 ? 2 : activitySummary.activeDaysThisWeek}
+        activePracticeDays={isDesignPreview && activitySummary.activePracticeDays === 0 ? 14 : activitySummary.activePracticeDays}
+        completedWeeklyChallenges={isDesignPreview && activitySummary.completedWeeklyChallenges === 0 ? 2 : activitySummary.completedWeeklyChallenges}
+        dailyMissionCompletedToday={isDesignPreview ? false : activitySummary.dailyMissionCompletedToday}
         bestWeekActiveDays={isDesignPreview && bestWeekActiveDays === 0 ? 4 : bestWeekActiveDays}
         skillEvidence={isDesignPreview ? {
           practicedTasks: 27,

@@ -8,6 +8,10 @@ import {
   getBadgeMetricValue,
   getBadgeProgressPercent,
   getNextBadgeLevel,
+  getLearningRank,
+  getLearningRankProgressPercent,
+  getLearningXp,
+  getNextLearningRank,
   PERSONAL_BADGES,
   type PersonalBadge,
   type PersonalBadgeStats,
@@ -93,6 +97,10 @@ export const PersonalAchievementsDialog: React.FC<PersonalAchievementsDialogProp
   const earnedBadges = countUnlockedPersonalBadges(badgeStats);
   const earnedStages = countUnlockedBadgeLevels(badgeStats);
   const totalStages = countTotalBadgeLevels();
+  const learningXp = getLearningXp(badgeStats);
+  const learningRank = getLearningRank(learningXp);
+  const nextLearningRank = getNextLearningRank(learningXp);
+  const rankProgress = getLearningRankProgressPercent(learningXp);
   const nextCount = PERSONAL_BADGES.filter((badge) => getNextBadgeLevel(badge, badgeStats) !== null).length;
   const nextGoal = PERSONAL_BADGES
     .map((badge, index) => ({ badge, index, nextLevel: getNextBadgeLevel(badge, badgeStats), progress: getBadgeProgressPercent(badge, badgeStats) }))
@@ -130,10 +138,10 @@ export const PersonalAchievementsDialog: React.FC<PersonalAchievementsDialogProp
                 {copy(isEnglish, "ШЛЯХ ПРАКТИКИ", "THE PRACTICE PATH")}
               </div>
               <h2 id="personal-achievements-title" className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold leading-tight tracking-[-.045em] sm:text-3xl">
-                {copy(isEnglish, "Емблеми твого поступу", "Emblems of your progress")}
+                {copy(isEnglish, "Твій шлях майстерності", "Your mastery path")}
               </h2>
               <p id="personal-achievements-description" className="mt-2 max-w-2xl text-sm leading-6 text-[#d1d9cf]">
-                {copy(isEnglish, "Кожна емблема фіксує окремий доказ навчання: завершені задачі, сталість, роботу над помилками або впевненість у темах.", "Each emblem records a distinct kind of learning evidence: completed tasks, consistency, learning from errors, or confidence across topics.")}
+                {copy(isEnglish, "Практика дає XP і підвищує загальний ранг. Емблеми окремо показують, що саме вже підтверджено: рішення, сталість, роботу з помилками чи міцність знань.", "Practice earns XP and raises your overall rank. Emblems separately show what you have proved: solutions, consistency, learning from errors, and lasting knowledge.")}
               </p>
             </div>
             <button
@@ -147,14 +155,19 @@ export const PersonalAchievementsDialog: React.FC<PersonalAchievementsDialogProp
             </button>
           </div>
 
-          <div className="relative mt-5 grid gap-2 sm:grid-cols-[.72fr_.72fr_1.56fr]">
+          <div className="relative mt-5 grid gap-2 sm:grid-cols-2 xl:grid-cols-[.72fr_.72fr_1fr_1.7fr]">
             <div className="rounded-2xl border border-white/10 bg-white/[.055] px-4 py-3">
               <div className="font-mono text-2xl font-bold tabular-nums">{earnedBadges}<span className="ml-1 text-base font-medium text-white/50">/ {PERSONAL_BADGES.length}</span></div>
-              <div className="mt-1 text-xs text-white/65">{copy(isEnglish, "напрямів із першим етапом", "paths started")}</div>
+              <div className="mt-1 text-xs text-white/65">{copy(isEnglish, "напрямів із доказом", "paths with evidence")}</div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/[.055] px-4 py-3">
               <div className="font-mono text-2xl font-bold tabular-nums text-[#e4cd8d]">{earnedStages}<span className="ml-1 text-base font-medium text-white/50">/ {totalStages}</span></div>
-              <div className="mt-1 text-xs text-white/65">{copy(isEnglish, "етапів підтверджено", "stages confirmed")}</div>
+              <div className="mt-1 text-xs text-white/65">{copy(isEnglish, "майстерних етапів", "mastery stages")}</div>
+            </div>
+            <div className="rounded-2xl border border-[#d4c18e]/20 bg-[#d4c18e]/[.07] px-4 py-3">
+              <div className="flex items-baseline justify-between gap-2"><div className="truncate text-sm font-bold text-[#e4cd8d]">{copy(isEnglish, learningRank.nameUk, learningRank.nameEn)}</div><div className="shrink-0 font-mono text-lg font-bold tabular-nums">{learningXp} XP</div></div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-label={copy(isEnglish, "Прогрес рангу", "Rank progress")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={rankProgress}><div className="h-full rounded-full bg-[#d4c18e] transition-[width] duration-500" style={{ width: `${rankProgress}%` }} /></div>
+              <div className="mt-1 text-[10px] text-white/60">{nextLearningRank ? copy(isEnglish, `Ще ${nextLearningRank.threshold - learningXp} XP до рівня ${nextLearningRank.nameUk}`, `${nextLearningRank.threshold - learningXp} XP to ${nextLearningRank.nameEn}`) : copy(isEnglish, "Найвищий ранг", "Highest rank")}</div>
             </div>
             <div className="flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-[#d4c18e]/25 bg-[#d4c18e]/[.09] px-4 py-3">
               {nextGoal ? <>
@@ -223,7 +236,7 @@ export const PersonalAchievementsDialog: React.FC<PersonalAchievementsDialogProp
                         </div>
                       </div>
                       <span className={`shrink-0 rounded-lg px-2 py-1.5 text-[10px] font-bold tracking-[.04em] ${currentLevel ? "bg-primary/10 text-primary-strong dark:text-primary-soft" : "bg-bg-hover text-text-muted dark:bg-white/[.05] dark:text-text-secondary"}`}>
-                        {currentLevel ? copy(isEnglish, "ЕТАП ПІДТВЕРДЖЕНО", "STAGE CONFIRMED") : copy(isEnglish, "НАСТУПНА ЦІЛЬ", "NEXT GOAL")}
+                        {currentLevel ? `${copy(isEnglish, "ЕТАП", "STAGE")} · +${currentLevel.xpReward} XP` : `${copy(isEnglish, "НАСТУПНА ЦІЛЬ", "NEXT GOAL")} · +${nextLevel?.xpReward ?? 0} XP`}
                       </span>
                     </div>
 
@@ -251,7 +264,7 @@ export const PersonalAchievementsDialog: React.FC<PersonalAchievementsDialogProp
           </div>
 
           <footer className="shrink-0 border-t border-border/10 px-5 py-3 text-[11px] leading-5 text-text-muted dark:border-white/10 dark:text-text-secondary sm:px-8">
-            {copy(isEnglish, "Постійні емблеми відображають найкращий підтверджений результат. Тижневий виклик окремо показує останні 7 днів і не стирає здобуті етапи.", "Permanent emblems reflect your best verified evidence. The weekly challenge tracks the last 7 days separately and never removes earned stages.")}
+            {copy(isEnglish, "XP: +8 за розв’язану задачу, +10 за повернення після помилки, +4 за нову тему, +15 за активний день, +60 за 3 різні дні практики в календарному тижні та бонус за кожен етап емблеми. XP і здобуті етапи не згорають.", "XP: +8 per solved task, +10 for solving after an error, +4 per new topic, +15 per active day, +60 for practice on 3 different days in a calendar week, plus each emblem stage reward. XP and earned stages never expire.")}
           </footer>
         </div>
       </div>
