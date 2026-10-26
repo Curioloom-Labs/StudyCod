@@ -131,7 +131,7 @@ async function findLegacySource(ownerId: number, kind: LegacyKind, sourceId: num
       "FROM course_item_progress p JOIN user_course_enrollments e ON e.id=p.enrollment_id " +
       "JOIN course_variants v ON v.id=e.variant_id JOIN course_items ci ON ci.id=p.item_id " +
       "JOIN course_modules cm ON cm.id=ci.module_id JOIN courses c ON c.id=cm.course_id " +
-      "WHERE p.item_id=? AND e.user_id=? AND c.organization_id IS NULL AND p.status='COMPLETED' " +
+      "WHERE p.item_id=? AND e.user_id=? AND c.org_id IS NULL AND p.status='COMPLETED' " +
       "AND JSON_EXTRACT(ci.content,'$.projectSpec') IS NOT NULL LIMIT 1";
     const rows = await AppDataSource.query(sql, [sourceId, ownerId]) as Array<Record<string, unknown>>;
     const row = rows[0]; if (!row) return null;
