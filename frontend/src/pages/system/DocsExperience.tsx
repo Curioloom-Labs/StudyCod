@@ -171,10 +171,8 @@ export const DocsExperience: React.FC<Props> = ({
         <motion.div
           initial={reduceMotion ? undefined : { opacity: 0, y: 18 }}
           animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          className="relative overflow-hidden rounded-[32px] bg-bg-code px-[clamp(24px,6vw,78px)] py-[clamp(54px,8vw,92px)] text-text-primary shadow-[0_36px_90px_rgba(12,25,17,.16)]"
+          className="docs-index-hero relative overflow-hidden rounded-[32px] bg-bg-code px-[clamp(24px,6vw,78px)] py-[clamp(54px,8vw,92px)] text-text-primary shadow-[0_36px_90px_rgba(12,25,17,.16)]"
         >
-          <div className="absolute -right-32 -top-44 size-[440px] rounded-full bg-primary/10 blur-[95px]" />
-          <div className="absolute -bottom-48 left-1/4 size-[380px] rounded-full bg-accent-warn/10 blur-[110px]" />
           <div className="relative max-w-[790px]">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[.06] px-3 py-1.5 text-[12px] font-semibold text-text-secondary">
               <BookOpen className="size-4 text-primary-strong" />

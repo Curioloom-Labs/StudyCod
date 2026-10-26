@@ -94,7 +94,7 @@ export const TeacherWorkspacePage: React.FC = () => {
 
   return <main className="edu-workspace min-h-full bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-8 lg:py-8">
     <div className="mx-auto max-w-7xl">
-      <header className="flex flex-col justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-end">
+      <header className="edu-workspace__page-heading flex flex-col justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-end">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{tr("Освітній простір", "Education")}</p>
           <h1 className="mt-2 text-3xl font-bold tracking-[-.04em]">{tr("Кабінет викладача", "Teacher workspace")}</h1>
@@ -109,7 +109,8 @@ export const TeacherWorkspacePage: React.FC = () => {
         <button type="button" onClick={() => void load()} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-3 font-semibold text-primary-strong hover:bg-bg-hover"><RefreshCw className="size-4" aria-hidden="true" />{tr("Повторити", "Retry")}</button>
       </div> : null}
 
-      <section className="mt-6" aria-labelledby="teacher-review-queue">
+      <div className="edu-workspace__dashboard-grid">
+      <section className="edu-workspace__panel" aria-labelledby="teacher-review-queue">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
           <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{tr("Перша дія", "Next action")}</p><h2 id="teacher-review-queue" className="mt-1 text-xl font-bold">{tr("На перевірку", "To review")}</h2></div>
           <span className="text-sm tabular-nums text-text-muted">{reviews.length} {tr("робіт", "submissions")}</span>
@@ -128,7 +129,7 @@ export const TeacherWorkspacePage: React.FC = () => {
             : <p className="py-5 text-sm text-text-secondary">{tr("Черга порожня. Можна перейти до найближчих занять.", "The queue is empty. You can prepare an upcoming lesson.")}</p>}
       </section>
 
-      <section className="mt-8" aria-labelledby="teacher-classes">
+      <section className="edu-workspace__panel" aria-labelledby="teacher-classes">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-3">
           <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{tr("Навчальні групи", "Learning groups")}</p><h2 id="teacher-classes" className="mt-1 text-xl font-bold">{tr("Мої класи", "My classes")}</h2></div>
           <span className="text-sm tabular-nums text-text-muted">{classes.length} {tr("класів", "classes")}</span>
@@ -144,6 +145,7 @@ export const TeacherWorkspacePage: React.FC = () => {
           : error ? <p className="py-5 text-sm text-text-secondary">{tr("Не вдалося завантажити класи.", "We couldn’t load classes.")}</p>
             : <div className="flex flex-wrap items-center justify-between gap-3 py-5"><p className="text-sm text-text-secondary">{organizations.length ? tr("Створи клас, щоб запросити учнів і призначати їм завдання.", "Create a class to invite learners and assign work.") : organizationsLoading ? tr("Перевіряємо доступ до закладів…", "Checking organization access…") : tr("Адміністратор має призначити вам клас для роботи з учнями.", "Ask your administrator to assign a class so you can work with learners.")}</p>{organizations.length > 0 && <button type="button" onClick={() => { setCreateError(null); setOpenCreate(true); }} className="min-h-11 rounded-lg border border-border px-4 text-sm font-semibold hover:bg-bg-hover">{tr("Створити клас", "Create a class")}</button>}{createError && <button type="button" onClick={() => setOrganizationReload(value => value + 1)} className="min-h-11 px-3 text-sm font-semibold text-primary-strong">{tr("Повторити завантаження закладів", "Reload organizations")}</button>}</div>}
       </section>
+      </div>
     </div>
 
     <Modal open={openCreate} closable={!creating} showCloseButton={false} title={tr("Новий клас", "New class")} description={tr("Клас об’єднує учнів. Мову програмування обирай окремо для кожної теми.", "A class brings learners together. Choose a programming language for each topic.")} onClose={() => setOpenCreate(false)}>

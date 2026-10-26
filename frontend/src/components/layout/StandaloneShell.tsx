@@ -155,7 +155,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
     <div ref={shellRef} className="mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary transition-colors">
       <a className="skip-link" href="#main-content">{ukrainian ? "Перейти до основного вмісту" : "Skip to main content"}</a>
       <DialogA11yObserver rootRef={shellRef} />
-      <header className="sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl">
+      <header className="product-shell__header sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-[1500px] items-center justify-between gap-1.5 px-2.5 sm:h-16 sm:gap-2 sm:px-6 lg:px-9">
           <button type="button" onClick={() => navigateTo(education ? (shellUser.studentId ? "/edu/lessons" : "/edu") : "/")} className="flex min-h-11 shrink-0 items-center gap-2.5 text-left">
             <span className="grid size-8 place-items-center rounded-xl brand-logo-surface sm:size-9">

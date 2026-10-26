@@ -540,11 +540,10 @@ export const ContestLobbyPage: React.FC<{ canCreate?: boolean; canJoinPrivateByC
             return (
               <article
                 key={item.id}
-                className="group relative flex min-h-[350px] flex-col overflow-hidden rounded-[24px] border border-border/10 bg-white shadow-[0_16px_45px_rgba(28,44,32,.05)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_50px_rgba(28,44,32,.11)] dark:border-white/[.09] dark:bg-bg-surface dark:shadow-none"
+                className="contest-list-card group relative flex min-h-[300px] flex-col overflow-hidden rounded-[24px] border border-border/10 bg-white shadow-[0_16px_45px_rgba(28,44,32,.05)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_24px_50px_rgba(28,44,32,.11)] dark:border-white/[.09] dark:bg-bg-surface dark:shadow-none"
               >
-                <div className="relative h-[112px] shrink-0 overflow-hidden bg-bg-surface">
-                  {item.bannerImageUrl ? <img src={item.bannerImageUrl} alt="" aria-hidden="true" className="absolute inset-0 size-full object-cover object-center transition duration-500 group-hover:scale-[1.03]" /> : <div className="absolute inset-0" style={{ background: CONTEST_BANNER_THEMES[contestTheme(item.bannerTheme)].background }} />}
-                  <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-[#08160d]/55 via-[#08160d]/15 to-transparent" />
+                <div className={`contest-list-card__art${item.bannerImageUrl ? " contest-list-card__art--image" : ""}`}>
+                  {item.bannerImageUrl ? <img src={item.bannerImageUrl} alt="" aria-hidden="true" className="transition duration-500 group-hover:scale-[1.03]" /> : <div className="size-full" style={{ background: CONTEST_BANNER_THEMES[contestTheme(item.bannerTheme)].background }} />}
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col p-5">
                   <div className="flex min-w-0 items-center gap-2">

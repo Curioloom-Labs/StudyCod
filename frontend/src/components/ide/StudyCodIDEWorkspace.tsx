@@ -1714,7 +1714,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
           </div>
         )}
         {firstFailedPublicTest ? (
-          <div className="mt-4 rounded-xl border border-accent-error/25 bg-accent-error/[.04] p-3">
+          <div className="ide-first-failed-evidence mt-4 rounded-xl border border-accent-error/25 bg-accent-error/[.04] p-3">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-[.12em] text-[var(--ide-error)]">
                 {tr("Перший невдалий тест", "First failed test")} #

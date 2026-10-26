@@ -494,14 +494,17 @@ if (!baseUrl) {
     contestFinished = false;
     extendDeadlineOnRecheck = true;
     contestExtensionApplied = false;
-    contestEndsAt = Date.now() + 6_000;
+    // Keep the workspace active long enough to finish the initial page load on
+    // slower CI runners before asserting that deadline-gated mentor controls
+    // remain hidden. The fixture extends this deadline on the later recheck.
+    contestEndsAt = Date.now() + 20_000;
     const endedProblemResponse = await page.goto(contestProblemUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
     if (!endedProblemResponse || endedProblemResponse.status() >= 500) throw new Error(`final contest workspace returned ${endedProblemResponse?.status() ?? "no response"}`);
     const mentorTab = page.getByRole("tab", { name: /Mentor|Ментор/i });
     await page.getByText(/Generated prefix sums challenge/i).first().waitFor({ state: "visible", timeout: 30_000 });
     await waitForEditor("ended contest problem");
     if (await mentorTab.count() !== 0) throw new Error("AI mentor was visible before the contest deadline on the open workspace");
-    await mentorTab.waitFor({ state: "visible", timeout: 20_000 });
+    await mentorTab.waitFor({ state: "visible", timeout: 30_000 });
     await mentorTab.click();
     await page.getByRole("button", { name: /Ask the mentor|Запитати ментора/i }).click();
     if (!contestExtensionApplied) throw new Error("browser fixture did not extend the contest at its original deadline");

@@ -887,6 +887,11 @@
   color: var(--ide-text);
   font-size: 12px;
 }
+
+.ide-first-failed-evidence {
+  border-inline-start: 3px solid var(--ide-error);
+  background: linear-gradient(90deg, var(--ide-error-wash), transparent 72%);
+}
 .ide-submissions {
   margin-top: 12px;
   border-top: 1px solid var(--ide-border);

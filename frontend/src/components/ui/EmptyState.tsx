@@ -22,7 +22,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   return (
     <div
       className={clsx(
-        "rounded-2xl border border-dashed border-border bg-bg-surface/40 px-6 py-12 text-center flex flex-col items-center",
+        "workshop-empty-state rounded-2xl border border-dashed border-border bg-bg-surface/40 px-6 py-12 text-center flex flex-col items-center",
         className
       )}
     >

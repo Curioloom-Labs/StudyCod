@@ -11,8 +11,8 @@ export const Card: React.FC<React.HTMLAttributes<HTMLDivElement> & {
   variant = "default",
   ...rest
 }) => {
-  const base = "rounded-2xl border border-border/80 transition-fast ease-out";
+  const base = "workshop-card rounded-2xl border border-border/80 transition-fast ease-out";
   const chrome = "shadow-[var(--ui-card-shadow)]";
   const surface = variant === "inset" ? "bg-bg-code/70" : variant === "panel" ? "bg-bg-surface/82 backdrop-blur-sm" : "bg-bg-surface";
-  return <div {...rest} data-slot="card" className={clsx(base, chrome, surface, className)}>{children}</div>;
+  return <div {...rest} data-slot="card" data-workshop-variant={variant} className={clsx(base, chrome, surface, className)}>{children}</div>;
 };

@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/design-tokens.css";
+import "./styles/workshop-system.css";
 import "./public.css";
 import { initTheme } from "./theme";
 import { getMe } from "./lib/api/profile";
