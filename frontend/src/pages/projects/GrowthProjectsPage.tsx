@@ -88,6 +88,7 @@ export const GrowthProjectsPage: React.FC = () => {
   const [activeFile, setActiveFile] = React.useState("");
   const [assessment, setAssessment] = React.useState<Record<string, any> | null>(null);
   const [workspaceTab, setWorkspaceTab] = React.useState<"work" | "history" | "portfolio">("work");
+  const [homeTab, setHomeTab] = React.useState<"mine" | "catalog" | "previous">("mine");
   const [job, setJob] = React.useState<Record<string, any> | null>(null);
   const [explanation, setExplanation] = React.useState("");
   const [exampleInput, setExampleInput] = React.useState("");
@@ -412,9 +413,9 @@ export const GrowthProjectsPage: React.FC = () => {
 
   return <main id="main-content" className="mx-auto max-w-6xl px-4 py-6 pb-16 sm:px-6 lg:px-8">
     <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
-      <div><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.16em] text-primary-soft"><FolderKanban className="h-4 w-4" />StudyCod · {en ? "Portfolio" : "Портфоліо"}</div>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{en ? "Projects that grow with you" : "Проєкти, що ростуть разом із тобою"}</h1>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-text-secondary">{en ? "Build a console app, extend it through three stages, defend a new requirement, then publish the exact version you choose." : "Створи консольну програму, розвивай її у трьох етапах, захисти зміну вимог і сам обери версію для портфоліо."}</p>
+      <div><div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.16em] text-primary-soft"><FolderKanban className="h-4 w-4" />StudyCod · {en ? "Project practice" : "Проєктна практика"}</div>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{en ? "Build something useful, one step at a time" : "Створюй корисні проєкти крок за кроком"}</h1>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-text-secondary">{en ? "Start small, add real features, and keep the versions you are proud to show." : "Почни з малого, додавай справжні можливості й зберігай версії, які хочеш показати іншим."}</p>
       </div>
       {selected && <button type="button" onClick={() => setParams({})} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border px-3 text-sm font-semibold hover:bg-bg-hover"><ArrowLeft className="h-4 w-4" />{en ? "All projects" : "Усі проєкти"}</button>}
       {!selected && <div className="flex gap-2"><button type="button" onClick={() => window.location.assign("/projects/reviews")} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border px-3 text-sm font-semibold hover:bg-bg-hover">{en ? "Review inbox" : "Черга рецензій"}</button>{isSystemAdmin && <button type="button" onClick={() => window.location.assign("/projects/admin/reviews")} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-border px-3 text-sm font-semibold hover:bg-bg-hover">{en ? "Admin review queue" : "Адмінчерга рецензій"}</button>}</div>}
@@ -423,7 +424,12 @@ export const GrowthProjectsPage: React.FC = () => {
     {notice && <div role="status" className="mb-4 break-all rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-primary-soft">{notice}</div>}
 
     {!selected && <>
-      <section className="mb-8">
+      <nav aria-label={en ? "Project views" : "Розділи проєктів"} className="mb-6 flex w-full gap-1 overflow-x-auto rounded-xl border border-border bg-bg-surface p-1">
+        {([ ["mine", en ? "My projects" : "Мої проєкти"], ["catalog", en ? "Explore projects" : "Обрати проєкт"], ["previous", en ? "Previous work" : "Попередні роботи"] ] as const).map(([tab, label]) => <button key={tab} type="button" aria-pressed={homeTab === tab} onClick={() => setHomeTab(tab)} className={`min-h-10 shrink-0 rounded-lg px-3 text-sm font-semibold transition ${homeTab === tab ? "bg-bg-hover text-primary-soft" : "text-text-secondary hover:bg-bg-hover/70 hover:text-text-primary"}`}>
+          {label}{tab === "mine" && <span className="ml-2 text-xs tabular-nums text-text-muted">{projects.length}</span>}{tab === "previous" && <span className="ml-2 text-xs tabular-nums text-text-muted">{legacyProjects.length}</span>}
+        </button>)}
+      </nav>
+      {homeTab === "mine" && <section className="mb-8">
         <div className="mb-4 flex items-center justify-between"><div><h2 className="text-xl font-bold">{en ? "My projects" : "Мої проєкти"}</h2><p className="mt-1 text-sm text-text-secondary">{en ? "Continue a draft or open a saved result." : "Продовж чернетку або відкрий збережений результат."}</p></div><span className="rounded-full bg-bg-hover px-3 py-1 text-sm">{projects.length}</span></div>
         {projects.length ? <div className="grid gap-3 md:grid-cols-2">{projects.map(project => {
           const family = catalog?.families.find(item => item.key === project.family_key);
@@ -432,19 +438,19 @@ export const GrowthProjectsPage: React.FC = () => {
             <div className="mt-1 text-sm text-text-secondary">{nextActionLabel(project.nextAction, en)}</div>
           </button>;
         })}</div> : <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-text-secondary">{en ? "Choose one of the nine tracks below to begin." : "Обери один із дев’яти сценаріїв нижче."}</div>}
-      </section>
-      {!!legacyProjects.length && <section className="mb-8 rounded-2xl border border-border/70 bg-bg-surface p-5">
-        <div className="mb-4"><h2 className="text-xl font-bold">{en ? "Previous learning projects" : "Попередні навчальні проєкти"}</h2><p className="mt-1 text-sm leading-6 text-text-secondary">{en ? "Import a copy to keep the original course or mini-project untouched. Imported work is labeled as prior learning and is not treated as newly tested." : "Імпорт створить окрему копію, не змінюючи курс чи старий мініпроєкт. Робота матиме позначку про попереднє навчання без нової автоперевірки."}</p></div>
-        <div className="grid gap-2 sm:grid-cols-2">{legacyProjects.map(source => <article key={source.kind + ":" + source.sourceId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-bg-base p-4"><div className="min-w-0"><h3 className="truncate text-sm font-semibold">{source.title}</h3><p className="mt-1 truncate text-xs text-text-muted">{source.description || source.kind} · {source.runtime}</p></div>{source.imported ? <span className="rounded-full bg-primary/10 px-3 py-2 text-xs font-semibold text-primary-soft">{en ? "Already added" : "Уже додано"}</span> : <button type="button" disabled={busy} onClick={() => void importPreviousWork(source)} className="min-h-9 shrink-0 rounded-lg border border-border px-3 text-xs font-semibold disabled:opacity-50">{en ? "Add copy" : "Додати копію"}</button>}</article>)}</div>
       </section>}
-      <section><h2 className="mb-1 text-xl font-bold">{en ? "Project catalogue" : "Каталог проєктів"}</h2><p className="mb-4 text-sm text-text-secondary">{en ? "Standard libraries only. The same practical challenge is available in Python, Java and C++." : "Тільки стандартні бібліотеки. Практичні задачі доступні на Python, Java та C++."}</p>
+      {homeTab === "previous" && <section className="mb-8 rounded-2xl border border-border/70 bg-bg-surface p-5">
+        <div className="mb-4"><h2 className="text-xl font-bold">{en ? "Previous learning projects" : "Попередні навчальні проєкти"}</h2><p className="mt-1 text-sm leading-6 text-text-secondary">{en ? "Import a copy to keep the original course or mini-project untouched. Imported work is labeled as prior learning and is not treated as newly tested." : "Імпорт створить окрему копію, не змінюючи курс чи старий мініпроєкт. Робота матиме позначку про попереднє навчання без нової автоперевірки."}</p></div>
+        <div className="grid gap-2 sm:grid-cols-2">{legacyProjects.map(source => <article key={source.kind + ":" + source.sourceId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-bg-base p-4"><div className="min-w-0"><h3 className="truncate text-sm font-semibold">{source.title}</h3><p className="mt-1 truncate text-xs text-text-muted">{source.description || source.kind} · {source.runtime}</p></div>{source.imported ? <span className="rounded-full bg-primary/10 px-3 py-2 text-xs font-semibold text-primary-soft">{en ? "Already added" : "Уже додано"}</span> : <button type="button" disabled={busy} onClick={() => void importPreviousWork(source)} className="min-h-9 shrink-0 rounded-lg border border-border px-3 text-xs font-semibold disabled:opacity-50">{en ? "Add copy" : "Додати копію"}</button>}</article>)}{!legacyProjects.length && <p className="text-sm text-text-secondary">{en ? "No previous project work found yet." : "Попередніх проєктів поки не знайдено."}</p>}</div>
+      </section>}
+      {homeTab === "catalog" && <section><h2 className="mb-1 text-xl font-bold">{en ? "Explore project tracks" : "Обери напрям проєкту"}</h2><p className="mb-4 text-sm text-text-secondary">{en ? "Start with a small console program. You can grow it in stages and keep each checked version." : "Почни з невеликої консольної програми. Її можна розвивати поступово й зберігати кожну перевірену версію."}</p>
         <div className="grid gap-4">{catalog?.families.map(family => <article key={family.key} className="rounded-2xl border border-border bg-bg-surface p-5">
           <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-bold uppercase tracking-wider text-primary-soft">{en ? "Three staged versions" : "Три послідовні версії"}</div><h3 className="mt-2 text-xl font-bold">{family.title}</h3><p className="mt-2 max-w-3xl text-sm leading-6 text-text-secondary">{family.summary}</p></div><Code2 className="h-5 w-5 text-primary-soft" /></div>
           <p className="mt-3 text-xs leading-5 text-text-muted">{family.recommendedPrep}</p><div className="mt-4 flex flex-wrap gap-2">{family.skills.map(skill => <span key={skill} className="rounded-full bg-bg-hover px-3 py-1 text-xs text-text-secondary">{skill}</span>)}</div>
           <div className="mt-4 grid gap-2 sm:grid-cols-3">{family.stages.map(stage => <div key={stage.key} className="rounded-xl bg-bg-base p-3"><div className="text-xs font-bold text-primary-soft">{stage.key}</div><div className="mt-1 text-sm font-semibold">{stage.title}</div><p className="mt-1 text-xs leading-5 text-text-secondary">{stage.description}</p></div>)}</div>
           <div className="mt-4 flex flex-wrap gap-2">{family.runtimes.map(runtime => <button type="button" disabled={busy} key={runtime} onClick={() => void startProject(family.key, runtime)} className="min-h-10 rounded-xl border border-border px-3 text-sm font-semibold hover:border-primary-soft disabled:opacity-50">{en ? "Start" : "Почати"} · {runtime}</button>)}</div>
         </article>) ?? <div className="h-32 animate-pulse rounded-2xl bg-bg-hover" />}</div>
-      </section>
+      </section>}
     </>}
 
     {selected && <>
