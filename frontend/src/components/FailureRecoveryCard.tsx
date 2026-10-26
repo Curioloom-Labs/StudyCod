@@ -118,6 +118,7 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
   const resultLabel = hasTestCount
     ? `${testsPassed}/${testsTotal} ${languageCopy(isEnglish, "тестів", "tests")}`
     : `${score ?? "—"}/${maxScore ?? 100}`;
+  const hasActionableEvidence = Boolean(category || compileError || firstFailure?.errorKind || firstFailure?.expectedPreview || firstFailure?.actualPreview || firstFailure?.inputPreview);
 
   useEffect(() => {
     setHintLevel(Math.max(0, Math.min(2, Number(highestHintLevelShown) || 0)));
@@ -151,30 +152,31 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
   if (upperVerdict === "AC") return null;
 
   const workflowSteps = isEnglish
-    ? ["Failed", "Diagnosed", "Hint", "Retry", trackLearning ? "Skill" : "Done"]
-    : ["Збій", "Діагноз", "Підказка", "Повтор", trackLearning ? "Навичка" : "Готово"];
+    ? ["Result", "Evidence", "Hint", "Retry", trackLearning ? "Next task" : "Done"]
+    : ["Результат", "Свідчення", "Підказка", "Повтор", trackLearning ? "Наступна задача" : "Готово"];
+  const activeWorkflowIndex = hasActionableEvidence ? 2 : 1;
 
   const displayedWorkflowSteps = workflowSteps.map((step, index) => !trackLearning && index === workflowSteps.length - 1 ? (isEnglish ? "Done" : "Готово") : step);
 
   return (
-    <div className="failure-recovery-card mt-4 rounded-2xl">
-      <div className="flex items-start justify-between gap-3">
+    <section className="failure-recovery-card mt-4 rounded-2xl" aria-label={languageCopy(isEnglish, "Розбір невдалої спроби", "Failed attempt review")}>
+      <div className="failure-recovery-top flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-primary-soft">
-            <Sparkles className="size-4" />
-            {languageCopy(isEnglish, "Знайдемо наступний крок", "Let’s find the next step")}
-          </div>
+          <h3 className="flex items-center gap-2 text-base font-bold tracking-[-.02em] text-[#cce890]">
+            <Sparkles className="size-4" aria-hidden="true" />
+            {languageCopy(isEnglish, "Розберімо цю спробу", "Inspect this attempt")}
+          </h3>
           <p className="mt-2 text-xs leading-5 text-text-secondary">
-            {languageCopy(isEnglish, "Невдала спроба — це сигнал для наступної перевірки, а не готове рішення.", "A failed attempt is a signal for the next check, not a finished solution.")}
+            {languageCopy(isEnglish, "Результат, доступні свідчення і наступна дія.", "The result, available evidence, and a next step.")}
           </p>
         </div>
-        <span className="rounded-full bg-accent-error/10 px-2.5 py-1 text-[10px] font-bold text-accent-error">{upperVerdict || "—"}</span>
+        <span className="shrink-0 border border-white/20 px-2.5 py-1 font-mono text-[11px] font-bold tracking-[.12em] text-white">{upperVerdict || "—"}</span>
       </div>
 
       <div className="failure-recovery-steps" aria-label={languageCopy(isEnglish, trackLearning ? "Шлях від помилки до навички" : "Шлях до завершення задачі", trackLearning ? "Path from failure to skill" : "Path to task completion")}>
         {displayedWorkflowSteps.map((step, index) => {
-          const completed = index < 2;
-          const current = index === 2;
+          const completed = index < activeWorkflowIndex;
+          const current = index === activeWorkflowIndex;
           return (
             <React.Fragment key={step}>
               <div className={`failure-recovery-step ${completed ? "is-complete" : ""} ${current ? "is-current" : ""}`}>
@@ -187,68 +189,72 @@ export const FailureRecoveryCard: React.FC<Props> = ({ verdict, testsPassed = 0,
         })}
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        <div className="rounded-xl bg-white/[.05] p-3 text-xs text-text-primary">
-          <span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{languageCopy(isEnglish, hasTestCount ? "Що не пройшло" : "Результат", hasTestCount ? "What failed" : "Result")}</span>
-          <strong className="mt-1 block">{resultLabel}{hasTestCount && (firstFailure?.testId ?? firstFailure?.testPublicIndex) ? ` · #${firstFailure.testId ?? firstFailure.testPublicIndex}` : ""}</strong>
-        </div>
-        <div className="rounded-xl bg-white/[.05] p-3 text-xs text-text-primary">
-          <span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{languageCopy(isEnglish, "Категорія", "Category")}</span>
-          <strong className="mt-1 block">{category ?? languageCopy(isEnglish, "Поки не визначено надійно", "Not reliably determined yet")}</strong>
-        </div>
-      </div>
-
-      {(firstFailure?.expectedPreview || firstFailure?.actualPreview || firstFailure?.inputPreview) && (
-        <details className="mt-4 rounded-xl border border-white/10 bg-white/[.035] p-3 text-xs text-text-primary">
-          <summary className="cursor-pointer list-none font-semibold text-text-primary">
-            {languageCopy(isEnglish, "Подивитися доказ невдалого тесту", "Inspect the failing-test evidence")}
-          </summary>
-          <div className="mt-3 grid gap-2 sm:grid-cols-3">
-            {[
-              [languageCopy(isEnglish, "Ввід", "Input"), firstFailure?.inputPreview],
-              [languageCopy(isEnglish, "Очікувано", "Expected"), firstFailure?.expectedPreview],
-              [languageCopy(isEnglish, "Отримано", "Actual"), firstFailure?.actualPreview],
-            ].map(([label, value]) => value ? <div key={label} className="min-w-0"><span className="block text-[10px] uppercase tracking-[.12em] text-text-muted">{label}</span><code className="mt-1 block max-h-20 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-black/20 p-2 text-[11px] text-text-primary">{value}</code></div> : null)}
+      <div className="failure-recovery-evidence">
+        <div className="failure-recovery-summary grid gap-2 sm:grid-cols-2">
+          <div className="min-w-0 border-l-2 border-accent-error px-3 py-1.5 text-xs text-text-primary">
+            <span className="block font-mono text-[10px] uppercase tracking-[.12em] text-text-muted">{languageCopy(isEnglish, hasTestCount ? "Результат перевірки" : "Результат", hasTestCount ? "Check result" : "Result")}</span>
+            <strong className="mt-1 block break-words font-mono text-sm tabular-nums">{resultLabel}{hasTestCount && (firstFailure?.testId ?? firstFailure?.testPublicIndex) ? ` · #${firstFailure.testId ?? firstFailure.testPublicIndex}` : ""}</strong>
           </div>
-        </details>
-      )}
-
-      <div className="mt-4 rounded-xl border border-primary/20 bg-primary/[.06] p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-[10px] font-bold uppercase tracking-[.12em] text-primary-soft">{languageCopy(isEnglish, `Підказка ${hintLevel + 1} з ${hints.length}`, `Hint ${hintLevel + 1} of ${hints.length}`)}</div>
-          <span className="rounded-full bg-white/[.07] px-2 py-1 text-[10px] font-semibold text-text-secondary">{hintStageLabel(hintLevel, isEnglish)}</span>
+          <div className="min-w-0 border-l-2 border-border px-3 py-1.5 text-xs text-text-primary">
+            <span className="block font-mono text-[10px] uppercase tracking-[.12em] text-text-muted">{languageCopy(isEnglish, "Ймовірна категорія", "Likely category")}</span>
+            <strong className="mt-1 block break-words">{category ?? languageCopy(isEnglish, "Причину не визначено за наявними даними", "Cause is not determined by the available data")}</strong>
+          </div>
         </div>
-        <p className="mt-2 text-sm leading-6 text-text-primary">{hints[hintLevel]}</p>
-        <p className="mt-2 text-[11px] leading-5 text-text-secondary">{languageCopy(isEnglish, "Підказка спрямовує до власного рішення й не показує готовий код.", "This hint points toward your own solution and does not reveal the finished code.")}</p>
+
+        {(firstFailure?.expectedPreview || firstFailure?.actualPreview || firstFailure?.inputPreview) && (
+          <details open className="failure-recovery-detail mt-4 rounded-xl border border-border bg-bg-base p-3 text-xs text-text-primary">
+            <summary className="cursor-pointer list-none font-semibold text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              {languageCopy(isEnglish, "Свідчення · відкритий тест", "Evidence · public test")}{firstFailure?.testPublicIndex ? ` #${firstFailure.testPublicIndex}` : ""}
+            </summary>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {[
+                [languageCopy(isEnglish, "Ввід", "Input"), firstFailure?.inputPreview],
+                [languageCopy(isEnglish, "Очікувано", "Expected"), firstFailure?.expectedPreview],
+                [languageCopy(isEnglish, "Отримано", "Actual"), firstFailure?.actualPreview],
+              ].map(([label, value]) => value ? <div key={label} className="min-w-0"><span className="block font-mono text-[10px] uppercase tracking-[.12em] text-text-muted">{label}</span><code className="mt-1 block max-h-32 overflow-auto whitespace-pre-wrap break-words border-l-2 border-accent-warn bg-bg-hover p-2 text-[11px] leading-5 text-text-primary">{value}</code></div> : null)}
+            </div>
+          </details>
+        )}
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button type="button" onClick={() => {
-          const nextLevel = Math.min(hints.length - 1, hintLevel + 1);
-          setHintLevel(nextLevel);
-          if (trackLearning && taskId && nextLevel > hintLevel) {
-            void recordLearningEvent({
-              eventType: "hint_viewed",
-              taskId,
-              taskKind,
-              learningAttemptId,
-              failureCategory: persistedCategory,
-              hintLevel: nextLevel + 1,
-            }).catch(() => undefined);
-          }
-        }} disabled={hintLevel >= hints.length - 1} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3.5 py-2.5 text-xs font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45">
-          {languageCopy(isEnglish, "Показати ще одну підказку", "Show another hint")} <ArrowRight className="size-3.5" />
-        </button>
-        <button type="button" onClick={() => {
-          if (trackLearning && taskId) {
-            void recordLearningEvent({ eventType: "retry_started", taskId, taskKind, learningAttemptId, failureCategory: persistedCategory }).catch(() => undefined);
-          }
-          onTryAgain?.();
-        }} aria-label={languageCopy(isEnglish, "Спробувати ще раз", "Try again")} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3.5 py-2.5 text-xs font-semibold text-text-primary hover:bg-white/[.06]">
-          <RotateCcw className="size-3.5" aria-hidden="true" /> {languageCopy(isEnglish, "Спробувати ще раз", "Try again")}
-        </button>
+      <div className="failure-recovery-guidance">
+        <div className="failure-recovery-hint rounded-xl border border-primary/20 bg-primary/[.06] p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-mono text-[10px] font-bold uppercase tracking-[.12em] text-primary-soft">{languageCopy(isEnglish, `Підказка ${hintLevel + 1} з ${hints.length}`, `Hint ${hintLevel + 1} of ${hints.length}`)}</div>
+            <span className="border border-border px-2 py-1 font-mono text-[10px] font-semibold text-text-secondary">{hintStageLabel(hintLevel, isEnglish)}</span>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-text-primary">{hints[hintLevel]}</p>
+          <p className="mt-2 text-[11px] leading-5 text-text-secondary">{languageCopy(isEnglish, "Підказка спрямовує до власного рішення й не показує готовий код.", "This hint points toward your own solution and does not reveal the finished code.")}</p>
+        </div>
+
+        <div className="failure-recovery-actions mt-4 flex flex-wrap gap-2">
+          <button type="button" onClick={() => {
+            const nextLevel = Math.min(hints.length - 1, hintLevel + 1);
+            setHintLevel(nextLevel);
+            if (trackLearning && taskId && nextLevel > hintLevel) {
+              void recordLearningEvent({
+                eventType: "hint_viewed",
+                taskId,
+                taskKind,
+                learningAttemptId,
+                failureCategory: persistedCategory,
+                hintLevel: nextLevel + 1,
+              }).catch(() => undefined);
+            }
+          }} disabled={hintLevel >= hints.length - 1} className="failure-recovery-action inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-3.5 py-2.5 text-xs font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45">
+            {languageCopy(isEnglish, "Показати ще одну підказку", "Show another hint")} <ArrowRight className="size-3.5" />
+          </button>
+          {onTryAgain ? <button type="button" onClick={() => {
+            if (trackLearning && taskId) {
+              void recordLearningEvent({ eventType: "retry_started", taskId, taskKind, learningAttemptId, failureCategory: persistedCategory }).catch(() => undefined);
+            }
+            onTryAgain();
+          }} aria-label={languageCopy(isEnglish, "Повернутися до коду", "Return to code")} className="failure-recovery-action failure-recovery-retry inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-3.5 py-2.5 text-xs font-semibold text-text-primary hover:bg-bg-hover">
+            <RotateCcw className="size-3.5" aria-hidden="true" /> {languageCopy(isEnglish, "До свого коду", "Return to code")}
+          </button> : null}
+        </div>
       </div>
-    </div>
+    </section>
   );
 };
 

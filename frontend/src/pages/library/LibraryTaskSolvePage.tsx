@@ -1170,7 +1170,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
         navigate(`${prefix}${nextTask.id}`);
       }}
     />
-  ) : checkResult ? (
+  ) : checkResult ? ({ onReturnToCode }: { onReturnToCode: () => void }) => (
     <FailureRecoveryCard
       verdict={checkResult.verdict}
       testsPassed={checkResult.testsPassed}
@@ -1185,6 +1185,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
       highestHintLevelShown={checkResult.learningAttempt?.highestHintLevelShown ?? 0}
       trackLearning={false}
       onTryAgain={() => {
+        onReturnToCode();
         const editor = codeEditorRef.current;
         const viewState = editor?.saveViewState() ?? null;
         setCheckResult(null);

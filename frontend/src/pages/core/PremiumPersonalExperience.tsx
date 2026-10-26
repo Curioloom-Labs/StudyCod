@@ -577,6 +577,7 @@ export const PremiumLibrary: React.FC<{
     notStarted: "Not started",
     inProgress: "In progress",
     completed: "Solved",
+    sample: "DEMO",
     attempts: "attempts",
     emptyTitle: query ? "No tasks match this search" : "No tasks are available yet",
     emptyBody: query ? "Try another title or topic, or clear the filters." : "New practice tasks will appear here when they are published.",
@@ -606,6 +607,7 @@ export const PremiumLibrary: React.FC<{
     notStarted: "Не почато",
     inProgress: "Є спроби",
     completed: "Розв’язано",
+    sample: "ДЕМО",
     attempts: "спроб",
     emptyTitle: query ? "За цим пошуком задач не знайдено" : "Задач поки немає",
     emptyBody: query ? "Спробуй іншу назву або тему чи скинь фільтри." : "Нові задачі з’являться тут після публікації.",
@@ -613,9 +615,6 @@ export const PremiumLibrary: React.FC<{
     loading: "Завантажуємо задачі",
   };
   const difficulty = (value: LibraryTaskListItem["difficulty"]) => value === "HARD" ? copy.hard : value === "MEDIUM" ? copy.medium : copy.easy;
-  const difficultyTone = (value: LibraryTaskListItem["difficulty"]) => value === "HARD"
-    ? "text-accent-error"
-    : value === "MEDIUM" ? "text-accent-warn" : "text-primary-strong dark:text-primary-soft";
   const filteredTasks = tasks.filter((task) =>
     (difficultyFilter === "ALL" || task.difficulty === difficultyFilter) &&
     (modeFilter === "ALL" || (task.taskMode || "CODE") === modeFilter)
@@ -632,19 +631,21 @@ export const PremiumLibrary: React.FC<{
   const taskTopic = (task: LibraryTaskListItem) => task.section?.trim() || task.tags?.find(Boolean) || (en ? "Practice" : "Практика");
 
   return (
-    <main className="min-h-full bg-bg-base px-4 pb-8 pt-3 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-8 lg:pt-4">
+    <main className="min-h-full bg-bg-base px-4 pb-8 pt-3 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-8 lg:pt-3">
       <div className="mx-auto max-w-7xl">
-        <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-border/70 pb-3 dark:border-white/10">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold tracking-[.14em] text-text-muted dark:text-text-secondary">{preview ? (en ? "DESIGN PREVIEW · SAMPLE TASKS" : "ПРЕВ’Ю ДИЗАЙНУ · ПРИКЛАДИ ЗАДАЧ") : copy.eyebrow}</p>
-            <h1 className="mt-1 font-[family-name:var(--font-display)] text-[26px] font-semibold leading-tight tracking-[-.045em] sm:text-[30px]">{copy.title}</h1>
+        <header className="relative grid overflow-hidden rounded-[22px] bg-[#19382d] px-5 py-4 text-[#f3f2e9] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-7 sm:py-5 lg:min-h-[104px] lg:px-8">
+          <div className="pointer-events-none absolute -right-8 -top-24 size-56 rounded-full border border-white/[.08]" aria-hidden="true" />
+          <div className="pointer-events-none absolute -right-1 -top-16 size-40 rounded-full border border-[#cce890]/20" aria-hidden="true" />
+          <div className="relative min-w-0">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[.17em] text-[#cce890]">{preview ? (en ? "PRACTICE / DEMO DATA" : "ПРАКТИКА / ДЕМО-ДАНІ") : `${copy.eyebrow} / 01`}</p>
+            <h1 className="mt-1 font-[family-name:var(--font-display)] text-3xl font-bold leading-none tracking-[-.055em] sm:text-[2.25rem]">{copy.title}</h1>
           </div>
-          <div className="flex items-center gap-4">
-            <dl className="flex items-center gap-4 text-xs tabular-nums sm:gap-5">
-              <div className="flex items-baseline gap-1.5"><dt className="text-text-muted dark:text-text-secondary">{copy.available}</dt><dd className="font-semibold text-text-primary">{loading && total == null ? "—" : total ?? tasks.length}</dd></div>
-              <div className="flex items-baseline gap-1.5"><dt className="text-text-muted dark:text-text-secondary">{copy.solved}</dt><dd className="font-semibold text-primary-strong dark:text-primary-soft">{solved}</dd></div>
+          <div className="relative mt-4 flex items-end gap-5 sm:mt-0 sm:gap-6">
+            <dl className="flex items-end gap-4 sm:gap-6">
+              <div className="border-l border-white/20 pl-3"><dd className="font-mono text-2xl font-bold leading-none tabular-nums sm:text-3xl">{loading && total == null ? "—" : total ?? tasks.length}</dd><dt className="mt-1.5 text-[10px] font-semibold uppercase tracking-[.1em] text-white/60">{copy.available}</dt></div>
+              <div className="border-l border-white/20 pl-3"><dd className="font-mono text-2xl font-bold leading-none tabular-nums text-[#cce890] sm:text-3xl">{solved}</dd><dt className="mt-1.5 text-[10px] font-semibold uppercase tracking-[.1em] text-white/60">{copy.solved}</dt></div>
             </dl>
-            {onShare ? <button type="button" onClick={onShare} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-text-secondary dark:hover:bg-white/[.06] motion-reduce:transition-none">{shareCopied ? copy.copied : copy.share}</button> : null}
+            {onShare ? <button type="button" onClick={onShare} className="mb-0.5 inline-flex min-h-10 items-center rounded-lg border border-white/20 px-3 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#cce890] motion-reduce:transition-none">{shareCopied ? copy.copied : copy.share}</button> : null}
           </div>
         </header>
 
@@ -659,12 +660,12 @@ export const PremiumLibrary: React.FC<{
               onChange={(event) => onQuery(event.target.value)}
               placeholder={copy.search}
               aria-controls="task-library-results"
-              className="h-11 w-full rounded-xl border border-border/70 bg-bg-surface pl-10 pr-20 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-white/10 dark:bg-bg-surface dark:placeholder:text-text-secondary motion-reduce:transition-none"
+              className="h-12 w-full rounded-xl border border-border bg-bg-surface pl-10 pr-20 text-sm text-text-primary outline-none transition placeholder:text-text-muted focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-white/10 dark:bg-bg-surface dark:placeholder:text-text-secondary motion-reduce:transition-none"
             />
             {query ? <button type="button" onClick={() => onQuery("")} className="absolute right-2 top-1/2 min-h-9 -translate-y-1/2 rounded-lg px-2.5 text-xs font-semibold text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-text-secondary dark:hover:bg-white/[.06] motion-reduce:transition-none">{copy.clear}</button> : null}
           </label>
 
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border pb-2 dark:border-white/10">
             <div className="flex flex-wrap items-center gap-2">
               <span className="mr-0.5 text-xs font-medium text-text-muted dark:text-text-secondary">{copy.level}</span>
               {([ ["ALL", copy.all], ["EASY", copy.easy], ["MEDIUM", copy.medium], ["HARD", copy.hard] ] as const).map(([value, label]) => (
@@ -684,30 +685,30 @@ export const PremiumLibrary: React.FC<{
         </section>
 
         {loading && filteredTasks.length === 0 ? (
-          <div id="task-library-results" className="mt-2 divide-y divide-border/70 border-y border-border/70 dark:divide-white/10 dark:border-white/10" role="status" aria-label={copy.loading}>
-            {Array.from({ length: 5 }, (_, index) => <div key={index} className="grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 py-3 motion-safe:animate-pulse">
-              <div className="min-w-0"><div className="h-4 w-2/5 rounded bg-bg-hover dark:bg-white/[.08]" /><div className="mt-2 h-3 w-1/4 rounded bg-bg-hover dark:bg-white/[.06]" /></div><div className="h-8 w-24 rounded-lg bg-bg-hover dark:bg-white/[.08]" />
+          <div id="task-library-results" className="mt-1 divide-y divide-border border-y border-border dark:divide-white/10 dark:border-white/10" role="status" aria-label={copy.loading}>
+            {Array.from({ length: 5 }, (_, index) => <div key={index} className="grid min-h-[68px] grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-3 px-1 py-3 sm:grid-cols-[42px_minmax(0,1fr)_160px_auto] sm:gap-4 motion-safe:animate-pulse">
+              <div className="h-5 w-6 rounded bg-bg-hover dark:bg-white/[.08]" /><div className="min-w-0"><div className="h-4 w-2/5 rounded bg-bg-hover dark:bg-white/[.08]" /><div className="mt-2 h-3 w-1/4 rounded bg-bg-hover dark:bg-white/[.06]" /></div><div className="hidden h-8 w-28 rounded-lg bg-bg-hover dark:bg-white/[.08] sm:block" /><div className="h-8 w-9 rounded-lg bg-bg-hover dark:bg-white/[.08]" />
             </div>)}
           </div>
         ) : filteredTasks.length > 0 ? (
-          <ol id="task-library-results" className="mt-2 divide-y divide-border/70 border-y border-border/70 dark:divide-white/10 dark:border-white/10" aria-label={en ? "Available practice tasks" : "Доступні задачі для практики"}>
-            {filteredTasks.map((task) => {
+          <ol id="task-library-results" className="mt-1 divide-y divide-border border-y border-border dark:divide-white/10 dark:border-white/10" aria-label={en ? "Available practice tasks" : "Доступні задачі для практики"}>
+            {filteredTasks.map((task, index) => {
               const mode = task.taskMode || "CODE";
               const status = taskStatus(task);
               const passed = task.attempt?.lastTestsPassed;
               const testTotal = task.attempt?.lastTestsTotal;
               const testSummary = passed != null && testTotal != null ? `${passed}/${testTotal} ${en ? "tests" : "тестів"}` : `${task.attempt?.submissionsCount ?? 0} ${copy.attempts}`;
-              return <li key={task.id} className="group grid min-h-[68px] grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_minmax(140px,.48fr)_minmax(92px,.3fr)_auto] sm:gap-4 sm:py-2">
+              return <li key={task.id} className={`group relative grid min-h-[68px] grid-cols-[30px_minmax(0,1fr)_auto] items-center gap-2.5 px-1 py-2.5 transition-colors duration-150 hover:bg-bg-surface sm:grid-cols-[42px_minmax(0,1fr)_minmax(145px,.45fr)_auto] sm:gap-4 sm:px-2 ${index === 0 ? "bg-[#edf1e9] dark:bg-white/[.035]" : ""}`}>
+                <span className={`font-mono text-sm font-bold tabular-nums sm:text-base ${index === 0 ? "text-primary-strong dark:text-primary-soft" : "text-text-muted"}`} aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
                 <button type="button" onClick={() => onOpen(task)} aria-label={`${copy.open}: ${task.title}`} className="min-w-0 rounded-lg py-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
-                  <span className="block line-clamp-2 text-sm font-semibold leading-5 tracking-[-.01em] text-text-primary transition-colors group-hover:text-primary-strong dark:group-hover:text-primary-soft" title={task.title}>{task.title}</span>
-                  <span className="mt-1 block truncate text-xs text-text-muted dark:text-text-secondary sm:hidden">{taskTopic(task)} · {difficulty(task.difficulty)}{task.projectSpec ? ` · ${copy.project}` : ""}</span>
+                  <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"><span className="line-clamp-2 text-[15px] font-bold leading-5 tracking-[-.025em] text-text-primary transition-colors group-hover:text-primary-strong dark:group-hover:text-primary-soft sm:text-base" title={task.title}>{task.title}</span>{preview && index === 0 ? <span className="shrink-0 border border-accent-warn/35 px-1.5 py-0.5 font-mono text-[9px] font-bold tracking-[.12em] text-accent-warn">{copy.sample}</span> : null}</span>
+                  <span className="mt-1 block truncate font-mono text-[10px] uppercase tracking-[.08em] text-text-muted dark:text-text-secondary">{taskTopic(task)}<span className="mx-1.5 text-border" aria-hidden="true">/</span>{mode === "WEB" ? copy.web : copy.code}{task.projectSpec ? ` / ${copy.project}` : ""}</span>
                 </button>
-                <div className="hidden min-w-0 items-center gap-2 sm:flex"><span className="truncate text-xs text-text-secondary" title={taskTopic(task)}>{taskTopic(task)}</span></div>
-                <div className="hidden min-w-0 sm:block"><span className={`block text-xs font-semibold ${difficultyTone(task.difficulty)}`}>{difficulty(task.difficulty)}</span><span className="mt-1 block truncate text-[11px] text-text-muted dark:text-text-secondary">{status === copy.notStarted ? (mode === "WEB" ? copy.web : copy.code) : `${status} · ${testSummary}`}</span></div>
+                <div className="hidden min-w-0 sm:flex sm:flex-col sm:items-start sm:gap-1"><span className={`inline-flex min-h-6 items-center border px-2 font-mono text-[10px] font-bold uppercase tracking-[.1em] ${task.difficulty === "HARD" ? "border-accent-error/25 bg-accent-error/8 text-accent-error" : task.difficulty === "MEDIUM" ? "border-accent-warn/25 bg-accent-warn/8 text-accent-warn" : "border-primary/20 bg-primary/8 text-primary-strong dark:text-primary-soft"}`}>{difficulty(task.difficulty)}</span><span className={`truncate text-[10px] font-medium ${task.attempt?.solved ? "text-primary-strong dark:text-primary-soft" : Number(task.attempt?.submissionsCount ?? 0) > 0 ? "text-accent-warn" : "text-text-muted dark:text-text-secondary"}`}>{status === copy.notStarted ? (en ? "Ready to start" : "Можна починати") : `${status} · ${testSummary}`}</span></div>
                 <div className="flex items-center justify-end gap-2">
                   {getTaskHref ? <a href={getTaskHref(task)} target="_blank" rel="noopener noreferrer" className="hidden min-h-10 items-center rounded-lg px-2 text-xs font-medium text-text-muted underline-offset-4 hover:text-text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:inline-flex" aria-label={`${copy.openNew}: ${task.title}`} title={copy.openNew}><ExternalLink className="size-4" aria-hidden="true" /></a> : null}
-                  <span className={`inline-flex min-h-8 items-center text-[11px] font-semibold sm:hidden ${task.attempt?.solved ? "text-primary-strong dark:text-primary-soft" : Number(task.attempt?.submissionsCount ?? 0) > 0 ? "text-accent-warn" : "text-text-muted dark:text-text-secondary"}`}>{status}</span>
-                  <button type="button" onClick={() => onOpen(task)} aria-label={`${copy.open}: ${task.title}`} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-primary-strong transition-colors hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-primary-soft motion-reduce:transition-none"><span className="hidden sm:inline">{copy.open}</span><ArrowRight className="size-4" aria-hidden="true" /></button>
+                  <span className={`inline-flex min-h-8 items-center text-[10px] font-bold sm:hidden ${task.attempt?.solved ? "text-primary-strong dark:text-primary-soft" : Number(task.attempt?.submissionsCount ?? 0) > 0 ? "text-accent-warn" : "text-text-muted dark:text-text-secondary"}`}>{status}</span>
+                  <button type="button" onClick={() => onOpen(task)} aria-label={`${copy.open}: ${task.title}`} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-bold text-primary-strong transition-colors hover:bg-primary/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary dark:text-primary-soft motion-reduce:transition-none"><span className="hidden sm:inline">{copy.open}</span><ArrowRight className="size-4" aria-hidden="true" /></button>
                 </div>
               </li>;
             })}

@@ -191,7 +191,7 @@ type Props = {
   disableLanguageChange?: boolean;
   runResult: StudyCodIdeRunResult | null;
   checkResult: StudyCodIdeCheckResult | null;
-  resultCards?: React.ReactNode;
+  resultCards?: React.ReactNode | ((actions: { onReturnToCode: () => void }) => React.ReactNode);
   actionRecovery?: {
     tone: "error" | "warning";
     message: string;
@@ -1754,7 +1754,9 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
             </div>
           </div>
         ) : null}
-        {props.resultCards}
+        {typeof props.resultCards === "function"
+          ? props.resultCards({ onReturnToCode: () => setMobilePane("code") })
+          : props.resultCards}
       </div>
     );
   };
