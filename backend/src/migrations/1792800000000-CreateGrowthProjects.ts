@@ -111,8 +111,13 @@ export class CreateGrowthProjects1792800000000 implements MigrationInterface {
       CONSTRAINT fk_growth_review_reviewer FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB`);
     await q.query(`ALTER TABLE notifications
-      MODIFY COLUMN type ENUM('BLOG_COMMENT','BLOG_REPLY','GROWTH_REVIEW_INVITATION','GROWTH_REVIEW_ASSIGNED','GROWTH_REVIEW_ASSIGNED_TO_AUTHOR','GROWTH_REVIEW_ACCEPTED','GROWTH_REVIEW_DECLINED','GROWTH_REVIEW_SUBMITTED','GROWTH_REVIEW_REQUESTED') NOT NULL,
-      ADD COLUMN related_path VARCHAR(300) NULL`);
+      MODIFY COLUMN type ENUM('BLOG_COMMENT','BLOG_REPLY','GROWTH_REVIEW_INVITATION','GROWTH_REVIEW_ASSIGNED','GROWTH_REVIEW_ASSIGNED_TO_AUTHOR','GROWTH_REVIEW_ACCEPTED','GROWTH_REVIEW_DECLINED','GROWTH_REVIEW_SUBMITTED','GROWTH_REVIEW_REQUESTED') NOT NULL`);
+    // Fresh contract databases are synchronized from the current entities
+    // before tracked migrations run, so related_path may already exist there.
+    // Existing production databases still need the additive column migration.
+    if (!(await q.hasColumn("notifications", "related_path"))) {
+      await q.query("ALTER TABLE notifications ADD COLUMN related_path VARCHAR(300) NULL");
+    }
   }
 
   async down(q: QueryRunner): Promise<void> {
