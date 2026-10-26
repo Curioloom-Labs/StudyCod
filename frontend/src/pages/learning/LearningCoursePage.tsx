@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
+  ArrowRight,
   BarChart3,
   BookOpen,
   CheckCircle2,
@@ -258,7 +259,7 @@ export const LearningCoursePage: React.FC = () => {
     return ordered;
   }, [allItems]);
 
-  const roadmapNodeRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+  const roadmapNodeRefs = React.useRef<Record<string, HTMLLIElement | null>>({});
 
   const nodeItems = (node: RoadmapNode): LearningCourseItem[] =>
     node.kind === "TOPIC" && node.theory ? [node.theory, ...node.practices] : node.item ? [node.item] : [];
@@ -274,9 +275,13 @@ export const LearningCoursePage: React.FC = () => {
   const projectNodes = roadmapNodes.filter((node) => node.kind === "PROJECT");
   const miniProjectNodes = projectNodes.filter((node) => node.item?.content.finalAssessment !== true);
   const activeTopicNodeId = roadmapNodes.find((node) => node.kind === "TOPIC" && !nodeCompleted(node))?.id ?? null;
+  const lastActiveTopicNodeId = React.useRef<string | null>(null);
 
   React.useEffect(() => {
-    if (loading || !course || focusPractice || selectedNodeId || !activeTopicNodeId) return;
+    if (loading || !course) return;
+    const previousActiveTopicNodeId = lastActiveTopicNodeId.current;
+    lastActiveTopicNodeId.current = activeTopicNodeId;
+    if (!previousActiveTopicNodeId || previousActiveTopicNodeId === activeTopicNodeId || focusPractice || selectedNodeId || !activeTopicNodeId) return;
     const frame = window.requestAnimationFrame(() => {
       roadmapNodeRefs.current[activeTopicNodeId]?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
@@ -330,18 +335,19 @@ export const LearningCoursePage: React.FC = () => {
     }
   };
 
-  const handleNodeClick = (node: RoadmapNode, index: number) => {
-    if (!courseIsActive) {
-      setMessage(tr("Активуйте курс, щоб відкрити перший вузол.", "Activate the course to open the first node."));
-      return;
-    }
-    const previousComplete = node.kind === "PROJECT" && (node.requiredTopicKeys || []).length > 0
+  const isNodeUnlocked = (node: RoadmapNode, index: number): boolean => courseIsActive && (node.kind === "PROJECT" && (node.requiredTopicKeys || []).length > 0
       ? (node.requiredTopicKeys || []).every((key) => {
           const prerequisite = roadmapNodes.find((candidate) => candidate.kind === "TOPIC" && candidate.topicKey === key);
           return Boolean(prerequisite && nodeCompleted(prerequisite));
         })
-      : roadmapNodes.slice(0, index).every(nodeCompleted);
-    if (!previousComplete) return;
+      : roadmapNodes.slice(0, index).every(nodeCompleted));
+
+  const handleNodeClick = (node: RoadmapNode, index: number) => {
+    if (!courseIsActive) {
+      setMessage(tr("Активуй курс, щоб відкрити перший крок.", "Activate the course to open the first step."));
+      return;
+    }
+    if (!isNodeUnlocked(node, index)) return;
 
     if (node.kind === "TOPIC") {
       setSelectedNodeId(node.id);
@@ -354,6 +360,18 @@ export const LearningCoursePage: React.FC = () => {
       return;
     }
     if (node.kind === "MILESTONE") setSelectedNodeId(node.id);
+  };
+
+  const recommendedNodeIndex = roadmapNodes.findIndex((node, index) => !nodeCompleted(node) && isNodeUnlocked(node, index));
+  const recommendedNode = recommendedNodeIndex >= 0 ? roadmapNodes[recommendedNodeIndex] : null;
+  const resumeCourse = () => {
+    if (!courseIsActive) { void activateCourse(); return; }
+    if (recommendedNode) { handleNodeClick(recommendedNode, recommendedNodeIndex); return; }
+    if (finalWork && canStartFinalWork && course) {
+      navigate(withDevPreview(`/learning/course/${course.id}/practice/${finalWork.id}`));
+      return;
+    }
+    setMessage(tr("Маршрут завершено. Переглянь свої результати або обери інший курс.", "This route is complete. Review your results or choose another course."));
   };
 
   const selectedNode = roadmapNodes.find((node) => node.id === selectedNodeId) ?? null;
@@ -370,111 +388,109 @@ export const LearningCoursePage: React.FC = () => {
   if (error && !course) return <main className="mx-auto max-w-3xl px-6 py-12"><button type="button" onClick={() => navigate(withDevPreview("/learning/catalog"))} className="mb-8 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button><div role="alert" className="rounded-2xl border border-accent-error/30 bg-accent-error/10 p-5 text-sm text-accent-error"><p>{error}</p><button type="button" onClick={() => void load()} className="mt-4 rounded-xl border border-current px-4 py-2 font-bold">{tr("Повторити", "Retry")}</button></div></main>;
   if (!course) return null;
 
-  const roadmapWavePath = "M50 0 C28 16 28 34 50 50 C72 66 72 84 50 100";
-  const renderRoadmapWave = (ratio: number, className: string) => <svg aria-hidden="true" className={`pointer-events-none ${className}`} viewBox="0 0 100 100" preserveAspectRatio="none" focusable="false">
-    <path d={roadmapWavePath} className="fill-none stroke-primary/30" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
-    {ratio > 0 && <path d={roadmapWavePath} className="fill-none stroke-primary" strokeWidth="7" strokeLinecap="round" pathLength={1} strokeDasharray={ratio >= 1 ? undefined : `${ratio} ${1 - ratio}`} vectorEffect="non-scaling-stroke" />}
-  </svg>;
-
-  return <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
-    <nav aria-label={tr("Навігація курсу", "Course navigation")} className="mb-5 flex flex-wrap items-center gap-2 text-xs font-semibold text-text-secondary">
-      <button type="button" onClick={() => navigate(withDevPreview("/learning/catalog"))} className="rounded-lg px-2 py-1 transition hover:bg-bg-hover hover:text-text-primary">{tr("Каталог", "Catalog")}</button>
-      <span aria-hidden="true">/</span>
-      <span className="max-w-[min(70vw,32rem)] truncate text-text-primary">{course.title}</span>
+  return <main className="mx-auto max-w-7xl px-4 pb-16 pt-5 sm:px-6 lg:px-10 lg:pt-8">
+    <nav aria-label={tr("Навігація курсу", "Course navigation")} className="mb-5 flex flex-wrap items-center gap-2 text-xs font-bold text-text-secondary">
+      <button type="button" onClick={() => navigate(withDevPreview("/learning/catalog"))} className="inline-flex min-h-9 items-center gap-2 rounded-lg px-2 transition hover:bg-bg-hover hover:text-text-primary"><ArrowLeft size={15} aria-hidden="true" />{tr("Каталог", "Catalog")}</button>
+      <span aria-hidden="true" className="text-text-muted">/</span><span className="max-w-[min(70vw,32rem)] truncate text-text-primary">{course.title}</span>
     </nav>
-    <button type="button" onClick={() => navigate(withDevPreview("/learning/catalog"))} className="mb-7 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button>
 
-    {!courseIsActive ? <div className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-primary/[.05] p-4"><div><p className="font-bold text-text-primary">{tr("Цей курс ще не активовано", "This course is not active yet")}</p><p className="mt-1 text-sm text-text-secondary">{tr("Активація відкриє теорію, послідовний roadmap і контекстну практику.", "Activation unlocks theory, the ordered roadmap, and course-scoped practice.")}</p></div><button type="button" disabled={activating} onClick={() => void activateCourse()} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground disabled:opacity-50">{activating ? tr("Активуємо…", "Activating…") : tr("Активувати курс", "Activate course")}</button></div> : null}
-    {message && <div role="status" aria-live="polite" className="mb-6 rounded-2xl border border-primary/25 bg-primary/[.05] px-4 py-3 text-sm text-primary">{message}</div>}
-    {error && <div role="alert" className="mb-6 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error">{error}</div>}
+    {message && <div role="status" aria-live="polite" className="mb-5 flex items-start gap-3 rounded-2xl border border-primary/25 bg-primary/[.06] px-4 py-3 text-sm text-text-primary"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" /><p>{message}</p></div>}
+    {error && <div role="alert" className="mb-5 flex items-start gap-3 rounded-2xl border border-accent-error/30 bg-accent-error/10 px-4 py-3 text-sm text-accent-error"><p>{error}</p></div>}
 
-    <section className="mb-6 overflow-hidden rounded-[30px] border border-border/10 bg-bg-base dark:border-white/10 dark:bg-bg-code">
-      <header className="relative overflow-hidden bg-bg-base px-5 py-7 text-text-primary sm:px-8 sm:py-10">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-32 size-[360px] rounded-full border border-white/10" />
-        <div aria-hidden="true" className="pointer-events-none absolute -right-2 -top-10 size-[220px] rounded-full border border-border/15" />
-        <div className="relative">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-5"><p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[.18em] text-primary-soft"><Route className="size-4" />{course.title} · {course.runtime}</p><span className="rounded-md border border-white/15 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[.12em] text-text-primary">{course.level}</span></div>
-          <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_270px] lg:items-end">
-            <div><h1 className="max-w-3xl text-[clamp(38px,5.5vw,68px)] font-bold leading-[.96] tracking-[-.065em]">{tr("Твій шлях до впевненого коду.", "Your path to confident code.")}</h1><p className="mt-5 max-w-2xl text-sm leading-6 text-text-secondary sm:text-base">{tr("Від першого поняття до задач, які ти вже можеш розв’язувати самостійно. Рухайся послідовно — кожна тема додає новий інструмент.", "From your first concept to problems you can solve independently. Move sequentially — every topic adds a new tool.")}</p></div>
-            <div className="border-t border-white/15 pt-4 lg:border-l lg:border-t-0 lg:pl-6"><div className="flex items-end justify-between gap-3"><span className="text-xs font-semibold text-text-secondary">{tr("Прогрес маршруту", "Path progress")}</span><strong className="text-4xl font-bold tracking-[-.06em] text-primary-soft">{Math.round(course.enrollment.completionPercent)}%</strong></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-primary-soft transition-[width] duration-200 ease-out" style={{ width: `${Math.min(100, Math.max(0, course.enrollment.completionPercent))}%` }} /></div><p className="mt-3 text-xs text-text-secondary">{completedItems} / {requiredItems.length} {tr("елементів завершено", "items completed")}</p></div>
+    {!courseIsActive && <div className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-accent-warn/30 bg-accent-warn/[.07] p-4 sm:px-5"><div className="flex items-start gap-3"><LockKeyhole className="mt-0.5 size-4 shrink-0 text-accent-warn" aria-hidden="true" /><div><p className="font-extrabold text-text-primary">{tr("Маршрут ще закритий", "This route is not active yet")}</p><p className="mt-1 text-sm leading-5 text-text-secondary">{tr("Активуй курс, щоб відкрити послідовність уроків і практики.", "Activate the course to open its sequence of lessons and practice.")}</p></div></div><button type="button" disabled={activating} onClick={() => void activateCourse()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-primary-foreground transition hover:brightness-105 disabled:opacity-50">{activating ? tr("Активуємо…", "Activating…") : tr("Активувати курс", "Activate course")}<ArrowRight size={16} aria-hidden="true" /></button></div>}
+
+    <header className="relative isolate mb-6 overflow-hidden rounded-[28px] border border-white/10 bg-[#17372d] text-[#f3f2e9] shadow-[0_24px_70px_rgba(8,24,17,.16)]">
+      <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-36 size-[400px] rounded-full border border-white/10" />
+      <div aria-hidden="true" className="pointer-events-none absolute right-12 top-12 size-44 rounded-full border border-[#c4e58a]/20" />
+      <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-center lg:gap-7 lg:p-8">
+        <div>
+          <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-[.17em] text-[#c4e58a]"><Route size={14} aria-hidden="true" /><span>{course.runtime}</span><span aria-hidden="true">·</span><span>{course.level === "FOUNDATION" ? tr("Фундамент", "Foundation") : course.level === "SPECIALIZATION" ? tr("Спеціалізація", "Specialization") : tr("Поглиблений рівень", "Advanced")}</span></div>
+          <h1 className="mt-4 max-w-3xl break-words text-[clamp(2.5rem,5.2vw,4.5rem)] font-black leading-[.95] tracking-[-.07em]">{course.title}</h1>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-[#d3ded4] sm:text-base">{course.description || tr("Послідовний маршрут від основ до самостійної практики.", "A structured path from foundations to independent practice.")}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="rounded-full border border-white/15 bg-white/[.05] px-3 py-1.5 text-xs font-bold">{course.runtime}</span>
+            <span className="rounded-full border border-white/15 bg-white/[.05] px-3 py-1.5 text-xs font-bold">{topicNodes.length} {tr("тем", "topics")}</span>
+            <span className="rounded-full border border-white/15 bg-white/[.05] px-3 py-1.5 text-xs font-bold">{practiceCount} {tr("практичних кроків", "practice steps")}</span>
           </div>
-          <div className="mt-10 grid grid-cols-2 border-t border-white/10 pt-5 sm:grid-cols-4"><div><p className="text-2xl font-bold tracking-[-.05em] text-text-primary">{topicNodes.length}</p><p className="mt-1 text-[11px] text-text-secondary">{tr("тем у маршруті", "topics in path")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-text-primary">{practiceCount}</p><p className="mt-1 text-[11px] text-text-secondary">{tr("практичних кроків", "practice steps")}</p></div><div className="border-l border-white/10 pl-4 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-primary-soft">{completedTopics}</p><p className="mt-1 text-[11px] text-text-secondary">{tr("тем завершено", "topics completed")}</p></div><div className="mt-4 border-l border-white/10 pl-4 sm:mt-0 sm:pl-6"><p className="text-2xl font-bold tracking-[-.05em] text-accent-warn">{miniProjectNodes.length}</p><p className="mt-1 text-[11px] text-text-secondary">{tr("мініпроєктів", "mini-projects")}</p></div></div>
         </div>
-      </header>
+        <aside className="rounded-[22px] border border-white/15 bg-[#10281f]/80 p-5 backdrop-blur-sm" aria-label={tr("Прогрес курсу", "Course progress")}>
+          <div className="flex items-end justify-between gap-3"><span className="text-xs font-bold text-[#d3ded4]">{tr("Прогрес маршруту", "Path progress")}</span><strong className="text-5xl font-black leading-none tracking-[-.07em] text-[#c4e58a]">{Math.round(course.enrollment.completionPercent)}<small className="text-2xl">%</small></strong></div>
+          <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/15"><div className="h-full rounded-full bg-[#c4e58a] transition-[width] duration-300" style={{ width: `${Math.min(100, Math.max(0, course.enrollment.completionPercent))}%` }} /></div>
+          <p className="mt-3 text-xs text-[#d3ded4]">{completedItems} / {requiredItems.length} {tr("обов’язкових елементів завершено", "required items completed")}</p>
+          <button type="button" disabled={activating} onClick={resumeCourse} className="mt-5 inline-flex min-h-11 w-full items-center justify-between rounded-xl bg-[#c4e58a] px-4 text-sm font-extrabold text-[#17372d] transition hover:bg-[#d4f29e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-wait disabled:opacity-70">
+            {activating ? tr("Активуємо…", "Activating…") : !courseIsActive ? tr("Відкрити маршрут", "Open this route") : recommendedNode ? tr("Наступний крок", "Next step") : canStartFinalWork ? tr("Фінальна робота", "Final project") : tr("Переглянути курс", "Review course")}<ArrowRight size={16} aria-hidden="true" />
+          </button>
+        </aside>
+      </div>
+      <div className="relative grid grid-cols-2 border-t border-white/15 bg-black/[.08] sm:grid-cols-4">
+        {[{ value: topicNodes.length, label: tr("тем", "topics") }, { value: practiceCount, label: tr("практичних кроків", "practice steps") }, { value: completedTopics, label: tr("тем завершено", "topics complete") }, { value: miniProjectNodes.length, label: tr("мініпроєктів", "mini-projects") }].map((metric, index) => <div key={metric.label} className={`px-5 py-3 sm:px-7 sm:py-3.5 ${index > 0 ? "border-l border-white/10" : ""} ${index > 1 ? "border-t border-white/10 sm:border-t-0" : ""}`}><p className="text-2xl font-black tabular-nums text-white">{metric.value}</p><p className="mt-1 text-[11px] font-semibold text-[#d3ded4]">{metric.label}</p></div>)}
+      </div>
+    </header>
 
-      <div className="px-5 py-7 sm:px-8 sm:py-9">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border/10 pb-5 dark:border-white/10"><div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{tr("Маршрут курсу", "Course roadmap")}</p><h3 className="mt-2 text-2xl font-bold tracking-[-.04em] text-text-primary dark:text-text-primary sm:text-3xl">{tr("Теми, що складаються в навичку", "Topics that become a skill")}</h3><p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Кожен вузол поєднує пояснення, практику та наступний зрозумілий крок.", "Every node combines explanation, practice, and a clear next step.")}</p></div><span className="rounded-md border border-border/12 px-3 py-1.5 text-[11px] font-bold text-text-muted dark:border-white/10 dark:text-text-secondary">{completedTopics} / {topicNodes.length} {tr("готово", "complete")}</span></div>
+    <section className="grid items-start gap-5 lg:grid-cols-[16rem_minmax(0,1fr)] lg:gap-7" aria-labelledby="course-route-heading">
+      <aside className="rounded-[22px] border border-border bg-bg-surface p-5 lg:sticky lg:top-24">
+        <p className="text-[10px] font-black uppercase tracking-[.17em] text-primary-strong dark:text-primary">{tr("Твій прогрес", "Your progress")}</p>
+        <div className="mt-3 flex items-baseline gap-2"><strong className="text-4xl font-black tabular-nums tracking-[-.06em] text-text-primary">{completedTopics}</strong><span className="text-sm font-bold text-text-muted">/ {topicNodes.length} {tr("тем", "topics")}</span></div>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-bg-hover"><div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${topicNodes.length ? Math.round(completedTopics / topicNodes.length * 100) : 0}%` }} /></div>
+        <p className="mt-3 text-xs leading-5 text-text-secondary">{recommendedNode ? tr("Наступний доступний крок:", "Your next available step:") : tr("Усі кроки маршруту пройдено.", "You have completed every step on this route.")}</p>
+        {recommendedNode && <div className="mt-2 rounded-xl bg-bg-base p-3"><p className="text-sm font-extrabold text-text-primary">{recommendedNode.title}</p><p className="mt-1 text-[11px] font-semibold text-primary">{recommendedNode.kind === "TOPIC" ? tr("Тема", "Topic") : recommendedNode.kind === "PROJECT" ? tr("Мініпроєкт", "Mini-project") : tr("Етап", "Milestone")}</p></div>}
+        <button type="button" disabled={activating} onClick={resumeCourse} className="mt-4 inline-flex min-h-11 w-full items-center justify-between rounded-xl border border-border bg-bg-base px-3.5 text-left text-xs font-extrabold text-text-primary transition hover:border-primary/40 hover:bg-primary/[.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring disabled:opacity-60">{!courseIsActive ? tr("Активувати курс", "Activate course") : recommendedNode ? tr("Перейти до кроку", "Go to this step") : tr("Курс завершено", "Course complete")}<ArrowRight size={15} aria-hidden="true" /></button>
+        <div className="mt-5 border-t border-border pt-4 text-[11px] leading-5 text-text-muted">{tr("Порядок поєднує пояснення, практику й проєкти. Наступні кроки відкриваються після попередніх.", "The route combines explanations, practice, and projects. Later steps unlock as you complete earlier ones.")}</div>
+      </aside>
 
-      <div className="relative mt-8">
-        <div className="relative space-y-5 lg:space-y-7">
+      <div className="min-w-0 rounded-[22px] border border-border bg-bg-surface p-4 sm:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
+          <div><p className="text-[10px] font-black uppercase tracking-[.17em] text-primary-strong dark:text-primary">{tr("Навчальний маршрут", "Learning route")}</p><h2 id="course-route-heading" className="mt-1 text-2xl font-black tracking-[-.04em] text-text-primary sm:text-3xl">{tr("Крок за кроком", "Step by step")}</h2><p className="mt-1 text-sm leading-5 text-text-secondary">{tr("Теорія відкриває практику. Практика закріплює тему.", "Theory unlocks practice. Practice makes each topic stick.")}</p></div>
+          <span className="rounded-full border border-border bg-bg-base px-3 py-1.5 text-[11px] font-extrabold tabular-nums text-text-secondary">{completedItems}/{requiredItems.length} {tr("завершено", "complete")}</span>
+        </div>
+
+        <ol className="mt-5 space-y-3">
           {roadmapNodes.map((node, index) => {
             const items = nodeItems(node);
             const completed = nodeCompleted(node);
-            const locked = !courseIsActive || !roadmapNodes.slice(0, index).every(nodeCompleted);
+            const locked = !isNodeUnlocked(node, index);
             const started = items.some((item) => item.progress.status === "IN_PROGRESS");
             const progress = nodeScore(node);
-            const previousNode = index > 0 ? roadmapNodes[index - 1] : null;
-            const previousItems = previousNode ? nodeItems(previousNode) : [];
-            const previousProgress = previousNode
-              ? previousItems.length
-                ? Math.round(previousItems.reduce((total, item) => total + itemScore(item), 0) / previousItems.length)
-                : nodeCompleted(previousNode) ? 100 : 0
-              : 0;
-            const incomingThickRatio = Math.min(1, previousProgress / 100);
-            const outgoingThickRatio = Math.min(1, progress / 100);
             const isSelected = selectedNodeId === node.id;
             const topicNumber = roadmapNodes.slice(0, index + 1).filter((candidate) => candidate.kind === "TOPIC").length;
             const parts = node.kind === "TOPIC" ? topicParts(node) : [];
             const projectNumber = node.kind === "PROJECT" ? projectNodes.findIndex((candidate) => candidate.id === node.id) + 1 : 0;
             const projectSpec = node.kind === "PROJECT" ? (node.item?.content.projectSpec as { estimatedMinutes?: number; skills?: unknown[] } | undefined) : undefined;
             const projectSkills = Array.isArray(projectSpec?.skills) ? projectSpec.skills.filter((skill): skill is string => typeof skill === "string").slice(0, 4) : [];
-            const topicAccent = node.kind === "TOPIC" ? ["border-l-[#20a86b]", "border-l-[#3195a5]", "border-l-[#bd8837]"][Math.max(0, (topicNumber - 1) % 3)] : "";
             const Icon = completed ? CheckCircle2 : locked ? LockKeyhole : node.kind === "PROJECT" ? Rocket : node.kind === "MILESTONE" ? FileCheck2 : node.theory?.progress.status === "COMPLETED" ? Play : BookOpen;
             const status = completed
               ? tr("Завершено", "Completed")
               : locked
                 ? tr("Заверши попередній вузол", "Complete the previous node")
-              : node.kind === "TOPIC" && node.theory?.progress.status !== "COMPLETED"
-                ? started
-                  ? tr("Продовжити урок", "Continue lesson")
-                  : tr("Відкрити урок", "Open lesson")
-                : started
-                  ? tr("Продовжити практику", "Continue practice")
-                  : node.kind === "PROJECT"
-                    ? tr("Відкрити мініпроєкт", "Open mini-project")
-                    : node.kind === "MILESTONE" && node.item?.kind === "QUIZ" ? tr("Відкрити квіз", "Open quiz") : tr("Відкрити практику", "Open practice");
+                : node.kind === "TOPIC" && node.theory?.progress.status !== "COMPLETED"
+                  ? started ? tr("Продовжити урок", "Continue lesson") : tr("Відкрити урок", "Open lesson")
+                  : started
+                    ? tr("Продовжити практику", "Continue practice")
+                    : node.kind === "PROJECT"
+                      ? tr("Відкрити мініпроєкт", "Open mini-project")
+                      : node.kind === "MILESTONE" && node.item?.kind === "QUIZ" ? tr("Відкрити квіз", "Open quiz") : tr("Відкрити практику", "Open practice");
 
-            return <div key={node.id} ref={(element) => { roadmapNodeRefs.current[node.id] = element; }} className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-3 lg:grid-cols-[minmax(0,1fr)_4rem_minmax(0,1fr)] lg:gap-0">
-              {index > 0 && renderRoadmapWave(incomingThickRatio, "absolute left-5 top-0 z-[1] block h-1/2 w-16 -translate-x-1/2 lg:left-1/2 lg:w-24")}
-              {index < roadmapNodes.length - 1 && renderRoadmapWave(outgoingThickRatio, "absolute left-5 top-1/2 z-[1] block h-[calc(50%+1.25rem)] w-16 -translate-x-1/2 lg:left-1/2 lg:h-[calc(50%+1.75rem)] lg:w-24")}
-              <div className="z-10 col-start-1 row-start-1 flex size-10 items-center justify-center rounded-full border-4 border-bg-surface bg-bg-base text-primary lg:col-start-2 lg:size-12">
-                <Icon className="size-4 lg:size-5" />
-              </div>
-               <button type="button" disabled={locked} onClick={() => handleNodeClick(node, index)} className={`group relative col-start-2 row-start-1 min-w-0 overflow-hidden rounded-2xl border p-4 text-left transition-colors duration-200 ${index % 2 === 0 ? "lg:col-start-1" : "lg:col-start-3"} lg:p-5 ${node.kind === "TOPIC" ? `bg-bg-base ${topicAccent} border-l-4` : node.kind === "PROJECT" ? "border-l-4 border-l-[#bd8837] bg-accent-warn/[.04]" : "bg-bg-base"} ${completed ? "border-primary/35 bg-primary/[.04]" : locked ? "cursor-not-allowed border-border bg-bg-base/60 opacity-55" : isSelected ? "border-primary bg-primary/[.05]" : "border-border hover:border-primary/50 hover:bg-bg-surface"}`}>
+            return <li key={node.id} ref={(element) => { roadmapNodeRefs.current[node.id] = element; }} className="relative grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 sm:gap-4">
+              {index < roadmapNodes.length - 1 && <span aria-hidden="true" className="absolute bottom-[-.75rem] left-[19px] top-11 w-px bg-border" />}
+              <span className={`relative z-[1] mt-4 flex size-10 items-center justify-center rounded-xl border bg-bg-base shadow-sm sm:size-11 ${completed ? "border-primary/40 text-primary" : locked ? "border-border text-text-muted" : node.kind === "PROJECT" ? "border-accent-warn/40 text-accent-warn" : "border-primary/30 text-primary"}`} aria-hidden="true"><Icon className="size-4 sm:size-[18px]" /></span>
+              <button type="button" disabled={locked} onClick={() => handleNodeClick(node, index)} aria-current={isSelected ? "step" : undefined} className={`group min-w-0 rounded-2xl border p-4 text-left transition duration-200 active:translate-y-px sm:p-5 ${completed ? "border-primary/30 bg-primary/[.035]" : locked ? "cursor-not-allowed border-border bg-bg-base/50 opacity-65" : isSelected ? "border-primary/60 bg-primary/[.055] shadow-[0_8px_26px_rgba(31,119,82,.08)]" : "border-border bg-bg-base hover:border-primary/45 hover:bg-bg-surface"}`}>
                 {celebratedNodeId === node.id ? <span aria-hidden="true" className="studycod-confetti pointer-events-none absolute inset-x-4 top-0 z-20 h-16" /> : null}
-                {node.kind === "TOPIC" && <div className="mb-3 flex items-center justify-between"><span className="flex size-8 items-center justify-center rounded-lg border border-border bg-bg-surface text-xs font-black text-primary">{String(topicNumber).padStart(2, "0")}</span><span className="rounded-md border border-border bg-bg-surface px-2.5 py-1 text-[11px] font-bold text-primary">{completed ? tr("Готово", "Done") : locked ? tr("Попереду", "Ahead") : tr("У фокусі", "In focus")}</span></div>}
-                {node.kind === "PROJECT" && <div className="mb-3 flex items-center justify-between"><span className="flex size-8 items-center justify-center rounded-lg border border-accent-warn/35 bg-accent-warn/10 text-xs font-black text-accent-warn dark:text-accent-warn">{String(projectNumber).padStart(2, "0")}</span><span className="rounded-md border border-accent-warn/30 bg-accent-warn/10 px-2.5 py-1 text-[11px] font-bold text-accent-warn dark:text-accent-warn">{completed ? tr("Готово", "Done") : locked ? tr("Після тем", "After topics") : tr("Проєкт", "Project")}</span></div>}
-                  <div className="flex items-start justify-between gap-3"><span className="text-[11px] font-bold uppercase tracking-[.12em] text-text-secondary">{node.kind === "TOPIC" ? tr("Навчальний фокус", "Learning focus") : node.kind === "PROJECT" ? tr("Мініпроєкт", "Mini-project") : tr("Етап", "Milestone")}</span><span className="text-xs font-bold text-primary">{progress}%</span></div>
-                 <h3 className="mt-2 line-clamp-2 font-bold text-text-primary">{node.kind === "PROJECT" ? projectTitle(node.title) : node.title}</h3>
-                 {node.kind === "TOPIC" ? <>
-                   <p className="mt-2 line-clamp-3 text-xs leading-5 text-text-secondary">{topicDescription(node)}</p>
-                    {parts.length > 0 && <div className="mt-4 flex flex-wrap gap-2">
-                      {parts.map((part) => <span key={part.label} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary"><span className="text-text-primary">{part.label}</span><span className="text-text-muted">·</span>{part.detail}</span>)}
-                    </div>}
-                   <p className="mt-3 text-xs font-semibold text-primary">{status}</p>
-                  </> : <>
-                    <p className="mt-2 line-clamp-3 text-xs leading-5 text-text-secondary">{node.kind === "PROJECT" ? projectDescription(node.item) : status}</p>
-                    {node.kind === "PROJECT" && <>{projectSkills.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{projectSkills.map((skill) => <span key={skill} className="rounded-lg border border-border bg-bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary">{skill}</span>)}</div>}{typeof projectSpec?.estimatedMinutes === "number" && <p className="mt-3 text-[11px] font-semibold text-text-muted">~{projectSpec.estimatedMinutes} {tr("хв на проєкт", "min project estimate")}</p>}</>}
-                    {node.kind === "PROJECT" && <p className="mt-3 text-xs font-semibold text-accent-warn dark:text-accent-warn">{status}</p>}
-                  </>}
-                  {(items.length > 1 || node.kind === "PROJECT") && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-surface"><div className="h-full rounded-full bg-primary transition-[width] duration-200 ease-out" style={{ width: `${progress}%` }} /></div>}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-[.14em] text-text-muted">{node.kind === "TOPIC" ? <>{tr("Тема", "Topic")} {String(topicNumber).padStart(2, "0")}</> : node.kind === "PROJECT" ? <>{tr("Мініпроєкт", "Mini-project")} {String(projectNumber).padStart(2, "0")}</> : tr("Підсумок", "Milestone")}</span>
+                  <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold ${completed ? "text-primary" : locked ? "text-text-muted" : node.kind === "PROJECT" ? "text-accent-warn" : "text-primary"}`}><span className={`size-1.5 rounded-full ${completed ? "bg-primary" : locked ? "bg-text-muted" : node.kind === "PROJECT" ? "bg-accent-warn" : "bg-primary"}`} />{completed ? tr("Завершено", "Complete") : locked ? tr("Закрито", "Locked") : tr("Доступно", "Ready")}</span>
+                </div>
+                <div className="mt-3 flex flex-wrap items-start justify-between gap-3"><h3 className="min-w-0 flex-1 text-base font-extrabold leading-6 text-text-primary sm:text-lg">{node.kind === "PROJECT" ? projectTitle(node.title) : node.title}</h3><span className="shrink-0 rounded-lg bg-bg-surface px-2.5 py-1 text-xs font-black tabular-nums text-text-secondary">{progress}%</span></div>
+                <p className="mt-2 max-w-3xl text-xs leading-5 text-text-secondary sm:text-sm sm:leading-6">{node.kind === "TOPIC" ? topicDescription(node) : node.kind === "PROJECT" ? projectDescription(node.item) : status}</p>
+                {node.kind === "TOPIC" && parts.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{parts.map((part) => <span key={part.label} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary"><span className="text-text-primary">{part.label}</span><span aria-hidden="true" className="text-text-muted">·</span>{part.detail}</span>)}</div>}
+                {node.kind === "PROJECT" && (projectSkills.length > 0 || typeof projectSpec?.estimatedMinutes === "number") && <div className="mt-4 flex flex-wrap items-center gap-2">{projectSkills.map((skill) => <span key={skill} className="rounded-lg border border-border bg-bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-text-secondary">{skill}</span>)}{typeof projectSpec?.estimatedMinutes === "number" && <span className="text-[11px] font-semibold text-text-muted">~{projectSpec.estimatedMinutes} {tr("хв", "min")}</span>}</div>}
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3"><span className={`text-xs font-bold ${node.kind === "PROJECT" && !completed && !locked ? "text-accent-warn" : "text-text-secondary"}`}>{status}</span><span className="inline-flex items-center gap-2 text-xs font-extrabold text-primary transition group-hover:gap-3">{locked ? tr("Виконай попереднє", "Finish previous step") : tr("Відкрити крок", "Open step")}<ArrowLeft className="size-3.5 rotate-180" aria-hidden="true" /></span></div>
+                {(items.length > 1 || node.kind === "PROJECT") && <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-bg-surface"><div className="h-full rounded-full bg-primary transition-[width] duration-200 ease-out" style={{ width: `${progress}%` }} /></div>}
               </button>
-            </div>;
+            </li>;
           })}
-        </div>
-       </div>
-       </div>
-     </section>
+        </ol>
+      </div>
+    </section>
 
     {selectedNode && selectedNode.kind !== "TOPIC" && <section className="mb-6 mt-6 rounded-2xl border border-primary/25 bg-bg-surface p-5 sm:p-7">
       <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{selectedNode.kind === "PROJECT" ? tr("Практичний проєкт", "Practical project") : tr("Етап курсу", "Course milestone")}</p><h2 className="mt-1 text-2xl font-bold text-text-primary">{selectedNode.kind === "PROJECT" ? projectTitle(selectedNode.title) : selectedNode.title}</h2></div><button type="button" onClick={() => setSelectedNodeId(null)} className="rounded-xl border border-border p-2 text-text-secondary transition hover:text-text-primary" aria-label={tr("Закрити", "Close")}><X className="size-4" /></button></div>

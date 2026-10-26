@@ -494,6 +494,11 @@ if (!baseUrl) {
     const pathUrl = new URL("learning/course/990/path", baseUrl).toString();
     const pathResponse = await page.goto(pathUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
     if (!pathResponse || pathResponse.status() >= 500) throw new Error(`course path route returned ${pathResponse?.status() ?? "no response"}`);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.getByRole("heading", { name: /Step by step|Крок за кроком/i }).waitFor({ state: "visible", timeout: 30_000 });
+    const courseRouteSteps = await page.locator("ol > li").count();
+    if (courseRouteSteps < 1) throw new Error("course path does not render its ordered learning steps");
+    await captureScreenshot("course-path-1280x720");
     await page.locator("button").filter({ hasText: "Quiz browser check" }).first().waitFor({ state: "visible", timeout: 30_000 });
     await page.locator("button").filter({ hasText: "Quiz browser check" }).first().click();
     await page.getByRole("button", { name: /open quiz|відкрити квіз/i }).click();
