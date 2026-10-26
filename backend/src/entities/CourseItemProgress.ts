@@ -30,6 +30,13 @@ export interface CourseProjectProgressData {
   } | null;
   status: CourseProjectProgressStatus;
   submittedAt?: string | null;
+  submissionHistory?: Array<{
+    milestoneIds: string[];
+    draft: string;
+    files?: Array<{ path: string; content: string }>;
+    lastCheck?: CourseProjectProgressData["lastCheck"];
+    submittedAt: string;
+  }>;
 }
 
 @Entity("course_item_progress")
