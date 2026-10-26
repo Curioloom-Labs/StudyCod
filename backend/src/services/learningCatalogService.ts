@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { AppDataSource } from "../data-source";
+import { applyCourseProjectCheckData } from "./courseProjectProgress";
 import { Course } from "../entities/Course";
 import { CourseDependency } from "../entities/CourseDependency";
 import { CourseItem } from "../entities/CourseItem";
@@ -1205,19 +1206,17 @@ async function recordCourseProjectScore(
   const previousScore = Number.isFinite(previousScoreValue) ? percent(previousScoreValue) : 0;
   const bestScore = Math.max(previousScore, normalizedScore);
   progress.score = bestScore;
-  // A check is evidence, not a submission. Completion belongs to the
-  // explicit submit action after the learner has checked every milestone.
-  progress.status = "IN_PROGRESS";
-  progress.completedAt = null;
   const previousData = projectProgressOrDefault(progress);
-  progress.projectData = {
-    milestoneIds: previousData.milestoneIds,
-    draft: files.find((file) => file.path === projectEntryFile(projectRuntime(enrollment)))?.content || previousData.draft,
-    files,
-    lastCheck: { score: normalizedScore, verdict, testsPassed, testsTotal, filesHash: projectFilesHash(files), checkedAt: new Date().toISOString() },
-    status: "DRAFT",
-    submittedAt: previousData.submittedAt || null,
-  };
+  const preserveCompletion = progress.status === "COMPLETED" && previousData.status === "SUBMITTED";
+  if (!preserveCompletion) {
+    progress.status = "IN_PROGRESS";
+    progress.completedAt = null;
+  }
+  const checkedAt = new Date().toISOString();
+  progress.projectData = applyCourseProjectCheckData(previousData, files, projectEntryFile(projectRuntime(enrollment)), {
+    score: normalizedScore, verdict, testsPassed, testsTotal, filesHash: projectFilesHash(files), checkedAt,
+  });
+  progress.score = preserveCompletion ? previousScore : bestScore;
   await progressRepo().save(progress);
   const updatedEnrollment = await recalculateEnrollmentProgress(enrollment);
   return {
@@ -1235,22 +1234,30 @@ async function saveProjectProgress(userId: number, itemId: number, input: { mile
   const assessment = readProperty(projectSpecFor(item), "assessment");
   const assessmentRecord = isRecord(assessment) ? assessment : null;
   const lastCheck = projectProgressOrDefault(existing).lastCheck;
+  const previousData = projectProgressOrDefault(existing);
   const savedFiles = input.files?.length ? normalizeProjectCheckFiles(input.files) : projectProgressOrDefault(existing).files;
   if (submit && (requiredIds.some((id) => !milestoneIds.includes(id)) || !input.draft.trim() || (readProperty(assessmentRecord, "checkBeforeSubmit") !== false && (!lastCheck || lastCheck.score < 60 || lastCheck.filesHash !== projectFilesHash(savedFiles))))) {
     throw Object.assign(new Error("PROJECT_REQUIREMENTS_INCOMPLETE"), { statusCode: 422 });
   }
   const progress = existing || progressRepo().create({ enrollment: { id: enrollment.id }, item: { id: item.id } });
+  const preserveCompletion = progress.status === "COMPLETED" && previousData.status === "SUBMITTED";
   progress.projectData = {
     milestoneIds,
     draft: input.draft,
     files: savedFiles,
     lastCheck,
-    status: submit ? "SUBMITTED" : "DRAFT",
-    submittedAt: submit ? new Date().toISOString() : (progress.projectData?.submittedAt || null),
+    status: submit || preserveCompletion ? "SUBMITTED" : "DRAFT",
+    submittedAt: submit ? new Date().toISOString() : (previousData.submittedAt || null),
   };
-  progress.status = submit ? "COMPLETED" : "IN_PROGRESS";
-  progress.score = submit ? 100 : null;
-  progress.completedAt = submit ? new Date() : null;
+  if (submit) {
+    progress.status = "COMPLETED";
+    progress.score = 100;
+    progress.completedAt = progress.completedAt || new Date();
+  } else if (!preserveCompletion) {
+    progress.status = "IN_PROGRESS";
+    progress.score = null;
+    progress.completedAt = null;
+  }
   await progressRepo().save(progress);
   const updatedEnrollment = await recalculateEnrollmentProgress(enrollment);
   if (submit && readProperty(item.content, "finalAssessment") === true) {

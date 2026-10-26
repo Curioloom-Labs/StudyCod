@@ -1,6 +1,6 @@
 import { api } from "./client";
 
-export type NotificationType = "BLOG_COMMENT" | "BLOG_REPLY";
+export type NotificationType = "BLOG_COMMENT" | "BLOG_REPLY" | "GROWTH_REVIEW_INVITATION" | "GROWTH_REVIEW_ASSIGNED" | "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR" | "GROWTH_REVIEW_ACCEPTED" | "GROWTH_REVIEW_DECLINED" | "GROWTH_REVIEW_SUBMITTED" | "GROWTH_REVIEW_REQUESTED";
 
 export type AppNotification = {
   id: number;
@@ -9,6 +9,7 @@ export type AppNotification = {
   postSlug: string | null;
   postTitle: string | null;
   commentId: number | null;
+  relatedPath: string | null;
   read: boolean;
   createdAt: string;
 };

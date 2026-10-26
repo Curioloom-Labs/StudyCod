@@ -5,6 +5,7 @@ import {
   BookOpen,
   ChevronDown,
   CircleUserRound,
+  FolderKanban,
   HelpCircle,
   Home,
   Languages,
@@ -27,7 +28,7 @@ import { WorkspaceTopNavigation } from "./WorkspaceTopNavigation";
 import { withDevPreview } from "../../lib/devPreview";
 
 type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "student" | "admin";
-type NavId = Page | "library" | "playground" | "contests";
+type NavId = Page | "library" | "playground" | "contests" | "projects";
 type NavItem = { id: NavId; label: string; Icon: React.ElementType<{ className?: string }>; onClick?: () => void };
 
 type ShellProps = {
@@ -113,6 +114,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
     { id: "home", label: uk ? "Навчання" : "Learning", Icon: Home },
     { id: "contests", label: uk ? "Контести" : "Contests", Icon: Trophy, onClick: onContests ?? (() => navigate("/contest/contests")) },
     { id: "library", label: uk ? "Бібліотека" : "Library", Icon: Library, onClick: onLibrary },
+    ...(user.userMode === "PERSONAL" ? [{ id: "projects" as const, label: uk ? "Проєкти" : "Projects", Icon: FolderKanban, onClick: () => navigate(withDevPreview("/projects")) }] : []),
     { id: "playground", label: uk ? "Пісочниця" : "Playground", Icon: PlaySquare, onClick: onPlayground },
     ...(user.role === "SYSTEM_ADMIN"
       ? [{ id: "admin" as const, label: uk ? "Адміністрування" : "Admin", Icon: ShieldCheck }]
@@ -123,6 +125,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
     if (id === "contests") return routeIsActive("/contest/contests");
     if (id === "library") return routeIsActive("/lab/library") || routeIsActive("/library");
     if (id === "playground") return routeIsActive("/lab/playground") || routeIsActive("/playground");
+    if (id === "projects") return routeIsActive("/projects");
     return page === id;
   };
   const displayName = user.firstName || user.username;

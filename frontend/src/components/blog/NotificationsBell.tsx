@@ -78,11 +78,19 @@ export const NotificationsBell: React.FC = () => {
         setUnread((current) => Math.max(0, current - 1));
       }).catch(() => undefined);
     }
-    if (n.postSlug) navigate(`/blog/${n.postSlug}`);
+    if (n.relatedPath) navigate(n.relatedPath);
+    else if (n.postSlug) navigate(`/blog/${n.postSlug}`);
   };
 
   const label = (n: AppNotification): string => {
     const who = n.actorName ?? tr("Хтось", "Someone");
+    if (n.type === "GROWTH_REVIEW_INVITATION") return tr(`${who} запросив вас до рецензії проєкту`, `${who} invited you to review a project`);
+    if (n.type === "GROWTH_REVIEW_ASSIGNED") return tr(`${who} призначив вам рецензію проєкту`, `${who} assigned you a project review`);
+    if (n.type === "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR") return tr("До вашої роботи призначено рецензента", "A reviewer was assigned to your work");
+    if (n.type === "GROWTH_REVIEW_REQUESTED") return tr(`${who} надіслав запит на офіційну рецензію`, `${who} requested an appointed review`);
+    if (n.type === "GROWTH_REVIEW_ACCEPTED") return tr(`${who} прийняв запит на рецензію`, `${who} accepted the review request`);
+    if (n.type === "GROWTH_REVIEW_DECLINED") return tr(`${who} відмовився від запиту на рецензію`, `${who} declined the review request`);
+    if (n.type === "GROWTH_REVIEW_SUBMITTED") return tr(`${who} залишив відгук на вашу роботу`, `${who} submitted a review of your work`);
     if (n.type === "BLOG_REPLY") return tr(`${who} відповів на ваш коментар`, `${who} replied to your comment`);
     return tr(`${who} прокоментував «${n.postTitle ?? ""}»`, `${who} commented on "${n.postTitle ?? ""}"`);
   };

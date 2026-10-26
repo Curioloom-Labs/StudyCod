@@ -46,6 +46,10 @@ const LearningPlanPage = React.lazy(() => import("./pages/core/LearningPlanPage"
 const PublicProfilePage = React.lazy(() => import("./pages/public/PublicProfilePage").then(mod => ({ default: mod.PublicProfilePage })));
 const IadPage = React.lazy(() => import("./pages/core/IadPage").then(mod => ({ default: mod.IadPage })));
 const LearningCatalogPage = React.lazy(() => import("./pages/learning/LearningCatalogPage").then(mod => ({ default: mod.LearningCatalogPage })));
+const GrowthProjectsPage = React.lazy(() => import("./pages/projects/GrowthProjectsPage").then(mod => ({ default: mod.GrowthProjectsPage })));
+const PublicGrowthPortfolioPage = React.lazy(() => import("./pages/projects/PublicGrowthPortfolioPage").then(mod => ({ default: mod.PublicGrowthPortfolioPage })));
+const GrowthReviewInboxPage = React.lazy(() => import("./pages/projects/GrowthReviewInboxPage").then(mod => ({ default: mod.GrowthReviewInboxPage })));
+const GrowthAdminReviewQueuePage = React.lazy(() => import("./pages/projects/GrowthAdminReviewQueuePage").then(mod => ({ default: mod.GrowthAdminReviewQueuePage })));
 const LearningCoursePage = React.lazy(() => import("./pages/learning/LearningCoursePage").then(mod => ({ default: mod.LearningCoursePage })));
 const CoursePracticePage = React.lazy(() => import("./pages/learning/CoursePracticePage").then(mod => ({ default: mod.CoursePracticePage })));
 const CourseProgressPage = React.lazy(() => import("./pages/learning/CourseProgressPage").then(mod => ({ default: mod.CourseProgressPage })));
@@ -1268,6 +1272,10 @@ export const App: React.FC = () => {
                   </Suspense>
                 </PersonalRouteShell>
               </RequireToken>} />
+          <Route path="/projects" element={<RequireToken><PersonalRouteShell><Suspense fallback={<PageLoader />}><AnimatedPage><GrowthProjectsPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/projects/reviews" element={<RequireToken><PersonalRouteShell><Suspense fallback={<PageLoader />}><AnimatedPage><GrowthReviewInboxPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/projects/admin/reviews" element={<RequireToken><Suspense fallback={<PageLoader />}><GrowthAdminReviewQueuePage /></Suspense></RequireToken>} />
+          <Route path="/portfolio/:publicId" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}><PublicGrowthPortfolioPage /></Suspense></PublicPageWithFooter>} />
           <Route path="/learning/course/:courseId" element={<RequireToken><LegacyCourseRouteRedirect /></RequireToken>} />
           <Route path="/learning/course/:courseId/overview" element={<RequireToken>
                 <PersonalRouteShell courseTab="overview">

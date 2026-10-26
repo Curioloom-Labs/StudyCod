@@ -6,7 +6,7 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, Index } from 
  * comment activity (a new comment on your post, a reply to your comment).
  */
 export type NotificationPrincipalType = "USER" | "STUDENT";
-export type NotificationType = "BLOG_COMMENT" | "BLOG_REPLY";
+export type NotificationType = "BLOG_COMMENT" | "BLOG_REPLY" | "GROWTH_REVIEW_INVITATION" | "GROWTH_REVIEW_ASSIGNED" | "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR" | "GROWTH_REVIEW_ACCEPTED" | "GROWTH_REVIEW_DECLINED" | "GROWTH_REVIEW_SUBMITTED" | "GROWTH_REVIEW_REQUESTED";
 
 @Entity("notifications")
 @Index("idx_notifications_recipient", ["recipientType", "recipientId", "readAt"])
@@ -20,7 +20,7 @@ export class Notification {
   @Column({ type: "int", name: "recipient_id" })
   recipientId!: number;
 
-  @Column({ type: "enum", enum: ["BLOG_COMMENT", "BLOG_REPLY"] })
+  @Column({ type: "enum", enum: ["BLOG_COMMENT", "BLOG_REPLY", "GROWTH_REVIEW_INVITATION", "GROWTH_REVIEW_ASSIGNED", "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR", "GROWTH_REVIEW_ACCEPTED", "GROWTH_REVIEW_DECLINED", "GROWTH_REVIEW_SUBMITTED", "GROWTH_REVIEW_REQUESTED"] })
   type!: NotificationType;
 
   /** Display name of whoever triggered the notification. */
@@ -36,6 +36,9 @@ export class Notification {
 
   @Column({ type: "int", name: "comment_id", nullable: true })
   commentId!: number | null;
+
+  @Column({ type: "varchar", length: 300, name: "related_path", nullable: true })
+  relatedPath!: string | null;
 
   @Column({ type: "datetime", name: "read_at", nullable: true })
   readAt!: Date | null;

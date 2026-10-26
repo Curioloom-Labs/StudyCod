@@ -43,6 +43,7 @@ router.get("/", authRequired, async (req: AuthRequest, res: Response) => {
       postSlug: n.postSlug,
       postTitle: n.postTitle,
       commentId: n.commentId,
+      relatedPath: n.relatedPath,
       read: !!n.readAt,
       createdAt: n.createdAt
     })),

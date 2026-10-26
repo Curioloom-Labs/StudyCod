@@ -32,6 +32,8 @@ import lspRouter from "./routes/lsp";
 import blogRouter from "./routes/blog";
 import notificationsRouter from "./routes/notifications";
 import { learningCatalogRouter } from "./routes/learningCatalog";
+import { growthProjectsRouter, growthProjectPublicRouter } from "./routes/growthProjects";
+import { startGrowthProjectQueueWorker } from "./services/growthProjectQueue";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware";
 import { geoBlockMiddleware } from "./middleware/geoBlockMiddleware";
 import { evaluateGeoBlock } from "./services/geoBlockService";
@@ -592,7 +594,7 @@ if (env.NODE_ENV !== "test") {
 }
 setupGoogleStrategy();
 if (!IS_PRODUCTION) {
-  app.use(morgan("dev"));
+  app.use(morgan("dev", { skip: req => /^\/(?:api\/)?project-portfolio\/share\/[^/]+/.test(req.url) }));
 }
 app.get("/", (_req, res) => {
   res.json({
@@ -956,6 +958,9 @@ app.use("/api/blog", blogRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/emails", emailsRouter);
 app.use("/api/learning", authMiddleware, forbidContestModeUsers, learningCatalogRouter);
+app.use("/projects", authMiddleware, forbidContestModeUsers, growthProjectsRouter);
+app.use("/api/projects", authMiddleware, forbidContestModeUsers, growthProjectsRouter);
+app.use("/api/project-portfolio", growthProjectPublicRouter);
 app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
   const message = errorMessage(err);
   const isCorsError = message.trim() === "CORS_NOT_ALLOWED";
@@ -1247,6 +1252,7 @@ async function bootstrap(): Promise<void> {
 
     startCertificateQueueWorker();
     startContestQueueWorker();
+    startGrowthProjectQueueWorker();
     startCredentialRecoveryCleanup();
 
     // Remove test payloads left behind by already-solved generated personal
