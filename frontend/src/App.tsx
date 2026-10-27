@@ -56,6 +56,7 @@ const GrowthAdminReviewQueuePage = React.lazy(() => import("./pages/projects/Gro
 const LearningCoursePage = React.lazy(() => import("./pages/learning/LearningCoursePage").then(mod => ({ default: mod.LearningCoursePage })));
 const CourseSyllabusPage = React.lazy(() => import("./pages/learning/CourseSyllabusPage").then(mod => ({ default: mod.CourseSyllabusPage })));
 const CoursePracticePage = React.lazy(() => import("./pages/learning/CoursePracticePage").then(mod => ({ default: mod.CoursePracticePage })));
+const CourseDiagnosticPage = React.lazy(() => import("./pages/learning/CourseDiagnosticPage").then(mod => ({ default: mod.CourseDiagnosticPage })));
 const CourseProgressPage = React.lazy(() => import("./pages/learning/CourseProgressPage").then(mod => ({ default: mod.CourseProgressPage })));
 const PersonalCourseDashboard = React.lazy(() => import("./pages/learning/PersonalCourseDashboard").then(mod => ({ default: mod.PersonalCourseDashboard })));
 const LabPracticePage = React.lazy(() => import("./pages/core/LabPracticePage").then(mod => ({ default: mod.LabPracticePage })));
@@ -1341,6 +1342,7 @@ export const App: React.FC = () => {
                 </PersonalRouteShell>
               </RequireToken>} />
           <Route path="/learning/course/:courseId/path" element={<RequireToken><PersonalRouteShell courseTab="path"><Suspense fallback={<PageLoader />}><AnimatedPage><LearningCoursePage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/learning/course/:courseId/assessment" element={<RequireToken><PersonalRouteShell courseTab="path"><Suspense fallback={<PageLoader />}><AnimatedPage><CourseDiagnosticPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
           <Route path="/learning/course/:courseId/practice/:courseItemId" element={<RequireToken><PersonalRouteShell courseTab="practice"><Suspense fallback={<PageLoader />}><AnimatedPage><CoursePracticePage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
           <Route path="/learning/course/:courseId/progress" element={<RequireToken><PersonalRouteShell courseTab="progress"><Suspense fallback={<PageLoader />}><AnimatedPage><CourseProgressPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
           <Route path="/invite/:token" element={<RequireToken>

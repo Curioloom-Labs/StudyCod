@@ -420,6 +420,9 @@ export const LearningCoursePage: React.FC = () => {
           <button type="button" disabled={activating} onClick={resumeCourse} className="mt-5 inline-flex min-h-11 w-full items-center justify-between rounded-xl bg-[#c4e58a] px-4 text-sm font-extrabold text-[#17372d] transition hover:bg-[#d4f29e] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-wait disabled:opacity-70">
             {activating ? tr("Активуємо…", "Activating…") : !courseIsActive ? tr("Відкрити маршрут", "Open this route") : recommendedNode ? tr("Наступний крок", "Next step") : canStartFinalWork ? tr("Фінальна робота", "Final project") : tr("Переглянути курс", "Review course")}<ArrowRight size={16} aria-hidden="true" />
           </button>
+          {courseIsActive && !course.enrollment.finalAssessmentPassed && <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${course.id}/assessment`))} className="mt-2 inline-flex min-h-11 w-full items-center justify-between rounded-xl border border-white/20 px-4 text-left text-xs font-extrabold text-white transition hover:border-[#c4e58a]/60 hover:bg-white/[.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+            <span className="inline-flex items-center gap-2"><Sparkles size={15} aria-hidden="true" />{completedItems ? tr("Підтвердити знання й пропустити маршрут", "Confirm knowledge and test out") : tr("Виміряти стартові знання", "Measure starting knowledge")}</span><ArrowRight size={15} aria-hidden="true" />
+          </button>}
         </aside>
       </div>
       <div className="relative grid grid-cols-2 border-t border-white/15 bg-black/[.08] sm:grid-cols-4">

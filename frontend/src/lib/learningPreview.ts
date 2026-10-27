@@ -1,6 +1,9 @@
 import type {
   CatalogCourse,
   CatalogCourseSyllabus,
+  CourseDiagnosticAssessment,
+  CourseDiagnosticResult,
+  CourseDiagnosticRunResult,
   LearningCourse,
   LearningCourseItem,
   LearningEnrollmentSummary,
@@ -40,6 +43,8 @@ const completedItems = new Set<number>([
     ? persistedPreviewState.completedItems.filter((id) => Number.isInteger(id) && id > 0)
     : []),
 ]);
+const previewDiagnosticResults = new Map<number, CourseDiagnosticResult>();
+const previewDiagnosticAttempts = new Map<number, number>();
 
 const isEnglish = () => typeof document !== "undefined" && document.documentElement.lang.toLowerCase().startsWith("en");
 const copy = (uk: string, en: string) => isEnglish() ? en : uk;
@@ -66,7 +71,7 @@ export function getLearningPreviewCourse(id = currentCourseId): LearningCourse {
   const next = items.find((item) => item.progress.status !== "COMPLETED");
   return {
     id, key: meta.key, title: meta.title, description: meta.description, level: meta.level, isBase: meta.isBase, runtime: meta.runtime,
-    enrollment: { id: meta.enrollmentId, variantId: meta.variantId, status: completed === items.length ? "COMPLETED" : "IN_PROGRESS", completionPercent, masteryScore: completed ? 76 : 0, finalAssessmentPassed: false },
+    enrollment: { id: meta.enrollmentId, variantId: meta.variantId, status: completed === items.length ? "COMPLETED" : "IN_PROGRESS", completionPercent, masteryScore: completed ? 76 : 0, finalAssessmentPassed: Boolean(previewDiagnosticResults.get(meta.enrollmentId)?.passed) },
     nextAction: next ? { itemId: next.id, title: next.title, kind: next.kind, status: next.progress.status === "IN_PROGRESS" ? "IN_PROGRESS" : "NOT_STARTED" } : null,
     modules: [
       { id: id * 10 + 1, title: copy("Послідовності", "Sequences"), items: items.slice(0, 2) },
@@ -96,7 +101,7 @@ export function getLearningPreviewSyllabus(id: number): CatalogCourseSyllabus {
 function summary(id: number): LearningEnrollmentSummary {
   const meta = courseMeta(id);
   const course = getLearningPreviewCourse(id);
-  return { enrollmentId: meta.enrollmentId, courseId: id, courseKey: meta.key, title: meta.title, description: meta.description, runtime: meta.runtime, runtimeLabel: "Python", level: meta.level, status: course.enrollment.status, completionPercent: course.enrollment.completionPercent, finalAssessmentPassed: false, completedAt: null, gate: null };
+  return { enrollmentId: meta.enrollmentId, courseId: id, courseKey: meta.key, title: meta.title, description: meta.description, runtime: meta.runtime, runtimeLabel: "Python", level: meta.level, status: course.enrollment.status, completionPercent: course.enrollment.completionPercent, finalAssessmentPassed: course.enrollment.finalAssessmentPassed, completedAt: null, gate: null };
 }
 
 export function getLearningPreviewMe(): LearningMe {
@@ -132,4 +137,118 @@ export function setCurrentLearningPreviewCourse(enrollmentId: number): void {
 export function completeLearningPreviewItem(itemId: number): void {
   completedItems.add(itemId);
   persistPreviewState();
+}
+
+const previewDiagnosticQuestions = () => [
+  { id: "q1", topicId: 6101, topicTitle: copy("Лінійний пошук у послідовності", "Linear search in a sequence"), question: copy("Що зберігає змінна після присвоєння?", "What does a variable store after assignment?"), options: [copy("Значення", "A value"), copy("Назву файлу", "A file name"), copy("Коментар", "A comment"), copy("Колір тексту", "A text color")] },
+  { id: "q2", topicId: 6103, topicTitle: copy("Цикли та умови", "Loops and conditions"), question: copy("Яка конструкція повторює дії для кожного елемента списку?", "Which construct repeats work for each list item?"), options: ["for", "if", "return", "class"] },
+  { id: "q3", topicId: 6101, topicTitle: copy("Лінійний пошук у послідовності", "Linear search in a sequence"), question: copy("Як знайти найменше число за один прохід?", "How do you find the smallest number in one pass?"), options: [copy("Порівнювати з поточним мінімумом", "Compare with the current minimum"), copy("Складати всі числа", "Add all values"), copy("Зупинитися на першому елементі", "Stop at the first item"), copy("Помножити числа", "Multiply the values")] },
+  { id: "q4", topicId: 6103, topicTitle: copy("Цикли та умови", "Loops and conditions"), question: copy("Коли спрацьовує гілка else?", "When does an else branch run?"), options: [copy("Коли умова if хибна", "When the if condition is false"), copy("Завжди перед if", "Always before if"), copy("Лише один раз у програмі", "Only once in a program"), copy("Після кожної змінної", "After every variable")] },
+  { id: "q5", topicId: 6101, topicTitle: copy("Лінійний пошук у послідовності", "Linear search in a sequence"), question: copy("Що таке індекс першого елемента списку Python?", "What is the index of the first Python list item?"), options: ["0", "1", "-1", "10"] },
+  { id: "q6", topicId: 6103, topicTitle: copy("Цикли та умови", "Loops and conditions"), question: copy("Що робить оператор return у функції?", "What does return do in a function?"), options: [copy("Повертає результат виклику", "Returns the call's result"), copy("Повторює цикл", "Repeats a loop"), copy("Видаляє список", "Deletes a list"), copy("Виводить коментар", "Prints a comment")] },
+];
+
+export function getLearningPreviewDiagnostic(enrollmentId: number): CourseDiagnosticAssessment {
+  const courseId = courseIds.find((id) => courseMeta(id).enrollmentId === enrollmentId) ?? currentCourseId;
+  const meta = courseMeta(courseId);
+  const attemptNumber = previewDiagnosticAttempts.get(enrollmentId) ?? 1;
+  return {
+    id: enrollmentId * 10 + attemptNumber,
+    enrollmentId,
+    attemptNumber,
+    courseTitle: meta.title,
+    status: previewDiagnosticResults.has(enrollmentId) ? "SUBMITTED" : "READY",
+    passing: { totalScore: 75, knowledgeScore: 70, practicalScore: 60 },
+    questions: previewDiagnosticQuestions(),
+    practical: {
+      title: copy("Знайди найменше значення", "Find the smallest value"),
+      statement: copy("Прочитай цілі числа з одного рядка та виведи найменше. Числа розділені пробілами.", "Read integers from one line and print the smallest. Values are separated by spaces."),
+      inputFormat: copy("Один рядок цілих чисел.", "One line of integers."),
+      outputFormat: copy("Одне ціле число — мінімум.", "One integer: the minimum."),
+      constraints: copy("У рядку є щонайменше одне число.", "The line contains at least one number."),
+      examples: [{ input: "7 3 9", output: "3", explanation: copy("Мінімальне число — 3.", "The minimum value is 3.") }],
+      codeTemplate: "values = list(map(int, input().split()))\n# TODO: find and print the minimum",
+      runtime: meta.runtime,
+      entryFile: "main.py",
+    },
+    result: previewDiagnosticResults.get(enrollmentId) ?? null,
+  };
+}
+
+export async function runLearningPreviewDiagnostic(_enrollmentId: number, _code: string, input: string): Promise<CourseDiagnosticRunResult> {
+  const numbers = input.trim().split(/\s+/).map(Number).filter(Number.isFinite);
+  return { stdout: numbers.length ? `${Math.min(...numbers)}\n` : "", stderr: "", exitCode: 0, success: numbers.length > 0 };
+}
+
+export function retryLearningPreviewDiagnostic(enrollmentId: number): CourseDiagnosticAssessment {
+  const previous = previewDiagnosticResults.get(enrollmentId);
+  if (!previous || previous.passed) return getLearningPreviewDiagnostic(enrollmentId);
+  previewDiagnosticResults.delete(enrollmentId);
+  previewDiagnosticAttempts.set(enrollmentId, (previewDiagnosticAttempts.get(enrollmentId) ?? 1) + 1);
+  return getLearningPreviewDiagnostic(enrollmentId);
+}
+
+export async function submitLearningPreviewDiagnostic(
+  enrollmentId: number,
+  answers: Array<{ questionId: string; selectedIndex: number }>,
+  code: string,
+): Promise<CourseDiagnosticResult> {
+  const questions = previewDiagnosticQuestions();
+  const correctIndexes = [0, 0, 0, 0, 0, 0];
+  const answerById = new Map(answers.map((answer) => [answer.questionId, answer.selectedIndex]));
+  const review = questions.map((question, index) => ({
+    questionId: question.id,
+    question: question.question,
+    options: question.options,
+    selectedIndex: answerById.get(question.id) ?? -1,
+    correctIndex: correctIndexes[index],
+    topicTitle: question.topicTitle,
+  }));
+  const correctCount = review.filter((item) => item.selectedIndex === item.correctIndex).length;
+  const knowledgeScore = Math.round(correctCount / questions.length * 100);
+  const practicalScore = code.includes("min(") ? 100 : 40;
+  const score = Math.round((knowledgeScore + practicalScore) / 2);
+  const passed = score >= 75 && knowledgeScore >= 70 && practicalScore >= 60;
+  const topicResults = [6101, 6103].map((topicId) => {
+    const topicQuestions = questions.map((question, index) => ({ question, index })).filter(({ question }) => question.topicId === topicId);
+    const topicCorrect = topicQuestions.filter(({ index }) => review[index].selectedIndex === correctIndexes[index]).length;
+    const topicScore = Math.round(topicCorrect / topicQuestions.length * 100);
+    const theoryCredited = topicScore >= 80;
+    return {
+      topicId,
+      topicTitle: topicQuestions[0]?.question.topicTitle || "",
+      correctCount: topicCorrect,
+      totalQuestions: topicQuestions.length,
+      score: topicScore,
+      theoryCredited,
+      practiceCredited: theoryCredited && practicalScore >= 60,
+    };
+  });
+  const result: CourseDiagnosticResult = {
+    score,
+    knowledgeScore,
+    practicalScore,
+    correctCount,
+    totalQuestions: questions.length,
+    testsPassed: 4,
+    testsTotal: 5,
+    passed,
+    answers,
+    topicResults,
+    review,
+    submittedAt: new Date().toISOString(),
+  };
+  previewDiagnosticResults.set(enrollmentId, result);
+  if (passed) {
+    courseItems().forEach((item) => { if (item.content.required !== false) completedItems.add(item.id); });
+    persistPreviewState();
+  } else {
+    for (const topic of topicResults) {
+      if (!topic.theoryCredited) continue;
+      completedItems.add(topic.topicId);
+      if (topic.practiceCredited) completedItems.add(topic.topicId + 1);
+    }
+    persistPreviewState();
+  }
+  return result;
 }

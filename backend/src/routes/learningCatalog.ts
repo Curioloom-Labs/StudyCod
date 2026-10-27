@@ -3,6 +3,7 @@ import { z } from "zod";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { checkCourseProject, completeCourseItem, enrollInCourseVariant, getCatalogCourseSyllabus, getCourseForUser, getCourseProject, getCourseQuiz, getEnrollmentIad, getLearningCatalog, getLearningMe, passFinalAssessment, runCourseProject, saveCourseProject, setCurrentCourseEnrollment, submitCourseProject, submitCourseQuiz } from "../services/learningCatalogService";
 import { normalizeUiLocale, resolveUiLocaleFromHeaders, type UiLocale } from "../utils/uiLocale";
+import { getCourseDiagnosticAssessment, retryCourseDiagnosticAssessment, runCourseDiagnosticSample, submitCourseDiagnosticAssessment } from "../services/courseDiagnosticAssessment";
 
 export const learningCatalogRouter = Router();
 
@@ -252,6 +253,57 @@ learningCatalogRouter.post("/enrollments/:enrollmentId/final-assessment", authRe
   try {
     const enrollment = await passFinalAssessment(req.userId, enrollmentId);
     return res.json({ enrollment: { id: enrollment.id, status: enrollment.status, completionPercent: enrollment.completionPercent, finalAssessmentPassed: enrollment.finalAssessmentPassed } });
+  } catch (error: unknown) {
+    return res.status(errorStatus(error)).json({ message: errorMessage(error) });
+  }
+});
+
+learningCatalogRouter.get("/enrollments/:enrollmentId/diagnostic", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  const enrollmentId = Number(req.params.enrollmentId);
+  if (!Number.isInteger(enrollmentId) || enrollmentId <= 0) return res.status(400).json({ message: "INVALID_INPUT" });
+  try {
+    return res.json({ assessment: await getCourseDiagnosticAssessment(req.userId, enrollmentId, requestLocale(req)) });
+  } catch (error: unknown) {
+    return res.status(errorStatus(error)).json({ message: errorMessage(error) });
+  }
+});
+
+learningCatalogRouter.post("/enrollments/:enrollmentId/diagnostic/retry", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  const enrollmentId = Number(req.params.enrollmentId);
+  if (!Number.isInteger(enrollmentId) || enrollmentId <= 0) return res.status(400).json({ message: "INVALID_INPUT" });
+  try {
+    return res.json({ assessment: await retryCourseDiagnosticAssessment(req.userId, enrollmentId, requestLocale(req)) });
+  } catch (error: unknown) {
+    return res.status(errorStatus(error)).json({ message: errorMessage(error) });
+  }
+});
+
+const diagnosticRunSchema = z.object({ code: z.string().trim().min(1).max(100_000), input: z.string().max(20_000).default("") }).strict();
+learningCatalogRouter.post("/enrollments/:enrollmentId/diagnostic/run", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  const enrollmentId = Number(req.params.enrollmentId);
+  const parsed = diagnosticRunSchema.safeParse(req.body ?? {});
+  if (!Number.isInteger(enrollmentId) || enrollmentId <= 0 || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+  try {
+    return res.json({ result: await runCourseDiagnosticSample(req.userId, enrollmentId, parsed.data.code, parsed.data.input) });
+  } catch (error: unknown) {
+    return res.status(errorStatus(error)).json({ message: errorMessage(error) });
+  }
+});
+
+const diagnosticSubmitSchema = z.object({
+  answers: z.array(z.object({ questionId: z.string().trim().min(1).max(32), selectedIndex: z.number().int().min(0).max(3) })).min(6).max(10),
+  code: z.string().trim().min(1).max(100_000),
+}).strict();
+learningCatalogRouter.post("/enrollments/:enrollmentId/diagnostic/submit", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  const enrollmentId = Number(req.params.enrollmentId);
+  const parsed = diagnosticSubmitSchema.safeParse(req.body ?? {});
+  if (!Number.isInteger(enrollmentId) || enrollmentId <= 0 || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT", issues: parsed.success ? undefined : parsed.error.issues });
+  try {
+    return res.json({ result: await submitCourseDiagnosticAssessment(req.userId, enrollmentId, parsed.data.answers, parsed.data.code) });
   } catch (error: unknown) {
     return res.status(errorStatus(error)).json({ message: errorMessage(error) });
   }
