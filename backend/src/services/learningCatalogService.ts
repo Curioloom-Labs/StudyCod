@@ -772,6 +772,41 @@ export async function getCourseForUser(userId: number, courseId: number, locale:
   };
 }
 
+/** Public outline for a published global course. It intentionally omits lesson content and learner progress. */
+export async function getCatalogCourseSyllabus(courseId: number, locale: LearningLocale = "uk") {
+  const course = await courseRepo().findOne({
+    where: { id: courseId, organization: IsNull() },
+    relations: ["modules", "modules.items", "variants"],
+  });
+  if (!course || course.status !== "PUBLISHED") {
+    throw Object.assign(new Error("COURSE_NOT_FOUND"), { statusCode: 404 });
+  }
+
+  const modules = [...(course.modules || [])]
+    .sort((a, b) => a.order - b.order || a.id - b.id)
+    .map((module) => ({
+      id: module.id,
+      title: localizedModuleTitle(module.contentKey, locale, module.title),
+      items: [...(module.items || [])]
+        .filter((item) => item.isActive !== false)
+        .sort((a, b) => a.order - b.order || a.id - b.id)
+        .map((item) => ({ kind: item.kind, title: localizeCourseItem(item, locale).title })),
+    }))
+    .filter((module) => module.items.length > 0);
+
+  return {
+    id: course.id,
+    title: localizedCourseTitle(course, locale),
+    description: localizedCourseDescription(course, locale),
+    level: course.level,
+    isBase: course.isBase,
+    variants: (course.variants || [])
+      .filter((variant) => variant.status === "PUBLISHED")
+      .map((variant) => ({ runtime: variant.runtime, runtimeLabel: runtimeLabel(variant.runtime), title: variant.title })),
+    modules,
+  };
+}
+
 async function getEnrolledCourseQuizContext(userId: number, itemId: number, locale: LearningLocale = "uk") {
   const item = await itemRepo().findOne({ where: { id: itemId, isActive: true }, relations: ["module", "module.course"] });
   if (!item?.module?.course || item.kind !== "QUIZ") {

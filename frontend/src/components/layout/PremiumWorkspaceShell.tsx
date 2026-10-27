@@ -48,7 +48,7 @@ type ShellProps = {
   onLogout: () => void;
   children: React.ReactNode;
   area?: "learning" | "lab" | "contest";
-  courseTab?: "overview" | "path" | "practice" | "progress";
+  courseTab?: "overview" | "path" | "practice" | "progress" | "none";
 };
 
 export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
@@ -150,7 +150,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   };
   const hasSupportDesk = user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN";
   const isAdmin = user.role === "SYSTEM_ADMIN";
-  const showCourseNavigation = area === "learning" && page !== "admin" && Boolean(learning.currentCourse);
+  const showCourseNavigation = area === "learning" && page !== "admin" && courseTab !== "none" && Boolean(learning.currentCourse);
   return (
     <div ref={shellRef} className={`mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary ${showCourseNavigation ? "has-course-context" : ""}`}>
       <a className="skip-link" href="#main-content">{uk ? "Перейти до основного вмісту" : "Skip to main content"}</a>

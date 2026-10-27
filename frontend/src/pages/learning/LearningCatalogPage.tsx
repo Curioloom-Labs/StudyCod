@@ -193,7 +193,7 @@ export const LearningCatalogPage: React.FC = () => {
           })}</div>
           <div className="mt-auto flex items-center justify-between gap-3 pt-4">
             {hasUnlocked ? <span className="text-[11px] font-semibold text-primary">{tr("Твій прогрес збережено", "Your progress is saved")}</span> : <span className="text-[11px] text-text-muted">{tr("Передумови видно до старту", "Prerequisites shown up front")}</span>}
-            {canPreview && <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${course.id}/overview`))} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-extrabold text-text-secondary transition hover:bg-bg-hover hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">{tr("Програма", "Syllabus")}<ArrowRight size={14} aria-hidden="true" /></button>}
+            {canPreview && <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${course.id}/syllabus`))} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-xs font-extrabold text-text-secondary transition hover:bg-bg-hover hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">{tr("Програма", "Syllabus")}<ArrowRight size={14} aria-hidden="true" /></button>}
           </div>
         </article>;
       })}
