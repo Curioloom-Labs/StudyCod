@@ -104,6 +104,7 @@ import { LearningEvidence } from "./entities/LearningEvidence";
 import { CourseAssignment } from "./entities/CourseAssignment";
 import { ManualSubmission } from "./entities/ManualSubmission";
 import { QuizAttempt } from "./entities/QuizAttempt";
+import { CourseDiagnosticAssessment } from "./entities/CourseDiagnosticAssessment";
 const dbPort = env.DB_PORT != null ? parseInt(env.DB_PORT, 10) : 3306;
 const runtimeMigrationExtension = path.extname(__filename) === ".ts" ? "ts" : "js";
 const BLOCKED_MIGRATION_TIMESTAMPS = new Set(["1736206400000"]);
@@ -142,7 +143,7 @@ export const AppDataSource = new DataSource({
     password: env.DB_PASS || "",
     database: env.DB_NAME || "studycod"
   }),
-  entities: [User, Task, Grade, Topic, Class, Student, EduCredentialOperation, EduLesson, EduLiveSession, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission, GradeAppeal, GradeAppealMessage, EduHintFeedback, ConceptReviewState, SubmissionIntegrity, SolveSession, PlaygroundSnippet, BlogPost, BlogMedia, BlogTag, BlogPostTag, BlogComment, BlogReaction, BlogCommentReport, Notification, AuditLog, Organization, Membership, OrgInvitation, EduRegistrationIntent, ParentLink, Course, CourseModule, CourseItem, CourseVariant, CourseDependency, UserCourseEnrollment, CourseItemProgress, LearningEvidence, CourseAssignment, ManualSubmission, QuizAttempt, Attendance, LearningAttempt, LearningEvent],
+  entities: [User, Task, Grade, Topic, Class, Student, EduCredentialOperation, EduLesson, EduLiveSession, EduTask, TestData, EduGrade, SummaryGrade, LessonAttempt, TopicNew, TopicTask, TaskTheory, ControlWork, TopicProgress, ClassAnnouncement, TheoryBlock, SupportTicket, SupportConversation, SupportMessage, SupportAttachment, MaintenanceState, LibraryTask, LibraryTaskAttempt, LibraryTaskRevision, Contest, ContestProblem, ContestParticipant, ContestSubmission, GradeAppeal, GradeAppealMessage, EduHintFeedback, ConceptReviewState, SubmissionIntegrity, SolveSession, PlaygroundSnippet, BlogPost, BlogMedia, BlogTag, BlogPostTag, BlogComment, BlogReaction, BlogCommentReport, Notification, AuditLog, Organization, Membership, OrgInvitation, EduRegistrationIntent, ParentLink, Course, CourseModule, CourseItem, CourseVariant, CourseDependency, UserCourseEnrollment, CourseItemProgress, LearningEvidence, CourseAssignment, ManualSubmission, QuizAttempt, CourseDiagnosticAssessment, Attendance, LearningAttempt, LearningEvent],
   synchronize: false,
   logging: ["error", "warn"],
   logger: new SlowQueryLogger(),

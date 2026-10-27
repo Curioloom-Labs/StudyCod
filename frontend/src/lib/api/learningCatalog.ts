@@ -5,9 +5,13 @@ import {
   enrollLearningPreviewCourse,
   getLearningPreviewCatalog,
   getLearningPreviewCourse,
+  getLearningPreviewDiagnostic,
   getLearningPreviewMe,
   getLearningPreviewSyllabus,
+  runLearningPreviewDiagnostic,
+  retryLearningPreviewDiagnostic,
   setCurrentLearningPreviewCourse,
+  submitLearningPreviewDiagnostic,
 } from "../learningPreview";
 
 export type CatalogRuntime = "JAVA" | "PYTHON" | "CPP";
@@ -82,6 +86,50 @@ export interface CatalogQuizResult {
   review: Array<{ questionId: string; question: string; options: string[]; selectedIndex: number; correctIndex: number }>;
   progress: LearningCourseItem["progress"];
   enrollment: { id: number; status: CatalogEnrollmentStatus; completionPercent: number; masteryScore: number };
+}
+
+export interface CourseDiagnosticResult {
+  score: number;
+  knowledgeScore: number;
+  practicalScore: number;
+  correctCount: number;
+  totalQuestions: number;
+  testsPassed: number;
+  testsTotal: number;
+  passed: boolean;
+  answers: Array<{ questionId: string; selectedIndex: number }>;
+  topicResults: Array<{ topicId: number; topicTitle: string; correctCount: number; totalQuestions: number; score: number; theoryCredited: boolean; practiceCredited: boolean }>;
+  review: Array<{ questionId: string; question: string; options: string[]; selectedIndex: number; correctIndex: number; topicTitle: string }>;
+  submittedAt: string;
+}
+
+export interface CourseDiagnosticAssessment {
+  id: number;
+  enrollmentId: number;
+  attemptNumber: number;
+  courseTitle: string;
+  status: "READY" | "SUBMITTED";
+  passing: { totalScore: number; knowledgeScore: number; practicalScore: number };
+  questions: Array<{ id: string; question: string; options: string[]; topicId: number; topicTitle: string }>;
+  practical: {
+    title: string;
+    statement: string;
+    inputFormat: string;
+    outputFormat: string;
+    constraints: string;
+    examples: Array<{ input: string; output: string; explanation?: string }>;
+    codeTemplate: string;
+    runtime: CatalogRuntime;
+    entryFile: string;
+  };
+  result: CourseDiagnosticResult | null;
+}
+
+export interface CourseDiagnosticRunResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  success: boolean;
 }
 
 export interface LearningProjectProgress {
@@ -270,6 +318,30 @@ export async function getCatalogQuiz(itemId: number): Promise<CatalogQuiz> {
 
 export async function submitCatalogQuiz(itemId: number, answers: Array<{ questionId: string; selectedIndex: number }>): Promise<CatalogQuizResult> {
   const response = await api.post(`/learning/items/${itemId}/quiz/submit`, { answers });
+  return response.data?.result;
+}
+
+export async function getCourseDiagnostic(enrollmentId: number): Promise<CourseDiagnosticAssessment> {
+  if (isDevPreviewActive()) return getLearningPreviewDiagnostic(enrollmentId);
+  const response = await api.get(`/learning/enrollments/${enrollmentId}/diagnostic`);
+  return response.data?.assessment;
+}
+
+export async function retryCourseDiagnostic(enrollmentId: number): Promise<CourseDiagnosticAssessment> {
+  if (isDevPreviewActive()) return retryLearningPreviewDiagnostic(enrollmentId);
+  const response = await api.post(`/learning/enrollments/${enrollmentId}/diagnostic/retry`);
+  return response.data?.assessment;
+}
+
+export async function runCourseDiagnostic(enrollmentId: number, code: string, input: string): Promise<CourseDiagnosticRunResult> {
+  if (isDevPreviewActive()) return runLearningPreviewDiagnostic(enrollmentId, code, input);
+  const response = await api.post(`/learning/enrollments/${enrollmentId}/diagnostic/run`, { code, input });
+  return response.data?.result;
+}
+
+export async function submitCourseDiagnostic(enrollmentId: number, answers: Array<{ questionId: string; selectedIndex: number }>, code: string): Promise<CourseDiagnosticResult> {
+  if (isDevPreviewActive()) return submitLearningPreviewDiagnostic(enrollmentId, answers, code);
+  const response = await api.post(`/learning/enrollments/${enrollmentId}/diagnostic/submit`, { answers, code });
   return response.data?.result;
 }
 
