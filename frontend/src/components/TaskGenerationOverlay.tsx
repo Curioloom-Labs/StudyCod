@@ -36,34 +36,64 @@ export function TaskGenerationOverlay({
   open,
   phase,
   progress,
+  mode = "task",
 }: {
   open: boolean;
   phase?: TaskGenerationPhase | null;
   progress?: TaskGenerationProgress | null;
+  mode?: "task" | "assessment";
 }) {
   const { i18n } = useTranslation();
+  const isAssessment = mode === "assessment";
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [tipIndex, setTipIndex] = useState(0);
 
   const phaseSteps = useMemo<Record<TaskGenerationPhase, string>>(
-    () => ({
-      requesting: tr("Надсилаємо запит", "Sending request"),
-      context: tr("Узгоджуємо контекст теми", "Loading topic context"),
-      generating: tr("Створюємо умову", "Building the statement"),
-      condition: tr("Створюємо умову", "Building the statement"),
-      tests: tr("Перевіряємо тести", "Preparing autotests"),
-      saving: tr("Зберігаємо результат", "Saving the result"),
-      ready: tr("Практика готова", "Practice is ready"),
-      syncing: tr("Оновлюємо маршрут практики", "Refreshing your practice route"),
-      opening: tr("Відкриваємо нове завдання", "Opening the new task"),
-      finishing: tr("Готуємо робочий простір", "Preparing your workspace"),
-      error: tr("Генерація не завершилась", "Generation did not finish"),
-    }),
-    [i18n.language],
+    () => isAssessment
+      ? {
+          requesting: tr("Надсилаємо запит", "Sending request"),
+          context: tr("Зіставляємо прогрес курсу", "Checking your course progress"),
+          generating: tr("Генеруємо персональний тест", "Building your personal assessment"),
+          condition: tr("Готуємо питання ABCD", "Preparing ABCD questions"),
+          tests: tr("Створюємо практичне завдання", "Creating the practical task"),
+          saving: tr("Зберігаємо діагностику", "Saving your assessment"),
+          ready: tr("Тест готовий", "Assessment is ready"),
+          syncing: tr("Оновлюємо персональний маршрут", "Updating your learning route"),
+          opening: tr("Відкриваємо тест", "Opening the assessment"),
+          finishing: tr("Готуємо діагностику", "Preparing your assessment"),
+          error: tr("Не вдалося створити тест", "Could not create the assessment"),
+        }
+      : {
+          requesting: tr("Надсилаємо запит", "Sending request"),
+          context: tr("Узгоджуємо контекст теми", "Loading topic context"),
+          generating: tr("Створюємо умову", "Building the statement"),
+          condition: tr("Створюємо умову", "Building the statement"),
+          tests: tr("Перевіряємо тести", "Preparing autotests"),
+          saving: tr("Зберігаємо результат", "Saving the result"),
+          ready: tr("Практика готова", "Practice is ready"),
+          syncing: tr("Оновлюємо маршрут практики", "Refreshing your practice route"),
+          opening: tr("Відкриваємо нове завдання", "Opening the new task"),
+          finishing: tr("Готуємо робочий простір", "Preparing your workspace"),
+          error: tr("Генерація не завершилась", "Generation did not finish"),
+        },
+    [i18n.language, isAssessment],
   );
 
   const loadingTips = useMemo(
-    () => [
+    () => isAssessment ? [
+      tr(
+        "Враховуємо теми, які ти вже опанував, щоб не перевіряти їх повторно.",
+        "We account for topics you have already mastered so you do not repeat them.",
+      ),
+      tr(
+        "Питання з різних тем допоможуть точніше визначити, що вже можна зарахувати.",
+        "Questions across the course help us identify which topics can be credited.",
+      ),
+      tr(
+        "Практичне завдання доповнить тест і покаже, як ти застосовуєш знання.",
+        "The practical task complements the quiz and checks how you apply your knowledge.",
+      ),
+    ] : [
       tr(
         "Перевіряємо, щоб умова мала чіткий формат вводу та виводу — так автоперевірка буде надійною.",
         "We check that the task has a clear input/output contract so automated checks stay reliable.",
@@ -77,17 +107,22 @@ export function TaskGenerationOverlay({
         "Edge cases include empty data, 0, 1, and maximum values where they matter.",
       ),
     ],
-    [i18n.language],
+    [i18n.language, isAssessment],
   );
 
   const labItems = useMemo(
-    () => [
+    () => isAssessment ? [
+      { title: tr("Прогрес курсу", "Course progress"), detail: tr("визначаємо теми для перевірки", "choosing topics to assess") },
+      { title: tr("Питання ABCD", "ABCD questions"), detail: tr("готуємо унікальний набір", "building a unique set") },
+      { title: tr("Практика", "Practical task"), detail: tr("підбираємо за рівнем", "matched to your level") },
+      { title: tr("Твій тест", "Your assessment"), detail: tr("збираємо персональний варіант", "assembling your version") },
+    ] : [
       { title: tr("Контекст теми", "Topic context"), detail: tr("узгоджуємо з маршрутом", "matched to your route") },
       { title: tr("Умова", "Statement"), detail: tr("формуємо зрозумілий формат", "clear input and output") },
       { title: tr("Тести", "Tests"), detail: tr("публічні та приховані кейси", "public and hidden cases") },
       { title: tr("Шаблон", "Template"), detail: tr("готуємо старт у редакторі", "ready in the editor") },
     ],
-    [i18n.language],
+    [i18n.language, isAssessment],
   );
 
   useEffect(() => {
@@ -131,7 +166,7 @@ export function TaskGenerationOverlay({
       className="fixed inset-0 z-[999] flex items-center justify-center bg-bg-base/80 p-4 backdrop-blur-xl"
       role="status"
       aria-live="polite"
-      aria-label={tr("Генерація завдання", "Task generation")}
+      aria-label={isAssessment ? tr("Генерація діагностичного тесту", "Diagnostic assessment generation") : tr("Генерація завдання", "Task generation")}
     >
       <div className="relative w-[min(900px,calc(100vw-28px))] overflow-hidden rounded-[28px] border border-border bg-bg-surface text-text-primary shadow-[0_35px_110px_rgba(0,0,0,.42)]">
         <div className="pointer-events-none absolute -right-24 -top-24 size-72 rounded-full bg-primary/15 blur-3xl" />
@@ -146,17 +181,19 @@ export function TaskGenerationOverlay({
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-bold uppercase tracking-[.16em] text-primary">
-                    {tr("Створення практики", "Practice generation")}
+                    {isAssessment ? tr("Персональна діагностика", "Personal assessment") : tr("Створення практики", "Practice generation")}
                   </p>
                   <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.06em] sm:text-4xl">
                     {activePhase === "error"
                       ? tr("Не вдалося завершити", "Could not finish")
-                      : tr("Готуємо нове завдання", "Preparing a new task")}
+                      : isAssessment ? tr("Формуємо тест знань", "Preparing your knowledge check") : tr("Готуємо нове завдання", "Preparing a new task")}
                   </h2>
                   <p className="mt-3 max-w-xl text-sm leading-6 text-text-secondary">
                     {activePhase === "error"
                       ? tr("Запит зупинився. Закрий це вікно та спробуй ще раз — робочий простір залишився на місці.", "The request stopped. Close this window and try again — your workspace is still intact.")
-                      : tr("Синхронізуємо тему, складність, тести та стартовий шаблон. Коли все буде готово, завдання відкриється автоматично.", "We are syncing the topic, difficulty, tests, and starter template. The task will open automatically when ready.")}
+                      : isAssessment
+                        ? tr("Враховуємо твій навчальний маршрут і вже засвоєні теми, щоб підготувати унікальні питання ABCD та практичне завдання.", "We are using your learning route and mastered topics to create unique ABCD questions and a practical task.")
+                        : tr("Синхронізуємо тему, складність, тести та стартовий шаблон. Коли все буде готово, завдання відкриється автоматично.", "We are syncing the topic, difficulty, tests, and starter template. The task will open automatically when ready.")}
                   </p>
                 </div>
               </div>
@@ -179,7 +216,7 @@ export function TaskGenerationOverlay({
                 <div className="mt-4 grid gap-2 sm:grid-cols-5">
                 {PHASE_ORDER.map((step, index) => {
                   const done = activePhase !== "error" && index < activeIndex;
-                  const current = activePhase === step;
+                  const current = phaseForIndex === step;
                   return (
                     <div key={step} className={`min-w-0 rounded-xl px-3 py-3 transition ${current ? "bg-primary text-primary-foreground" : done ? "bg-accent-success/10 text-primary" : "bg-bg-base text-text-muted border border-border"}`}>
                       <div className="text-[11px] font-bold tabular-nums">{String(index + 1).padStart(2, "0")}</div>
@@ -202,9 +239,9 @@ export function TaskGenerationOverlay({
           </section>
 
           <aside className="relative min-w-0 border-t border-border bg-bg-base/70 p-6 lg:border-l lg:border-t-0">
-            <p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{tr("Лабораторія генерації", "Generation lab")}</p>
-            <h3 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.05em]">{tr("Збираємо задачу як конструктор", "Assembling the task")}</h3>
-            <p className="mt-3 text-sm leading-6 text-text-secondary">{tr("Тут видно, що саме готується: зміст, перевірки та робочий шаблон. Це зрозумілий стан очікування, а не порожній екран.", "This makes the waiting state clear: content, checks, and the workspace template are being prepared.")}</p>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{isAssessment ? tr("Діагностична лабораторія", "Assessment lab") : tr("Лабораторія генерації", "Generation lab")}</p>
+            <h3 className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold tracking-[-.05em]">{isAssessment ? tr("Збираємо тест під твій маршрут", "Building an assessment for your route") : tr("Збираємо задачу як конструктор", "Assembling the task")}</h3>
+            <p className="mt-3 text-sm leading-6 text-text-secondary">{isAssessment ? tr("Підбираємо теми, питання та практичне завдання. Поки тест готується, видно кожен крок.", "We are selecting topics, questions, and a practical task. Follow each step while the assessment is prepared.") : tr("Тут видно, що саме готується: зміст, перевірки та робочий шаблон. Це зрозумілий стан очікування, а не порожній екран.", "This makes the waiting state clear: content, checks, and the workspace template are being prepared.")}</p>
 
             <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-bg-code p-4">
               <div className="relative mb-4 h-24 overflow-hidden rounded-xl bg-bg-code">

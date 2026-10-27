@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, LoaderCircle, Play, Sparkles } fro
 import { useNavigate, useParams } from "react-router-dom";
 import { CodeEditor } from "../../components/CodeEditor";
 import { MarkdownView } from "../../components/MarkdownView";
+import { TaskGenerationOverlay } from "../../components/TaskGenerationOverlay";
 import {
   getCourseDiagnostic,
   getLearningCourse,
@@ -151,12 +152,7 @@ export const CourseDiagnosticPage: React.FC = () => {
   const answeredCount = Object.keys(answers).length;
   const practical = assessment?.practical;
 
-  if (loading) return <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-    <div className="h-5 w-36 animate-pulse rounded bg-bg-hover" />
-    <div className="mt-5 h-36 animate-pulse rounded-2xl bg-bg-hover" />
-    <div className="mt-4 h-64 animate-pulse rounded-2xl bg-bg-hover" />
-    <div className="mt-4 h-80 animate-pulse rounded-2xl bg-bg-hover" />
-  </main>;
+  if (loading) return <TaskGenerationOverlay open mode="assessment" phase="generating" />;
 
   if (!assessment || !course) return <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
     <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${courseId}/path`))} className="mb-5 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-primary"><ArrowLeft className="size-4" />{tr("До маршруту курсу", "Back to course path")}</button>
@@ -166,7 +162,9 @@ export const CourseDiagnosticPage: React.FC = () => {
     </section>
   </main>;
 
-  return <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-5 text-text-primary sm:px-6 lg:px-8 lg:pt-8">
+  return <>
+    <TaskGenerationOverlay open={retrying} mode="assessment" phase="generating" />
+    <main className="mx-auto w-full max-w-5xl px-4 pb-16 pt-5 text-text-primary sm:px-6 lg:px-8 lg:pt-8">
     <button type="button" onClick={() => navigate(withDevPreview(`/learning/course/${course.id}/path`))} className="mb-5 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-primary transition hover:underline">
       <ArrowLeft className="size-4" />{tr("До маршруту курсу", "Back to course path")}
     </button>
@@ -284,5 +282,6 @@ export const CourseDiagnosticPage: React.FC = () => {
         <button type="button" disabled={submitting || assessment.status === "SUBMITTED"} onClick={() => void submit()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-extrabold text-primary-foreground transition hover:brightness-105 disabled:cursor-wait disabled:opacity-55">{submitting && <LoaderCircle className="size-4 animate-spin" />}{submitting ? tr("Перевіряємо…", "Checking…") : tr("Подати тест", "Submit assessment")}<ArrowRight className="size-4" /></button>
       </div>
     </div>}
-  </main>;
+    </main>
+  </>;
 };
