@@ -55,7 +55,7 @@ export function TaskGenerationOverlay({
           context: tr("Зіставляємо прогрес курсу", "Checking your course progress"),
           generating: tr("Генеруємо персональний тест", "Building your personal assessment"),
           condition: tr("Готуємо питання ABCD", "Preparing ABCD questions"),
-          tests: tr("Створюємо практичне завдання", "Creating the practical task"),
+          tests: tr("Створюємо практичні задачі", "Creating practical tasks"),
           saving: tr("Зберігаємо діагностику", "Saving your assessment"),
           ready: tr("Тест готовий", "Assessment is ready"),
           syncing: tr("Оновлюємо персональний маршрут", "Updating your learning route"),
@@ -90,8 +90,8 @@ export function TaskGenerationOverlay({
         "Questions across the course help us identify which topics can be credited.",
       ),
       tr(
-        "Практичне завдання доповнить тест і покаже, як ти застосовуєш знання.",
-        "The practical task complements the quiz and checks how you apply your knowledge.",
+        "Задачі доповнять тест і покажуть, як ти застосовуєш знання з різних тем.",
+        "Practical tasks complement the quiz and show how you apply knowledge across topics.",
       ),
     ] : [
       tr(
@@ -114,7 +114,7 @@ export function TaskGenerationOverlay({
     () => isAssessment ? [
       { title: tr("Прогрес курсу", "Course progress"), detail: tr("визначаємо теми для перевірки", "choosing topics to assess") },
       { title: tr("Питання ABCD", "ABCD questions"), detail: tr("готуємо унікальний набір", "building a unique set") },
-      { title: tr("Практика", "Practical task"), detail: tr("підбираємо за рівнем", "matched to your level") },
+      { title: tr("Практика", "Practical tasks"), detail: tr("для модулів курсу", "across course modules") },
       { title: tr("Твій тест", "Your assessment"), detail: tr("збираємо персональний варіант", "assembling your version") },
     ] : [
       { title: tr("Контекст теми", "Topic context"), detail: tr("узгоджуємо з маршрутом", "matched to your route") },
@@ -158,6 +158,7 @@ export function TaskGenerationOverlay({
   const progressValue = progress?.progress ?? (activePhase === "error"
     ? 100
     : Math.max(5, Math.round(((activeIndex + 1) / PHASE_ORDER.length) * 100)));
+  const hasDeterminateProgress = !isAssessment || Boolean(progress) || activePhase === "error";
   const activeTip = loadingTips[tipIndex] ?? loadingTips[0];
   const activeMessage = progress?.message?.trim() || phaseSteps[activePhase];
 
@@ -192,7 +193,7 @@ export function TaskGenerationOverlay({
                     {activePhase === "error"
                       ? tr("Запит зупинився. Закрий це вікно та спробуй ще раз — робочий простір залишився на місці.", "The request stopped. Close this window and try again — your workspace is still intact.")
                       : isAssessment
-                        ? tr("Враховуємо твій навчальний маршрут і вже засвоєні теми, щоб підготувати унікальні питання ABCD та практичне завдання.", "We are using your learning route and mastered topics to create unique ABCD questions and a practical task.")
+                        ? tr("Генеруємо унікальні питання ABCD і практичні задачі за всіма темами курсу.", "We are generating unique ABCD questions and practical tasks across the full course.")
                         : tr("Синхронізуємо тему, складність, тести та стартовий шаблон. Коли все буде готово, завдання відкриється автоматично.", "We are syncing the topic, difficulty, tests, and starter template. The task will open automatically when ready.")}
                   </p>
                 </div>
@@ -207,10 +208,12 @@ export function TaskGenerationOverlay({
             <div className="mt-8">
               <div className="mb-3 flex items-center justify-between gap-3 text-sm">
                 <span className="min-w-0 break-words font-semibold">{activeMessage}</span>
-                <span className="shrink-0 font-bold text-primary tabular-nums">{progressValue}%</span>
+                <span className="shrink-0 font-bold text-primary tabular-nums">{hasDeterminateProgress ? `${progressValue}%` : tr("Усі теми", "Full course")}</span>
               </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-bg-hover">
-                <div className={`h-full rounded-full transition-[width] duration-300 ease-out ${activePhase === "error" ? "bg-accent-error" : "bg-primary"}`} style={{ width: `${progressValue}%` }} />
+              <div className="h-2.5 overflow-hidden rounded-full bg-bg-hover" role="progressbar" aria-valuemin={hasDeterminateProgress ? 0 : undefined} aria-valuemax={hasDeterminateProgress ? 100 : undefined} aria-valuenow={hasDeterminateProgress ? progressValue : undefined} aria-valuetext={hasDeterminateProgress ? `${progressValue}%` : tr("Генеруємо оцінювання з усіх тем курсу", "Generating an assessment across the full course")}>
+                {hasDeterminateProgress
+                  ? <div className={`h-full rounded-full transition-[width] duration-300 ease-out ${activePhase === "error" ? "bg-accent-error" : "bg-primary"}`} style={{ width: `${progressValue}%` }} />
+                  : <div className="h-full w-1/3 animate-shimmer rounded-full bg-primary" />}
               </div>
 
                 <div className="mt-4 grid gap-2 sm:grid-cols-5">

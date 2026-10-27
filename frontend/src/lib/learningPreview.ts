@@ -152,15 +152,11 @@ export function getLearningPreviewDiagnostic(enrollmentId: number): CourseDiagno
   const courseId = courseIds.find((id) => courseMeta(id).enrollmentId === enrollmentId) ?? currentCourseId;
   const meta = courseMeta(courseId);
   const attemptNumber = previewDiagnosticAttempts.get(enrollmentId) ?? 1;
-  return {
-    id: enrollmentId * 10 + attemptNumber,
-    enrollmentId,
-    attemptNumber,
-    courseTitle: meta.title,
-    status: previewDiagnosticResults.has(enrollmentId) ? "SUBMITTED" : "READY",
-    passing: { totalScore: 75, knowledgeScore: 70, practicalScore: 60 },
-    questions: previewDiagnosticQuestions(),
-    practical: {
+  const practicals: NonNullable<CourseDiagnosticAssessment["practicals"]> = [
+    {
+      id: "p1",
+      moduleTitle: copy("Послідовності", "Sequences"),
+      topicIds: [6101],
       title: copy("Знайди найменше значення", "Find the smallest value"),
       statement: copy("Прочитай цілі числа з одного рядка та виведи найменше. Числа розділені пробілами.", "Read integers from one line and print the smallest. Values are separated by spaces."),
       inputFormat: copy("Один рядок цілих чисел.", "One line of integers."),
@@ -171,13 +167,39 @@ export function getLearningPreviewDiagnostic(enrollmentId: number): CourseDiagno
       runtime: meta.runtime,
       entryFile: "main.py",
     },
+    {
+      id: "p2",
+      moduleTitle: copy("Цикли та умови", "Loops and conditions"),
+      topicIds: [6103],
+      title: copy("Порахуй парні числа", "Count even numbers"),
+      statement: copy("Прочитай рядок цілих чисел і виведи кількість парних.", "Read a line of integers and print how many are even."),
+      inputFormat: copy("Один рядок цілих чисел.", "One line of integers."),
+      outputFormat: copy("Кількість парних чисел.", "The number of even values."),
+      constraints: copy("У рядку є щонайменше одне число.", "The line contains at least one number."),
+      examples: [{ input: "2 3 8 5", output: "2" }],
+      codeTemplate: "values = list(map(int, input().split()))\n# TODO: count even values",
+      runtime: meta.runtime,
+      entryFile: "main.py",
+    },
+  ];
+  return {
+    id: enrollmentId * 10 + attemptNumber,
+    enrollmentId,
+    attemptNumber,
+    courseTitle: meta.title,
+    status: previewDiagnosticResults.has(enrollmentId) ? "SUBMITTED" : "READY",
+    passing: { totalScore: 75, knowledgeScore: 70, practicalScore: 60 },
+    questions: previewDiagnosticQuestions(),
+    practical: practicals[0],
+    practicals,
     result: previewDiagnosticResults.get(enrollmentId) ?? null,
   };
 }
 
-export async function runLearningPreviewDiagnostic(_enrollmentId: number, _code: string, input: string): Promise<CourseDiagnosticRunResult> {
+export async function runLearningPreviewDiagnostic(_enrollmentId: number, taskId: string, _code: string, input: string): Promise<CourseDiagnosticRunResult> {
   const numbers = input.trim().split(/\s+/).map(Number).filter(Number.isFinite);
-  return { stdout: numbers.length ? `${Math.min(...numbers)}\n` : "", stderr: "", exitCode: 0, success: numbers.length > 0 };
+  const value = taskId === "p2" ? numbers.filter((number) => number % 2 === 0).length : numbers.length ? Math.min(...numbers) : "";
+  return { stdout: numbers.length ? `${value}\n` : "", stderr: "", exitCode: 0, success: numbers.length > 0 };
 }
 
 export function retryLearningPreviewDiagnostic(enrollmentId: number): CourseDiagnosticAssessment {
@@ -191,7 +213,7 @@ export function retryLearningPreviewDiagnostic(enrollmentId: number): CourseDiag
 export async function submitLearningPreviewDiagnostic(
   enrollmentId: number,
   answers: Array<{ questionId: string; selectedIndex: number }>,
-  code: string,
+  practicalSubmissions: Array<{ taskId: string; code: string }>,
 ): Promise<CourseDiagnosticResult> {
   const questions = previewDiagnosticQuestions();
   const correctIndexes = [0, 0, 0, 0, 0, 0];
@@ -206,7 +228,11 @@ export async function submitLearningPreviewDiagnostic(
   }));
   const correctCount = review.filter((item) => item.selectedIndex === item.correctIndex).length;
   const knowledgeScore = Math.round(correctCount / questions.length * 100);
-  const practicalScore = code.includes("min(") ? 100 : 40;
+  const taskScores = [
+    practicalSubmissions.find((submission) => submission.taskId === "p1")?.code.includes("min(") ? 100 : 40,
+    practicalSubmissions.find((submission) => submission.taskId === "p2")?.code.includes("% 2") ? 100 : 40,
+  ];
+  const practicalScore = Math.round(taskScores.reduce((sum, value) => sum + value, 0) / taskScores.length);
   const score = Math.round((knowledgeScore + practicalScore) / 2);
   const passed = score >= 75 && knowledgeScore >= 70 && practicalScore >= 60;
   const topicResults = [6101, 6103].map((topicId) => {
@@ -221,7 +247,7 @@ export async function submitLearningPreviewDiagnostic(
       totalQuestions: topicQuestions.length,
       score: topicScore,
       theoryCredited,
-      practiceCredited: theoryCredited && practicalScore >= 60,
+      practiceCredited: theoryCredited && taskScores[topicId === 6101 ? 0 : 1] >= 60,
     };
   });
   const result: CourseDiagnosticResult = {
@@ -230,8 +256,12 @@ export async function submitLearningPreviewDiagnostic(
     practicalScore,
     correctCount,
     totalQuestions: questions.length,
-    testsPassed: 4,
-    testsTotal: 5,
+    testsPassed: taskScores.reduce((sum, taskScore) => sum + (taskScore === 100 ? 5 : 2), 0),
+    testsTotal: 10,
+    practicalResults: [
+      { taskId: "p1", title: copy("Знайди найменше значення", "Find the smallest value"), moduleTitle: copy("Послідовності", "Sequences"), topicIds: [6101], testsPassed: taskScores[0] === 100 ? 5 : 2, testsTotal: 5, score: taskScores[0] },
+      { taskId: "p2", title: copy("Порахуй парні числа", "Count even numbers"), moduleTitle: copy("Цикли та умови", "Loops and conditions"), topicIds: [6103], testsPassed: taskScores[1] === 100 ? 5 : 2, testsTotal: 5, score: taskScores[1] },
+    ],
     passed,
     answers,
     topicResults,
