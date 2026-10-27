@@ -155,35 +155,14 @@ function courseDiagnosticTopics(course: Course, locale: CurriculumLocale): Cours
   return topics;
 }
 
-function courseContext(course: Course, locale: CurriculumLocale, seed: string): string {
-  const modules = [...(course.modules || [])].sort((a, b) => a.order - b.order || a.id - b.id);
-  const sections = modules.map((module) => {
-    const title = localizedModuleTitle(module.contentKey, locale, module.title);
-    const items = [...(module.items || [])]
-      .filter((item) => item.isActive !== false && item.content?.required !== false)
-      .sort((a, b) => a.order - b.order || a.id - b.id)
-      .map((item) => {
-        const localized = localizeCourseItem(item, locale);
-        const content = localized.content || {};
-        const details = [content.markdown, content.statement, content.description, content.objective, content.outcome]
-          .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-          .join("\n")
-          .slice(0, 1_000);
-        return `- ${localized.title}${details ? `\n${details}` : ""}`;
-      });
-    return `${title}\n${items.join("\n")}`;
-  });
-  return [
-    `Course: ${localizedCourseTitle(course, locale)}. ${localizedCourseDescription(course, locale) || ""}`,
-    "Create a learner-specific diagnostic assessment. Use only the curriculum below.",
-    `Variation token (never include it in question text): ${seed}`,
-    ...sections,
-  ].join("\n\n").slice(0, 16_000);
-}
-
 async function generateAssessment(course: Course, runtime: Runtime, userId: number, locale: CurriculumLocale, courseTopics: CourseDiagnosticTopic[]): Promise<CourseDiagnosticPayload> {
   const seed = crypto.randomBytes(16).toString("hex");
-  const context = courseContext(course, locale, seed);
+  const courseContext = [
+    `Course: ${localizedCourseTitle(course, locale)}.`,
+    localizedCourseDescription(course, locale)?.slice(0, 1_000),
+    "Generate new assessment content using only the curriculum topics supplied with each task.",
+    `Variation token (never include it in the learner-facing text): ${seed}`,
+  ].filter(Boolean).join("\n");
   const topics = [...courseTopics];
   if (!topics.length) throw assessmentError("ASSESSMENT_TOPICS_INVALID", 503);
   const llm = getLLMOrchestrator();
@@ -191,23 +170,6 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
   try {
     const questionAssignments = topics.flatMap((topic) => Array.from({ length: 2 }, () => topic));
     const questionBatches = chunks(questionAssignments, 8);
-    const generatedQuestions = await mapWithConcurrency(questionBatches, 2, async (topicAssignments, batchIndex) => {
-      const questionPlan = [
-        "QUESTION COVERAGE PLAN. Generate exactly one question for each listed assignment, in order. Prefix q with [topic:ID].",
-        ...topicAssignments.map((topic, index) => `Question ${index + 1}: [topic:${topic.id}] ${topic.title}. Test this topic only. ${topic.context}`),
-        "When the same topic appears twice, assess two different skills. The [topic:ID] marker is metadata and must be at the beginning of q.",
-      ].join("\n");
-      const quiz = await llm.generateQuizWithAI({
-        lang: runtime,
-        prevTopics: `${context}\n\n${questionPlan}`,
-        count: topicAssignments.length,
-        userId,
-        language,
-      });
-      return normalizeQuestions(quiz.quizJson, topicAssignments, topicAssignments.length, batchIndex * 8);
-    });
-    const questions = generatedQuestions.flat();
-
     const practicalGroups: CourseDiagnosticTopic[][] = [];
     for (const topic of topics) {
       const currentGroup = practicalGroups[practicalGroups.length - 1];
@@ -217,74 +179,96 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
         currentGroup.push(topic);
       }
     }
-    const practicals = await mapWithConcurrency(practicalGroups, 2, async (topicGroup, taskIndex) => {
-      const topicList = topicGroup.map((topic) => `- [topic:${topic.id}] ${topic.title}: ${topic.context}`).join("\n");
-      const groupSeed = `${seed}-task-${taskIndex + 1}`;
-      const topicTitle = topicGroup[0].moduleTitle.slice(0, 255);
-      const taskContext = [
-        context,
-        `PRACTICAL ASSESSMENT ${taskIndex + 1}/${practicalGroups.length}. This task covers the following course topics:`,
-        topicList,
-        `Variation token: ${groupSeed}. Generate a fresh integrated programming task that requires applying the listed topics. Do not use concepts outside the course. Include standard input/output, clear constraints, examples, and a concise starter template with TODO markers.`,
-      ].join("\n\n");
-      const generatedTask = await llm.generateTaskWithAI({
-        topicTitle,
-        theory: taskContext,
-        lang: runtime,
-        topicIndex: taskIndex + 1,
-        numInTopic: practicalGroups.length,
-        isFirstTask: false,
-        isControl: true,
-        difus: 0.5,
-        prevTopics: context,
-        userId,
-        topicId: topicGroup[0].id > 0 ? topicGroup[0].id : undefined,
-        language,
-      });
-      const taskDescription = [
-        generatedTask.practicalTask,
-        `Input format: ${generatedTask.inputFormat}`,
-        `Output format: ${generatedTask.outputFormat}`,
-        `Constraints: ${generatedTask.constraints}`,
-        `Examples: ${generatedTask.examples.map((example) => `Input:\n${example.input}\nOutput:\n${example.output}`).join("\n")}`,
-      ].join("\n\n");
-      const tests = await llm.generateTestDataWithAI({
-        taskTitle: generatedTask.title,
-        taskDescription,
-        lang: runtime,
-        count: 5,
-        language,
-        userId,
-        publicExamples: generatedTask.examples,
-        requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
-      });
-      const cleanTests = tests
-        .map((test) => ({ input: text(test.input, 10_000), output: text(test.output, 10_000) }))
-        .filter((test) => test.input.length > 0 && test.output.length > 0)
-        .slice(0, 8);
-      if (!text(generatedTask.practicalTask) || cleanTests.length < 3) throw assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503);
-      const examples = generatedTask.examples
-        .map((example) => ({ input: text(example.input, 2_000), output: text(example.output, 2_000), explanation: text(example.explanation, 1_000) }))
-        .filter((example) => example.input || example.output)
-        .slice(0, 3);
-      const moduleTitles = Array.from(new Set(topicGroup.map((topic) => topic.moduleTitle)));
-      const practical: CourseDiagnosticPractical = {
-        id: `p${taskIndex + 1}`,
-        moduleTitle: moduleTitles.join(" · "),
-        topicIds: topicGroup.map((topic) => topic.id),
-        title: text(generatedTask.title, 255) || (locale === "en" ? `Practical task ${taskIndex + 1}` : `Практичне завдання ${taskIndex + 1}`),
-        statement: text(generatedTask.practicalTask, 8_000),
-        inputFormat: text(generatedTask.inputFormat, 2_000),
-        outputFormat: text(generatedTask.outputFormat, 2_000),
-        constraints: text(generatedTask.constraints, 2_000),
-        examples,
-        codeTemplate: text(generatedTask.codeTemplate, 40_000),
-        runtime,
-        entryFile: projectEntryFile(runtime),
-        tests: cleanTests,
-      };
-      return practical;
-    });
+
+    const [generatedQuestions, practicals] = await Promise.all([
+      mapWithConcurrency(questionBatches, 2, async (topicAssignments, batchIndex) => {
+        const questionPlan = [
+          "QUESTION COVERAGE PLAN. Generate exactly one question for each listed assignment, in order. Prefix q with [topic:ID].",
+          ...topicAssignments.map((topic, index) => `Question ${index + 1}: [topic:${topic.id}] ${topic.title}. Test this topic only. ${topic.context}`),
+          "When the same topic appears twice, assess two different skills. The [topic:ID] marker is metadata and must be at the beginning of q.",
+        ].join("\n");
+        const quiz = await llm.generateQuizWithAI({
+          lang: runtime,
+          prevTopics: `${courseContext}\n\n${questionPlan}`,
+          count: topicAssignments.length,
+          userId,
+          language,
+        });
+        return normalizeQuestions(quiz.quizJson, topicAssignments, topicAssignments.length, batchIndex * 8);
+      }),
+      mapWithConcurrency(practicalGroups, 2, async (topicGroup, taskIndex) => {
+        const topicList = topicGroup.map((topic) => `- [topic:${topic.id}] ${topic.title}: ${topic.context}`).join("\n");
+        const groupSeed = `${seed}-task-${taskIndex + 1}`;
+        const topicTitle = topicGroup[0].moduleTitle.slice(0, 255);
+        const taskContext = [
+          courseContext,
+          `Module: ${topicTitle}`,
+          `PRACTICAL ASSESSMENT ${taskIndex + 1}/${practicalGroups.length}. This task covers the following course topics:`,
+          topicList,
+          `Variation token: ${groupSeed}. Generate a fresh integrated programming task that requires applying the listed topics. Do not use concepts outside the course. Include standard input/output, clear constraints, examples, and a concise starter template with TODO markers.`,
+        ].join("\n\n");
+        const generatedTask = await llm.generateTaskWithAI({
+          topicTitle,
+          theory: taskContext,
+          lang: runtime,
+          topicIndex: taskIndex + 1,
+          numInTopic: practicalGroups.length,
+          isFirstTask: false,
+          isControl: true,
+          difus: 0.5,
+          allowedIoTypes: ["STDIN_STDOUT"],
+          prevTopics: topicList,
+          userId,
+          topicId: topicGroup[0].id > 0 ? topicGroup[0].id : undefined,
+          language,
+        });
+        const taskDescription = [
+          generatedTask.practicalTask,
+          `Input format: ${generatedTask.inputFormat}`,
+          `Output format: ${generatedTask.outputFormat}`,
+          `Constraints: ${generatedTask.constraints}`,
+          `Examples: ${generatedTask.examples.map((example) => `Input:\n${example.input}\nOutput:\n${example.output}`).join("\n")}`,
+        ].join("\n\n");
+        const tests = await llm.generateTestDataWithAI({
+          taskTitle: generatedTask.title,
+          taskDescription,
+          lang: runtime,
+          count: 5,
+          ioType: generatedTask.ioType ?? "STDIN_STDOUT",
+          language,
+          userId,
+          publicExamples: generatedTask.examples,
+          requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
+        });
+        const cleanTests = tests
+          .map((test) => ({ input: text(test.input, 10_000), output: text(test.output, 10_000) }))
+          .filter((test) => test.input.length > 0 && test.output.length > 0)
+          .slice(0, 8);
+        if (!text(generatedTask.practicalTask) || cleanTests.length < 3) throw assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503);
+        const examples = generatedTask.examples
+          .map((example) => ({ input: text(example.input, 2_000), output: text(example.output, 2_000), explanation: text(example.explanation, 1_000) }))
+          .filter((example) => example.input || example.output)
+          .slice(0, 3);
+        const moduleTitles = Array.from(new Set(topicGroup.map((topic) => topic.moduleTitle)));
+        const practical: CourseDiagnosticPractical = {
+          id: `p${taskIndex + 1}`,
+          moduleTitle: moduleTitles.join(" · "),
+          topicIds: topicGroup.map((topic) => topic.id),
+          title: text(generatedTask.title, 255) || (locale === "en" ? `Practical task ${taskIndex + 1}` : `Практичне завдання ${taskIndex + 1}`),
+          statement: text(generatedTask.practicalTask, 8_000),
+          inputFormat: text(generatedTask.inputFormat, 2_000),
+          outputFormat: text(generatedTask.outputFormat, 2_000),
+          constraints: text(generatedTask.constraints, 2_000),
+          examples,
+          codeTemplate: text(generatedTask.codeTemplate, 40_000),
+          runtime,
+          entryFile: projectEntryFile(runtime),
+          tests: cleanTests,
+        };
+        return practical;
+      }),
+    ]);
+    const questions = generatedQuestions.flat();
     return { version: 2, seed, questions, practicals };
   } catch (error) {
     if (recordOf(error)?.statusCode) throw error;
