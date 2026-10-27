@@ -18,6 +18,7 @@ import { PlatformFooter } from "./PlatformFooter";
 import { DialogA11yObserver } from "../ui/DialogA11yObserver";
 import { WorkspaceTopNavigation } from "./WorkspaceTopNavigation";
 import "../../pages/edu/eduWorkspace.css";
+import "../../pages/edu/eduPlatform.css";
 import type { AppTheme } from "../../theme";
 import type { User } from "../../types";
 
@@ -58,6 +59,8 @@ export const PremiumModuleShell: React.FC<Props> = ({
     user.eduContexts?.organizations?.some((org) => org.role === "ORG_ADMIN");
   const isEduAdmin = isSystemAdmin || isOrgManager;
   const isContestOnly = product === "CONTEST" && user.userMode === "CONTEST";
+  const isClassCalendar = currentPath === "/edu/calendar" && /^[1-9]\d*$/.test(new URLSearchParams(window.location.search).get("class") || "");
+  const isClassWorkspace = product === "EDU" && ((/^\/edu\/(classes|topics|control-works)\//.test(currentPath) && !currentPath.endsWith("/live")) || isClassCalendar || /^\/edu\/manual-tasks\/\d+\/submissions$/.test(currentPath));
   const [accountOpen, setAccountOpen] = React.useState(false);
   const accountRef = React.useRef<HTMLDivElement | null>(null);
   const accountTriggerRef = React.useRef<HTMLButtonElement | null>(null);
@@ -185,10 +188,11 @@ export const PremiumModuleShell: React.FC<Props> = ({
   const productHome =
     product === "EDU" || product === "ADMIN" ? "/edu" : "/contest/contests";
   const displayName = user.firstName || user.username;
-  const isActive = (path: string) =>
-    path === "/edu"
-      ? currentPath === "/edu"
-      : currentPath === path || currentPath.startsWith(`${path}/`);
+  const isActive = (path: string) => {
+    if (path === "/edu") return currentPath === "/edu" || /^\/edu\/(classes|topics|control-works|manual-tasks)(\/|$)/.test(currentPath);
+    if (path === "/edu/lessons") return /^\/edu\/(lessons|tasks|grades)(\/|$)/.test(currentPath);
+    return currentPath === path || currentPath.startsWith(`${path}/`);
+  };
 
   React.useEffect(() => {
     if (!accountOpen) return;
@@ -219,7 +223,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
   }, [accountOpen]);
 
   return (
-    <div ref={shellRef} className={`mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary ${product === "EDU" ? "edu-product" : ""}`}>
+    <div ref={shellRef} className={`mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary ${product === "EDU" ? "edu-product" : ""} ${isClassWorkspace ? "classroom-product" : ""}`}>
       <a className="skip-link" href="#main-content">{uk ? "Перейти до основного вмісту" : "Skip to main content"}</a>
       <DialogA11yObserver rootRef={shellRef} />
       <header data-material="premium-header" className={`sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl ${product === "EDU" ? "edu-product__header" : ""}`}>
@@ -424,7 +428,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
       <div data-material="workspace-canvas" className="mobile-app-viewport min-w-0 flex-1">
         {children}
       </div>
-      {!navigationHidden && !footerHidden && !isContestOnly && <PlatformFooter />}
+      {!navigationHidden && !footerHidden && !isContestOnly && <PlatformFooter className={product === "EDU" ? "edu-product__footer" : undefined} />}
       </div>
     </div>
   );

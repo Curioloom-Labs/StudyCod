@@ -3,16 +3,16 @@ import React from "react";
 import { useReducedMotion } from "framer-motion";
 import "./eduWorkspace.css";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
   BookOpen,
   BookOpenCheck,
   CalendarDays,
-  CheckCircle2,
   Plus,
   Radio,
   UsersRound,
+  Search,
 } from "lucide-react";
 import {
   getClass,
@@ -28,23 +28,12 @@ import { getActiveLiveSession, type LiveSession } from "../../lib/api/liveClassr
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { tr } from "../../i18n";
 import { withDevPreview } from "../../lib/devPreview";
-import { ClassWorkspaceNavigation } from "./ClassWorkspaceNavigation";
+import { ClassWorkspaceNavigation, ClassWorkspaceFrame } from "./ClassWorkspaceNavigation";
 import "./classVisualQuality.css";
 
 const isPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const root = "edu-workspace edu-class-hub min-h-[100dvh] bg-bg-base px-4 py-5 text-text-primary sm:px-6 lg:px-10 lg:py-7";
 const languageName = (language?: string) => language || "—";
-
-const countForm = (count: number, forms: [string, string, string]) => {
-  const lastTwo = count % 100;
-  const last = count % 10;
-  return last === 1 && lastTwo !== 11 ? forms[0] : last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? forms[1] : forms[2];
-};
-
-const countText = (count: number, forms: [string, string, string], englishSingular: string, englishPlural: string) => {
-  const form = countForm(count, forms);
-  return tr(`${count} ${form}`, `${count} ${count === 1 ? englishSingular : englishPlural}`);
-};
 
 const sampleLessons: Lesson[] = [
   { id: 101, title: "Повторення за 10 клас", type: "LESSON", tasksCount: 2, createdAt: new Date().toISOString() },
@@ -63,6 +52,8 @@ export const ClassHubPage: React.FC = () => {
   const reduceMotion = useReducedMotion();
   const { classId } = useParams<{ classId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [topicQuery, setTopicQuery] = React.useState("");
   const id = Number(classId);
   const [classInfo, setClassInfo] = React.useState<ClassDetails | null>(null);
   const [students, setStudents] = React.useState<Student[]>([]);
@@ -173,74 +164,37 @@ export const ClassHubPage: React.FC = () => {
     );
   }
 
-  return (
-    <div className={root}>
-      <div className="class-overview">
-        <ClassWorkspaceNavigation classId={id} className={className} active="overview" backHref="/edu" backLabel={tr("EDU простір", "EDU workspace")} reduceMotion={reduceMotion} />
-
-        <header className="class-overview__header">
-          <div className="class-overview__title-block">
-            <p>{tr("Класний простір", "Class workspace")}</p>
-            <h1>{className}</h1>
-            <span>{tr("Навчання, матеріали й заняття класу в одному місці.", "Class learning, materials, and lessons in one place.")}</span>
-          </div>
-          <div className="class-overview__actions">
-            <button type="button" className="class-overview__primary" disabled={!liveEnabled} onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/live`)}>
-              <Radio className="size-4" aria-hidden="true" />{liveSession ? tr("Повернутися до заняття", "Return to lesson") : tr("Почати заняття", "Start a lesson")}
-            </button>
-            <button type="button" className="class-overview__secondary" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/topics/new`)}>
-              <Plus className="size-4" aria-hidden="true" />{tr("Нова тема", "New topic")}
-            </button>
-          </div>
+  const isLearning = searchParams.get("view") === "learning";
+  const visibleTopics = topics.filter(topic => topic.title.toLocaleLowerCase().includes(topicQuery.toLocaleLowerCase()));
+  return <div className={root}>
+    <ClassWorkspaceFrame classId={id} className={className} active={isLearning ? "learning" : "overview"}>
+      <div className="classroom-overview">
+        <header className="classroom-heading">
+          <div><p>{tr("Клас", "Class")} / {className}</p><h1>{isLearning ? tr("Теми та завдання", "Topics and tasks") : tr("Огляд класу", "Class overview")}</h1><span>{isLearning ? tr("Програма навчання, практика й контрольні роботи.", "The learning programme, practice, and assessments.") : tr("Навчальна програма та робота з учнями.", "Your teaching programme and class activity.")}</span></div>
+          <div className="classroom-actions"><button type="button" className="classroom-button" disabled={!liveEnabled} onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/live`)}><Radio className="size-4" aria-hidden="true" />{liveSession ? tr("Повернутися до заняття", "Rejoin lesson") : tr("Онлайн-урок", "Live lesson")}</button><button type="button" className="classroom-button classroom-button--primary" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/topics/new`)}><Plus className="size-4" aria-hidden="true" />{tr("Нова тема", "New topic")}</button></div>
         </header>
-
-        {!liveEnabled && <p className="class-overview__notice">{tr("Онлайн-уроки вимкнені для цього сервера.", "Live lessons are disabled on this server.")}</p>}
-        {error && <div role="alert" className="class-overview__load-error class-overview__load-error--compact"><span>{error}</span><button type="button" onClick={() => void load()}>{tr("Повторити", "Retry")}</button></div>}
-
-        {liveSession && <section className="class-overview__live" aria-label={tr("Онлайн-урок триває", "Live lesson in progress")}>
-          <span><i aria-hidden="true" />{tr("ЗАРАЗ НАЖИВО", "LIVE NOW")}</span>
-          <strong>{liveSession.title || tr("Зустріч із класом", "Classroom session")}</strong>
-          <button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/live`)}>{tr("Повернутися", "Rejoin")}<ArrowRight className="size-4" aria-hidden="true" /></button>
-        </section>}
-
-        <main className="class-overview__main">
-          <section id="class-topics" className="class-overview__learning" aria-labelledby="class-topics-title">
-            <div className="class-overview__section-heading">
-              <div><p>{tr("НАВЧАЛЬНИЙ МАРШРУТ", "LEARNING PATH")}</p><h2 id="class-topics-title">{tr("Теми класу", "Class topics")}</h2></div>
-              <button type="button" className="class-overview__text-action" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/topics/new`)}><Plus className="size-4" aria-hidden="true" />{tr("Додати тему", "Add topic")}</button>
-            </div>
-            {unavailable.topics ? <div className="class-overview__empty"><BookOpen className="size-5" aria-hidden="true" /><p>{tr("Теми тимчасово недоступні.", "Topics are temporarily unavailable.")}</p></div> : topics.length ? (
-              <div className="class-overview__topic-list">{topics.map((topic, index) => {
-                const practiceCount = topic.tasks?.length || 0;
-                const controlCount = topic.controlWorks?.length || 0;
-                return <button type="button" key={topic.id} className="class-overview__topic" onClick={() => navigateWithPreview(navigate, `/edu/topics/${topic.id}`)}>
-                  <span className="class-overview__topic-index">{String(index + 1).padStart(2, "0")}</span>
-                  <span className="class-overview__topic-copy"><strong>{topic.title}</strong><span className="class-overview__topic-description">{topic.description || tr("Практика, теорія та контрольні для цієї теми.", "Practice, theory, and assessments for this topic.")}</span><span className="class-overview__topic-meta"><span>{languageName(topic.language)}</span><span><BookOpenCheck className="size-3.5" aria-hidden="true" />{countText(practiceCount, ["практика", "практики", "практик"], "practice task", "practice tasks")}</span><span><CheckCircle2 className="size-3.5" aria-hidden="true" />{countText(controlCount, ["контрольна", "контрольні", "контрольних"], "assessment", "assessments")}</span></span></span>
-                  <ArrowRight className="class-overview__topic-arrow size-4" aria-hidden="true" />
-                </button>;
-              })}</div>
-            ) : <div className="class-overview__empty"><BookOpen className="size-5" aria-hidden="true" /><div><strong>{tr("Почни з першої теми", "Start with a first topic")}</strong><p>{tr("Збери в одному маршруті теорію, практику й контрольні.", "Bring theory, practice, and assessments together in one pathway.")}</p></div><button type="button" className="class-overview__text-action" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/topics/new`)}>{tr("Створити тему", "Create topic")}<ArrowRight className="size-4" aria-hidden="true" /></button></div>}
+        <div className="classroom-facts"><span><UsersRound className="size-4" aria-hidden="true" />{tr("Учні", "Students")}: {unavailable.students ? "—" : students.length}</span><span><BookOpen className="size-4" aria-hidden="true" />{tr("Теми", "Topics")}: {unavailable.topics ? "—" : topics.length}</span><span><CalendarDays className="size-4" aria-hidden="true" />{tr("Заняття", "Lessons")}: {unavailable.lessons ? "—" : lessons.length}</span></div>
+        {error && <div role="alert" className="classroom-notice">{error}<button type="button" onClick={() => void load()}>{tr("Повторити", "Retry")}</button></div>}
+        {!liveEnabled && <p className="classroom-caption">{tr("Онлайн-уроки вимкнені для цього сервера.", "Live lessons are disabled on this server.")}</p>}
+        {liveSession && <div className="classroom-notice"><Radio className="size-4" aria-hidden="true" /><strong>{liveSession.title || tr("Урок триває", "Lesson in progress")}</strong><button type="button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/live`)}>{tr("Приєднатися", "Join")}</button></div>}
+        <div className={`classroom-overview__layout ${isLearning ? "is-learning" : ""}`}>
+          <section id="class-topics" className="classroom-programme" aria-labelledby="class-topics-title">
+            <div className="classroom-section-title"><h2 id="class-topics-title">{tr("Навчальна програма", "Teaching programme")}<span>{topics.length}</span></h2>{!isLearning && <button type="button" className="classroom-text-button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}?view=learning`)}>{tr("Усі теми", "All topics")}<ArrowRight className="size-3.5" aria-hidden="true" /></button>}</div>
+            <div className="classroom-toolbar"><label className="classroom-search"><Search className="size-4" aria-hidden="true" /><input type="search" value={topicQuery} onChange={event => setTopicQuery(event.target.value)} aria-label={tr("Знайти тему", "Search topics")} placeholder={tr("Знайти тему…", "Search topics…")} /></label></div>
+            <div className="classroom-topic-columns" aria-hidden="true"><span>{tr("Тема", "Topic")}</span><span>{tr("Мова", "Language")}</span><span>{tr("Практики", "Practice")}</span><span>{tr("Контрольні", "Tests")}</span><span /></div>
+            {unavailable.topics ? <div className="classroom-empty">{tr("Не вдалося завантажити теми.", "Could not load topics.")}</div> : <div className="classroom-topic-list">{visibleTopics.map((topic, index) => <button type="button" key={topic.id} className="classroom-topic" onClick={() => navigateWithPreview(navigate, `/edu/topics/${topic.id}`)}><span className="classroom-topic__name"><span className="classroom-topic__index">{String(index + 1).padStart(2, "0")}</span><span><strong>{topic.title}</strong><small>{topic.description || tr("Теорія та практичні завдання", "Theory and practice tasks")}</small></span></span><span className="classroom-language">{languageName(topic.language)}</span><span className="classroom-topic__count">{topic.tasks?.length || 0}<small>{tr("практик", "practice")}</small></span><span className="classroom-topic__count">{topic.controlWorks?.length || 0}<small>{tr("контрольних", "tests")}</small></span><ArrowRight className="size-4" aria-hidden="true" /></button>)}</div>}
+            {!unavailable.topics && !visibleTopics.length && <div className="classroom-empty"><BookOpen className="size-6" aria-hidden="true" /><strong>{topicQuery ? tr("Тем не знайдено", "No matching topics") : tr("Додайте першу тему", "Add your first topic")}</strong><p>{topicQuery ? tr("Спробуйте іншу назву.", "Try another name.") : tr("Зберіть матеріали й завдання для класу.", "Bring together materials and tasks for your class.")}</p>{!topicQuery && <button type="button" className="classroom-button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/topics/new`)}><Plus className="size-4" aria-hidden="true" />{tr("Нова тема", "New topic")}</button>}</div>}
+            <button type="button" className="classroom-add-row" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/topics/new`)}><Plus className="size-4" aria-hidden="true" />{tr("Додати тему до програми", "Add a topic to the programme")}</button>
           </section>
-
-          <aside className="class-overview__lessons" aria-labelledby="class-lessons-title">
-            <div className="class-overview__section-heading"><div><p>{tr("ПЛАН КЛАСУ", "CLASS PLAN")}</p><h2 id="class-lessons-title">{tr("Останні заняття", "Recent lessons")}</h2></div><CalendarDays className="class-overview__heading-icon size-5" aria-hidden="true" /></div>
-            {unavailable.lessons ? <div className="class-overview__empty"><p>{tr("Заняття тимчасово недоступні.", "Lessons are temporarily unavailable.")}</p></div> : lessons.length ? <div className="class-overview__lesson-list">{lessons.slice(0, 5).map((lesson) => <button type="button" key={eduLessonKey(lesson)} className="class-overview__lesson" onClick={() => navigateWithPreview(navigate, lesson.source === "course" || lesson.type === "LESSON" ? eduLessonPath(lesson) : `/edu/topics/${lesson.id}`)}>
-              <span className="class-overview__lesson-mark">{lesson.type === "CONTROL" ? <CheckCircle2 className="size-4" aria-hidden="true" /> : <BookOpenCheck className="size-4" aria-hidden="true" />}</span><span><strong>{lesson.title}</strong><small>{lesson.type === "CONTROL" ? tr("Контрольна", "Assessment") : tr("Заняття", "Lesson")} · {countText(lesson.tasksCount || 0, ["задача", "задачі", "задач"], "task", "tasks")}</small></span><ArrowRight className="class-overview__lesson-arrow size-4" aria-hidden="true" />
-            </button>)}</div> : <div className="class-overview__empty"><CalendarDays className="size-5" aria-hidden="true" /><div><strong>{tr("Занять поки немає", "No lessons yet")}</strong><p>{tr("Створи заняття, щоб запланувати наступний крок класу.", "Create a lesson to plan the class’s next step.")}</p></div></div>}
-            <button type="button" className="class-overview__text-action class-overview__add-lesson" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/lessons/new`)}><Plus className="size-4" aria-hidden="true" />{tr("Додати заняття", "Add lesson")}</button>
-          </aside>
-        </main>
-
-        <section className="class-overview__students" aria-labelledby="class-students-title">
-          <div className="class-overview__students-copy"><p>{tr("СКЛАД КЛАСУ", "CLASS ROSTER")}</p><h2 id="class-students-title">{tr("Учні", "Students")}{!unavailable.students && <span>{students.length}</span>}</h2></div>
-          {unavailable.students ? <div className="class-overview__students-empty">{tr("Список учнів тимчасово недоступний.", "The student list is temporarily unavailable.")}</div> : students.length ? <div className="class-overview__roster">
-            <div className="class-overview__roster-preview">{students.slice(0, 6).map((student) => <span className="class-overview__roster-student" key={student.id}><i>{initials(student)}</i><span>{student.firstName} {student.lastName}</span></span>)}{students.length > 6 && <span className="class-overview__roster-more">+{students.length - 6}</span>}</div>
-            <button type="button" className="class-overview__secondary" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/manage`)}><UsersRound className="size-4" aria-hidden="true" />{tr("Відкрити список", "Open roster")}<ArrowRight className="size-4" aria-hidden="true" /></button>
-          </div> : <div className="class-overview__roster-empty"><span>{tr("Учнів ще не додано.", "No students have been added yet.")}</span><button type="button" className="class-overview__text-action" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/manage`)}>{tr("Додати учнів", "Add students")}<ArrowRight className="size-4" aria-hidden="true" /></button></div>}
-        </section>
+          {!isLearning && <aside className="classroom-overview__aside">
+            <section><div className="classroom-section-title"><h2>{tr("Останні заняття", "Recent lessons")}</h2></div>{unavailable.lessons ? <p className="classroom-caption">{tr("Заняття тимчасово недоступні.", "Lessons are temporarily unavailable.")}</p> : lessons.slice(0, 4).map(lesson => <button type="button" key={eduLessonKey(lesson)} className="classroom-lesson-link" onClick={() => navigateWithPreview(navigate, lesson.source === "course" || lesson.type === "LESSON" ? eduLessonPath(lesson) : `/edu/topics/${lesson.id}`)}><BookOpenCheck className="size-4" aria-hidden="true" /><span><strong>{lesson.title}</strong><small>{lesson.tasksCount || 0} {tr("задач", "tasks")}</small></span><ArrowRight className="size-3.5" aria-hidden="true" /></button>)}{!unavailable.lessons && !lessons.length && <p className="classroom-caption">{tr("Занять ще немає.", "No lessons yet.")}</p>}<button type="button" className="classroom-text-button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/lessons/new`)}><Plus className="size-3.5" aria-hidden="true" />{tr("Додати заняття", "Add lesson")}</button></section>
+            <section><div className="classroom-section-title"><h2>{tr("Учні класу", "Class students")}<span>{unavailable.students ? "—" : students.length}</span></h2></div>{students.slice(0, 4).map(student => <div className="classroom-person" key={student.id}><span aria-hidden="true">{initials(student)}</span><strong>{student.lastName} {student.firstName}</strong></div>)}{unavailable.students && <p className="classroom-caption">{tr("Не вдалося завантажити список.", "Could not load the roster.")}</p>}<button type="button" className="classroom-text-button" onClick={() => navigateWithPreview(navigate, `/edu/classes/${id}/manage`)}>{tr("Відкрити список учнів", "Open student roster")}<ArrowRight className="size-3.5" aria-hidden="true" /></button></section>
+          </aside>}
+        </div>
       </div>
-    </div>
-  );
+    </ClassWorkspaceFrame>
+  </div>;
+
 };
 
 export default ClassHubPage;

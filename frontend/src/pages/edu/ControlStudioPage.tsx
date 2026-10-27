@@ -1,12 +1,14 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Calculator, Clock3, FileCheck2, Plus, Save, Sparkles, Wand2 } from "lucide-react";
+import { ArrowLeft, Calculator, Clock3, FileCheck2, Plus, Save, Sparkles, Wand2, Trash2 } from "lucide-react";
 import { api } from "../../lib/api/client";
 import { updateControlWorkFormula } from "../../lib/api/edu";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { showToast } from "../../lib/toast";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
+import { ClassWorkspaceFrame } from "./ClassWorkspaceNavigation";
+import { withDevPreview } from "../../lib/devPreview";
 
 type ControlTask = { id: number; title: string; description?: string; maxAttempts?: number };
 type QuizItem = { question?: string; options?: Record<string, string>; correct?: string };
@@ -24,7 +26,7 @@ type Control = {
 };
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
-const root = "mx-auto max-w-[1280px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10";
+const root = "edu-workspace edu-control-workspace";
 
 const demoQuiz: QuizItem[] = [
   { question: "Яка складність проходу по масиву з n елементів?", options: { A: "O(1)", B: "O(log n)", C: "O(n)" }, correct: "C" },
@@ -71,6 +73,20 @@ export const ControlStudioPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = React.useState(false);
   const [newTask, setNewTask] = React.useState({ title: "", description: "", template: "" });
+  const [parentClass, setParentClass] = React.useState<{ id: number; name: string } | null>(null);
+
+  React.useEffect(() => {
+    if (preview()) { setParentClass({ id: 31, name: "11-А" }); return; }
+    const topicId = control?.topic?.id || control?.topicId;
+    if (!topicId) return;
+    let alive = true;
+    setParentClass(null);
+    void api.get(`/topics/${topicId}`).then(response => {
+      const topic = response.data.topic ?? response.data;
+      if (alive && topic.class?.id) setParentClass({ id: topic.class.id, name: topic.class.name || tr("Клас", "Class") });
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [control?.topic?.id, control?.topicId]);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -103,6 +119,7 @@ export const ControlStudioPage: React.FC = () => {
 
   const save = async () => {
     setBusy(true);
+    setError(null);
     try {
       if (quizText.trim()) JSON.parse(quizText);
       if (!preview()) {
@@ -112,11 +129,13 @@ export const ControlStudioPage: React.FC = () => {
           quizJson: quizText.trim() || null,
         });
         await updateControlWorkFormula(id, formula.trim() || null);
+        await load();
+      } else {
+        setControl(old => old ? { ...old, title: title.trim(), timeLimitMinutes: Number(minutes) || null, quizJson: quizText.trim() || null, formula: formula.trim() || null } : old);
       }
-      await load();
       showToast({ type: "success", message: tr("Контрольну збережено.", "Assessment saved.") });
     } catch (caught) {
-      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося зберегти зміни. Перевірте JSON квізу.", "Could not save changes. Check the quiz JSON.")));
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося зберегти зміни. Перевірте запитання та спробуйте ще раз.", "Could not save changes. Check the questions and try again.")));
     } finally {
       setBusy(false);
     }
@@ -184,32 +203,19 @@ export const ControlStudioPage: React.FC = () => {
   const quiz = parseQuiz(quizText);
   const hasQuiz = quiz.length > 0;
 
-  return (
+  const content = (
     <div className={root}>
-      <button type="button" onClick={() => navigate(control.topic?.id ? `/edu/topics/${control.topic.id}` : "/edu")} className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-text-muted transition hover:text-primary-strong dark:text-text-secondary dark:hover:text-primary-soft"><ArrowLeft className="h-4 w-4" />{tr("До теми", "Back to topic")}</button>
-
-      <header className="rounded-[34px] bg-bg-hover p-6 dark:bg-[var(--surface-warning)] sm:p-10">
-        <p className="text-xs font-bold uppercase tracking-[.16em] text-accent-warn dark:text-accent-warn">{tr("Контрольна точка", "Assessment")} · {control.topic?.title || "EDU"}</p>
-        <div className="mt-3 flex flex-col justify-between gap-7 lg:flex-row lg:items-end">
-          <div>
-            <h1 className="font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.06em] sm:text-6xl">{control.title || tr("Контрольна робота", "Assessment")}</h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-accent-warn dark:text-accent-warn">{tr("Одне місце для теорії, практики, квізу й формули оцінювання. Квіз тепер можна не тільки генерувати, а й редагувати.", "One place for theory, practice, a quiz, and the grading formula. You can now edit quizzes as well as generate them.")}</p>
-          </div>
-          <div className="rounded-2xl bg-white/75 px-5 py-4 dark:bg-black/15">
-            <p className="text-xs font-bold uppercase tracking-[.12em] text-accent-warn dark:text-accent-warn">{tr("Тривалість", "Duration")}</p>
-            <p className="mt-1 text-2xl font-bold">{control.timeLimitMinutes || "—"} {tr("хв", "min")}</p>
-          </div>
-        </div>
-      </header>
+      <button type="button" onClick={() => navigate(withDevPreview(control.topic?.id ? `/edu/topics/${control.topic.id}` : "/edu"))} className="classroom-text-button classroom-control-back"><ArrowLeft className="size-4" aria-hidden="true" />{tr("До теми", "Back to topic")}</button>
+      <header className="classroom-heading"><div><p>{tr("Контрольна робота", "Assessment")} / {control.topic?.title || "EDU"}</p><h1>{control.title || tr("Контрольна робота", "Assessment")}</h1><span>{tr("Завдання, запитання та правила оцінювання.", "Tasks, questions, and grading rules.")}</span></div><div className="classroom-actions"><button type="button" disabled={busy} className="classroom-button classroom-button--primary" onClick={() => void save()}><Save className="size-4" aria-hidden="true" />{busy ? tr("Зберігаємо…", "Saving…") : tr("Зберегти зміни", "Save changes")}</button></div></header>
 
       {error && <div className="mt-5 rounded-2xl border border-accent-error/25 bg-accent-error/[.08] px-4 py-3 text-sm text-accent-error dark:text-accent-error">{error}</div>}
 
-      <main className="mt-8 grid gap-6 xl:grid-cols-[1fr_390px]">
+      <main className="classroom-control-layout">
         <section className="space-y-6">
           <section className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-8">
             <div className="flex items-center gap-3">
               <span className="grid h-10 w-10 place-items-center rounded-2xl bg-bg-hover text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn"><FileCheck2 className="h-5 w-5" /></span>
-              <div><p className="text-xs font-bold uppercase tracking-[.13em] text-accent-warn">{tr("Склад роботи", "Assessment overview")}</p><h2 className="mt-1 text-2xl font-bold tracking-[-.04em]">{tr("Що побачить учень", "What students will see")}</h2></div>
+              <div><p className="text-xs font-bold uppercase tracking-[.13em] text-accent-warn">{tr("Склад роботи", "Assessment overview")}</p><h2 className="mt-1 text-2xl font-bold tracking-[-.04em]">{tr("Практичні завдання", "Practice tasks")}</h2></div>
             </div>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               <StatusCard active={Boolean(control.hasTheory)} title={tr("Теорія", "Theory")} text={control.hasTheory ? (hasQuiz ? tr("Квіз готовий.", "Quiz is ready.") : tr("Увімкнено, квіз ще не заповнений.", "Enabled, but the quiz is empty.")) : tr("Вимкнено.", "Disabled.")} />
@@ -236,27 +242,19 @@ export const ControlStudioPage: React.FC = () => {
             </div>
           </section>
 
-          <section className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface sm:p-8">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[.13em] text-accent-warn">{tr("Самоперевірка", "Self-check")}</p>
-                <h2 className="mt-1 text-2xl font-bold tracking-[-.04em]">{tr("Квіз", "Quiz")}</h2>
-                <p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Редагуйте JSON масив питань. Старий формат `{`question, options, correct`}` підтримується контрольними.", "Edit the quiz questions as JSON. Assessments support the legacy `{`question, options, correct`}` format.")}</p>
-              </div>
-              <Sparkles className="h-5 w-5 text-accent-warn" />
-            </div>
-            <div className="mt-5 flex flex-wrap gap-2">
-              <button type="button" disabled={busy} onClick={() => void generateQuiz()} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground"><Wand2 className="h-4 w-4" />{busy ? tr("Готуємо…", "Preparing…") : hasQuiz ? tr("Перегенерувати", "Regenerate") : tr("Згенерувати", "Generate")}</button>
-              <button type="button" onClick={normalizeQuiz} className="rounded-xl border border-border/10 px-4 py-3 text-sm font-bold dark:border-white/10">{tr("Форматувати JSON", "Format JSON")}</button>
-            </div>
-            <textarea value={quizText} onChange={(event) => setQuizText(event.target.value)} rows={16} spellCheck={false} className="mt-5 w-full resize-y rounded-2xl border border-border/10 bg-bg-surface p-4 font-mono text-xs leading-6 outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-code" placeholder={'[{"question":"...","options":{"A":"...","B":"..."},"correct":"A"}]'} />
-            {hasQuiz && <div className="mt-4 grid gap-2 md:grid-cols-2">{quiz.slice(0, 4).map((item, index) => <div key={`${item.question}-${index}`} className="rounded-2xl bg-bg-hover p-3 text-sm dark:bg-white/[.045]"><b>{index + 1}. {item.question || tr("Без питання", "No question")}</b><div className="mt-1 text-xs text-text-muted dark:text-text-secondary">{tr("Правильна:", "Correct:")} {item.correct || "—"}</div></div>)}</div>}
+          <section className="classroom-quiz-editor">
+            <div className="classroom-section-title"><h2>{tr("Запитання квізу", "Quiz questions")}<span>{quiz.length}</span></h2><button type="button" className="classroom-text-button" disabled={busy} onClick={() => void generateQuiz()}><Wand2 className="size-4" aria-hidden="true" />{busy ? tr("Готуємо…", "Preparing…") : hasQuiz ? tr("Згенерувати знову", "Regenerate") : tr("Згенерувати", "Generate")}</button></div>
+            <p className="classroom-caption">{tr("Введіть запитання й варіанти відповідей. Позначте правильну відповідь кружечком.", "Enter a question and its answer options. Mark the correct answer using the circle.")}</p>
+            {quiz.map((item, index) => <fieldset key={index} className="classroom-quiz-question"><legend>{tr("Запитання", "Question")} {index + 1}</legend><div className="classroom-quiz-question__heading"><textarea aria-label={tr(`Текст запитання ${index + 1}`, `Question ${index + 1} text`)} value={item.question || ""} onChange={event => setQuizText(JSON.stringify(quiz.map((q, i) => i === index ? { ...q, question: event.target.value } : q), null, 2))} rows={2} placeholder={tr("Введіть запитання…", "Enter a question…")} /><button type="button" className="classroom-icon-button" aria-label={tr(`Прибрати запитання ${index + 1}`, `Remove question ${index + 1}`)} onClick={() => setQuizText(JSON.stringify(quiz.filter((_, i) => i !== index), null, 2))}><Trash2 className="size-4" aria-hidden="true" /></button></div><div className="classroom-quiz-options">{Object.entries(item.options || { A: "", B: "", C: "", D: "" }).map(([key, value]) => <label key={key}><input type="radio" name={`quiz-correct-${index}`} checked={item.correct === key} aria-label={tr(`Правильна відповідь ${key} для запитання ${index + 1}`, `Correct answer ${key} for question ${index + 1}`)} onChange={() => setQuizText(JSON.stringify(quiz.map((q, i) => i === index ? { ...q, correct: key } : q), null, 2))} /><span>{key}</span><input type="text" aria-label={tr(`Варіант ${key} запитання ${index + 1}`, `Question ${index + 1} option ${key}`)} value={value} onChange={event => setQuizText(JSON.stringify(quiz.map((q, i) => i === index ? { ...q, options: { ...q.options, [key]: event.target.value } } : q), null, 2))} placeholder={tr("Варіант відповіді", "Answer option")} /></label>)}</div></fieldset>)}
+            <button type="button" className="classroom-add-row" onClick={() => setQuizText(JSON.stringify([...quiz, { question: "", options: { A: "", B: "", C: "", D: "" }, correct: "A" }], null, 2))}><Plus className="size-4" aria-hidden="true" />{tr("Додати запитання", "Add question")}</button>
+            <details className="classroom-quiz-source"><summary>{tr("Імпорт і розширений формат", "Import and advanced format")}</summary><p className="classroom-caption">{tr("Тут можна вставити набір запитань у форматі JSON.", "Paste a set of questions in JSON format here.")}</p><textarea aria-label={tr("Запитання у форматі JSON", "Questions in JSON format")} value={quizText} onChange={event => setQuizText(event.target.value)} rows={8} spellCheck={false} /><button type="button" className="classroom-text-button" onClick={normalizeQuiz}>{tr("Перевірити формат", "Check format")}</button></details>
           </section>
+
         </section>
 
         <aside className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface">
           <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Налаштування", "Settings")}</p>
-          <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">{tr("Рамка оцінювання", "Grading framework")}</h2>
+          <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">{tr("Параметри роботи", "Assessment settings")}</h2>
           <label className="mt-6 block text-sm font-bold">{tr("Назва", "Title")}<input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
           <label className="mt-4 block text-sm font-bold">{tr("Час, хв", "Time, min")}<input value={minutes} onChange={(event) => setMinutes(event.target.value)} type="number" min="1" className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
           <div className="mt-6 rounded-2xl bg-bg-hover p-4 dark:bg-white/[.045]">
@@ -269,10 +267,11 @@ export const ControlStudioPage: React.FC = () => {
       </main>
     </div>
   );
+  return parentClass ? <ClassWorkspaceFrame classId={parentClass.id} className={parentClass.name} active="learning">{content}</ClassWorkspaceFrame> : <div className="classroom-frame__body">{content}</div>;
 };
 
 const StatusCard: React.FC<{ active: boolean; title: string; text: string; warm?: boolean }> = ({ active, title, text, warm = false }) => (
-  <div className={`rounded-2xl p-5 ${active ? warm ? "bg-bg-hover dark:bg-accent-warn/10" : "bg-bg-hover dark:bg-primary/10" : "bg-bg-hover dark:bg-white/[.045]"}`}>
+  <div className={`classroom-control-status ${active ? "is-active" : ""}`}>
     <div className="flex items-center gap-2">
       {warm ? <Clock3 className="h-4 w-4 text-accent-warn" /> : <FileCheck2 className="h-4 w-4 text-primary-strong dark:text-primary-soft" />}
       <p className="text-sm font-bold">{title}</p>

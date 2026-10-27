@@ -27,7 +27,7 @@ import { ClassJoinCodeButton } from "../../components/ClassJoinCodeButton";
 import { useClassCredentialRecovery } from "./useClassCredentialRecovery";
 import { ClassCredentialRecoveryPanel } from "./ClassCredentialRecoveryPanel";
 import { CredentialWorkflowModal } from "./CredentialWorkflowModal";
-import { ClassWorkspaceNavigation } from "./ClassWorkspaceNavigation";
+import { ClassWorkspaceNavigation, ClassWorkspaceFrame } from "./ClassWorkspaceNavigation";
 import { showToast } from "../../lib/toast";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { api } from "../../lib/api/client";
@@ -742,7 +742,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
   return (
     <div className={root} data-preview={isClassPreview() ? "true" : undefined}>
       <div className="edu-class-management__shell">
-        <ClassWorkspaceNavigation classId={id} className={classInfo?.name || tr("Клас", "Class")} active="students" />
+        <ClassWorkspaceFrame classId={id} className={classInfo?.name || tr("Клас", "Class")} active="students">
         {searchParams.get("return") === "members" && classInfo?.organizationId && <button type="button" onClick={() => navigate(`/edu/organization?org=${classInfo.organizationId}`)} className="ml-2 min-h-11 rounded-xl px-4 text-sm font-semibold text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">{tr("До учасників закладу", "Back to organization members")}</button>}
         <header className="class-management__header">
           <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
@@ -751,10 +751,10 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                 {tr("Керування класом", "Class management")}
               </p>
               <h1 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.06em] sm:text-5xl">
-                {classInfo?.name || tr("Клас", "Class")}
+                {activeTab === "students" ? tr("Учні та доступи", "Students and access") : activeTab === "announcements" ? tr("Оголошення", "Announcements") : tr("Налаштування класу", "Class settings")}
               </h1>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-text-primary sm:text-base">
-                {tr("Учні, комунікація та правила класу — в одному робочому просторі без зайвих службових екранів.", "Students, communication, and class settings in one workspace.")}
+                {activeTab === "students" ? tr("Список учнів, облікові записи та зв’язок із батьками.", "Student roster, accounts, and parent access.") : activeTab === "announcements" ? tr("Повідомлення для учнів вашого класу.", "Updates for the students in your class.") : tr("Викладачі, оцінювання та приєднання до класу.", "Teachers, grading, and joining the class.")}
               </p>
             </div>
           </div>
@@ -809,18 +809,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
         {activeTab === "students" && (
           <section id="class-panel-students" role="tabpanel" aria-labelledby="class-tab-students" className="class-management__panel">
             <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
-                  {tr("Склад класу", "Class roster")}
-                </p>
-                <h2 className="mt-2 text-2xl font-black tracking-[-.05em] sm:text-3xl">
-                  {tr("Учні та доступи", "Students and access")}
-                </h2>
-                <p className="mt-2 text-sm text-text-muted dark:text-text-secondary">
-                  {tr("Додайте учнів вручну або імпортуйте їх зі списку.", "Add students manually or import them from a list.")}
-                </p>
-                {!error && <p className="class-management__roster-count">{students.length} {tr("учнів у класі", "students in class")}</p>}
-              </div>
+              <p className="classroom-caption">{students.length} {tr("учнів у класі", "students in class")}</p>
               <div className="flex flex-wrap gap-2">
                 <Button variant="ghost" onClick={openImport} disabled={!classInfo || loading || Boolean(error) || !recovery.canStart}>
                   <FileUp className="mr-2 size-4" />
@@ -839,6 +828,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
             <div className="class-management__roster-toolbar">
               <label className="class-management__search"><Search className="size-4" aria-hidden="true" /><span className="sr-only">{tr("Знайти учня", "Search students")}</span><input type="search" value={studentQuery} onChange={(event) => setStudentQuery(event.target.value)} placeholder={tr("Знайти за ім’ям, email або логіном", "Search by name, email, or username")} /></label>
             </div>
+            <div className="classroom-student-columns" aria-hidden="true"><span>{tr("Учень", "Student")}</span><span>{tr("Логін", "Username")}</span><span>{tr("Доступи та зв’язок", "Access and contacts")}</span></div>
             <div className="class-management__roster-grid">
               {visibleStudents.map((student) => (
                 <article
@@ -1052,6 +1042,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
         {activeTab === "settings" && (
           <section id="class-panel-settings" role="tabpanel" aria-labelledby="class-tab-settings" className="class-management__settings">
             <div className="class-management__panel class-management__settings-card">
+              <div className="classroom-setting-description">
               <p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
                 {tr("Викладачі класу", "Class teachers")}
               </p>
@@ -1059,6 +1050,8 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
               <p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
                 {canAssignTeachers ? tr("Оберіть відповідального вчителя. Інші призначені викладачі й асистенти зберігають доступ відповідно до своєї ролі.", "Choose the responsible teacher. Other assigned teachers and assistants keep access according to their role.") : tr("Призначення та передавання класу виконує адміністратор закладу.", "The organization administrator assigns teachers and transfers class responsibility.")}
               </p>
+              </div>
+              <div className="classroom-setting-controls">
               {!canAssignTeachers && <p className="mt-4 text-sm font-semibold">{classInfo?.teacherName || tr("Уточніть в адміністратора закладу", "Contact your organization administrator")}</p>}
               {canAssignTeachers && <>
               <div className="mt-5 space-y-2">
@@ -1113,8 +1106,10 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                 {tr("Зберегти викладачів", "Save teachers")}
               </Button>
               </>}
+              </div>
             </div>
             <div className="class-management__panel class-management__settings-card">
+              <div className="classroom-setting-description">
               <p className="class-management__eyebrow">
                 {tr("Оцінювання", "Grading")}
               </p>
@@ -1122,6 +1117,8 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
               <p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
                 {tr("Оберіть шкалу, яка буде використовуватись у журналі цього класу.", "Choose the grading scale used in this class journal.")}
               </p>
+              </div>
+              <div className="classroom-setting-controls">
               <select
                 value={gradingSystem}
                 onChange={(event) =>
@@ -1143,8 +1140,10 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                 <Save className="mr-2 size-4" />
                 {tr("Зберегти систему", "Save grading system")}
               </Button>
+              </div>
             </div>
             <div className="class-management__panel class-management__settings-card">
+              <div className="classroom-setting-description">
               <p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
                 {tr("Самостійне приєднання", "Self-enrollment")}
               </p>
@@ -1152,13 +1151,17 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
               <p className="mt-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
                 {tr("Учні можуть приєднатися до класу за коротким кодом без ручного створення облікового запису.", "Students can join the class with a short code without an account being created manually.")}
               </p>
+              </div>
+              <div className="classroom-setting-controls">
               <div className="mt-6 flex items-center justify-between gap-3 rounded-2xl bg-bg-hover p-4 dark:bg-white/[.05]">
                 <ClassJoinCodeButton classId={id} />
                 <BookOpen className="size-5 text-primary-strong dark:text-primary-soft" />
               </div>
+              </div>
             </div>
           </section>
         )}
+        </ClassWorkspaceFrame>
       </div>
 
       <CredentialWorkflowModal

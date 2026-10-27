@@ -1,22 +1,21 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  ArrowLeft,
   ArrowRight,
   BookOpen,
-  CheckCircle2,
   ClipboardCheck,
   FlaskConical,
   ListChecks,
   Pencil,
   Plus,
   Settings,
-  ShieldCheck,
   Sparkles,
   TerminalSquare,
   Trash2,
   Upload,
   X,
+  ChevronDown,
+  Search,
 } from "lucide-react";
 import { api } from "../../lib/api/client";
 import {
@@ -36,6 +35,8 @@ import { useDialogA11y } from "../../components/ui/useDialogA11y";
 import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
+import { ClassWorkspaceFrame } from "./ClassWorkspaceNavigation";
+import { withDevPreview } from "../../lib/devPreview";
 
 type TopicTask = {
   id: number;
@@ -70,7 +71,7 @@ type Topic = {
   title: string;
   description?: string | null;
   language: string;
-  class?: { id: number } | null;
+  class?: { id: number; name?: string } | null;
   tasks?: TopicTask[];
   controlWorks?: Control[];
 };
@@ -151,7 +152,7 @@ const demo: Topic = {
   title: "Колекції та зрізи",
   description: "Тема, де учні переходять від окремих значень до роботи зі структурованими даними.",
   language: "PYTHON",
-  class: { id: 7 },
+  class: { id: 31, name: "11-А" },
   tasks: [
     {
       id: 101,
@@ -176,22 +177,22 @@ const demo: Topic = {
   ],
 };
 
-const Modal: React.FC<{ title: string; caption?: string; children: React.ReactNode; onClose: () => void; wide?: boolean }> = ({ title, caption, children, onClose, wide }) => {
+const Modal: React.FC<{ title: string; caption?: string; error?: string | null; children: React.ReactNode; onClose: () => void; wide?: boolean }> = ({ title, caption, error, children, onClose, wide }) => {
   const titleId = React.useId();
   const panelRef = useDialogA11y({ open: true, onClose });
-  return <div data-dialog-a11y="direct" data-material="topic-dialog-scrim" className="fixed inset-0 z-[90] overflow-y-auto bg-bg-code/50 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={panelRef as React.RefObject<HTMLElement>} data-dialog-a11y="direct" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-material="topic-dialog" className={`mx-auto my-8 w-full rounded-[32px] bg-bg-surface p-5 shadow-[0_28px_90px_rgba(10,31,17,.28)] dark:bg-bg-code sm:p-7 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>
-      <div className="flex items-start justify-between gap-4">
+  return <div data-dialog-a11y="direct" data-material="topic-dialog-scrim" className="topic-editor__scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section ref={panelRef as React.RefObject<HTMLElement>} data-dialog-a11y="direct" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} data-material="topic-dialog" className={`topic-editor ${wide ? "topic-editor--wide" : ""}`}>
+      <div className="topic-editor__header">
         <div>
-          <p className="text-xs font-black uppercase tracking-[.16em] text-accent-warn">Topic studio</p>
-          <h2 id={titleId} className="mt-2 font-[family-name:var(--font-display)] text-3xl font-black tracking-[-.06em]">{title}</h2>
+          <p className="classroom-caption">{tr("Редактор теми", "Topic editor")}</p>
+          <h2 id={titleId}>{title}</h2>
           {caption && <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted dark:text-text-secondary">{caption}</p>}
         </div>
         <button type="button" onClick={onClose} aria-label={tr("Закрити вікно", "Close dialog")} className="grid size-10 shrink-0 place-items-center rounded-full bg-bg-hover text-text-muted transition  focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/30 dark:bg-white/[.07] dark:text-text-primary">
           <X className="size-4" aria-hidden="true" />
         </button>
       </div>
-      <div className="mt-7">{children}</div>
+      <div className="topic-editor__body">{error && <div className="classroom-notice classroom-notice--error" role="alert">{error}</div>}{children}</div>
     </section>
   </div>;
 };
@@ -206,6 +207,11 @@ export const TopicStudioPage: React.FC = () => {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [mode, setMode] = React.useState<"task" | "control" | "tests" | null>(null);
+  const [topicTab, setTopicTab] = React.useState<"tasks" | "controls">("tasks");
+  const [taskQuery, setTaskQuery] = React.useState("");
+  const [taskFilter, setTaskFilter] = React.useState<"all" | "assigned" | "draft">("all");
+  const [expandedTaskId, setExpandedTaskId] = React.useState<number | null>(null);
+  const [editorTab, setEditorTab] = React.useState<"statement" | "code" | "theory" | "settings">("statement");
   const [selectedTask, setSelectedTask] = React.useState<TopicTask | null>(null);
   const [editingTaskId, setEditingTaskId] = React.useState<number | null>(null);
   const [tests, setTests] = React.useState<TestData[]>([]);
@@ -242,6 +248,7 @@ export const TopicStudioPage: React.FC = () => {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
+      if (preview()) { setTopic({ ...demo, id }); setError(null); return; }
       const response = await api.get(`/topics/${id}`);
       setTopic(response.data.topic ?? response.data);
       setError(null);
@@ -262,12 +269,16 @@ export const TopicStudioPage: React.FC = () => {
   const backPath = topic?.class?.id ? `/edu/classes/${topic.class.id}${preview() ? "?preview=true" : ""}` : `/edu${preview() ? "?preview=true" : ""}`;
 
   const openTaskBuilder = () => {
+    setError(null);
+    setEditorTab("statement");
     setEditingTaskId(null);
     setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "" });
     setMode("task");
   };
 
   const openTaskEditor = (task: TopicTask) => {
+    setError(null);
+    setEditorTab("statement");
     setSelectedTask(task);
     setEditingTaskId(task.id);
     setTaskForm({
@@ -282,6 +293,7 @@ export const TopicStudioPage: React.FC = () => {
   };
 
   const openControlBuilder = () => {
+    setError(null);
     setControlForm((old) => ({
       ...old,
       title: old.title || tr(`Контрольна · ${topic?.title || "тема"}`, `Test · ${topic?.title || "topic"}`),
@@ -740,234 +752,50 @@ export const TopicStudioPage: React.FC = () => {
   const assignedTasks = tasks.filter((task) => task.isAssigned).length;
 
   return (
-    <div className={root}>
-      <div className="mx-auto max-w-[1480px] space-y-6">
-        <header className="edu-topic-hero overflow-hidden rounded-[36px] border border-border/10 text-text-primary shadow-[0_28px_90px_rgba(7,24,13,.20)] dark:border-white/10">
-          <div className="edu-topic-hero__layout grid lg:grid-cols-[1.25fr_.75fr]">
-            <div className="edu-topic-hero__main p-6 sm:p-9 lg:p-11">
-              <button type="button" onClick={() => navigate(backPath)} className="inline-flex items-center gap-2 text-sm font-bold text-text-primary transition hover:text-white">
-                <ArrowLeft className="size-4" />
-                {tr("До класу", "Back to class")}
-              </button>
-              <p className="mt-10 text-xs font-black uppercase tracking-[.18em] text-primary-soft">{topic.language} · {tr("конструктор теми", "topic studio")}</p>
-              <h1 className="mt-4 max-w-4xl font-[family-name:var(--font-display)] text-4xl font-black tracking-[-.07em] sm:text-6xl">{topic.title}</h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-text-primary">
-                {topic.description || tr("Зберіть тему як маршрут: коротка теорія, практика з тестами, контрольна з окремими правилами оцінювання.", "Build a learning path with concise theory, tested practice, and a test with its own grading rules.")}
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <button type="button" onClick={openTaskBuilder} className="inline-flex items-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-black text-primary-foreground">
-                  <Plus className="size-4" />
-                  {tr("Практика + теорія", "Practice + theory")}
-                </button>
-                <button type="button" onClick={openControlBuilder} className="inline-flex items-center gap-2 rounded-2xl border border-white/14 px-5 py-3 text-sm font-bold text-text-primary">
-                  <ClipboardCheck className="size-4" />
-                  {tr("Контрольна", "Test")}
-                </button>
-              </div>
-            </div>
-            <div className="edu-topic-hero__aside border-t border-white/10 bg-white/[.045] p-6 sm:p-9 lg:border-l lg:border-t-0 lg:p-10">
-              <p className="edu-topic-hero__aside-label">{tr("Стан теми", "Topic at a glance")}</p>
-              <div className="grid gap-3">
-                {[
-                  { label: tr("практик", "practice tasks"), value: tasks.length, icon: TerminalSquare },
-                  { label: tr("відкрито учням", "assigned to students"), value: assignedTasks, icon: CheckCircle2 },
-                  { label: tr("контрольних", "tests"), value: controls.length, icon: ShieldCheck },
-                ].map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <div key={item.label} className="edu-topic-hero__stat rounded-[24px] border border-white/10 bg-white/[.055] p-5">
-                      <div className="flex items-center justify-between">
-                        <span className="grid size-11 place-items-center rounded-2xl bg-primary/15 text-primary-soft"><Icon className="size-5" /></span>
-                        <strong className="text-4xl font-black tracking-[-.07em]">{item.value}</strong>
-                      </div>
-                      <p className="mt-4 text-sm font-bold text-text-primary">{item.label}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+    <main className={root}>
+      <ClassWorkspaceFrame classId={topic.class?.id || "0"} className={topic.class?.name || tr("Клас", "Class")} active="learning">
+        <header className="classroom-heading">
+          <div><p>{tr("Теми та завдання", "Topics and tasks")} / {tr("Тема", "Topic")}</p><h1>{topic.title}</h1><span>{topic.description || tr("Матеріали та завдання для учнів класу.", "Materials and tasks for your class.")}</span></div>
+          <div className="classroom-actions"><button type="button" className="classroom-button" onClick={openControlBuilder}><ClipboardCheck className="size-4" aria-hidden="true" />{tr("Контрольна", "Assessment")}</button><button type="button" className="classroom-button classroom-button--primary" onClick={openTaskBuilder}><Plus className="size-4" aria-hidden="true" />{tr("Додати завдання", "Add task")}</button></div>
         </header>
+        <div className="classroom-facts"><span className="classroom-language">{topic.language}</span><span>{tr("Завдання", "Tasks")}: {tasks.length}</span><span><span className="classroom-status-dot" />{tr("Відкрито учням", "Open to students")}: {assignedTasks}</span></div>
+        {error && <div className="classroom-notice classroom-notice--error" role="alert">{error}</div>}
+        <div className="classroom-tabs" role="tablist" aria-label={tr("Матеріали теми", "Topic materials")}>
+          <button type="button" role="tab" id="topic-tab-tasks" aria-selected={topicTab === "tasks"} aria-controls="topic-panel-tasks" onClick={() => setTopicTab("tasks")}>{tr("Завдання", "Tasks")}<span>{tasks.length}</span></button>
+          <button type="button" role="tab" id="topic-tab-controls" aria-selected={topicTab === "controls"} aria-controls="topic-panel-controls" onClick={() => setTopicTab("controls")}>{tr("Контрольні роботи", "Assessments")}<span>{controls.length}</span></button>
+        </div>
+        {topicTab === "tasks" ? <section role="tabpanel" id="topic-panel-tasks" aria-labelledby="topic-tab-tasks" className="classroom-task-workspace">
+          <div className="classroom-toolbar"><label className="classroom-search"><Search className="size-4" aria-hidden="true" /><input type="search" aria-label={tr("Знайти завдання", "Search tasks")} placeholder={tr("Знайти завдання…", "Search tasks…")} value={taskQuery} onChange={event => setTaskQuery(event.target.value)} /></label><select className="classroom-filter" aria-label={tr("Фільтр доступності", "Access filter")} value={taskFilter} onChange={event => setTaskFilter(event.target.value as typeof taskFilter)}><option value="all">{tr("Усі завдання", "All tasks")}</option><option value="assigned">{tr("Відкриті учням", "Open to students")}</option><option value="draft">{tr("Чернетки", "Drafts")}</option></select></div>
+          <div className="classroom-task-columns" aria-hidden="true"><span>{tr("Завдання", "Task")}</span><span>{tr("Доступ", "Access")}</span><span>{tr("Дії", "Actions")}</span></div>
+          <div className="classroom-task-list">{tasks.filter(task => task.title.toLocaleLowerCase().includes(taskQuery.toLocaleLowerCase()) && (taskFilter === "all" || (taskFilter === "assigned" ? task.isAssigned : !task.isAssigned))).map((task, index) => <article className={`classroom-task ${expandedTaskId === task.id ? "is-expanded" : ""}`} key={task.id}>
+            <div className="classroom-task__row"><div className="classroom-task__identity"><span className="classroom-task__number">{String(index + 1).padStart(2, "0")}</span><div><button type="button" className="classroom-task__title" onClick={() => openTaskEditor(task)}>{task.title}</button><p>{task.theory?.content ? tr("Теорія та практика", "Theory and practice") : tr("Практичне завдання", "Practice task")}{task.maxAttempts ? ` · ${tr("Спроби", "Attempts")}: ${task.maxAttempts}` : ""}</p></div></div><span className={`classroom-status ${task.isAssigned ? "is-open" : ""}`}><i aria-hidden="true" />{task.isAssigned ? tr("Відкрито", "Open") : tr("Чернетка", "Draft")}</span><div className="classroom-task__actions"><button type="button" className="classroom-text-button" aria-label={tr(`Редагувати задачу ${task.title}`, `Edit task ${task.title}`)} onClick={() => openTaskEditor(task)}><Pencil className="size-3.5" aria-hidden="true" />{tr("Редагувати", "Edit")}</button><button type="button" className="classroom-icon-button" aria-expanded={expandedTaskId === task.id} aria-controls={`task-details-${task.id}`} aria-label={tr(`Доступ і тести: ${task.title}`, `Access and tests: ${task.title}`)} onClick={() => setExpandedTaskId(current => current === task.id ? null : task.id)}><ChevronDown className="size-4" aria-hidden="true" /></button></div></div>
+            {expandedTaskId === task.id && <div id={`task-details-${task.id}`} className="classroom-task__details"><div className="classroom-task__description">{task.description ? <MarkdownView content={task.description} /> : <p>{tr("Умова ще готується.", "The problem statement is being prepared.")}</p>}</div><div className="classroom-task__access"><label htmlFor={`topic-task-deadline-${task.id}`}>{tr("Доступ до", "Access until")}<input id={`topic-task-deadline-${task.id}`} type="datetime-local" value={deadlineDrafts[task.id] ?? toDateTimeLocalValue(task.deadline)} onChange={event => setDeadlineDrafts(old => ({ ...old, [task.id]: event.target.value }))} disabled={assignmentBusyId === task.id} /></label>{task.isAssigned && <button type="button" className="classroom-button" disabled={assignmentBusyId === task.id} onClick={() => void saveTaskDeadline(task)}>{tr("Зберегти дедлайн", "Save deadline")}</button>}<button type="button" className="classroom-button" disabled={assignmentBusyId === task.id} aria-pressed={!!task.isAssigned} onClick={() => void toggleTask(task)}>{assignmentBusyId === task.id ? tr("Зберігаємо…", "Saving…") : task.isAssigned ? tr("Закрити доступ", "Close access") : tr("Відкрити учням", "Open to students")}</button></div><div className="classroom-task__utilities"><button type="button" className="classroom-text-button" onClick={() => void openTests(task)}><FlaskConical className="size-4" aria-hidden="true" />{tr("Налаштувати тести", "Configure tests")}</button><button type="button" className="classroom-text-button classroom-text-button--danger" onClick={() => void deleteTask(task)} aria-label={tr(`Видалити задачу ${task.title}`, `Delete task ${task.title}`)}><Trash2 className="size-4" aria-hidden="true" />{tr("Видалити завдання", "Delete task")}</button></div></div>}
+          </article>)}</div>
+          {!tasks.filter(task => task.title.toLocaleLowerCase().includes(taskQuery.toLocaleLowerCase()) && (taskFilter === "all" || (taskFilter === "assigned" ? task.isAssigned : !task.isAssigned))).length && <div className="classroom-empty"><TerminalSquare className="size-6" aria-hidden="true" /><strong>{tasks.length ? tr("Завдань не знайдено", "No matching tasks") : tr("Почніть із першого завдання", "Start with your first task")}</strong><p>{tasks.length ? tr("Змініть пошук або фільтр.", "Change the search or filter.") : tr("Додайте умову, теорію та тести для перевірки.", "Add a problem statement, theory, and test cases.")}</p></div>}
+          <button type="button" className="classroom-add-row" onClick={openTaskBuilder}><Plus className="size-4" aria-hidden="true" />{tr("Додати завдання", "Add task")}</button>
+          <p className="classroom-list-hint">{tr("Натисніть назву, щоб редагувати. Стрілка праворуч відкриває доступ, дедлайн і тести.", "Select a title to edit. The arrow on the right opens access, deadline, and test settings.")}</p>
+        </section> : <section role="tabpanel" id="topic-panel-controls" aria-labelledby="topic-tab-controls" className="classroom-task-workspace"><div className="classroom-toolbar"><p className="classroom-caption">{tr("Перевірка знань із теми", "Assess knowledge of this topic")}</p></div>{controls.map(control => <article key={control.id} className="classroom-assessment"><span className="classroom-assessment__icon"><ClipboardCheck className="size-5" aria-hidden="true" /></span><div><h2>{control.title || tr("Контрольна робота", "Assessment")}</h2><p>{control.timeLimitMinutes ? `${control.timeLimitMinutes} ${tr("хвилин", "minutes")}` : tr("Без обмеження часу", "No time limit")}</p></div><span className={`classroom-status ${control.isAssigned ? "is-open" : ""}`}><i aria-hidden="true" />{control.isAssigned ? tr("Відкрито", "Open") : tr("Чернетка", "Draft")}</span><div className="classroom-actions"><button type="button" className="classroom-button" disabled={assignmentBusyId === control.id} onClick={() => void toggleControl(control)}>{control.isAssigned ? tr("Закрити доступ", "Close access") : tr("Відкрити учням", "Open to students")}</button><button type="button" className="classroom-text-button" onClick={() => navigate(withDevPreview(`/edu/control-works/${control.id}`))}>{tr("Налаштувати", "Configure")}<ArrowRight className="size-4" aria-hidden="true" /></button></div></article>)}{!controls.length && <div className="classroom-empty"><ClipboardCheck className="size-6" aria-hidden="true" /><strong>{tr("Контрольних ще немає", "No assessments yet")}</strong><p>{tr("Створіть контрольну, коли матеріали теми будуть готові.", "Create an assessment when the topic materials are ready.")}</p></div>}<button type="button" className="classroom-add-row" onClick={openControlBuilder}><Plus className="size-4" aria-hidden="true" />{tr("Створити контрольну", "Create assessment")}</button></section>}
 
-        {error && <div className="rounded-2xl border border-accent-error/25 bg-accent-error/10 px-4 py-3 text-sm font-medium text-accent-error" role="alert">{error}</div>}
-
-        <main className="grid gap-6 xl:grid-cols-[1fr_410px]">
-          <section className="rounded-[32px] border border-border/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-bg-code sm:p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">{tr("Практичний маршрут", "Practice path")}</p>
-                <h2 className="mt-2 text-2xl font-black tracking-[-.05em]">{tr("Завдання теми", "Topic tasks")}</h2>
-              </div>
-              <button type="button" onClick={openTaskBuilder} className="rounded-xl bg-bg-code px-4 py-2.5 text-sm font-bold text-text-primary dark:bg-primary dark:text-primary-foreground">
-                {tr("Додати", "Add")}
-              </button>
-            </div>
-
-            <div className="mt-5 grid gap-3">
-              {tasks.map((task, index) => (
-                <article key={task.id} className="group rounded-[26px] border border-border/10 bg-bg-hover p-4 transition hover:border-primary/40 hover:bg-white dark:border-white/10 dark:bg-white/[.045] dark:hover:bg-white/[.07] sm:p-5">
-                  <div className="grid gap-4 sm:grid-cols-[54px_1fr]">
-                    <span className="grid size-12 place-items-center rounded-2xl bg-white text-sm font-black text-primary-strong shadow-sm dark:bg-bg-code dark:text-primary-soft">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-xl font-black tracking-[-.04em]">{task.title}</h3>
-                          <div className="mt-2 max-h-48 max-w-2xl overflow-hidden text-sm leading-6 text-text-muted [mask-image:linear-gradient(to_bottom,black_72%,transparent)] dark:text-text-secondary">
-                            {task.description ? <MarkdownView content={task.description} /> : tr("Умова ще готується.", "The problem statement is being prepared.")}
-                          </div>
-                        </div>
-                        <span className={`rounded-full px-3 py-1.5 text-xs font-black ${task.isAssigned ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-bg-hover text-text-muted dark:bg-white/[.06] dark:text-text-secondary"}`}>
-                          {task.isAssigned ? tr("доступ відкритий", "access open") : tr("чернетка · доступ закритий", "draft · access closed")}
-                        </span>
-                      </div>
-                      <div className="mt-5 flex flex-wrap items-end gap-2">
-                        <label htmlFor={`topic-task-deadline-${task.id}`} className="block min-w-[220px] flex-1">
-                          <span className="mb-1 block text-[11px] font-black uppercase tracking-[.1em] text-text-muted dark:text-text-secondary">{tr("Дедлайн доступу", "Access deadline")}</span>
-                          <input id={`topic-task-deadline-${task.id}`} name={`taskDeadline-${task.id}`} type="datetime-local" value={deadlineDrafts[task.id] ?? toDateTimeLocalValue(task.deadline)} onChange={(event) => setDeadlineDrafts((old) => ({ ...old, [task.id]: event.target.value }))} disabled={assignmentBusyId === task.id} className="w-full rounded-xl border border-border/10 bg-white px-3 py-2 text-xs font-bold text-text-primary outline-none transition focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-bg-code dark:text-text-primary" />
-                        </label>
-                        <button type="button" disabled={assignmentBusyId === task.id} onClick={() => openTaskEditor(task)} aria-label={tr(`Редагувати задачу ${task.title}`, `Edit task ${task.title}`)} className="inline-flex items-center gap-1.5 rounded-xl border border-border/12 bg-white px-3 py-2 text-xs font-black text-text-primary shadow-sm transition hover:border-primary/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:opacity-45 dark:border-white/10 dark:bg-bg-code dark:text-text-primary">
-                          <Pencil className="size-3.5" aria-hidden="true" />
-                          {tr("Редагувати", "Edit")}
-                        </button>
-                        <button type="button" disabled={assignmentBusyId === task.id} onClick={() => void toggleTask(task)} aria-pressed={!!task.isAssigned} className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-black shadow-sm transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:opacity-45 ${task.isAssigned ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-white text-text-primary dark:bg-bg-code dark:text-text-primary"}`}>
-                           {task.isAssigned ? tr("Закрити доступ", "Close access") : tr("Відкрити учням", "Open to students")}
-                        </button>
-                        {task.isAssigned && <button type="button" disabled={assignmentBusyId === task.id} onClick={() => void saveTaskDeadline(task)} className="rounded-xl border border-primary-strong/25 bg-white px-3 py-2 text-xs font-black text-primary-strong transition hover:border-primary/50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 disabled:opacity-45 dark:bg-bg-code dark:text-primary-soft">
-                          {tr("Зберегти дедлайн", "Save deadline")}
-                        </button>}
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <button type="button" onClick={() => void openTests(task)} className="inline-flex items-center gap-1 rounded-xl bg-bg-hover px-3 py-2 text-xs font-black text-accent-warn transition  focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-warn/25 dark:bg-accent-warn/12 dark:text-accent-warn">
-                          <FlaskConical className="size-3.5" />
-                          {tr("Тести", "Tests")}
-                        </button>
-                        <button type="button" onClick={() => void deleteTask(task)} aria-label={tr(`Видалити задачу ${task.title}`, `Delete task ${task.title}`)} className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-black text-accent-error opacity-100 transition hover:bg-accent-error/8 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent-error/20 dark:text-accent-error sm:opacity-0 sm:group-hover:opacity-100">
-                          <Trash2 className="size-3.5" aria-hidden="true" />
-                          {tr("Видалити", "Delete")}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              ))}
-              {!tasks.length && (
-                <div className="rounded-[26px] border border-dashed border-border/15 px-6 py-16 text-center dark:border-white/10">
-                  <TerminalSquare className="mx-auto size-9 text-primary-strong dark:text-primary-soft" />
-                  <h3 className="mt-4 text-xl font-black">{tr("Додайте першу практику", "Add your first practice task")}</h3>
-                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-muted dark:text-text-secondary">
-                    {tr("Після створення одразу відкриється вікно тестів, щоб завдання не лишалось порожньою карткою.", "After creation, the tests window opens so the task is ready to use.")}
-                  </p>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <aside className="space-y-5">
-            <section className="rounded-[32px] border border-border/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-bg-code sm:p-6">
-              <div className="flex items-center gap-3">
-                <span className="grid size-11 place-items-center rounded-2xl bg-bg-hover text-accent-warn dark:bg-accent-warn/12"><ClipboardCheck className="size-5" /></span>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[.13em] text-accent-warn">{tr("Перевірки", "Assessments")}</p>
-                  <h2 className="mt-1 text-xl font-black">{tr("Контрольні", "Tests")}</h2>
-                </div>
-              </div>
-              <div className="mt-5 space-y-3">
-                {controls.map((control) => (
-                  <div key={control.id} className="rounded-[22px] bg-bg-hover p-4 dark:bg-white/[.045]">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-black">{control.title || tr("Контрольна робота", "Test")}</p>
-                        <p className="mt-1 text-xs text-text-muted dark:text-text-secondary">{control.timeLimitMinutes ? `${control.timeLimitMinutes} ${tr("хв", "min")}` : tr("Без обмеження часу", "No time limit")}</p>
-                      </div>
-                      <button type="button" disabled={assignmentBusyId === control.id} onClick={() => void toggleControl(control)} aria-pressed={!!control.isAssigned} className={`rounded-full px-2.5 py-1 text-[11px] font-black transition disabled:cursor-wait disabled:opacity-60 ${control.isAssigned ? "bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft" : "bg-white text-text-muted dark:bg-white/[.06] dark:text-text-secondary"}`}>
-                        {assignmentBusyId === control.id ? tr("зберігаю…", "saving…") : control.isAssigned ? tr("активна", "active") : tr("чернетка", "draft")}
-                      </button>
-                    </div>
-                    <button type="button" onClick={() => navigate(`/edu/control-works/${control.id}${preview() ? "?preview=true" : ""}`)} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-3 py-2.5 text-sm font-black text-text-primary shadow-sm dark:bg-bg-code dark:text-text-primary">
-                      <Settings className="size-4" />
-                      {tr("Налаштувати", "Configure")}
-                    </button>
-                  </div>
-                ))}
-                {!controls.length && <p className="rounded-2xl border border-dashed border-border/15 px-4 py-8 text-center text-sm leading-6 text-text-muted dark:border-white/10 dark:text-text-secondary">{tr("Контрольної поки немає.", "No tests yet.")}</p>}
-              </div>
-              <button type="button" onClick={openControlBuilder} className="mt-5 w-full rounded-xl border border-border/12 px-3 py-2.5 text-sm font-black text-text-primary dark:border-white/10 dark:text-text-primary">
-                {tr("Створити контрольну", "Create a test")}
-              </button>
-            </section>
-
-            <section className="edu-topic-guideline rounded-[24px] p-5">
-              <p className="text-xs font-black uppercase tracking-[.14em]">{tr("Правило теми", "Topic guideline")}</p>
-              <p className="mt-3 text-sm leading-6">
-                {tr("Тема спершу збирається в чернетку. Відкривайте учням лише ті практики й контрольні, які вже мають теорію, тести або зрозумілу схему оцінювання.", "Build the topic as a draft first. Give students access only to practice tasks and tests with theory, test cases, or clear grading rules.")}
-              </p>
-            </section>
-          </aside>
-        </main>
 
         {mode === "task" && (
-          <Modal title={editingTaskId ? tr("Редагувати практику", "Edit practice task") : tr("Нова практика", "New practice task")} caption={editingTaskId ? tr("Змініть умову, код, теорію або кількість спроб. Чернетку можна редагувати до відкриття учням.", "Edit the problem statement, code, theory, or attempt limit. You can edit the draft until it is assigned to students.") : tr("Одне вікно для умови, стартового коду й короткої теорії. Після створення відкриється налаштування тестів.", "Add the problem statement, starter code, and brief theory in one place. Test settings open after creation.")} onClose={() => { setMode(null); setEditingTaskId(null); }} wide>
-            <div className="grid gap-5 lg:grid-cols-[1fr_.85fr]">
-              <section className="space-y-4 rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
-                <div className="flex items-center gap-3">
-                  <TerminalSquare className="size-5 text-primary-strong dark:text-primary-soft" />
-                  <h3 className="font-black">{tr("Практичне завдання", "Practice task")}</h3>
-                </div>
-                <input id="topic-task-title" name="taskTitle" aria-label={tr("Назва завдання", "Task title")} value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} placeholder={tr("Назва завдання", "Task title")} className="w-full rounded-xl border border-border/10 bg-bg-hover px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-primary/15 dark:border-white/10 dark:bg-bg-code" />
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => void generateCondition()} disabled={!!aiBusy || !taskForm.title.trim()} className="inline-flex items-center gap-2 rounded-xl bg-bg-hover px-3 py-2 text-xs font-black text-accent-warn disabled:opacity-45 dark:bg-accent-warn/12 dark:text-accent-warn">
-                    <Sparkles className="size-3.5" />
-                    {aiBusy === "condition" ? tr("Генерую…", "Generating…") : tr("Згенерувати умову", "Generate problem statement")}
-                  </button>
-                  <button type="button" onClick={() => void generateTemplate()} disabled={!!aiBusy || !taskForm.title.trim()} className="inline-flex items-center gap-2 rounded-xl bg-bg-hover px-3 py-2 text-xs font-black text-primary-strong disabled:opacity-45 dark:bg-primary/10 dark:text-primary-soft">
-                    <Sparkles className="size-3.5" />
-                    {aiBusy === "template" ? tr("Генерую…", "Generating…") : tr("Стартовий код", "Starter code")}
-                  </button>
-                </div>
-                <textarea id="topic-task-description" name="taskDescription" aria-label={tr("Умова завдання", "Problem statement")} value={taskForm.description} onChange={(event) => setTaskForm({ ...taskForm, description: event.target.value })} placeholder={tr("Умова, контекст, обмеження", "Problem statement, context, constraints")} rows={6} className="w-full resize-none rounded-xl border border-border/10 bg-bg-hover px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-primary/15 dark:border-white/10 dark:bg-bg-code" />
-                <textarea id="topic-task-template" name="taskTemplate" aria-label={tr("Стартовий код", "Starter code")} value={taskForm.template} onChange={(event) => setTaskForm({ ...taskForm, template: event.target.value })} placeholder={tr("Стартовий код (необовʼязково)", "Starter code (optional)")} rows={6} className="w-full resize-none rounded-xl border border-border/10 bg-bg-code px-4 py-3 font-mono text-sm text-text-primary outline-none focus:ring-4 focus:ring-primary/15 dark:border-white/10" />
-              </section>
-              <section className="space-y-4 rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
-                <div className="flex items-center gap-3">
-                  <BookOpen className="size-5 text-accent-warn" />
-                  <h3 className="font-black">{tr("Теорія і правила", "Theory and settings")}</h3>
-                </div>
-                <label className="block">
-                  <span className="mb-2 block text-xs font-black uppercase tracking-[.12em] text-text-muted dark:text-text-secondary">{tr("Спроб", "Attempts")}</span>
-                  <input id="topic-task-max-attempts" name="maxAttempts" aria-label={tr("Максимальна кількість спроб", "Maximum attempts")} value={taskForm.maxAttempts} onChange={(event) => setTaskForm({ ...taskForm, maxAttempts: event.target.value })} type="number" min="1" className="w-full rounded-xl border border-border/10 bg-bg-hover px-4 py-3 text-sm dark:border-white/10 dark:bg-bg-code" />
-                </label>
-                <button type="button" onClick={() => void generateTheory()} disabled={!!aiBusy || !taskForm.description.trim()} className="inline-flex items-center gap-2 rounded-xl bg-bg-hover px-3 py-2 text-xs font-black text-accent-warn disabled:opacity-45 dark:bg-accent-warn/12 dark:text-accent-warn">
-                  <Sparkles className="size-3.5" />
-                  {aiBusy === "theory" ? tr("Генерую…", "Generating…") : tr("Згенерувати теорію", "Generate theory")}
-                </button>
-                <textarea id="topic-task-theory" name="taskTheory" aria-label={tr("Теорія завдання", "Task theory")} value={taskForm.theory} onChange={(event) => setTaskForm({ ...taskForm, theory: event.target.value })} placeholder={tr("Коротке пояснення перед практикою: поняття, приклад, пастки", "A short explanation before practice: concepts, examples, and pitfalls")} rows={9} className="w-full resize-none rounded-xl border border-border/10 bg-bg-hover px-4 py-3 text-sm outline-none focus:ring-4 focus:ring-primary/15 dark:border-white/10 dark:bg-bg-code" />
-                <div>
-                  <label className="mb-2 block text-xs font-black uppercase tracking-[.12em] text-text-muted dark:text-text-secondary">{tr("Мініпроєкт · projectSpec JSON (необовʼязково)", "Mini project · projectSpec JSON (optional)")}</label>
-                  <textarea
-                    id="topic-task-project-spec"
-                    name="projectSpecJson"
-                    aria-label={tr("Специфікація мініпроєкту JSON", "Mini project JSON specification")}
-                    value={taskForm.projectSpecJson}
-                    onChange={(event) => setTaskForm({ ...taskForm, projectSpecJson: event.target.value })}
-                    placeholder={tr('{"version":1,"kind":"MINI_PROJECT","estimatedMinutes":45,"skills":["цикли"],"milestones":[{"id":"step-1","title":"Перший етап","description":"Що має зробити учень.","required":true}]}', '{"version":1,"kind":"MINI_PROJECT","estimatedMinutes":45,"skills":["loops"],"milestones":[{"id":"step-1","title":"First step","description":"What the student should do.","required":true}]}')}
-                    rows={7}
-                    className="w-full resize-none rounded-xl border border-border/10 bg-bg-code px-4 py-3 font-mono text-xs text-text-primary outline-none focus:ring-4 focus:ring-primary/15 dark:border-white/10"
-                  />
-                  <p className="mt-2 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Для мініпроєкту додайте тести нижче. Учень побачить етапи в IDE, а submit перевірятиметься judgeʼом.", "Add tests below for a mini project. Students will see the milestones in the IDE, and submissions will be checked by the judge.")}</p>
-                </div>
-                <button type="button" disabled={busy || !taskForm.title.trim()} onClick={() => void createTask()} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-black text-primary-foreground disabled:opacity-45">
-                  <ArrowRight className="size-4" />
-                  {editingTaskId ? tr("Зберегти зміни", "Save changes") : tr("Створити й додати тести", "Create and add tests")}
-                </button>
-              </section>
-            </div>
+          <Modal error={error} title={editingTaskId ? tr("Редагувати практику", "Edit practice task") : tr("Нова практика", "New practice task")} caption={editingTaskId ? tr("Змініть умову, код, теорію або кількість спроб. Чернетку можна редагувати до відкриття учням.", "Edit the problem statement, code, theory, or attempt limit. You can edit the draft until it is assigned to students.") : tr("Одне вікно для умови, стартового коду й короткої теорії. Після створення відкриється налаштування тестів.", "Add the problem statement, starter code, and brief theory in one place. Test settings open after creation.")} onClose={() => { setMode(null); setEditingTaskId(null); }} wide>
+            <form className="task-authoring" onSubmit={event => { event.preventDefault(); void createTask(); }}>
+              <label className="task-authoring__label" htmlFor="topic-task-title">{tr("Назва завдання", "Task title")}</label><input id="topic-task-title" name="taskTitle" required value={taskForm.title} onChange={event => setTaskForm({ ...taskForm, title: event.target.value })} placeholder={tr("Наприклад, Словник частот", "For example, Frequency map")} disabled={busy} className="task-authoring__title" />
+              <div className="classroom-tabs" role="tablist" aria-label={tr("Розділи редактора", "Editor sections")}>{([{ id: "statement", label: tr("Умова", "Statement") }, { id: "code", label: tr("Стартовий код", "Starter code") }, { id: "theory", label: tr("Теорія", "Theory") }, { id: "settings", label: tr("Налаштування", "Settings") }] as const).map(tab => <button key={tab.id} type="button" role="tab" id={`task-editor-tab-${tab.id}`} aria-selected={editorTab === tab.id} aria-controls={`task-editor-panel-${tab.id}`} onClick={() => setEditorTab(tab.id)}>{tab.label}</button>)}</div>
+              <div className="task-authoring__panel" role="tabpanel" id={`task-editor-panel-${editorTab}`} aria-labelledby={`task-editor-tab-${editorTab}`}>
+                {editorTab === "statement" && <><div className="classroom-toolbar"><label className="task-authoring__label" htmlFor="topic-task-description">{tr("Що потрібно зробити учню", "What the student needs to do")}</label><button type="button" className="classroom-text-button" disabled={!!aiBusy || !taskForm.title.trim()} onClick={() => void generateCondition()}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "condition" ? tr("Генеруємо…", "Generating…") : tr("Допомога AI", "AI assistance")}</button></div><textarea id="topic-task-description" name="taskDescription" value={taskForm.description} onChange={event => setTaskForm({ ...taskForm, description: event.target.value })} placeholder={tr("Опишіть завдання, вхідні та вихідні дані, обмеження й приклади.", "Describe the problem, input, output, constraints, and examples.")} rows={13} disabled={busy} /><p className="classroom-caption">{tr("Підтримуються Markdown, приклади коду та математичні формули.", "Supports Markdown, code examples, and mathematical formulae.")}</p><details className="task-authoring__preview"><summary>{tr("Переглянути як учень", "Preview as a student")}</summary><MarkdownView content={taskForm.description || tr("Тут з’явиться умова завдання.", "The problem statement will appear here.")} /></details></>}
+                {editorTab === "code" && <><div className="classroom-toolbar"><label className="task-authoring__label" htmlFor="topic-task-template">{tr("Код, із якого учень почне розв’язання", "Code the student starts with")}</label><button type="button" className="classroom-text-button" disabled={!!aiBusy || !taskForm.title.trim()} onClick={() => void generateTemplate()}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "template" ? tr("Генеруємо…", "Generating…") : tr("Згенерувати", "Generate")}</button></div><textarea id="topic-task-template" name="taskTemplate" value={taskForm.template} onChange={event => setTaskForm({ ...taskForm, template: event.target.value })} rows={14} spellCheck={false} className="task-authoring__code" disabled={busy} /><p className="classroom-caption">{tr("Необов’язково. Можна залишити редактор учня порожнім.", "Optional. You can leave the student editor empty.")}</p></>}
+                {editorTab === "theory" && <><div className="classroom-toolbar"><label className="task-authoring__label" htmlFor="topic-task-theory">{tr("Пояснення перед практикою", "Explanation before practice")}</label><button type="button" className="classroom-text-button" disabled={!!aiBusy || !taskForm.description.trim()} onClick={() => void generateTheory()}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "theory" ? tr("Генеруємо…", "Generating…") : tr("Допомога AI", "AI assistance")}</button></div><textarea id="topic-task-theory" name="taskTheory" value={taskForm.theory} onChange={event => setTaskForm({ ...taskForm, theory: event.target.value })} rows={13} placeholder={tr("Додайте поняття, приклад і підказки для самостійної роботи.", "Add concepts, an example, and guidance for independent work.")} disabled={busy} /><details className="task-authoring__preview"><summary>{tr("Переглянути теорію", "Preview theory")}</summary><MarkdownView content={taskForm.theory || tr("Теорію ще не додано.", "No theory added yet.")} /></details></>}
+                {editorTab === "settings" && <><label className="task-authoring__label" htmlFor="topic-task-max-attempts">{tr("Максимальна кількість спроб", "Maximum attempts")}</label><input id="topic-task-max-attempts" name="maxAttempts" type="number" min="1" required value={taskForm.maxAttempts} onChange={event => setTaskForm({ ...taskForm, maxAttempts: event.target.value })} className="task-authoring__attempts" disabled={busy} /><p className="classroom-caption">{tr("Скільки разів учень може надіслати розв’язання на перевірку.", "How many times a student can submit a solution for checking.")}</p><details className="task-authoring__advanced" open={!!taskForm.projectSpecJson}><summary>{tr("Налаштування мініпроєкту", "Mini-project settings")}</summary><p className="classroom-caption">{tr("Для завдань з етапами та окремими критеріями. Вставте наявну специфікацію проєкту у форматі JSON.", "For tasks with milestones and individual criteria. Paste an existing project specification in JSON format.")}</p><label className="task-authoring__label" htmlFor="topic-task-project-spec">{tr("Специфікація мініпроєкту JSON", "Mini project JSON specification")}</label><textarea id="topic-task-project-spec" name="projectSpecJson" value={taskForm.projectSpecJson} onChange={event => setTaskForm({ ...taskForm, projectSpecJson: event.target.value })} rows={9} spellCheck={false} className="task-authoring__code" disabled={busy} /></details></>}
+              </div>
+              <div className="task-authoring__footer"><button type="button" className="classroom-button" disabled={busy} onClick={() => { setMode(null); setEditingTaskId(null); }}>{tr("Скасувати", "Cancel")}</button><button type="submit" className="classroom-button classroom-button--primary" disabled={busy || !!aiBusy || !taskForm.title.trim()}>{busy ? tr("Зберігаємо…", "Saving…") : tr("Зберегти й налаштувати тести", "Save and configure tests")}<ArrowRight className="size-4" aria-hidden="true" /></button></div>
+            </form>
+
           </Modal>
         )}
 
         {mode === "control" && (
-          <Modal title={tr("Нова контрольна", "New test")} caption={tr("Контрольна створюється не просто назвою: одразу визначаємо час, частини роботи й формулу оцінювання.", "Create a complete test by setting its time limit, sections, and grading formula.")} onClose={() => setMode(null)} wide>
+          <Modal error={error} title={tr("Нова контрольна", "New test")} caption={tr("Контрольна створюється не просто назвою: одразу визначаємо час, частини роботи й формулу оцінювання.", "Create a complete test by setting its time limit, sections, and grading formula.")} onClose={() => setMode(null)} wide>
             <div className="grid gap-5 lg:grid-cols-[1fr_.9fr]">
               <section className="space-y-4 rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
                 <div className="flex items-center gap-3">
@@ -1019,7 +847,7 @@ export const TopicStudioPage: React.FC = () => {
         )}
 
         {mode === "tests" && selectedTask && (
-          <Modal title={`${tr("Тести", "Tests")} · ${selectedTask.title}`} caption={tr("Згенеруйте тести, імпортуйте пари sample.in + sample.out або додайте один тест вручну. Вони використовуються автоперевіркою.", "Generate tests, import sample.in + sample.out pairs, or add a test manually. They are used for automatic grading.")} onClose={() => { setMode(null); setSelectedTask(null); setTestNotice(null); setImportFiles([]); }} wide>
+          <Modal error={error} title={`${tr("Тести", "Tests")} · ${selectedTask.title}`} caption={tr("Згенеруйте тести, імпортуйте пари sample.in + sample.out або додайте один тест вручну. Вони використовуються автоперевіркою.", "Generate tests, import sample.in + sample.out pairs, or add a test manually. They are used for automatic grading.")} onClose={() => { setMode(null); setSelectedTask(null); setTestNotice(null); setImportFiles([]); }} wide>
             <div className="grid gap-5 lg:grid-cols-[1fr_.85fr]">
               <section className="space-y-3 rounded-[26px] border border-border/10 bg-white p-5 dark:border-white/10 dark:bg-white/[.045]">
                 <div className="flex items-center justify-between gap-3">
@@ -1111,8 +939,8 @@ export const TopicStudioPage: React.FC = () => {
             </div>
           </Modal>
         )}
-      </div>
-    </div>
+      </ClassWorkspaceFrame>
+    </main>
   );
 };
 

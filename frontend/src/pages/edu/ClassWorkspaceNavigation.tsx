@@ -1,9 +1,10 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, BookOpen, CalendarDays, ClipboardList, LayoutDashboard, UsersRound } from "lucide-react";
+import { ArrowLeft, BookOpen, CalendarDays, ClipboardList, LayoutDashboard, UsersRound, GraduationCap } from "lucide-react";
 import { tr } from "../../i18n";
 import { withDevPreview } from "../../lib/devPreview";
 import "./classVisualQuality.css";
+import "./classroomWorkspace.css";
 
 export type ClassWorkspaceSection = "overview" | "students" | "learning" | "gradebook" | "calendar";
 
@@ -29,9 +30,9 @@ export const ClassWorkspaceNavigation: React.FC<Props> = ({
   const items: Array<{ id: ClassWorkspaceSection; label: string; icon: React.ComponentType<{ className?: string }>; href: string }> = [
     { id: "overview", label: tr("Огляд", "Overview"), icon: LayoutDashboard, href: classPath },
     { id: "students", label: tr("Учні", "Students"), icon: UsersRound, href: `${classPath}/manage` },
-    { id: "learning", label: tr("Навчання", "Learning"), icon: BookOpen, href: `${classPath}#class-topics` },
+    { id: "learning", label: tr("Теми та завдання", "Topics and tasks"), icon: BookOpen, href: `${classPath}?view=learning` },
     { id: "gradebook", label: tr("Журнал", "Gradebook"), icon: ClipboardList, href: `${classPath}/gradebook` },
-    { id: "calendar", label: tr("Календар", "Calendar"), icon: CalendarDays, href: "/edu/calendar" },
+    { id: "calendar", label: tr("Календар", "Calendar"), icon: CalendarDays, href: `/edu/calendar?class=${classId}` },
   ];
 
   return (
@@ -54,18 +55,16 @@ export const ClassWorkspaceNavigation: React.FC<Props> = ({
               type="button"
               key={section}
               aria-current={isActive ? "page" : undefined}
+              aria-label={label}
               className="class-workspace-nav__tab"
               data-active={isActive || undefined}
               onClick={() => {
-                if (section === "learning" && active === "overview") {
-                  document.getElementById("class-topics")?.scrollIntoView({ behavior: reduceMotion ? "instant" : "smooth", block: "start" });
-                  return;
-                }
                 navigate(withDevPreview(href));
               }}
             >
               <Icon className="size-4" aria-hidden="true" />
-              <span>{label}</span>
+              <span className={section === "learning" ? "classroom-nav-full" : undefined}>{label}</span>
+              {section === "learning" && <span className="classroom-nav-short" aria-hidden="true">{tr("Теми", "Topics")}</span>}
             </button>
           );
         })}
@@ -75,3 +74,16 @@ export const ClassWorkspaceNavigation: React.FC<Props> = ({
 };
 
 export default ClassWorkspaceNavigation;
+
+export const ClassWorkspaceFrame: React.FC<Props & { children: React.ReactNode }> = ({ children, ...props }) => {
+  const navigate = useNavigate();
+  if (!Number.isSafeInteger(Number(props.classId)) || Number(props.classId) <= 0) return <div className="classroom-frame__body">{children}</div>;
+  return <div className="classroom-frame">
+    <aside className="classroom-context" aria-label={tr("Простір класу", "Class workspace")}>
+      <button type="button" className="classroom-context__back" onClick={() => navigate(withDevPreview("/edu"))}><ArrowLeft className="size-4" aria-hidden="true" />{tr("Усі класи", "All classes")}</button>
+      <div className="classroom-context__identity"><span><GraduationCap className="size-5" aria-hidden="true" /></span><div><strong>{props.className || tr("Клас", "Class")}</strong><small>{tr("Клас", "Class")}</small></div></div>
+      <ClassWorkspaceNavigation {...props} />
+    </aside>
+    <div className="classroom-frame__body">{children}</div>
+  </div>;
+};

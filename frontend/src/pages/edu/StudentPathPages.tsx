@@ -117,11 +117,15 @@ export const StudentLessonsWorkspace: React.FC = () => {
   const liveLesson = liveSession?.lessonId == null ? null : lessons.find((lesson) => lesson.id === liveSession.lessonId);
   const livePath = classId ? withDevPreview(`/edu/classes/${classId}/live`) : null;
   return <div className={`${container} edu-lessons-page`}>
-    <header className="edu-lessons-hero edu-lessons-hero--path">
+    <header className="edu-student-page-heading">
+      <div><p>{tr("Навчальний простір", "Learning workspace")}</p><h1>{tr("Мої уроки", "My lessons")}</h1><span>{tr("Матеріали, практика й ваш наступний крок у навчанні.", "Materials, practice, and your next step in learning.")}</span></div>
+      {className && <span className="edu-student-page-heading__class"><BookOpen className="size-4" aria-hidden="true" />{className}</span>}
+    </header>
+    <section className="edu-lessons-hero edu-lessons-hero--path" aria-label={tr("Продовжити навчання", "Continue learning")}>
       <div className="edu-lessons-hero__main">
-        <p className="edu-lessons-kicker">StudyCod EDU <span aria-hidden="true">/</span> {className || tr("навчальний простір", "learning space")}</p>
-        <h1>{tr("Продовжити навчання", "Continue learning")}</h1>
-        <p className="edu-lessons-intro">{nextTopic ? tr(`Наступна тема — «${nextTopic.title}». Матеріал і практичні задачі зібрані в одному уроці.`, `Next up: “${nextTopic.title}”. Review the material and practice in one lesson.`) : tr("Коли викладач опублікує тему, вона з’явиться у маршруті класу.", "When your teacher publishes a topic, it will appear in your class pathway.")}</p>
+        <p className="edu-lessons-kicker"><Play className="size-3.5" aria-hidden="true" />{tr("Наступний урок", "Next lesson")}</p>
+        <h2>{nextTopic?.title || tr("Навчання починається тут", "Your learning starts here")}</h2>
+        <p className="edu-lessons-intro">{nextTopic ? tr("Опрацюй матеріал і переходь до практичних задач. Усе зібрано в одному уроці.", "Review the material, then move on to practice. Everything is in one lesson.") : tr("Коли викладач опублікує тему, вона з’явиться у маршруті класу.", "When your teacher publishes a topic, it will appear in your class pathway.")}</p>
         <div className="edu-lessons-hero__actions">
           {nextTopic && <button type="button" onClick={() => navigate(eduLessonPath(nextTopic))} className="edu-lessons-hero__continue"><Play className="size-4 fill-current" />{tr("Відкрити урок", "Open lesson")}<ArrowRight className="size-4" /></button>}
           <button type="button" onClick={() => navigate("/edu/journal")} className="edu-lessons-journal"><CircleDot className="size-4" />{tr("Журнал", "Journal")}<ArrowRight className="size-4" /></button>
@@ -133,7 +137,7 @@ export const StudentLessonsWorkspace: React.FC = () => {
         {trackedTasks.length > 0 ? <div className="edu-lessons-hero__route-progress"><span><span style={{ width: `${Math.round(completedTrackedTasks / trackedTasks.length * 100)}%` }} /></span><small>{completedTrackedTasks} / {trackedTasks.length} {tr("виконано", "completed")}</small></div> : <small className="edu-lessons-hero__route-note">{tr("Практика та контрольні за темами", "Practice and assessments by topic")}</small>}
         {controls.length > 0 && <div className="edu-lessons-hero__assessment"><ClipboardList className="size-4" /><span>{controls.length} {tr("контрольних робіт", "assessments")}</span></div>}
       </aside>
-    </header>
+    </section>
     {error && <div className="mb-5 flex flex-wrap items-start gap-3">{errorBox(error)}<button type="button" onClick={() => void load()} className="-mt-1 rounded-xl border border-accent-error px-3 py-2 text-xs font-bold text-accent-error"><RefreshCw className="mr-1 inline size-3" />{tr("Повторити", "Retry")}</button></div>}
 
     {liveSession && livePath && <section className="edu-live-invite" aria-label={tr("Активний онлайн-урок", "Active live lesson")}>
