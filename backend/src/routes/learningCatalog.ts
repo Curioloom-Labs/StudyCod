@@ -27,6 +27,16 @@ function errorField(error: unknown, key: string): unknown {
   return isRecord(error) ? error[key] : undefined;
 }
 
+function diagnosticErrorPayload(error: unknown) {
+  const stage = errorField(error, "assessmentStage");
+  const reason = errorField(error, "assessmentReason");
+  return {
+    message: errorMessage(error),
+    ...(typeof stage === "string" ? { stage } : {}),
+    ...(typeof reason === "string" ? { reason } : {}),
+  };
+}
+
 function requestLocale(req: AuthRequest): UiLocale {
   return normalizeUiLocale(req.query?.uiLang, resolveUiLocaleFromHeaders(req.headers, "uk"));
 }
@@ -265,7 +275,7 @@ learningCatalogRouter.get("/enrollments/:enrollmentId/diagnostic", authRequired,
   try {
     return res.json({ assessment: await getCourseDiagnosticAssessment(req.userId, enrollmentId, requestLocale(req)) });
   } catch (error: unknown) {
-    return res.status(errorStatus(error)).json({ message: errorMessage(error) });
+    return res.status(errorStatus(error)).json(diagnosticErrorPayload(error));
   }
 });
 
@@ -276,7 +286,7 @@ learningCatalogRouter.post("/enrollments/:enrollmentId/diagnostic/retry", authRe
   try {
     return res.json({ assessment: await retryCourseDiagnosticAssessment(req.userId, enrollmentId, requestLocale(req)) });
   } catch (error: unknown) {
-    return res.status(errorStatus(error)).json({ message: errorMessage(error) });
+    return res.status(errorStatus(error)).json(diagnosticErrorPayload(error));
   }
 });
 

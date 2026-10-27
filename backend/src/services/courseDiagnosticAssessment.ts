@@ -16,6 +16,7 @@ import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeLanguage } from "./judgeWorker/types";
 import { projectEntryFile } from "./learningCatalogProjectFiles";
 import { localizeCourseItem, localizedCourseDescription, localizedCourseTitle, localizedModuleTitle, type CurriculumLocale } from "./curriculumLocalization";
+import { logger } from "../utils/logger";
 
 const assessmentRepo = () => AppDataSource.getRepository(CourseDiagnosticAssessment);
 const enrollmentRepo = () => AppDataSource.getRepository(UserCourseEnrollment);
@@ -23,6 +24,7 @@ const courseRepo = () => AppDataSource.getRepository(Course);
 
 type Runtime = "JAVA" | "PYTHON" | "CPP";
 type UnknownRecord = Record<string, unknown>;
+type AssessmentGenerationStage = "questions" | "practical_task" | "hidden_tests";
 type CourseDiagnosticTopic = { id: number; moduleId: number; moduleTitle: string; title: string; context: string; itemIds: number[] };
 
 function recordOf(value: unknown): UnknownRecord | null {
@@ -35,6 +37,29 @@ function text(value: unknown, maxLength = 4_000): string {
 
 function assessmentError(code: string, statusCode: number): Error & { statusCode: number } {
   return Object.assign(new Error(code), { statusCode });
+}
+
+function withAssessmentStage(error: unknown, stage: AssessmentGenerationStage): Error & { assessmentStage: AssessmentGenerationStage } {
+  const cause = error instanceof Error ? error : new Error(String(error));
+  return Object.assign(cause, { assessmentStage: stage });
+}
+
+async function runAtAssessmentStage<T>(stage: AssessmentGenerationStage, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    throw withAssessmentStage(error, stage);
+  }
+}
+
+function assessmentFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(recordOf(error)?.message ?? error ?? "");
+  if (/\b429\b|rate.?limit|too many requests/i.test(message)) return "provider_rate_limited";
+  if (/timeout|timed out|ETIMEDOUT|aborted/i.test(message)) return "provider_timeout";
+  if (/ECONN|ENOTFOUND|fetch failed|network|\b50[234]\b|bad gateway|unavailable/i.test(message)) return "provider_unavailable";
+  if (/empty (ai )?response/i.test(message)) return "empty_provider_response";
+  if (/json|parse|schema|invalid response|validation/i.test(message)) return "invalid_provider_response";
+  return "provider_generation_failed";
 }
 
 function percent(value: unknown): number {
@@ -181,22 +206,29 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
     }
 
     const [generatedQuestions, practicals] = await Promise.all([
-      mapWithConcurrency(questionBatches, 2, async (topicAssignments, batchIndex) => {
-        const questionPlan = [
-          "QUESTION COVERAGE PLAN. Generate exactly one question for each listed assignment, in order. Prefix q with [topic:ID].",
-          ...topicAssignments.map((topic, index) => `Question ${index + 1}: [topic:${topic.id}] ${topic.title}. Test this topic only. ${topic.context}`),
-          "When the same topic appears twice, assess two different skills. The [topic:ID] marker is metadata and must be at the beginning of q.",
-        ].join("\n");
-        const quiz = await llm.generateQuizWithAI({
-          lang: runtime,
-          prevTopics: `${courseContext}\n\n${questionPlan}`,
-          count: topicAssignments.length,
-          userId,
-          language,
-        });
-        return normalizeQuestions(quiz.quizJson, topicAssignments, topicAssignments.length, batchIndex * 8);
+      // Keep one question batch and one practical task in flight at a time.
+      // This overlaps the two parts without flooding providers with four
+      // concurrent generation/review chains.
+      mapWithConcurrency(questionBatches, 1, async (topicAssignments, batchIndex) => {
+        try {
+          const questionPlan = [
+            "QUESTION COVERAGE PLAN. Generate exactly one question for each listed assignment, in order. Prefix q with [topic:ID].",
+            ...topicAssignments.map((topic, index) => `Question ${index + 1}: [topic:${topic.id}] ${topic.title}. Test this topic only. ${topic.context}`),
+            "When the same topic appears twice, assess two different skills. The [topic:ID] marker is metadata and must be at the beginning of q.",
+          ].join("\n");
+          const quiz = await llm.generateQuizWithAI({
+            lang: runtime,
+            prevTopics: `${courseContext}\n\n${questionPlan}`,
+            count: topicAssignments.length,
+            userId,
+            language,
+          });
+          return normalizeQuestions(quiz.quizJson, topicAssignments, topicAssignments.length, batchIndex * 8);
+        } catch (error) {
+          throw withAssessmentStage(error, "questions");
+        }
       }),
-      mapWithConcurrency(practicalGroups, 2, async (topicGroup, taskIndex) => {
+      mapWithConcurrency(practicalGroups, 1, async (topicGroup, taskIndex) => {
         const topicList = topicGroup.map((topic) => `- [topic:${topic.id}] ${topic.title}: ${topic.context}`).join("\n");
         const groupSeed = `${seed}-task-${taskIndex + 1}`;
         const topicTitle = topicGroup[0].moduleTitle.slice(0, 255);
@@ -207,21 +239,21 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
           topicList,
           `Variation token: ${groupSeed}. Generate a fresh integrated programming task that requires applying the listed topics. Do not use concepts outside the course. Include standard input/output, clear constraints, examples, and a concise starter template with TODO markers.`,
         ].join("\n\n");
-        const generatedTask = await llm.generateTaskWithAI({
-          topicTitle,
-          theory: taskContext,
-          lang: runtime,
-          topicIndex: taskIndex + 1,
-          numInTopic: practicalGroups.length,
-          isFirstTask: false,
-          isControl: true,
-          difus: 0.5,
-          allowedIoTypes: ["STDIN_STDOUT"],
-          prevTopics: topicList,
-          userId,
-          topicId: topicGroup[0].id > 0 ? topicGroup[0].id : undefined,
-          language,
-        });
+        const generatedTask = await runAtAssessmentStage("practical_task", () => llm.generateTaskWithAI({
+            topicTitle,
+            theory: taskContext,
+            lang: runtime,
+            topicIndex: taskIndex + 1,
+            numInTopic: practicalGroups.length,
+            isFirstTask: false,
+            isControl: true,
+            difus: 0.5,
+            allowedIoTypes: ["STDIN_STDOUT"],
+            prevTopics: topicList,
+            userId,
+            topicId: topicGroup[0].id > 0 ? topicGroup[0].id : undefined,
+            language,
+          }));
         const taskDescription = [
           generatedTask.practicalTask,
           `Input format: ${generatedTask.inputFormat}`,
@@ -229,22 +261,27 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
           `Constraints: ${generatedTask.constraints}`,
           `Examples: ${generatedTask.examples.map((example) => `Input:\n${example.input}\nOutput:\n${example.output}`).join("\n")}`,
         ].join("\n\n");
-        const tests = await llm.generateTestDataWithAI({
-          taskTitle: generatedTask.title,
-          taskDescription,
-          lang: runtime,
-          count: 5,
-          ioType: generatedTask.ioType ?? "STDIN_STDOUT",
-          language,
-          userId,
-          publicExamples: generatedTask.examples,
-          requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
-        });
+        const tests = await runAtAssessmentStage("hidden_tests", () => llm.generateTestDataWithAI({
+            taskTitle: generatedTask.title,
+            taskDescription,
+            lang: runtime,
+            count: 5,
+            ioType: generatedTask.ioType ?? "STDIN_STDOUT",
+            language,
+            userId,
+            publicExamples: generatedTask.examples,
+            requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
+          }));
         const cleanTests = tests
           .map((test) => ({ input: text(test.input, 10_000), output: text(test.output, 10_000) }))
           .filter((test) => test.input.length > 0 && test.output.length > 0)
           .slice(0, 8);
-        if (!text(generatedTask.practicalTask) || cleanTests.length < 3) throw assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503);
+        if (!text(generatedTask.practicalTask)) {
+          throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "practical_task");
+        }
+        if (cleanTests.length < 3) {
+          throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "hidden_tests");
+        }
         const examples = generatedTask.examples
           .map((example) => ({ input: text(example.input, 2_000), output: text(example.output, 2_000), explanation: text(example.explanation, 1_000) }))
           .filter((example) => example.input || example.output)
@@ -271,8 +308,23 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
     const questions = generatedQuestions.flat();
     return { version: 2, seed, questions, practicals };
   } catch (error) {
+    const details = recordOf(error);
+    const stage = details?.assessmentStage;
+    logger.error("[learning/diagnostic] assessment generation failed", {
+      userId,
+      courseId: course.id,
+      stage: typeof stage === "string" ? stage : "unknown",
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorCode: details?.code,
+      statusCode: details?.statusCode,
+      reason: assessmentFailureReason(error),
+    });
     if (recordOf(error)?.statusCode) throw error;
-    throw assessmentError("ASSESSMENT_GENERATION_FAILED", 503);
+    const failure = assessmentError("ASSESSMENT_GENERATION_FAILED", 503);
+    throw Object.assign(failure, {
+      assessmentStage: typeof stage === "string" ? stage : "unknown",
+      assessmentReason: assessmentFailureReason(error),
+    });
   }
 }
 
