@@ -6,6 +6,7 @@ import {
   createManualGrade,
   createSummaryGrade,
   deleteSummaryGrade,
+  getClass,
   getClassGradebook,
   getSummaryGrades,
   getTopics,
@@ -35,6 +36,7 @@ import {
 } from "../../lib/gradingSystems";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
+import { ClassWorkspaceNavigation } from "./ClassWorkspaceNavigation";
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const root = "edu-workspace edu-data-workspace mx-auto max-w-[1480px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12";
@@ -143,7 +145,7 @@ const gradeTone = (value: number | null | undefined) => {
   return "bg-bg-hover text-accent-error dark:bg-accent-error/10 dark:text-accent-error";
 };
 
-const Header: React.FC<{ title: string; text: string; classId?: string; actions?: React.ReactNode }> = ({ title, text, classId, actions }) => {
+const Header: React.FC<{ title: string; text: string; classId?: string; actions?: React.ReactNode; showBackButton?: boolean }> = ({ title, text, classId, actions, showBackButton = true }) => {
   const navigate = useNavigate();
   return (
     <header className="mb-6 flex flex-col justify-between gap-4 border-b border-border/70 pb-5 md:flex-row md:items-end dark:border-white/10">
@@ -154,10 +156,9 @@ const Header: React.FC<{ title: string; text: string; classId?: string; actions?
       </div>
       <div className="flex flex-wrap gap-2">
         {actions}
-        <button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${classId}`))} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold dark:border-white/10">
-          <ArrowLeft className="size-4" />
-          {tr("Клас", "Class")}
-        </button>
+        {showBackButton && classId && <button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${classId}`))} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold dark:border-white/10">
+          <ArrowLeft className="size-4" />{tr("Клас", "Class")}
+        </button>}
       </div>
     </header>
   );
@@ -170,6 +171,7 @@ export const GradebookWorkspace: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [data, setData] = React.useState<GradebookResponse | null>(null);
+  const [className, setClassName] = React.useState("");
   const [topics, setTopics] = React.useState<Topic[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -207,14 +209,17 @@ export const GradebookWorkspace: React.FC = () => {
       if (preview()) {
         setData(demoGradebook);
         setTopics(demoTopics);
+        setClassName("11-А");
         return;
       }
-      const [book, topicList] = await Promise.all([
+      const [book, topicList, classInfo] = await Promise.all([
         getClassGradebook(Number(classId)),
         getTopics(Number(classId)),
+        getClass(Number(classId)).catch(() => null),
       ]);
       setTopics(topicList);
       setData(book);
+      setClassName(classInfo?.name || "");
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, tr("Не вдалося завантажити журнал.", "Could not load the gradebook.")));
     }
@@ -404,13 +409,15 @@ export const GradebookWorkspace: React.FC = () => {
 
   return (
     <div data-gradebook-workspace className={`${root} min-w-0 w-full`}>
+      <ClassWorkspaceNavigation classId={classId || "0"} className={className || tr("Клас", "Class")} active="gradebook" />
       <Header
         classId={classId}
+        showBackButton={false}
         title={tr("Журнал класу", "Class gradebook")}
         text={tr("Оцінки, тематичні та семестрові підсумки — в одному журналі класу, без дублювання окремими розділами.", "Grades, thematic work, and semester summaries in one class gradebook.")}
         actions={
           <>
-            <button type="button" onClick={() => navigate(`/edu/classes/${classId}`)} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold dark:border-white/10"><Settings2 className="size-4" />{tr("Налаштування класу", "Class settings")}</button>
+            <button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${classId}/manage?tab=settings`))} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold dark:border-white/10"><Settings2 className="size-4" />{tr("Налаштування класу", "Class settings")}</button>
             <button type="button" disabled={!missingThematics.length} onClick={() => setThematicOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45 dark:bg-primary dark:text-primary-foreground"><Plus className="size-4" />{missingThematics.length ? tr("Тематична", "Thematic") : tr("Усі тематичні створено", "All thematic grades created")}</button>
             <button ref={semesterButtonRef} type="button" disabled={busyAction || saving || !canUseSemesterGrades} onClick={() => { setRecomputeError(null); setRecomputeConfirm(true); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55 dark:border-white/10 dark:text-text-primary"><Calculator className="size-4" />{tr("Семестрові", "Semester grades")}</button>
           </>
@@ -519,6 +526,7 @@ export const SummaryGradesWorkspace: React.FC = () => {
   const navigate = useNavigate();
   const [groups, setGroups] = React.useState<SummaryGradeGroup[]>([]);
   const [gradebook, setGradebook] = React.useState<GradebookResponse | null>(null);
+  const [className, setClassName] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const gradingSystem = normalizeGradingSystem(gradebook?.gradingSystem || DEFAULT_GRADING_SYSTEM);
   const scaleMode = normalizeScaleMode(gradebook?.gradeScaleMode);
@@ -529,13 +537,15 @@ export const SummaryGradesWorkspace: React.FC = () => {
       try {
         if (preview()) {
           setGradebook(demoGradebook);
+          setClassName("11-А");
           setGroups([{ name: "Рядки", grades: [{ id: 1, studentId: 1, studentName: "Марія Коваль", grade: 92, createdAt: new Date().toISOString() }] }]);
           return;
         }
-        const [grades, book] = await Promise.all([getSummaryGrades(Number(classId)), getClassGradebook(Number(classId))]);
+        const [grades, book, classInfo] = await Promise.all([getSummaryGrades(Number(classId)), getClassGradebook(Number(classId)), getClass(Number(classId)).catch(() => null)]);
         if (alive) {
           setGroups(grades);
           setGradebook(book);
+          setClassName(classInfo?.name || "");
         }
       } catch (caught) {
         if (alive) setError(getErrorMessageFromUnknown(caught, tr("Не вдалося завантажити підсумки.", "Could not load summary grades.")));
@@ -560,8 +570,10 @@ export const SummaryGradesWorkspace: React.FC = () => {
 
   return (
     <div className={root}>
+      <ClassWorkspaceNavigation classId={classId || "0"} className={className || tr("Клас", "Class")} active="gradebook" />
       <Header
         classId={classId}
+        showBackButton={false}
         title={tr("Підсумкові оцінки", "Summary grades")}
         text={tr("Це архів і перегляд. Створення тематичних та семестрових перенесено в журнал класу, щоб оцінювання не дублювалось.", "This page is for reviewing archived grades. Create thematic and semester grades in the class gradebook to keep grading in one place.")}
         actions={<button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${classId}/gradebook`))} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground dark:bg-primary dark:text-primary-foreground">{tr("Відкрити журнал", "Open gradebook")} <ChevronRight className="size-4" /></button>}

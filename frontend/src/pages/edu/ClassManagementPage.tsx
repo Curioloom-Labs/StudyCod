@@ -3,7 +3,6 @@ import { useIsPresent } from "framer-motion";
 import { isAxiosError } from "axios";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
-  ArrowLeft,
   Bell,
   BookOpen,
   Check,
@@ -27,6 +26,7 @@ import { ClassJoinCodeButton } from "../../components/ClassJoinCodeButton";
 import { useClassCredentialRecovery } from "./useClassCredentialRecovery";
 import { ClassCredentialRecoveryPanel } from "./ClassCredentialRecoveryPanel";
 import { CredentialWorkflowModal } from "./CredentialWorkflowModal";
+import { ClassWorkspaceNavigation } from "./ClassWorkspaceNavigation";
 import { showToast } from "../../lib/toast";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { api } from "../../lib/api/client";
@@ -694,14 +694,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
   return (
     <div className={root}>
       <div className="mx-auto max-w-[1380px] space-y-6">
-        <button
-          type="button"
-          onClick={() => navigate(`/edu/classes/${id}`)}
-          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-border/10 bg-white/80 px-4 py-2 text-sm font-bold text-text-muted shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 dark:border-white/10 dark:bg-white/[.06] dark:text-text-primary"
-        >
-          <ArrowLeft className="size-4" />
-          {tr("До класу", "Back to class")}
-        </button>
+        <ClassWorkspaceNavigation classId={id} className={classInfo?.name || tr("Клас", "Class")} active="students" />
         {searchParams.get("return") === "members" && classInfo?.organizationId && <button type="button" onClick={() => navigate(`/edu/organization?org=${classInfo.organizationId}`)} className="ml-2 min-h-11 rounded-xl px-4 text-sm font-semibold text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">{tr("До учасників закладу", "Back to organization members")}</button>}
         <header className="rounded-[28px] border border-border bg-bg-surface p-5 text-text-primary shadow-[0_24px_70px_rgba(7,24,13,.16)] sm:p-7">
           <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
