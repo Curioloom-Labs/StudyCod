@@ -692,7 +692,7 @@ export const PremiumLibrary: React.FC<{
   const taskTopic = (task: LibraryTaskListItem) => task.section?.trim() || task.tags?.find(Boolean) || (en ? "Practice" : "Практика");
 
   return (
-    <main className="premium-task-library min-h-full bg-bg-base px-4 pb-8 pt-5 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-8 lg:pt-7">
+    <main className="premium-task-library min-h-full bg-bg-base px-4 pb-8 pt-5 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-6 lg:px-8 lg:pt-2">
       <div className="mx-auto max-w-7xl">
         <header className="premium-task-library__hero relative grid overflow-hidden rounded-[22px] px-5 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-7 sm:py-5 lg:min-h-[96px] lg:px-8">
           <div className="relative min-w-0">
