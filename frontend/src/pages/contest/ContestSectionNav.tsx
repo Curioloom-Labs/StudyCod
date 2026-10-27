@@ -40,6 +40,7 @@ export const ContestSectionNav: React.FC<ContestSectionNavProps> = ({ contestId,
 
   const hrefFor = (id: ContestSection) => {
     if (id === "standings") return `${contestPath}/scoreboard${suffix}`;
+    if (id === "problems" && !canManage) return `${contestPath}${suffix}`;
     const query = new URLSearchParams(preserved);
     if (id !== "problems") query.set("tab", id);
     const search = query.toString();

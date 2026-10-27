@@ -1344,7 +1344,7 @@ export const CodeEditor: React.FC<Props> = React.memo(({
           ))}
         </div>}
       <div ref={containerRef} className="relative min-h-0 flex-1">
-      {import.meta.env.DEV && mountTimedOut && !didMount && <div className="absolute inset-0 z-10 flex items-start justify-end p-2 pointer-events-none">
+      {import.meta.env.DEV && new URLSearchParams(window.location.search).get("debugEditor") === "1" && mountTimedOut && !didMount && <div className="absolute inset-0 z-10 flex items-start justify-end p-2 pointer-events-none">
           <div className="pointer-events-none rounded border border-accent-warn/50 bg-bg-surface/80 px-3 py-2 text-xs font-mono text-text-secondary">
             Monaco did not mount (5s). Check the browser console and bundled editor assets.
           </div>

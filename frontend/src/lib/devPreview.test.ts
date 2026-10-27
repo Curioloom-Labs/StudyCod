@@ -8,6 +8,12 @@ describe("development preview routes and fixtures", () => {
       .toBe("/edu/classes/31/gradebook?tab=summary&preview=true&persona=teacher#student-201");
   });
 
+  it("uses a fallback persona only for a preview without an explicit persona", () => {
+    expect(withDevPreview("/edu/lessons/101", "?preview=true", "teacher")).toBe("/edu/lessons/101?preview=true&persona=teacher");
+    expect(withDevPreview("/edu/lessons/101", "?preview=true&persona=student", "teacher")).toBe("/edu/lessons/101?preview=true&persona=student");
+    expect(withDevPreview("/edu/lessons/101", "", "teacher")).toBe("/edu/lessons/101");
+  });
+
   it("creates a stable student persona with an educational class context", () => {
     const user = getDevPreviewUser("?preview=true&persona=student");
     expect(user.role).toBe("TEACHER");

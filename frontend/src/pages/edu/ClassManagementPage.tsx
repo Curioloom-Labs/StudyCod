@@ -839,7 +839,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                 </article>
               ))}
               {!students.length && (
-                <div className="col-span-full rounded-[24px] border border-dashed border-border/15 bg-bg-surface p-7 text-center dark:border-white/10 dark:bg-white/[.02] sm:p-10">
+                <div className="col-span-full min-w-0 rounded-[24px] border border-dashed border-border/15 bg-bg-surface p-4 text-center dark:border-white/10 dark:bg-white/[.02] sm:p-10">
                   <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
                     <span className="grid size-12 place-items-center rounded-2xl bg-bg-hover text-primary-strong dark:bg-bg-base dark:text-primary-soft">
                       <UsersRound aria-hidden="true" className="size-6" />

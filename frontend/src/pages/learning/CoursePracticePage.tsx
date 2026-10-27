@@ -451,7 +451,7 @@ const CoursePracticeContent: React.FC = () => {
       : courseItem
       ? tr(`Відкритий елемент є ${kindLabel(courseItem.kind)}.`, `The opened item is a ${kindLabel(courseItem.kind)}.`)
       : tr("Цей елемент не знайдено в поточному курсі.", "This item was not found in the current course.");
-    return <main className="mx-auto flex min-h-[60vh] max-w-2xl items-center px-6 py-12">
+    return <main className="mx-auto flex min-h-[60vh] w-full min-w-0 max-w-2xl items-center px-6 py-12">
       <section role="alert" className="w-full rounded-3xl border border-border bg-bg-surface p-7 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-[.14em] text-primary">{tr("Курсова практика", "Course practice")}</p>
         <h1 className="mt-3 text-2xl font-bold text-text-primary">{tr("Цей елемент не відкривається у практиці", "This item cannot be opened in Practice")}</h1>

@@ -227,6 +227,7 @@ export const PremiumModuleShell: React.FC<Props> = ({
           <button
             type="button"
             onClick={() => !navigationHidden && onNavigate(productHome)}
+            aria-label={uk ? `На головну сторінку StudyCod ${product}` : `Go to the StudyCod ${product} home page`}
             className="flex min-h-11 items-center gap-2.5"
           >
             <span className="grid size-8 place-items-center rounded-xl brand-logo-surface sm:size-9">

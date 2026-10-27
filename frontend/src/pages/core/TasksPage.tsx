@@ -37,6 +37,7 @@ function isPersonalTaskEditable(task: Task | null, latestGradeTotal?: number | n
 const PERSONAL_TASK_PREVIEW_FIXTURES: Task[] = [
   {
     id: 91001,
+    courseItemId: 6102,
     title: "Розумний розклад автобусів",
     subtitle: "Алгоритми · масиви та мінімум",
     topicId: 901,

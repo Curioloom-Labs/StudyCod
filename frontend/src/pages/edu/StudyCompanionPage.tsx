@@ -52,8 +52,8 @@ export const StudyCompanionPage: React.FC = () => {
         </aside>
       </header>
 
-      <main className="mt-8 grid gap-6 lg:grid-cols-[.75fr_1.25fr]">
-        <aside>
+      <main className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,.75fr)_minmax(0,1.25fr)]">
+        <aside className="min-w-0">
           <p className="text-xs font-bold uppercase tracking-[.14em] text-accent-warn">{copy("Почати розмову", "Start a conversation")}</p>
           <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">{copy("Що саме не сходиться?", "What isn't adding up?")}</h2>
           <div className="mt-5 flex flex-wrap gap-2">
@@ -69,7 +69,7 @@ export const StudyCompanionPage: React.FC = () => {
           </div>
         </aside>
 
-        <section className="rounded-[30px] border border-border/10 bg-white p-5 dark:border-white/[.09] dark:bg-bg-surface sm:p-7">
+        <section className="min-w-0 rounded-[30px] border border-border/10 bg-white p-5 dark:border-white/[.09] dark:bg-bg-surface sm:p-7">
           <div className="min-h-[270px]">
             {busy ? (
               <div className="space-y-3" role="status" aria-label={copy("Помічник готує відповідь", "The companion is preparing an answer")}>
@@ -80,10 +80,10 @@ export const StudyCompanionPage: React.FC = () => {
             ) : answer ? (
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{copy("Наступний крок", "Next step")}</p>
-                <p className="mt-4 whitespace-pre-wrap text-base leading-8 text-text-primary dark:text-text-primary">{answer.answer}</p>
+                <p className="mt-4 whitespace-pre-wrap [overflow-wrap:anywhere] text-base leading-8 text-text-primary dark:text-text-primary">{answer.answer}</p>
                 {answer.tips?.length > 0 && <div className="mt-7 border-t border-border/10 pt-5 dark:border-white/[.08]">
                   <p className="text-xs font-bold uppercase tracking-[.13em] text-accent-warn">{copy("Спробуйте далі", "Try this next")}</p>
-                  <ul className="mt-3 space-y-3">{answer.tips.map((tip) => <li key={tip} className="flex gap-3 text-sm leading-6 text-text-muted dark:text-text-secondary"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />{tip}</li>)}</ul>
+                  <ul className="mt-3 space-y-3">{answer.tips.map((tip) => <li key={tip} className="flex min-w-0 gap-3 text-sm leading-6 text-text-muted dark:text-text-secondary"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" /><span className="min-w-0 [overflow-wrap:anywhere]">{tip}</span></li>)}</ul>
                 </div>}
               </div>
             ) : (
@@ -91,7 +91,7 @@ export const StudyCompanionPage: React.FC = () => {
                 <div>
                   <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary-strong dark:bg-primary/10 dark:text-primary-soft"><Lightbulb className="h-6 w-6" /></span>
                   <h3 className="mt-4 text-xl font-bold">{copy("Тут з’явиться розбір.", "Your explanation will appear here.")}</h3>
-                  <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-text-muted dark:text-text-secondary">{copy("Оберіть підказку ліворуч або сформулюйте власне питання нижче.", "Choose a prompt on the left or write your own question below.")}</p>
+                  <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-text-muted dark:text-text-secondary">{copy("Оберіть підказку або сформулюйте власне питання нижче.", "Choose a prompt or write your own question below.")}</p>
                 </div>
               </div>
             )}

@@ -157,7 +157,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
       <DialogA11yObserver rootRef={shellRef} />
       <header className="product-shell__header sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-[1500px] items-center justify-between gap-1.5 px-2.5 sm:h-16 sm:gap-2 sm:px-6 lg:px-9">
-          <button type="button" onClick={() => navigateTo(education ? (shellUser.studentId ? "/edu/lessons" : "/edu") : "/")} className="flex min-h-11 shrink-0 items-center gap-2.5 text-left">
+          <button type="button" onClick={() => navigateTo(education ? (shellUser.studentId ? "/edu/lessons" : "/edu") : "/")} aria-label={ukrainian ? "На головну сторінку StudyCod" : "Go to the StudyCod home page"} className="flex min-h-11 shrink-0 items-center gap-2.5 text-left">
             <span className="grid size-8 place-items-center rounded-xl brand-logo-surface sm:size-9">
               <Logo size={20} />
             </span>
@@ -176,7 +176,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
 
           <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">
             {!education ? (
-              <button type="button" onClick={() => void i18n.changeLanguage(ukrainian ? "en" : "uk")} className="grid size-11 place-items-center rounded-xl px-1 text-[11px] font-bold text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white sm:w-auto sm:px-3 sm:text-xs">
+              <button type="button" onClick={() => void i18n.changeLanguage(ukrainian ? "en" : "uk")} aria-label={ukrainian ? "Перемкнути на англійську" : "Switch to Ukrainian"} className="grid size-11 place-items-center rounded-xl px-1 text-[11px] font-bold text-text-muted transition hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-bg-surface/[.07] dark:hover:text-white sm:w-auto sm:px-3 sm:text-xs">
                 {ukrainian ? "EN" : "UA"}
               </button>
             ) : null}
@@ -195,7 +195,7 @@ export const StandaloneShell: React.FC<Props> = ({ current, children }) => {
                 <span className={`hidden text-xs text-text-muted transition sm:inline ${accountOpen ? "rotate-180" : ""}`}>⌄</span>
               </button>
               {accountOpen ? (
-              <div ref={accountMenuRef} data-material="standalone-account-menu" data-motion-surface className="material-popover absolute right-0 top-12 z-50 w-72 overflow-hidden rounded-2xl border border-border/70 bg-bg-surface p-2 shadow-[var(--ui-modal-shadow)]" role="menu" aria-label={ukrainian ? "Меню акаунта" : "Account menu"} onKeyDown={(event) => {
+              <div ref={accountMenuRef} data-material="standalone-account-menu" data-motion-surface className="material-popover absolute right-0 top-12 z-50 w-72 overflow-hidden rounded-2xl border border-border/70 bg-bg-surface p-2 shadow-[var(--ui-modal-shadow)] max-sm:fixed max-sm:left-2 max-sm:right-2 max-sm:top-14 max-sm:w-auto" role="menu" aria-label={ukrainian ? "Меню акаунта" : "Account menu"} onKeyDown={(event) => {
                   const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[role='menuitem']"));
                   const currentIndex = items.indexOf(document.activeElement as HTMLElement);
                   if (event.key === "ArrowDown" || event.key === "ArrowUp") {

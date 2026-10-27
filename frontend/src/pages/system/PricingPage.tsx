@@ -85,7 +85,7 @@ export const PricingPage: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-[100dvh] bg-bg-base font-sans text-text-primary [&_h1]:font-sans [&_h2]:font-sans [&_h3]:font-sans dark:bg-bg-base dark:text-text-primary">
+    <div className="min-h-[100dvh] overflow-x-clip bg-bg-base font-sans text-text-primary [&_h1]:font-sans [&_h2]:font-sans [&_h3]:font-sans dark:bg-bg-base dark:text-text-primary">
       <PublicProductNav active="pricing" />
 
       <main id="main-content" tabIndex={-1}>

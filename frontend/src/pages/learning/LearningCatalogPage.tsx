@@ -65,7 +65,7 @@ export const LearningCatalogPage: React.FC = () => {
   };
 
   if (contentState === "loading") {
-    return <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12" aria-busy="true">
+    return <main className="mx-auto w-full min-w-0 max-w-7xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12" aria-busy="true">
       <div className="sr-only" role="status" aria-live="polite">
         <LoaderCircle className="mr-2 inline size-4 animate-spin" aria-hidden="true" />
         {tr("Завантажуємо каталог навчання…", "Loading the learning catalog…")}
@@ -98,7 +98,7 @@ export const LearningCatalogPage: React.FC = () => {
     return (level === "ALL" || course.level === level) && (!query.trim() || text.includes(query.trim().toLocaleLowerCase(locale)));
   });
 
-  return <main className="mx-auto max-w-7xl px-4 pb-16 pt-5 sm:px-6 lg:px-10 lg:pt-7">
+  return <main className="mx-auto w-full min-w-0 max-w-7xl px-4 pb-16 pt-5 sm:px-6 lg:px-10 lg:pt-7">
     <header className="relative isolate mb-5 overflow-hidden rounded-[28px] border border-white/10 bg-[#17372d] text-[#f3f2e9] shadow-[0_24px_70px_rgba(8,24,17,.16)]">
       <div aria-hidden="true" className="pointer-events-none absolute -right-28 -top-40 size-[420px] rounded-full border border-white/10" />
       <div aria-hidden="true" className="pointer-events-none absolute right-10 top-12 size-44 rounded-full border border-[#c4e58a]/20" />

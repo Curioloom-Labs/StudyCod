@@ -160,7 +160,7 @@
   .premium-task-library__filter-row { align-items: start; }
   .premium-task-library__filter-row > div:first-child { gap: .2rem; }
   .premium-task-library__filter-row > div:first-child > span { align-self: center; }
-  .premium-task-library__row { min-height: 4.4rem; padding-inline: 0; }
+  .premium-task-library__row { min-height: 4.4rem; padding-inline: .5rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

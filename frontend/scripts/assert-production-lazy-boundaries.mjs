@@ -33,6 +33,16 @@ if (entryBytes > entryBudgetBytes) {
 }
 
 const assetNames = await readdir(path.join(distPath, "assets"));
+// The workspace relies on Tailwind's generated layout utilities. A build
+// from a different working directory must not silently ship an incomplete CSS
+// bundle: that removes spacing and collapses layouts across multiple routes.
+const cssAssets = await Promise.all(assetNames.filter(asset => asset.endsWith(".css"))
+  .map(asset => readFile(path.join(distPath, "assets", asset), "utf8")));
+const workspaceCss = cssAssets.find(css => css.includes(".max-w-7xl{") && css.includes(".px-4{"));
+if (!workspaceCss || !/--spacing\s*:\s*(?:0?\.25rem)/.test(workspaceCss)
+  || !workspaceCss.includes(".mx-auto{") || !workspaceCss.includes(".w-full{")) {
+  throw new Error("Production workspace CSS is missing essential width or spacing utilities.");
+}
 const editorAssets = assetNames
   .filter((asset) => /^monaco-.*\.js$/i.test(asset));
 const editorAssetSizes = await Promise.all(editorAssets.map(async (asset) => ({

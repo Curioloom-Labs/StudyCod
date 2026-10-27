@@ -384,11 +384,11 @@ export const LearningCoursePage: React.FC = () => {
   const selectedTopicPractice = selectedTopic?.practices.find((item) => item.progress.status !== "COMPLETED") ?? selectedTopic?.practices[0] ?? null;
   const selectedItem = selectedNode?.kind === "MILESTONE" ? selectedNode.item : undefined;
 
-  if (loading) return <div role="status" aria-live="polite" className="mx-auto max-w-5xl px-6 py-16 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо курс…", "Loading course…")}</div>;
-  if (error && !course) return <main className="mx-auto max-w-3xl px-6 py-12"><button type="button" onClick={() => navigate(withDevPreview("/learning/catalog"))} className="mb-8 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button><div role="alert" className="rounded-2xl border border-accent-error/30 bg-accent-error/10 p-5 text-sm text-accent-error"><p>{error}</p><button type="button" onClick={() => void load()} className="mt-4 rounded-xl border border-current px-4 py-2 font-bold">{tr("Повторити", "Retry")}</button></div></main>;
+  if (loading) return <div role="status" aria-live="polite" className="mx-auto w-full min-w-0 max-w-5xl px-6 py-16 text-sm text-text-secondary"><LoaderCircle className="mr-2 inline size-4 animate-spin" />{tr("Завантажуємо курс…", "Loading course…")}</div>;
+  if (error && !course) return <main className="mx-auto w-full min-w-0 max-w-3xl px-6 py-12"><button type="button" onClick={() => navigate(withDevPreview("/learning/catalog"))} className="mb-8 inline-flex items-center text-sm font-bold text-primary"><ArrowLeft className="mr-2 inline size-4" />{tr("До каталогу", "Back to catalog")}</button><div role="alert" className="rounded-2xl border border-accent-error/30 bg-accent-error/10 p-5 text-sm text-accent-error"><p>{error}</p><button type="button" onClick={() => void load()} className="mt-4 rounded-xl border border-current px-4 py-2 font-bold">{tr("Повторити", "Retry")}</button></div></main>;
   if (!course) return null;
 
-  return <main className="mx-auto max-w-7xl px-4 pb-16 pt-5 sm:px-6 lg:px-10 lg:pt-8">
+  return <main className="mx-auto w-full min-w-0 max-w-7xl px-4 pb-16 pt-5 sm:px-6 lg:px-10 lg:pt-8">
     <nav aria-label={tr("Навігація курсу", "Course navigation")} className="mb-5 flex flex-wrap items-center gap-2 text-xs font-bold text-text-secondary">
       <button type="button" onClick={() => navigate(withDevPreview("/learning/catalog"))} className="inline-flex min-h-9 items-center gap-2 rounded-lg px-2 transition hover:bg-bg-hover hover:text-text-primary"><ArrowLeft size={15} aria-hidden="true" />{tr("Каталог", "Catalog")}</button>
       <span aria-hidden="true" className="text-text-muted">/</span><span className="max-w-[min(70vw,32rem)] truncate text-text-primary">{course.title}</span>

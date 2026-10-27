@@ -5,10 +5,11 @@ import { Brain, CheckCircle2, Circle, Lightbulb, Trophy } from "lucide-react";
 import { usePersonalLearning } from "../../components/learning/PersonalLearningProvider";
 import { listGrades } from "../../lib/api/grades";
 import { getMyLearningEvidence, type LearningSkillEvidence } from "../../lib/api/library";
+import { withDevPreview } from "../../lib/devPreview";
 import type { Grade } from "../../types";
 
 export const CourseProgressPage: React.FC = () => {
-  const { currentCourse, loading } = usePersonalLearning();
+  const { currentCourse, loading, error, refresh } = usePersonalLearning();
   const [grades, setGrades] = React.useState<Grade[]>([]);
   const [gradesLoading, setGradesLoading] = React.useState(false);
   const [gradesError, setGradesError] = React.useState<string | null>(null);
@@ -54,7 +55,17 @@ export const CourseProgressPage: React.FC = () => {
       .finally(() => { if (!cancelled) setEvidenceLoading(false); });
     return () => { cancelled = true; };
   }, [evidenceRetryToken, currentCourse?.enrollment.id]);
-  if (loading || !currentCourse) return <div className="mx-auto max-w-6xl px-4 py-16 text-sm text-text-muted">{uk ? "Завантажуємо прогрес…" : "Loading progress…"}</div>;
+  if (loading && !currentCourse) return <div className="mx-auto w-full min-w-0 max-w-6xl px-4 py-16 text-sm text-text-muted" role="status" aria-live="polite">{uk ? "Завантажуємо прогрес…" : "Loading progress…"}</div>;
+  if (!currentCourse) return <main className="mx-auto w-full min-w-0 max-w-6xl px-4 py-10 sm:px-6 lg:px-10">
+    <section className="rounded-2xl border border-border bg-bg-surface p-5 sm:p-7" role={error ? "alert" : undefined}>
+      <h1 className="text-xl font-bold">{error ? (uk ? "Не вдалося завантажити прогрес" : "Could not load progress") : (uk ? "Оберіть курс, щоб переглянути прогрес" : "Choose a course to see your progress")}</h1>
+      <p className="mt-2 text-sm text-text-secondary">{error ? (uk ? "Перевірте з’єднання та спробуйте ще раз." : "Check your connection and try again.") : (uk ? "Оберіть навчальний маршрут у каталозі." : "Choose a learning path in the catalog.")}</p>
+      <div className="mt-5 flex flex-wrap gap-3">
+        {error && <button type="button" onClick={() => void refresh()} className="rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground">{uk ? "Спробувати ще" : "Try again"}</button>}
+        <Link to={withDevPreview("/learning/catalog")} className="rounded-lg border border-border px-4 py-2.5 text-sm font-semibold text-text-primary">{uk ? "До каталогу" : "Go to catalog"}</Link>
+      </div>
+    </section>
+  </main>;
   const items = currentCourse.modules.flatMap((module) => module.items);
   const completed = items.filter((item) => item.progress.status === "COMPLETED").length;
   const normalizedTopicName = (value: string) => value.replace(/^(?:Практика|Practice)\s+\d+\/\d+:\s*/i, "").trim().toLocaleLowerCase();
@@ -70,7 +81,8 @@ export const CourseProgressPage: React.FC = () => {
   const visibleTopics = [...(learningEvidence?.topics ?? [])]
     .sort((a, b) => a.solved / Math.max(1, a.practiced) - b.solved / Math.max(1, b.practiced) || b.practiced - a.practiced)
     .slice(0, 6);
-  return <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+  return <main className="mx-auto w-full min-w-0 max-w-5xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+    {loading ? <p className="mb-4 text-sm text-text-secondary" role="status">{uk ? "Оновлюємо прогрес…" : "Refreshing progress…"}</p> : error ? <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent-warn/40 bg-bg-surface px-4 py-3 text-sm" role="status"><span>{uk ? "Не вдалося оновити прогрес. Показано останні завантажені дані." : "Could not refresh progress. Showing the last loaded data."}</span><button type="button" onClick={() => void refresh()} className="rounded-lg border border-border px-3 py-2 font-semibold text-primary-strong">{uk ? "Повторити" : "Retry"}</button></div> : null}
     <section className="rounded-[26px] border border-border/10 bg-white p-7 dark:border-white/[.08] dark:bg-bg-code">
       <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.16em] text-primary-strong"><Trophy className="size-4" />{uk ? "Прогрес курсу" : "Course progress"}</p><h1 className="mt-3 text-4xl font-bold">{Math.round(currentCourse.enrollment.completionPercent)}%</h1><p className="mt-2 text-sm text-text-muted">{completed} / {items.length} {uk ? "елементів завершено" : "items completed"}</p></div><div className="w-full max-w-xs"><div className="h-2 overflow-hidden rounded-full bg-bg-hover dark:bg-white/10"><div className="h-full rounded-full bg-primary" style={{ width: `${currentCourse.enrollment.completionPercent}%` }} /></div></div></div>
     </section>
@@ -107,7 +119,7 @@ export const CourseProgressPage: React.FC = () => {
         <p className="mt-4 text-xs text-text-muted">{uk ? `Рівні підказок за задачами: ${learningEvidence.hintLevelCounts.map(({ level, tasks }) => `${level}: ${tasks}`).join(" · ") || "—"}.` : `Hint levels by task: ${learningEvidence.hintLevelCounts.map(({ level, tasks }) => `${level}: ${tasks}`).join(" · ") || "—"}.`}</p>
       </> : null}
     </section>
-    <section className="mt-6 space-y-4">{currentCourse.modules.map((module) => <article key={module.id} className="rounded-[22px] border border-border/10 bg-white p-5 dark:border-white/[.08] dark:bg-bg-code"><h2 className="text-lg font-bold">{module.title}</h2><div className="mt-4 grid gap-2 sm:grid-cols-2">{module.items.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-xl bg-bg-hover px-3 py-3 text-sm dark:bg-white/[.04]">{item.progress.status === "COMPLETED" ? <CheckCircle2 className="size-4 text-primary-strong" /> : <Circle className="size-4 text-text-muted" />}<span className="min-w-0 flex-1 truncate">{item.title}</span>{item.progress.score != null ? <span className="text-xs font-semibold text-primary-strong">{item.progress.score}</span> : null}</div>)}</div></article>)}</section>
+    <section className="mt-6 space-y-4">{currentCourse.modules.map((module) => <article key={module.id} className="min-w-0 rounded-[22px] border border-border/10 bg-white p-5 dark:border-white/[.08] dark:bg-bg-code"><h2 className="break-words text-lg font-bold">{module.title}</h2><div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">{module.items.map((item) => <div key={item.id} className="flex min-w-0 items-center gap-3 rounded-xl bg-bg-hover px-3 py-3 text-sm dark:bg-white/[.04]">{item.progress.status === "COMPLETED" ? <CheckCircle2 className="size-4 shrink-0 text-primary-strong" /> : <Circle className="size-4 shrink-0 text-text-muted" />}<span className="min-w-0 flex-1 break-words">{item.title}</span>{item.progress.score != null ? <span className="shrink-0 text-xs font-semibold text-primary-strong">{item.progress.score}</span> : null}</div>)}</div></article>)}</section>
     <div className="mt-6 flex flex-wrap items-center gap-3 text-sm text-text-muted" aria-live="polite">
       {gradesLoading ? (uk ? "Завантажуємо оцінки…" : "Loading grades…") : gradesError ? <><span role="alert" className="text-accent-error">{gradesError}</span><button type="button" onClick={() => setGradesRetryToken((value) => value + 1)} className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">{uk ? "Спробувати ще" : "Try again"}</button></> : (uk ? `Оцінок у поточному enrollment: ${grades.length}. Lab-спроби сюди не потрапляють.` : `${grades.length} grades in the current enrollment. Lab attempts stay separate.`)}
     </div>

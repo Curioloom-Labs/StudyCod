@@ -9,13 +9,13 @@ const isPreview = () => import.meta.env.DEV && new URLSearchParams(window.locati
 
 const previewDetails: IadDetails = {
   lang: "PYTHON",
-  currentIad: 0.64,
-  currentDifus: 0.64,
+  currentIad: 0.1,
+  currentDifus: 0.1,
   currentTopicIndex: 4,
   currentTopicCeiling: 0.115,
   modelVersion: 2,
-  iadByLang: { PYTHON: 0.64, JAVA: 0.42, CPP: 0.51 },
-  difusByLang: { PYTHON: 0.64, JAVA: 0.42, CPP: 0.51 },
+  iadByLang: { PYTHON: 0.1, JAVA: 0.42, CPP: 0.51 },
+  difusByLang: { PYTHON: 0.1, JAVA: 0.42, CPP: 0.51 },
   limits: { min: 0, max: 1 },
   lastAppliedGradeId: 143,
   updatedAt: "2026-07-10T09:30:00.000Z",
@@ -146,7 +146,7 @@ export const IadPage: React.FC = () => {
             </section>
 
             <section className="mt-6 grid gap-5 lg:grid-cols-[.82fr_1.18fr]">
-              <article className="rounded-[28px] border border-border/10 bg-white p-6 dark:border-white/10 dark:bg-bg-surface">
+              <article className="min-w-0 rounded-[28px] border border-border/10 bg-white p-4 dark:border-white/10 dark:bg-bg-surface sm:p-6">
                 <div className="text-xs font-semibold uppercase tracking-[.14em] text-accent-warn">{tr("Прогноз", "What-if")}</div>
                 <h2 className="mt-2 text-2xl font-semibold tracking-[-.04em]">{tr("Наступна оцінка", "Next grade")}</h2>
                 <label htmlFor="iad-next-grade" className="sr-only">{tr("Наступна оцінка", "Next grade")}</label><input id="iad-next-grade" name="nextGrade" type="range" min={0} max={100} value={nextGrade} onChange={(event) => setNextGrade(Number(event.target.value))} className="mt-6 w-full accent-primary" />
@@ -157,7 +157,7 @@ export const IadPage: React.FC = () => {
                 </div>
               </article>
 
-              <article className="rounded-[28px] border border-border/10 bg-white p-6 dark:border-white/10 dark:bg-bg-surface">
+              <article className="min-w-0 rounded-[28px] border border-border/10 bg-white p-4 dark:border-white/10 dark:bg-bg-surface sm:p-6">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Останні зміни", "Recent changes")}</div>

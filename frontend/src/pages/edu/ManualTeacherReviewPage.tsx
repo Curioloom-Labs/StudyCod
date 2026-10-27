@@ -69,11 +69,16 @@ export const ManualTeacherReviewPage: React.FC = () => {
     } catch (caught) {
       if (generation !== loadGeneration.current) return;
       if (preview()) {
+        const previewRubric = [{ id: "logic", label: "Логіка рішення", maxPoints: 6 }, { id: "clarity", label: "Пояснення", maxPoints: 4 }];
         setSubmissions([
           { studentId: 1, studentName: "Марія Коваль", text: "Пояснення рішення…", hasFile: true, fileName: "solution.pdf", status: "SUBMITTED" },
           { studentId: 2, studentName: "Дмитро Левченко", text: "Короткий опис алгоритму.", hasFile: false, fileName: null, status: "GRADED" }
         ]);
-        setRubric([{ id: "logic", label: "Логіка рішення", maxPoints: 6 }, { id: "clarity", label: "Пояснення", maxPoints: 4 }]);
+        setRubric(previewRubric);
+        setSavedRubric(previewRubric);
+        setRubricLocked(false);
+        setCanEditRubric(true);
+        setError(null);
       } else {
         setError(getErrorMessageFromUnknown(caught, tr("Не вдалося завантажити роботи.", "Could not load submissions.")));
       }
@@ -82,7 +87,7 @@ export const ManualTeacherReviewPage: React.FC = () => {
     }
   }, [numericTaskId, taskId]);
 
-  React.useEffect(() => { setSubmissions([]); setScores({}); setFeedback({}); setRubric([]); setReviewConflict(null); void load(); return () => { ++loadGeneration.current; }; }, [load]);
+  React.useEffect(() => { setSubmissions([]); setScores({}); setFeedback({}); setRubric([]); setSavedRubric([]); setReviewConflict(null); void load(); return () => { ++loadGeneration.current; }; }, [load]);
 
   const maxScore = Math.max(1, rubric.reduce((sum, item) => sum + Number(item.maxPoints || 0), 0) || 100);
   const rubricDirty = JSON.stringify(rubric) !== JSON.stringify(savedRubric);

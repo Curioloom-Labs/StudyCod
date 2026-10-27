@@ -75,13 +75,13 @@
 .edu-topic-row__main:hover, .edu-topic-row__assessment:hover, .edu-topic-row__standalone:hover { background: var(--bg-hover); }
 .edu-topic-row__number { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border-radius: 0; background: transparent; color: color-mix(in srgb, var(--primary-strong) 65%, var(--text-secondary)); font-family: var(--font-display); font-size: 1.35rem; font-weight: 740; letter-spacing: -.06em; }
 .edu-topic-row__copy { display: grid; min-width: 0; gap: .3rem; }
-.edu-topic-row__copy strong { overflow: hidden; font-size: .9rem; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+.edu-topic-row__copy strong { overflow-wrap: anywhere; font-size: .9rem; font-weight: 720; line-height: 1.35; }
 .edu-topic-row__copy > span { color: var(--text-secondary); font-size: .72rem; }
 .edu-topic-row__completion { color: var(--text-secondary); font-size: .7rem; white-space: nowrap; }
 .edu-topic-row__main > svg, .edu-topic-row__assessment > svg:last-child, .edu-topic-row__standalone > svg { color: var(--text-secondary); }
 .edu-topic-row__assessment { display: grid; width: calc(100% - 3.2rem); min-height: 2.65rem; grid-template-columns: 1rem minmax(0, 1fr) auto 1rem; align-items: center; gap: .5rem; margin: 0 .1rem .35rem 2.75rem; border-top: 1px solid var(--border); padding: .45rem .15rem; color: var(--text-secondary); text-align: left; transition: color 140ms ease; }
 .edu-topic-row__assessment > svg:first-child { color: var(--accent-warn); }
-.edu-topic-row__assessment > span:first-of-type { overflow: hidden; color: var(--text-primary); font-size: .76rem; font-weight: 640; text-overflow: ellipsis; white-space: nowrap; }
+.edu-topic-row__assessment > span:first-of-type { min-width: 0; overflow-wrap: anywhere; color: var(--text-primary); font-size: .76rem; font-weight: 640; line-height: 1.35; }
 .edu-topic-row__assessment > span:nth-of-type(2) { color: var(--text-secondary); font-size: .66rem; white-space: nowrap; }
 .edu-topic-row__standalone { display: grid; width: 100%; min-height: 4.3rem; grid-template-columns: 2.35rem minmax(0, 1fr) 1rem; align-items: center; gap: .75rem; border: 0; border-top: 1px solid var(--border); padding: .65rem .15rem; background: transparent; text-align: left; transition: color 140ms ease; }
 .edu-curriculum__empty { display: grid; min-height: 15rem; justify-items: center; align-content: center; gap: .55rem; padding: 2rem; text-align: center; }
@@ -171,7 +171,7 @@
 .edu-live-room__tools { max-width: 100%; }
 .edu-live-room__body { min-height: 0; }
 .edu-live-room__stage { min-height: 0; }
-.edu-live-room__aside { display: flex; flex-direction: column; }
+.edu-live-room__aside { display: flex; flex-direction: column; scroll-margin-top: 4.5rem; }
 .edu-live-room__panel-body { flex: 1; }
 .edu-live-panel-heading { display: flex; min-height: 3.5rem; align-items: center; gap: .65rem; border-bottom: 1px solid var(--border); padding-inline: 1rem; }
 .edu-live-panel-heading > span { display: grid; width: 1.9rem; height: 1.9rem; place-items: center; border-radius: .6rem; background: color-mix(in srgb, var(--primary) 11%, var(--bg-base)); color: var(--primary-strong); }
@@ -1227,13 +1227,6 @@
   --edu-panel-radius: 1rem;
 }
 
-/* Centered pages are flex children; give their max-width room to work. */
-.edu-product #main-content .edu-workspace {
-  width: min(100%, 80rem);
-  max-width: 80rem;
-  flex: 0 0 auto;
-}
-
 /* Route roots are flex children inside AnimatedPage. `mx-auto` otherwise
    makes auto-sized pages shrink to their content instead of filling EDU. */
 .edu-product #main-content > .w-full > .flex-1 > :is(div, main, section, article, form) {
@@ -1380,7 +1373,7 @@
 }
 
 /* Lesson checks keep questions, answers and submission state in the same EDU system. */
-.edu-product .edu-lesson-quiz { width: min(100%, 58rem); max-width: 58rem; padding: clamp(1.2rem, 3vw, 2.4rem) 1rem 3rem; }
+.edu-product .edu-lesson-quiz { width: min(100%, 58rem); max-width: 58rem; margin-inline: auto; padding: clamp(1.2rem, 3vw, 2.4rem) 1rem 3rem; }
 .edu-product .edu-lesson-quiz__back { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .5rem; color: var(--text-secondary); font-size: .82rem; font-weight: 700; }
 .edu-product .edu-lesson-quiz__back:hover { color: var(--primary-strong); }
 .edu-product .edu-lesson-quiz__header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .4rem 1rem; margin: .8rem 0 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem; }

@@ -4,7 +4,7 @@ export function isDevPreviewActive(search = typeof window === "undefined" ? "" :
   return import.meta.env.DEV === true && new URLSearchParams(search).get("preview") === "true";
 }
 
-export function withDevPreview(target: string, currentSearch = typeof window === "undefined" ? "" : window.location.search): string {
+export function withDevPreview(target: string, currentSearch = typeof window === "undefined" ? "" : window.location.search, fallbackPersona?: string): string {
   if (!import.meta.env.DEV) return target;
   const current = new URLSearchParams(currentSearch);
   if (current.get("preview") !== "true") return target;
@@ -15,7 +15,7 @@ export function withDevPreview(target: string, currentSearch = typeof window ===
   const pathname = queryAt >= 0 ? withoutHash.slice(0, queryAt) : withoutHash;
   const params = new URLSearchParams(queryAt >= 0 ? withoutHash.slice(queryAt + 1) : "");
   params.set("preview", "true");
-  const persona = current.get("persona");
+  const persona = current.get("persona") || fallbackPersona;
   if (persona) params.set("persona", persona);
   return `${pathname}?${params.toString()}${hash}`;
 }

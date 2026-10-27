@@ -5,6 +5,7 @@ import { getCachedMeUser, getMe, isGetMeSessionChanged } from "./lib/api/profile
 import type { User } from "./types";
 import { useTranslation } from "react-i18next";
 import { AnimatedPage } from "./components/layout/AnimatedPage";
+import { RouteScrollReset } from "./components/layout/RouteScrollReset";
 import { PlatformFooter } from "./components/layout/PlatformFooter";
 import { PremiumWorkspaceShell } from "./components/layout/PremiumWorkspaceShell";
 import { PersonalLearningProvider } from "./components/learning/PersonalLearningProvider";
@@ -509,14 +510,14 @@ const AppContent: React.FC = React.memo(() => {
       const courseId = Number(searchParams.get("courseId"));
       const itemId = Number(searchParams.get("courseItemId"));
       if (Number.isInteger(courseId) && courseId > 0 && Number.isInteger(itemId) && itemId > 0) {
-        navigate(`/learning/course/${courseId}/practice/${itemId}`, { replace: true });
+        navigate(withDevPreview(`/learning/course/${courseId}/practice/${itemId}`, location.search), { replace: true });
       } else {
-        navigate("/lab/library", { replace: true });
+        navigate(withDevPreview("/lab/library", location.search), { replace: true });
       }
       return;
     }
     if (user.userMode !== "EDUCATIONAL" && requestedAppPage === "grades") {
-      void getLearningMe().then((me) => navigate(me.current ? `/learning/course/${me.current.courseId}/progress` : "/learning/catalog", { replace: true })).catch(() => navigate("/learning/catalog", { replace: true }));
+      void getLearningMe().then((me) => navigate(withDevPreview(me.current ? `/learning/course/${me.current.courseId}/progress` : "/learning/catalog", location.search), { replace: true })).catch(() => navigate(withDevPreview("/learning/catalog", location.search), { replace: true }));
       return;
     }
     if (!requestedAppPage) return;
@@ -1155,6 +1156,7 @@ export const App: React.FC = () => {
   }, [location.pathname, subdomainNavigate]);
   return <PageLoadingProvider>
     <TheoryModalProvider>
+        <RouteScrollReset />
         <ToastViewport />
         {!isContestSurface && !isTalentSurface && <GlobalQuickSearch />}
         <NetworkStatus />

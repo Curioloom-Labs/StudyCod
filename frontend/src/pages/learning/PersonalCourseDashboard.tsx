@@ -14,8 +14,8 @@ export const PersonalCourseDashboard: React.FC = () => {
   const uk = !i18n.language?.toLowerCase().startsWith("en");
   const contentState = getLearningContentState({ loading, hasError: Boolean(error), hasData: Boolean(currentCourse) });
 
-  if (contentState === "loading") return <div className="mx-auto max-w-[1320px] px-4 py-16 text-sm text-text-muted sm:px-6 lg:px-8" role="status" aria-live="polite">{uk ? "Завантажуємо навчальний простір…" : "Loading your learning space…"}</div>;
-  if (contentState === "error") return <main className="mx-auto w-full max-w-[1320px] px-4 py-10 sm:px-6 lg:px-8" aria-labelledby="learning-load-error">
+  if (contentState === "loading") return <div className="mx-auto w-full min-w-0 max-w-[1320px] px-4 py-16 text-sm text-text-muted sm:px-6 lg:px-8" role="status" aria-live="polite">{uk ? "Завантажуємо навчальний простір…" : "Loading your learning space…"}</div>;
+  if (contentState === "error") return <main className="mx-auto w-full min-w-0 max-w-[1320px] px-4 py-10 sm:px-6 lg:px-8" aria-labelledby="learning-load-error">
     <section className="rounded-2xl border border-accent-error/45 bg-accent-error/8 p-5 sm:p-7" role="alert">
       <h1 id="learning-load-error" className="text-xl font-bold">{uk ? "Не вдалося завантажити навчальний простір" : "We couldn’t load your learning space"}</h1>
       <p className="mt-2 max-w-xl text-sm leading-6 text-text-secondary">{uk ? "Перевір з’єднання й спробуй ще раз. Дані не змінено." : "Check your connection and try again. Your data has not changed."}</p>
@@ -24,7 +24,7 @@ export const PersonalCourseDashboard: React.FC = () => {
       </button>
     </section>
   </main>;
-  if (contentState === "empty") return <main className="mx-auto w-full max-w-[1320px] px-4 py-10 sm:px-6 lg:px-8">
+  if (contentState === "empty") return <main className="mx-auto w-full min-w-0 max-w-[1320px] px-4 py-10 sm:px-6 lg:px-8">
     <section className="border-b border-border pb-6">
       <p className="text-xs font-semibold uppercase tracking-[.12em] text-text-muted">{uk ? "Навчання" : "Learning"}</p>
       <h1 className="mt-2 text-3xl font-bold tracking-tight">{uk ? "Обери перший курс" : "Choose your first course"}</h1>
@@ -52,7 +52,7 @@ export const PersonalCourseDashboard: React.FC = () => {
   const shownItems = Math.min(8, allItems.length);
   const completedItems = allItems.filter((item) => item.progress.status === "COMPLETED").length;
   const progressPercent = Math.max(0, Math.min(100, Number(currentCourse.enrollment.completionPercent) || 0));
-  return <main className="mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6 lg:px-10 lg:py-7">
+  return <main className="mx-auto w-full min-w-0 max-w-[1440px] px-4 py-5 sm:px-6 lg:px-10 lg:py-7">
     {contentState === "refreshing" ? <div className="mb-4 text-sm text-text-secondary" role="status" aria-live="polite">{uk ? "Оновлюємо дані…" : "Refreshing your data…"}</div> : null}
     {error ? <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent-warn/40 bg-surface-warning px-4 py-3 text-sm" role="status">
       <span className="text-text-secondary">{uk ? "Не вдалося оновити дані. Показано останню завантажену версію." : "Could not refresh. Showing the last loaded version."}</span>

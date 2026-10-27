@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { revealLivePanel } from "./livePanelNavigation";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { ConnectionStateToast, LiveKitRoom, PreJoin, useParticipants, VideoConference } from "@livekit/components-react";
 import "@livekit/components-styles";
@@ -68,6 +69,11 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
   // Students land directly on the lesson, while teachers land on their live
   // class overview. Both roles can switch tools without unmounting their state.
   const [sidePanel, setSidePanel] = useState<SidePanel>(() => user?.studentId ? "materials" : "people");
+  const sidePanelRef = useRef<HTMLElement>(null);
+  const selectSidePanel = (panel: SidePanel) => {
+    setSidePanel(panel);
+    revealLivePanel(sidePanelRef.current);
+  };
   const [breakoutsOpen, setBreakoutsOpen] = useState(false);
   const [myBreakoutIndex, setMyBreakoutIndex] = useState<number | null>(null);
   const [watched, setWatched] = useState<{ studentId: number; name: string } | null>(null);
@@ -393,10 +399,10 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
               </div>
             </div>
             <nav aria-label={tr("Інструменти онлайн-уроку", "Live lesson tools")} className={`edu-live-room__tools flex items-center gap-2 overflow-x-auto${isTeacher ? " edu-live-room__tools--teacher" : ""}`}>
-              <Tool active={sidePanel === "people"} controls="live-panel-people" onClick={() => setSidePanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
-              <Tool active={sidePanel === "materials"} controls="live-panel-materials" onClick={() => setSidePanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
-              <Tool active={sidePanel === "board"} controls="live-panel-board" onClick={() => setSidePanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
-              <Tool active={sidePanel === "code"} controls="live-panel-code" onClick={() => setSidePanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
+              <Tool active={sidePanel === "people"} controls="live-panel-people" onClick={() => selectSidePanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
+              <Tool active={sidePanel === "materials"} controls="live-panel-materials" onClick={() => selectSidePanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
+              <Tool active={sidePanel === "board"} controls="live-panel-board" onClick={() => selectSidePanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
+              <Tool active={sidePanel === "code"} controls="live-panel-code" onClick={() => selectSidePanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
               {isTeacher && <Tool active={breakoutsOpen} onClick={() => setBreakoutsOpen((value) => !value)} icon={<Users className="size-4" />} label={tr("Групи", "Groups")} />}
               {!isTeacher && <button type="button" onClick={() => void handleLeave()} className="edu-live-room__leave inline-flex shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-bold text-text-secondary hover:bg-bg-hover"><ArrowLeft className="size-4" />{tr("Вийти з уроку", "Leave lesson")}</button>}
               {isTeacher && <button type="button" disabled={busy} onClick={() => void handleEnd()} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent-error/35 bg-accent-error/10 px-3 py-2 text-sm font-bold text-accent-error hover:bg-accent-error/15 disabled:opacity-50"><PhoneOff className="size-4" />{tr("Завершити", "End")}</button>}
@@ -426,7 +432,7 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
               )}
             </section>
 
-            <aside className="edu-live-room__aside min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-surface">
+            <aside ref={sidePanelRef} className="edu-live-room__aside min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-surface">
               <PanelHeading panel={sidePanel} />
               <div className="edu-live-room__panel-body h-[calc(100%-56px)] min-h-0">
                 <section id="live-panel-people" role="region" aria-label={tr("Учасники уроку", "Lesson participants")} aria-hidden={sidePanel !== "people"} className="h-full min-h-0 overflow-auto p-3" hidden={sidePanel !== "people"}>
@@ -502,6 +508,11 @@ const LiveClassroomPreview: React.FC = () => {
   const navigate = useNavigate();
   const { classId } = useParams<{ classId: string }>();
   const [panel, setPanel] = useState<SidePanel>("materials");
+  const sidePanelRef = useRef<HTMLElement>(null);
+  const selectPanel = (next: SidePanel) => {
+    setPanel(next);
+    revealLivePanel(sidePanelRef.current);
+  };
 
   return (
     <LiveShell>
@@ -512,10 +523,10 @@ const LiveClassroomPreview: React.FC = () => {
             <div className="min-w-0"><p className="edu-live-room__preview-label">{tr("Приклад інтерфейсу", "Interface preview")}</p><h1 className="truncate font-bold">{tr("Цикли: від ідеї до коду", "Loops: from idea to code")}</h1></div>
           </div>
           <nav aria-label={tr("Інструменти уроку", "Lesson tools")} className="edu-live-room__tools">
-            <Tool active={panel === "people"} controls="live-preview-panel-people" onClick={() => setPanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
-            <Tool active={panel === "materials"} controls="live-preview-panel-materials" onClick={() => setPanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
-            <Tool active={panel === "board"} controls="live-preview-panel-board" onClick={() => setPanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
-            <Tool active={panel === "code"} controls="live-preview-panel-code" onClick={() => setPanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
+            <Tool active={panel === "people"} controls="live-preview-panel-people" onClick={() => selectPanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
+            <Tool active={panel === "materials"} controls="live-preview-panel-materials" onClick={() => selectPanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
+            <Tool active={panel === "board"} controls="live-preview-panel-board" onClick={() => selectPanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
+            <Tool active={panel === "code"} controls="live-preview-panel-code" onClick={() => selectPanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
           </nav>
         </header>
 
@@ -556,7 +567,7 @@ const LiveClassroomPreview: React.FC = () => {
             </div>
           </section>
 
-          <aside className="edu-live-room__aside min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-surface">
+          <aside ref={sidePanelRef} className="edu-live-room__aside min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-surface">
             <PanelHeading panel={panel} />
             <div className="edu-live-room__panel-body h-[calc(100%-56px)] min-h-0 overflow-auto p-5">
               <p className="edu-live-room__preview-notice mb-4">{tr("Демонстраційний макет. Камера, мікрофон та учасники не підключені.", "Design preview only. Camera, microphone, and participants are not connected.")}</p>

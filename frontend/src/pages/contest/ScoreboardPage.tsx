@@ -304,7 +304,7 @@ export const ScoreboardPage: React.FC = () => {
 
             {/* Controls */}
             {board && !board.hidden && (board.rows ?? []).length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex flex-wrap items-center gap-2">
                 <div className="relative flex-1 min-w-[200px]">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                   <input
@@ -321,12 +321,12 @@ export const ScoreboardPage: React.FC = () => {
                     {tr("До мене", "Jump to me")}
                   </Button>
                 ) : null}
-                <details ref={exportMenuRef} className="relative">
+                <details ref={exportMenuRef} className="max-sm:static sm:relative">
                   <summary className="inline-flex h-10 cursor-pointer list-none items-center gap-2 rounded-lg border border-border bg-bg-surface px-3 text-sm font-medium text-text-primary transition-fast hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary [&::-webkit-details-marker]:hidden">
                     <Download className="h-4 w-4" />
                     {tr("Експорт", "Export")}
                   </summary>
-                  <div className="absolute right-0 z-30 mt-2 min-w-56 rounded-xl border border-border bg-bg-surface p-2 shadow-xl">
+                  <div className="absolute left-0 right-0 z-30 mt-2 rounded-xl border border-border bg-bg-surface p-2 shadow-xl sm:left-auto sm:w-56">
                     <p className="px-2 py-1 text-xs text-text-muted">{tr(`Учасників: ${filteredRows.length}`, `Participants: ${filteredRows.length}`)}</p>
                     <button type="button" onClick={downloadCsv} className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-text-primary hover:bg-bg-hover">
                       <Download className="h-4 w-4 text-text-muted" /> CSV
