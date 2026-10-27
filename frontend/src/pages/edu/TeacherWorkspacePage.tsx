@@ -7,6 +7,7 @@ import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduE
 import { Modal } from "../../components/ui/Modal";
 import { withDevPreview } from "../../lib/devPreview";
 import "./eduWorkspace.css";
+import "./eduVisualQuality.css";
 import { api } from "../../lib/api/client";
 
 export const TeacherWorkspacePage: React.FC = () => {
@@ -103,15 +104,15 @@ export const TeacherWorkspacePage: React.FC = () => {
           {organizations.length > 0 && <button type="button" onClick={() => { setCreateError(null); setOpenCreate(true); }} className="edu-teacher-home__create"><Plus className="size-4" aria-hidden="true" />{tr("Створити клас", "Create a class")}<ArrowRight className="size-4" aria-hidden="true" /></button>}
         </div>
         <dl className="edu-teacher-home__stats" aria-label={tr("Огляд навчального простору", "Learning workspace overview")}>
-          <div><dt>{tr("Класи", "Classes")}</dt><dd>{loading ? "—" : classes.length}</dd></div>
-          <div><dt>{tr("Учні", "Students")}</dt><dd>{loading ? "—" : studentCount}</dd></div>
-          <div><dt>{tr("На перевірку", "To review")}</dt><dd>{loading ? "—" : reviews.length}</dd></div>
+          <div><dt><BookOpen aria-hidden="true" />{tr("Класи", "Classes")}</dt><dd>{loading ? "—" : classes.length}</dd></div>
+          <div><dt><Users aria-hidden="true" />{tr("Учні", "Students")}</dt><dd>{loading ? "—" : studentCount}</dd></div>
+          <div><dt><ClipboardCheck aria-hidden="true" />{tr("На перевірку", "To review")}</dt><dd>{loading ? "—" : reviews.length}</dd></div>
         </dl>
       </header>
       <nav className="edu-teacher-home__shortcuts" aria-label={tr("Швидкий перехід", "Quick links")}>
-        <button type="button" onClick={() => navigate(withDevPreview("/edu/calendar"))}><CalendarDays className="size-4" />{tr("Календар", "Calendar")}<ArrowRight className="edu-teacher-home__shortcut-arrow size-4" /></button>
-        <button type="button" onClick={() => navigate(withDevPreview("/edu/courses"))}><BookOpen className="size-4" />{tr("Курси", "Courses")}<ArrowRight className="edu-teacher-home__shortcut-arrow size-4" /></button>
-        <button type="button" onClick={() => navigate(withDevPreview("/edu/library"))}><Library className="size-4" />{tr("Бібліотека задач", "Task library")}<ArrowRight className="edu-teacher-home__shortcut-arrow size-4" /></button>
+        <button className="edu-teacher-home__shortcut edu-teacher-home__shortcut--primary" type="button" onClick={() => navigate(withDevPreview("/edu/calendar"))}><CalendarDays className="size-4" />{tr("Календар занять", "Lesson calendar")}<ArrowRight className="edu-teacher-home__shortcut-arrow size-4" /></button>
+        <button className="edu-teacher-home__shortcut" type="button" onClick={() => navigate(withDevPreview("/edu/courses"))}><BookOpen className="size-4" />{tr("Курси", "Courses")}<ArrowRight className="edu-teacher-home__shortcut-arrow size-4" /></button>
+        <button className="edu-teacher-home__shortcut" type="button" onClick={() => navigate(withDevPreview("/edu/library"))}><Library className="size-4" />{tr("Бібліотека задач", "Task library")}<ArrowRight className="edu-teacher-home__shortcut-arrow size-4" /></button>
       </nav>
       {!openCreate && createError && <div role="alert" className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-accent-error/30 p-3 text-sm"><p>{createError}</p><button type="button" onClick={() => setOrganizationReload(value => value + 1)} className="min-h-11 px-3 font-semibold text-primary-strong">{tr("Повторити завантаження закладів", "Reload organizations")}</button></div>}
 
@@ -129,15 +130,19 @@ export const TeacherWorkspacePage: React.FC = () => {
         {loading ? <div className="divide-y divide-border" role="status" aria-label={tr("Завантаження робіт", "Loading submissions")}><div className="h-16 animate-pulse bg-bg-hover/60" /><div className="h-16 animate-pulse bg-bg-hover/40" /></div>
           : reviews.length ? <ul className="divide-y divide-border">
             {reviews.slice(0, 8).map((review) => <li key={review.gradeId}>
-              <button type="button" disabled={!review.classId} onClick={() => { if (review.classId) navigate(withDevPreview(`/edu/classes/${review.classId}/gradebook?review=${review.gradeId}`)); }} className="grid min-h-[68px] w-full grid-cols-[36px_1fr_auto] items-center gap-3 py-3 text-left transition-colors hover:bg-bg-hover/50 disabled:cursor-default disabled:opacity-70">
-                <span className="grid size-9 place-items-center rounded-lg bg-bg-hover text-text-secondary"><ClipboardCheck className="size-4" aria-hidden="true" /></span>
-                <span className="min-w-0"><span className="block truncate text-sm font-semibold">{review.task?.title || `${tr("Робота", "Submission")} #${review.gradeId}`}</span><span className="mt-1 block truncate text-xs text-text-muted">{review.student.firstName} {review.student.lastName} · {review.className || review.task?.lesson?.title || tr("Ручна перевірка", "Manual review")}</span></span>
-                <ArrowRight className="size-4 text-text-muted" aria-hidden="true" />
+              <button type="button" disabled={!review.classId} onClick={() => { if (review.classId) navigate(withDevPreview(`/edu/classes/${review.classId}/gradebook?review=${review.gradeId}`)); }} className="edu-teacher-review-row disabled:cursor-default disabled:opacity-70">
+                <span className="edu-teacher-review-row__mark"><ClipboardCheck className="size-4" aria-hidden="true" /></span>
+                <span className="edu-teacher-review-row__copy"><strong>{review.task?.title || `${tr("Робота", "Submission")} #${review.gradeId}`}</strong><span>{review.student.firstName} {review.student.lastName}<i aria-hidden="true">·</i>{review.className || review.task?.lesson?.title || tr("Ручна перевірка", "Manual review")}</span></span>
+                <ArrowRight className="edu-teacher-review-row__arrow size-4" aria-hidden="true" />
               </button>
             </li>)}
           </ul>
           : error ? <p className="py-5 text-sm text-text-secondary">{tr("Не вдалося підтвердити, чи є роботи в черзі.", "We couldn’t confirm whether there are submissions to review.")}</p>
-            : <p className="py-5 text-sm text-text-secondary">{tr("Черга порожня. Можна перейти до найближчих занять.", "The queue is empty. You can prepare an upcoming lesson.")}</p>}
+            : <div className="edu-teacher-review-empty">
+              <span className="edu-teacher-review-empty__mark"><ClipboardCheck className="size-5" aria-hidden="true" /></span>
+              <div><strong>{tr("Усе перевірено", "You’re all caught up")}</strong><p>{tr("Нові роботи з’являться тут після того, як учні надішлють розв’язання.", "New submissions will appear here after learners send their solutions.")}</p></div>
+              <button type="button" onClick={() => navigate(withDevPreview("/edu/calendar"))}><CalendarDays className="size-4" aria-hidden="true" />{tr("Відкрити календар", "Open calendar")}<ArrowRight className="size-4" aria-hidden="true" /></button>
+            </div>}
       </section>
 
       <section className="edu-workspace__panel" aria-labelledby="teacher-classes">

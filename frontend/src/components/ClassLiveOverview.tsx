@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Activity, AlertTriangle, ArrowRight, CheckCircle2, Circle, Code2, Loader2, Pause, Play, Sparkles, X, type LucideIcon } from "lucide-react";
 import { tr } from "../i18n";
 import { getClassLiveOverview, getLiveCopilot, type LiveOverview, type LiveCodeStatus, type LiveCopilotBriefing } from "../lib/api/liveClassroom";
+import "../pages/edu/eduVisualQuality.css";
 
 type Props = {
   classId: number;
@@ -9,13 +11,14 @@ type Props = {
   onSelectStudent?: (studentId: number, name: string) => void;
   selectedStudentId?: number | null;
   enableCopilot?: boolean;
+  previewData?: LiveOverview;
 };
 
-const STATUS_META: Record<LiveCodeStatus, { glyph: string; label: string; dot: string }> = {
-  stuck: { glyph: "⚠️", label: tr("Застряг", "Stuck"), dot: "bg-secondary" },
-  in_progress: { glyph: "⏳", label: tr("Працює", "Working"), dot: "bg-primary" },
-  not_started: { glyph: "⚪", label: tr("Не активний", "Idle"), dot: "bg-text-muted" },
-  passed: { glyph: "✅", label: tr("Склав", "Passed"), dot: "bg-accent-success" },
+const STATUS_META: Record<LiveCodeStatus, { label: string; icon: LucideIcon }> = {
+  stuck: { label: tr("Застряг", "Stuck"), icon: AlertTriangle },
+  in_progress: { label: tr("Працює", "Working"), icon: Code2 },
+  not_started: { label: tr("Не активний", "Idle"), icon: Circle },
+  passed: { label: tr("Склав", "Passed"), icon: CheckCircle2 },
 };
 
 function relTime(ms: number | null, now: number): string {
@@ -27,18 +30,12 @@ function relTime(ms: number | null, now: number): string {
   return tr(`${Math.round(m / 60)} год тому`, `${Math.round(m / 60)}h ago`);
 }
 
-/**
- * Class-wide live code heatmap for the teacher's live lesson. Polls the
- * class-wide overview so a teacher can see, while talking on video, who is
- * stuck / working / passed / idle across whatever task each student is on —
- * the "code-aware" half of the live classroom.
- */
-export const ClassLiveOverview: React.FC<Props> = ({ classId, pollMs = 5000, className, onSelectStudent, selectedStudentId, enableCopilot }) => {
-  const [snap, setSnap] = useState<LiveOverview | null>(null);
+/** Live class overview for the teacher's current lesson. */
+export const ClassLiveOverview: React.FC<Props> = ({ classId, pollMs = 5000, className, onSelectStudent, selectedStudentId, enableCopilot, previewData }) => {
+  const [snap, setSnap] = useState<LiveOverview | null>(previewData ?? null);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(true);
   const timerRef = useRef<number | null>(null);
-
   const [briefing, setBriefing] = useState<LiveCopilotBriefing | null>(null);
   const [copilotLoading, setCopilotLoading] = useState(false);
 
@@ -60,6 +57,11 @@ export const ClassLiveOverview: React.FC<Props> = ({ classId, pollMs = 5000, cla
   };
 
   useEffect(() => {
+    if (previewData) {
+      setSnap(previewData);
+      setError(null);
+      return;
+    }
     let cancelled = false;
     const tick = async () => {
       try {
@@ -69,117 +71,87 @@ export const ClassLiveOverview: React.FC<Props> = ({ classId, pollMs = 5000, cla
           setError(null);
         }
       } catch {
-        if (!cancelled) setError(tr("Не вдалося оновити.", "Failed to refresh."));
+        if (!cancelled) setError(tr("Не вдалося оновити огляд класу.", "Could not refresh the class overview."));
       }
     };
     void tick();
-    if (live) {
-      timerRef.current = window.setInterval(tick, Math.max(2500, pollMs));
-    }
+    if (live) timerRef.current = window.setInterval(tick, Math.max(2500, pollMs));
     return () => {
       cancelled = true;
       if (timerRef.current) window.clearInterval(timerRef.current);
     };
-  }, [classId, pollMs, live]);
+  }, [classId, pollMs, live, previewData]);
 
   const totals = snap?.totals;
   const now = snap?.generatedAtMs ?? Date.now();
 
   return (
-    <div className={`flex h-full flex-col rounded-lg border border-border bg-bg-base/60 ${className ?? ""}`}>
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <div className="text-[11px] font-mono text-primary">{tr("🔴 Жива панель класу", "🔴 Live class panel")}</div>
-        <div className="flex items-center gap-2">
-          {enableCopilot && (
-            <button
-              type="button"
-              disabled={copilotLoading}
-              className="text-[10px] font-mono text-accent-warning hover:text-text-primary disabled:opacity-50"
-              onClick={() => void runCopilot()}
-            >
-              {copilotLoading ? tr("Думаю…", "Thinking…") : tr("🧠 AI-діагноз", "🧠 AI brief")}
-            </button>
-          )}
-          <button
-            type="button"
-            className="text-[10px] font-mono text-text-secondary hover:text-text-primary"
-            onClick={() => setLive((v) => !v)}
-          >
-            {live ? tr("Пауза", "Pause") : tr("Відновити", "Resume")}
+    <section className={`edu-live-overview ${className ?? ""}`} aria-label={tr("Живий огляд класу", "Live class overview")}>
+      <header className="edu-live-overview__header">
+        <div className="edu-live-overview__title">
+          <span className="edu-live-overview__mark"><Activity className="size-4" aria-hidden="true" /></span>
+          <div><h2>{tr("Огляд класу", "Class overview")}</h2><p>{tr("Активність під час уроку", "Activity during this lesson")}</p></div>
+        </div>
+        <div className="edu-live-overview__actions">
+          <span className={`edu-live-overview__refresh ${live ? "is-live" : "is-paused"}`}><i aria-hidden="true" />{live ? tr("Наживо", "Live") : tr("На паузі", "Paused")}</span>
+          {enableCopilot && <button type="button" disabled={copilotLoading} className="edu-live-overview__copilot" onClick={() => void runCopilot()}>
+            {copilotLoading ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Sparkles className="size-4" aria-hidden="true" />}
+            <span>{copilotLoading ? tr("Готую огляд", "Preparing") : tr("AI-огляд", "AI brief")}</span>
+          </button>}
+          <button type="button" className="edu-live-overview__pause" aria-pressed={!live} title={live ? tr("Призупинити оновлення", "Pause updates") : tr("Відновити оновлення", "Resume updates")} onClick={() => setLive((value) => !value)}>
+            {live ? <Pause className="size-4" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
+            <span>{live ? tr("Пауза", "Pause") : tr("Відновити", "Resume")}</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      {briefing && (
-        <div className="border-b border-border bg-primary/10 px-3 py-2">
-          <div className="flex items-start justify-between gap-2">
-            <div className="text-[11px] font-mono text-primary">
-              🧠 {briefing.headline}
-              <span className="ml-1 text-text-muted">{briefing.source === "ai" ? "· AI" : "· rule"}</span>
-            </div>
-            <button
-              type="button"
-              className="text-[10px] font-mono text-text-muted hover:text-text-primary"
-              onClick={() => setBriefing(null)}
-            >
-              ✕
-            </button>
-          </div>
-          <p className="mt-1 text-[11px] font-mono text-text-secondary">{briefing.diagnosis}</p>
-          {briefing.actions.length > 0 && (
-            <ul className="mt-1 space-y-0.5">
-              {briefing.actions.map((a, i) => (
-                <li key={i} className="text-[11px] font-mono text-text-primary">→ {a}</li>
-              ))}
-            </ul>
-          )}
+      {briefing && <aside className="edu-live-overview__briefing">
+        <div className="edu-live-overview__briefing-head">
+          <span><Sparkles className="size-4" aria-hidden="true" />{tr("Короткий огляд", "Quick brief")}</span>
+          <div><small>{briefing.source === "ai" ? "AI" : tr("Правила", "Rules")}</small><button type="button" aria-label={tr("Закрити огляд", "Close brief")} onClick={() => setBriefing(null)}><X className="size-4" aria-hidden="true" /></button></div>
         </div>
-      )}
+        <strong>{briefing.headline}</strong>
+        <p>{briefing.diagnosis}</p>
+        {briefing.actions.length > 0 && <ul>{briefing.actions.map((action, index) => <li key={index}><ArrowRight className="size-3.5" aria-hidden="true" />{action}</li>)}</ul>}
+      </aside>}
 
-      {error && <div role="alert" className="px-3 py-2 text-xs font-mono text-secondary">{error}</div>}
+      {error && <div role="alert" className="edu-live-overview__error"><AlertTriangle className="size-4" aria-hidden="true" />{error}</div>}
 
-      {totals && (
-        <div className="grid grid-cols-2 gap-1.5 px-3 py-2 border-b border-border">
-          {(["stuck", "in_progress", "passed", "not_started"] as LiveCodeStatus[]).map((st) => (
-            <div key={st} className="text-[11px] font-mono text-text-primary rounded-md bg-bg-hover/50 px-2 py-1">
-              {STATUS_META[st].glyph} {STATUS_META[st].label}: <span className="text-primary">{totals[st]}</span>
-            </div>
-          ))}
+      {totals ? <section className="edu-live-overview__metrics" aria-label={tr("Стан розв’язання задач", "Problem status")}>
+        <div className="edu-live-overview__section-title"><h3>{tr("Стан задач", "Problem status")}</h3><span>{tr("Увесь клас", "Whole class")}</span></div>
+        <div className="edu-live-overview__metric-grid">
+          {(["stuck", "in_progress", "passed", "not_started"] as LiveCodeStatus[]).map((status) => {
+            const StatusIcon = STATUS_META[status].icon;
+            return <div key={status} className={`edu-live-overview__metric is-${status}`}>
+              <span className="edu-live-overview__metric-icon"><StatusIcon className="size-4" aria-hidden="true" /></span>
+              <span className="edu-live-overview__metric-copy"><strong>{totals[status]}</strong><small>{STATUS_META[status].label}</small></span>
+            </div>;
+          })}
         </div>
-      )}
+      </section> : !error && <div className="edu-live-overview__metric-skeleton" role="status" aria-label={tr("Завантажуємо стан класу", "Loading class status")}><span /><span /><span /><span /></div>}
 
-      <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-border/60">
-        {(snap?.students ?? []).map((s) => (
-          <button
-            key={s.studentId}
-            type="button"
-            onClick={onSelectStudent ? () => onSelectStudent(s.studentId, s.name) : undefined}
-            disabled={!onSelectStudent}
-            className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs font-mono ${
-              onSelectStudent ? "hover:bg-bg-hover/60 cursor-pointer" : "cursor-default"
-            } ${selectedStudentId === s.studentId ? "bg-bg-hover/70" : ""}`}
-          >
-            <span className="flex min-w-0 items-center gap-2 text-text-primary">
-              <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_META[s.status].dot}`} title={STATUS_META[s.status].label} />
-              <span className="truncate">{s.name}</span>
-            </span>
-            <span className="flex shrink-0 items-center gap-2 text-text-secondary">
-              {s.currentTaskTitle && <span className="max-w-[7rem] truncate text-text-muted" title={s.currentTaskTitle}>{s.currentTaskTitle}</span>}
-              {s.testsTotal != null && s.testsTotal > 0 && (
-                <span>{s.testsPassed ?? 0}/{s.testsTotal}</span>
-              )}
-              <span className="whitespace-nowrap">{relTime(s.lastActivityMs, now)}</span>
-            </span>
-          </button>
-        ))}
-        {snap && snap.students.length === 0 && (
-          <div className="px-3 py-3 text-xs font-mono text-text-secondary">{tr("Немає активності в класі.", "No class activity yet.")}</div>
-        )}
-        {!snap && !error && (
-          <div className="px-3 py-3 text-xs font-mono text-text-secondary">{tr("Завантаження…", "Loading…")}</div>
-        )}
-      </div>
-    </div>
+      <section className="edu-live-overview__students" aria-label={tr("Активність учнів", "Learner activity")}>
+        <div className="edu-live-overview__section-title"><h3>{tr("Активність учнів", "Learner activity")}</h3>{snap && <span>{snap.students.length} {tr("учнів", "learners")}</span>}</div>
+        {snap?.students.length ? <ul className="edu-live-overview__student-list">
+          {snap.students.map((student) => {
+            const StatusIcon = STATUS_META[student.status].icon;
+            const initials = student.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase();
+            return <li key={student.studentId}>
+              <button type="button" onClick={onSelectStudent ? () => onSelectStudent(student.studentId, student.name) : undefined} disabled={!onSelectStudent} aria-current={selectedStudentId === student.studentId ? "true" : undefined}>
+                <span className="edu-live-overview__student-avatar">{initials || "?"}</span>
+                <span className="edu-live-overview__student-copy"><strong>{student.name}</strong><small className={`is-${student.status}`}><StatusIcon className="size-3.5" aria-hidden="true" />{STATUS_META[student.status].label}{student.currentTaskTitle && <><i aria-hidden="true">·</i><span title={student.currentTaskTitle}>{student.currentTaskTitle}</span></>}</small></span>
+                <span className="edu-live-overview__student-meta">{student.testsTotal != null && student.testsTotal > 0 && <b>{student.testsPassed ?? 0}/{student.testsTotal}</b>}<small>{relTime(student.lastActivityMs, now)}</small></span>
+                {onSelectStudent && <ArrowRight className="edu-live-overview__student-arrow size-4" aria-hidden="true" />}
+              </button>
+            </li>;
+          })}
+        </ul> : snap ? <div className="edu-live-overview__empty">
+          <span><Activity className="size-5" aria-hidden="true" /></span>
+          <strong>{tr("Поки тихо в класі", "It’s quiet in class")}</strong>
+          <p>{tr("Коли учні відкриють задачу, їхній стан з’явиться тут.", "Learners’ progress will appear here when they open a problem.")}</p>
+        </div> : error ? <div className="edu-live-overview__empty is-error"><span><AlertTriangle className="size-5" aria-hidden="true" /></span><strong>{tr("Не вдалося отримати активність", "Activity is unavailable")}</strong><p>{tr("Спробуйте ще раз за мить.", "Try again in a moment.")}</p></div> : <div className="edu-live-overview__loading" role="status"><span /><span /><span />{tr("Оновлюємо активність класу…", "Loading class activity…")}</div>}
+      </section>
+    </section>
   );
 };
 

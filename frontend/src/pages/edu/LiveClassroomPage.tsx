@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { revealLivePanel } from "./livePanelNavigation";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
-import { ConnectionStateToast, LiveKitRoom, PreJoin, useParticipants, VideoConference } from "@livekit/components-react";
+import { CarouselLayout, Chat, ConnectionQualityIndicator, ConnectionStateToast, ControlBar, FocusLayout, FocusLayoutContainer, FocusToggle, GridLayout, LayoutContextProvider, LiveKitRoom, ParticipantName, ParticipantTile, PreJoin, RoomAudioRenderer, TrackMutedIndicator, VideoTrack, useCreateLayoutContext, useParticipantContext, useParticipants, usePinnedTracks, useTrackRefContext, useTracks } from "@livekit/components-react";
 import "@livekit/components-styles";
-import { DisconnectReason } from "livekit-client";
-import { ArrowLeft, ArrowRight, BookOpen, Code2, Loader2, PenSquare, PhoneOff, PlayCircle, Radio, RotateCcw, Users, Video, WifiOff } from "lucide-react";
+import { DisconnectReason, RoomEvent, Track } from "livekit-client";
+import { isEqualTrackRef, isTrackReference, type TrackReferenceOrPlaceholder, type WidgetState } from "@livekit/components-core";
+import { ArrowLeft, ArrowRight, BookOpen, Clock3, Code2, Flag, Loader2, MessageCircle, Mic, MicOff, MonitorUp, PenSquare, PhoneOff, PlayCircle, Radio, RotateCcw, Users, Video, VideoOff, WifiOff } from "lucide-react";
 import { BreakoutPanel } from "../../components/BreakoutPanel";
 import { ClassLiveOverview } from "../../components/ClassLiveOverview";
 import { LessonMaterialsPanel } from "../../components/LessonMaterialsPanel";
@@ -28,8 +29,10 @@ import {
   type LiveJoinInfo,
   type LiveSession,
   type LessonBrief,
+  type LiveOverview,
 } from "../../lib/api/liveClassroom";
 import "./eduWorkspace.css";
+import "./eduVisualQuality.css";
 
 type Phase = "loading" | "lobby" | "prejoin" | "in_room" | "disabled" | "error";
 type SidePanel = "people" | "materials" | "code" | "board";
@@ -47,6 +50,69 @@ type LiveClassroomUser = { studentId?: number; classId?: number; userMode?: stri
 const isInterfacePreview = () => import.meta.env.DEV
   && new URLSearchParams(window.location.search).get("preview") === "true"
   && new URLSearchParams(window.location.search).get("liveRoomPreview") === "design";
+
+const EduParticipantTileContent: React.FC = () => {
+  const participant = useParticipantContext();
+  const trackRef = useTrackRefContext();
+  const microphoneRef = React.useMemo(() => ({ participant, source: Track.Source.Microphone }), [participant]);
+  const displayName = participant.name?.trim() || participant.identity;
+  const initials = displayName.split(/\s+/).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase()).join("") || "SC";
+
+  return <>
+    {isTrackReference(trackRef) && (trackRef.publication?.kind === "video" || trackRef.source === Track.Source.Camera || trackRef.source === Track.Source.ScreenShare) && <VideoTrack trackRef={trackRef} />}
+    <div className="lk-participant-placeholder edu-live-room__participant-placeholder" aria-hidden="true"><span>{initials}</span></div>
+    <div className="lk-participant-metadata">
+      <div className="lk-participant-metadata-item">
+        {trackRef.source === Track.Source.Camera ? <><TrackMutedIndicator trackRef={microphoneRef} show="muted" /><ParticipantName /></> : <><MonitorUp className="size-4" aria-hidden="true" /><ParticipantName>&apos;s screen</ParticipantName></>}
+      </div>
+      <ConnectionQualityIndicator className="lk-participant-metadata-item" />
+    </div>
+    <FocusToggle trackRef={trackRef} />
+  </>;
+};
+
+const EduParticipantTile: React.FC<{ trackRef?: TrackReferenceOrPlaceholder }> = (props) => <ParticipantTile {...props}><EduParticipantTileContent /></ParticipantTile>;
+
+/** LiveKit's standard conference layout with a branded, name-aware camera-off tile. */
+const EduVideoConference: React.FC = () => {
+  const [widgetState, setWidgetState] = useState<WidgetState>({ showChat: false, unreadMessages: 0, showSettings: false });
+  const lastAutoFocusedScreenShareTrack = useRef<TrackReferenceOrPlaceholder | null>(null);
+  const tracks = useTracks(
+    [{ source: Track.Source.Camera, withPlaceholder: true }, { source: Track.Source.ScreenShare, withPlaceholder: false }],
+    { updateOnlyOn: [RoomEvent.ActiveSpeakersChanged], onlySubscribed: false },
+  );
+  const layoutContext = useCreateLayoutContext();
+  const screenShareTracks = tracks.filter(isTrackReference).filter((track) => track.publication.source === Track.Source.ScreenShare);
+  const focusTrack = usePinnedTracks(layoutContext)?.[0];
+  const carouselTracks = tracks.filter((track) => !isEqualTrackRef(track, focusTrack));
+
+  useEffect(() => {
+    if (screenShareTracks.some((track) => track.publication.isSubscribed) && lastAutoFocusedScreenShareTrack.current === null) {
+      layoutContext.pin.dispatch?.({ msg: "set_pin", trackReference: screenShareTracks[0] });
+      lastAutoFocusedScreenShareTrack.current = screenShareTracks[0];
+    } else if (lastAutoFocusedScreenShareTrack.current && !screenShareTracks.some((track) => track.publication.trackSid === lastAutoFocusedScreenShareTrack.current?.publication?.trackSid)) {
+      layoutContext.pin.dispatch?.({ msg: "clear_pin" });
+      lastAutoFocusedScreenShareTrack.current = null;
+    }
+    if (focusTrack && !isTrackReference(focusTrack)) {
+      const updatedFocusTrack = tracks.find((track) => track.participant.identity === focusTrack.participant.identity && track.source === focusTrack.source);
+      if (updatedFocusTrack !== focusTrack && isTrackReference(updatedFocusTrack)) layoutContext.pin.dispatch?.({ msg: "set_pin", trackReference: updatedFocusTrack });
+    }
+  }, [screenShareTracks.map((ref) => `${ref.publication.trackSid}_${ref.publication.isSubscribed}`).join(), focusTrack?.publication?.trackSid, tracks]);
+
+  return <div className="lk-video-conference">
+    <LayoutContextProvider value={layoutContext} onWidgetChange={setWidgetState}>
+      <div className="lk-video-conference-inner">
+        {!focusTrack ? <div className="lk-grid-layout-wrapper"><GridLayout tracks={tracks}><EduParticipantTile /></GridLayout></div>
+          : <div className="lk-focus-layout-wrapper"><FocusLayoutContainer><CarouselLayout tracks={carouselTracks}><EduParticipantTile /></CarouselLayout>{focusTrack && <FocusLayout trackRef={focusTrack} />}</FocusLayoutContainer></div>}
+        <ControlBar controls={{ chat: true, settings: false }} />
+      </div>
+      <Chat style={{ display: widgetState.showChat ? "grid" : "none" }} />
+    </LayoutContextProvider>
+    <RoomAudioRenderer />
+    <ConnectionStateToast />
+  </div>;
+};
 
 const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) => {
   useTranslation();
@@ -418,7 +484,7 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
             <section aria-label={tr("Відеозустріч", "Video meeting")} className="edu-live-room__stage relative min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-code shadow-[0_28px_64px_-46px_rgba(0,0,0,.82)]" data-lk-theme="default">
               <div className="flex h-full min-h-0 flex-col">
                 {isTeacher ? <RaisedHandsBar /> : <div className="flex items-center justify-end border-b border-white/10 px-4 py-2"><RaiseHandButton /></div>}
-                <div className="min-h-0 flex-1"><VideoConference /></div>
+                <div className="min-h-0 flex-1"><EduVideoConference /></div>
               </div>
 
               {roomConn === "connecting" && <ConnectionOverlay icon={<Loader2 className="size-6 animate-spin text-primary-soft" />} title={tr("Підключення до відеосервера…", "Connecting to video server…")} subtitle={activeRoom.url} />}
@@ -503,11 +569,19 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
   );
 };
 
+const PREVIEW_LIVE_OVERVIEW: LiveOverview = {
+  totals: { stuck: 0, in_progress: 0, passed: 0, not_started: 0 },
+  students: [],
+  generatedAtMs: Date.now(),
+};
+
 const LiveClassroomPreview: React.FC = () => {
   useTranslation();
   const navigate = useNavigate();
   const { classId } = useParams<{ classId: string }>();
-  const [panel, setPanel] = useState<SidePanel>("materials");
+  const [panel, setPanel] = useState<SidePanel>("people");
+  const [previewMicOn, setPreviewMicOn] = useState(false);
+  const [previewCameraOn, setPreviewCameraOn] = useState(false);
   const sidePanelRef = useRef<HTMLElement>(null);
   const selectPanel = (next: SidePanel) => {
     setPanel(next);
@@ -517,62 +591,51 @@ const LiveClassroomPreview: React.FC = () => {
   return (
     <LiveShell>
       <div className="edu-live-room edu-live-room--preview">
-        <header className="edu-live-room__header">
-          <div className="flex min-w-0 items-center gap-3">
-            <button type="button" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-bold hover:bg-bg-hover"><ArrowLeft className="size-4" />{tr("11-А · Python", "Class 11-A · Python")}</button>
-            <div className="min-w-0"><p className="edu-live-room__preview-label">{tr("Приклад інтерфейсу", "Interface preview")}</p><h1 className="truncate font-bold">{tr("Цикли: від ідеї до коду", "Loops: from idea to code")}</h1></div>
+        <header className="edu-live-room__header edu-live-room__preview-header">
+          <div className="edu-live-room__preview-title">
+            <button type="button" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)} aria-label={tr("Повернутися до класу 11-А", "Back to class 11-A")}><ArrowLeft className="size-4" /></button>
+            <span className="edu-live-room__status-dot is-connected" aria-hidden="true" />
+            <div className="min-w-0"><p className="edu-live-room__preview-label">{tr("Урок наживо · 11-А · Python", "Live lesson · Class 11-A · Python")}</p><h1 className="truncate">{tr("Цикли: від ідеї до коду", "Loops: from idea to code")}</h1></div>
+            <span className="edu-live-room__preview-count"><Users className="size-3.5" aria-hidden="true" />16 {tr("учнів", "learners")}</span>
           </div>
           <nav aria-label={tr("Інструменти уроку", "Lesson tools")} className="edu-live-room__tools">
             <Tool active={panel === "people"} controls="live-preview-panel-people" onClick={() => selectPanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
             <Tool active={panel === "materials"} controls="live-preview-panel-materials" onClick={() => selectPanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
             <Tool active={panel === "board"} controls="live-preview-panel-board" onClick={() => selectPanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
             <Tool active={panel === "code"} controls="live-preview-panel-code" onClick={() => selectPanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
+            <button type="button" className="edu-live-room__preview-end" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)}><PhoneOff className="size-4" />{tr("Завершити", "End")}</button>
           </nav>
         </header>
 
+        <section className="edu-live-challenge edu-live-challenge--setup edu-live-challenge--preview" aria-label={tr("Швидка практика", "Quick practice")}>
+          <div className="edu-live-challenge__identity"><span><Flag className="size-4" aria-hidden="true" /></span><div><strong>{tr("Швидка практика", "Quick practice")}</strong><small>{tr("Коротка задача для всього класу", "A short task for the class")}</small></div></div>
+          <label><span>{tr("Задача", "Problem")}</span><select aria-label={tr("Задача челенджу", "Challenge task")} disabled><option>{tr("Задачі поки недоступні", "No problems available")}</option></select></label>
+          <label className="edu-live-challenge__duration"><span>{tr("Час", "Time")}</span><select aria-label={tr("Тривалість челенджу", "Challenge duration")} defaultValue="90" disabled><option value="90">1:30</option></select></label>
+          <button type="button" disabled className="edu-live-challenge__launch"><PlayCircle className="size-4" aria-hidden="true" />{tr("Запустити", "Start")}</button>
+        </section>
+
         <main className="edu-live-room__body grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <section aria-label={tr("Демонстраційний онлайн-урок", "Live lesson preview")} className="edu-live-room__stage relative flex min-h-0 flex-col overflow-hidden rounded-[24px] border border-border bg-bg-code text-text-primary">
-            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3">
-              <div><p className="text-xs font-bold uppercase tracking-[.12em] text-primary-soft">{tr("Онлайн-урок · демо", "Live lesson · demo")}</p><h2 className="mt-1 font-semibold">{tr("Цикл і його верхня межа", "A loop and its upper bound")}</h2></div>
-              <span className="rounded-lg border border-white/10 bg-white/[.04] px-2.5 py-1.5 font-mono text-[10px] text-white/75">{tr("Зразок інтерфейсу", "Interface sample")}</span>
+          <section aria-label={tr("Демонстраційний відеодзвінок", "Demo video call")} className="edu-live-room__stage edu-live-room__preview-stage">
+            <div className="edu-live-room__preview-stage-head"><span><i aria-hidden="true" />{tr("Зустріч відкрита", "Room is open")}</span><span>{tr("Приклад інтерфейсу · камера вимкнена", "Interface preview · camera off")}</span></div>
+            <div className="edu-live-room__preview-camera">
+              <div className="edu-live-room__preview-person"><span>ОК</span><strong>{tr("Олена Коваль", "Olena Koval")}</strong><small><VideoOff className="size-3.5" aria-hidden="true" />{tr("Камера вимкнена", "Camera is off")}</small></div>
+              <span className="edu-live-room__preview-speaker-tag"><MicOff className="size-3.5" aria-hidden="true" />{tr("Олена Коваль · викладач", "Olena Koval · teacher")}</span>
             </div>
-            <div className="edu-live-room__demo-content grid min-h-0 flex-1 gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-              <section className="edu-live-room__demo-board" aria-label={tr("Фрагмент спільної дошки", "Shared board excerpt")}>
-                <p className="edu-live-room__demo-board-label"><span />{tr("Спільна дошка · пояснюємо на прикладі", "Shared board · working through an example")}</p>
-                <h2>{tr("Чому сума для 5 дорівнює 10, а не 15?", "Why does the sum for 5 equal 10 instead of 15?")}</h2>
-                <div className="edu-live-room__demo-code" aria-label={tr("Приклад коду Python", "Python code example")}>
-                  <span>n = 5</span><span>total = 0</span><span className="is-focus">for value in range(1, n):</span><span>    total += value</span><span>print(total)  <span className="text-white/45"># 10</span></span>
-                </div>
-                <p className="edu-live-room__demo-note">{tr("У Python права межа range не входить у послідовність. Додаємо n + 1, щоб цикл захопив число 5.", "Python's range excludes its right endpoint. Add n + 1 so the loop includes 5.")}</p>
-              </section>
-              <aside className="edu-live-room__demo-side" aria-label={tr("Викладач і план уроку", "Teacher and lesson plan")}>
-                <div className="edu-live-room__demo-speaker">
-                  <p className="edu-live-room__demo-speaker-label">{tr("Стан кімнати", "Room status")}</p>
-                  <div className="edu-live-room__demo-speaker-top"><span><Video className="size-5" /></span><span className="edu-live-room__demo-camera-state"><i />{tr("Відео не підключене", "Video is not connected")}</span></div>
-                  <strong>{tr("Відео не запускається в макеті", "Video is not started in this preview")}</strong><small>{tr("Камера й мікрофон працюють після входу до реальної кімнати.", "Camera and microphone work after joining a live room.")}</small>
-                </div>
-                <div className="edu-live-room__demo-agenda">
-                  <p>{tr("План уроку", "Lesson plan")}</p>
-                  <ol>
-                    <li className={panel === "materials" ? "is-current" : ""}><span>01</span>{tr("Матеріал", "Material")}</li>
-                    <li className={panel === "board" ? "is-current" : ""}><span>02</span>{tr("Розбір на дошці", "Work through the board")}</li>
-                    <li className={panel === "code" ? "is-current" : ""}><span>03</span>{tr("Практика в коді", "Practice in code")}</li>
-                  </ol>
-                </div>
-              </aside>
-            </div>
-            <div className="edu-live-room__demo-controls">
-              <span className="edu-live-room__demo-controls-note">{tr("Камера, мікрофон і реакції доступні після входу до реальної кімнати.", "Camera, microphone, and reactions are available after joining a live room.")}</span>
-              <button type="button" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)} className="edu-live-room__demo-leave"><PhoneOff className="size-4" />{tr("Вийти з перегляду", "Leave preview")}</button>
+            <div className="edu-live-room__preview-controls" aria-label={tr("Керування дзвінком", "Call controls")}>
+              <button type="button" aria-pressed={previewMicOn} onClick={() => setPreviewMicOn((value) => !value)}><span>{previewMicOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}</span>{tr("Мікрофон", "Microphone")}</button>
+              <button type="button" aria-pressed={previewCameraOn} onClick={() => setPreviewCameraOn((value) => !value)}><span>{previewCameraOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}</span>{tr("Камера", "Camera")}</button>
+              <button type="button" onClick={() => selectPanel("board")}><span><MonitorUp className="size-4" /></span>{tr("Показ екрана", "Share screen")}</button>
+              <button type="button" onClick={() => selectPanel("materials")}><span><MessageCircle className="size-4" /></span>{tr("Чат", "Chat")}</button>
+              <button type="button" className="is-leave" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)}><span><PhoneOff className="size-4" /></span>{tr("Вийти", "Leave")}</button>
             </div>
           </section>
 
           <aside ref={sidePanelRef} className="edu-live-room__aside min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-surface">
             <PanelHeading panel={panel} />
-            <div className="edu-live-room__panel-body h-[calc(100%-56px)] min-h-0 overflow-auto p-5">
-              <p className="edu-live-room__preview-notice mb-4">{tr("Демонстраційний макет. Камера, мікрофон та учасники не підключені.", "Design preview only. Camera, microphone, and participants are not connected.")}</p>
+            <div className="edu-live-room__panel-body h-[calc(100%-56px)] min-h-0 overflow-auto p-3">
+              <p className="edu-live-room__preview-notice mb-3">{tr("Попередній перегляд. Керування дзвінком тут демонстраційне.", "Design preview. Call controls are illustrative.")}</p>
               <section id="live-preview-panel-people" role="region" aria-label={tr("Учасники уроку", "Lesson participants")} hidden={panel !== "people"}>
-                {panel === "people" && <div className="edu-live-room__preview-not-connected"><Users className="size-5" /><strong>{tr("Учасників не підключено", "No participants connected")}</strong><p>{tr("Це макет інтерфейсу. Реальний список з’явиться після входу до кімнати.", "This is an interface preview. The real participant list appears after joining a room.")}</p></div>}
+                {panel === "people" && <ClassLiveOverview classId={Number(classId) || 31} enableCopilot previewData={PREVIEW_LIVE_OVERVIEW} />}
               </section>
               <section id="live-preview-panel-materials" role="region" aria-label={tr("Матеріали уроку", "Lesson materials")} hidden={panel !== "materials"}>
                 {panel === "materials" && <div className="space-y-4"><div className="edu-live-room__demo-material"><p className="text-xs font-semibold uppercase tracking-[.12em] text-primary-strong dark:text-primary-soft">{tr("Матеріал до зустрічі", "Lesson material")}</p><h2 className="mt-2 text-lg font-bold">{tr("Цикли: діапазон і сума", "Loops: range and sum")}</h2><p className="mt-2 text-sm leading-6 text-text-secondary">{tr("Розберіть приклад разом із викладачем, а потім перевірте ту саму ідею у практиці.", "Work through the example with the teacher, then test the same idea in practice.")}</p></div><div><p className="mb-1 text-xs font-bold uppercase tracking-[.1em] text-text-secondary">{tr("Практика уроку", "Lesson practice")}</p><button type="button" onClick={() => setPanel("code")} className="edu-live-room__demo-task"><strong>{tr("Сума від 1 до n", "Sum from 1 to n")}</strong><span>PY · 1 test</span></button><button type="button" onClick={() => setPanel("board")} className="edu-live-room__demo-task"><strong>{tr("Знайди межу циклу", "Find the loop boundary")}</strong><span>{tr("дошка", "board")}</span></button></div></div>}
