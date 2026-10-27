@@ -606,15 +606,14 @@ function maskStudyCodStringsAndComments(text: string): string {
 }
 
 function refreshStudyCodMarkers(monaco: MonacoApi, model: Monaco.editor.ITextModel, language: string) {
+  if (language !== "python") return;
   const markers: Monaco.editor.IMarkerData[] = [];
-  if (language === "python") {
-    const lines = maskStudyCodStringsAndComments(model.getValue()).split("\n");
-    lines.forEach((line, index) => {
-      if (/^\s*(?:if|elif|else|for|while|def|class|try|except|finally|with)\b/.test(line) && !/:\s*$/.test(line)) {
-        markers.push({ severity: monaco.MarkerSeverity.Warning, message: "This Python statement usually needs a trailing ':'.", startLineNumber: index + 1, startColumn: Math.max(1, line.trimEnd().length), endLineNumber: index + 1, endColumn: Math.max(2, line.trimEnd().length + 1) });
-      }
-    });
-  }
+  const lines = maskStudyCodStringsAndComments(model.getValue()).split("\n");
+  lines.forEach((line, index) => {
+    if (/^\s*(?:if|elif|else|for|while|def|class|try|except|finally|with)\b/.test(line) && !/:\s*$/.test(line)) {
+      markers.push({ severity: monaco.MarkerSeverity.Warning, message: "This Python statement usually needs a trailing ':'.", startLineNumber: index + 1, startColumn: Math.max(1, line.trimEnd().length), endLineNumber: index + 1, endColumn: Math.max(2, line.trimEnd().length + 1) });
+    }
+  });
   // Do not run a hand-written, language-agnostic bracket parser over user code:
   // valid syntax such as Haskell comments, language-specific strings, and macros
   // was being marked as an error even though the judge accepts it.
@@ -1229,18 +1228,6 @@ export const CodeEditor: React.FC<Props> = React.memo(({
 
   useEffect(() => {
     const editor = editorRef.current;
-    if (!editor) return;
-    try {
-      const current = editor.getValue?.();
-      if (typeof current === "string" && current !== value) {
-        editor.setValue(value);
-      }
-    } catch {
-      // ignore
-    }
-  }, [value]);
-  useEffect(() => {
-    const editor = editorRef.current;
     if (!editor || !Number.isFinite(focusLine) || Number(focusLine) < 1) return;
     try {
       const model = editor.getModel();
@@ -1408,23 +1395,25 @@ export const CodeEditor: React.FC<Props> = React.memo(({
         try {
           const model = editor.getModel();
           if (model) {
-            refreshStudyCodMarkers(monaco, model, monacoLang);
+            const supportsLocalMarkers = monacoLang === "python";
+            if (supportsLocalMarkers) refreshStudyCodMarkers(monaco, model, monacoLang);
             let markerTimer: number | null = null;
             const scheduleMarkers = () => {
+              if (!supportsLocalMarkers) return;
               if (markerTimer !== null) window.clearTimeout(markerTimer);
               markerTimer = window.setTimeout(() => {
                 markerTimer = null;
                 refreshStudyCodMarkers(monaco, model, monacoLang);
               }, 120);
             };
-            const markerSubscription = model.onDidChangeContent(scheduleMarkers);
+            const markerSubscription = supportsLocalMarkers ? model.onDidChangeContent(scheduleMarkers) : null;
             // Read-only previews do not need a dedicated language-server process.
             // Starting one for every preview (especially JDTLS) made opening pages
             // compete with the active editor and delayed completions.
             const defaultFilePath = (JUDGE_ENTRY_FILES[String(language).toLowerCase() as JudgeLanguage] ?? "main.cpp");
             const lspDispose = enableSemanticLsp && !readOnly ? connectStudyCodLsp(monaco, model, monacoLang, filePath || defaultFilePath, readOnly) : () => undefined;
             editor.onDidDispose(() => {
-              markerSubscription.dispose();
+              markerSubscription?.dispose();
               if (markerTimer !== null) window.clearTimeout(markerTimer);
               lspDispose();
             });
@@ -1459,11 +1448,8 @@ export const CodeEditor: React.FC<Props> = React.memo(({
           // ignore
         }
         try {
-          // Ensure the model contains the current value (extra safety for controlled usage).
-          if (typeof value === "string") {
-            const cur = editor.getValue?.();
-            if (typeof cur === "string" && cur !== value) editor.setValue(value);
-          }
+          // @monaco-editor/react owns controlled-value synchronization. Calling
+          // setValue here as well can replace the model's full text on rerenders.
           editor.layout();
         } catch {}
       }} loading={<div className="h-full w-full flex items-center justify-center bg-bg-code border border-border">

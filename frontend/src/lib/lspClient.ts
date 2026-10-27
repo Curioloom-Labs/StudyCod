@@ -301,11 +301,14 @@ class SemanticLspConnection {
     const text = this.model.getValue();
     this.changeInFlight = true;
     try {
-      const response = await api.post<{ diagnostics?: unknown[] }>(`/lsp/session/${this.sessionId}/change`, { path: this.filePath, version, text }, requestConfig());
+      const response = await api.post<{ diagnostics?: unknown[]; diagnosticsReady?: boolean }>(`/lsp/session/${this.sessionId}/change`, { path: this.filePath, version, text }, requestConfig());
       // Do not paint diagnostics for an older snapshot over newer editor text.
       if (!this.disposed && version === this.requestedVersion) {
         applyDiagnostics(this.monaco, this.model, response.data?.diagnostics || []);
-        this.refreshDiagnostics();
+        // The bridge waits for publishDiagnostics. Only poll when that wait
+        // timed out; otherwise this would fetch and repaint the same markers
+        // after every edit.
+        if (!response.data?.diagnosticsReady) this.refreshDiagnostics();
       }
     } catch (error) {
       markLspRateLimited(error);

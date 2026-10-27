@@ -308,7 +308,7 @@ async function openDocument(session: LspSession, body: JsonObject): Promise<stri
   return uri;
 }
 
-async function changeDocument(session: LspSession, body: JsonObject): Promise<string> {
+async function changeDocument(session: LspSession, body: JsonObject): Promise<{ uri: string; diagnosticsReady: boolean }> {
   const path = safeRelativePath(body.path, session.language);
   const filePath = join(session.workspace, path);
   const text = String(body.text || "");
@@ -317,20 +317,20 @@ async function changeDocument(session: LspSession, body: JsonObject): Promise<st
   const uri = pathToFileURL(filePath).toString();
   const diagnosticRevision = session.diagnosticRevisions.get(uri) || 0;
   notify(session, "textDocument/didChange", { textDocument: { uri, version: Number(body.version || Date.now()) }, contentChanges: [{ text }] });
-  await waitForDiagnostics(session, uri, diagnosticRevision);
+  const diagnosticsReady = await waitForDiagnostics(session, uri, diagnosticRevision);
   session.lastUsedAt = Date.now();
-  return uri;
+  return { uri, diagnosticsReady };
 }
 
-function waitForDiagnostics(session: LspSession, uri: string, revision: number): Promise<void> {
-  if ((session.diagnosticRevisions.get(uri) || 0) > revision) return Promise.resolve();
+function waitForDiagnostics(session: LspSession, uri: string, revision: number): Promise<boolean> {
+  if ((session.diagnosticRevisions.get(uri) || 0) > revision) return Promise.resolve(true);
 
   return new Promise(resolve => {
     let waiter: DiagnosticWaiter;
     const done = () => {
       clearTimeout(waiter.timer);
       session.diagnosticWaiters.delete(waiter);
-      resolve();
+      resolve((session.diagnosticRevisions.get(uri) || 0) > revision);
     };
     waiter = { uri, revision, timer: setTimeout(done, DIAGNOSTICS_WAIT_MS), done };
     session.diagnosticWaiters.add(waiter);
@@ -367,8 +367,8 @@ async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
       return json(res, 200, { uri, diagnostics: diagnosticsFor(session, uri) });
     }
     if (req.method === "POST" && parts[2] === "change") {
-      const uri = await changeDocument(session, await readBody(req));
-      return json(res, 200, { uri, diagnostics: diagnosticsFor(session, uri) });
+      const changed = await changeDocument(session, await readBody(req));
+      return json(res, 200, { ...changed, diagnostics: diagnosticsFor(session, changed.uri) });
     }
     if (req.method === "GET" && parts[2] === "diagnostics") {
       const uri = String(url.searchParams.get("uri") || "");
