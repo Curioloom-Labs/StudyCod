@@ -1,5 +1,6 @@
 import type {
   CatalogCourse,
+  CatalogCourseSyllabus,
   LearningCourse,
   LearningCourseItem,
   LearningEnrollmentSummary,
@@ -71,6 +72,24 @@ export function getLearningPreviewCourse(id = currentCourseId): LearningCourse {
       { id: id * 10 + 1, title: copy("Послідовності", "Sequences"), items: items.slice(0, 2) },
       { id: id * 10 + 2, title: copy("Керування потоком", "Control flow"), items: items.slice(2) },
     ],
+  };
+}
+
+export function getLearningPreviewSyllabus(id: number): CatalogCourseSyllabus {
+  if (!courseIds.includes(id as (typeof courseIds)[number])) throw new Error("COURSE_NOT_FOUND");
+  const course = getLearningPreviewCourse(id);
+  return {
+    id: course.id,
+    title: course.title,
+    description: course.description,
+    level: course.level,
+    isBase: course.isBase,
+    variants: [{ runtime: course.runtime, runtimeLabel: "Python", title: "Python" }],
+    modules: course.modules.map((module) => ({
+      id: module.id,
+      title: module.title,
+      items: module.items.map((item) => ({ kind: item.kind, title: item.title })),
+    })),
   };
 }
 

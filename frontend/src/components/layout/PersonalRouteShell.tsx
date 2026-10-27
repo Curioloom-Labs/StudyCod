@@ -11,7 +11,7 @@ import { PersonalWorkspaceContext } from "./PersonalWorkspaceContext";
 import { getDevPreviewUser, isDevPreviewActive, withDevPreview } from "../../lib/devPreview";
 import { logoutAndReload } from "../../lib/authSession";
 
-export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "learning" | "lab"; courseTab?: "overview" | "path" | "practice" | "progress" }> = ({ children, area = "learning", courseTab = "overview" }) => {
+export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "learning" | "lab"; courseTab?: "overview" | "path" | "practice" | "progress" | "none" }> = ({ children, area = "learning", courseTab = "overview" }) => {
   const sharedWorkspace = useContext(PersonalWorkspaceContext);
   const [user, setUser] = React.useState<User | null>(() => getCachedMeUser() ?? (isDevPreviewActive() ? getDevPreviewUser() : null));
   const [loading, setLoading] = React.useState(() => !getCachedMeUser());

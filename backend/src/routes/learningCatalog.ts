@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { z } from "zod";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
-import { checkCourseProject, completeCourseItem, enrollInCourseVariant, getCourseForUser, getCourseProject, getCourseQuiz, getEnrollmentIad, getLearningCatalog, getLearningMe, passFinalAssessment, runCourseProject, saveCourseProject, setCurrentCourseEnrollment, submitCourseProject, submitCourseQuiz } from "../services/learningCatalogService";
+import { checkCourseProject, completeCourseItem, enrollInCourseVariant, getCatalogCourseSyllabus, getCourseForUser, getCourseProject, getCourseQuiz, getEnrollmentIad, getLearningCatalog, getLearningMe, passFinalAssessment, runCourseProject, saveCourseProject, setCurrentCourseEnrollment, submitCourseProject, submitCourseQuiz } from "../services/learningCatalogService";
 import { normalizeUiLocale, resolveUiLocaleFromHeaders, type UiLocale } from "../utils/uiLocale";
 
 export const learningCatalogRouter = Router();
@@ -65,6 +65,17 @@ learningCatalogRouter.get("/courses/:courseId", authRequired, async (req: AuthRe
     return res.json({ course: await getCourseForUser(req.userId, courseId, requestLocale(req)) });
   } catch (error: unknown) {
     return res.status(errorStatus(error)).json({ message: errorMessage(error), prerequisites: errorField(error, "prerequisites") });
+  }
+});
+
+learningCatalogRouter.get("/courses/:courseId/syllabus", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  const courseId = Number(req.params.courseId);
+  if (!Number.isInteger(courseId) || courseId <= 0) return res.status(400).json({ message: "INVALID_INPUT" });
+  try {
+    return res.json({ syllabus: await getCatalogCourseSyllabus(courseId, requestLocale(req)) });
+  } catch (error: unknown) {
+    return res.status(errorStatus(error)).json({ message: errorMessage(error) });
   }
 });
 

@@ -54,6 +54,7 @@ const PublicGrowthPortfolioPage = React.lazy(() => import("./pages/projects/Publ
 const GrowthReviewInboxPage = React.lazy(() => import("./pages/projects/GrowthReviewInboxPage").then(mod => ({ default: mod.GrowthReviewInboxPage })));
 const GrowthAdminReviewQueuePage = React.lazy(() => import("./pages/projects/GrowthAdminReviewQueuePage").then(mod => ({ default: mod.GrowthAdminReviewQueuePage })));
 const LearningCoursePage = React.lazy(() => import("./pages/learning/LearningCoursePage").then(mod => ({ default: mod.LearningCoursePage })));
+const CourseSyllabusPage = React.lazy(() => import("./pages/learning/CourseSyllabusPage").then(mod => ({ default: mod.CourseSyllabusPage })));
 const CoursePracticePage = React.lazy(() => import("./pages/learning/CoursePracticePage").then(mod => ({ default: mod.CoursePracticePage })));
 const CourseProgressPage = React.lazy(() => import("./pages/learning/CourseProgressPage").then(mod => ({ default: mod.CourseProgressPage })));
 const PersonalCourseDashboard = React.lazy(() => import("./pages/learning/PersonalCourseDashboard").then(mod => ({ default: mod.PersonalCourseDashboard })));
@@ -1329,6 +1330,13 @@ export const App: React.FC = () => {
                 <PersonalRouteShell courseTab="overview">
                   <Suspense fallback={<PageLoader />}>
                     <AnimatedPage><PersonalCourseDashboard /></AnimatedPage>
+                  </Suspense>
+                </PersonalRouteShell>
+              </RequireToken>} />
+          <Route path="/learning/course/:courseId/syllabus" element={<RequireToken>
+                <PersonalRouteShell courseTab="none">
+                  <Suspense fallback={<PageLoader />}>
+                    <AnimatedPage><CourseSyllabusPage /></AnimatedPage>
                   </Suspense>
                 </PersonalRouteShell>
               </RequireToken>} />

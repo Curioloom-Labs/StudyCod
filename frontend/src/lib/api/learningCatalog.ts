@@ -6,6 +6,7 @@ import {
   getLearningPreviewCatalog,
   getLearningPreviewCourse,
   getLearningPreviewMe,
+  getLearningPreviewSyllabus,
   setCurrentLearningPreviewCourse,
 } from "../learningPreview";
 
@@ -178,6 +179,16 @@ export interface LearningCourse {
   modules: Array<{ id: number; title: string; items: LearningCourseItem[] }>;
 }
 
+export interface CatalogCourseSyllabus {
+  id: number;
+  title: string;
+  description: string | null;
+  level: CatalogCourse["level"];
+  isBase: boolean;
+  variants: Array<{ runtime: CatalogRuntime; runtimeLabel: string; title: string }>;
+  modules: Array<{ id: number; title: string; items: Array<{ kind: LearningCourseItem["kind"]; title: string }> }>;
+}
+
 export interface LearningEnrollmentSummary {
     enrollmentId: number;
     courseId: number;
@@ -234,6 +245,12 @@ export async function getLearningCourse(courseId: number): Promise<LearningCours
   if (isDevPreviewActive()) return getLearningPreviewCourse(courseId);
   const response = await api.get(`/learning/courses/${courseId}`);
   return response.data?.course;
+}
+
+export async function getCatalogCourseSyllabus(courseId: number): Promise<CatalogCourseSyllabus> {
+  if (isDevPreviewActive()) return getLearningPreviewSyllabus(courseId);
+  const response = await api.get(`/learning/courses/${courseId}/syllabus`);
+  return response.data?.syllabus;
 }
 
 export async function completeCatalogItem(itemId: number, score?: number) {
