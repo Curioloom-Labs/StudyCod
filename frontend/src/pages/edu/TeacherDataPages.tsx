@@ -1,7 +1,7 @@
 import { isAxiosError } from "axios";
 import React from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, BarChart3, Calculator, ChevronRight, GraduationCap, Plus, Save, Settings2, Trash2, UsersRound, X } from "lucide-react";
+import { ArrowLeft, Calculator, ChevronRight, Plus, Save, Settings2, Trash2, UsersRound, X } from "lucide-react";
 import {
   createManualGrade,
   createSummaryGrade,
@@ -52,7 +52,6 @@ type Column = {
   isControl?: boolean;
   isSemester?: boolean;
 };
-
 type EditingCell = {
   student: GradebookStudent;
   column: Column;
@@ -148,7 +147,7 @@ const gradeTone = (value: number | null | undefined) => {
 const Header: React.FC<{ title: string; text: string; classId?: string; actions?: React.ReactNode; showBackButton?: boolean }> = ({ title, text, classId, actions, showBackButton = true }) => {
   const navigate = useNavigate();
   return (
-    <header className="mb-6 flex flex-col justify-between gap-4 border-b border-border/70 pb-5 md:flex-row md:items-end dark:border-white/10">
+    <header className="class-data-header">
       <div>
         <p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">{tr("EDU / журнал", "EDU / gradebook")}</p>
         <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-semibold tracking-[-.045em]">{title}</h1>
@@ -436,58 +435,53 @@ export const GradebookWorkspace: React.FC = () => {
         </div>
       )}
 
-      {error && <div className="mb-5 rounded-2xl bg-accent-error/10 px-4 py-3 text-sm text-accent-error" role="alert">{error}</div>}
+      {error && <div className="class-gradebook__error" role="alert">{error}<button type="button" onClick={() => void load()}>{tr("Спробувати ще раз", "Try again")}</button></div>}
       {!data ? (
-        <div className="h-80 animate-pulse rounded-[28px] bg-bg-hover dark:bg-white/[.05]" />
+        error ? <div className="class-gradebook__empty" role="status">{tr("Журнал не завантажився. Спробуйте ще раз.", "The gradebook did not load. Try again.")}</div> : <div className="h-64 animate-pulse rounded-xl bg-bg-hover" role="status" aria-label={tr("Завантажуємо журнал", "Loading gradebook")} />
       ) : (
         <>
-          <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_.8fr]">
-            <div className={`rounded-[24px] border px-5 py-4 text-sm font-bold ${canUseSemesterGrades ? "border-primary/20 bg-bg-hover text-[#16623d] dark:bg-primary/10 dark:text-primary-soft" : "border-accent-warn/25 bg-bg-hover text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn"}`}>
-              {canUseSemesterGrades
-                ? tr("Журнал строгий: тематичні колонки готові, семестрові можна перераховувати.", "Gradebook is ready: all thematic columns are present, so semester grades can be recalculated.")
-                : tr(`Семестрові заблоковано: бракує тематичних колонок для ${missingThematics.length} тем.`, `Semester grades are blocked: ${missingThematics.length} thematic column(s) are missing.`)}
+          <section className="class-gradebook__summary" aria-label={tr("Стан журналу й система оцінювання", "Gradebook status and grading scale")}>
+            <div className={`class-gradebook__status ${canUseSemesterGrades ? "is-ready" : "is-blocked"}`}>
+              <span className="class-gradebook__status-dot" aria-hidden="true" />
+              <span>{canUseSemesterGrades
+                ? tr("Тематичні готові до підсумку", "Thematic grades are ready for the term")
+                : tr(`Семестрові оцінки: бракує тематичних для ${missingThematics.length} тем`, `Semester grades need thematic columns for ${missingThematics.length} more topic(s)`)}
+              </span>
             </div>
-            <div className="rounded-[24px] border border-border/10 bg-white px-5 py-4 text-sm dark:border-white/10 dark:bg-bg-surface">
-              <div className="text-xs font-bold uppercase tracking-[.14em] text-text-muted dark:text-text-secondary">{tr("Система оцінювання класу", "Class grading system")}</div>
-              <div className="mt-1 text-lg font-bold">{gradingSystemLabel(gradingSystem, isEn)}</div>
-              <div className="mt-1 text-xs text-text-muted dark:text-text-secondary">{tr("Введення:", "Input:")} {gradingSystemInputHint(gradingSystem, isEn)}</div>
-            </div>
-          </div>
+            <div className="class-gradebook__scale"><span>{tr("Шкала", "Scale")}</span><strong>{gradingSystemLabel(gradingSystem, isEn)}</strong><small>{gradingSystemInputHint(gradingSystem, isEn)}</small></div>
+            <div className="class-gradebook__counts"><span><strong>{students.length}</strong>{tr("учнів", "students")}</span><span><strong>{columns.length}</strong>{tr("колонок", "columns")}</span></div>
+          </section>
 
-          <div className="mb-4 grid gap-3 sm:grid-cols-3">
-            <Metric icon={UsersRound} value={students.length} label={tr("учнів", "students")} tone="green" />
-            <Metric icon={BarChart3} value={columns.length} label={tr("колонок у журналі", "gradebook columns")} tone="orange" />
-            <Metric icon={GraduationCap} value={columns.filter((item) => item.isSummary || item.isSemester).length} label={tr("підсумкових колонок", "summary columns")} tone="yellow" />
-          </div>
-
-          <section className="mb-4 rounded-[24px] border border-border/10 bg-white p-4 dark:border-white/[.09] dark:bg-bg-surface">
+          <section className="class-gradebook__filters">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div><p className="text-xs font-bold uppercase tracking-[.14em] text-text-muted dark:text-text-secondary">{tr("Фільтр класу", "Class filter")}</p><p className="mt-1 text-sm text-text-muted dark:text-text-secondary">{tr("Швидко знайдіть роботи, які потребують уваги.", "Quickly find work that needs attention.")}</p></div>
-              <div className="flex flex-wrap gap-2">{(["all", "missing", "low"] as const).map((filter) => <button type="button" key={filter} onClick={() => setStudentFilter(filter)} className={`rounded-full px-3 py-2 text-xs font-bold ${studentFilter === filter ? "bg-primary text-primary-foreground dark:bg-primary dark:text-primary-foreground" : "bg-bg-hover text-text-muted dark:bg-white/[.06] dark:text-text-secondary"}`}>{filter === "all" ? `${tr("Усі", "All")} · ${students.length}` : filter === "missing" ? `${tr("Без оцінки", "No grade")} · ${students.filter((student) => student.grades.length === 0 || student.grades.some((grade) => grade.grade == null)).length}` : `${tr("Низькі", "Low grades")} · ${students.filter((student) => student.grades.some((grade) => grade.grade != null && grade.grade < 60)).length}`}</button>)}</div>
+              <span className="class-gradebook__filter-label">{tr("Учні", "Students")}</span>
+              <div className="class-gradebook__filter-options">{(["all", "missing", "low"] as const).map((filter) => <button type="button" key={filter} aria-pressed={studentFilter === filter} onClick={() => setStudentFilter(filter)}>{filter === "all" ? `${tr("Усі", "All")} · ${students.length}` : filter === "missing" ? `${tr("Без оцінки", "No grade")} · ${students.filter((student) => student.grades.length === 0 || student.grades.some((grade) => grade.grade == null)).length}` : `${tr("Низькі", "Low grades")} · ${students.filter((student) => student.grades.some((grade) => grade.grade != null && grade.grade < 60)).length}`}</button>)}</div>
+              <span className="class-gradebook__visible-count">{tr("Показано", "Showing")} {visibleStudents.length} {tr("із", "of")} {students.length}</span>
             </div>
           </section>
 
-          <div className="max-h-[min(68vh,740px)] overflow-auto rounded-2xl border border-border/10 bg-white dark:border-white/[.09] dark:bg-bg-surface">
-            <table className="min-w-full border-collapse">
+          <div className="class-gradebook__table-wrap">
+            <table style={{ width: `max(100%, ${256 + Math.max(columns.length, 1) * 168}px)`, tableLayout: "fixed" }}>
+              <colgroup><col style={{ width: 256 }} />{columns.map((column) => <col key={column.id} />)}</colgroup>
               <thead>
                 <tr className="border-b border-border/10 dark:border-white/[.08]">
-                  <th className="sticky left-0 top-0 z-30 min-w-56 bg-bg-surface px-5 py-4 text-left text-xs font-bold uppercase tracking-[.13em] text-text-secondary">{tr("Учень", "Student")}</th>
-                  {columns.map((column) => <th key={column.id} className="sticky top-0 z-20 min-w-40 bg-bg-surface px-3 py-4 text-left align-bottom"><div className="text-xs font-semibold text-text-primary">{column.title}</div><div className="mt-1 text-[11px] font-medium text-text-secondary">{column.subtitle}</div></th>)}
+                  <th className="class-gradebook__student-head">{tr("Учень", "Student")}</th>
+                  {columns.map((column) => <th key={column.id} className="class-gradebook__column-head"><span>{column.title}</span><small>{column.subtitle}</small></th>)}
                 </tr>
               </thead>
               <tbody>
                 {visibleStudents.map((student) => (
-                  <tr key={student.studentId} data-student-id={student.studentId} className="border-b border-border/8 last:border-0 dark:border-white/[.06]">
-                  <td className="sticky left-0 z-10 bg-bg-surface px-5 py-4 text-sm font-semibold">{student.studentName}</td>
+                  <tr key={student.studentId} data-student-id={student.studentId}>
+                  <td className="class-gradebook__student-cell">{student.studentName}</td>
                     {columns.map((column) => {
                       const grade = findGrade(student, column);
-                      return <td key={column.id} className="px-3 py-3"><button type="button" data-grade-id={grade?.gradeId} disabled={saving || busyAction} aria-label={`${student.studentName} · ${column.title} · ${grade?.grade == null ? tr("Без оцінки", "No grade") : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}`} onClick={() => openEditor(student, column)} className={`inline-flex min-h-11 min-w-12 items-center justify-center rounded-xl px-3 text-sm font-extrabold hover:ring-4 hover:ring-primary/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55 ${gradeTone(grade?.grade)}`}>{grade?.grade == null ? "—" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</button></td>;
+                      return <td key={column.id} className="class-gradebook__grade-cell"><button type="button" data-grade-id={grade?.gradeId} disabled={saving || busyAction} aria-label={`${student.studentName} · ${column.title} · ${grade?.grade == null ? tr("Без оцінки", "No grade") : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}`} onClick={() => openEditor(student, column)} className={`class-gradebook__grade ${gradeTone(grade?.grade)}`}>{grade?.grade == null ? "—" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</button></td>;
                     })}
                   </tr>
                 ))}
               </tbody>
             </table>
-            {!visibleStudents.length && <div className="px-5 py-10 text-center text-sm text-text-muted dark:text-text-secondary">{tr("За цим фільтром учнів не знайдено.", "No students match this filter.")}</div>}
+            {!visibleStudents.length && <div className="class-gradebook__empty">{tr("За цим фільтром учнів не знайдено.", "No students match this filter.")}</div>}
           </div>
         </>
       )}
@@ -516,7 +510,7 @@ export const GradebookWorkspace: React.FC = () => {
           </form>
       </Modal>
     </div>
-  );
+);
 };
 
 export const SummaryGradesWorkspace: React.FC = () => {
@@ -601,11 +595,3 @@ export const SummaryGradesWorkspace: React.FC = () => {
     </div>
   );
 };
-
-const Metric: React.FC<{ icon: React.ComponentType<{ className?: string }>; value: React.ReactNode; label: string; tone: "green" | "orange" | "yellow" }> = ({ icon: Icon, value, label, tone }) => (
-  <div className={`rounded-2xl p-4 ${tone === "green" ? "bg-primary/10 dark:bg-primary/10" : tone === "orange" ? "bg-bg-hover dark:bg-accent-warn/10" : "bg-bg-hover dark:bg-accent-warn/10"}`}>
-    <Icon className={`size-5 ${tone === "green" ? "text-primary-strong dark:text-primary-soft" : tone === "orange" ? "text-accent-warn dark:text-accent-warn" : "text-accent-warn dark:text-accent-warn"}`} />
-    <b className="mt-4 block text-xl">{value}</b>
-    <span className="text-sm text-text-muted dark:text-text-secondary">{label}</span>
-  </div>
-);

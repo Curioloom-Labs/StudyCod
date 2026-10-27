@@ -13,6 +13,7 @@ import {
   Pencil,
   Plus,
   Save,
+  Search,
   Settings2,
   Trash2,
   UserPlus,
@@ -60,6 +61,7 @@ import {
 
 const root =
   "edu-workspace edu-class-management min-h-[100dvh] bg-bg-base px-4 py-6 text-text-primary sm:px-6 lg:px-10 lg:py-10";
+const isClassPreview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const initials = (student: Student) =>
   `${student.firstName?.[0] || ""}${student.lastName?.[0] || ""}`.toUpperCase() ||
   tr("У", "S");
@@ -217,6 +219,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
   const id = Number(classId);
   const [classInfo, setClassInfo] = React.useState<ClassDetails | null>(null);
   const [students, setStudents] = React.useState<Student[]>([]);
+  const [studentQuery, setStudentQuery] = React.useState("");
   const [announcements, setAnnouncements] = React.useState<
     ClassAnnouncementDto[]
   >([]);
@@ -275,6 +278,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
   const assignmentPending = React.useRef(false);
   const gradingPending = React.useRef(false);
   const assignmentErrorRef = React.useRef<HTMLParagraphElement>(null);
+  const previousRouteId = React.useRef(id);
   const canAssignTeachers = user?.role === "SYSTEM_ADMIN" || user?.eduContexts?.organizations.some(org => org.orgId === classInfo?.organizationId && org.role === "ORG_ADMIN") === true;
   const primaryCandidates = orgStaff.filter(member => assignedTeacherIds.includes(member.userId) && ["ORG_ADMIN", "TEACHER"].includes(member.role));
   React.useEffect(() => { if (assignmentError) assignmentErrorRef.current?.focus(); }, [assignmentError]);
@@ -284,6 +288,11 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
     () => parsePastedStudentList(bulkStudentText),
     [bulkStudentText],
   );
+  const visibleStudents = React.useMemo(() => {
+    const query = studentQuery.trim().toLocaleLowerCase();
+    if (!query) return students;
+    return students.filter((student) => `${student.firstName} ${student.lastName} ${student.email || ""} ${student.generatedUsername}`.toLocaleLowerCase().includes(query));
+  }, [students, studentQuery]);
 
   const load = React.useCallback(async () => {
     if (!Number.isSafeInteger(id) || id <= 0) { setError(tr("Клас не знайдено.", "Class not found.")); setLoading(false); return; }
@@ -291,6 +300,28 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
     const current = () => generation === loadGeneration.current && routeId.current === id;
     setLoading(true);
     try {
+      if (isClassPreview()) {
+        const now = new Date().toISOString();
+        const names = [
+          ["Марія", "Коваль"], ["Андрій", "Левченко"], ["Софія", "Данилюк"], ["Максим", "Бондар"],
+          ["Олена", "Шевчук"], ["Данило", "Мельник"], ["Ірина", "Кравець"], ["Богдан", "Романюк"],
+          ["Анастасія", "Ткаченко"], ["Михайло", "Гончар"], ["Вікторія", "Савчук"], ["Назар", "Олійник"],
+          ["Дарина", "Мороз"], ["Тимур", "Петренко"], ["Єва", "Бойко"], ["Арсен", "Лисенко"],
+        ];
+        setClassInfo({ id, name: "11-А", gradingSystem: "POINTS_12", createdAt: now, updatedAt: now });
+        setAssignedPrimaryTeacherId(null);
+        setAssignedTeacherIds([]);
+        setStudents(names.map(([firstName, lastName], index) => ({ id: index + 1, firstName, lastName, email: index < 6 ? `${firstName.toLowerCase()}.${lastName.toLowerCase()}@school.edu.ua` : "", generatedUsername: `${firstName.toLowerCase()}.${lastName.toLowerCase()}`, createdAt: now })));
+        setAnnouncements([
+          { id: 1, title: "Підготовка до олімпіади", content: "До п’ятниці повторіть рекурсію та задачі на обхід графа. Матеріали вже додані до навчального маршруту.", pinned: true, createdAt: now, updatedAt: now, author: { id: 1, name: "Олена Савченко" } },
+          { id: 2, title: "Заняття в середу", content: "Зустрічаємося о 14:30 у звичайному кабінеті.", pinned: false, createdAt: now, updatedAt: now, author: { id: 1, name: "Олена Савченко" } },
+        ]);
+        setAnnouncementsUnavailable(false);
+        setGradingSystem("POINTS_12");
+        setOrgStaff([]);
+        setError(null);
+        return;
+      }
       const [group, people] = await Promise.all([getClass(id), getStudents(id)]);
       if (!current()) return;
       setClassInfo(group);
@@ -364,6 +395,8 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
     onCancelled: kind => { ++rosterGeneration.current; rosterPending.current = false; setSaving(false); if (kind === "CREATE") setShowAdd(true); if (kind === "IMPORT") setShowImport(true); },
   });
   React.useEffect(() => {
+    if (previousRouteId.current === id) return;
+    previousRouteId.current = id;
     ++rosterGeneration.current; rosterPending.current = false; setSaving(false);
     setShowCredentials(false); setCredentials([]); setCredentialClassId(null); setShowAdd(false); setShowImport(false); setResetStudent(null);
     setClassInfo(previous => previous?.id === id ? previous : null); setStudents([]);
@@ -683,20 +716,35 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
   if ((loading && !classInfo || classInfo && classInfo.id !== id) && !showCredentials && !recovery.showPrompt)
     return (
       <div className={root}>
-        <div className="mx-auto max-w-7xl animate-pulse space-y-6">
-          <div className="h-8 w-48 rounded-full bg-bg-hover dark:bg-white/[.08]" />
-          <div className="h-48 rounded-[32px] bg-bg-hover dark:bg-white/[.08]" />
-          <div className="h-[520px] rounded-[32px] bg-bg-hover dark:bg-white/[.08]" />
+        <div className="class-overview" role="status" aria-label={tr("Завантажуємо клас", "Loading class")}>
+          <div className="class-overview__skeleton class-overview__skeleton--nav" />
+          <div className="class-overview__skeleton class-overview__skeleton--heading" />
+          <div className="class-overview__skeleton class-overview__skeleton--content" />
         </div>
       </div>
     );
 
+  if (error && (!classInfo || classInfo.id !== id)) {
+    return (
+      <div className={root}>
+        <div className="edu-class-management__shell">
+          <ClassWorkspaceNavigation classId={id || "0"} className={tr("Клас", "Class")} active="students" />
+          <section className="class-management__load-error" role="alert">
+            <div><strong>{tr("Не вдалося відкрити клас", "Could not open this class")}</strong><p>{error}</p></div>
+            <Button variant="ghost" className="min-h-11" disabled={loading} onClick={() => void load()}>{tr("Спробувати ще раз", "Try again")}</Button>
+          </section>
+          {recovery.hasUnresolved && <ClassCredentialRecoveryPanel recovery={recovery} credentialsVisible={showCredentials && credentialClassId === id} />}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={root}>
-      <div className="mx-auto max-w-[1380px] space-y-6">
+    <div className={root} data-preview={isClassPreview() ? "true" : undefined}>
+      <div className="edu-class-management__shell">
         <ClassWorkspaceNavigation classId={id} className={classInfo?.name || tr("Клас", "Class")} active="students" />
         {searchParams.get("return") === "members" && classInfo?.organizationId && <button type="button" onClick={() => navigate(`/edu/organization?org=${classInfo.organizationId}`)} className="ml-2 min-h-11 rounded-xl px-4 text-sm font-semibold text-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60">{tr("До учасників закладу", "Back to organization members")}</button>}
-        <header className="rounded-[28px] border border-border bg-bg-surface p-5 text-text-primary shadow-[0_24px_70px_rgba(7,24,13,.16)] sm:p-7">
+        <header className="class-management__header">
           <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
             <div>
               <p className="text-xs font-black uppercase tracking-[.18em] text-primary-soft">
@@ -709,22 +757,17 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                 {tr("Учні, комунікація та правила класу — в одному робочому просторі без зайвих службових екранів.", "Students, communication, and class settings in one workspace.")}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="rounded-xl bg-white/[.08] px-3 py-2 text-sm font-bold text-text-primary">
-                {students.length} {tr("учнів", "students")}
-              </span>
-            </div>
           </div>
         </header>
 
         {error && (
-            <div role="alert" className="rounded-2xl border border-accent-error/25 bg-bg-hover px-4 py-3 text-sm text-accent-error dark:bg-accent-error/10 dark:text-accent-error">
-              <p>{error}</p><Button variant="ghost" className="mt-3 min-h-11" disabled={loading} onClick={() => void load()}>{tr("Оновити список класу", "Refresh class roster")}</Button>
+          <div role="alert" className="class-management__inline-error">
+            <p>{error}</p><Button variant="ghost" className="min-h-11" disabled={loading} onClick={() => void load()}>{tr("Оновити список класу", "Refresh class roster")}</Button>
           </div>
         )}
-        <ClassCredentialRecoveryPanel recovery={recovery} credentialsVisible={showCredentials && credentialClassId === id} />
+        {!isClassPreview() && <ClassCredentialRecoveryPanel recovery={recovery} credentialsVisible={showCredentials && credentialClassId === id} />}
 
-        <div role="tablist" aria-label={tr("Розділи класу", "Class sections")} className="flex flex-wrap gap-1.5 rounded-2xl border border-border/10 bg-white/70 p-1.5 shadow-sm dark:border-white/10 dark:bg-bg-code">
+        <div role="tablist" aria-label={tr("Розділи класу", "Class sections")} className="class-management__tabs">
           <button
             id="class-tab-students"
             role="tab"
@@ -732,7 +775,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
             aria-controls="class-panel-students"
             type="button"
             onClick={() => setActiveTab("students")}
-            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${activeTab === "students" ? "bg-bg-hover text-primary-strong shadow-sm dark:bg-bg-base dark:text-primary-soft" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-white/[.06] dark:hover:text-white"}`}
+            className="class-management__tab"
           >
             <UsersRound aria-hidden="true" className="size-4" />
             <span>{tr("Учні", "Students")}</span>
@@ -744,7 +787,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
             aria-controls="class-panel-announcements"
             type="button"
             onClick={() => setActiveTab("announcements")}
-            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-warn/60 ${activeTab === "announcements" ? "bg-bg-hover text-accent-warn shadow-sm dark:bg-[var(--surface-warning)] dark:text-accent-warn" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-white/[.06] dark:hover:text-white"}`}
+            className="class-management__tab"
           >
             <Bell aria-hidden="true" className="size-4" />
             <span>{tr("Оголошення", "Announcements")}</span>
@@ -756,7 +799,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
             aria-controls="class-panel-settings"
             type="button"
             onClick={() => setActiveTab("settings")}
-            className={`flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b7cf6]/60 ${activeTab === "settings" ? "bg-bg-hover text-[#5b4bb7] shadow-sm dark:bg-[#211d3b] dark:text-[#b9afff]" : "text-text-muted hover:bg-bg-hover hover:text-text-primary dark:text-text-secondary dark:hover:bg-white/[.06] dark:hover:text-white"}`}
+            className="class-management__tab"
           >
             <Settings2 aria-hidden="true" className="size-4" />
             <span>{tr("Налаштування", "Settings")}</span>
@@ -764,7 +807,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
         </div>
 
         {activeTab === "students" && (
-          <section id="class-panel-students" role="tabpanel" aria-labelledby="class-tab-students" className="rounded-[28px] border border-border/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-bg-code sm:p-7">
+          <section id="class-panel-students" role="tabpanel" aria-labelledby="class-tab-students" className="class-management__panel">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
@@ -776,6 +819,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                 <p className="mt-2 text-sm text-text-muted dark:text-text-secondary">
                   {tr("Додайте учнів вручну або імпортуйте їх зі списку.", "Add students manually or import them from a list.")}
                 </p>
+                {!error && <p className="class-management__roster-count">{students.length} {tr("учнів у класі", "students in class")}</p>}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button variant="ghost" onClick={openImport} disabled={!classInfo || loading || Boolean(error) || !recovery.canStart}>
@@ -792,28 +836,31 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                 </Button>
               </div>
             </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {students.map((student) => (
+            <div className="class-management__roster-toolbar">
+              <label className="class-management__search"><Search className="size-4" aria-hidden="true" /><span className="sr-only">{tr("Знайти учня", "Search students")}</span><input type="search" value={studentQuery} onChange={(event) => setStudentQuery(event.target.value)} placeholder={tr("Знайти за ім’ям, email або логіном", "Search by name, email, or username")} /></label>
+            </div>
+            <div className="class-management__roster-grid">
+              {visibleStudents.map((student) => (
                 <article
                   key={student.id}
-                  className="rounded-[24px] border border-border/10 bg-bg-hover p-4 dark:border-white/10 dark:bg-white/[.045]"
+                  className="class-management__student"
                 >
                   <div className="flex items-center gap-3">
                     <span className="grid size-11 place-items-center rounded-2xl bg-bg-base text-sm font-black text-primary-soft">
                       {initials(student)}
                     </span>
                     <div className="min-w-0">
-                      <strong className="block truncate text-sm font-black">
+                      <strong className="class-management__student-name">
                         {student.lastName} {student.firstName}
                       </strong>
-                      <span className="mt-1 block truncate text-xs text-text-muted dark:text-text-secondary">
+                      <span className="class-management__student-email">
                         {student.email || tr("Email ще не додано", "No email added")}
                       </span>
                     </div>
                   </div>
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/8 pt-3 text-xs text-text-muted dark:border-white/10 dark:text-text-secondary">
-                    <span className="min-w-0 break-all">@{student.generatedUsername}</span>
-                    <button type="button" disabled={!recovery.canStart} aria-label={tr(`Скинути пароль для ${student.lastName} ${student.firstName}`, `Reset password for ${student.lastName} ${student.firstName}`)} onClick={() => { setResetError(null); setResetStudent(student); }} className="min-h-11 font-semibold text-primary-strong disabled:opacity-50">{tr("Новий пароль", "Reset password")}</button>
+                  <div className="class-management__student-controls">
+                    <span className="class-management__student-username">@{student.generatedUsername}</span>
+                    <button type="button" disabled={!recovery.canStart} aria-label={tr(`Скинути пароль для ${student.lastName} ${student.firstName}`, `Reset password for ${student.lastName} ${student.firstName}`)} onClick={() => { setResetError(null); setResetStudent(student); }} className="class-management__student-action">{tr("Новий пароль", "Reset password")}</button>
                     <button
                       type="button"
                       disabled={!recovery.canStart}
@@ -824,15 +871,15 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                         setParentLink("");
                         setParentLinkCopied(false);
                       }}
-                      className="min-h-11 font-bold text-primary-strong disabled:opacity-50 dark:text-primary-soft"
+                      className="class-management__student-action"
                     >
                       {tr("Запросити батьків", "Invite a parent")}
                     </button>
                   </div>
                 </article>
               ))}
-              {!students.length && (
-                <div className="col-span-full min-w-0 rounded-[24px] border border-dashed border-border/15 bg-bg-surface p-4 text-center dark:border-white/10 dark:bg-white/[.02] sm:p-10">
+              {!students.length && !error && (
+                <div className="class-management__empty">
                   <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
                     <span className="grid size-12 place-items-center rounded-2xl bg-bg-hover text-primary-strong dark:bg-bg-base dark:text-primary-soft">
                       <UsersRound aria-hidden="true" className="size-6" />
@@ -854,21 +901,22 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                   </div>
                 </div>
               )}
+              {students.length > 0 && !visibleStudents.length && <div className="class-management__empty">{tr("За цим запитом учнів не знайдено.", "No students match this search.")}</div>}
             </div>
           </section>
         )}
 
         {activeTab === "announcements" && (
-          <section id="class-panel-announcements" role="tabpanel" aria-labelledby="class-tab-announcements" className="grid gap-6 xl:grid-cols-[1fr_420px]">
+          <section id="class-panel-announcements" role="tabpanel" aria-labelledby="class-tab-announcements" className="class-management__announcements">
             {announcementsUnavailable && (
-              <div className="xl:col-span-2 rounded-2xl border border-accent-warn/35 bg-bg-hover px-4 py-3 text-sm text-accent-warn dark:border-accent-warn/25 dark:bg-[var(--surface-warning)] dark:text-accent-warn">
+              <div className="class-management__inline-notice">
                 {tr("Оголошення тимчасово недоступні. Список учнів та інші розділи класу працюють.", "Announcements are temporarily unavailable. The student list and other class sections are working.")}
               </div>
             )}
-            <div className="rounded-[32px] border border-border/10 bg-white p-5 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-bg-code sm:p-7">
+            <div className="class-management__panel class-management__announcement-list">
               <div className="flex items-end justify-between gap-3">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[.15em] text-accent-warn">
+                  <p className="class-management__eyebrow">
                     {tr("Комунікація", "Communication")}
                   </p>
                   <h2 className="mt-2 text-3xl font-black tracking-[-.055em]">
@@ -946,8 +994,8 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                 )}
               </div>
             </div>
-            <div className="rounded-[32px] bg-bg-hover p-6 dark:bg-[var(--surface-warning)]">
-              <p className="text-xs font-black uppercase tracking-[.15em] text-accent-warn">
+            <div className="class-management__panel class-management__announcement-editor">
+              <p className="class-management__eyebrow">
                 {tr("Редактор", "Editor")}
               </p>
               <h2 className="mt-2 text-2xl font-black">
@@ -962,7 +1010,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                   })
                 }
                 placeholder={tr("Заголовок", "Title")}
-                className="mt-5 w-full rounded-xl border border-accent-warn/20 bg-white/75 px-4 py-3 text-sm outline-none dark:bg-white/[.07]"
+                className="mt-5 w-full rounded-xl border border-border bg-bg-base px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
               />
               <textarea
                 value={announcement.content}
@@ -974,9 +1022,9 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                 }
                 placeholder={tr("Текст оголошення", "Announcement text")}
                 rows={8}
-                className="mt-3 w-full resize-none rounded-xl border border-accent-warn/20 bg-white/75 px-4 py-3 text-sm outline-none dark:bg-white/[.07]"
+                className="mt-3 w-full resize-none rounded-xl border border-border bg-bg-base px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
               />
-              <label className="mt-4 flex items-center gap-2 text-sm font-bold text-accent-warn dark:text-accent-warn">
+              <label className="mt-4 flex items-center gap-2 text-sm font-bold text-text-secondary">
                 <input
                   type="checkbox"
                   checked={announcement.pinned}
@@ -1002,8 +1050,8 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
         )}
 
         {activeTab === "settings" && (
-          <section id="class-panel-settings" role="tabpanel" aria-labelledby="class-tab-settings" className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="rounded-[32px] border border-border/10 bg-white p-6 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-bg-code">
+          <section id="class-panel-settings" role="tabpanel" aria-labelledby="class-tab-settings" className="class-management__settings">
+            <div className="class-management__panel class-management__settings-card">
               <p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
                 {tr("Викладачі класу", "Class teachers")}
               </p>
@@ -1066,8 +1114,8 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
               </Button>
               </>}
             </div>
-            <div className="rounded-[32px] border border-border/10 bg-white p-6 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-bg-code">
-              <p className="text-xs font-black uppercase tracking-[.15em] text-[#6b5bd4] dark:text-[#b9afff]">
+            <div className="class-management__panel class-management__settings-card">
+              <p className="class-management__eyebrow">
                 {tr("Оцінювання", "Grading")}
               </p>
               <h2 className="mt-2 text-2xl font-black">{tr("Система оцінювання", "Grading system")}</h2>
@@ -1079,7 +1127,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                 onChange={(event) =>
                   setGradingSystem(event.target.value as ClassGradingSystem)
                 }
-                className="mt-5 w-full rounded-xl border border-border/10 bg-bg-hover px-4 py-3 text-sm font-bold outline-none dark:border-white/10 dark:bg-white/[.05]"
+                className="mt-5 w-full rounded-xl border border-border bg-bg-base px-4 py-3 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
               >
                 {GRADING_SYSTEMS.map((system) => (
                   <option key={system} value={system}>
@@ -1096,7 +1144,7 @@ export const ClassManagementPage: React.FC<{ user?: Pick<User, "id" | "role" | "
                 {tr("Зберегти систему", "Save grading system")}
               </Button>
             </div>
-            <div className="rounded-[32px] border border-border/10 bg-white p-6 shadow-[0_18px_60px_rgba(18,32,23,.06)] dark:border-white/10 dark:bg-bg-code">
+            <div className="class-management__panel class-management__settings-card">
               <p className="text-xs font-black uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">
                 {tr("Самостійне приєднання", "Self-enrollment")}
               </p>
