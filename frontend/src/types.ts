@@ -74,7 +74,7 @@ export interface PublicProfile {
   username: string;
   avatarUrl: string | null;
   lang: CourseLanguage;
-  difus: number;
+  difus: number | null;
   joinedAt: string;
   contestHandles: {
     codeforces: string | null;
@@ -84,7 +84,7 @@ export interface PublicProfile {
   };
   privacy?: PublicProfilePrivacy;
   stats: {
-    solvedTotal: number;
+    solvedTotal: number | null;
     solvedByLang: Record<CourseLanguage, number>;
     badgesUnlocked: number[];
     contestsJoined: number | null;

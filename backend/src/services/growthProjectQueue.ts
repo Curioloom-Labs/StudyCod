@@ -1,12 +1,13 @@
 import { randomUUID, createHash } from "crypto";
 import { AppDataSource } from "../data-source";
 import { judgeWithSemaphore } from "./judgeWorker";
-import { GROWTH_PROJECT_RUNTIME_INFO } from "../data/growthProjects";
-import type { JudgeFile, JudgeResponse, JudgeTestCase } from "./judgeWorker/types";
+import { GROWTH_PROJECT_RUNTIME_INFO, type GrowthProjectRuntime } from "../data/growthProjects";
+import type { JudgeFile, JudgeLanguage, JudgeResponse, JudgeTestCase } from "./judgeWorker/types";
 import { logger } from "../utils/logger";
 import { executionScheduler } from "./execution/executionSchedulerSingleton";
 import { summarizeGrowthProjectCheck } from "./growthProjectCheckSummary";
-import { summarizeTalentInterviewExecution } from "./talentInterviewResult";
+import { summarizeAssessInterviewExecution } from "./assessInterviewResult";
+import { assessEntryFile, assessJudgeLanguage } from "./assessInterviewLanguage";
 
 let started = false;
 let active = false;
@@ -17,8 +18,20 @@ const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 
 type ClaimedJob = {
   id: string; project_id: string | null; interview_id?: string | null; execution_kind?: string | null; owner_id: number; context_key: string; artifact_id: string;
-  tests_json: string; files_json: string; examples_json: string; runtime: "PYTHON" | "JAVA" | "CPP";
+  tests_json: string; files_json: string; examples_json: string; runtime: string;
 };
+
+export function growthJobJudgeTarget(runtime: string, isInterview: boolean): { language: JudgeLanguage; entryFile: string } {
+  if (isInterview) {
+    const language = assessJudgeLanguage(runtime);
+    const entryFile = assessEntryFile(runtime);
+    if (!language || !entryFile) throw new Error("ASSESS_RUNTIME_UNSUPPORTED");
+    return { language, entryFile };
+  }
+  const target = GROWTH_PROJECT_RUNTIME_INFO[runtime as GrowthProjectRuntime];
+  if (!target) throw new Error("GROWTH_PROJECT_RUNTIME_UNSUPPORTED");
+  return { language: target.judge, entryFile: target.entryFile };
+}
 
 async function claimOne(): Promise<ClaimedJob | null> {
   const runner = AppDataSource.createQueryRunner();
@@ -73,18 +86,19 @@ async function runJob(job: ClaimedJob): Promise<void> {
   try {
     const files = JSON.parse(job.files_json) as JudgeFile[];
     const tests = JSON.parse(job.tests_json) as JudgeTestCase[];
+    const target = growthJobJudgeTarget(job.runtime, Boolean(job.interview_id));
     const result = await judgeWithSemaphore({
       submission_id: `growth_${job.id.replace(/-/g, "")}`,
       cache_owner: `growth-user-${job.owner_id}`,
-      language: GROWTH_PROJECT_RUNTIME_INFO[job.runtime].judge,
+      language: target.language,
       files,
-      entry: GROWTH_PROJECT_RUNTIME_INFO[job.runtime].entryFile,
+      entry: target.entryFile,
       tests,
       run_all: true,
       limits: { time_limit_ms: 5_000, memory_limit_mb: 256, output_limit_kb: 64 },
       checker: { type: "exact" },
     }, { signal: controller.signal });
-    const summary = job.interview_id ? summarizeTalentInterviewExecution(result, tests, job.execution_kind) : summarizeGrowthProjectCheck(result, tests);
+    const summary = job.interview_id ? summarizeAssessInterviewExecution(result, tests, job.execution_kind) : summarizeGrowthProjectCheck(result, tests);
     await AppDataSource.query(
       `UPDATE growth_project_jobs SET state='COMPLETED', result_json=?, completed_at=NOW(3), lease_until=NULL, lease_owner=NULL WHERE id=? AND lease_owner=? AND state='RUNNING'`,
       [JSON.stringify(summary), job.id, workerId]

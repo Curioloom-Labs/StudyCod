@@ -30,6 +30,7 @@ import {
   getUserIadForLang,
 } from "../utils/iad";
 import { getStableIad } from "../utils/adaptiveDifficulty";
+import { portfolioSharingAgeStatus } from "../utils/portfolioAge";
 const router = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const gradeRepo = () => AppDataSource.getRepository(Grade);
@@ -77,9 +78,9 @@ type PublicProfilePrivacy = {
 };
 
 const DEFAULT_PUBLIC_PROFILE_PRIVACY: PublicProfilePrivacy = {
-  showContestStats: true,
-  showSolvedHistory: true,
-  showLanguageBreakdown: true,
+  showContestStats: false,
+  showSolvedHistory: false,
+  showLanguageBreakdown: false,
 };
 
 const EMPTY_COURSE_HANDLES = (): CourseHandleMap => ({ JAVA: null, PYTHON: null, CPP: null });
@@ -327,6 +328,8 @@ function denyContestProfileAccess(req: AuthRequest, res: Response): boolean {
 }
 
 router.get("/public/:username", async (req: AuthRequest, res: Response) => {
+  res.setHeader("Cache-Control", "no-store, private");
+  res.setHeader("Referrer-Policy", "no-referrer");
   try {
     const username = String((req.params)?.username ?? "").trim();
     if (!username) {
@@ -343,19 +346,31 @@ router.get("/public/:username", async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: "PUBLIC_PROFILE_NOT_FOUND" });
     }
 
-    const solvedByLangRows = await libraryAttemptRepo()
-      .createQueryBuilder("a")
-      .innerJoin("a.libraryTask", "t")
-      .select("t.lang", "lang")
-      .addSelect("COUNT(a.id)", "solved")
-      .where("a.user_id = :userId", { userId: user.id })
-      .andWhere("a.last_tests_total IS NOT NULL")
-      .andWhere("a.last_tests_total > 0")
-      .andWhere("a.last_tests_passed IS NOT NULL")
-      .andWhere("a.last_tests_passed >= a.last_tests_total")
-      .andWhere("t.status = :status", { status: "APPROVED" })
-      .groupBy("t.lang")
-      .getRawMany<{ lang: "JAVA" | "PYTHON" | "CPP"; solved: string | number }>();
+    const profileMeta = parseUserProfileMeta(user.timezone ?? null);
+    const ageEligible = portfolioSharingAgeStatus({
+      birthDay: user.birthDay,
+      birthMonth: user.birthMonth,
+      birthYear: user.birthYear,
+    }) === "ADULT";
+    const privacy: PublicProfilePrivacy = ageEligible
+      ? profileMeta.privacy
+      : { ...DEFAULT_PUBLIC_PROFILE_PRIVACY };
+
+    const solvedByLangRows = privacy.showSolvedHistory || privacy.showLanguageBreakdown
+      ? await libraryAttemptRepo()
+        .createQueryBuilder("a")
+        .innerJoin("a.libraryTask", "t")
+        .select("t.lang", "lang")
+        .addSelect("COUNT(a.id)", "solved")
+        .where("a.user_id = :userId", { userId: user.id })
+        .andWhere("a.last_tests_total IS NOT NULL")
+        .andWhere("a.last_tests_total > 0")
+        .andWhere("a.last_tests_passed IS NOT NULL")
+        .andWhere("a.last_tests_passed >= a.last_tests_total")
+        .andWhere("t.status = :status", { status: "APPROVED" })
+        .groupBy("t.lang")
+        .getRawMany<{ lang: "JAVA" | "PYTHON" | "CPP"; solved: string | number }>()
+      : [];
 
     const solvedByLang: Record<"JAVA" | "PYTHON" | "CPP", number> = {
       JAVA: 0,
@@ -369,30 +384,28 @@ router.get("/public/:username", async (req: AuthRequest, res: Response) => {
       }
     }
     const solvedTotal = solvedByLang.JAVA + solvedByLang.PYTHON + solvedByLang.CPP;
-    const profileMeta = parseUserProfileMeta(user.timezone ?? null);
-    const privacy = profileMeta.privacy;
-
-    const recentSolved = await libraryAttemptRepo()
-      .createQueryBuilder("a")
-      .innerJoin("a.libraryTask", "t")
-      .select("t.id", "id")
-      .addSelect("t.title", "title")
-      .addSelect("t.problem_code", "problemCode")
-      .addSelect("t.slug", "slug")
-      .addSelect("t.lang", "lang")
-      .addSelect("a.last_score", "lastScore")
-      .addSelect("a.last_tests_passed", "lastTestsPassed")
-      .addSelect("a.last_tests_total", "lastTestsTotal")
-      .addSelect("a.last_checked_at", "lastCheckedAt")
-      .where("a.user_id = :userId", { userId: user.id })
-      .andWhere("a.last_tests_total IS NOT NULL")
-      .andWhere("a.last_tests_total > 0")
-      .andWhere("a.last_tests_passed IS NOT NULL")
-      .andWhere("a.last_tests_passed >= a.last_tests_total")
-      .andWhere("t.status = :status", { status: "APPROVED" })
-      .orderBy("a.last_checked_at", "DESC")
-      .limit(10)
-      .getRawMany<{
+    const recentSolved = privacy.showSolvedHistory
+      ? await libraryAttemptRepo()
+        .createQueryBuilder("a")
+        .innerJoin("a.libraryTask", "t")
+        .select("t.id", "id")
+        .addSelect("t.title", "title")
+        .addSelect("t.problem_code", "problemCode")
+        .addSelect("t.slug", "slug")
+        .addSelect("t.lang", "lang")
+        .addSelect("a.last_score", "lastScore")
+        .addSelect("a.last_tests_passed", "lastTestsPassed")
+        .addSelect("a.last_tests_total", "lastTestsTotal")
+        .addSelect("a.last_checked_at", "lastCheckedAt")
+        .where("a.user_id = :userId", { userId: user.id })
+        .andWhere("a.last_tests_total IS NOT NULL")
+        .andWhere("a.last_tests_total > 0")
+        .andWhere("a.last_tests_passed IS NOT NULL")
+        .andWhere("a.last_tests_passed >= a.last_tests_total")
+        .andWhere("t.status = :status", { status: "APPROVED" })
+        .orderBy("a.last_checked_at", "DESC")
+        .limit(10)
+        .getRawMany<{
         id: string | number;
         title: string;
         problemCode: string | null;
@@ -402,9 +415,10 @@ router.get("/public/:username", async (req: AuthRequest, res: Response) => {
         lastTestsPassed: string | number | null;
         lastTestsTotal: string | number | null;
         lastCheckedAt: string | null;
-      }>();
+        }>()
+      : [];
 
-    const [contestsJoined, contestSubmissionsAgg] = await Promise.all([
+    const [contestsJoined, contestSubmissionsAgg] = privacy.showContestStats ? await Promise.all([
       contestParticipantRepo()
         .createQueryBuilder("p")
         .where("p.user_id = :userId", { userId: user.id })
@@ -419,22 +433,26 @@ router.get("/public/:username", async (req: AuthRequest, res: Response) => {
         )
         .where("p.user_id = :userId", { userId: user.id })
         .getRawOne<{ total: string | number | null; accepted: string | number | null }>(),
-    ]);
+    ]) : [null, null];
+
+    const hiddenContestHandles = { codeforces: null, atcoder: null, leetcode: null, codechef: null };
 
     return res.json({
       id: user.id,
       username: user.username,
-      avatarUrl: user.avatarUrl ?? null,
+      avatarUrl: ageEligible ? user.avatarUrl ?? null : null,
       lang: "PYTHON",
-      iad: getUserIadForLang(user, "PYTHON"),
-      difus: getUserIadForLang(user, "PYTHON"),
+      iad: privacy.showSolvedHistory ? getUserIadForLang(user, "PYTHON") : null,
+      difus: privacy.showSolvedHistory ? getUserIadForLang(user, "PYTHON") : null,
       joinedAt: user.createdAt,
-      contestHandles: pickContestHandlesForCourse(getContestHandlesByCourse(user), "PYTHON"),
+      contestHandles: privacy.showContestStats
+        ? pickContestHandlesForCourse(getContestHandlesByCourse(user), "PYTHON")
+        : hiddenContestHandles,
       privacy,
       stats: {
-        solvedTotal,
+        solvedTotal: privacy.showSolvedHistory ? solvedTotal : null,
         solvedByLang: privacy.showLanguageBreakdown ? solvedByLang : { JAVA: 0, PYTHON: 0, CPP: 0 },
-        badgesUnlocked: PROFILE_BADGES.filter((m) => solvedTotal >= m),
+        badgesUnlocked: privacy.showSolvedHistory ? PROFILE_BADGES.filter((m) => solvedTotal >= m) : [],
         contestsJoined: privacy.showContestStats ? contestsJoined : null,
         contestSubmissionsTotal: privacy.showContestStats ? (Number(contestSubmissionsAgg?.total ?? 0) || 0) : null,
         contestAcceptedLike: privacy.showContestStats ? (Number(contestSubmissionsAgg?.accepted ?? 0) || 0) : null,

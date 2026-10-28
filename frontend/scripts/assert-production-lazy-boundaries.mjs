@@ -59,20 +59,22 @@ if (oversizedEditorAssets.length > 0) {
 }
 
 const largestEditorAsset = Math.max(0, ...editorAssetSizes.map(({ bytes }) => bytes));
-// Check the actual static graph too: excluding preload links alone does not
-// prevent a shared helper from dragging an editor chunk into a light route.
-const lightRoots = [
+// Check the entry and each lazy page's static graph. Excluding preload links
+// alone does not prevent a shared helper from importing an editor chunk.
+const routeRoots = [
   ...entryJavaScript.map(asset => path.join(distPath, asset.replace(/^\//, ""))),
-  ...assetNames.filter(asset => /^(App|ProjectCompaniesPage|TalentInterviewRoom|PublicGrowthPortfolioPage)-.*\.js$/.test(asset)).map(asset => path.join(distPath, "assets", asset)),
+  ...assetNames
+    .filter(asset => /^(App|PortfolioProjectsPage|PortfolioDashboardPage|PublicPortfolioPage|EvidencePackPage|AssessWorkspacePage|AssessInterviewRoom|PortfolioPublicationPage|PortfolioReviewInboxPage|PortfolioReviewQueuePage)-.*\.js$/.test(asset))
+    .map(asset => path.join(distPath, "assets", asset)),
 ];
 const visited = new Set();
 async function checkStaticImports(file, trail = []) {
-  if (/^monaco-/i.test(path.basename(file))) throw new Error(`Light route statically imports Monaco: ${[...trail, path.basename(file)].join(" → ")}`);
+  if (/^monaco-/i.test(path.basename(file))) throw new Error(`Route statically imports Monaco: ${[...trail, path.basename(file)].join(" → ")}`);
   if (visited.has(file)) return;
   visited.add(file);
   const source = await readFile(file, "utf8");
   const imports = [...source.matchAll(/\b(?:import|export)\s*(?:[^;"'()]*?\bfrom\s*)?["'](\.[^"']+\.js)["']/g)];
   for (const match of imports) await checkStaticImports(path.resolve(path.dirname(file), match[1]), [...trail, path.basename(file)]);
 }
-for (const root of lightRoots) await checkStaticImports(root);
+for (const root of routeRoots) await checkStaticImports(root);
 console.log(`Lazy boundary check passed: no Monaco preload; initial JavaScript is ${entryBytes} bytes (budget ${entryBudgetBytes}); largest Monaco chunk is ${largestEditorAsset} bytes (budget ${editorChunkBudgetBytes}).`);

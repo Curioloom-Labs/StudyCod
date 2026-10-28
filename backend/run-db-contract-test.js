@@ -32,6 +32,10 @@ if (process.platform === "win32") {
 
 const env = {
   ...process.env,
+  // DB contract tests import services that construct the application data
+  // source. Force the isolated test profile even when a developer's .env sets
+  // NODE_ENV=production, so production-only secret checks never gate the test.
+  NODE_ENV: "test",
   RUN_DB_CONTRACT_TEST: "1",
 };
 

@@ -21,6 +21,7 @@ export class CertificateVerificationService {
              c.score as score,
              c.max_score as maxScore,
              c.organizer_name as organizerName,
+             c.status as certificateStatus,
              c.revoked_at as revokedAt,
              ct.title as contestTitle
       FROM certificates c
@@ -33,22 +34,27 @@ export class CertificateVerificationService {
 
     const row = rows[0];
     if (!row) return null;
+    const certificateStatus = String(row.certificateStatus ?? "").toLowerCase();
+    const revoked = Boolean(row.revokedAt) || certificateStatus === "revoked";
+    const issued = certificateStatus === "rendered" || certificateStatus === "emailed";
     const issuedAt = row.issuedAt;
     const issuedDate = issuedAt instanceof Date
       ? issuedAt
       : typeof issuedAt === "string" || typeof issuedAt === "number"
         ? new Date(issuedAt)
         : null;
+    const issuedDateIso = issuedDate && Number.isFinite(issuedDate.getTime()) ? issuedDate.toISOString() : null;
+    if (!revoked && (!issued || !issuedDateIso)) return null;
 
     return {
       certificateId: String(row.certificateId),
       name: String(row.participantName ?? ""),
       contestName: String(row.contestTitle ?? ""),
-      date: issuedDate && Number.isFinite(issuedDate.getTime()) ? issuedDate.toISOString() : null,
+      date: issuedDateIso,
       score: Number(row.score ?? 0) || 0,
       maxScore: Number(row.maxScore ?? 0) || 0,
       organizer: String(row.organizerName ?? "StudyCod"),
-      status: row.revokedAt ? "revoked" : "valid",
+      status: revoked ? "revoked" : "valid",
     };
   }
 }

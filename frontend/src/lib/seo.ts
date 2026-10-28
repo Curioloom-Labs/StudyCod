@@ -1,9 +1,9 @@
 const SITE_URL = "https://studycod.space";
 const DEFAULT_DESCRIPTION = "StudyCod — learn by building. Навчайся програмуванню через коротку теорію, практику, підказки та зрозумілий прогрес.";
 
-type SeoLanguage = "uk" | "en";
+export type SeoLanguage = "uk" | "en";
 
-type SeoData = {
+export type SeoData = {
   title: string;
   description: string;
   indexable: boolean;
@@ -100,10 +100,20 @@ function isPrivatePath(path: string): boolean {
   return PRIVATE_PREFIXES.some(prefix => path === prefix || path.startsWith(`${prefix}/`));
 }
 
-function getSeoData(path: string, language: SeoLanguage): SeoData {
-  if (path === "/companies" || path.startsWith("/companies/")) return {
-    title: language === "uk" ? "StudyCod Talent — співбесіди та розвиток" : "StudyCod Talent — Interviews and development",
-    description: language === "uk" ? "Робочий простір команди для співбесід, технічних змін у проєктах і структурованих відгуків." : "A team workspace for interviews, project requirement changes, and structured feedback.",
+export function getSeoData(path: string, language: SeoLanguage): SeoData {
+  if (path.startsWith("/portfolio/u/")) return {
+    title: language === "uk" ? "Портфоліо розробника — StudyCod" : "Developer Portfolio — StudyCod",
+    description: language === "uk" ? "Публічне портфоліо StudyCod з роботами та вибраними доказами навичок." : "A public StudyCod portfolio with selected work and skill evidence.",
+    indexable: true,
+  };
+  if (path.startsWith("/portfolio/p/")) return {
+    title: "StudyCod Portfolio — shared evidence pack",
+    description: "A private, time-limited StudyCod Portfolio evidence pack.",
+    indexable: false,
+  };
+  if (path === "/assess" || path.startsWith("/assess/") || path === "/companies" || path.startsWith("/companies/")) return {
+    title: "StudyCod Assess — technical assessment",
+    description: language === "uk" ? "Командний простір для технічних тестів, співбесід і структурованого перегляду результатів." : "A team workspace for technical tests, interviews, and structured result review.",
     indexable: false,
   };
   if (isPrivatePath(path)) {
@@ -113,6 +123,12 @@ function getSeoData(path: string, language: SeoLanguage): SeoData {
       indexable: false
     };
   }
+
+  if (path === "/portfolio" || path.startsWith("/portfolio/") || path === "/projects" || path.startsWith("/projects/")) return {
+    title: language === "uk" ? "StudyCod Portfolio — практичне портфоліо" : "StudyCod Portfolio — practical work",
+    description: language === "uk" ? "Особистий простір для професійного профілю, робіт і доказів навичок." : "A personal workspace for your professional profile, work, and skill evidence.",
+    indexable: false,
+  };
 
   if (PUBLIC_SEO[path]) {
     return PUBLIC_SEO[path];

@@ -19,7 +19,7 @@ function findTestFiles(directory) {
   return files;
 }
 
-const distDirectory = path.join(__dirname, "dist");
+const distDirectory = path.resolve(process.env.STUDYCOD_TEST_DIST_DIR || path.join(__dirname, "dist"));
 const testFiles = findTestFiles(distDirectory).sort();
 
 if (testFiles.length === 0) {
@@ -27,10 +27,10 @@ if (testFiles.length === 0) {
   process.exit(1);
 }
 
-// The CI workflow historically appends Jest's --runInBand flag. Node's test
-// runner does not need it, so this wrapper intentionally discovers files and
-// invokes Node directly without relying on shell-specific glob expansion.
-const result = spawnSync(process.execPath, ["--test", ...testFiles], {
+// Keep file-level concurrency bounded because curriculum contracts compile
+// examples with external toolchains. Allow an isolated emit for local runs so
+// verification does not need to replace the developer's backend/dist.
+const result = spawnSync(process.execPath, ["--test", "--test-concurrency=4", ...testFiles], {
   // Each test run gets its own signing key before application config is loaded.
   // Never depend on a developer's .env or pass a production signing key to tests.
   env: {

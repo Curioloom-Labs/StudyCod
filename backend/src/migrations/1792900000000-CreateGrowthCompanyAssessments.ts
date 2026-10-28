@@ -84,16 +84,6 @@ export class CreateGrowthCompanyAssessments1792900000000 implements MigrationInt
   }
 
   async down(q: QueryRunner): Promise<void> {
-    await q.query("DELETE FROM notifications WHERE type LIKE 'COMPANY_%'");
-    await q.query(`ALTER TABLE notifications MODIFY COLUMN type ENUM(
-      'BLOG_COMMENT','BLOG_REPLY','GROWTH_REVIEW_INVITATION','GROWTH_REVIEW_ASSIGNED',
-      'GROWTH_REVIEW_ASSIGNED_TO_AUTHOR','GROWTH_REVIEW_ACCEPTED','GROWTH_REVIEW_DECLINED',
-      'GROWTH_REVIEW_SUBMITTED','GROWTH_REVIEW_REQUESTED'
-    ) NOT NULL`);
-    await q.query("ALTER TABLE growth_company_assessments DROP FOREIGN KEY fk_growth_company_assessment_task");
-    await q.query("ALTER TABLE growth_project_assessments DROP FOREIGN KEY fk_growth_project_company_assessment, DROP INDEX uq_growth_project_company_assessment, DROP COLUMN company_assessment_id");
-    await q.query("DROP TABLE growth_company_assessments");
-    await q.query("DROP TABLE growth_company_members");
-    await q.query("DROP TABLE growth_companies");
+    throw new Error("Rollback blocked: StudyCod Assess depends on company workspaces, candidate assessments, linked project evidence, and shared notification types. Use an inventory-backed forward-only migration; no data or schema was changed.");
   }
 }

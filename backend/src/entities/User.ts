@@ -228,6 +228,14 @@ export class User {
   })
   birthMonth?: number | null;
 
+  @Column({
+    type: "smallint",
+    unsigned: true,
+    nullable: true,
+    name: "birth_year"
+  })
+  birthYear?: number | null;
+
   /**
    * Tracks the year when the last birthday greeting email was sent.
    * Used to ensure idempotency (send at most once per year).

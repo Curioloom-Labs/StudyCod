@@ -82,11 +82,20 @@ test("database contract bootstrap executes tracked migrations", () => {
   const bootstrapFile = [
     path.join(__dirname, "..", "..", "..", "..", "run-db-contract-bootstrap.js"),
     path.join(__dirname, "..", "..", "run-db-contract-bootstrap.js"),
+    path.join(process.cwd(), "backend", "run-db-contract-bootstrap.js"),
+    path.join(process.cwd(), "run-db-contract-bootstrap.js"),
   ].find(file => fs.existsSync(file));
   assert.ok(bootstrapFile, "database contract bootstrap script must be discoverable");
   const bootstrapSource = fs.readFileSync(bootstrapFile, "utf8");
 
-  assert.match(bootstrapSource, /synchronize:\s*true/, "contract bootstrap must create an isolated entity baseline");
+  assert.match(bootstrapSource, /AppDataSource\.setOptions\(\{\s*synchronize:\s*false\s*\}\)/, "contract bootstrap must disable implicit synchronization before the empty-schema check");
+  assert.match(bootstrapSource, /await AppDataSource\.synchronize\(\)/, "contract bootstrap must create the entity baseline explicitly");
+  assert.match(bootstrapSource, /new DataSource\(\{\s*\.\.\.options,\s*synchronize:\s*false,\s*migrations\s*\}\)/, "migration data sources must disable synchronization and use the tracked migration list");
+  const initializeIndex = bootstrapSource.indexOf("await AppDataSource.initialize()");
+  const emptySchemaCheckIndex = bootstrapSource.indexOf("refusing to bootstrap a nonempty database");
+  const synchronizeIndex = bootstrapSource.indexOf("await AppDataSource.synchronize()");
+  assert.ok(initializeIndex >= 0 && initializeIndex < emptySchemaCheckIndex && emptySchemaCheckIndex < synchronizeIndex,
+    "contract bootstrap may synchronize entities only after verifying the schema is empty");
   assert.match(bootstrapSource, /runMigrations\(\{\s*transaction:\s*["']all["']\s*\}\)/, "contract bootstrap must execute tracked migrations");
   assert.doesNotMatch(bootstrapSource, /migrations:\s*\[\s*\]/, "contract bootstrap must not disable migration discovery");
 });

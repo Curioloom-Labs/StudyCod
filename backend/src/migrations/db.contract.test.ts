@@ -55,6 +55,70 @@ type MigrationRow = RowDataPacket & {
   name: string;
 };
 
+function workspaceFile(relativePath: string): string {
+  for (const start of [process.cwd(), __dirname]) {
+    let directory = path.resolve(start);
+    while (true) {
+      const candidate = path.join(directory, relativePath);
+      if (fs.existsSync(candidate)) return candidate;
+      const parent = path.dirname(directory);
+      if (parent === directory) break;
+      directory = parent;
+    }
+  }
+  throw new Error(`Could not locate workspace file: ${relativePath}`);
+}
+
+function readReadOnlyInventoryStatements(relativePath: string): string[] {
+  const source = fs.readFileSync(workspaceFile(relativePath), "utf8")
+    .replace(/^\s*--.*$/gm, "");
+  const statements = source.split(";").map(statement => statement.trim()).filter(Boolean);
+  assert.equal(statements[0]?.toUpperCase(), "START TRANSACTION READ ONLY", `${relativePath} must begin a read-only transaction`);
+  assert.equal(statements[statements.length - 1]?.toUpperCase(), "ROLLBACK", `${relativePath} must end by rolling back its read-only transaction`);
+  for (const statement of statements.slice(1, -1)) {
+    assert.match(statement, /^(?:SELECT|WITH)\b/i, `${relativePath} contains a statement other than a read-only query`);
+    assert.doesNotMatch(statement, /\b(?:INSERT|UPDATE|DELETE|REPLACE|CREATE|ALTER|DROP|TRUNCATE|COMMIT|GRANT|REVOKE|SET)\b/i,
+      `${relativePath} contains a mutating or privilege-changing statement`);
+  }
+  return statements;
+}
+
+test("read-only inventory SQL contains only SELECT statements", () => {
+  for (const report of [
+    "docs/portfolio-assess-data-inventory-readonly.sql",
+    "docs/portfolio-assess-portfolio-data-inventory-readonly.sql",
+  ]) {
+    assert.ok(readReadOnlyInventoryStatements(report).length > 2, `${report} must contain inventory queries`);
+  }
+});
+
+test("legacy and Portfolio inventory reports execute on MySQL", {
+  skip: !process.env.RUN_DB_CONTRACT_TEST
+    ? "set RUN_DB_CONTRACT_TEST=1 and DB_CONTRACT_DATABASE_URL to validate inventory SQL on MySQL"
+    : false,
+}, async () => {
+  const reports = [
+    "docs/portfolio-assess-data-inventory-readonly.sql",
+    "docs/portfolio-assess-portfolio-data-inventory-readonly.sql",
+  ];
+  const connection = await createConnection(databaseUrl);
+  try {
+    for (const report of reports) {
+      const statements = readReadOnlyInventoryStatements(report);
+      await connection.query(statements[0]);
+      try {
+        for (const statement of statements.slice(1, -1)) {
+          await connection.query(statement);
+        }
+      } finally {
+        await connection.query("ROLLBACK");
+      }
+    }
+  } finally {
+    await connection.end();
+  }
+});
+
 async function hasTable(connection: Awaited<ReturnType<typeof createConnection>>, table: string): Promise<boolean> {
   const [rows] = await connection.query<RowDataPacket[]>(
     "SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ? LIMIT 1",
@@ -103,6 +167,15 @@ test("database contract: critical schema, indexes, and hot-path plans", {
       "maintenance_state",
       "edu_grades",
       "summary_grades",
+      "growth_projects",
+      "growth_companies",
+      "growth_company_assessments",
+      "growth_interviews",
+      "portfolio_profiles",
+      "portfolio_works",
+      "portfolio_evidence",
+      "portfolio_evidence_packs",
+      "portfolio_sourced_evidence",
     ];
     for (const table of requiredTables) {
       assert.equal(await hasTable(connection, table), true, `missing required table: ${table}`);
@@ -134,6 +207,7 @@ test("database contract: critical schema, indexes, and hot-path plans", {
     assert.equal(credentialVersion?.Null, "NO", "student credential version must be non-null");
     assert.equal(Number(credentialVersion?.Default), 0, "existing student sessions start at credential version zero");
     const userRows = await columns(connection, "users");
+    assert.equal(userRows.find(row => row.Field === "birth_year")?.Null, "YES", "Portfolio birth year must remain optional for existing users");
     const eduSessionVersion = userRows.find(row => row.Field === "edu_session_version");
     assert.equal(eduSessionVersion?.Null, "NO", "EDU User session revocation must be durable");
     assert.equal(Number(eduSessionVersion?.Default), 0, "legacy EDU sessions start at version zero");
@@ -159,6 +233,11 @@ test("database contract: critical schema, indexes, and hot-path plans", {
       indexNames(connection, "summary_grades"),
       indexNames(connection, "topics_new"),
     ]);
+    const gradeColumns = await columns(connection, "grades");
+    for (const field of ["verification_method", "judge_verdict", "tests_passed", "tests_total"]) {
+      assert.ok(gradeColumns.some(row => row.Field === field), `Personal Judge provenance column must exist: grades.${field}`);
+    }
+    assert.equal((await indexNames(connection, "grades")).has("ix_grade_owner_verification"), true, "Personal Judge provenance lookup index must exist");
     for (const name of ["idx_edu_grades_student_task_created", "idx_edu_grades_student_topic_created"]) {
       assert.equal(gradeIndexes.has(name), true, `missing index: edu_grades.${name}`);
     }

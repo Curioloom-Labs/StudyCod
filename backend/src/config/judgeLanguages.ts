@@ -8,6 +8,14 @@ export const ALL_JUDGE_LANGUAGES: readonly JudgeLanguage[] = [
   "d", "dart", "haskell", "lisp", "lua", "perl", "php", "ruby", "swift",
 ];
 
+/** Persisted Assess runtime form; each value maps to one existing Judge family. */
+export const ASSESS_RUNTIMES = [
+  "JAVA", "PYTHON", "CPP", "C", "CSHARP", "KOTLIN",
+  "JS", "GO", "RUST", "PASCAL", "D", "DART", "HASKELL",
+  "LISP", "LUA", "PERL", "PHP", "RUBY", "SWIFT",
+] as const;
+export type AssessRuntime = (typeof ASSESS_RUNTIMES)[number];
+
 /** Languages accepted by the legacy/admin library editor. */
 export const CORE_JUDGE_LANGUAGES: readonly JudgeLanguage[] = [
   "java", "python", "cpp", "c", "csharp", "kotlin",
@@ -50,4 +58,14 @@ export function normalizeJudgeLanguage(
   return (supported as readonly string[]).includes(value)
     ? value as JudgeLanguage
     : null;
+}
+
+export function normalizeAssessRuntime(raw: unknown): AssessRuntime | null {
+  const language = normalizeJudgeLanguage(String(raw ?? "").trim().toLowerCase());
+  return language ? language.toUpperCase() as AssessRuntime : null;
+}
+
+export function isAssessRuntimeEnabled(raw: unknown): boolean {
+  const language = normalizeJudgeLanguage(String(raw ?? "").trim().toLowerCase());
+  return Boolean(language && !getDisabledJudgeLanguages().has(language));
 }
