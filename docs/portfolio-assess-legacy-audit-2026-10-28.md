@@ -95,6 +95,8 @@ Before any destructive legacy cleanup, compare this mapping with an approved rea
 
 ### Inventory and data-change gates
 
+Use the [preservation evidence intake template](portfolio-assess-preservation-evidence-template.md) to record the approved sanitized snapshot and isolated restore result before running the read-only inventory. This documentation does not authorize production DDL, migration, or deployment.
+
 1. Confirm the intended database identity and schema with the database operator before opening a connection. Use a read-only database account; do not pass credentials in shell history, report output, or this repository.
 2. Record the approved backup identifier and a successful restore-test reference outside the SQL result. An unverified snapshot or backup age alone does not satisfy this gate.
 3. Run `portfolio-assess-data-inventory-readonly.sql` with a SQL client configured to stop on the first statement error. Confirm the returned legacy tables, `grades` verification columns, and `portfolio_evidence_packs.skill_ids_json` before interpreting aggregate counts. The script intentionally fails when its required legacy schema is absent.
