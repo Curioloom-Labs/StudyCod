@@ -1111,3 +1111,16 @@ test('external cancellation remains connected while a response body is still gen
   await assert.rejects(new OpenRouterProvider().generateText('hello', undefined, { signal: controller.signal, maxRetries: 0 }), /deadline exceeded/);
   assert.equal(requests, 1);
 });
+
+test('content repair starts with the next configured model without changing normal model preference', async (t) => {
+  const provider = new OpenRouterProvider() as any;
+  const requested: string[] = [];
+  t.mock.method(provider, 'callOpenRouter', async (request: { model: string }) => {
+    requested.push(request.model);
+    return { choices: [{ message: { content: '{}' } }] };
+  });
+  const factory = (model: string) => ({ model, messages: [] });
+  await provider.callOpenRouterWithModelFallback(factory, { validationRetry: true }, ['configured-primary', 'configured-backup'], 'json');
+  await provider.callOpenRouterWithModelFallback(factory, {}, ['configured-primary', 'configured-backup'], 'json');
+  assert.deepEqual(requested, ['configured-backup', 'configured-primary']);
+});

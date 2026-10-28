@@ -409,7 +409,7 @@ export class LLMOrchestrator {
         } catch (error) {
           if (attempt !== 0 || !isInvalidGeneratedContentError(error)) throw error;
           const detail = errorMessage(error).replace(/\s+/g, ' ').trim().slice(0, 800);
-          validationFeedback = `The previous generated task failed contract validation: ${detail}. Return a new complete task that fixes this issue and matches the requested JSON schema.`;
+          validationFeedback = buildTaskValidationFeedback(detail, readProperty(error, 'rawResponse'));
           logger.warn('[llm] retrying Cloudflare task after invalid generated content', {
             userId: params.userId,
             topicId: params.topicId,
@@ -1378,8 +1378,9 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     let lastError: Error | null = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const retryFeedback = lastError ? `\nPREVIOUS VALIDATION FAILURE: ${buildTaskValidationFeedback(lastError.message)}\nGenerate a complete corrected task; explicitly resolve this issue without inventing hidden rules.` : '';
+        const retryFeedback = lastError ? `\nPREVIOUS VALIDATION FAILURE: ${buildTaskValidationFeedback(lastError.message, readProperty(lastError, 'rawResponse'))}\nGenerate a complete corrected task; explicitly resolve this issue without inventing hidden rules.` : '';
         const parsed = await provider.generateJSON<unknown>(userPrompt + retryFeedback, jsonSchema, systemPrompt, {
+          validationRetry: Boolean(lastError || params.validationFeedback),
           timeout: LLM_TASK_TIMEOUT_MS,
           maxRetries: 0,
           userId: params.userId,
@@ -1393,6 +1394,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
           topicIndex: params.topicIndex === 0 && olympiadContract ? 1 : params.topicIndex,
           allowedIoTypes: params.allowedIoTypes,
         }, {
+          validationRetry: Boolean(lastError || params.validationFeedback),
           signal: params.signal,
           userId: params.userId,
           topicId: params.topicId,

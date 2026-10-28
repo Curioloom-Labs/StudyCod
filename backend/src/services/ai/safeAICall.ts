@@ -743,7 +743,8 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
           // instead of failing fast (bounded by maxAttempts and totalTimeoutMs).
           const canRetryValidation = (mode === 'generateTask' || (mode === 'generateTestData' && !cannotRepairByRegeneratingTests(error))) && attempt < maxAttempts;
           if (canRetryValidation) {
-            sanitizedParams.validationFeedback = buildTaskValidationFeedback(errorMsg).slice(0, 8000);
+            sanitizedParams.validationFeedback = buildTaskValidationFeedback(errorMsg,
+              error instanceof AIValidationError ? error.rawResponse : undefined);
             logger.debug('[ai] invalid response (retrying)', {
               mode,
               requestId: options?.requestId ?? null,

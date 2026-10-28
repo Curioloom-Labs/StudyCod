@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { LLMProvider } from './LLMProvider';
 import type { LLMTaskLanguage, TestDataExample } from './LLMOrchestrator';
-import { AIResponseValidator, makeAIValidationError } from './AIResponseValidator';
+import { AIResponseValidator, AIValidationError, makeAIValidationError } from './AIResponseValidator';
 import { requireCompleteTaskDescription, reviewGeneratedTests } from './TaskContractReview';
 
 export type ReferenceTestExecutor = (source: string, inputs: string[], publicExamples: TestDataExample[], signal?: AbortSignal) => Promise<string[]>;
@@ -61,6 +61,7 @@ The program must produce non-empty stdout for each valid input. If rules are amb
     validationFeedback: params.validationFeedback ?? null,
   }), schema, instructions, {
     userId: params.userId, signal: params.signal, timeout: 30_000,
+    validationRetry: Boolean(params.validationFeedback),
     maxRetries: 1, temperature: 0, maxTokens: 3000,
   });
   const parsed = ResponseSchema.safeParse(raw);
@@ -88,14 +89,20 @@ The program must produce non-empty stdout for each valid input. If rules are amb
       `Reference test generation validation failed: received ${selectedInputs.length} distinct non-empty inputs that are not public examples; ${count} are required. Return new valid inputs that differ from every public example and one another.`,
     );
   }
-  const outputs = await params.executeReference(referenceSolution, selectedInputs, params.publicExamples ?? [], params.signal);
-  if (outputs.length !== selectedInputs.length) throw makeAIValidationError('generateTestData', 'Reference execution returned an incomplete test suite');
-  const tests = AIResponseValidator.validateGenerateTestData(selectedInputs.map((input, index) => ({ input, output: outputs[index] })), count, 'STDIN_STDOUT');
-  await reviewGeneratedTests(provider, statement, 'STDIN_STDOUT', tests, {
-    signal: params.signal, userId: params.userId,
-    requiredCases: params.requiredCases,
-    publicExamples: params.publicExamples,
-    executedReference: { language: REFERENCE_LANGUAGE, source: referenceSolution },
-  });
-  return tests;
+  try {
+    const outputs = await params.executeReference(referenceSolution, selectedInputs, params.publicExamples ?? [], params.signal);
+    if (outputs.length !== selectedInputs.length) throw makeAIValidationError('generateTestData', 'Reference execution returned an incomplete test suite');
+    const tests = AIResponseValidator.validateGenerateTestData(selectedInputs.map((input, index) => ({ input, output: outputs[index] })), count, 'STDIN_STDOUT');
+    await reviewGeneratedTests(provider, statement, 'STDIN_STDOUT', tests, {
+      validationRetry: Boolean(params.validationFeedback),
+      signal: params.signal, userId: params.userId,
+      requiredCases: params.requiredCases,
+      publicExamples: params.publicExamples,
+      executedReference: { language: REFERENCE_LANGUAGE, source: referenceSolution },
+    });
+    return tests;
+  } catch (error) {
+    if (error instanceof AIValidationError) error.rawResponse = { referenceSolution, inputs };
+    throw error;
+  }
 }

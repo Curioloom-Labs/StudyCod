@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { LLMProvider } from './LLMProvider';
+import type { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { generateReferenceTestData } from './ReferenceTestData';
+import { AIValidationError, makeAIValidationError } from './AIResponseValidator';
+import { buildTaskValidationFeedback } from './TaskContractReview';
 
 test('expected outputs come from execution and the reviewer receives the executed source', async () => {
   const source = 'a,b=map(int,input().split()); print(a+b)';
@@ -110,4 +112,44 @@ test('reference generation exposes validation feedback and clearly requires a Py
   assert.equal(seen[0].payload.validationFeedback, 'Previous oracle was Java; return Python.');
   assert.match(seen[0].instructions, /referenceSolution MUST be Python 3 source code/i);
   assert.match(seen[0].instructions, /do not return Java or C\+\+/i);
+});
+
+test('compiler failures preserve the rejected Python source for a bounded repair and fresh review', async () => {
+  const broken = 'if __name__ == "__main__\':\n    print(int(input()) + 1)';
+  const fixed = 'print(int(input()) + 1)';
+  const payloads: Array<Record<string, unknown>> = [];
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string, _schema: object, _system?: string, options?: LLMGenerateOptions): Promise<T> {
+      payloads.push(JSON.parse(prompt));
+      if (payloads.length === 1) return { referenceSolution: broken, inputs: ['2', '3', '4'] } as T;
+      if (payloads.length === 2) {
+        assert.equal(options?.validationRetry, true);
+        return { referenceSolution: fixed, inputs: ['2', '3', '4'] } as T;
+      }
+      assert.equal(payloads.length, 3, 'repair must still undergo independent test review');
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+  const params = {
+    taskDescription: 'Read one integer n in [1,10]. Print n+1.', lang: 'JAVA' as const, count: 1,
+    publicExamples: [{ input: '1', output: '2' }],
+    executeReference: async (source: string, inputs: string[]) => {
+      if (source === broken) throw makeAIValidationError('generateTestData', 'Reference program compilation failed: SyntaxError: unterminated string literal');
+      assert.equal(source, fixed);
+      return inputs.map(input => String(Number(input) + 1));
+    },
+  };
+  let feedback = '';
+  await assert.rejects(generateReferenceTestData(provider, params), error => {
+    assert.ok(error instanceof AIValidationError);
+    feedback = buildTaskValidationFeedback(error.message, error.rawResponse);
+    return true;
+  });
+  const result = await generateReferenceTestData(provider, { ...params, validationFeedback: feedback });
+  assert.deepEqual(result.map(test => test.output), ['3']);
+  assert.match(feedback, /REPAIR THE REJECTED REFERENCE PROGRAM/);
+  assert.ok(feedback.includes(JSON.stringify(broken)), 'quotes in the rejected source must survive feedback serialization');
+  assert.equal(payloads[1].statement, params.taskDescription);
+  assert.equal(payloads[1].validationFeedback, feedback);
 });

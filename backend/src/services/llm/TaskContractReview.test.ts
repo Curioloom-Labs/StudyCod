@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { LLMProvider } from './LLMProvider';
+import type { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { LLMOrchestrator, getLLMOrchestrator, type AiTaskGenerationResult } from './LLMOrchestrator';
 import { safeAICall } from '../ai/safeAICall';
 import { makeAIValidationError } from './AIResponseValidator';
@@ -598,4 +598,37 @@ test('course task retry repairs a function-only request without rejecting a full
   assert.match(feedback[1], /COMPLETE RUNNABLE PROGRAM/);
   assert.match(feedback[1], /PRINTS to stdout/);
   assert.match(feedback[1], /Preserve the lesson objective and allowed IO type/);
+});
+
+test('a line-count contradiction is repaired from the rejected task with another model preference and fresh review', async () => {
+  const draft = { ...task, inputFormat: 'Four lines of input: a, b, repeated a, repeated b.' };
+  const responses: unknown[] = [draft,
+    { valid: false, invalidSource: 'statement', issues: ['The inputFormat specifies four lines but the statement and public example contain one line with two integers.'] },
+    task, { valid: true, invalidSource: 'none', issues: [] }];
+  const calls: Array<{ prompt: string; options?: LLMGenerateOptions }> = [];
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string, _schema: object, _system?: string, options?: LLMGenerateOptions): Promise<T> {
+      calls.push({ prompt, options });
+      assert.ok(responses.length, 'no extra hidden repair loop');
+      return responses.shift() as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+  const orchestrator = new LLMOrchestrator() as unknown as {
+    generateTaskFromAnchor(params: object, provider: LLMProvider): Promise<AiTaskGenerationResult>;
+  };
+  const result = await orchestrator.generateTaskFromAnchor({
+    topicTitle: 'Arithmetic', theory: 'Addition.', lang: 'JAVA', topicIndex: 3,
+    anchor: { topic: 'Arithmetic', coreOperation: 'sum', allowedScope: ['addition'], forbiddenScope: [] },
+    allowedIoTypes: ['STDIN_STDOUT'], semanticRetries: 1,
+  }, provider);
+  assert.equal(result.inputFormat, task.inputFormat);
+  assert.equal(calls.length, 4);
+  assert.match(calls[2].prompt, /REPAIR THE REJECTED TASK/);
+  assert.ok(calls[2].prompt.includes(JSON.stringify(draft.inputFormat)));
+  assert.ok(calls[2].prompt.includes('"input":"2 3"'));
+  assert.match(calls[2].prompt, /one explicit line\/token grammar/);
+  assert.equal(calls[0].options?.validationRetry, false);
+  assert.equal(calls[2].options?.validationRetry, true);
+  assert.equal(calls[3].options?.validationRetry, true);
 });

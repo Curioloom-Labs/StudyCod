@@ -39,9 +39,14 @@ export async function validateAndReviewGeneratedTask(
     beforeReview?: (task: AiTaskGenerationResult) => void;
   } = {},
 ): Promise<AiTaskGenerationResult> {
-  const validate = (candidate: unknown) => AIResponseValidator.validateGenerateTask(
-    candidate, validation.expectedTopic, validation.topicIndex, validation.allowedIoTypes,
-  );
+  const validate = (candidate: unknown) => {
+    try {
+      return AIResponseValidator.validateGenerateTask(candidate, validation.expectedTopic, validation.topicIndex, validation.allowedIoTypes);
+    } catch (error) {
+      if (error instanceof AIValidationError && error.rawResponse === undefined) error.rawResponse = candidate;
+      throw error;
+    }
+  };
   let task: AiTaskGenerationResult;
   try {
     task = validate(raw);
