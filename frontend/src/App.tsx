@@ -47,12 +47,15 @@ const LearningPlanPage = React.lazy(() => import("./pages/core/LearningPlanPage"
 const PublicProfilePage = React.lazy(() => import("./pages/public/PublicProfilePage").then(mod => ({ default: mod.PublicProfilePage })));
 const IadPage = React.lazy(() => import("./pages/core/IadPage").then(mod => ({ default: mod.IadPage })));
 const LearningCatalogPage = React.lazy(() => import("./pages/learning/LearningCatalogPage").then(mod => ({ default: mod.LearningCatalogPage })));
-const GrowthProjectsPage = React.lazy(() => import("./pages/projects/GrowthProjectsPage").then(mod => ({ default: mod.GrowthProjectsPage })));
-const ProjectCompaniesPage = React.lazy(() => import("./pages/projects/ProjectCompaniesPage").then(mod => ({ default: mod.ProjectCompaniesPage })));
-const TalentInterviewRoom = React.lazy(() => import("./pages/projects/TalentInterviewRoom").then(mod => ({ default: mod.TalentInterviewRoom })));
-const PublicGrowthPortfolioPage = React.lazy(() => import("./pages/projects/PublicGrowthPortfolioPage").then(mod => ({ default: mod.PublicGrowthPortfolioPage })));
-const GrowthReviewInboxPage = React.lazy(() => import("./pages/projects/GrowthReviewInboxPage").then(mod => ({ default: mod.GrowthReviewInboxPage })));
-const GrowthAdminReviewQueuePage = React.lazy(() => import("./pages/projects/GrowthAdminReviewQueuePage").then(mod => ({ default: mod.GrowthAdminReviewQueuePage })));
+const PortfolioProjectsPage = React.lazy(() => import("./pages/portfolio/PortfolioProjectsPage").then(mod => ({ default: mod.PortfolioProjectsPage })));
+const PortfolioDashboardPage = React.lazy(() => import("./pages/portfolio/PortfolioDashboardPage").then(mod => ({ default: mod.PortfolioDashboardPage })));
+const PublicPortfolioPage = React.lazy(() => import("./pages/portfolio/PublicPortfolioPage").then(mod => ({ default: mod.PublicPortfolioPage })));
+const EvidencePackPage = React.lazy(() => import("./pages/portfolio/EvidencePackPage").then(mod => ({ default: mod.EvidencePackPage })));
+const AssessWorkspacePage = React.lazy(() => import("./pages/assess/AssessWorkspacePage").then(mod => ({ default: mod.AssessWorkspacePage })));
+const AssessInterviewRoom = React.lazy(() => import("./pages/assess/AssessInterviewRoom").then(mod => ({ default: mod.AssessInterviewRoom })));
+const PortfolioPublicationPage = React.lazy(() => import("./pages/portfolio/PortfolioPublicationPage").then(mod => ({ default: mod.PortfolioPublicationPage })));
+const PortfolioReviewInboxPage = React.lazy(() => import("./pages/portfolio/PortfolioReviewInboxPage").then(mod => ({ default: mod.PortfolioReviewInboxPage })));
+const PortfolioReviewQueuePage = React.lazy(() => import("./pages/portfolio/PortfolioReviewQueuePage").then(mod => ({ default: mod.PortfolioReviewQueuePage })));
 const LearningCoursePage = React.lazy(() => import("./pages/learning/LearningCoursePage").then(mod => ({ default: mod.LearningCoursePage })));
 const CourseSyllabusPage = React.lazy(() => import("./pages/learning/CourseSyllabusPage").then(mod => ({ default: mod.CourseSyllabusPage })));
 const CoursePracticePage = React.lazy(() => import("./pages/learning/CoursePracticePage").then(mod => ({ default: mod.CoursePracticePage })));
@@ -81,6 +84,16 @@ const LegacyCourseRouteRedirect: React.FC = () => {
 const LegacyLibraryRedirect: React.FC = () => {
   const location = useLocation();
   return <Navigate to={{ pathname: "/lab/library", search: location.search, hash: location.hash }} replace />;
+};
+const LegacyPortfolioWorkspaceRedirect: React.FC = () => {
+  const location = useLocation();
+  const suffix = location.pathname.replace(/^\/projects/, "");
+  return <Navigate to={{ pathname: `/portfolio/projects${suffix}`, search: location.search, hash: location.hash }} replace />;
+};
+const LegacyAssessRedirect: React.FC = () => {
+  const location = useLocation();
+  const suffix = location.pathname.replace(/^\/companies/, "");
+  return <Navigate to={{ pathname: `/assess${suffix}`, search: location.search, hash: location.hash }} replace />;
 };
 const LegacyGradesRedirect: React.FC = () => {
   const [target, setTarget] = React.useState<string | null>(null);
@@ -1125,7 +1138,7 @@ const ContestEntryRoute: React.FC = () => {
 export const App: React.FC = () => {
   const location = useLocation();
   const isContestSurface = /^\/(?:contest|contests)(?:\/|$)/.test(location.pathname);
-  const isTalentSurface = /^\/companies(?:\/|$)/.test(location.pathname);
+  const isAssessSurface = /^\/(?:assess|companies)(?:\/|$)/.test(location.pathname);
   const { i18n } = useTranslation();
   const topLevelRouteKey = useMemo(() => {
     const path = location.pathname || "/";
@@ -1160,9 +1173,9 @@ export const App: React.FC = () => {
     <TheoryModalProvider>
         <RouteScrollReset />
         <ToastViewport />
-        {!isContestSurface && !isTalentSurface && <GlobalQuickSearch />}
+        {!isContestSurface && !isAssessSurface && <GlobalQuickSearch />}
         <NetworkStatus />
-        {!isContestSurface && !isTalentSurface && <MascotCompanion />}
+        {!isContestSurface && !isAssessSurface && <MascotCompanion />}
         <AnimatedPage key={productRouteKey} className="w-full">
         <PersonalWorkspaceFrame routeLocation={location}><ContestOnlySurfaceGuard>
           <AnimatedPage key={topLevelRouteKey} className="w-full">
@@ -1320,12 +1333,21 @@ export const App: React.FC = () => {
                   </Suspense>
                 </PersonalRouteShell>
               </RequireToken>} />
-          <Route path="/projects" element={<RequireToken><PersonalRouteShell><Suspense fallback={<PageLoader />}><AnimatedPage><GrowthProjectsPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
-          <Route path="/companies" element={<RequireToken><Suspense fallback={<PageLoader />}><ProjectCompaniesPage /></Suspense></RequireToken>} />
-          <Route path="/companies/interviews/:interviewId" element={<RequireToken><Suspense fallback={<PageLoader />}><TalentInterviewRoom /></Suspense></RequireToken>} />
-          <Route path="/projects/reviews" element={<RequireToken><PersonalRouteShell><Suspense fallback={<PageLoader />}><AnimatedPage><GrowthReviewInboxPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
-          <Route path="/projects/admin/reviews" element={<RequireToken><Suspense fallback={<PageLoader />}><GrowthAdminReviewQueuePage /></Suspense></RequireToken>} />
-          <Route path="/portfolio/:publicId" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}><PublicGrowthPortfolioPage /></Suspense></PublicPageWithFooter>} />
+          <Route path="/portfolio" element={<RequireToken><PersonalRouteShell><Suspense fallback={<PageLoader />}><AnimatedPage><PortfolioDashboardPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/portfolio/projects" element={<RequireToken><PersonalRouteShell><Suspense fallback={<PageLoader />}><AnimatedPage><PortfolioProjectsPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/portfolio/projects/reviews" element={<RequireToken><PersonalRouteShell><Suspense fallback={<PageLoader />}><AnimatedPage><PortfolioReviewInboxPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/portfolio/projects/admin/reviews" element={<RequireToken><Suspense fallback={<PageLoader />}><PortfolioReviewQueuePage /></Suspense></RequireToken>} />
+          <Route path="/portfolio/preview" element={<RequireToken><PersonalRouteShell><Suspense fallback={<PageLoader />}><AnimatedPage><PublicPortfolioPage preview /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/portfolio/u/:username" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}><PublicPortfolioPage /></Suspense></PublicPageWithFooter>} />
+          <Route path="/portfolio/p/:token" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}><EvidencePackPage /></Suspense></PublicPageWithFooter>} />
+          <Route path="/projects" element={<RequireToken><LegacyPortfolioWorkspaceRedirect /></RequireToken>} />
+          <Route path="/projects/reviews" element={<RequireToken><LegacyPortfolioWorkspaceRedirect /></RequireToken>} />
+          <Route path="/projects/admin/reviews" element={<RequireToken><LegacyPortfolioWorkspaceRedirect /></RequireToken>} />
+          <Route path="/assess" element={<RequireToken><Suspense fallback={<PageLoader />}><AssessWorkspacePage /></Suspense></RequireToken>} />
+          <Route path="/assess/interviews/:interviewId" element={<RequireToken><Suspense fallback={<PageLoader />}><AssessInterviewRoom /></Suspense></RequireToken>} />
+          <Route path="/companies" element={<RequireToken><LegacyAssessRedirect /></RequireToken>} />
+          <Route path="/companies/interviews/:interviewId" element={<RequireToken><LegacyAssessRedirect /></RequireToken>} />
+          <Route path="/portfolio/:publicId" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}><PortfolioPublicationPage /></Suspense></PublicPageWithFooter>} />
           <Route path="/learning/course/:courseId" element={<RequireToken><LegacyCourseRouteRedirect /></RequireToken>} />
           <Route path="/learning/course/:courseId/overview" element={<RequireToken>
                 <PersonalRouteShell courseTab="overview">

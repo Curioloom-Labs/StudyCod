@@ -32,10 +32,12 @@ import lspRouter from "./routes/lsp";
 import blogRouter from "./routes/blog";
 import notificationsRouter from "./routes/notifications";
 import { learningCatalogRouter } from "./routes/learningCatalog";
-import { growthProjectsRouter, growthProjectPublicRouter } from "./routes/growthProjects";
-import { projectCompaniesRouter } from "./routes/projectCompanies";
-import { talentInterviewsRouter } from "./routes/talentInterviews";
+import { portfolioProjectsRouter, portfolioProjectPublicRouter } from "./routes/portfolioProjects";
+import { assessCompaniesRouter } from "./routes/assessCompanies";
+import { assessInterviewsRouter } from "./routes/assessInterviews";
+import { portfolioRouter, publicPortfolioRouter } from "./routes/portfolio";
 import { startGrowthProjectQueueWorker } from "./services/growthProjectQueue";
+import { startAssessInterviewExpiryWorker } from "./services/assessInterviewSession";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware";
 import { geoBlockMiddleware } from "./middleware/geoBlockMiddleware";
 import { evaluateGeoBlock } from "./services/geoBlockService";
@@ -603,7 +605,7 @@ if (env.NODE_ENV !== "test") {
 }
 setupGoogleStrategy();
 if (!IS_PRODUCTION) {
-  app.use(morgan("dev", { skip: req => /^\/(?:api\/)?project-portfolio\/share\/[^/]+/.test(req.url) }));
+  app.use(morgan("dev", { skip: req => /^\/(?:api\/)?project-portfolio\/share\/[^/]+/.test(req.url) || /^\/api\/portfolio-public\/p\/[^/?]+(?:\?|$)/.test(req.url) }));
 }
 app.get("/", (_req, res) => {
   res.json({
@@ -967,13 +969,22 @@ app.use("/api/blog", blogRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/emails", emailsRouter);
 app.use("/api/learning", authMiddleware, forbidContestModeUsers, learningCatalogRouter);
-app.use("/projects", authMiddleware, forbidContestModeUsers, growthProjectsRouter);
-app.use("/api/projects", authMiddleware, forbidContestModeUsers, growthProjectsRouter);
-app.use("/project-companies", authMiddleware, forbidContestModeUsers, projectCompaniesRouter);
-app.use("/api/project-companies", authMiddleware, forbidContestModeUsers, projectCompaniesRouter);
-app.use("/talent", authMiddleware, forbidContestModeUsers, talentInterviewsRouter);
-app.use("/api/talent", authMiddleware, forbidContestModeUsers, talentInterviewsRouter);
-app.use("/api/project-portfolio", growthProjectPublicRouter);
+app.use("/projects", authMiddleware, forbidContestModeUsers, portfolioProjectsRouter);
+app.use("/api/projects", authMiddleware, forbidContestModeUsers, portfolioProjectsRouter);
+app.use("/portfolio/projects", authMiddleware, forbidContestModeUsers, portfolioProjectsRouter);
+app.use("/api/portfolio/projects", authMiddleware, forbidContestModeUsers, portfolioProjectsRouter);
+app.use("/project-companies", authMiddleware, forbidContestModeUsers, assessCompaniesRouter);
+app.use("/api/project-companies", authMiddleware, forbidContestModeUsers, assessCompaniesRouter);
+app.use("/assess/companies", authMiddleware, forbidContestModeUsers, assessCompaniesRouter);
+app.use("/api/assess/companies", authMiddleware, forbidContestModeUsers, assessCompaniesRouter);
+app.use("/talent", authMiddleware, forbidContestModeUsers, assessInterviewsRouter);
+app.use("/api/talent", authMiddleware, forbidContestModeUsers, assessInterviewsRouter);
+app.use("/assess", authMiddleware, forbidContestModeUsers, assessInterviewsRouter);
+app.use("/api/assess", authMiddleware, forbidContestModeUsers, assessInterviewsRouter);
+app.use("/portfolio", authMiddleware, forbidContestModeUsers, portfolioRouter);
+app.use("/api/portfolio", authMiddleware, forbidContestModeUsers, portfolioRouter);
+app.use("/api/portfolio-public", publicPortfolioRouter);
+app.use("/api/project-portfolio", portfolioProjectPublicRouter);
 app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
   const message = errorMessage(err);
   const isCorsError = message.trim() === "CORS_NOT_ALLOWED";
@@ -1266,6 +1277,7 @@ async function bootstrap(): Promise<void> {
     startCertificateQueueWorker();
     startContestQueueWorker();
     startGrowthProjectQueueWorker();
+    startAssessInterviewExpiryWorker();
     startCredentialRecoveryCleanup();
 
     // Remove test payloads left behind by already-solved generated personal

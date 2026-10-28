@@ -35,9 +35,9 @@ interface Props {
 }
 
 const DEFAULT_PUBLIC_PROFILE_PRIVACY: PublicProfilePrivacy = {
-  showContestStats: true,
-  showSolvedHistory: true,
-  showLanguageBreakdown: true,
+  showContestStats: false,
+  showSolvedHistory: false,
+  showLanguageBreakdown: false,
 };
 
 type BadgeMilestone = 1 | 5 | 15 | 40;
@@ -784,12 +784,17 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                 </div>
               </div>
 
-              {/*
-                <div className="space-y-3">
+              {user.userMode === "PERSONAL" && <div className="space-y-3">
                   <h3 className="text-sm font-mono text-text-primary">{tr("Приватність публічного профілю", "Public profile privacy")}</h3>
-                  <div className="border border-border bg-bg-code p-4 rounded-md space-y-3">
+                  <p className="max-w-2xl text-xs leading-5 text-text-secondary">
+                    {tr(
+                      "Навчальні результати за замовчуванням приховані. Вони з’являться лише після вашого вибору, якщо у Portfolio збережена дата народження, що вказує на повноліття.",
+                      "Learning results stay private by default. They appear only when you choose to share them and a birth date saved in Portfolio indicates you are an adult."
+                    )}
+                  </p>
+                  <div className="max-w-2xl border border-border bg-bg-code p-4 rounded-md space-y-3">
                     <label className="flex items-center justify-between gap-3 text-xs font-mono">
-                      <span className="text-text-primary">{tr("Показувати статистику контестів", "Show contest statistics")}</span>
+                      <span className="text-text-primary">{tr("Показувати статистику контестів і прив’язані профілі", "Show contest statistics and linked profiles")}</span>
                       <input
                         type="checkbox"
                         checked={Boolean(publicProfilePrivacy.showContestStats)}
@@ -803,7 +808,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                       />
                     </label>
                     <label className="flex items-center justify-between gap-3 text-xs font-mono">
-                      <span className="text-text-primary">{tr("Показувати історію розвʼязань", "Show solved history")}</span>
+                      <span className="text-text-primary">{tr("Показувати розв’язані задачі та їх кількість", "Show solved problems and their count")}</span>
                       <input
                         type="checkbox"
                         checked={Boolean(publicProfilePrivacy.showSolvedHistory)}
@@ -817,7 +822,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                       />
                     </label>
                     <label className="flex items-center justify-between gap-3 text-xs font-mono">
-                      <span className="text-text-primary">{tr("Показувати розподіл за мовами", "Show language breakdown")}</span>
+                      <span className="text-text-primary">{tr("Показувати розподіл розв’язаних задач за мовами", "Show solved problem counts by language")}</span>
                       <input
                         type="checkbox"
                         checked={Boolean(publicProfilePrivacy.showLanguageBreakdown)}
@@ -831,8 +836,7 @@ export const ProfilePage: React.FC<Props> = ({ user, onUserChange }) => {
                       />
                     </label>
                   </div>
-                </div>
-              */}
+                </div>}
 
               {emailPrefEmail ? (
                 <div className="space-y-3">

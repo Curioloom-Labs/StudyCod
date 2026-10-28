@@ -47,6 +47,7 @@ import { buildJudgeTests, loadTestContentByIds, sweepTestCache } from "../servic
 import { sanitizeTestResultsForStudent } from "../services/grading/sanitizeStudentTestResults";
 import type { CheckerSpec, JudgeRequest as WorkerJudgeRequest, JudgeResponse as WorkerJudgeResponse } from "../services/judgeWorker/types";
 import { normalizeMarkdownText } from "../utils/markdownNormalize";
+import { resolvePersonalJudgeVerdict } from "../utils/personalJudgeVerification";
 import { sanitizeGeneratedTestText, compactOutputFormatForLearner, pickNoInputFixedExpectedOutput, formatStatementSectionValueForMarkdown } from "../services/generatedTaskIO";
 import { inferNeedsInput } from "../utils/inferNeedsInput";
 import { logger } from "../utils/logger";
@@ -4779,6 +4780,9 @@ tasksRouter.post("/:id/web-submit", authMiddleware, submissionRateLimitMiddlewar
       user: { id: req.userId },
       task: { id: task.id },
       total,
+      verificationMethod: "WEB_RULES",
+      testsPassed: check.passedRules,
+      testsTotal: check.totalRules,
       workScore: 0,
       optimizationScore: 0,
       integrityScore: 0,
@@ -5113,6 +5117,7 @@ tasksRouter.post(
         id: task.id
       },
       total: Math.min(MAX_GRADE, Math.max(MIN_GRADE, total)),
+      verificationMethod: "AI_REVIEW",
       workScore: ai.work,
       optimizationScore: ai.optimization,
       integrityScore: ai.integrity,
@@ -5418,6 +5423,10 @@ tasksRouter.post(
       id: task.id
     },
     total: Math.min(MAX_GRADE, Math.max(MIN_GRADE, total)),
+    verificationMethod: "ONLINE_JUDGE",
+    judgeVerdict: resolvePersonalJudgeVerdict(workerRes?.verdict, passedTests, judgedTests.length),
+    testsPassed: passedTests,
+    testsTotal: judgedTests.length,
     workScore: 0,
     optimizationScore: 0,
     integrityScore: 0,

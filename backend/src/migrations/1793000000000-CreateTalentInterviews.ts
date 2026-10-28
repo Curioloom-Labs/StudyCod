@@ -66,11 +66,6 @@ export class CreateTalentInterviews1793000000000 implements MigrationInterface {
     await q.query(`ALTER TABLE growth_interviews ADD CONSTRAINT fk_talent_interview_job FOREIGN KEY(last_job_id) REFERENCES growth_project_jobs(id) ON DELETE SET NULL`);
   }
   async down(q: QueryRunner): Promise<void> {
-    await q.query("ALTER TABLE growth_interviews DROP FOREIGN KEY fk_talent_interview_job");
-    await q.query("DELETE FROM growth_project_jobs WHERE interview_id IS NOT NULL");
-    await q.query(`ALTER TABLE growth_project_jobs DROP FOREIGN KEY fk_talent_job_interview,
-      DROP INDEX ix_talent_execution, DROP COLUMN interview_id, DROP COLUMN runtime_override,
-      DROP COLUMN execution_kind, DROP COLUMN interview_draft_revision, MODIFY COLUMN project_id CHAR(36) NOT NULL`);
-    for (const table of ["growth_interview_quizzes", "growth_interview_messages", "growth_interview_notes", "growth_interviews", "growth_interview_kits"]) await q.query(`DROP TABLE ${table}`);
+    throw new Error("Rollback blocked: StudyCod Assess depends on interview sessions, candidate and interviewer records, and interview-linked Judge jobs. Use an inventory-backed forward-only migration; no data or schema was changed.");
   }
 }

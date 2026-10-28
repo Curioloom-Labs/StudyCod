@@ -19,6 +19,8 @@
     "test:static-contract": "node run-static-contract-test.js",
     "test:env-contract": "node run-env-contract-test.js",
     "test:browser-contract": "node run-browser-contract-test.js",
+    "test:assess-browser-contract": "node run-assess-browser-contract.cjs",
+    "test:portfolio-browser-contract": "node run-portfolio-browser-contract.cjs",
     "test:judge-contract": "cross-env NODE_ENV=test node run-judge-contract-test.js",
     "db:contract:bootstrap": "node run-db-contract-bootstrap.js",
     "test:db-contract": "node run-db-contract-test.js",

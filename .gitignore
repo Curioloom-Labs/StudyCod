@@ -88,6 +88,9 @@ docs/
 !docs/
 docs/*
 !docs/olympiad-programming-audit.md
+!docs/portfolio-assess-legacy-audit-2026-10-28.md
+!docs/portfolio-assess-data-inventory-readonly.sql
+!docs/portfolio-assess-portfolio-data-inventory-readonly.sql
 _svg_renderer/
 
 # Uploads (user files)

@@ -96,6 +96,14 @@ export class Grade {
     name: "code_hash"
   })
   codeHash!: string | null;
+  @Column({ type: "varchar", length: 24, nullable: true, name: "verification_method" })
+  verificationMethod?: "ONLINE_JUDGE" | "AI_REVIEW" | "WEB_RULES" | null;
+  @Column({ type: "varchar", length: 8, nullable: true, name: "judge_verdict" })
+  judgeVerdict?: string | null;
+  @Column({ type: "int", nullable: true, name: "tests_passed" })
+  testsPassed?: number | null;
+  @Column({ type: "int", nullable: true, name: "tests_total" })
+  testsTotal?: number | null;
   @Column({
     type: "text",
     nullable: true,

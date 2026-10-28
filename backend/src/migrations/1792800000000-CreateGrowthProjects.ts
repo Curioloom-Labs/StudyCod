@@ -121,10 +121,6 @@ export class CreateGrowthProjects1792800000000 implements MigrationInterface {
   }
 
   async down(q: QueryRunner): Promise<void> {
-    await q.query("DELETE FROM notifications WHERE type LIKE 'GROWTH_REVIEW_%'");
-    await q.query(`ALTER TABLE notifications DROP COLUMN related_path, MODIFY COLUMN type ENUM('BLOG_COMMENT','BLOG_REPLY') NOT NULL`);
-    for (const table of ["growth_project_reviews", "growth_project_reviewer_grants", "growth_project_publications", "growth_project_assessments", "growth_project_versions", "growth_project_jobs", "growth_project_artifacts", "growth_projects", "growth_project_queue_guard"]) {
-      await q.query(`DROP TABLE IF EXISTS ${table}`);
-    }
+    throw new Error("Rollback blocked: StudyCod Portfolio and Assess still depend on the growth-project schema and shared notification fields. Use an inventory-backed forward-only migration; no data or schema was changed.");
   }
 }
