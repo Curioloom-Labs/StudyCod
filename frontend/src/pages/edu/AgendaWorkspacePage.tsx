@@ -2,9 +2,10 @@ import React from "react";
 import { withDevPreview } from "../../lib/devPreview";
 import "./eduWorkspace.css";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowRight, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Clock3 } from "lucide-react";
-import { getAgenda, type AgendaItemDto } from "../../lib/api/edu";
+import { getAgenda, getClass, type AgendaItemDto } from "../../lib/api/edu";
+import { ClassWorkspaceFrame } from "./ClassWorkspaceNavigation";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
@@ -26,11 +27,25 @@ export const AgendaWorkspacePage: React.FC = () => {
   const copy = (uk: string, english: string) => en ? english : uk;
   const locale = en ? "en-US" : "uk-UA";
   const navigate = useNavigate();
-  const [items, setItems] = React.useState<AgendaItemDto[]>([]);
+  const [searchParams] = useSearchParams();
+  const rawClassId = Number(searchParams.get("class"));
+  const classId = Number.isSafeInteger(rawClassId) && rawClassId > 0 ? rawClassId : null;
+  const [classLabel, setClassLabel] = React.useState("");
+  const [allItems, setItems] = React.useState<AgendaItemDto[]>([]);
+  const items = React.useMemo(() => classId ? allItems.filter(item => item.classId === classId) : allItems, [allItems, classId]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [cursor, setCursor] = React.useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [chosen, setChosen] = React.useState(key(new Date()));
+
+  React.useEffect(() => {
+    if (!classId) { setClassLabel(""); return; }
+    if (preview()) { setClassLabel("11-А"); return; }
+    let alive = true;
+    setClassLabel("");
+    void getClass(classId).then(info => { if (alive) setClassLabel(info.name); }).catch(() => {});
+    return () => { alive = false; };
+  }, [classId]);
 
   React.useEffect(() => {
     let alive = true;
@@ -38,6 +53,7 @@ export const AgendaWorkspacePage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
+        if (preview()) { if (alive) setItems(sampleAgenda(en).map(item => classId && item.classId === 1 ? { ...item, classId, className: "11-А" } : item)); return; }
         const response = await getAgenda();
         if (alive) setItems(response.items || []);
       } catch (caught) {
@@ -49,7 +65,7 @@ export const AgendaWorkspacePage: React.FC = () => {
       }
     })();
     return () => { alive = false; };
-  }, [en]);
+  }, [en, classId]);
 
   const grouped = React.useMemo(() => {
     const map = new Map<string, AgendaItemDto[]>();
@@ -74,13 +90,13 @@ export const AgendaWorkspacePage: React.FC = () => {
 
   if (loading) return <div className="edu-workspace mx-auto max-w-[1280px] px-4 py-10 sm:px-6 lg:px-10"><div className="h-[620px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" role="status" aria-label={copy("Завантаження календаря", "Loading calendar")} /></div>;
 
-  return (
+  const content = (
     <div className="edu-workspace edu-calendar-page mx-auto max-w-[1280px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
       <header className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">EDU / {copy("ритм навчання", "learning schedule")}</p>
-          <h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] text-text-primary dark:text-text-primary sm:text-5xl">{copy("Календар, який не тисне", "A calendar that keeps things simple")}</h1>
-          <p className="mt-3 max-w-xl text-base leading-7 text-text-muted dark:text-text-secondary">{copy("Дедлайни видно заздалегідь — без таблиць, які треба розшифровувати.", "See deadlines ahead of time without having to decipher a spreadsheet.")}</p>
+          <p className="text-xs font-bold uppercase tracking-[.15em] text-primary-strong dark:text-primary-soft">{copy("Навчальний простір", "Learning workspace")}</p>
+          <h1 className="mt-3 font-[family-name:var(--font-display)] text-4xl font-bold tracking-[-.055em] text-text-primary dark:text-text-primary sm:text-5xl">{classId ? copy("Календар класу", "Class calendar") : copy("Календар занять", "Lesson calendar")}</h1>
+          <p className="mt-3 max-w-xl text-base leading-7 text-text-muted dark:text-text-secondary">{classId ? copy("Контрольні та дедлайни цього класу.", "Assessments and deadlines for this class.") : copy("Заняття, контрольні та дедлайни ваших класів.", "Lessons, assessments, and deadlines for your classes.")}</p>
         </div>
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => { const now = new Date(); setCursor(new Date(now.getFullYear(), now.getMonth(), 1)); setChosen(key(now)); }} className="rounded-xl border border-border/12 px-4 py-2.5 text-sm font-bold text-text-primary hover:bg-bg-hover dark:border-white/10 dark:text-text-primary dark:hover:bg-white/[.06]">{copy("Сьогодні", "Today")}</button>
@@ -119,4 +135,5 @@ export const AgendaWorkspacePage: React.FC = () => {
       </div>
     </div>
   );
+  return classId ? <div className="edu-workspace edu-class-calendar"><ClassWorkspaceFrame classId={classId} className={classLabel || copy("Клас", "Class")} active="calendar">{content}</ClassWorkspaceFrame></div> : content;
 };

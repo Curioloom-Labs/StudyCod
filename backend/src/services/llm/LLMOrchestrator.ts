@@ -214,7 +214,11 @@ function preferredProvider(): 'cloudflare' | 'openrouter' | 'local' | 'auto' {
 function isRetryableError(error: unknown): boolean {
   if (!error) return false;
   const message = errorMessage(error);
-  return message.includes('timeout') || message.includes('network') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND') || message.includes('Failed to parse') || message.includes('Empty response') || message.includes('Invalid JSON');
+  return message.includes('timeout') || message.includes('network') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND') || message.includes('Failed to parse') || message.includes('Empty response') || message.includes('Invalid JSON') || isInvalidGeneratedContentError(error);
+}
+function isInvalidGeneratedContentError(error: unknown): boolean {
+  if (readProperty(error, 'name') === 'AIValidationError') return true;
+  return /validation failed|failed to parse|invalid json|empty response|schema mismatch/i.test(errorMessage(error));
 }
 export class LLMOrchestrator {
   private cloudflareProvider: CloudflareAIProvider;
@@ -364,42 +368,56 @@ export class LLMOrchestrator {
     const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
-      const raw = await this.cloudflareProvider.generateTaskWithAI({
-        topicTitle: params.topicTitle,
-        theory: params.theory,
-        lang: params.lang,
-        topicIndex: params.topicIndex,
-        numInTopic: params.numInTopic,
-        isFirstTask: params.isFirstTask,
-        difus: params.difus,
-        isControl: params.isControl,
-        prevTopics: params.prevTopics,
-        previousTasks: params.previousTasks,
-        allowedIoTypes: params.allowedIoTypes,
-        validationFeedback: params.validationFeedback,
-        userId: params.userId,
-        topicId: params.topicId
-      }, {
-        signal: params.signal
-      });
-      const validationTopicIndex = olympiadContract && params.topicIndex === 0 ? 1 : params.topicIndex;
-      const validated = await validateAndReviewGeneratedTask(this.cloudflareProvider, raw, {
-        expectedTopic: params.topicTitle,
-        topicIndex: validationTopicIndex,
-        allowedIoTypes: params.allowedIoTypes,
-      }, {
-        signal: params.signal,
-        userId: params.userId,
-        topicId: params.topicId,
-        learningContract: serializeOlympiadContractForReview(params.theory),
-        beforeReview: olympiadContract ? (task) => {
-          ensureOlympiadCompleteProgramRequest(olympiadContract, task);
-          validateOlympiadTaskNarrativeDomain(olympiadContract, task);
-          validateOlympiadTaskExamples(olympiadContract, task);
-          validateOlympiadDebuggingTask(olympiadContract, task);
-        } : undefined,
-      });
-      return validated;
+      let validationFeedback = params.validationFeedback;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const raw = await this.cloudflareProvider.generateTaskWithAI({
+            topicTitle: params.topicTitle,
+            theory: params.theory,
+            lang: params.lang,
+            topicIndex: params.topicIndex,
+            numInTopic: params.numInTopic,
+            isFirstTask: params.isFirstTask,
+            difus: params.difus,
+            isControl: params.isControl,
+            prevTopics: params.prevTopics,
+            previousTasks: params.previousTasks,
+            allowedIoTypes: params.allowedIoTypes,
+            validationFeedback,
+            userId: params.userId,
+            topicId: params.topicId
+          }, {
+            signal: params.signal
+          });
+          const validationTopicIndex = olympiadContract && params.topicIndex === 0 ? 1 : params.topicIndex;
+          return await validateAndReviewGeneratedTask(this.cloudflareProvider, raw, {
+            expectedTopic: params.topicTitle,
+            topicIndex: validationTopicIndex,
+            allowedIoTypes: params.allowedIoTypes,
+          }, {
+            signal: params.signal,
+            userId: params.userId,
+            topicId: params.topicId,
+            learningContract: serializeOlympiadContractForReview(params.theory),
+            beforeReview: olympiadContract ? (task) => {
+              ensureOlympiadCompleteProgramRequest(olympiadContract, task);
+              validateOlympiadTaskNarrativeDomain(olympiadContract, task);
+              validateOlympiadTaskExamples(olympiadContract, task);
+              validateOlympiadDebuggingTask(olympiadContract, task);
+            } : undefined,
+          });
+        } catch (error) {
+          if (attempt !== 0 || !isInvalidGeneratedContentError(error)) throw error;
+          const detail = errorMessage(error).replace(/\s+/g, ' ').trim().slice(0, 800);
+          validationFeedback = `The previous generated task failed contract validation: ${detail}. Return a new complete task that fixes this issue and matches the requested JSON schema.`;
+          logger.warn('[llm] retrying Cloudflare task after invalid generated content', {
+            userId: params.userId,
+            topicId: params.topicId,
+            attempt: attempt + 2,
+          });
+        }
+      }
+      throw new Error('AI_GENERATION_FAILED: Cloudflare task generation retries exhausted');
     };
 
     const tryOpenRouter = async () => {
@@ -446,7 +464,7 @@ export class LLMOrchestrator {
     try {
       return await tryOpenRouter();
     } catch (e: unknown) {
-      if (canCf && shouldFallbackToCloudflare(e)) {
+      if (canCf && (shouldFallbackToCloudflare(e) || isInvalidGeneratedContentError(e))) {
         return await tryCloudflare();
       }
       throw e;

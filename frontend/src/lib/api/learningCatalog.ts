@@ -96,11 +96,27 @@ export interface CourseDiagnosticResult {
   totalQuestions: number;
   testsPassed: number;
   testsTotal: number;
+  practicalResults?: Array<{ taskId: string; title: string; moduleTitle: string; topicIds: number[]; testsPassed: number; testsTotal: number; score: number }>;
   passed: boolean;
   answers: Array<{ questionId: string; selectedIndex: number }>;
   topicResults: Array<{ topicId: number; topicTitle: string; correctCount: number; totalQuestions: number; score: number; theoryCredited: boolean; practiceCredited: boolean }>;
   review: Array<{ questionId: string; question: string; options: string[]; selectedIndex: number; correctIndex: number; topicTitle: string }>;
   submittedAt: string;
+}
+
+export interface CourseDiagnosticPractical {
+  id: string;
+  moduleTitle: string;
+  topicIds: number[];
+  title: string;
+  statement: string;
+  inputFormat: string;
+  outputFormat: string;
+  constraints: string;
+  examples: Array<{ input: string; output: string; explanation?: string }>;
+  codeTemplate: string;
+  runtime: CatalogRuntime;
+  entryFile: string;
 }
 
 export interface CourseDiagnosticAssessment {
@@ -111,17 +127,9 @@ export interface CourseDiagnosticAssessment {
   status: "READY" | "SUBMITTED";
   passing: { totalScore: number; knowledgeScore: number; practicalScore: number };
   questions: Array<{ id: string; question: string; options: string[]; topicId: number; topicTitle: string }>;
-  practical: {
-    title: string;
-    statement: string;
-    inputFormat: string;
-    outputFormat: string;
-    constraints: string;
-    examples: Array<{ input: string; output: string; explanation?: string }>;
-    codeTemplate: string;
-    runtime: CatalogRuntime;
-    entryFile: string;
-  };
+  /** First task retained for compatibility with older stored assessments. */
+  practical: CourseDiagnosticPractical;
+  practicals?: CourseDiagnosticPractical[];
   result: CourseDiagnosticResult | null;
 }
 
@@ -333,15 +341,15 @@ export async function retryCourseDiagnostic(enrollmentId: number): Promise<Cours
   return response.data?.assessment;
 }
 
-export async function runCourseDiagnostic(enrollmentId: number, code: string, input: string): Promise<CourseDiagnosticRunResult> {
-  if (isDevPreviewActive()) return runLearningPreviewDiagnostic(enrollmentId, code, input);
-  const response = await api.post(`/learning/enrollments/${enrollmentId}/diagnostic/run`, { code, input });
+export async function runCourseDiagnostic(enrollmentId: number, taskId: string, code: string, input: string): Promise<CourseDiagnosticRunResult> {
+  if (isDevPreviewActive()) return runLearningPreviewDiagnostic(enrollmentId, taskId, code, input);
+  const response = await api.post(`/learning/enrollments/${enrollmentId}/diagnostic/run`, { taskId, code, input });
   return response.data?.result;
 }
 
-export async function submitCourseDiagnostic(enrollmentId: number, answers: Array<{ questionId: string; selectedIndex: number }>, code: string): Promise<CourseDiagnosticResult> {
-  if (isDevPreviewActive()) return submitLearningPreviewDiagnostic(enrollmentId, answers, code);
-  const response = await api.post(`/learning/enrollments/${enrollmentId}/diagnostic/submit`, { answers, code });
+export async function submitCourseDiagnostic(enrollmentId: number, answers: Array<{ questionId: string; selectedIndex: number }>, practicals: Array<{ taskId: string; code: string }>): Promise<CourseDiagnosticResult> {
+  if (isDevPreviewActive()) return submitLearningPreviewDiagnostic(enrollmentId, answers, practicals);
+  const response = await api.post(`/learning/enrollments/${enrollmentId}/diagnostic/submit`, { answers, practicals });
   return response.data?.result;
 }
 

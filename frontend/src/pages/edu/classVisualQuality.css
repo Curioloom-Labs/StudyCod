@@ -260,7 +260,7 @@
 .class-gradebook__table-wrap td { overflow: hidden; border-bottom: 1px solid var(--class-line); padding: .65rem .55rem; text-align: left; text-overflow: ellipsis; }
 .class-gradebook__table-wrap th { position: sticky; z-index: 2; top: 0; background: var(--bg-surface); }
 .class-gradebook__student-head,
-.class-gradebook__student-cell { position: sticky !important; left: 0; z-index: 3 !important; width: 16rem; background: var(--bg-surface) !important; box-shadow: 8px 0 16px -16px var(--text-primary); }
+.class-gradebook__student-cell { position: sticky !important; left: 0; z-index: 3 !important; width: 16rem; background: var(--bg-surface) !important; border-right: 1px solid var(--class-line); box-shadow: none; }
 .class-gradebook__student-head { color: var(--text-muted); font-size: .65rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .class-gradebook__student-cell { color: var(--text-primary); font-size: .76rem; font-weight: 650; }
 .class-gradebook__column-head { vertical-align: bottom; }

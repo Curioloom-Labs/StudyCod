@@ -16,15 +16,16 @@ import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeLanguage } from "./judgeWorker/types";
 import { projectEntryFile } from "./learningCatalogProjectFiles";
 import { localizeCourseItem, localizedCourseDescription, localizedCourseTitle, localizedModuleTitle, type CurriculumLocale } from "./curriculumLocalization";
+import { logger } from "../utils/logger";
 
 const assessmentRepo = () => AppDataSource.getRepository(CourseDiagnosticAssessment);
 const enrollmentRepo = () => AppDataSource.getRepository(UserCourseEnrollment);
-const progressRepo = () => AppDataSource.getRepository(CourseItemProgress);
 const courseRepo = () => AppDataSource.getRepository(Course);
 
 type Runtime = "JAVA" | "PYTHON" | "CPP";
 type UnknownRecord = Record<string, unknown>;
-type CourseDiagnosticTopic = { id: number; title: string; context: string; itemIds: number[] };
+type AssessmentGenerationStage = "questions" | "practical_task" | "hidden_tests";
+type CourseDiagnosticTopic = { id: number; moduleId: number; moduleTitle: string; title: string; context: string; itemIds: number[] };
 
 function recordOf(value: unknown): UnknownRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : null;
@@ -36,6 +37,29 @@ function text(value: unknown, maxLength = 4_000): string {
 
 function assessmentError(code: string, statusCode: number): Error & { statusCode: number } {
   return Object.assign(new Error(code), { statusCode });
+}
+
+function withAssessmentStage(error: unknown, stage: AssessmentGenerationStage): Error & { assessmentStage: AssessmentGenerationStage } {
+  const cause = error instanceof Error ? error : new Error(String(error));
+  return Object.assign(cause, { assessmentStage: stage });
+}
+
+async function runAtAssessmentStage<T>(stage: AssessmentGenerationStage, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    throw withAssessmentStage(error, stage);
+  }
+}
+
+function assessmentFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(recordOf(error)?.message ?? error ?? "");
+  if (/\b429\b|rate.?limit|too many requests/i.test(message)) return "provider_rate_limited";
+  if (/timeout|timed out|ETIMEDOUT|aborted/i.test(message)) return "provider_timeout";
+  if (/ECONN|ENOTFOUND|fetch failed|network|\b50[234]\b|bad gateway|unavailable/i.test(message)) return "provider_unavailable";
+  if (/empty (ai )?response/i.test(message)) return "empty_provider_response";
+  if (/json|parse|schema|invalid response|validation/i.test(message)) return "invalid_provider_response";
+  return "provider_generation_failed";
 }
 
 function percent(value: unknown): number {
@@ -52,7 +76,31 @@ function shuffled<T>(items: T[]): T[] {
   return result;
 }
 
-function normalizeQuestions(rawQuiz: unknown, topicAssignments: CourseDiagnosticTopic[]): CourseDiagnosticQuestion[] {
+function chunks<T>(items: T[], size: number): T[][] {
+  const groups: T[][] = [];
+  for (let index = 0; index < items.length; index += size) groups.push(items.slice(index, index + size));
+  return groups;
+}
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index], index);
+    }
+  }));
+  return results;
+}
+
+function normalizeQuestions(
+  rawQuiz: unknown,
+  topicAssignments: CourseDiagnosticTopic[],
+  expectedCount: number,
+  startIndex: number,
+): CourseDiagnosticQuestion[] {
   let parsed: unknown = rawQuiz;
   if (typeof parsed === "string") {
     try { parsed = JSON.parse(parsed); } catch { parsed = null; }
@@ -71,20 +119,19 @@ function normalizeQuestions(rawQuiz: unknown, topicAssignments: CourseDiagnostic
     const correct = Number(question?.correct);
     if (!prompt || rawOptions.length < 4 || rawOptions.length > 5 || !Number.isInteger(correct) || correct < 0 || correct >= rawOptions.length || rawOptions.some((option) => !option)) continue;
 
-    const correctOption = rawOptions[correct];
     const distractorIndexes = shuffled(rawOptions.map((_, optionIndex) => optionIndex).filter((optionIndex) => optionIndex !== correct)).slice(0, 3);
     const options = shuffled([correct, ...distractorIndexes].map((optionIndex) => ({ text: rawOptions[optionIndex], correct: optionIndex === correct })));
     questions.push({
-      id: `q${index + 1}`,
+      id: `q${startIndex + index + 1}`,
       question: prompt,
       options: options.map((option) => option.text),
       correct: options.findIndex((option) => option.correct),
       topicId: topic.id,
       topicTitle: topic.title,
     });
-    if (questions.length >= 10) break;
+    if (questions.length >= expectedCount) break;
   }
-  if (questions.length < 6) throw assessmentError("ASSESSMENT_QUESTIONS_INVALID", 503);
+  if (questions.length !== expectedCount) throw assessmentError("ASSESSMENT_QUESTIONS_INVALID", 503);
   return questions;
 }
 
@@ -102,7 +149,7 @@ function courseDiagnosticTopics(course: Course, locale: CurriculumLocale): Cours
     if (!theoryItems.length) {
       if (!moduleItems.length) continue;
       const title = localizedModuleTitle(module.contentKey, locale, module.title);
-      topics.push({ id: -module.id, title, context: `Topic: ${title}`, itemIds: moduleItems.map((item) => item.id) });
+      topics.push({ id: -module.id, moduleId: module.id, moduleTitle: title, title, context: `Topic: ${title}`, itemIds: moduleItems.map((item) => item.id) });
       continue;
     }
 
@@ -122,6 +169,8 @@ function courseDiagnosticTopics(course: Course, locale: CurriculumLocale): Cours
         .slice(0, 1_200);
       topics.push({
         id: theoryItem.id,
+        moduleId: module.id,
+        moduleTitle: localizedModuleTitle(module.contentKey, locale, module.title),
         title: topicTitle,
         context: [topicTitle, sourceKey, detail].filter(Boolean).join("\n"),
         itemIds,
@@ -131,116 +180,151 @@ function courseDiagnosticTopics(course: Course, locale: CurriculumLocale): Cours
   return topics;
 }
 
-function unmasteredTopics(topics: CourseDiagnosticTopic[], progress: CourseItemProgress[]): CourseDiagnosticTopic[] {
-  const progressByItem = new Map(progress.map((item) => [item.itemId, item]));
-  const remaining = topics.filter((topic) => topic.itemIds.some((itemId) => progressByItem.get(itemId)?.status !== "COMPLETED"));
-  return remaining.length ? remaining : topics;
-}
-
-function courseContext(course: Course, locale: CurriculumLocale, seed: string): string {
-  const modules = [...(course.modules || [])].sort((a, b) => a.order - b.order || a.id - b.id);
-  const sections = modules.map((module) => {
-    const title = localizedModuleTitle(module.contentKey, locale, module.title);
-    const items = [...(module.items || [])]
-      .filter((item) => item.isActive !== false && item.content?.required !== false)
-      .sort((a, b) => a.order - b.order || a.id - b.id)
-      .map((item) => {
-        const localized = localizeCourseItem(item, locale);
-        const content = localized.content || {};
-        const details = [content.markdown, content.statement, content.description, content.objective, content.outcome]
-          .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-          .join("\n")
-          .slice(0, 1_000);
-        return `- ${localized.title}${details ? `\n${details}` : ""}`;
-      });
-    return `${title}\n${items.join("\n")}`;
-  });
-  return [
-    `Course: ${localizedCourseTitle(course, locale)}. ${localizedCourseDescription(course, locale) || ""}`,
-    "Create a learner-specific diagnostic assessment. Use only the curriculum below.",
-    `Variation token (never include it in question text): ${seed}`,
-    ...sections,
-  ].join("\n\n").slice(0, 16_000);
-}
-
-async function generateAssessment(course: Course, runtime: Runtime, userId: number, locale: CurriculumLocale, availableTopics: CourseDiagnosticTopic[]): Promise<CourseDiagnosticPayload> {
+async function generateAssessment(course: Course, runtime: Runtime, userId: number, locale: CurriculumLocale, courseTopics: CourseDiagnosticTopic[]): Promise<CourseDiagnosticPayload> {
   const seed = crypto.randomBytes(16).toString("hex");
-  const context = courseContext(course, locale, seed);
-  const selectedTopics = shuffled(availableTopics).slice(0, 8);
-  if (!selectedTopics.length) throw assessmentError("ASSESSMENT_TOPICS_INVALID", 503);
-  const topicAssignments = Array.from({ length: 8 }, (_, index) => selectedTopics[index % selectedTopics.length]);
-  const questionPlan = [
-    "QUESTION COVERAGE PLAN. Keep this exact order, use one topic per question, and prefix each q with [topic:ID] using the topic ID shown below.",
-    ...topicAssignments.map((topic, index) => `Question ${index + 1}: [topic:${topic.id}] ${topic.title}. Assess only this topic. ${topic.context}`),
-    "The [topic:ID] marker is metadata and must be at the beginning of the q value.",
-  ].join("\n");
-  const assessmentContext = `${context}\n\n${questionPlan}`;
+  const courseContext = [
+    `Course: ${localizedCourseTitle(course, locale)}.`,
+    localizedCourseDescription(course, locale)?.slice(0, 1_000),
+    "Generate new assessment content using only the curriculum topics supplied with each task.",
+    `Variation token (never include it in the learner-facing text): ${seed}`,
+  ].filter(Boolean).join("\n");
+  const topics = [...courseTopics];
+  if (!topics.length) throw assessmentError("ASSESSMENT_TOPICS_INVALID", 503);
   const llm = getLLMOrchestrator();
   const language = locale === "en" ? "en" : "uk";
   try {
-    const quiz = await llm.generateQuizWithAI({
-      lang: runtime,
-      prevTopics: assessmentContext,
-      count: 8,
-      userId,
-      language,
-    });
-    const questions = normalizeQuestions(quiz.quizJson, topicAssignments);
-    const generatedTask = await llm.generateTaskWithAI({
-      topicTitle: localizedCourseTitle(course, locale),
-      theory: `${assessmentContext}\n\nGenerate a fresh practical coding task for this learner. Variation token: ${seed}. It must assess application of the selected course concepts, use standard input/output, and include a concise starter template with TODO markers.`,
-      lang: runtime,
-      topicIndex: 1,
-      numInTopic: 1,
-      isFirstTask: false,
-      isControl: true,
-      difus: 0.5,
-      prevTopics: assessmentContext,
-      userId,
-      language,
-    });
-    const taskDescription = [
-      generatedTask.practicalTask,
-      `Input format: ${generatedTask.inputFormat}`,
-      `Output format: ${generatedTask.outputFormat}`,
-      `Constraints: ${generatedTask.constraints}`,
-      `Examples: ${generatedTask.examples.map((example) => `Input:\n${example.input}\nOutput:\n${example.output}`).join("\n")}`,
-    ].join("\n\n");
-    const tests = await llm.generateTestDataWithAI({
-      taskTitle: generatedTask.title,
-      taskDescription,
-      lang: runtime,
-      count: 5,
-      language,
-      userId,
-      publicExamples: generatedTask.examples,
-      requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
-    });
-    const cleanTests = tests
-      .map((test) => ({ input: text(test.input, 10_000), output: text(test.output, 10_000) }))
-      .filter((test) => test.input.length > 0 && test.output.length > 0)
-      .slice(0, 8);
-    if (!text(generatedTask.practicalTask) || cleanTests.length < 3) throw assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503);
-    const examples = generatedTask.examples
-      .map((example) => ({ input: text(example.input, 2_000), output: text(example.output, 2_000), explanation: text(example.explanation, 1_000) }))
-      .filter((example) => example.input || example.output)
-      .slice(0, 3);
-    const practical: CourseDiagnosticPractical = {
-      title: text(generatedTask.title, 255) || (locale === "en" ? "Practical task" : "Практичне завдання"),
-      statement: text(generatedTask.practicalTask, 8_000),
-      inputFormat: text(generatedTask.inputFormat, 2_000),
-      outputFormat: text(generatedTask.outputFormat, 2_000),
-      constraints: text(generatedTask.constraints, 2_000),
-      examples,
-      codeTemplate: text(generatedTask.codeTemplate, 40_000),
-      runtime,
-      entryFile: projectEntryFile(runtime),
-      tests: cleanTests,
-    };
-    return { version: 1, seed, questions, practical };
+    const questionAssignments = topics.flatMap((topic) => Array.from({ length: 2 }, () => topic));
+    const questionBatches = chunks(questionAssignments, 8);
+    const practicalGroups: CourseDiagnosticTopic[][] = [];
+    for (const topic of topics) {
+      const currentGroup = practicalGroups[practicalGroups.length - 1];
+      if (!currentGroup || currentGroup[0].moduleId !== topic.moduleId || currentGroup.length >= 4) {
+        practicalGroups.push([topic]);
+      } else {
+        currentGroup.push(topic);
+      }
+    }
+
+    const [generatedQuestions, practicals] = await Promise.all([
+      // Keep one question batch and one practical task in flight at a time.
+      // This overlaps the two parts without flooding providers with four
+      // concurrent generation/review chains.
+      mapWithConcurrency(questionBatches, 1, async (topicAssignments, batchIndex) => {
+        try {
+          const questionPlan = [
+            "QUESTION COVERAGE PLAN. Generate exactly one question for each listed assignment, in order. Prefix q with [topic:ID].",
+            ...topicAssignments.map((topic, index) => `Question ${index + 1}: [topic:${topic.id}] ${topic.title}. Test this topic only. ${topic.context}`),
+            "When the same topic appears twice, assess two different skills. The [topic:ID] marker is metadata and must be at the beginning of q.",
+          ].join("\n");
+          const quiz = await llm.generateQuizWithAI({
+            lang: runtime,
+            prevTopics: `${courseContext}\n\n${questionPlan}`,
+            count: topicAssignments.length,
+            userId,
+            language,
+          });
+          return normalizeQuestions(quiz.quizJson, topicAssignments, topicAssignments.length, batchIndex * 8);
+        } catch (error) {
+          throw withAssessmentStage(error, "questions");
+        }
+      }),
+      mapWithConcurrency(practicalGroups, 1, async (topicGroup, taskIndex) => {
+        const topicList = topicGroup.map((topic) => `- [topic:${topic.id}] ${topic.title}: ${topic.context}`).join("\n");
+        const groupSeed = `${seed}-task-${taskIndex + 1}`;
+        const topicTitle = topicGroup[0].moduleTitle.slice(0, 255);
+        const taskContext = [
+          courseContext,
+          `Module: ${topicTitle}`,
+          `PRACTICAL ASSESSMENT ${taskIndex + 1}/${practicalGroups.length}. This task covers the following course topics:`,
+          topicList,
+          `Variation token: ${groupSeed}. Generate a fresh integrated programming task that requires applying the listed topics. Do not use concepts outside the course. Include standard input/output, clear constraints, examples, and a concise starter template with TODO markers.`,
+        ].join("\n\n");
+        const generatedTask = await runAtAssessmentStage("practical_task", () => llm.generateTaskWithAI({
+            topicTitle,
+            theory: taskContext,
+            lang: runtime,
+            topicIndex: taskIndex + 1,
+            numInTopic: practicalGroups.length,
+            isFirstTask: false,
+            isControl: true,
+            difus: 0.5,
+            allowedIoTypes: ["STDIN_STDOUT"],
+            prevTopics: topicList,
+            userId,
+            topicId: topicGroup[0].id > 0 ? topicGroup[0].id : undefined,
+            language,
+          }));
+        const taskDescription = [
+          generatedTask.practicalTask,
+          `Input format: ${generatedTask.inputFormat}`,
+          `Output format: ${generatedTask.outputFormat}`,
+          `Constraints: ${generatedTask.constraints}`,
+          `Examples: ${generatedTask.examples.map((example) => `Input:\n${example.input}\nOutput:\n${example.output}`).join("\n")}`,
+        ].join("\n\n");
+        const tests = await runAtAssessmentStage("hidden_tests", () => llm.generateTestDataWithAI({
+            taskTitle: generatedTask.title,
+            taskDescription,
+            lang: runtime,
+            count: 5,
+            ioType: generatedTask.ioType ?? "STDIN_STDOUT",
+            language,
+            userId,
+            publicExamples: generatedTask.examples,
+            requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
+          }));
+        const cleanTests = tests
+          .map((test) => ({ input: text(test.input, 10_000), output: text(test.output, 10_000) }))
+          .filter((test) => test.input.length > 0 && test.output.length > 0)
+          .slice(0, 8);
+        if (!text(generatedTask.practicalTask)) {
+          throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "practical_task");
+        }
+        if (cleanTests.length < 3) {
+          throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "hidden_tests");
+        }
+        const examples = generatedTask.examples
+          .map((example) => ({ input: text(example.input, 2_000), output: text(example.output, 2_000), explanation: text(example.explanation, 1_000) }))
+          .filter((example) => example.input || example.output)
+          .slice(0, 3);
+        const moduleTitles = Array.from(new Set(topicGroup.map((topic) => topic.moduleTitle)));
+        const practical: CourseDiagnosticPractical = {
+          id: `p${taskIndex + 1}`,
+          moduleTitle: moduleTitles.join(" · "),
+          topicIds: topicGroup.map((topic) => topic.id),
+          title: text(generatedTask.title, 255) || (locale === "en" ? `Practical task ${taskIndex + 1}` : `Практичне завдання ${taskIndex + 1}`),
+          statement: text(generatedTask.practicalTask, 8_000),
+          inputFormat: text(generatedTask.inputFormat, 2_000),
+          outputFormat: text(generatedTask.outputFormat, 2_000),
+          constraints: text(generatedTask.constraints, 2_000),
+          examples,
+          codeTemplate: text(generatedTask.codeTemplate, 40_000),
+          runtime,
+          entryFile: projectEntryFile(runtime),
+          tests: cleanTests,
+        };
+        return practical;
+      }),
+    ]);
+    const questions = generatedQuestions.flat();
+    return { version: 2, seed, questions, practicals };
   } catch (error) {
+    const details = recordOf(error);
+    const stage = details?.assessmentStage;
+    logger.error("[learning/diagnostic] assessment generation failed", {
+      userId,
+      courseId: course.id,
+      stage: typeof stage === "string" ? stage : "unknown",
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorCode: details?.code,
+      statusCode: details?.statusCode,
+      reason: assessmentFailureReason(error),
+    });
     if (recordOf(error)?.statusCode) throw error;
-    throw assessmentError("ASSESSMENT_GENERATION_FAILED", 503);
+    const failure = assessmentError("ASSESSMENT_GENERATION_FAILED", 503);
+    throw Object.assign(failure, {
+      assessmentStage: typeof stage === "string" ? stage : "unknown",
+      assessmentReason: assessmentFailureReason(error),
+    });
   }
 }
 
@@ -255,8 +339,25 @@ async function ownedEnrollment(userId: number, enrollmentId: number) {
   return enrollment;
 }
 
+function assessmentPracticals(payload: CourseDiagnosticPayload): CourseDiagnosticPractical[] {
+  const stored = Array.isArray(payload.practicals) ? payload.practicals : payload.practical ? [payload.practical] : [];
+  return stored.map((practical, index) => ({
+    ...practical,
+    id: practical.id || `p${index + 1}`,
+    moduleTitle: practical.moduleTitle || "",
+    topicIds: Array.isArray(practical.topicIds) ? practical.topicIds : [],
+  }));
+}
+
+function hasComprehensivePayload(payload: CourseDiagnosticPayload): boolean {
+  return payload.version >= 2 && Array.isArray(payload.practicals) && payload.practicals.length > 0;
+}
+
 function publicAssessment(assessment: CourseDiagnosticAssessment, course: Course) {
   const payload = assessment.assessmentData;
+  const practicals = assessmentPracticals(payload);
+  const publicPracticals = practicals.map(({ tests: _tests, ...practical }) => practical);
+  if (!publicPracticals.length) throw assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503);
   return {
     id: assessment.id,
     enrollmentId: assessment.enrollmentId,
@@ -265,19 +366,16 @@ function publicAssessment(assessment: CourseDiagnosticAssessment, course: Course
     status: assessment.status,
     passing: { totalScore: 75, knowledgeScore: 70, practicalScore: 60 },
     questions: payload.questions.map(({ id, question, options, topicId, topicTitle }) => ({ id, question, options, topicId, topicTitle })),
-    practical: {
-      title: payload.practical.title,
-      statement: payload.practical.statement,
-      inputFormat: payload.practical.inputFormat,
-      outputFormat: payload.practical.outputFormat,
-      constraints: payload.practical.constraints,
-      examples: payload.practical.examples,
-      codeTemplate: payload.practical.codeTemplate,
-      runtime: payload.practical.runtime,
-      entryFile: payload.practical.entryFile,
-    },
+    practical: publicPracticals[0],
+    practicals: publicPracticals,
     result: assessment.resultData ?? null,
   };
+}
+
+async function generateForCourse(userId: number, course: Course, runtime: Runtime, locale: CurriculumLocale): Promise<CourseDiagnosticPayload> {
+  const topics = courseDiagnosticTopics(course, locale);
+  if (!topics.length) throw assessmentError("ASSESSMENT_TOPICS_INVALID", 503);
+  return generateAssessment(course, runtime, userId, locale, topics);
 }
 
 export async function getCourseDiagnosticAssessment(userId: number, enrollmentId: number, locale: CurriculumLocale = "uk") {
@@ -288,13 +386,17 @@ export async function getCourseDiagnosticAssessment(userId: number, enrollmentId
     relations: ["modules", "modules.items"],
   });
   if (!course) throw assessmentError("COURSE_NOT_FOUND", 404);
+  if (assessment && assessment.status === "READY" && !hasComprehensivePayload(assessment.assessmentData)) {
+    if (enrollment.finalAssessmentPassed || enrollment.status === "COMPLETED") throw assessmentError("COURSE_ALREADY_COMPLETED", 409);
+    const runtime = enrollment.variant.runtime === "JAVA" || enrollment.variant.runtime === "CPP" ? enrollment.variant.runtime : "PYTHON";
+    assessment.assessmentData = await generateForCourse(userId, course, runtime, locale);
+    assessment = await assessmentRepo().save(assessment);
+  }
   if (assessment) return publicAssessment(assessment, course);
   if (enrollment.finalAssessmentPassed || enrollment.status === "COMPLETED") throw assessmentError("COURSE_ALREADY_COMPLETED", 409);
 
   const runtime = enrollment.variant.runtime === "JAVA" || enrollment.variant.runtime === "CPP" ? enrollment.variant.runtime : "PYTHON";
-  const currentProgress = await progressRepo().find({ where: { enrollment: { id: enrollment.id } } });
-  const availableTopics = unmasteredTopics(courseDiagnosticTopics(course, locale), currentProgress);
-  const assessmentData = await generateAssessment(course, runtime, userId, locale, availableTopics);
+  const assessmentData = await generateForCourse(userId, course, runtime, locale);
   assessment = assessmentRepo().create({ enrollment: { id: enrollment.id }, attemptNumber: 1, assessmentData, status: "READY" });
   try {
     assessment = await assessmentRepo().save(assessment);
@@ -315,9 +417,7 @@ export async function retryCourseDiagnosticAssessment(userId: number, enrollment
   const course = await courseRepo().findOne({ where: { id: enrollment.courseId }, relations: ["modules", "modules.items"] });
   if (!course) throw assessmentError("COURSE_NOT_FOUND", 404);
   const runtime = enrollment.variant.runtime === "JAVA" || enrollment.variant.runtime === "CPP" ? enrollment.variant.runtime : "PYTHON";
-  const currentProgress = await progressRepo().find({ where: { enrollment: { id: enrollment.id } } });
-  const availableTopics = unmasteredTopics(courseDiagnosticTopics(course, locale), currentProgress);
-  const assessmentData = await generateAssessment(course, runtime, userId, locale, availableTopics);
+  const assessmentData = await generateForCourse(userId, course, runtime, locale);
   let next = assessmentRepo().create({
     enrollment: { id: enrollment.id },
     attemptNumber: latest.attemptNumber + 1,
@@ -386,7 +486,7 @@ function gradeAnswers(questions: CourseDiagnosticQuestion[], answers: Array<{ qu
 
 async function runPractical(enrollmentId: number, assessmentId: number, practical: CourseDiagnosticPractical, code: string) {
   const result = await judgeWithSemaphore({
-    submission_id: `diagnostic-${enrollmentId}-${assessmentId}-${Date.now()}`,
+    submission_id: `diagnostic-${enrollmentId}-${assessmentId}-${practical.id}-${Date.now()}`,
     language: practical.runtime.toLowerCase() as JudgeLanguage,
     files: [{ path: practical.entryFile, content: code }],
     entry: practical.entryFile,
@@ -402,7 +502,30 @@ async function runPractical(enrollmentId: number, assessmentId: number, practica
   return { testsPassed, testsTotal, score: Math.round(testsPassed / testsTotal * 100) };
 }
 
-export async function runCourseDiagnosticSample(userId: number, enrollmentId: number, rawCode: unknown, rawInput: unknown) {
+function normalizePracticalSubmissions(
+  rawPracticals: unknown,
+  rawLegacyCode: unknown,
+  practicals: CourseDiagnosticPractical[],
+): Array<{ taskId: string; code: string }> | null {
+  if (Array.isArray(rawPracticals)) {
+    if (rawPracticals.length !== practicals.length) return null;
+    const codeByTask = new Map<string, string>();
+    for (const raw of rawPracticals) {
+      const submission = recordOf(raw);
+      const taskId = text(submission?.taskId, 80);
+      const code = text(submission?.code, 100_000);
+      if (!taskId || !code || codeByTask.has(taskId)) return null;
+      codeByTask.set(taskId, code);
+    }
+    if (practicals.some((practical) => !codeByTask.has(practical.id))) return null;
+    return practicals.map((practical) => ({ taskId: practical.id, code: codeByTask.get(practical.id)! }));
+  }
+
+  const code = text(rawLegacyCode, 100_000);
+  return practicals.length === 1 && code ? [{ taskId: practicals[0].id, code }] : null;
+}
+
+export async function runCourseDiagnosticSample(userId: number, enrollmentId: number, rawTaskId: unknown, rawCode: unknown, rawInput: unknown) {
   const enrollment = await ownedEnrollment(userId, enrollmentId);
   const assessment = await assessmentRepo().findOne({ where: { enrollment: { id: enrollment.id } }, order: { attemptNumber: "DESC", id: "DESC" } });
   if (!assessment) throw assessmentError("ASSESSMENT_NOT_FOUND", 404);
@@ -410,7 +533,10 @@ export async function runCourseDiagnosticSample(userId: number, enrollmentId: nu
   const code = text(rawCode, 100_000);
   if (!code) throw assessmentError("PRACTICAL_CODE_REQUIRED", 400);
   const input = text(rawInput, 20_000);
-  const practical = assessment.assessmentData.practical;
+  const practicals = assessmentPracticals(assessment.assessmentData);
+  const taskId = text(rawTaskId, 80) || practicals[0]?.id;
+  const practical = practicals.find((candidate) => candidate.id === taskId);
+  if (!practical) throw assessmentError("ASSESSMENT_PRACTICAL_INVALID", 400);
   try {
     const result = await judgeWithSemaphore({
       submission_id: `diagnostic-run-${enrollment.id}-${assessment.id}-${Date.now()}`,
@@ -439,7 +565,8 @@ export async function submitCourseDiagnosticAssessment(
   userId: number,
   enrollmentId: number,
   rawAnswers: unknown,
-  rawCode: unknown,
+  rawPracticals: unknown,
+  rawLegacyCode?: unknown,
 ) {
   const enrollment = await ownedEnrollment(userId, enrollmentId);
   const assessment = await assessmentRepo().findOne({ where: { enrollment: { id: enrollment.id } }, order: { attemptNumber: "DESC", id: "DESC" } });
@@ -448,32 +575,61 @@ export async function submitCourseDiagnosticAssessment(
   const payload = assessment.assessmentData;
   const answers = normalizeAnswers(rawAnswers, payload.questions);
   if (!answers) throw assessmentError("ASSESSMENT_ANSWERS_INVALID", 400);
-  const code = text(rawCode, 100_000);
-  if (!code) throw assessmentError("PRACTICAL_CODE_REQUIRED", 400);
+  const practicals = assessmentPracticals(payload);
+  const practicalSubmissions = normalizePracticalSubmissions(rawPracticals, rawLegacyCode, practicals);
+  if (!practicalSubmissions) throw assessmentError("PRACTICAL_CODE_REQUIRED", 400);
+  const submissionByTask = new Map(practicalSubmissions.map((submission) => [submission.taskId, submission.code]));
 
-  let practicalResult: { testsPassed: number; testsTotal: number; score: number };
+  let practicalResults: Array<{
+    taskId: string;
+    title: string;
+    moduleTitle: string;
+    topicIds: number[];
+    testsPassed: number;
+    testsTotal: number;
+    score: number;
+  }>;
   try {
-    practicalResult = await runPractical(enrollment.id, assessment.id, payload.practical, code);
+    practicalResults = await mapWithConcurrency(practicals, 2, async (practical) => {
+      const evaluation = await runPractical(enrollment.id, assessment.id, practical, submissionByTask.get(practical.id)!);
+      return {
+        taskId: practical.id,
+        title: practical.title,
+        moduleTitle: practical.moduleTitle,
+        topicIds: practical.topicIds,
+        ...evaluation,
+      };
+    });
   } catch (error) {
     if (recordOf(error)?.statusCode) throw error;
     throw assessmentError("JUDGE_UNAVAILABLE", 503);
   }
+  const testsPassed = practicalResults.reduce((total, task) => total + task.testsPassed, 0);
+  const testsTotal = practicalResults.reduce((total, task) => total + task.testsTotal, 0);
+  if (!testsTotal) throw assessmentError("JUDGE_UNAVAILABLE", 503);
+  const practicalScore = Math.round(testsPassed / testsTotal * 100);
+  const topicPracticeScores = new Map<number, number>();
+  for (const task of practicalResults) {
+    for (const topicId of task.topicIds) topicPracticeScores.set(topicId, task.score);
+  }
+  const hasTopicCoverage = practicals.some((practical) => practical.topicIds.length > 0);
   const knowledge = gradeAnswers(payload.questions, answers);
-  const score = Math.round((knowledge.score + practicalResult.score) / 2);
-  const passed = score >= 75 && knowledge.score >= 70 && practicalResult.score >= 60;
+  const score = Math.round((knowledge.score + practicalScore) / 2);
+  const passed = score >= 75 && knowledge.score >= 70 && practicalScore >= 60;
   const result: CourseDiagnosticResult = {
     score,
     knowledgeScore: knowledge.score,
-    practicalScore: practicalResult.score,
+    practicalScore,
     correctCount: knowledge.correctCount,
     totalQuestions: payload.questions.length,
-    testsPassed: practicalResult.testsPassed,
-    testsTotal: practicalResult.testsTotal,
+    testsPassed,
+    testsTotal,
+    practicalResults,
     passed,
     answers,
     topicResults: knowledge.topicResults.map((topic) => ({
       ...topic,
-      practiceCredited: topic.theoryCredited && practicalResult.score >= 60,
+      practiceCredited: topic.theoryCredited && (hasTopicCoverage ? (topicPracticeScores.get(topic.topicId) ?? 0) >= 60 : practicalScore >= 60),
     })),
     review: knowledge.review,
     submittedAt: new Date().toISOString(),

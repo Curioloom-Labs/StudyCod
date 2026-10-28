@@ -27,6 +27,16 @@ function errorField(error: unknown, key: string): unknown {
   return isRecord(error) ? error[key] : undefined;
 }
 
+function diagnosticErrorPayload(error: unknown) {
+  const stage = errorField(error, "assessmentStage");
+  const reason = errorField(error, "assessmentReason");
+  return {
+    message: errorMessage(error),
+    ...(typeof stage === "string" ? { stage } : {}),
+    ...(typeof reason === "string" ? { reason } : {}),
+  };
+}
+
 function requestLocale(req: AuthRequest): UiLocale {
   return normalizeUiLocale(req.query?.uiLang, resolveUiLocaleFromHeaders(req.headers, "uk"));
 }
@@ -265,7 +275,7 @@ learningCatalogRouter.get("/enrollments/:enrollmentId/diagnostic", authRequired,
   try {
     return res.json({ assessment: await getCourseDiagnosticAssessment(req.userId, enrollmentId, requestLocale(req)) });
   } catch (error: unknown) {
-    return res.status(errorStatus(error)).json({ message: errorMessage(error) });
+    return res.status(errorStatus(error)).json(diagnosticErrorPayload(error));
   }
 });
 
@@ -276,34 +286,35 @@ learningCatalogRouter.post("/enrollments/:enrollmentId/diagnostic/retry", authRe
   try {
     return res.json({ assessment: await retryCourseDiagnosticAssessment(req.userId, enrollmentId, requestLocale(req)) });
   } catch (error: unknown) {
-    return res.status(errorStatus(error)).json({ message: errorMessage(error) });
+    return res.status(errorStatus(error)).json(diagnosticErrorPayload(error));
   }
 });
 
-const diagnosticRunSchema = z.object({ code: z.string().trim().min(1).max(100_000), input: z.string().max(20_000).default("") }).strict();
+const diagnosticRunSchema = z.object({ taskId: z.string().trim().min(1).max(80).optional(), code: z.string().trim().min(1).max(100_000), input: z.string().max(20_000).default("") }).strict();
 learningCatalogRouter.post("/enrollments/:enrollmentId/diagnostic/run", authRequired, async (req: AuthRequest, res: Response) => {
   if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
   const enrollmentId = Number(req.params.enrollmentId);
   const parsed = diagnosticRunSchema.safeParse(req.body ?? {});
   if (!Number.isInteger(enrollmentId) || enrollmentId <= 0 || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
   try {
-    return res.json({ result: await runCourseDiagnosticSample(req.userId, enrollmentId, parsed.data.code, parsed.data.input) });
+    return res.json({ result: await runCourseDiagnosticSample(req.userId, enrollmentId, parsed.data.taskId, parsed.data.code, parsed.data.input) });
   } catch (error: unknown) {
     return res.status(errorStatus(error)).json({ message: errorMessage(error) });
   }
 });
 
 const diagnosticSubmitSchema = z.object({
-  answers: z.array(z.object({ questionId: z.string().trim().min(1).max(32), selectedIndex: z.number().int().min(0).max(3) })).min(6).max(10),
-  code: z.string().trim().min(1).max(100_000),
-}).strict();
+  answers: z.array(z.object({ questionId: z.string().trim().min(1).max(32), selectedIndex: z.number().int().min(0).max(3) })).min(1).max(300),
+  practicals: z.array(z.object({ taskId: z.string().trim().min(1).max(80), code: z.string().trim().min(1).max(100_000) })).min(1).max(50).optional(),
+  code: z.string().trim().min(1).max(100_000).optional(),
+}).strict().refine((value) => Boolean(value.practicals?.length || value.code), { message: "PRACTICAL_CODE_REQUIRED" });
 learningCatalogRouter.post("/enrollments/:enrollmentId/diagnostic/submit", authRequired, async (req: AuthRequest, res: Response) => {
   if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
   const enrollmentId = Number(req.params.enrollmentId);
   const parsed = diagnosticSubmitSchema.safeParse(req.body ?? {});
   if (!Number.isInteger(enrollmentId) || enrollmentId <= 0 || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT", issues: parsed.success ? undefined : parsed.error.issues });
   try {
-    return res.json({ result: await submitCourseDiagnosticAssessment(req.userId, enrollmentId, parsed.data.answers, parsed.data.code) });
+    return res.json({ result: await submitCourseDiagnosticAssessment(req.userId, enrollmentId, parsed.data.answers, parsed.data.practicals, parsed.data.code) });
   } catch (error: unknown) {
     return res.status(errorStatus(error)).json({ message: errorMessage(error) });
   }

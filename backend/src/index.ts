@@ -476,6 +476,10 @@ const LARGE_BODY_PATH_PREFIXES = [
   "/topics", "/api/topics",
   "/contests", "/api/contests"
 ];
+// A full-course assessment can contain a solution for each generated task.
+// Keep the larger limit scoped to this authenticated submission endpoint.
+const COURSE_DIAGNOSTIC_SUBMIT_BODY_LIMIT = "32mb";
+const COURSE_DIAGNOSTIC_SUBMIT_BODY_PATH = /^\/(?:api\/)?learning\/enrollments\/\d+\/diagnostic\/submit\/?$/;
 // Allow 50 MiB for both template fields in one JSON request, plus payload overhead.
 const CERTIFICATE_TEMPLATE_BODY_LIMIT = "110mb";
 const CERTIFICATE_TEMPLATE_BODY_PATH = /^\/(?:api\/)?certificate\/(?:template(?:\/\d+)?|contest\/\d+\/preview)\/?$/;
@@ -496,6 +500,7 @@ function isLargeBodyPath(path: string): boolean {
 
 const jsonParserDefault = express.json({ limit: defaultBodyLimit });
 const jsonParserLarge = express.json({ limit: largeBodyLimit });
+const jsonParserCourseDiagnosticSubmit = express.json({ limit: COURSE_DIAGNOSTIC_SUBMIT_BODY_LIMIT });
 const jsonParserCertificateTemplate = express.json({ limit: CERTIFICATE_TEMPLATE_BODY_LIMIT });
 const urlencodedParserDefault = express.urlencoded({ extended: false, limit: defaultBodyLimit });
 const urlencodedParserLarge = express.urlencoded({ extended: false, limit: largeBodyLimit });
@@ -503,8 +508,10 @@ const urlencodedParserLarge = express.urlencoded({ extended: false, limit: large
 app.use((req, res, next) => {
   const isCertificateTemplateWrite = (req.method === "POST" || req.method === "PUT")
     && CERTIFICATE_TEMPLATE_BODY_PATH.test(req.path);
+  const isCourseDiagnosticSubmit = req.method === "POST" && COURSE_DIAGNOSTIC_SUBMIT_BODY_PATH.test(req.path);
   (isCertificateTemplateWrite
     ? jsonParserCertificateTemplate
+    : isCourseDiagnosticSubmit ? jsonParserCourseDiagnosticSubmit
     : isLargeBodyPath(req.path) ? jsonParserLarge : jsonParserDefault)(req, res, next);
 });
 app.use((req, res, next) => {

@@ -1,7 +1,7 @@
 import { isAxiosError } from "axios";
 import React from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Calculator, ChevronRight, Plus, Save, Settings2, Trash2, UsersRound, X } from "lucide-react";
+import { ArrowLeft, Calculator, ChevronRight, Plus, Save, Search, Settings2, Trash2, UsersRound, X } from "lucide-react";
 import {
   createManualGrade,
   createSummaryGrade,
@@ -36,7 +36,7 @@ import {
 } from "../../lib/gradingSystems";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
-import { ClassWorkspaceNavigation } from "./ClassWorkspaceNavigation";
+import { ClassWorkspaceNavigation, ClassWorkspaceFrame } from "./ClassWorkspaceNavigation";
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const root = "edu-workspace edu-data-workspace mx-auto max-w-[1480px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12";
@@ -189,6 +189,7 @@ export const GradebookWorkspace: React.FC = () => {
   const recomputeNoticeRef = React.useRef<HTMLDivElement>(null);
   const semesterButtonRef = React.useRef<HTMLButtonElement>(null);
   const [studentFilter, setStudentFilter] = React.useState<"all" | "missing" | "low">("all");
+  const [studentQuery, setStudentQuery] = React.useState("");
 
   const gradingSystem = normalizeGradingSystem(data?.gradingSystem || DEFAULT_GRADING_SYSTEM);
   const scaleMode = normalizeScaleMode(data?.gradeScaleMode);
@@ -197,11 +198,13 @@ export const GradebookWorkspace: React.FC = () => {
   const missingThematics = React.useMemo(() => missingThematicTopics(data, topics), [data, topics]);
   const canUseSemesterGrades = missingThematics.length === 0;
   const students = data?.students ?? [];
+  const missingStudentIds = React.useMemo(() => new Set(students.filter(student => columns.some(column => findGrade(student, column)?.grade == null)).map(student => student.studentId)), [students, columns]);
   const visibleStudents = React.useMemo(() => students.filter((student) => {
+    if (!student.studentName.toLocaleLowerCase().includes(studentQuery.toLocaleLowerCase())) return false;
     if (studentFilter === "all") return true;
-    if (studentFilter === "missing") return student.grades.length === 0 || student.grades.some((grade) => grade.grade == null);
+    if (studentFilter === "missing") return missingStudentIds.has(student.studentId);
     return student.grades.some((grade) => grade.grade != null && grade.grade < 60);
-  }), [students, studentFilter]);
+  }), [students, studentFilter, studentQuery, missingStudentIds]);
   const load = React.useCallback(async () => {
     setError(null);
     try {
@@ -408,16 +411,16 @@ export const GradebookWorkspace: React.FC = () => {
 
   return (
     <div data-gradebook-workspace className={`${root} min-w-0 w-full`}>
-      <ClassWorkspaceNavigation classId={classId || "0"} className={className || tr("Клас", "Class")} active="gradebook" />
+      <ClassWorkspaceFrame classId={classId || "0"} className={className || tr("Клас", "Class")} active="gradebook">
       <Header
         classId={classId}
         showBackButton={false}
         title={tr("Журнал класу", "Class gradebook")}
-        text={tr("Оцінки, тематичні та семестрові підсумки — в одному журналі класу, без дублювання окремими розділами.", "Grades, thematic work, and semester summaries in one class gradebook.")}
+        text={tr("Результати завдань, тематичні та семестрові оцінки.", "Task results, thematic grades, and semester grades.")}
         actions={
           <>
-            <button type="button" onClick={() => navigate(withDevPreview(`/edu/classes/${classId}/manage?tab=settings`))} className="inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold dark:border-white/10"><Settings2 className="size-4" />{tr("Налаштування класу", "Class settings")}</button>
-            <button type="button" disabled={!missingThematics.length} onClick={() => setThematicOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45 dark:bg-primary dark:text-primary-foreground"><Plus className="size-4" />{missingThematics.length ? tr("Тематична", "Thematic") : tr("Усі тематичні створено", "All thematic grades created")}</button>
+            <button type="button" aria-label={tr("Налаштування журналу", "Gradebook settings")} onClick={() => navigate(withDevPreview(`/edu/classes/${classId}/manage?tab=settings`))} className="classroom-gradebook-settings inline-flex items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold dark:border-white/10"><Settings2 className="size-4" aria-hidden="true" /><span>{tr("Налаштування", "Settings")}</span></button>
+            <button type="button" disabled={!missingThematics.length} onClick={() => setThematicOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45 dark:bg-primary dark:text-primary-foreground"><Plus className="size-4" />{tr("Тематична", "Thematic")}</button>
             <button ref={semesterButtonRef} type="button" disabled={busyAction || saving || !canUseSemesterGrades} onClick={() => { setRecomputeError(null); setRecomputeConfirm(true); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border/12 px-4 py-3 text-sm font-bold text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55 dark:border-white/10 dark:text-text-primary"><Calculator className="size-4" />{tr("Семестрові", "Semester grades")}</button>
           </>
         }
@@ -453,20 +456,22 @@ export const GradebookWorkspace: React.FC = () => {
           </section>
 
           <section className="class-gradebook__filters">
+            <label className="classroom-search"><Search className="size-4" aria-hidden="true" /><input type="search" value={studentQuery} onChange={event => setStudentQuery(event.target.value)} aria-label={tr("Знайти учня в журналі", "Search the gradebook")} placeholder={tr("Знайти учня…", "Search students…")} /></label>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="class-gradebook__filter-label">{tr("Учні", "Students")}</span>
-              <div className="class-gradebook__filter-options">{(["all", "missing", "low"] as const).map((filter) => <button type="button" key={filter} aria-pressed={studentFilter === filter} onClick={() => setStudentFilter(filter)}>{filter === "all" ? `${tr("Усі", "All")} · ${students.length}` : filter === "missing" ? `${tr("Без оцінки", "No grade")} · ${students.filter((student) => student.grades.length === 0 || student.grades.some((grade) => grade.grade == null)).length}` : `${tr("Низькі", "Low grades")} · ${students.filter((student) => student.grades.some((grade) => grade.grade != null && grade.grade < 60)).length}`}</button>)}</div>
+              <div className="class-gradebook__filter-options">{(["all", "missing", "low"] as const).map((filter) => <button type="button" key={filter} aria-pressed={studentFilter === filter} onClick={() => setStudentFilter(filter)}>{filter === "all" ? `${tr("Усі", "All")} · ${students.length}` : filter === "missing" ? `${tr("Без оцінки", "No grade")} · ${missingStudentIds.size}` : `${tr("Низькі", "Low grades")} · ${students.filter((student) => student.grades.some((grade) => grade.grade != null && grade.grade < 60)).length}`}</button>)}</div>
               <span className="class-gradebook__visible-count">{tr("Показано", "Showing")} {visibleStudents.length} {tr("із", "of")} {students.length}</span>
             </div>
           </section>
 
           <div className="class-gradebook__table-wrap">
-            <table style={{ width: `max(100%, ${256 + Math.max(columns.length, 1) * 168}px)`, tableLayout: "fixed" }}>
-              <colgroup><col style={{ width: 256 }} />{columns.map((column) => <col key={column.id} />)}</colgroup>
+            <table style={{ width: `max(100%, ${192 + Math.max(columns.length, 1) * 132}px)`, tableLayout: "fixed" }}>
+              <caption className="sr-only">{tr("Оцінки учнів класу. Натисніть оцінку, щоб редагувати.", "Class grades. Select a grade to edit it.")}</caption>
+              <colgroup><col style={{ width: 192 }} />{columns.map((column) => <col key={column.id} />)}</colgroup>
               <thead>
                 <tr className="border-b border-border/10 dark:border-white/[.08]">
-                  <th className="class-gradebook__student-head">{tr("Учень", "Student")}</th>
-                  {columns.map((column) => <th key={column.id} className="class-gradebook__column-head"><span>{column.title}</span><small>{column.subtitle}</small></th>)}
+                  <th scope="col" className="class-gradebook__student-head">{tr("Учень", "Student")}</th>
+                  {columns.map((column) => <th scope="col" key={column.id} data-column-kind={column.isSemester ? "semester" : column.isSummary ? "summary" : "task"} className="class-gradebook__column-head"><span>{column.title}</span><small>{column.subtitle}</small></th>)}
                 </tr>
               </thead>
               <tbody>
@@ -475,7 +480,7 @@ export const GradebookWorkspace: React.FC = () => {
                   <td className="class-gradebook__student-cell">{student.studentName}</td>
                     {columns.map((column) => {
                       const grade = findGrade(student, column);
-                      return <td key={column.id} className="class-gradebook__grade-cell"><button type="button" data-grade-id={grade?.gradeId} disabled={saving || busyAction} aria-label={`${student.studentName} · ${column.title} · ${grade?.grade == null ? tr("Без оцінки", "No grade") : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}`} onClick={() => openEditor(student, column)} className={`class-gradebook__grade ${gradeTone(grade?.grade)}`}>{grade?.grade == null ? "—" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</button></td>;
+                      return <td key={column.id} data-column-kind={column.isSemester ? "semester" : column.isSummary ? "summary" : "task"} className="class-gradebook__grade-cell"><button type="button" data-grade-id={grade?.gradeId} disabled={saving || busyAction} aria-label={`${student.studentName} · ${column.title} · ${grade?.grade == null ? tr("Без оцінки", "No grade") : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}`} onClick={() => openEditor(student, column)} data-grade-tone={grade?.grade == null ? "empty" : grade.grade < 60 ? "low" : "normal"} className="class-gradebook__grade">{grade?.grade == null ? "—" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode)}</button></td>;
                     })}
                   </tr>
                 ))}
@@ -483,17 +488,15 @@ export const GradebookWorkspace: React.FC = () => {
             </table>
             {!visibleStudents.length && <div className="class-gradebook__empty">{tr("За цим фільтром учнів не знайдено.", "No students match this filter.")}</div>}
           </div>
+          <p className="classroom-list-hint">{tr("Натисніть оцінку, щоб змінити її. Тематичні й семестрові колонки виділено фоном.", "Select a grade to edit it. Thematic and semester columns have a tinted background.")}</p>
         </>
       )}
 
       {editing && (
-        <Modal open onClose={() => { if (!mutationPending.current) setEditing(null); }} title={tr("Редагування оцінки", "Edit grade")} description={`${editing.student.studentName} · ${editing.column.title}`} showCloseButton={false} panelClassName="max-w-md">
-            <div className="flex justify-end">
-              <button type="button" disabled={saving} onClick={() => setEditing(null)} aria-label={tr("Закрити редагування оцінки", "Close grade editor")} className="min-h-11 min-w-11 rounded-xl bg-bg-subtle p-2 text-text-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55"><X className="mx-auto size-4" aria-hidden="true" /></button>
-            </div>
+        <Modal open onClose={() => { if (!mutationPending.current) setEditing(null); }} title={tr("Редагування оцінки", "Edit grade")} description={`${editing.student.studentName} · ${editing.column.title}`} showCloseButton={false} panelClassName="classroom-grade-editor max-w-md">
             <form onSubmit={event => { event.preventDefault(); void saveGrade(); }}>
               {editing.column.isControl && editing.grade?.manualOverrideGrade != null && <div data-control-override role="status" className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm"><p>{tr("Ручна оцінка збережена. Нові результати тесту й практики оновлюють розрахунок, не змінюючи вашу оцінку.", "Your manual grade is retained. New quiz and practice results update the calculation while preserving your decision.")}</p><p className="mt-2 font-semibold">{tr("Розрахована оцінка:", "Calculated grade:")} {editing.grade.calculatedGrade == null ? tr("Ще немає результатів для розрахунку", "No results to calculate yet") : formatGradeForSystem(editing.grade.calculatedGrade, gradingSystem, scaleMode)}</p><button type="button" disabled={saving || Boolean(gradeConflict)} onClick={() => void clearControlOverride()} className="mt-3 min-h-11 rounded-xl border border-border/20 px-3 py-2 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55">{editing.grade.calculatedGrade == null ? tr("Прибрати ручну оцінку", "Remove manual grade") : tr("Використати розраховану оцінку", "Use calculated grade")}</button></div>}
-              <label htmlFor="teacher-grade-value" className="sr-only">{tr("Оцінка", "Grade")}</label><input ref={gradeInputRef} id="teacher-grade-value" name="gradeValue" inputMode="decimal" disabled={saving} aria-invalid={Boolean(gradeError)} aria-describedby={gradeError ? "teacher-grade-error" : undefined} value={gradeValue} onChange={(event) => { setGradeValue(event.target.value); setGradeError(null); }} className="mt-6 w-full rounded-2xl border border-border/12 bg-bg-hover px-4 py-4 text-center text-3xl font-bold outline-none ring-primary/25 focus:ring-4 dark:border-white/10 dark:bg-bg-base" placeholder={gradingSystemInputHint(gradingSystem, isEn)} />
+              <label htmlFor="teacher-grade-value" className="classroom-grade-label">{tr("Оцінка", "Grade")}</label><input ref={gradeInputRef} id="teacher-grade-value" name="gradeValue" inputMode="decimal" disabled={saving} aria-invalid={Boolean(gradeError)} aria-describedby={gradeError ? "teacher-grade-error" : undefined} value={gradeValue} onChange={(event) => { setGradeValue(event.target.value); setGradeError(null); }} className="classroom-grade-input" placeholder={gradingSystemInputHint(gradingSystem, isEn)} />
               {gradeError && <p id="teacher-grade-error" role="alert" className="mt-3 text-sm text-accent-error">{gradeError}</p>}
               {gradeConflict && <div role="status" className="mt-4 rounded-xl border border-accent-warn/30 bg-accent-warn/10 p-4 text-sm"><p>{tr("Оцінка змінилася. Введене значення збережено. Перегляньте актуальну оцінку перед продовженням.", "The grade changed. Your input is retained. Review the current grade before continuing.")}</p>{gradeConflict === "ready" && <p className="mt-2 font-semibold">{tr("Актуальна оцінка:", "Current grade:")} {editing.grade?.grade == null ? tr("Без оцінки", "No grade") : formatGradeForSystem(editing.grade.grade, gradingSystem, scaleMode)}</p>}<button type="button" disabled={saving || gradeConflict === "loading"} onClick={() => { if (gradeConflict === "ready") { setGradeConflict(null); setGradeError(null); gradeInputRef.current?.focus(); } else void refreshConflictedGrade(); }} className="mt-3 min-h-11 rounded-xl border border-border/20 px-3 py-2 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55">{gradeConflict === "ready" ? tr("Переглянув зміни — продовжити", "Reviewed changes — continue") : tr("Завантажити актуальну оцінку", "Load current grade")}</button></div>}
               <div className="mt-4 grid grid-cols-5 gap-2">{quickGrades.map((value) => <button key={value} type="button" disabled={saving} onClick={() => { setGradeValue(value); setGradeError(null); }} className="min-h-11 rounded-xl bg-bg-hover px-3 py-2 text-sm font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55 dark:bg-white/[.06]">{value}</button>)}</div>
@@ -509,6 +512,7 @@ export const GradebookWorkspace: React.FC = () => {
             <div className="mt-5 flex gap-2"><button type="button" onClick={() => setThematicOpen(false)} className="flex-1 rounded-xl px-4 py-3 font-bold">{tr("Скасувати", "Cancel")}</button><button type="submit" disabled={busyAction || !thematicTopicId} className="flex-1 rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground disabled:opacity-55">{tr("Додати", "Add")}</button></div>
           </form>
       </Modal>
+      </ClassWorkspaceFrame>
     </div>
 );
 };

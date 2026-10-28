@@ -21,6 +21,9 @@ export type CourseDiagnosticQuestion = {
 };
 
 export type CourseDiagnosticPractical = {
+  id: string;
+  moduleTitle: string;
+  topicIds: number[];
   title: string;
   statement: string;
   inputFormat: string;
@@ -34,10 +37,12 @@ export type CourseDiagnosticPractical = {
 };
 
 export type CourseDiagnosticPayload = {
-  version: 1;
+  version: 1 | 2;
   seed: string;
   questions: CourseDiagnosticQuestion[];
-  practical: CourseDiagnosticPractical;
+  /** Version 1 payloads keep one task; version 2 has a course-wide task set. */
+  practical?: CourseDiagnosticPractical;
+  practicals?: CourseDiagnosticPractical[];
 };
 
 export type CourseDiagnosticResult = {
@@ -48,6 +53,15 @@ export type CourseDiagnosticResult = {
   totalQuestions: number;
   testsPassed: number;
   testsTotal: number;
+  practicalResults?: Array<{
+    taskId: string;
+    title: string;
+    moduleTitle: string;
+    topicIds: number[];
+    testsPassed: number;
+    testsTotal: number;
+    score: number;
+  }>;
   passed: boolean;
   answers: Array<{ questionId: string; selectedIndex: number }>;
   topicResults: Array<{

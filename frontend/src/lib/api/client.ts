@@ -23,6 +23,10 @@ const RETRY_CONFIG = {
   shouldRetry: (error: AxiosError, retryCount: number) => {
     if (retryCount <= 0) return false;
 
+    // Loading a course diagnostic creates an AI assessment and stores it. A
+    // retry after a long-running 503 would start the full generation again.
+    if (/\/learning\/enrollments\/\d+\/diagnostic\/?$/.test(String(error.config?.url || ""))) return false;
+
     // Retrying a POST/PATCH can duplicate side effects (messages, submissions,
     // payments). Only automatically retry idempotent reads; callers that have
     // an explicit idempotency key can retry their mutation themselves.
