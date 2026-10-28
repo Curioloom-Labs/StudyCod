@@ -21,6 +21,17 @@ export class CreateCourseDiagnosticAssessments1793100000000 implements Migration
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    if (!(await queryRunner.hasTable("course_diagnostic_assessments"))) return;
+
+    const rows = await queryRunner.query(
+      "SELECT COUNT(*) AS row_count FROM `course_diagnostic_assessments`"
+    ) as Array<{ row_count: number | string }>;
+    if (Number(rows[0]?.row_count ?? 0) > 0) {
+      throw new Error(
+        "Rollback blocked: course diagnostic assessments contain learner data. Export or migrate it before removing this table."
+      );
+    }
+
     await queryRunner.query("DROP TABLE IF EXISTS `course_diagnostic_assessments`");
   }
 }
