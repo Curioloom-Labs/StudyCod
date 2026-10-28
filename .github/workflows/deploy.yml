@@ -145,15 +145,16 @@ jobs:
           ai_service=0
           lsp_service=0
           ai_worker=0
-          frontend=0
+          # Always activate the verified frontend artifact. A previous deploy
+          # may have failed after a frontend change, while this push only
+          # contains a backend fix; scope-by-push would otherwise leave the old UI live.
+          frontend=1
 
           has_path '^(backend/|package-lock.json$)' && backend=1
           has_path '^(judge/|package-lock.json$)' && judge=1
           has_path '^(ai-service/|package-lock.json$)' && ai_service=1
           has_path '^(lsp-service/|package-lock.json$)' && lsp_service=1
           has_path '^ai-service/cloudflare-ai-worker/' && ai_worker=1
-          has_path '^frontend/' && frontend=1
-
           infra_only=0
           if ! grep -Evq '^(\.github/workflows/|ops/)' <<< "$changed"; then
             infra_only=1
