@@ -36,6 +36,21 @@ test("course diagnostic assessment rollback drops only an empty table", async ()
   assert.equal(statements[1], "DROP TABLE IF EXISTS `course_diagnostic_assessments`");
 });
 
+test("course diagnostic assessment rollback blocks when the row count cannot be verified", async () => {
+  const statements: string[] = [];
+  const queryRunner = {
+    hasTable: async () => true,
+    query: async (sql: string) => { statements.push(sql); return []; },
+  } as any;
+
+  await assert.rejects(
+    () => new CreateCourseDiagnosticAssessments1793100000000().down(queryRunner),
+    /Rollback blocked: could not verify the course diagnostic assessment row count/
+  );
+  assert.equal(statements.length, 1);
+  assert.match(statements[0], /^SELECT COUNT\(\*\).*course_diagnostic_assessments/);
+});
+
 test("course diagnostic assessment rollback is a no-op when the table is absent", async () => {
   let queryCalled = false;
   const queryRunner = {
