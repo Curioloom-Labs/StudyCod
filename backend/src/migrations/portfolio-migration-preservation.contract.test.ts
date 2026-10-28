@@ -90,6 +90,8 @@ test("Portfolio and Assess migration up() methods issue only additive SQL", asyn
         statements.push(sql);
         return [];
       },
+      hasColumn: async (_table: string, _column: string) => false,
+      hasIndex: async (_table: string, _index: string) => false,
       getTable: async () => ({
         findColumnByName: () => undefined,
         findIndexByName: () => undefined,
