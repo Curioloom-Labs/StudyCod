@@ -487,7 +487,9 @@ export const ContestProblemSolvePage: React.FC = () => {
       const allowed = isDevPreviewActive()
         ? stmt.task.allowedLanguages
         : enabledJudgeLanguages();
-      const fallbackLang = (allowed[0] ?? "java") as JudgeLanguage;
+      const fallbackLang = stmt.task.defaultLanguage && allowed.includes(stmt.task.defaultLanguage)
+        ? stmt.task.defaultLanguage
+        : (allowed[0] ?? "java") as JudgeLanguage;
 
       try {
         const savedLang = localStorage.getItem(

@@ -42,6 +42,7 @@ import { certificateService } from "../services/certificates/CertificateService"
 import { computeScoreboard, type ScoreboardSubmission } from "../services/contest/scoreboard";
 import { publishContestEvent, subscribeContestEvents, type ContestEvent } from "../services/contest/contestEvents";
 import { ALL_JUDGE_LANGUAGES } from "../config/judgeLanguages";
+import { contestDefaultLanguage } from "../utils/contestDefaultLanguage";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { askTutor } from "../services/edu/aiTutor";
 import { getActiveAirRaidAlert, isAirAlertProviderConfigured, listAirAlertLocations, type AirAlertLevel } from "../services/contest/airAlerts";
@@ -4171,7 +4172,7 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
         limitsByLanguage: taskLimitsByLanguage(task, DEFAULT_LIMITS_BY_LANG, getAllowedJudgeLanguages(task)),
         template: task.template,
         templatesByLanguage: task.templatesByLanguage ?? null,
-        defaultLanguage: task.lang === "PYTHON" ? "python" : task.lang === "CPP" ? "cpp" : "java",
+        defaultLanguage: contestDefaultLanguage(task, ALL_JUDGE_LANGS),
         allowedLanguages: getAllowedJudgeLanguages(task),
         timeLimitMs: task.timeLimitMs ?? null,
         memoryLimitMb: task.memoryLimitMb ?? null,
