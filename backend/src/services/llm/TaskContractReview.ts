@@ -26,6 +26,7 @@ export function resolveTestDataIoType(description: string, explicit?: AiTaskGene
 
 export const TASK_PRECISION_INSTRUCTIONS = `
 STATEMENT CONTRACT (mandatory):
+- The learner submits one complete runnable program, checked through stdout and stdin only when the selected IO type permits it. Never request a function-only, method-only or class-only submission, a return value in place of stdout, or unit tests. For a lesson about functions/methods/classes, put that concept inside a complete program with an explicit input/output contract. Java may use class Main and public static void main(String[] args); C++ uses main(); Python runs as a script. These entry points are not standalone function tasks.
 - State the exact input structure, types and valid domain, including numeric bounds and string/array lengths where applicable.
 - Keep the narrative consistent with the entire valid input domain. If a signed numeric field permits negative values, explain what a negative value means in the story (such as a refund, debt, or net change), or use a neutral signed-value context; do not describe signed values as inherently non-negative counts, sales or lengths.
 - Specify every rule that determines the answer: inclusive/exclusive boundaries, equality, ties, order, duplicates, case sensitivity and the no-match/default result whenever relevant. Do not introduce cases outside the valid domain.
@@ -35,6 +36,16 @@ STATEMENT CONTRACT (mandatory):
 - For NO_INPUT_FIXED_OUTPUT, use exactly one public example with empty input. Set outputFormat to the literal stdout with no surrounding prose or code fence, and make examples[0].output byte-for-byte identical to outputFormat, including spaces, punctuation and line breaks.
 - Keep all these rules in the learner-visible statement, inputFormat, outputFormat or constraints. Conciseness must not remove a rule needed to determine the answer.
 `;
+
+export function buildTaskValidationFeedback(message: string): string {
+  if (/function\/method\/class instead of a full program|implement a function\/method instead of a full program/i.test(message)) {
+    return `${message} Rewrite practicalTask as a request to write a COMPLETE RUNNABLE PROGRAM, not to implement a callable or return a value. Preserve the lesson objective and allowed IO type. State what the program reads (or that no input is needed) and exactly what it PRINTS to stdout; keep inputFormat, outputFormat and every public example consistent. Replace any function-only template with an empty complete-program scaffold: Java class Main with public static void main(String[] args), C++ main(), or a Python script. Do not add untaught concepts or change the problem to an unrelated exercise.`;
+  }
+  if (/fixed output contradicts outputFormat/i.test(message)) {
+    return `${message} For NO_INPUT_FIXED_OUTPUT, keep exactly one example with empty input; make outputFormat and examples[0].output the same literal stdout byte-for-byte, including every newline and space. Do not put a description or markdown in outputFormat. Keep the practicalTask consistent with that stdout.`;
+  }
+  return message;
+}
 
 const ReviewSchema = z.object({
   valid: z.boolean(),

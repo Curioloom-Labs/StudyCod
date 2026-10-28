@@ -5,7 +5,7 @@ import { logger } from '../../utils/logger';
 import { getCurriculumPolicyViolationForGeneratedTask } from './curriculumPolicy';
 import { isAiCircuitOpen, recordAiCircuitSuccess, recordAiCircuitFailure } from './aiCircuitBreaker';
 import { normalizeTopicLanguage, TOPIC_LANGUAGES } from '../../utils/topicLanguage';
-import { cannotRepairByRegeneratingTests, requireCompleteTaskDescription, resolveTestDataIoType } from '../llm/TaskContractReview';
+import { buildTaskValidationFeedback, cannotRepairByRegeneratingTests, requireCompleteTaskDescription, resolveTestDataIoType } from '../llm/TaskContractReview';
 import { executeReferenceTests } from '../executeReferenceTests';
 import { REFERENCE_LANGUAGE } from '../llm/ReferenceTestData';
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
@@ -743,10 +743,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
           // instead of failing fast (bounded by maxAttempts and totalTimeoutMs).
           const canRetryValidation = (mode === 'generateTask' || (mode === 'generateTestData' && !cannotRepairByRegeneratingTests(error))) && attempt < maxAttempts;
           if (canRetryValidation) {
-            const targetedCorrection = /fixed output contradicts outputFormat/i.test(errorMsg)
-              ? ' For NO_INPUT_FIXED_OUTPUT, keep exactly one example with empty input; make outputFormat and examples[0].output the same literal stdout byte-for-byte, including every newline and space. Do not put a description or markdown in outputFormat. Keep the practicalTask consistent with that stdout.'
-              : '';
-            sanitizedParams.validationFeedback = `${errorMsg}${targetedCorrection}`.slice(0, 8000);
+            sanitizedParams.validationFeedback = buildTaskValidationFeedback(errorMsg).slice(0, 8000);
             logger.debug('[ai] invalid response (retrying)', {
               mode,
               requestId: options?.requestId ?? null,

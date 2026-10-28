@@ -178,8 +178,9 @@ export type TaskGenerationProgress = {
   updatedAt: string;
 };
 
-export async function getTaskGenerationProgress(generationId: string): Promise<TaskGenerationProgress> {
+export async function getTaskGenerationProgress(generationId: string): Promise<TaskGenerationProgress | null> {
   const res = await api.get(`/tasks/generate/progress/${encodeURIComponent(generationId)}`);
+  if (res.status === 202) return null;
   return res.data as TaskGenerationProgress;
 }
 

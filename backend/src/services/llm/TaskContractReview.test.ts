@@ -575,3 +575,27 @@ test('outer task retries pass the actual review failure back to generation', asy
   assert.equal(result.success, true);
   assert.equal(feedback, 'Missing input bounds.');
 });
+
+test('course task retry repairs a function-only request without rejecting a full program using output methods', async (t) => {
+  const feedback: string[] = [];
+  t.mock.method(getLLMOrchestrator(), 'generateTaskWithAI', async (params: { validationFeedback?: string }) => {
+    feedback.push(params.validationFeedback ?? '');
+    return {
+      ...task,
+      practicalTask: feedback.length === 1
+        ? 'Implement a function sum_two(a, b) that returns the sum of two integers. Each argument is between -100 and 100 inclusive. The return value must be the exact arithmetic sum, including negative and zero values, without converting the result to a string.'
+        : 'Write a complete program that reads two integers a and b from one line of standard input and calculates their sum. Print exactly one integer containing a + b with the System.out.println method. Do not print labels, prompts, or explanations.',
+    };
+  });
+  const result = await safeAICall('generateTask', {
+    topicTitle: 'Arithmetic', theory: 'Addition.', lang: 'JAVA', numInTopic: 1,
+    isFirstTask: false, allowedIoTypes: ['STDIN_STDOUT'],
+  }, { maxAttempts: 2 });
+
+  assert.equal(result.success, true, JSON.stringify(result));
+  assert.equal(feedback.length, 2);
+  assert.match(feedback[1], /function\/method\/class instead of a full program/);
+  assert.match(feedback[1], /COMPLETE RUNNABLE PROGRAM/);
+  assert.match(feedback[1], /PRINTS to stdout/);
+  assert.match(feedback[1], /Preserve the lesson objective and allowed IO type/);
+});

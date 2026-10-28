@@ -205,6 +205,28 @@ test("curriculumPolicy: ignores function syntax inside a fenced debugging draft"
   assert.equal(looksLikeFunctionImplementationTask(practicalTask), false);
 });
 
+test("curriculumPolicy: complete programs may mention output methods, mathematical functions and main", () => {
+  for (const practicalTask of [
+    "Напишіть програму, яка зчитує два цілих числа та виводить їхню суму. Для виведення використайте метод System.out.println.",
+    "Write a program that reads two integers and prints their sum. The output method must not print any extra labels.",
+    "Напишіть програму, яка обчислює f(x) = x*x + 1. Математична функція визначена для всіх цілих x; виведіть результат.",
+    "Напишіть програму Java з точкою входу public static void main(String[] args). Зчитайте число та виведіть його квадрат.",
+  ]) {
+    assert.equal(looksLikeFunctionImplementationTask(practicalTask), false, practicalTask);
+  }
+});
+
+test("curriculumPolicy: direct callable-only submission requests remain rejected", () => {
+  for (const practicalTask of [
+    "Implement a function sum_two(a, b) that returns the sum of its arguments.",
+    "Напишіть функцію sum_two(a, b), яка повертає суму аргументів.",
+    "Створіть окремий статичний метод sumTwo, який повертає суму.",
+    "Не пишіть повну програму. Напишіть функцію для обчислення суми.",
+  ]) {
+    assert.equal(looksLikeFunctionImplementationTask(practicalTask), true, practicalTask);
+  }
+});
+
 test("curriculumPolicy: allows mathematical function descriptions", () => {
   const v = getCurriculumPolicyViolationForGeneratedTask({
     lang: "PYTHON",

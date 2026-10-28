@@ -39,13 +39,6 @@ function isNonJudgeableScaffoldingText(practicalText: string): boolean {
   return hasCreateVerb && (hasFileOpsNouns(text) || hasScaffoldingPathHints(text) || hasExplicitCreateNamedFile(text));
 }
 
-function hasFunctionTaskVerb(text: string): boolean {
-  // `напис` covers "написати/написав"; `напиш` is required for the imperative
-  // "напишіть/напиши" (напиш-, not напис-) — without it UA function-impl tasks
-  // slip through. Likewise `реалізуй` imperative alongside the `реаліз` stem.
-  return /(write|implement|define|create|declare|develop|build|design|make|реаліз|напиш|напис|створ|визнач|оголос|розроб|імплемент|опиш|склад(и|іть))/i.test(text);
-}
-
 function hasFunctionTaskNoun(text: string): boolean {
   return /(\bfunction\b|\bmethod\b|\bprocedure\b|функц|метод|процедур)/i.test(text);
 }
@@ -58,12 +51,16 @@ export function looksLikeFunctionImplementationTask(practicalText: string): bool
   const prose = raw.replace(/```[\s\S]*?```/g, " ");
   const text = prose.toLowerCase();
 
-  if (hasFunctionTaskNoun(text) && hasFunctionTaskVerb(text)) return true;
+  // Match an instruction to implement a callable, not unrelated words anywhere
+  // in the statement (e.g. "Write a program ... use the println method").
+  if (/\b(?:write|implement|define|create|declare|develop|build|design|make)\s+(?:(?:a|an|the|your|new|required|following|specified|python(?:\s+3)?|java|c\+\+|static|public|private|helper|recursive|pure|separate|standalone)\s+){0,4}(?:function|method|procedure)\b/i.test(prose)) return true;
+  if (/(?:реаліз[^\s.!?]*|напиш[^\s.!?]*|напис[^\s.!?]*|створ[^\s.!?]*|визнач[^\s.!?]*|оголос[^\s.!?]*|розроб[^\s.!?]*|імплемент[^\s.!?]*|опиш[^\s.!?]*|склад(?:и|іть))\s+(?:(?:нов[^\s.!?]*|власн[^\s.!?]*|окрем[^\s.!?]*|потрібн[^\s.!?]*|задан[^\s.!?]*|наведен[^\s.!?]*|статичн[^\s.!?]*|допоміжн[^\s.!?]*|рекурсивн[^\s.!?]*|публічн[^\s.!?]*)\s+){0,3}(?:функці[^\s.!?]*|метод[^\s.!?]*|процедур[^\s.!?]*)/i.test(prose)) return true;
 
-  if (/\bdef\s+[a-z_][a-z0-9_]*\s*\(/i.test(prose)) return true;
-  if (/\bpublic\s+static\s+\w+\s+\w+\s*\(/i.test(prose)) return true;
+  if (/\bdef\s+(?!main\s*\()[a-z_][a-z0-9_]*\s*\(/i.test(prose)) return true;
+  if (/\bpublic\s+static\s+\w+\s+(?!main\s*\()\w+\s*\(/i.test(prose)) return true;
 
-  if (hasFunctionTaskNoun(text) && /(must|should|has to)\s+return|повинн\w*\s+поверт|має\s+поверт/.test(text)) return true;
+  if (splitPracticalTaskToClauses(text).some(clause => hasFunctionTaskNoun(clause)
+    && /(?:must|should|has to)\s+return|повинн[^\s]*\s+поверт|має\s+поверт/.test(clause))) return true;
 
   return false;
 }

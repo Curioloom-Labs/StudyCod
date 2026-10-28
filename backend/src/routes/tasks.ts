@@ -2591,7 +2591,15 @@ tasksRouter.get("/generate/progress/:generationId", authMiddleware, async (req: 
   }
 
   const progress = await getTaskGenerationProgress({ userId: req.userId, generationId });
-  if (!progress) return res.status(404).json({ status: "missing" });
+  // Polling may arrive before POST /generate writes its first snapshot.
+  if (!progress) return res.status(202).json({
+    pending: true,
+    status: "running",
+    phase: "requesting",
+    progress: 5,
+    message: "Надсилаємо запит на створення практики",
+    updatedAt: new Date().toISOString(),
+  });
   return res.json(progress);
 });
 tasksRouter.get("/:id", authMiddleware, async (req: AuthRequest, res: Response) => {

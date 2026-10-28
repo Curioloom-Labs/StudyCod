@@ -1495,9 +1495,11 @@ export const TasksPage: React.FC<Props> = ({
           try {
             const next = await getTaskGenerationProgress(generationId);
             if (!progressPolling) break;
-            setGenerationProgress(next);
-            setGenerationPhase(next.phase);
-            if (next.status === "error" || next.status === "ready") break;
+            if (next) {
+              setGenerationProgress(next);
+              setGenerationPhase(next.phase);
+              if (next.status === "error" || next.status === "ready") break;
+            }
           } catch {
             // The generation request can reach a different backend worker
             // before Redis has the first snapshot. Keep the visible request

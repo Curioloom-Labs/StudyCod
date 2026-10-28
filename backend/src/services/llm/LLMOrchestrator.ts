@@ -10,7 +10,7 @@ import { BoundedCache } from '../../utils/boundedCache';
 import { env } from '../../env';
 import { topicLanguageLabel, type TopicLanguage } from '../../utils/topicLanguage';
 import { createIntroductoryHelloWorldTask, shouldUseCanonicalIntroductoryPractice } from './introductoryTask';
-import { requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTests, TASK_PRECISION_INSTRUCTIONS } from './TaskContractReview';
+import { buildTaskValidationFeedback, requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTests, TASK_PRECISION_INSTRUCTIONS } from './TaskContractReview';
 import { validateAndReviewGeneratedTask } from './GeneratedTaskContract';
 import { generateReferenceTestData, type ReferenceTestExecutor } from './ReferenceTestData';
 import { parseOlympiadPracticeContract } from '../learning/learningContract';
@@ -1027,7 +1027,7 @@ ${pythonBeforeStringsInstructionsUa}
 ⚠️ ПЕРШ ЛІЖ УСЬОГО — ОСНОВНЕ ПРАВИЛО ⚠️
 ЗАВДАННЯ ОБОВ'ЯЗКОВО ПОВИННО ВИМАГАТИ ПОВНОЇ ПРОГРАМИ (Програма = код зі STDIN/STDOUT або без вводу).
 ЯКЩО ТИ НАПИШЕШ, ЩО СТУДЕНТ ПОВИНЕН РЕАЛІЗУВАТИ ФУНКЦІЮ/МЕТОД/КЛАС (ЗАМІСТЬ ПОВНОЇ ПРОГРАМИ) — ЗАВДАННЯ БУДЕ АВТОМАТИЧНО ВІДХИЛЕНО.
-ЖОДНОЇ ЧАСТИНИ ФУНКЦІЙ, ЖОДНИХ UNIT-ТЕСТІВ, ЖОДНИХ КЛАССІВ — ТІЛЬКИ ПОВНА ПРОГРАМА З main().
+Потрібна повна виконувана програма, а не окрема функція чи клас для unit-тестів. Java використовує клас Main і main(), C++ — main(), Python — виконуваний скрипт. Навіть у темі про функції чи класи визнач повний контракт введення/виведення програми.
 
 КРИТИЧНО ВАЖЛИВО:
 1. Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.anchor.topic}" (immutable)
@@ -1167,7 +1167,7 @@ ${pythonBeforeStringsInstructionsEn}
 ⚠️ MOST CRITICAL RULE — READ THIS FIRST ⚠️
 THE TASK MUST REQUIRE WRITING A COMPLETE FULL PROGRAM (Program = code with STDIN/STDOUT or no input with fixed output).
 IF YOU WRITE THAT A STUDENT MUST IMPLEMENT A FUNCTION/METHOD/CLASS (INSTEAD OF A FULL PROGRAM) — THE TASK WILL BE AUTOMATICALLY REJECTED.
-NO FUNCTION STUBS, NO UNIT TESTS, NO CLASSES — ONLY A COMPLETE RUNNABLE PROGRAM WITH main().
+Require a complete runnable program, not a standalone function or class for unit tests. Java uses class Main with main(), C++ uses main(), and Python runs as a script. Even for a lesson about functions or classes, define the complete program's input/output contract.
 
 CRITICALLY IMPORTANT:
 1. The "topic" field in JSON MUST be equal to "${params.anchor.topic}" (immutable)
@@ -1378,7 +1378,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     let lastError: Error | null = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const retryFeedback = lastError ? `\nPREVIOUS VALIDATION FAILURE: ${lastError.message}\nGenerate a complete corrected task; explicitly resolve this issue without inventing hidden rules.` : '';
+        const retryFeedback = lastError ? `\nPREVIOUS VALIDATION FAILURE: ${buildTaskValidationFeedback(lastError.message)}\nGenerate a complete corrected task; explicitly resolve this issue without inventing hidden rules.` : '';
         const parsed = await provider.generateJSON<unknown>(userPrompt + retryFeedback, jsonSchema, systemPrompt, {
           timeout: LLM_TASK_TIMEOUT_MS,
           maxRetries: 0,
