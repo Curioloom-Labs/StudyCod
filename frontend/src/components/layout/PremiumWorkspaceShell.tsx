@@ -32,6 +32,9 @@ type Page = "home" | "tasks" | "grades" | "plan" | "profile" | "teacher" | "stud
 type NavId = Page | "library" | "playground" | "contests" | "portfolio" | "assess";
 type NavItem = { id: NavId; label: string; Icon: React.ElementType<{ className?: string }>; onClick?: () => void };
 
+// Temporarily hide these navigation entries while keeping their routes available.
+const SHOW_PORTFOLIO_ASSESS_NAV = false;
+
 type ShellProps = {
   user: User;
   page: Page | "contests";
@@ -115,8 +118,8 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
     { id: "home", label: uk ? "Навчання" : "Learning", Icon: Home },
     { id: "contests", label: uk ? "Контести" : "Contests", Icon: Trophy, onClick: onContests ?? (() => navigate("/contest/contests")) },
     { id: "library", label: uk ? "Бібліотека" : "Library", Icon: Library, onClick: onLibrary },
-    ...(user.userMode === "PERSONAL" ? [{ id: "portfolio" as const, label: uk ? "Портфоліо" : "Portfolio", Icon: FolderKanban, onClick: () => navigate(withDevPreview("/portfolio")) }] : []),
-    ...(user.userMode === "PERSONAL" ? [{ id: "assess" as const, label: "Assess", Icon: BriefcaseBusiness, onClick: () => navigate(withDevPreview("/assess")) }] : []),
+    ...(SHOW_PORTFOLIO_ASSESS_NAV && user.userMode === "PERSONAL" ? [{ id: "portfolio" as const, label: uk ? "Портфоліо" : "Portfolio", Icon: FolderKanban, onClick: () => navigate(withDevPreview("/portfolio")) }] : []),
+    ...(SHOW_PORTFOLIO_ASSESS_NAV && user.userMode === "PERSONAL" ? [{ id: "assess" as const, label: "Assess", Icon: BriefcaseBusiness, onClick: () => navigate(withDevPreview("/assess")) }] : []),
     { id: "playground", label: uk ? "Пісочниця" : "Playground", Icon: PlaySquare, onClick: onPlayground },
     ...(user.role === "SYSTEM_ADMIN"
       ? [{ id: "admin" as const, label: uk ? "Адміністрування" : "Admin", Icon: ShieldCheck }]
