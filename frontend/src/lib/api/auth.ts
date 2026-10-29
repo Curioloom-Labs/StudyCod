@@ -1,5 +1,7 @@
 import { api } from "./client";
 import type { User } from "../../types";
+import { clearGetMeCache } from "./profile";
+import { setActiveEduStudentId } from "../eduContext";
 export interface RegisterResponse {
   message: string;
   requiresEmailVerification?: boolean;
@@ -24,6 +26,9 @@ export async function login(username: string, password: string, turnstileToken?:
     password,
     ...(turnstileToken ? { turnstileToken } : {})
   });
+  // A new account cookie must not inherit another account's selected class or profile.
+  setActiveEduStudentId(null);
+  clearGetMeCache({ clearSnapshot: true });
   return res.data.user as User;
 }
 

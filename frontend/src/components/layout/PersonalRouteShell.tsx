@@ -1,5 +1,5 @@
 import React, { useContext } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { getCachedMeUser, getMe } from "../../lib/api/profile";
 import type { User } from "../../types";
@@ -18,6 +18,7 @@ export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "l
   const [loadError, setLoadError] = React.useState(false);
   const [theme, setTheme] = React.useState<AppTheme>(getCurrentTheme);
   const navigate = useNavigate();
+  const location = useLocation();
   const navigateWithPreview = (path: string) => navigate(withDevPreview(path));
   const { i18n } = useTranslation();
   React.useEffect(() => {
@@ -39,6 +40,14 @@ export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "l
       });
     return () => { active = false; };
   }, [sharedWorkspace?.active, sharedWorkspace?.setUser]);
+  // A saved personal URL must never put an EDU session inside personal chrome.
+  if (user?.userMode === "EDUCATIONAL") {
+    const libraryPath = location.pathname.replace(/^\/(?:lab\/library|library)(?=\/|$)/, "/edu/library");
+    const target = libraryPath !== location.pathname
+      ? `${libraryPath}${location.search}${location.hash}`
+      : user.studentId ? "/edu/lessons" : "/edu";
+    return <Navigate to={target} replace />;
+  }
   if (sharedWorkspace?.active) return <>{children}</>;
   if (loading && !user) return <PageLoader />;
   if (!user || loadError && !user) {

@@ -17,6 +17,7 @@ import { Student } from '../entities/Student';
 import { matchesStudentCredentialVersion, matchesEduUserPasswordVersion, readClassIssuedPasswordState } from '../services/edu/studentCredentialVersion';
 import type { CourseRuntime } from '../entities/CourseVariant';
 import { matchesEduSessionVersion, readEducationalUserSessionState } from '../services/edu/userSessions';
+import { findDefaultClassIssuedStudent } from '../services/edu/classIssuedAccount';
 
 /**
  * Carries the authenticated principal. EDU runs a deliberate dual identity model
@@ -195,7 +196,7 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
   }
 
   let issuedState: Awaited<ReturnType<typeof readClassIssuedPasswordState>> | undefined;
-  if (payload.eduPasswordVersion !== undefined || (user.userMode === "EDUCATIONAL" || eduRoute) && (user.role == null || user.role === "USER")) {
+  if (payload.eduPasswordVersion !== undefined || (req.eduSessionVersion !== undefined || user.userMode === "EDUCATIONAL" || eduRoute) && (user.role == null || user.role === "USER")) {
     issuedState = await readClassIssuedPasswordState(userId);
     if ((payload.eduPasswordVersion !== undefined && !issuedState) || (issuedState && !matchesEduUserPasswordVersion(payload.eduPasswordVersion, issuedState))) return "not-found";
   }
@@ -210,9 +211,9 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
     relations: ["variant"],
     order: { updatedAt: "DESC" }
   });
-  // A User-backed student is selected explicitly by the browser context
-  // header. Only a Student linked to this same User can activate it; never
-  // trust a raw student id from the client as an authorization decision.
+  // Private accounts select a linked Student explicitly. School-managed learners
+  // also recover their default class when a new tab has no context header.
+  // Both paths must resolve a Student owned by this authenticated User.
   const requestedStudentId = Number(req.headers["x-studycod-edu-student"] ?? 0);
   let linkedStudent: Student | null = null;
   if (Number.isInteger(requestedStudentId) && requestedStudentId > 0) {
@@ -227,6 +228,8 @@ async function hydrateAuthContext(req: AuthRequest, payload: JwtPayload): Promis
       // Student view; marked pre-promotion sessions were rejected above.
       if (issuedState && !matchesEduUserPasswordVersion(payload.eduPasswordVersion, issuedState)) return "not-found";
     }
+  } else if (req.headers["x-studycod-edu-student"] == null && issuedState) {
+    linkedStudent = await findDefaultClassIssuedStudent(userId);
   }
   req.userId = userId;
   req.userType = "USER";

@@ -20,7 +20,7 @@ import { generateJti, revokeJti, revokeUserTokensBeforeTime } from "../services/
 import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { AUTH_COOKIE_NAME, clearSharedAuthCookie, setSharedAuthCookie } from "../utils/authCookie";
 import { EduRegistrationIntent } from "../entities/EduRegistrationIntent";
-import { hasClassIssuedUserLogin, hasUnmanagedClassLogin } from "../services/edu/classIssuedAccount";
+import { hasClassIssuedUserLogin, hasUnmanagedClassLogin, findDefaultClassIssuedStudent } from "../services/edu/classIssuedAccount";
 import { eduUserPasswordVersion } from "../services/edu/studentCredentialVersion";
 import { hasEducationalAccountContext, saveEducationalAccountMetadata } from "../services/edu/accountMetadata";
 import { verifyEducationalAccountEmail } from "../services/edu/verifyAccountEmail";
@@ -28,6 +28,7 @@ import { HttpError } from "../utils/httpError";
 import { readEducationalUserSessionState, resetEducationalUserPassword, revokeEducationalUserSessions, revokeEducationalStudentSessions } from "../services/edu/userSessions";
 import { Student } from "../entities/Student";
 import { OrgInvitation } from "../entities/OrgInvitation";
+import { applyStudentViewToUserDto } from "../services/edu/studentLink";
 import { signAccountUserToken } from "../services/auth/accountToken";
 import { invalidateCachedUser } from "../services/auth/userCache";
 export const authRouter = Router();
@@ -633,9 +634,10 @@ authRouter.post("/login", loginLimiter, async (req: AuthRequest, res: Response) 
     }
 
     const token = await signAccountUserToken(user);
+    const student = classIssued ? await findDefaultClassIssuedStudent(user.id) : null;
     setSharedAuthCookie(res, token);
     return res.json({
-      user: buildUserDto(user)
+      user: student ? applyStudentViewToUserDto(buildUserDto(user), student) : buildUserDto(user)
     });
   } catch (err) {
     logger.error("[auth] Login error", { requestId: req.requestId, err });
