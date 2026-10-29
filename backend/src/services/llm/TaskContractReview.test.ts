@@ -632,3 +632,28 @@ test('a line-count contradiction is repaired from the rejected task with another
   assert.equal(calls[2].options?.validationRetry, true);
   assert.equal(calls[3].options?.validationRetry, true);
 });
+
+test('EDU authored examples may have genuinely empty stdin for a no-input task', async t => {
+  t.mock.method(getLLMOrchestrator(), 'generateTestDataWithAI', async (params: { publicExamples?: unknown }) => {
+    assert.deepEqual(params.publicExamples, [{ input: '', output: '\n' }]);
+    return [{ input: '', output: '\n' }];
+  });
+  const result = await safeAICall('generateTestData', {
+    taskDescription: 'There is no input. Print exactly one empty line.', taskTitle: 'Blank line',
+    lang: 'PYTHON', count: 1, ioType: 'NO_INPUT_FIXED_OUTPUT', allowEmptyOutput: true,
+    publicExamples: [{ input: '', output: '\n' }],
+  }, { maxAttempts: 2 });
+  assert.equal(result.success, true, JSON.stringify(result));
+  if (result.success) assert.deepEqual(result.data, [{ input: '', output: '\n', explanation: undefined }]);
+});
+
+test('EDU blank expected answers survive the final save guard for ordinary stdin tasks', async t => {
+  const tests = [{ input: '0\n', output: '\n' }, { input: '1\n5\n', output: '' }, { input: '3\n1 2 3\n', output: '6\n' }];
+  t.mock.method(getLLMOrchestrator(), 'generateTestDataWithAI', async () => tests);
+  const result = await safeAICall('generateTestData', {
+    taskDescription: 'Read N and N integers; for N < 3 print an empty line; otherwise print the sum.',
+    taskTitle: 'Window filter', lang: 'PYTHON', count: 3, ioType: 'STDIN_STDOUT', allowEmptyOutput: true,
+  }, { maxAttempts: 2 });
+  assert.equal(result.success, true, JSON.stringify(result));
+  if (result.success) assert.deepEqual((result.data as typeof tests).map(test => test.output), ['\n', '', '6\n']);
+});

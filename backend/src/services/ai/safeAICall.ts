@@ -381,7 +381,7 @@ function validateInputParams(mode: AIMode, params: JsonObject): void {
       throw new Error(`Unknown AI mode: ${mode}`);
   }
 }
-function validateResultBeforeSave(mode: AIMode, result: unknown): void {
+function validateResultBeforeSave(mode: AIMode, result: unknown, options: { allowEmptyOutput?: boolean } = {}): void {
   const resultObject = asJsonObject(result);
   switch (mode) {
     case 'generateTask':
@@ -430,7 +430,7 @@ function validateResultBeforeSave(mode: AIMode, result: unknown): void {
         if (typeof testObject.input !== 'string') {
           throw new Error('Generated test data contains invalid entries: input must be a string');
         }
-        if (typeof testObject.output !== 'string' || !testObject.output.trim()) {
+        if (typeof testObject.output !== 'string' || (!options.allowEmptyOutput && !testObject.output.trim())) {
           throw new Error('Generated test data contains invalid entries: output must be a non-empty string');
         }
       }
@@ -712,7 +712,9 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
               requiredCases: Array.isArray(sanitizedParams.requiredCases) ? sanitizedParams.requiredCases as string[] : undefined,
               validationFeedback: optionalString(sanitizedParams.validationFeedback),
               publicExamples: Array.isArray(sanitizedParams.publicExamples) ? sanitizedParams.publicExamples.map(example => ({
-                input: requiredString(asJsonObject(example).input, 'publicExamples.input'),
+                input: typeof asJsonObject(example).input === 'string'
+                  ? asJsonObject(example).input as string
+                  : requiredString(asJsonObject(example).input, 'publicExamples.input'),
                 output: sanitizedParams.allowEmptyOutput === true && typeof asJsonObject(example).output === 'string'
                   ? asJsonObject(example).output as string
                   : requiredString(asJsonObject(example).output, 'publicExamples.output'),
@@ -931,7 +933,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
       };
     }
     try {
-      validateResultBeforeSave(mode, result);
+      validateResultBeforeSave(mode, result, { allowEmptyOutput: sanitizedParams.allowEmptyOutput === true });
     } catch (validationError) {
       const validationErrorMessage = errorMessage(validationError);
       logger.warn('[ai] invalid result', { mode, requestId: options?.requestId ?? null, error: validationErrorMessage });
