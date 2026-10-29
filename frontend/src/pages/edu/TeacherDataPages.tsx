@@ -37,6 +37,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
 import { ClassWorkspaceNavigation, ClassWorkspaceFrame } from "./ClassWorkspaceNavigation";
+import { StudentWorkReview } from "./StudentWorkReview";
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const root = "edu-workspace edu-data-workspace mx-auto max-w-[1480px] px-4 py-8 sm:px-6 lg:px-10 lg:py-12";
@@ -175,6 +176,7 @@ export const GradebookWorkspace: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [editing, setEditing] = React.useState<EditingCell | null>(null);
+  const [reviewingWork, setReviewingWork] = React.useState(false);
   const [gradeValue, setGradeValue] = React.useState("");
   const [thematicOpen, setThematicOpen] = React.useState(false);
   const [thematicTopicId, setThematicTopicId] = React.useState("");
@@ -232,7 +234,7 @@ export const GradebookWorkspace: React.FC = () => {
   const openEditor = (student: GradebookStudent, column: Column) => {
     if (mutationPending.current) return;
     const grade = findGrade(student, column);
-    setGradeError(null); setGradeConflict(null);
+    setGradeError(null); setGradeConflict(null); setReviewingWork(false);
     setEditing({ student, column, grade });
     setGradeValue(grade?.grade == null ? "" : formatGradeForSystem(grade.grade, gradingSystem, scaleMode));
   };
@@ -492,10 +494,11 @@ export const GradebookWorkspace: React.FC = () => {
         </>
       )}
 
-      {editing && (
+      {editing && !reviewingWork && (
         <Modal open onClose={() => { if (!mutationPending.current) setEditing(null); }} title={tr("Редагування оцінки", "Edit grade")} description={`${editing.student.studentName} · ${editing.column.title}`} showCloseButton={false} panelClassName="classroom-grade-editor max-w-md">
             <form onSubmit={event => { event.preventDefault(); void saveGrade(); }}>
               {editing.column.isControl && editing.grade?.manualOverrideGrade != null && <div data-control-override role="status" className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm"><p>{tr("Ручна оцінка збережена. Нові результати тесту й практики оновлюють розрахунок, не змінюючи вашу оцінку.", "Your manual grade is retained. New quiz and practice results update the calculation while preserving your decision.")}</p><p className="mt-2 font-semibold">{tr("Розрахована оцінка:", "Calculated grade:")} {editing.grade.calculatedGrade == null ? tr("Ще немає результатів для розрахунку", "No results to calculate yet") : formatGradeForSystem(editing.grade.calculatedGrade, gradingSystem, scaleMode)}</p><button type="button" disabled={saving || Boolean(gradeConflict)} onClick={() => void clearControlOverride()} className="mt-3 min-h-11 rounded-xl border border-border/20 px-3 py-2 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55">{editing.grade.calculatedGrade == null ? tr("Прибрати ручну оцінку", "Remove manual grade") : tr("Використати розраховану оцінку", "Use calculated grade")}</button></div>}
+              {!editing.column.isSummary && !editing.column.isSemester && <button type="button" disabled={saving} className="student-work__entry" onClick={() => setReviewingWork(true)}><span><strong>{tr("Переглянути подачі", "View submissions")}</strong><small>{tr("Код, усі спроби та результати перевірки", "Code, all attempts, and review results")}</small></span><ChevronRight className="size-5" aria-hidden="true" /></button>}
               <label htmlFor="teacher-grade-value" className="classroom-grade-label">{tr("Оцінка", "Grade")}</label><input ref={gradeInputRef} id="teacher-grade-value" name="gradeValue" inputMode="decimal" disabled={saving} aria-invalid={Boolean(gradeError)} aria-describedby={gradeError ? "teacher-grade-error" : undefined} value={gradeValue} onChange={(event) => { setGradeValue(event.target.value); setGradeError(null); }} className="classroom-grade-input" placeholder={gradingSystemInputHint(gradingSystem, isEn)} />
               {gradeError && <p id="teacher-grade-error" role="alert" className="mt-3 text-sm text-accent-error">{gradeError}</p>}
               {gradeConflict && <div role="status" className="mt-4 rounded-xl border border-accent-warn/30 bg-accent-warn/10 p-4 text-sm"><p>{tr("Оцінка змінилася. Введене значення збережено. Перегляньте актуальну оцінку перед продовженням.", "The grade changed. Your input is retained. Review the current grade before continuing.")}</p>{gradeConflict === "ready" && <p className="mt-2 font-semibold">{tr("Актуальна оцінка:", "Current grade:")} {editing.grade?.grade == null ? tr("Без оцінки", "No grade") : formatGradeForSystem(editing.grade.grade, gradingSystem, scaleMode)}</p>}<button type="button" disabled={saving || gradeConflict === "loading"} onClick={() => { if (gradeConflict === "ready") { setGradeConflict(null); setGradeError(null); gradeInputRef.current?.focus(); } else void refreshConflictedGrade(); }} className="mt-3 min-h-11 rounded-xl border border-border/20 px-3 py-2 font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-55">{gradeConflict === "ready" ? tr("Переглянув зміни — продовжити", "Reviewed changes — continue") : tr("Завантажити актуальну оцінку", "Load current grade")}</button></div>}
@@ -504,6 +507,8 @@ export const GradebookWorkspace: React.FC = () => {
             </form>
         </Modal>
       )}
+
+      {editing && reviewingWork && <StudentWorkReview key={String(classId) + "-" + editing.student.studentId + "-" + editing.column.id} studentId={editing.student.studentId} studentName={editing.student.studentName} taskId={editing.column.taskId} taskTitle={editing.column.title} isControl={Boolean(editing.column.isControl)} gradingSystem={gradingSystem} scaleMode={scaleMode} onClose={() => setReviewingWork(false)} />}
 
       <Modal open={thematicOpen} onClose={() => setThematicOpen(false)} title={tr("Додати тематичну оцінку", "Add thematic grade")} description={tr("Оберіть тему, щоб додати підсумкову колонку до журналу класу.", "Choose a topic to add a summary column to the class gradebook.")} showCloseButton={false} panelClassName="max-w-md">
           <form onSubmit={addThematic}>
