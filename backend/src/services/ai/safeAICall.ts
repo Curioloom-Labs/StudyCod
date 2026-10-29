@@ -713,17 +713,24 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
               validationFeedback: optionalString(sanitizedParams.validationFeedback),
               publicExamples: Array.isArray(sanitizedParams.publicExamples) ? sanitizedParams.publicExamples.map(example => ({
                 input: requiredString(asJsonObject(example).input, 'publicExamples.input'),
-                output: requiredString(asJsonObject(example).output, 'publicExamples.output'),
+                output: sanitizedParams.allowEmptyOutput === true && typeof asJsonObject(example).output === 'string'
+                  ? asJsonObject(example).output as string
+                  : requiredString(asJsonObject(example).output, 'publicExamples.output'),
               })) : [],
+              allowEmptyOutput: sanitizedParams.allowEmptyOutput === true,
+              referenceExamplesAreAuthoritative: sanitizedParams.referenceExamplesAreAuthoritative === true,
               ...(testIoType === 'STDIN_STDOUT' ? {
-                executeReference: (source: string, inputs: string[], examples: Array<{ input: string; output: string }>, signal?: AbortSignal) => executeReferenceTests(source, REFERENCE_LANGUAGE, inputs, examples, signal),
+                executeReference: (source: string, inputs: string[], examples: Array<{ input: string; output: string }>, signal?: AbortSignal) => executeReferenceTests(source, REFERENCE_LANGUAGE, inputs, examples, signal, {
+                  allowEmptyOutput: sanitizedParams.allowEmptyOutput === true,
+                  referenceExamplesAreAuthoritative: sanitizedParams.referenceExamplesAreAuthoritative === true,
+                }),
               } : {}),
               userId: optionalNumber(sanitizedParams.userId),
               language,
               signal: controller?.signal
             });
             const expectedTestCount = testIoType === 'STDIN_STDOUT' ? (options?.expectedCount || optionalNumber(sanitizedParams.count) || 12) : 1;
-            result = AIResponseValidator.validateGenerateTestData(result, expectedTestCount, testIoType);
+            result = AIResponseValidator.validateGenerateTestData(result, expectedTestCount, testIoType, { allowEmptyOutput: sanitizedParams.allowEmptyOutput === true });
             break;
           default:
             throw new Error(`Unknown AI mode: ${mode}`);

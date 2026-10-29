@@ -2395,6 +2395,8 @@ public class Main {
     publicExamples?: TestDataExample[];
     requiredCases?: string[];
     executeReference?: ReferenceTestExecutor;
+    allowEmptyOutput?: boolean;
+    referenceExamplesAreAuthoritative?: boolean;
   }): Promise<TestDataExample[]> {
     requireCompleteTaskDescription(params.taskDescription);
     params = { ...params, ioType: resolveTestDataIoType(params.taskDescription, params.ioType) };
@@ -2418,12 +2420,14 @@ public class Main {
         ioType: params.ioType,
         requiredCases: params.requiredCases,
         validationFeedback: params.validationFeedback,
+        allowEmptyOutput: params.allowEmptyOutput,
         userId: params.userId
       }, {
         signal: params.signal
       });
-      const validated = AIResponseValidator.validateGenerateTestData(raw, generationCount, params.ioType);
+      const validated = AIResponseValidator.validateGenerateTestData(raw, generationCount, params.ioType, { allowEmptyOutput: params.allowEmptyOutput });
       await reviewGeneratedTests(this.cloudflareProvider, params.taskDescription, params.ioType, validated, {
+        allowEmptyOutput: params.allowEmptyOutput,
         signal: params.signal,
         userId: params.userId,
         requiredCases: params.requiredCases,
@@ -2494,6 +2498,8 @@ public class Main {
     publicExamples?: TestDataExample[];
     requiredCases?: string[];
     executeReference?: ReferenceTestExecutor;
+    allowEmptyOutput?: boolean;
+    referenceExamplesAreAuthoritative?: boolean;
   }, providerOverride?: LLMProvider): Promise<TestDataExample[]> {
     const provider = providerOverride ?? this.openRouterProvider;
     if (params.executeReference && params.ioType === 'STDIN_STDOUT') {
@@ -2553,7 +2559,7 @@ SILENT VALIDATION BEFORE JSON:
 - Parse the input exactly as the statement describes: tokens, lines, separators, and empty input.
 - Simulate the program completely for every candidate input, including every if/else branch, switch case, mapping, loop, boundary, zero, negative value, and default branch that is allowed by the constraints.
 - Write output from the simulation, character by character: exact words, capitalization, punctuation, spaces, and line breaks. Output is stdout only; never include explanations, labels, prompts, or markdown unless the statement explicitly requires them.
-- Every expected output must contain at least one non-empty token or line. If the statement appears to allow an empty result, treat that as an invalid task and do not invent an empty expected output.
+${params.allowEmptyOutput ? '- Preserve empty stdout and blank lines exactly when the authored statement explicitly requires them; do not invent a sentinel.' : '- Every expected output must contain at least one non-empty token or line. If the statement appears to allow an empty result, treat that as an invalid task and do not invent an empty expected output.'}
 - Re-check each candidate twice. If an output cannot be calculated with certainty, discard that candidate and choose a simpler valid input.
 - Check normalized input uniqueness within the new tests and against EXISTING TEST DATA. Never return two outputs for the same input.
 
@@ -2617,8 +2623,9 @@ IMPORTANT:
         temperature: 0.08,
         maxTokens: 3000
       });
-    const validated = AIResponseValidator.validateGenerateTestData(parsed, desiredCount, ioTypeLabel);
+    const validated = AIResponseValidator.validateGenerateTestData(parsed, desiredCount, ioTypeLabel, { allowEmptyOutput: params.allowEmptyOutput });
     await reviewGeneratedTests(provider, taskDesc, ioTypeLabel, validated, {
+      allowEmptyOutput: params.allowEmptyOutput,
       signal: params.signal,
       userId: params.userId,
       requiredCases: params.requiredCases,

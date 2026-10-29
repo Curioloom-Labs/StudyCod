@@ -10,6 +10,13 @@ const contractTask = {
   examples: [{ input: '2 3', output: '5', explanation: '2 + 3 = 5.' }], codeTemplate: '# TODO',
 };
 
+test('authored EDU tests preserve blank output while generated course tests remain strict', () => {
+  const tests = [{ input: '0\n', output: '\n' }, { input: '1\n5\n', output: '' }, { input: '3\n3 3 3\n', output: '  3.00\n' }];
+  assert.deepEqual(AIResponseValidator.validateGenerateTestData(tests, 3, 'STDIN_STDOUT', { allowEmptyOutput: true }).map(test => test.output), ['\n', '', '  3.00\n']);
+  assert.throws(() => AIResponseValidator.validateGenerateTestData(tests, 3, 'STDIN_STDOUT'));
+  assert.throws(() => AIResponseValidator.validateGenerateTestData([{ input: '0' }], 1, 'STDIN_STDOUT', { allowEmptyOutput: true }));
+});
+
 test('task validation never fabricates missing examples or empty stdin', () => {
   for (const examples of [undefined, [], [{ input: '', output: '5', explanation: 'Missing input.' }]]) {
     assert.throws(() => AIResponseValidator.validateGenerateTask({ ...contractTask, examples }));

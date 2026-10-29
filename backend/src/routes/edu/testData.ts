@@ -17,6 +17,7 @@ const router = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
+export const eduTestDataGenerationDependencies = { safeAICall };
 
 /**
  * Authorize the caller (USER) against the class that owns a loaded topic-task,
@@ -42,7 +43,7 @@ function parseAIBudgetMs(envKey: string, fallbackMs: number, minMs = 8_000, maxM
 }
 
 const EDU_TESTDATA_AI_DISABLE_DEADLINE = String(env.EDU_TESTDATA_AI_DISABLE_DEADLINE || "").trim() === "1";
-const EDU_TESTDATA_AI_BUDGET_MS = parseAIBudgetMs("EDU_TESTDATA_AI_BUDGET_MS", 25_000);
+const EDU_TESTDATA_AI_BUDGET_MS = parseAIBudgetMs("EDU_TESTDATA_AI_BUDGET_MS", 55_000);
 
 // AI-heavy endpoint: protect against bursts.
 const generateTestDataLimiter = createRouteLimiter({ windowMs: 60 * 1000, limit: 5, message: "RATE_LIMIT" });
@@ -516,20 +517,27 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
       String(topicTask.template || "").trim() ||
       `Завдання: ${topicTask.title}`;
 
+    const authoredTests = await AppDataSource.query(
+      "SELECT input, expected_output AS output FROM test_data WHERE topic_task_id = ? AND source <> 'AI_GENERATED' ORDER BY id LIMIT 40",
+      [taskId],
+    ) as Array<{ input: string; output: string }>;
     const aiStartedAt = Date.now();
-    const testDataResult = await safeAICall(
+    const testDataResult = await eduTestDataGenerationDependencies.safeAICall(
       "generateTestData",
       {
         taskDescription: safeTaskDescription,
         taskTitle: topicTask.title,
         lang: topicTask.topic.language,
         count: testCount,
+        allowEmptyOutput: true,
+        referenceExamplesAreAuthoritative: true,
+        publicExamples: authoredTests.map(test => ({ input: String(test.input), output: String(test.output) })),
         userId: req.userId
       },
       {
         expectedCount: testCount,
         requestId: req.requestId,
-        maxAttempts: 1,
+        maxAttempts: 2,
         ...(EDU_TESTDATA_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: EDU_TESTDATA_AI_BUDGET_MS })
       }
     );
@@ -545,6 +553,25 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
     });
 
     if (!testDataResult.success) {
+      const error = testDataResult.error;
+      const finding = String(error.details?.validationError ?? error.error ?? "");
+      const english = String(req.headers["x-ui-language"] ?? req.headers["accept-language"] ?? "").toLowerCase().startsWith("en");
+      if (/TASK_CONTRACT_REVIEW_FAILED\[(statement|publicExamples)\]/.test(finding)) {
+        return res.status(422).json({
+          code: "EDU_TASK_CONTRACT_INVALID",
+          message: english
+            ? "The task statement or examples contain conflicting rules. Check the input/output format and examples before generating tests."
+            : "В умові або прикладах задачі є суперечності. Перевір формат введення, виведення та приклади перед генерацією тестів.",
+        });
+      }
+      if (/Invalid response structure/.test(error.message)) {
+        return res.status(503).json({
+          code: "EDU_TEST_GENERATION_FAILED",
+          message: english
+            ? "AI could not prepare valid tests after retrying. Please try generating them again."
+            : "AI не зміг підготувати коректні тести після повторної спроби. Спробуй згенерувати їх ще раз.",
+        });
+      }
       sendAIError(res, testDataResult.error);
       return;
     }

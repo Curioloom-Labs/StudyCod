@@ -14,6 +14,8 @@ export interface ReferenceTestDataParams {
   userId?: number;
   signal?: AbortSignal;
   validationFeedback?: string;
+  allowEmptyOutput?: boolean;
+  referenceExamplesAreAuthoritative?: boolean;
   publicExamples?: TestDataExample[];
   requiredCases?: string[];
   executeReference: ReferenceTestExecutor;
@@ -53,12 +55,14 @@ Implement the entire input domain and every explicit rule, including branches, t
 Choose allowed boundary and ordinary inputs, cover every branch when present, and include relevant fractional/truncation cases. A formula task may have only one execution path: varying valid values is allowed. Do not copy existing example inputs or invent invalid cases for variety.
 If requiredCoverage is supplied as separate internal metadata, choose inputs that cover each listed case when it is defined by the statement. This metadata is a test-design checklist, not permission to add rules to the learner-facing task.
 If validationFeedback is non-null, treat it as an authoritative validator finding and fix the reported issue before returning. In particular, the referenceSolution MUST be Python 3 source code regardless of the student's language; do not return Java or C++ code.
-The program must produce non-empty stdout for each valid input. If rules are ambiguous, do not invent them. Keep the program concise, with no explanations or Markdown. Return only the supplied JSON shape.`;
+${params.allowEmptyOutput ? 'Empty stdout or a blank output line is valid only when explicitly required by the authored statement. Preserve that result exactly; never substitute a sentinel or discard those boundary inputs.' : 'The program must produce non-empty stdout for each valid input.'}
+If authoritativeExamples is true, existingExamples are authored tests: repair the oracle to match them, never rewrite their expected answers. If rules are ambiguous, do not invent them. Keep the program concise, with no explanations or Markdown. Return only the supplied JSON shape.`;
   const raw = await provider.generateJSON<unknown>(JSON.stringify({
     statement,
     existingExamples: params.publicExamples ?? [],
     requiredCoverage: params.requiredCases ?? [],
     validationFeedback: params.validationFeedback ?? null,
+    ...(params.referenceExamplesAreAuthoritative ? { authoritativeExamples: true } : {}),
   }), schema, instructions, {
     userId: params.userId, signal: params.signal, timeout: 30_000,
     validationRetry: Boolean(params.validationFeedback),
@@ -92,9 +96,10 @@ The program must produce non-empty stdout for each valid input. If rules are amb
   try {
     const outputs = await params.executeReference(referenceSolution, selectedInputs, params.publicExamples ?? [], params.signal);
     if (outputs.length !== selectedInputs.length) throw makeAIValidationError('generateTestData', 'Reference execution returned an incomplete test suite');
-    const tests = AIResponseValidator.validateGenerateTestData(selectedInputs.map((input, index) => ({ input, output: outputs[index] })), count, 'STDIN_STDOUT');
+    const tests = AIResponseValidator.validateGenerateTestData(selectedInputs.map((input, index) => ({ input, output: outputs[index] })), count, 'STDIN_STDOUT', { allowEmptyOutput: params.allowEmptyOutput });
     await reviewGeneratedTests(provider, statement, 'STDIN_STDOUT', tests, {
       validationRetry: Boolean(params.validationFeedback),
+      allowEmptyOutput: params.allowEmptyOutput,
       signal: params.signal, userId: params.userId,
       requiredCases: params.requiredCases,
       publicExamples: params.publicExamples,

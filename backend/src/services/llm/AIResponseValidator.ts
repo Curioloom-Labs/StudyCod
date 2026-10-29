@@ -968,7 +968,7 @@ export class AIResponseValidator {
       throw new AIValidationError('generateTaskTemplate', emptyZod(), `Task template validation failed: ${unknownErr(error)}`);
     }
   }
-  static validateGenerateTestData(data: unknown, expectedCount?: number, ioType?: AiTaskGenerationResult['ioType']): TestDataExample[] {
+  static validateGenerateTestData(data: unknown, expectedCount?: number, ioType?: AiTaskGenerationResult['ioType'], options: { allowEmptyOutput?: boolean } = {}): TestDataExample[] {
     try {
       const rawTests = this.normalizeTestDataContainer(data);
       // Providers occasionally return one extra valid row despite an exact
@@ -979,13 +979,14 @@ export class AIResponseValidator {
       const boundedTests = expectedCount !== undefined && Array.isArray(rawTests) && rawTests.length > expectedCount
         ? rawTests.slice(0, expectedCount)
         : rawTests;
-      const tests = TestDataResponseSchema.parse(boundedTests);
+      const itemSchema = options.allowEmptyOutput ? TestDataItemSchema.extend({ output: z.string() }) : TestDataItemSchema;
+      const tests = options.allowEmptyOutput ? z.array(itemSchema).min(1).parse(boundedTests) : TestDataResponseSchema.parse(boundedTests);
       if (expectedCount !== undefined && tests.length !== expectedCount) {
         throw new AIValidationError('generateTestData', emptyZod(), `Test data validation failed: expected ${expectedCount} tests, got ${tests.length}`, data);
       }
       tests.forEach((test, idx) => {
         try {
-          TestDataItemSchema.parse(test);
+          itemSchema.parse(test);
         } catch (err) {
           if (err instanceof z.ZodError) {
             const errorMessages = (err.issues || []).map(e => {
@@ -999,10 +1000,10 @@ export class AIResponseValidator {
       });
       const normalized = tests.map(t => ({
         input: String(t.input ?? ''),
-        output: String(t.output ?? '').trim(),
+        output: options.allowEmptyOutput ? t.output : String(t.output ?? '').trim(),
         explanation: t.explanation ? String(t.explanation).trim() : undefined
       }));
-      if (normalized.some(test => !test.output)) {
+      if (!options.allowEmptyOutput && normalized.some(test => !test.output)) {
         throw makeAIValidationError('generateTestData', 'Test data validation failed: expected stdout must be non-empty');
       }
       if (ioType === 'STDIN_STDOUT' || (ioType === undefined && expectedCount !== undefined && expectedCount > 1)) {

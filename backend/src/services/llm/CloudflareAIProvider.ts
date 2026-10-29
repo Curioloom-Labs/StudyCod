@@ -101,6 +101,7 @@ Return ONLY the Markdown statement.${responseLanguageInstruction}`
     count: number;
     ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
     requiredCases?: string[];
+    allowEmptyOutput?: boolean;
   }): { prompt: string; systemPrompt: string; schema: object } {
     const langName = topicLanguageLabel(params.lang);
     const taskDesc = requireCompleteTaskDescription(String(params.taskDescription || ""));
@@ -146,7 +147,7 @@ ${params.requiredCases?.length ? `ОБОВ’ЯЗКОВЕ ПОКРИТТЯ ДЛ�
 
 ВИМОГИ:
 - ${needsInput ? `Кожен тест має мати непорожній, валідний і унікальний input; поверни рівно ${count} тестів.` : 'input кожного тесту ОБОВ’ЯЗКОВО дорівнює порожньому рядку ""; поверни рівно один тест.'}
-- output має бути непорожнім фактичним stdout: без пояснень, prompt-тексту, "Answer:", markdown і зайвих міток.
+${params.allowEmptyOutput ? '- output має точно зберігати порожній stdout або порожній рядок, якщо цього явно вимагає умова.' : '- output має бути непорожнім фактичним stdout: без пояснень, prompt-тексту, "Answer:", markdown і зайвих міток.'}
 - Обчисли кожен output саме для його input. Перевір межі, нуль, від’ємні значення, пороги, default/case та таблиці відповідностей, якщо вони дозволені умовою.
 - Виведи рівно всі рядки результату, визначені умовою, у правильному порядку; не пропускай рядок для нуля. Не округлюй і не відкидай дробову частину, якщо це явно не вимагає умова.
 - Для кожного тесту підстав input у формулу з умови й окремо звір кожен рядок output, перш ніж повертати JSON.
@@ -601,6 +602,7 @@ ${JSON.stringify(schema, null, 2)}
     userId?: number;
     validationFeedback?: string;
     requiredCases?: string[];
+    allowEmptyOutput?: boolean;
   }, options?: LLMGenerateOptions): Promise<Array<{
     input: string;
     output: string;
@@ -613,10 +615,11 @@ ${JSON.stringify(schema, null, 2)}
       count: params.count,
       ioType: params.ioType,
       requiredCases: params.requiredCases,
+      allowEmptyOutput: params.allowEmptyOutput,
     });
     const response = await this.callCloudflareWorker('generate-test-data', {
       prompt: built.prompt + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nReturn corrected tests and resolve every reported issue.` : ''),
-      systemPrompt: built.systemPrompt,
+      systemPrompt: built.systemPrompt + (params.allowEmptyOutput ? '\nFor this authored EDU task, preserve empty stdout or blank lines exactly when explicitly required by its statement. Never replace them with a sentinel.' : ''),
       schema: built.schema
     }, {
       userId: params.userId,
@@ -635,6 +638,6 @@ ${JSON.stringify(schema, null, 2)}
     }
     const ioType = resolveTestDataIoType(params.taskDescription, params.ioType);
     const count = ioType === 'STDIN_STDOUT' ? Math.max(1, Math.floor(params.count)) : 1;
-    return AIResponseValidator.validateGenerateTestData(parsed, count, ioType);
+    return AIResponseValidator.validateGenerateTestData(parsed, count, ioType, { allowEmptyOutput: params.allowEmptyOutput });
   }
 }

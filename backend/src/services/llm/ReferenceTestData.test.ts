@@ -5,6 +5,31 @@ import { generateReferenceTestData } from './ReferenceTestData';
 import { AIValidationError, makeAIValidationError } from './AIResponseValidator';
 import { buildTaskValidationFeedback } from './TaskContractReview';
 
+test('EDU reference generation keeps empty boundary outputs through schema validation and review', async () => {
+  let calls = 0;
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string, _schema: object, instructions?: string): Promise<T> {
+      if (++calls === 1) {
+        assert.match(instructions ?? '', /Empty stdout or a blank output line is valid/);
+        assert.equal(JSON.parse(prompt).authoritativeExamples, true);
+        return { referenceSolution: 'print()', inputs: ['0\n', '1\n5\n', '2\n1 2\n', '3\n1 2 3\n'] } as T;
+      }
+      const payload = JSON.parse(prompt);
+      assert.equal(payload.allowEmptyOutput, true);
+      assert.deepEqual(payload.candidateTests.map((test: { output: string }) => test.output), ['\n', '']);
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+  const result = await generateReferenceTestData(provider, {
+    taskDescription: 'Read N and N integers. For N < 3 print an empty line; otherwise print the window sums.',
+    lang: 'PYTHON', count: 2, allowEmptyOutput: true, referenceExamplesAreAuthoritative: true,
+    executeReference: async () => ['\n', ''],
+  });
+  assert.deepEqual(result.map(test => test.output), ['\n', '']);
+  assert.equal(calls, 2);
+});
+
 test('expected outputs come from execution and the reviewer receives the executed source', async () => {
   const source = 'a,b=map(int,input().split()); print(a+b)';
   const inputs = ['2 3', '-7 4'];

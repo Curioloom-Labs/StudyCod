@@ -46,3 +46,40 @@ test('failed, empty, missing, or truncated execution results cannot produce expe
     t.mock.restoreAll();
   }
 });
+
+test('EDU accepts successful empty-output boundary cases and preserves literal whitespace', async (t) => {
+  t.mock.method(sandbox, 'judgeWithSemaphore', async (request: JudgeRequest) => {
+    const response = results(request, ['\n', '', '  3.00  \n']);
+    response.tests[0].verdict = 'WA';
+    response.tests[0].exit_code = 0;
+    response.tests[1].verdict = 'WA';
+    response.tests[1].exit_code = 0;
+    return response;
+  });
+  assert.deepEqual(await executeReferenceTests('reference', 'PYTHON', ['1\n5', '3\n3 3 3'], [{ input: '0\n', output: '\n' }], undefined,
+    { allowEmptyOutput: true, referenceExamplesAreAuthoritative: true }), ['', '  3.00  \n']);
+});
+
+test('EDU empty-output support cannot accept runtime failures or nonzero exits', async (t) => {
+  for (const verdict of ['RE', 'TLE', 'WA'] as const) {
+    t.mock.method(sandbox, 'judgeWithSemaphore', async (request: JudgeRequest) => {
+      const response = results(request, ['']);
+      response.tests[0].verdict = verdict;
+      response.tests[0].exit_code = 1;
+      return response;
+    });
+    await assert.rejects(executeReferenceTests('reference', 'PYTHON', ['0'], [], undefined, { allowEmptyOutput: true }), /Reference program failed/);
+    t.mock.restoreAll();
+  }
+});
+
+test('an authored test mismatch asks to repair the oracle without classifying teacher answers as generated examples', async (t) => {
+  t.mock.method(sandbox, 'judgeWithSemaphore', async (request: JudgeRequest) => results(request, ['9', '8']));
+  await assert.rejects(executeReferenceTests('reference', 'PYTHON', ['3'], [{ input: '2', output: '4' }], undefined,
+    { referenceExamplesAreAuthoritative: true }), error => {
+      assert.ok(error instanceof Error);
+      assert.equal(error instanceof TaskContractReviewError, false);
+      assert.match(error.message, /disagrees with authored test/);
+      return true;
+    });
+});
