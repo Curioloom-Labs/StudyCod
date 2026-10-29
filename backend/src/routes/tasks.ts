@@ -3078,6 +3078,7 @@ tasksRouter.post("/explain-error", authMiddleware, submissionRateLimitMiddleware
       taskTitle,
       taskText,
       language,
+      uiLanguage: resolveUiLanguage(req),
       code,
       verdict,
       stderr,

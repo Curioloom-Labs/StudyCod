@@ -366,7 +366,21 @@ export function classifyErrorKind(verdict: string, stderr: string): "compile" | 
   return "wrong_answer";
 }
 
-export function deterministicExplanation(kind: ReturnType<typeof classifyErrorKind>, language: HintLanguage): string {
+export function deterministicExplanation(kind: ReturnType<typeof classifyErrorKind>, language: HintLanguage, uiLanguage: "uk" | "en" = "uk"): string {
+  if (uiLanguage === "en") {
+    switch (kind) {
+      case "compile":
+        return language === "PYTHON"
+          ? "The program could not start because of a syntax error. Find the line mentioned in the error message and check brackets, colons after if/for/def, and indentation."
+          : "The program did not compile. Use the line mentioned by the compiler to check syntax, types, semicolons, brackets, and required libraries (import / #include).";
+      case "timeout":
+        return "The program exceeded the time limit. Estimate its complexity and check for unnecessary nested loops. Consider whether the required result can be calculated in a single pass.";
+      case "runtime":
+        return "The program crashed during execution. Check the error message for the type of failure, such as an out-of-bounds index, division by zero, or None/null, and inspect the corresponding code.";
+      default:
+        return "The output did not match the expected answer. Compare both character by character: check spaces, line breaks, letter case, and the calculations themselves.";
+    }
+  }
   switch (kind) {
     case "compile":
       return language === "PYTHON"
@@ -396,14 +410,27 @@ export async function explainSubmissionError(params: {
   verdict?: string;
   stderr?: string | null;
   failures?: FailureCase[];
+  uiLanguage?: "uk" | "en";
 }): Promise<{ explanation: string; source: ExplainErrorSource }> {
   const verdict = String(params.verdict ?? "").trim();
   const failures = (params.failures ?? []).slice(0, 3);
   const stderr = String(params.stderr ?? failures.map(f => f.stderr || "").filter(Boolean).join("\n") ?? "").slice(0, 4000);
   const kind = classifyErrorKind(verdict, stderr);
-  const fallback = deterministicExplanation(kind, params.language);
+  const uiLanguage = params.uiLanguage ?? "uk";
+  const fallback = deterministicExplanation(kind, params.language, uiLanguage);
 
-  const systemPrompt = `Ти — доброзичливий наставник з програмування. Поясни студенту ПРОСТОЮ українською, ЧОМУ його розв'язок не пройшов, у 2–4 реченнях.
+  const systemPrompt = uiLanguage === "en"
+    ? `You are a friendly programming mentor. Explain in simple English WHY the student's submission failed, in 2–4 sentences.
+
+CRITICAL:
+- First briefly explain what went wrong (the error or mismatch).
+- Then give ONE concrete direction for what to check or fix.
+- NEVER provide ready-to-copy code or the complete solution algorithm.
+- NEVER give advice about style, naming, or comments.
+- If evidence is insufficient, give the most useful general observation.
+
+Respond ONLY with valid JSON.`
+    : `Ти — доброзичливий наставник з програмування. Поясни студенту ПРОСТОЮ українською, ЧОМУ його розв'язок не пройшов, у 2–4 реченнях.
 
 КРИТИЧНО:
 - Спочатку коротко скажи, що саме пішло не так (помилка/невідповідність).
@@ -447,11 +474,13 @@ ${stderr ? `Повідомлення про помилку (stderr):\n${JSON.str
 Невдалі тести:
 ${failuresBlock}
 
-Поясни простою українською, що пішло не так і що перевірити. Відповідай JSON {"explanation": "..."}.`;
+${uiLanguage === "en"
+  ? 'Explain in simple English what went wrong and what to check. Respond with JSON {"explanation": "..."}.'
+  : 'Поясни простою українською, що пішло не так і що перевірити. Відповідай JSON {"explanation": "..."}.'}`;
 
   try {
     const provider = getLLMProvider();
-    const parsed = await provider.generateJSON<{ explanation: string }>(userPrompt, schema, systemPrompt, { temperature: 0.2 });
+    const parsed = await provider.generateJSON<{ explanation: string }>(userPrompt, schema, systemPrompt, { temperature: 0.2, language: uiLanguage });
     const explanation = String(parsed?.explanation ?? "").trim();
     if (explanation) return { explanation, source: "ai" };
   } catch (err: unknown) {
