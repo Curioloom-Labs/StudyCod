@@ -436,6 +436,10 @@ const TaskTemplateSchema = z.object({
   template: z.string().min(1, 'template must be a non-empty string'),
 });
 
+const TaskGenerationGuidanceSchema = z.object({
+  guidance: z.string().trim().min(20, 'guidance must be at least 20 characters').max(4000),
+});
+
 const TestDataItemSchema = z.object({
   input: z.string(),
   output: z.string().min(1, 'test output must be a non-empty string'),
@@ -966,6 +970,18 @@ export class AIResponseValidator {
         throw new AIValidationError('generateTaskTemplate', error, `Task template validation failed: ${zodMessages(error)}`);
       }
       throw new AIValidationError('generateTaskTemplate', emptyZod(), `Task template validation failed: ${unknownErr(error)}`);
+    }
+  }
+  static validateGenerateTaskGuidance(data: unknown): {
+    guidance: string;
+  } {
+    try {
+      return TaskGenerationGuidanceSchema.parse(data);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new AIValidationError('generateTaskGuidance', error, `Task generation guidance validation failed: ${zodMessages(error)}`);
+      }
+      throw new AIValidationError('generateTaskGuidance', emptyZod(), `Task generation guidance validation failed: ${unknownErr(error)}`);
     }
   }
   static validateGenerateTestData(data: unknown, expectedCount?: number, ioType?: AiTaskGenerationResult['ioType'], options: { allowEmptyOutput?: boolean } = {}): TestDataExample[] {

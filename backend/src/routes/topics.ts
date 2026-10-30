@@ -36,6 +36,7 @@ import {
   createTaskSchema,
   createTopicSchema,
   generateQuizSchema,
+  generateTaskGuidanceSchema,
   generateTheorySchema,
   theoryBlockSchema,
   theoryContentSchema,
@@ -951,6 +952,57 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
     });
   }
 });
+topicsRouter.post("/:topicId/tasks/generate-guidance", authRequired, async (req: AuthRequest, res: Response) => {
+  const parsed = generateTaskGuidanceSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: "INVALID_INPUT", errors: parsed.error.issues });
+  }
+  try {
+    const topicId = Number(req.params.topicId);
+    if (!Number.isSafeInteger(topicId) || topicId <= 0) return res.status(400).json({ message: "INVALID_TOPIC_ID" });
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user || user.userMode !== "EDUCATIONAL" || req.studentId) {
+      return res.status(403).json({ message: "ONLY_TEACHERS_CAN_GENERATE" });
+    }
+    const topic = await topicRepo().findOne({ where: { id: topicId }, relations: ["class"] });
+    if (!topic) return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
+    if (topic.class) {
+      const access = await authorizeClassForReq(req, topic.class.id, "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    } else if (req.userRole !== "SYSTEM_ADMIN") {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+
+    const responseLanguage = parsed.data.responseLanguage || "uk";
+    const topicTitle = responseLanguage === "en"
+      ? await translateTopicTitleToEn({ req, topicId: topic.id, title: topic.title })
+      : topic.title;
+    const result = await safeAICall("generateTaskGuidance", {
+      topicTitle,
+      taskTitle: parsed.data.taskTitle,
+      taskType: parsed.data.taskType,
+      language: topic.language,
+      classTitle: topic.class?.name,
+      responseLanguage,
+      userId: user.id,
+      topicId: topic.id,
+    }, {
+      language: responseLanguage,
+      requestId: req.requestId,
+      maxAttempts: 1,
+      totalTimeoutMs: 20_000,
+    });
+    if (!result.success) return sendAIError(res, result.error);
+    return res.json({ guidance: result.data.guidance });
+  } catch (error: unknown) {
+    logger.error("[topics] Error generating task guidance", { requestId: req.requestId, err: error });
+    const statusCode = errorStatusCode(error);
+    if (statusCode) return res.status(statusCode).json({ message: errorMessage(error), error: readProperty(error, "error") });
+    return res.status(500).json({ message: errorMessage(error) || "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const topicId = parseInt(req.params.topicId, 10);

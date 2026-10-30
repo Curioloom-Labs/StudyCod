@@ -79,6 +79,12 @@ export const generateTheorySchema = z.object({
   language: z.enum(["uk", "en"]).optional(),
 });
 
+export const generateTaskGuidanceSchema = z.object({
+  taskTitle: z.string().trim().min(1).max(512),
+  taskType: z.enum(["PRACTICE", "CONTROL"]),
+  responseLanguage: z.enum(["uk", "en"]).optional(),
+});
+
 export const theoryContentSchema = z.object({
   content: z.string().min(1),
 });
