@@ -113,6 +113,17 @@ const exampleLesson: LessonWithTasks = {
     },
   ],
 };
+const exampleCourseLesson: Lesson & { tasks: Task[] } = {
+  ...exampleLesson,
+  tasks: exampleLesson.tasks.map((task) => ({
+    id: task.id,
+    title: task.title,
+    description: task.description ?? "",
+    template: task.template ?? "",
+    testDataCount: task.testDataCount ?? 0,
+    createdAt: task.createdAt,
+  })),
+};
 const Overlay: React.FC<{
   title: string;
   sub?: string;
@@ -763,7 +774,7 @@ const StudentLessonWorkspace: React.FC = () => {
       })
       .catch((caught) => {
         if (!active) return;
-        if (preview()) setLesson(exampleLesson);
+        if (preview()) setLesson(exampleCourseLesson);
         else
           setError(
             getErrorMessageFromUnknown(
