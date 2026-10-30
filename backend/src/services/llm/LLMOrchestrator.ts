@@ -66,29 +66,68 @@ function errorMessage(error: unknown): string {
 }
 
 type QuizQuestionStyle = "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
+type QuizCodeLength = "SHORT" | "MEDIUM" | "LONG";
 
-function buildQuizGenerationGuidance(params: { difficulty?: number; questionStyle?: QuizQuestionStyle; generationGuidance?: string }, language?: "uk" | "en"): string {
+function buildQuizGenerationGuidance(params: { difficulty?: number; questionStyle?: QuizQuestionStyle; codeLength?: QuizCodeLength; generationGuidance?: string }, language?: "uk" | "en"): string {
   const isEnglish = language === "en";
   const difficultyLabels = isEnglish
     ? ["introductory", "easy", "intermediate", "advanced", "expert"]
     : ["початкова", "легка", "середня", "висока", "поглиблена"];
   const styleInstructions: Record<QuizQuestionStyle, string> = isEnglish ? {
-    MIXED: "Mix conceptual questions and short code-reading questions.",
+    MIXED: "Mix conceptual questions and code-reading questions.",
     CONCEPTS: "Focus on concepts, terminology, and rules; avoid long code snippets.",
-    CODE_READING: "Focus on short code snippets and reasoning about their behavior or output.",
-    DEBUGGING: "Focus on identifying mistakes in short code snippets or choosing a correct fix."
+    CODE_READING: "Every question must include its complete code snippet and ask a precise question about its behavior or output.",
+    DEBUGGING: "Every question must include its complete code snippet and ask the student to locate or fix a specific bug."
   } : {
-    MIXED: "Поєднуй питання на розуміння понять і короткі завдання на читання коду.",
+    MIXED: "Поєднуй питання на розуміння понять і завдання на читання коду.",
     CONCEPTS: "Зосередься на поняттях, термінах і правилах; не використовуй довгі фрагменти коду.",
-    CODE_READING: "Зосередься на коротких фрагментах коду та міркуванні про їхню поведінку або результат.",
-    DEBUGGING: "Зосередься на пошуку помилок у коротких фрагментах коду або виборі правильного виправлення."
+    CODE_READING: "Кожне питання обов’язково має містити повний фрагмент коду й чітке питання про його поведінку або результат.",
+    DEBUGGING: "Кожне питання обов’язково має містити повний фрагмент коду й просити знайти або виправити конкретну помилку."
   };
-  const difficulty = typeof params.difficulty === "number" ? Math.max(1, Math.min(5, Math.floor(params.difficulty))) : undefined;
+  const teacherNotes = params.generationGuidance?.trim() || "";
+  const asksForVeryHard = isEnglish
+    ? /\b(?:very[-\s]+very\s+hard|extremely\s+(?:hard|difficult|challenging)|as\s+(?:hard|difficult)\s+as\s+possible)\b/i.test(teacherNotes)
+    : /(?:дуже[\s-]+дуже\s+склад|надзвичайно\s+склад|максимально\s+склад)/i.test(teacherNotes);
+  const asksForLongCode = isEnglish
+    ? /\b(?:long|large|substantial|extended)\s+(?:code|snippet|program)\b/i.test(teacherNotes)
+    : /(?:великий|довгий|розгорнут\w*)\s+(?:код|фрагмент|програм)/i.test(teacherNotes);
+  const difficulty = asksForVeryHard
+    ? 5
+    : typeof params.difficulty === "number" ? Math.max(1, Math.min(5, Math.floor(params.difficulty))) : undefined;
+  const codeLength = asksForLongCode ? "LONG" : params.codeLength || "MEDIUM";
+  const codeLengthInstructions: Record<QuizCodeLength, string> = isEnglish ? {
+    SHORT: "For code questions, include a complete 3–8 line snippet.",
+    MEDIUM: "For code questions, include a complete 8–16 line snippet.",
+    LONG: "For code questions, include a substantial complete 18–35 line snippet. The lines must interact meaningfully; do not pad with comments or blank lines."
+  } : {
+    SHORT: "Для питань із кодом додавай повний фрагмент на 3–8 рядків.",
+    MEDIUM: "Для питань із кодом додавай повний фрагмент на 8–16 рядків.",
+    LONG: "Для питань із кодом додавай змістовний повний фрагмент на 18–35 рядків. Рядки мають взаємодіяти між собою; не збільшуй обсяг коментарями чи порожніми рядками."
+  };
   return [
     difficulty ? (isEnglish ? `Difficulty: ${difficultyLabels[difficulty - 1]}.` : `Складність: ${difficultyLabels[difficulty - 1]}.`) : "",
+    difficulty === 5 ? (isEnglish ? "Difficulty 5/5 is mandatory: require several connected reasoning steps and careful tracing of interacting cases; do not downgrade it." : "Складність 5/5 обов’язкова: вимагай кількох пов’язаних кроків міркування та уважного простеження взаємодіючих випадків; не знижуй рівень.") : "",
     params.questionStyle ? styleInstructions[params.questionStyle] : "",
-    params.generationGuidance?.trim() ? (isEnglish ? `Teacher instructions: ${params.generationGuidance.trim()}` : `Побажання вчителя: ${params.generationGuidance.trim()}`) : ""
+    params.questionStyle !== "CONCEPTS" ? codeLengthInstructions[codeLength] : "",
+    isEnglish
+      ? "MANDATORY CODE COMPLETENESS: Every item that refers to code, a program, execution, or output must include the entire standalone code in its `code` field and its language in `codeLanguage`. Never ask about 'the following code' when the snippet is missing. Use an empty code field only for purely conceptual questions. Teacher instructions are hard requirements and override generic defaults."
+      : "ОБОВ’ЯЗКОВА ПОВНОТА КОДУ: Кожне питання про код, програму, виконання або виведення має містити весь самодостатній код у полі `code` і мову в `codeLanguage`. Не питай про «наступний код», якщо фрагмента немає. Порожнє поле code дозволене лише для суто поняттєвих питань. Побажання вчителя є обов’язковими й важливіші за загальні типові налаштування.",
+    teacherNotes ? (isEnglish ? `Mandatory teacher instructions: ${teacherNotes}` : `Обов’язкові вимоги вчителя: ${teacherNotes}`) : ""
   ].filter(Boolean).join("\n");
+}
+
+function enforceQuizCodeCompleteness(result: AiQuizResult, questionStyle?: QuizQuestionStyle): AiQuizResult {
+  const parsed = JSON.parse(result.quizJson) as Array<{ q?: string }>;
+  const codeQuestionPattern = /(?:\bcode\b|\bsnippet\b|\bprogram\b|\bexecution\b|\boutput\b|код|фрагмент|програм|виконан|вивед|результат)/i;
+  const missingCode = parsed.findIndex((question) => {
+    const hasSnippet = typeof question.q === "string" && /```[^\n]*\n[\s\S]+?```/.test(question.q);
+    if (questionStyle === "CODE_READING" || questionStyle === "DEBUGGING") return !hasSnippet;
+    return typeof question.q === "string" && codeQuestionPattern.test(question.q) && !hasSnippet;
+  });
+  if (missingCode < 0) return result;
+  const error = new Error(`QUIZ_CODE_MISSING: question ${missingCode + 1} refers to code but has no complete code snippet`);
+  (error as Error & { shouldFallback?: boolean }).shouldFallback = true;
+  throw error;
 }
 
 type TaskAnchor = {
@@ -1736,6 +1775,7 @@ REQUIREMENTS (mandatory):
     count?: number;
     difficulty?: number;
     questionStyle?: "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
+    codeLength?: QuizCodeLength;
     generationGuidance?: string;
     responseLanguage?: string;
     userId?: number;
@@ -1755,6 +1795,7 @@ REQUIREMENTS (mandatory):
         count: params.count,
         difficulty: params.difficulty,
         questionStyle: params.questionStyle,
+        codeLength: params.codeLength,
         generationGuidance: buildQuizGenerationGuidance(params, params.language),
         responseLanguage: params.responseLanguage,
         userId: params.userId,
@@ -1763,7 +1804,7 @@ REQUIREMENTS (mandatory):
         language: params.language,
         signal: params.signal
       });
-      return AIResponseValidator.validateGenerateQuiz(raw, params.count || 12);
+      return enforceQuizCodeCompleteness(AIResponseValidator.validateGenerateQuiz(raw, params.count || 12), params.questionStyle);
     };
 
     const tryOpenRouter = async () => {
@@ -1821,6 +1862,7 @@ REQUIREMENTS (mandatory):
     count?: number;
     difficulty?: number;
     questionStyle?: "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
+    codeLength?: QuizCodeLength;
     generationGuidance?: string;
     responseLanguage?: string;
     userId?: number;
@@ -1843,26 +1885,31 @@ REQUIREMENTS:
 - EXACTLY ${questionCount} questions
 - Each question has exactly 5 options
 - Output format: ONLY valid JSON array
-- Each item format: {"q": "question", "options": ["A", "B", "C", "D", "E"], "correct": 0}
+- Each item format: {"q": "question stem", "code": "complete code or empty string", "codeLanguage": "${langName}", "options": ["A", "B", "C", "D", "E"], "correct": 0}
+- If a question refers to code, execution, a program, or its output, its complete standalone snippet MUST be in the "code" field. Never mention missing or implied code.
+- For CODE_READING or DEBUGGING, every single question MUST have code. For other styles, use code only where appropriate and keep purely conceptual items code-free.
 - Return ONLY JSON array, no markdown, no explanations.${quizGuidance ? `\n${quizGuidance}` : ""}${responseLanguageInstruction}`
       : `Створи тест виключно по мові ${langName}. Теми для питань: ${params.prevTopics}.
 ВИМОГИ:
 - Кількість питань: РІВНО ${questionCount}
 - Кожне питання має рівно 5 варіантів відповіді
 - Формат: ТІЛЬКИ ВАЛІДНИЙ JSON масив без жодного додаткового тексту
-- Кожне питання має формат: {"q": "питання", "options": ["А", "Б", "В", "Г", "Д"], "correct": 0}
+- Кожне питання має формат: {"q": "текст питання", "code": "повний код або порожній рядок", "codeLanguage": "${langName}", "options": ["А", "Б", "В", "Г", "Д"], "correct": 0}
+- Якщо питання згадує код, виконання програми або її вивід, повний самодостатній фрагмент ОБОВ’ЯЗКОВО має бути в полі "code". Не посилайся на відсутній чи уявний код.
+- Для стилю CODE_READING або DEBUGGING кожне без винятку питання має містити код. Для інших стилів додавай код лише до доречних питань, а суто поняттєві залишай без нього.
 - Відповідай ТІЛЬКИ JSON масивом, без пояснень, без markdown.${quizGuidance ? `\n${quizGuidance}` : ""}${responseLanguageInstruction}`;
     let lastError: Error | null = null;
     const maxRetries = 2;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
+        const maxTokens = Math.min(10000, Math.max(3000, questionCount * (params.codeLength === "LONG" ? 500 : 240)));
         const content = await provider.generateText(userPrompt, systemPrompt, {
           timeout: 30000,
           userId: params.userId,
           topicId: params.topicId,
           signal: params.signal,
           temperature: 0.7,
-          maxTokens: 3000
+          maxTokens
         });
         if (!content) throw new Error('Empty AI response');
         let parsed: unknown;
@@ -1955,12 +2002,12 @@ REQUIREMENTS:
           }
         }
         const validated = AIResponseValidator.validateGenerateQuiz(parsed, questionCount);
-        return validated;
+        return enforceQuizCodeCompleteness(validated, params.questionStyle);
       } catch (err: unknown) {
         const message = errorMessage(err);
         lastError = err instanceof Error ? err : new Error(message);
         if (attempt < maxRetries) {
-          userPrompt += `\n\nВиправ формат. Поверни ТІЛЬКИ JSON масив з ${questionCount} питаннями, кожне з 5 варіантами відповіді. БЕЗ жодного тексту до або після JSON. БЕЗ markdown. БЕЗ пояснень. ТІЛЬКИ чистий JSON масив.`;
+          userPrompt += `\n\nПопередню відповідь відхилено: ${message}. Якщо питання посилається на код, додай повний код у поле "code" і вкажи "codeLanguage". Для CODE_READING або DEBUGGING код обов’язковий у кожному питанні. Поверни ТІЛЬКИ JSON-масив із ${questionCount} питаннями, кожне з 5 варіантами відповіді; без тексту поза JSON.`;
           await new Promise(r => setTimeout(r, 1000));
           continue;
         }

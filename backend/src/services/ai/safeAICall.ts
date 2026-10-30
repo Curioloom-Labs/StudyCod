@@ -258,6 +258,7 @@ function sanitizeParams(mode: AIMode, params: unknown): JsonObject {
     if (typeof p.count === 'number') p.count = Math.max(1, Math.min(50, Math.floor(p.count)));
     if (typeof p.difficulty === 'number') p.difficulty = Math.max(1, Math.min(5, Math.floor(p.difficulty)));
     if (!['MIXED', 'CONCEPTS', 'CODE_READING', 'DEBUGGING'].includes(String(p.questionStyle))) delete p.questionStyle;
+    if (!['SHORT', 'MEDIUM', 'LONG'].includes(String(p.codeLength))) delete p.codeLength;
   }
   if (mode === 'generateTestData') {
     if (typeof p.count === 'number') p.count = Math.max(1, Math.min(50, Math.floor(p.count)));
@@ -692,6 +693,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
               count: optionalNumber(sanitizedParams.count),
               difficulty: optionalNumber(sanitizedParams.difficulty),
               questionStyle: optionalString(sanitizedParams.questionStyle) as 'MIXED' | 'CONCEPTS' | 'CODE_READING' | 'DEBUGGING' | undefined,
+              codeLength: optionalString(sanitizedParams.codeLength) as 'SHORT' | 'MEDIUM' | 'LONG' | undefined,
               generationGuidance: optionalString(sanitizedParams.generationGuidance),
               responseLanguage: optionalString(sanitizedParams.responseLanguage),
               userId: optionalNumber(sanitizedParams.userId),

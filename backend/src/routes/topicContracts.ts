@@ -53,6 +53,7 @@ export const generateQuizSchema = z.object({
   count: optionalPositiveInt.refine(value => value === undefined || value <= 50, "count must be at most 50"),
   difficulty: z.coerce.number().int().min(1).max(5).optional(),
   questionStyle: z.enum(["MIXED", "CONCEPTS", "CODE_READING", "DEBUGGING"]).optional(),
+  codeLength: z.enum(["SHORT", "MEDIUM", "LONG"]).optional(),
   generationGuidance: z.string().trim().max(4000).optional(),
   responseLanguage: z.string().optional(),
   language: z.enum(["uk", "en"]).optional(),

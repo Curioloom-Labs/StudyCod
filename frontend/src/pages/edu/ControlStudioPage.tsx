@@ -18,6 +18,7 @@ import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertB
 type ControlTask = { id: number; title: string; description?: string; template?: string; maxAttempts?: number; theory?: { content: string } | null; projectSpec?: unknown; isAssigned?: boolean; assignedStudentIds?: number[] | null };
 type QuizItem = { question?: string; options?: Record<string, string>; correct?: string };
 type QuizQuestionStyle = "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
+type QuizCodeLength = "SHORT" | "MEDIUM" | "LONG";
 type ManualTestDraft = { input: string; expectedOutput: string; points: number; isHidden: boolean; imageUrls: string[] };
 type Control = {
   id: number;
@@ -104,7 +105,7 @@ export const ControlStudioPage: React.FC = () => {
   const [minutes, setMinutes] = React.useState("45");
   const [formula, setFormula] = React.useState("");
   const [quizText, setQuizText] = React.useState("");
-  const [quizGenerationSettings, setQuizGenerationSettings] = React.useState({ count: "10", difficulty: "3", questionStyle: "MIXED" as QuizQuestionStyle, guidance: "" });
+  const [quizGenerationSettings, setQuizGenerationSettings] = React.useState({ count: "10", difficulty: "3", questionStyle: "MIXED" as QuizQuestionStyle, codeLength: "MEDIUM" as QuizCodeLength, guidance: "" });
   const quizQuestionRefs = React.useRef<Record<number, HTMLTextAreaElement | null>>({});
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
@@ -218,6 +219,7 @@ export const ControlStudioPage: React.FC = () => {
           topicTitle: control?.topic?.title || title,
           difficulty: Number(quizGenerationSettings.difficulty) || 3,
           questionStyle: quizGenerationSettings.questionStyle,
+          codeLength: quizGenerationSettings.codeLength,
           generationGuidance: quizGenerationSettings.guidance.trim(),
           language: isEn ? "en" : "uk",
         });
@@ -734,11 +736,13 @@ export const ControlStudioPage: React.FC = () => {
             <div className="classroom-section-title"><h2>{tr("Запитання квізу", "Quiz questions")}<span>{quiz.length}</span></h2></div>
             <section className="mt-4 rounded-2xl border border-border/10 bg-bg-hover/70 p-4 dark:border-white/10 dark:bg-white/[.035]" aria-label={tr("Налаштування генерації квізу", "Quiz generation settings")}>
               <div className="mb-3"><h3 className="text-sm font-bold">{tr("Налаштування генерації", "Generation settings")}</h3><p className="mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Вкажіть кількість і рівень. Згенеровані питання можна буде відредагувати або видалити вручну.", "Choose the number and level. You can edit or remove generated questions afterward.")}</p></div>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <label className="text-xs font-bold">{tr("Кількість запитань", "Number of questions")}<input aria-label={tr("Кількість запитань квізу", "Quiz question count")} type="number" min="1" max="50" value={quizGenerationSettings.count} onChange={event => setQuizGenerationSettings(old => ({ ...old, count: event.target.value }))} className="mt-1 w-full rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-bg-code" /></label>
                 <label className="text-xs font-bold">{tr("Складність", "Difficulty")}<select aria-label={tr("Складність квізу", "Quiz difficulty")} value={quizGenerationSettings.difficulty} onChange={event => setQuizGenerationSettings(old => ({ ...old, difficulty: event.target.value }))} className="mt-1 w-full rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-bg-code">{[1, 2, 3, 4, 5].map(level => <option key={level} value={level}>{tr(`${level} · ${["Початкова", "Легка", "Середня", "Висока", "Поглиблена"][level - 1]}`, `${level} · ${["Introductory", "Easy", "Intermediate", "Advanced", "Expert"][level - 1]}`)}</option>)}</select></label>
                 <label className="text-xs font-bold">{tr("Фокус запитань", "Question focus")}<select aria-label={tr("Фокус запитань квізу", "Quiz question focus")} value={quizGenerationSettings.questionStyle} onChange={event => setQuizGenerationSettings(old => ({ ...old, questionStyle: event.target.value as QuizQuestionStyle }))} className="mt-1 w-full rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm dark:border-white/10 dark:bg-bg-code"><option value="MIXED">{tr("Змішаний", "Mixed")}</option><option value="CONCEPTS">{tr("Поняття й правила", "Concepts and rules")}</option><option value="CODE_READING">{tr("Читання коду", "Code reading")}</option><option value="DEBUGGING">{tr("Пошук помилок", "Debugging")}</option></select></label>
+                <label className="text-xs font-bold">{tr("Обсяг коду", "Code length")}<select aria-label={tr("Обсяг коду у питаннях", "Code length in questions")} value={quizGenerationSettings.codeLength} onChange={event => setQuizGenerationSettings(old => ({ ...old, codeLength: event.target.value as QuizCodeLength }))} disabled={quizGenerationSettings.questionStyle === "CONCEPTS"} className="mt-1 w-full rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm disabled:opacity-50 dark:border-white/10 dark:bg-bg-code"><option value="SHORT">{tr("Компактний", "Compact")}</option><option value="MEDIUM">{tr("Середній", "Medium")}</option><option value="LONG">{tr("Розгорнутий", "Extended")}</option></select></label>
               </div>
+              <p className="mt-2 text-xs text-text-muted dark:text-text-secondary">{tr("Питання, які посилаються на код, завжди міститимуть сам фрагмент. Для розгорнутого обсягу генератор створює змістовніші приклади коду.", "Questions that refer to code will include the snippet. Extended length creates more substantial code examples.")}</p>
               <label className="mt-3 block text-xs font-bold">{tr("Що врахувати генератору", "Additional instructions")}<textarea value={quizGenerationSettings.guidance} onChange={event => setQuizGenerationSettings(old => ({ ...old, guidance: event.target.value }))} rows={3} maxLength={4000} placeholder={tr("Наприклад: для учнів 8 класу; зосередься на циклах і масивах; не включай теми, яких ще не проходили.", "For example: for grade 8; focus on loops and arrays; avoid topics not covered yet.")} className="mt-1 w-full resize-y rounded-xl border border-border/10 bg-white p-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
               {hasQuiz && <p className="mt-2 text-xs text-text-muted dark:text-text-secondary">{tr("Повторна генерація замінить поточні запитання квізу.", "Regenerating replaces the current quiz questions.")}</p>}
               <button type="button" className="classroom-button mt-3" disabled={busy} onClick={() => void generateQuiz()}><Wand2 className="mr-2 inline size-4" aria-hidden="true" />{busy ? tr("Готуємо…", "Preparing…") : tr(`Згенерувати ${Math.max(1, Math.min(50, Number(quizGenerationSettings.count) || 10))} запитань`, `Generate ${Math.max(1, Math.min(50, Number(quizGenerationSettings.count) || 10))} questions`)}</button>

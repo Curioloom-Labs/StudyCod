@@ -422,6 +422,8 @@ const TheoryResponseSchema = z.object({
 
 const QuizQuestionSchema = z.object({
   q: z.string().min(1, 'question text must be a non-empty string'),
+  code: z.string().max(12000).optional(),
+  codeLanguage: z.string().max(24).optional(),
   options: z.array(z.string().min(1)).length(5, 'question must have exactly 5 options'),
   correct: z.number().int().min(0).max(4, 'correct must be between 0 and 4'),
 });
@@ -935,8 +937,15 @@ export class AIResponseValidator {
           }
         }
       });
+      const questionsWithCode = questions.map((question) => {
+        const code = question.code?.trim();
+        if (!code || question.q.includes(code)) return question;
+        const language = /^[a-zA-Z0-9+#.-]{1,24}$/.test(question.codeLanguage || "") ? question.codeLanguage : "";
+        const fencedCode = `\`\`\`${language}\n${code}\n\`\`\``;
+        return { ...question, q: `${question.q.trim()}\n\n${fencedCode}` };
+      });
       return {
-        quizJson: JSON.stringify(questions)
+        quizJson: JSON.stringify(questionsWithCode)
       };
     } catch (error) {
       if (error instanceof AIValidationError) {
