@@ -210,6 +210,7 @@ export const StudentTaskPage: React.FC = () => {
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizGrade, setQuizGrade] = useState<number | null>(null);
+  const [controlQuizOpen, setControlQuizOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [deadlineRemaining, setDeadlineRemaining] = useState<number | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -1536,11 +1537,12 @@ export const StudentTaskPage: React.FC = () => {
     });
   })();
   const showScoringLegend = Array.isArray(scoringSegments) && scoringSegments.some(s => s.key === "public" || s.key === "hidden");
-  if (String(task.lesson.type) !== "CONTROL") {
+  const isControlTask = task.lesson.type === "CONTROL";
+  if (!isControlTask || task.taskMode !== "MANUAL") {
     const ideLanguage = String(task.language).toLowerCase() as JudgeLanguage;
     const ideTestsPassed = testResults.filter((result) => result.passed).length || task.grade?.testsPassed || 0;
     const ideTestsTotal = testResults.length || task.grade?.testsTotal || task.testDataCount || 0;
-    const ideCheckResult: StudyCodIdeCheckResult | null = ideTestsTotal > 0 || lastScoring || learningFeedback
+    const ideCheckResult: StudyCodIdeCheckResult | null = isControlTask ? null : ideTestsTotal > 0 || lastScoring || learningFeedback
       ? {
           verdict: learningFeedback?.verdict ?? (ideTestsTotal > 0 ? (ideTestsPassed >= ideTestsTotal ? "AC" : "WA") : null),
           testsPassed: ideTestsPassed,
@@ -1595,6 +1597,7 @@ export const StudentTaskPage: React.FC = () => {
           stdin={testInput}
           onStdinChange={setTestInput}
           onUseExampleInput={() => undefined}
+          publicExamples={task.publicExamples}
           running={running}
           checking={submitting}
           onRun={handleRun}
@@ -1602,6 +1605,14 @@ export const StudentTaskPage: React.FC = () => {
           onSave={() => showToast({ type: "success", message: tr("Автозбереження активне", "Autosave is active") })}
           onReset={() => { setCode(task.template); setFiles(ensureEntryFile(entryFile, [{ path: entryFile, content: task.template }], task.template)); }}
           readOnly={!canEdit}
+          submitMode
+          disableAiAssistance={isControlTask}
+          attemptsUsed={task.attemptsUsed ?? 0}
+          maxAttempts={task.maxAttempts ?? null}
+          toolbarStatus={isControlTask ? <div className="flex flex-wrap items-center gap-2 text-xs">
+            {timeRemaining !== null && <span className={`rounded-md border px-2 py-1 font-mono ${timeRemaining <= 300 ? "border-accent-error/40 text-accent-error" : "border-accent-warn/40 text-accent-warn"}`}>{tr("Час", "Time")}: {Math.floor(timeRemaining / 60)}:{String(timeRemaining % 60).padStart(2, "0")}</span>}
+            {quizQuestions.length > 0 && <button type="button" onClick={() => setControlQuizOpen(true)} className="rounded-md border border-border px-2.5 py-1.5 font-semibold text-text-secondary hover:bg-bg-hover hover:text-text-primary">{quizSubmitted ? tr("Теорія", "Theory") + ` · ${quizGrade ?? "—"}/100` : tr("Теоретичний тест", "Theory quiz") + ` · ${Object.keys(quizAnswers).length}/${quizQuestions.length}`}</button>}
+          </div> : undefined}
           onBack={handleBack}
           runResult={ideRunResult}
           checkResult={ideCheckResult}
@@ -1611,6 +1622,27 @@ export const StudentTaskPage: React.FC = () => {
           webPreviewFiles={isWebTask ? toWebTaskFiles() : undefined}
           isWebTask={isWebTask}
         />
+        {isControlTask && quizQuestions.length > 0 && <Modal open={controlQuizOpen} onClose={() => setControlQuizOpen(false)} title={tr("Теоретичний тест", "Theory quiz")} showCloseButton>
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto p-1">
+            <p className="text-sm text-text-secondary">{quizSubmitted ? tr("Відповіді вже зафіксовані.", "Your answers have been submitted.") : tr("Оберіть відповідь для кожного питання, потім надішліть тест.", "Choose an answer for each question, then submit the quiz.")}</p>
+            {quizQuestions.map((question, questionIndex) => <fieldset key={questionIndex} className="rounded-xl border border-border p-4">
+              <legend className="px-1 text-xs font-semibold text-text-muted">{tr("Питання", "Question")} {questionIndex + 1}/{quizQuestions.length}</legend>
+              <div className="mb-3 text-sm text-text-primary"><MarkdownView content={question.question} /></div>
+              <div className="space-y-2">{(["А", "Б", "В", "Г", "Д"] as QuizOption[]).filter(option => question.options[option]).map(option => <label key={option} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 text-sm ${quizSubmitted && question.correct === option ? "border-accent-success bg-accent-success/10" : quizAnswers[questionIndex] === option ? "border-primary bg-primary/10" : "border-border"}`}>
+                <input type="radio" name={`control-quiz-${questionIndex}`} value={option} checked={quizAnswers[questionIndex] === option} disabled={quizSubmitted} onChange={() => {
+                  const next = { ...quizAnswers, [questionIndex]: option };
+                  setQuizAnswers(next);
+                  if (taskId) localStorage.setItem(scopedStorageKey("quiz_answers", taskId), JSON.stringify(next));
+                  resumeExtrasRef.current.questionIndex = questionIndex;
+                  resumeExtrasRef.current.anchorId = `quiz-q-${questionIndex}`;
+                  saveResume(viewportEl?.scrollTop);
+                }} />
+                <span><strong className="mr-1">{option})</strong><MarkdownView content={question.options[option]} /></span>
+              </label>)}</div>
+            </fieldset>)}
+            {!quizSubmitted ? <Button variant="primary" className="w-full" disabled={submitting || Object.keys(quizAnswers).length < quizQuestions.length} onClick={() => void handleSubmitQuiz()}><Send className="mr-2 h-4 w-4" />{tr("Надіслати тест", "Submit quiz")}</Button> : <div className="rounded-xl border border-primary/30 bg-primary/10 p-4 text-center"><div className="text-2xl font-bold">{quizGrade ?? "—"}/100</div><p className="text-sm text-text-secondary">{tr("Оцінка за теоретичну частину", "Theory score")}</p></div>}
+          </div>
+        </Modal>}
       </div>
     </div>;
   }

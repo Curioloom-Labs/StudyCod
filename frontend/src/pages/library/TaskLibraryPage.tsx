@@ -7,6 +7,7 @@ import { Button } from "../../components/ui/Button";
 import { Modal } from "../../components/ui/Modal";
 import { MarkdownView } from "../../components/MarkdownView";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
+import { TestImagesJsonField } from "../../components/TestImageAttachments";
 import { Badge } from "../../components/ui/Badge";
 import { Skeleton } from "../../components/ui/Skeleton";
 import { showToast } from "../../lib/toast";
@@ -197,7 +198,7 @@ const parseCheckerType = (value: string): EditorState["checkerType"] | null => {
   return null;
 };
 
-function safeParseTestsJson(text: string): Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number }> {
+function safeParseTestsJson(text: string): Array<{ input: string; expectedOutput: string; imageUrls?: string[]; isHidden?: boolean; points?: number; subtask?: number }> {
   const raw = String(text ?? "").trim();
   if (!raw) return [];
   const parsed = JSON.parse(raw);
@@ -209,11 +210,13 @@ function safeParseTestsJson(text: string): Array<{ input: string; expectedOutput
       isHidden?: unknown;
       points?: unknown;
       subtask?: unknown;
+      imageUrls?: unknown;
     };
     const parsedSubtask = Number(item.subtask);
     return {
       input: String(item.input ?? ""),
       expectedOutput: String(item.expectedOutput ?? ""),
+      imageUrls: Array.isArray(item.imageUrls) ? item.imageUrls.filter((url): url is string => typeof url === "string").slice(0, 8) : [],
       isHidden: item.isHidden ? true : false,
       points: item.points != null ? Number(item.points) : undefined,
       subtask: Number.isInteger(parsedSubtask) && parsedSubtask >= 1 ? parsedSubtask : undefined,
@@ -859,6 +862,7 @@ export const TaskLibraryPage: React.FC = () => {
               d.tests.map((t) => ({
                 input: t.input,
                 expectedOutput: t.expectedOutput,
+                imageUrls: t.imageUrls ?? [],
                 isHidden: t.isHidden,
                 points: t.points,
                 subtask: t.subtask ?? undefined,
@@ -890,7 +894,7 @@ export const TaskLibraryPage: React.FC = () => {
       return;
     }
 
-    let tests: Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number }> | undefined = undefined;
+    let tests: Array<{ input: string; expectedOutput: string; imageUrls?: string[]; isHidden?: boolean; points?: number; subtask?: number }> | undefined = undefined;
     try {
       const parsed = safeParseTestsJson(editor.testsJson);
       if (parsed.length > 0) tests = parsed;
@@ -2968,6 +2972,7 @@ export const TaskLibraryPage: React.FC = () => {
                   "Example: [{\"input\":\"1 2\",\"expectedOutput\":\"3\",\"points\":1}]"
                 )}
               />
+              <TestImagesJsonField value={editor.testsJson} onChange={testsJson => setEditor(current => ({ ...current, testsJson }))} disabled={saving} />
             </div>
 
             <div className="flex gap-2 justify-end">

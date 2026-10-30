@@ -83,6 +83,9 @@ export class TestData {
   })
   points!: number;
 
+  @Column({ type: "simple-json", name: "image_urls", nullable: true })
+  imageUrls?: string[] | null;
+
   // Optional: subtask identifier used for binary (0 or full) subtask scoring.
   // When null/empty => falls back to legacy public/hidden grouping.
   @Column({

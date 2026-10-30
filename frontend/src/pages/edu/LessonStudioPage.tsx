@@ -41,6 +41,7 @@ import "./eduWorkspace.css";
 import { CourseTaskTestFields, emptyCourseTest, validCourseTests } from "./CourseTaskTestFields";
 import type { CourseTestInput } from "../../lib/api/edu";
 import { Modal } from "../../components/ui/Modal";
+import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
 import { eduLessonPath } from "../../lib/eduNavigation";
 
 type Quiz = {
@@ -202,6 +203,7 @@ const LessonTeacherStudio: React.FC = () => {
   }>({ title: "", description: "", template: "", projectSpecJson: "" });
   const [taskTests, setTaskTests] = React.useState<CourseTestInput[]>([emptyCourseTest()]);
   const [taskMaxAttempts, setTaskMaxAttempts] = React.useState(3);
+  const taskDescriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
   const createPending = React.useRef(false);
   const [quiz, setQuiz] = React.useState<Quiz[]>([]);
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
@@ -640,8 +642,11 @@ const LessonTeacherStudio: React.FC = () => {
               placeholder={tr("Назва завдання", "Task title")}
               className="mt-2 w-full rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-bg-code"
             /></label>
-            <label className="block text-sm font-semibold">{tr("Умова", "Problem statement")}
+            <div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><label htmlFor="course-task-description" className="block text-sm font-semibold">{tr("Умова", "Problem statement")}</label><MarkdownImageInsertButton value={task.description} onChange={description => setTask({ ...task, description })} textareaRef={taskDescriptionRef} className="text-xs" /></div>
             <textarea
+              id="course-task-description"
+              ref={taskDescriptionRef}
               value={task.description}
               onChange={(event) =>
                 setTask({ ...task, description: event.target.value })
@@ -649,7 +654,8 @@ const LessonTeacherStudio: React.FC = () => {
               placeholder={tr("Умова", "Problem statement")}
               rows={5}
               className="mt-2 w-full resize-none rounded-xl border border-border/10 bg-white px-4 py-3 text-sm dark:border-white/10 dark:bg-bg-code"
-            /></label>
+            />
+            </div>
             <label className="block text-sm font-semibold">{tr("Стартовий код (за потреби)", "Starter code (optional)")}
             <textarea
               value={task.template}

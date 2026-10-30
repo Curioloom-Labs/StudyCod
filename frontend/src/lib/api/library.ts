@@ -162,6 +162,7 @@ export type LibraryTaskTest = {
   id: number;
   input: string;
   expectedOutput: string;
+  imageUrls?: string[];
   isHidden: boolean;
   kind?: "SAMPLE" | "JUDGE";
   points: number;
@@ -508,7 +509,7 @@ export async function createLibraryTask(payload: {
   lang?: LibraryTaskLang;
   maxAttempts?: number;
   theory?: string;
-  tests?: Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number }>;
+  tests?: Array<{ input: string; expectedOutput: string; imageUrls?: string[]; isHidden?: boolean; points?: number; subtask?: number }>;
 }) {
   const res = await api.post("/library/tasks", payload);
   return res.data as { task: LibraryTaskListItem };
@@ -555,7 +556,7 @@ export async function updateLibraryTask(
     checkerSpec: LibraryCheckerSpec | null;
     allowedLanguages: JudgeLanguage[] | null;
     theory: string;
-    tests: Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number }>;
+    tests: Array<{ input: string; expectedOutput: string; imageUrls?: string[]; isHidden?: boolean; points?: number; subtask?: number }>;
   }>
 ) {
   const res = await api.patch(`/library/tasks/${id}`, payload);

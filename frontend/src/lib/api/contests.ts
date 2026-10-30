@@ -142,6 +142,7 @@ export type ContestProblemStatement = {
     id: number;
     title: string;
       description: string;
+    publicTests?: Array<{ testId: number; input: string; expectedOutput: string; imageUrls?: string[] }>;
       template: string;
       templatesByLanguage: Record<string, string> | null;
       defaultLanguage?: JudgeLanguage;
@@ -643,7 +644,7 @@ export async function addContestProblem(
         template: string;
         maxAttempts?: number;
         difficulty?: "EASY" | "MEDIUM" | "HARD";
-        tests?: Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }>;
+        tests?: Array<{ input: string; expectedOutput: string; imageUrls?: string[]; isHidden?: boolean; points?: number }>;
       }
     | { mode: "COPY"; libraryTaskId: number }
 ): Promise<{ problemId: number; libraryTaskId: number; order: number; label: string; points: number | null }> {

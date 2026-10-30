@@ -54,8 +54,6 @@ const studentRepo = () => AppDataSource.getRepository(Student);
 const classRepo = () => AppDataSource.getRepository(Class);
 const userRepo = () => AppDataSource.getRepository(User);
 const testDataRepo = () => AppDataSource.getRepository(TestData);
-const CONTROL_WORK_MAX_TASKS_COUNT = 3;
-const CONTROL_TASK_MAX_ATTEMPTS = 3;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -107,26 +105,13 @@ function normalizeProjectSpec(raw: unknown): LibraryTaskProjectSpec | null {
   };
 }
 
-function normalizeTaskMaxAttempts(type: "PRACTICE" | "CONTROL", raw: unknown): number {
-  if (type === "CONTROL") {
-    return CONTROL_TASK_MAX_ATTEMPTS;
-  }
-
+function normalizeTaskMaxAttempts(_type: "PRACTICE" | "CONTROL", raw: unknown): number {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) {
     return 3;
   }
 
   return Math.max(1, Math.floor(parsed));
-}
-
-async function countControlTasksForControlWork(controlWorkId: number): Promise<number> {
-  return await taskRepo().count({
-    where: {
-      controlWork: { id: controlWorkId },
-      type: "CONTROL"
-    }
-  });
 }
 
 function parseAIBudgetMs(envKey: string, fallbackMs: number, minMs = 8_000, maxMs = 55_000): number {
@@ -575,14 +560,6 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
         });
       }
 
-      const currentControlTasksCount = await countControlTasksForControlWork(controlWork.id);
-      if (currentControlTasksCount >= CONTROL_WORK_MAX_TASKS_COUNT) {
-        return res.status(400).json({
-          message: "CONTROL_WORK_MAX_TASKS_REACHED",
-          expected: CONTROL_WORK_MAX_TASKS_COUNT,
-          actual: currentControlTasksCount
-        });
-      }
     }
     const task = taskRepo().create({
       topic: {
@@ -926,8 +903,6 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
     task.projectSpec = normalizedProjectSpec;
     if (maxAttempts !== undefined) {
       task.maxAttempts = normalizeTaskMaxAttempts(task.type, maxAttempts);
-    } else if (task.type === "CONTROL" && task.maxAttempts !== CONTROL_TASK_MAX_ATTEMPTS) {
-      task.maxAttempts = CONTROL_TASK_MAX_ATTEMPTS;
     }
     if (deadline !== undefined) {
       const normalizedDeadline = deadline === null ? null : new Date(deadline);
@@ -1210,7 +1185,8 @@ topicsRouter.get("/control-works/:controlWorkId", authRequired, async (req: Auth
       },
       order: {
         order: "ASC"
-      }
+      },
+      relations: ["theory"]
     });
     res.json({
       controlWork: {
@@ -2267,7 +2243,6 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
         message: "TASK_NOT_FOUND"
       });
     }
-    if (task.type === "CONTROL") return res.status(409).json({ message: "CONTROL_TASK_DELETE_WITH_ASSESSMENT" });
     if (task.topic.class) {
       const access = await authorizeClassForReq(req, task.topic.class.id, "CONTENT_AUTHOR");
       if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
@@ -2283,6 +2258,12 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
           message: "ACCESS_DENIED"
         });
       }
+    }
+    if (task.type === "CONTROL") {
+      const assignedToStudents = Boolean(task.isAssigned || task.assignedStudentIds?.length || task.controlWork?.isAssigned || task.controlWork?.assignedStudentIds?.length);
+      if (assignedToStudents) return res.status(409).json({ message: "CONTROL_TASK_DELETE_AFTER_ASSIGNMENT_NOT_ALLOWED" });
+      const existingGrades = await AppDataSource.getRepository(EduGrade).count({ where: { topicTask: { id: taskId } } });
+      if (existingGrades > 0) return res.status(409).json({ message: "CONTROL_TASK_HAS_ATTEMPTS" });
     }
     await AppDataSource.transaction(async (manager) => {
       await manager.getRepository(EduGrade).delete({ topicTask: { id: taskId } });

@@ -135,7 +135,8 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
     catch (error) { submissionAllowed = false; submissionBlockedReason = (error as Error).message; }
     const grade = await latestGrade(task.id, student.id);
     const attemptsUsed = await gradeRepo().count({ where: { task: { id: task.id }, student: { id: student.id } } });
-    const tests = await testRepo().count({ where: { task: { id: task.id } } });
+    const tests = await testRepo().find({ where: { task: { id: task.id } }, order: { id: "ASC" }, take: 50 });
+    const testsCount = await testRepo().count({ where: { task: { id: task.id } } });
     return res.json({ task: {
       id: task.id,
       title: task.title,
@@ -146,12 +147,18 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       webTemplateFiles: task.webTemplateFiles ?? null,
       webValidationRules: task.webValidationRules ?? null,
       language: languageFor(task),
-      testDataCount: tests,
+      testDataCount: testsCount,
+      publicExamples: tests.filter(test => !test.isHidden).slice(0, 20).map(test => ({
+        testId: test.id,
+        input: test.input,
+        expectedOutput: test.expectedOutput,
+        imageUrls: Array.isArray(test.imageUrls) ? test.imageUrls : [],
+      })),
       savedCode: grade?.submittedCode ?? null,
       maxAttempts: task.maxAttempts,
       attemptsUsed,
       deadline: task.deadline ?? null,
-      isClosed: task.isClosed || !submissionAllowed || task.taskMode === "CODE" && tests === 0 || Boolean(grade?.isCompleted || grade?.isManuallyGraded) || attemptsUsed >= task.maxAttempts,
+      isClosed: task.isClosed || !submissionAllowed || task.taskMode === "CODE" && testsCount === 0 || Boolean(grade?.isCompleted || grade?.isManuallyGraded) || attemptsUsed >= task.maxAttempts,
       submissionAllowed, submissionBlockedReason,
       lesson: { id: task.lesson.id, title: task.lesson.title, type: task.lesson.type, hasTheory: task.lesson.hasTheory },
       hasGrade: Boolean(grade),

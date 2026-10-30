@@ -31,8 +31,6 @@ const summaryGradeRepo = () => AppDataSource.getRepository(SummaryGrade);
 const eduLessonRepo = () => AppDataSource.getRepository(EduLesson);
 
 const THEMATIC_CANONICAL_NAME = "THEMATIC";
-const CONTROL_TASK_MAX_ATTEMPTS = 3;
-
 function clampGradeToInt(raw: unknown): number {
   const n = typeof raw === "number" ? raw : Number(raw);
   if (!Number.isFinite(n)) return 0;
@@ -63,10 +61,6 @@ function localizeSummaryName(raw: unknown, locale: "uk" | "en"): string {
 }
 
 function resolveTaskMaxAttempts(task: Pick<TopicTask, "type" | "maxAttempts">): number {
-  if (task.type === "CONTROL") {
-    return CONTROL_TASK_MAX_ATTEMPTS;
-  }
-
   const parsed = Number(task.maxAttempts);
   if (!Number.isFinite(parsed)) {
     return 3;

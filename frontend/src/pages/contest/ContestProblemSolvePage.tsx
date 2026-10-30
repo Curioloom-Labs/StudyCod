@@ -1215,7 +1215,9 @@ export const ContestProblemSolvePage: React.FC = () => {
   if (!statement) return isPreview ? null : <ContestSafetyGate contestId={contestId} onUnlocked={() => void load()} />;
 
   const entryFile = JUDGE_ENTRY_FILES[judgeLanguage];
-  const publicExamples = examplesFromStatement(statement.task.description);
+  const publicExamples = statement.task.publicTests?.length
+    ? statement.task.publicTests
+    : examplesFromStatement(statement.task.description);
   const orderedContestProblems = [...contestProblems].sort(
     (a, b) => a.order - b.order,
   );

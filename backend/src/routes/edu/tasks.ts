@@ -382,13 +382,7 @@ type ControlTaskUnlockOptions = {
   requireActiveAttempt?: boolean;
 };
 
-const CONTROL_TASK_MAX_ATTEMPTS = 3;
-
 function resolveTaskMaxAttempts(task: Pick<TopicTask, "type" | "maxAttempts">): number {
-  if (task.type === "CONTROL") {
-    return CONTROL_TASK_MAX_ATTEMPTS;
-  }
-
   const parsed = Number(task.maxAttempts);
   if (!Number.isFinite(parsed)) {
     return 3;
@@ -653,6 +647,11 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
     }
 
     const testDataCount = await testDataRepo().count({ where: { topicTask: { id: taskId } } });
+    const publicExamples = await testDataRepo().find({
+      where: { topicTask: { id: taskId }, isHidden: false },
+      order: { id: "ASC" },
+      take: 20,
+    });
 
     let lessonType: "TOPIC" | "CONTROL" = "TOPIC";
     let lessonId = topicTask.topic.id;
@@ -788,6 +787,12 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
         type: topicTask.type,
         order: topicTask.order,
         testDataCount,
+        publicExamples: publicExamples.map(test => ({
+          testId: test.id,
+          input: test.input,
+          expectedOutput: test.expectedOutput,
+          imageUrls: Array.isArray(test.imageUrls) ? test.imageUrls : [],
+        })),
         grade,
         language: topicTask.topic.language,
         lesson: {

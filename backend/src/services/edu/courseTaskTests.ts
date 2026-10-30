@@ -12,6 +12,7 @@ import type { JudgeResponse } from "../judgeWorker/types";
 export const courseTestSchema = z.object({
   input: z.string().max(65536), expectedOutput: z.string().max(65536),
   points: z.number().int().min(1).max(1000).default(1), isHidden: z.boolean().default(false),
+  imageUrls: z.array(z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/)).max(8).default([]),
   subtask: z.string().trim().max(64).nullable().optional(),
 }).strict().refine(test => Boolean(test.input.trim() || test.expectedOutput.trim()), "EMPTY_TEST");
 export const courseTestsSchema = z.array(courseTestSchema).max(50);
@@ -19,7 +20,7 @@ export type CourseTestInput = z.infer<typeof courseTestSchema>;
 export function courseTestsRevision(tests: Array<Partial<TestData>>, maxAttempts: number) {
   return createHash("sha256").update(JSON.stringify({ maxAttempts, tests: tests.map(test => ({
     input: test.input ?? "", expectedOutput: test.expectedOutput ?? "", points: test.points || 1,
-    isHidden: test.isHidden === true, subtask: test.subtask || null,
+    isHidden: test.isHidden === true, imageUrls: Array.isArray(test.imageUrls) ? test.imageUrls : [], subtask: test.subtask || null,
   })) })).digest("hex");
 }
 export async function courseTaskTestCounts(taskIds: number[]) {
@@ -37,7 +38,7 @@ async function hasStarted(task: EduTask, manager: EntityManager) {
 export async function courseTaskTestConfig(task: EduTask, manager = AppDataSource.manager) {
   const tests = await manager.getRepository(TestData).find({ where: { task: { id: task.id } }, order: { id: "ASC" } });
   return { task: { id: task.id, title: task.title, lessonId: task.lesson.id },
-    testData: tests.map(test => ({ input: test.input, expectedOutput: test.expectedOutput, points: test.points, isHidden: test.isHidden, subtask: test.subtask || null })),
+    testData: tests.map(test => ({ input: test.input, expectedOutput: test.expectedOutput, points: test.points, isHidden: test.isHidden, imageUrls: Array.isArray(test.imageUrls) ? test.imageUrls : [], subtask: test.subtask || null })),
     maxAttempts: task.maxAttempts, revision: courseTestsRevision(tests, task.maxAttempts), gradingLocked: await hasStarted(task, manager) };
 }
 export async function replaceCourseTaskTests(task: EduTask, tests: CourseTestInput[], maxAttempts: number, expectedRevision: string) {

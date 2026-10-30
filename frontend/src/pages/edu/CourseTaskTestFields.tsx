@@ -2,6 +2,7 @@ import React from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { tr } from "../../i18n";
 import type { CourseTestInput } from "../../lib/api/edu";
+import { TestImageAttachments } from "../../components/TestImageAttachments";
 const field = "mt-2 min-h-11 w-full rounded-xl border border-border bg-bg-base px-3 py-3 text-sm text-text-primary";
 export const emptyCourseTest = (): CourseTestInput => ({ input: "", expectedOutput: "", points: 1, isHidden: false });
 export const validCourseTests = (tests: CourseTestInput[]) => tests.length <= 50 && tests.every(test =>
@@ -19,6 +20,7 @@ export const CourseTaskTestFields: React.FC<{ tests: CourseTestInput[]; onChange
         <div><label htmlFor={`${id}-input-${index}`} className="text-sm">{tr("Вхідні дані", "Input")}</label><textarea id={`${id}-input-${index}`} className={`${field} resize-y font-mono`} rows={3} maxLength={65536} value={test.input} onChange={event => update(index, { input: event.target.value })} /></div>
         <div><label htmlFor={`${id}-output-${index}`} className="text-sm">{tr("Очікуваний вивід", "Expected output")}</label><textarea id={`${id}-output-${index}`} className={`${field} resize-y font-mono`} rows={3} maxLength={65536} value={test.expectedOutput} onChange={event => update(index, { expectedOutput: event.target.value })} /></div>
       </div>
+      <TestImageAttachments value={test.imageUrls ?? []} onChange={imageUrls => update(index, { imageUrls })} disabled={disabled} />
       <div className="mt-3 flex flex-wrap items-end gap-4">
         <label htmlFor={`${id}-points-${index}`} className="w-24 text-sm">{tr("Бали", "Points")}<input id={`${id}-points-${index}`} className={field} type="number" min={1} max={1000} step={1} value={test.points} onChange={event => update(index, { points: Number(event.target.value) })} /></label>
         <label className="flex min-h-11 items-center gap-2 text-sm"><input className="size-4 accent-primary" type="checkbox" checked={test.isHidden} onChange={event => update(index, { isHidden: event.target.checked })} />{tr("Прихований від учнів", "Hidden from students")}</label>

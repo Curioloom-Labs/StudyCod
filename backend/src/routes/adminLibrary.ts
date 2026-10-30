@@ -52,6 +52,7 @@ type RevisionSnapshotTask = {
 type RevisionSnapshotTest = {
   input: string;
   expectedOutput: string;
+  imageUrls?: string[];
   isHidden: boolean;
   kind: "SAMPLE" | "JUDGE";
   points: number;
@@ -172,6 +173,7 @@ async function buildSnapshot(taskId: number) {
       id: t.id,
       input: t.input,
       expectedOutput: t.expectedOutput,
+      imageUrls: Array.isArray(t.imageUrls) ? t.imageUrls : [],
       isHidden: t.isHidden,
       kind: t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
       points: t.points,
@@ -531,6 +533,7 @@ adminLibraryRouter.post(
             libraryTask: { id } as LibraryTask,
             input: String(t.input ?? ""),
             expectedOutput: String(t.expectedOutput ?? ""),
+            imageUrls: Array.isArray(t.imageUrls) ? t.imageUrls.filter((url): url is string => typeof url === "string" && /^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/.test(url)).slice(0, 8) : [],
             isHidden: !!t.isHidden,
             kind: t.kind === "SAMPLE" ? "SAMPLE" : "JUDGE",
             points: Number.isFinite(Number(t.points)) ? Number(t.points) : 1,

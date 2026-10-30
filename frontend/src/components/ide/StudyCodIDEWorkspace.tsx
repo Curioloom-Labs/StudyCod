@@ -157,6 +157,7 @@ type Props = {
     testId: number;
     input: string;
     expectedOutput: string;
+    imageUrls?: string[];
   }>;
   hasUnsavedChanges?: boolean;
   running: boolean;
@@ -2009,6 +2010,17 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
         <article className="ide-task-document">
           <MarkdownView content={taskBody} variant="task" />
         </article>
+        {props.publicExamples?.some(example => example.imageUrls?.length) ? <section className="mt-4 space-y-3" aria-label={tr("Зображення у відкритих тестах", "Images in public tests")}>
+          <h3 className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--ide-muted)]">{tr("Зображення у прикладах", "Example images")}</h3>
+          {props.publicExamples.filter(example => example.imageUrls?.length).map((example, index) => <div key={example.testId} className="rounded-xl border border-[var(--ide-border)] bg-[var(--ide-surface)] p-3">
+            <div className="mb-2 text-[11px] font-semibold text-[var(--ide-muted)]">{tr(`Приклад ${index + 1}`, `Example ${index + 1}`)}</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div><div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--ide-muted)]">{tr("Ввід", "Input")}</div><pre className="max-h-24 overflow-auto whitespace-pre-wrap break-words text-xs">{example.input || "∅"}</pre></div>
+              <div><div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--ide-muted)]">{tr("Очікуваний результат", "Expected output")}</div><pre className="max-h-24 overflow-auto whitespace-pre-wrap break-words text-xs">{example.expectedOutput || "∅"}</pre></div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">{example.imageUrls?.map((url, imageIndex) => <a key={`${url}-${imageIndex}`} href={url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-[var(--ide-border)]"><img src={url} alt={tr(`Зображення прикладу ${index + 1}`, `Example ${index + 1} image`)} loading="lazy" className="max-h-56 max-w-full object-contain" /></a>)}</div>
+          </div>)}
+        </section> : null}
         {props.task.projectSpec ? (
           <details className="ide-context-details" open>
             <summary>

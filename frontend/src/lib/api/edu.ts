@@ -241,6 +241,7 @@ export interface Task {
   description: string;
   template: string;
   testDataCount: number;
+  publicExamples?: Array<{ testId: number; input: string; expectedOutput: string; imageUrls?: string[] }>;
   createdAt: string;
 }
 export interface TaskWithGrade {
@@ -248,6 +249,7 @@ export interface TaskWithGrade {
   title: string;
   description: string;
   template: string;
+  publicExamples?: Array<{ testId: number; input: string; expectedOutput: string; imageUrls?: string[] }>;
   taskMode?: "CODE" | "WEB" | "MANUAL";
   projectSpec?: {
     version: 1;
@@ -712,7 +714,7 @@ export async function saveQuiz(lessonId: number, quiz: QuizItem[]): Promise<void
     quiz
   });
 }
-export type CourseTestInput = { input: string; expectedOutput: string; points: number; isHidden: boolean; subtask?: string | null };
+export type CourseTestInput = { input: string; expectedOutput: string; points: number; isHidden: boolean; imageUrls?: string[]; subtask?: string | null };
 export type CourseTestConfig = { task: { id: number; title: string; lessonId: number }; testData: CourseTestInput[]; maxAttempts: number; revision: string; gradingLocked: boolean };
 export async function getCourseTaskTests(taskId: number): Promise<CourseTestConfig> { return (await api.get(`/edu/course-tasks/${taskId}/tests`)).data; }
 export async function saveCourseTaskTests(taskId: number, input: { testData: CourseTestInput[]; maxAttempts: number; expectedRevision: string }): Promise<CourseTestConfig> { return (await api.put(`/edu/course-tasks/${taskId}/tests`, input)).data; }
@@ -938,6 +940,7 @@ export async function generateTestData(taskId: number, count: number, options?: 
     isHidden?: boolean;
     source?: "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
     subtask?: string | null;
+    imageUrls?: string[];
   }>;
 }> {
   const res = await api.post(eduTaskUrl(taskId, "/test-data/generate"), {
@@ -953,6 +956,7 @@ export interface TestDataItem {
   points: number;
   isHidden?: boolean;
   subtask?: string | null;
+  imageUrls?: string[];
 }
 export async function addTestData(taskId: number, testData: TestDataItem[]): Promise<{
   count: number;
@@ -970,6 +974,7 @@ export interface TestData {
   isHidden?: boolean;
   source?: "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
   subtask?: string | null;
+  imageUrls?: string[];
   isInputTruncated?: boolean;
   inputFullLength?: number;
   isExpectedOutputTruncated?: boolean;
@@ -1032,6 +1037,7 @@ export async function updateTestData(taskId: number, testDataId: number, update:
   points?: number;
   isHidden?: boolean;
   subtask?: string | null;
+  imageUrls?: string[];
 }): Promise<{
   message: string;
   testData: TestData;

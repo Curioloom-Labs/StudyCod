@@ -1282,7 +1282,7 @@ export const LibraryTaskSolvePage: React.FC = () => {
           onStdinChange={setStdin}
           firstExampleInput={firstExampleInput}
           onUseExampleInput={() => setStdin(firstExampleInput)}
-          publicExamples={visibleTests.map((test) => ({ testId: test.id, input: test.input, expectedOutput: test.expectedOutput }))}
+          publicExamples={visibleTests.map((test) => ({ testId: test.id, input: test.input, expectedOutput: test.expectedOutput, imageUrls: test.imageUrls }))}
           hasUnsavedChanges={isDraftDirty}
           saveStatus={draftSaveState}
           lastSavedAt={lastSavedAt}

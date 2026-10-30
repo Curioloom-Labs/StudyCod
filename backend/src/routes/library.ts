@@ -732,6 +732,7 @@ const createLibraryTaskSchema = z.object({
       z.object({
         input: z.string(),
         expectedOutput: z.string(),
+        imageUrls: z.array(z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/)).max(8).optional(),
         isHidden: z.boolean().optional(),
         points: z.number().int().min(1).max(1000).optional(),
         // Subtask id used for binary (0/full) subtask scoring in contests.
@@ -870,6 +871,7 @@ libraryRouter.get("/tasks/by/:key", authOptional, async (req: AuthRequest, res: 
         id: t.id,
         input: t.input,
         expectedOutput: t.expectedOutput,
+        imageUrls: Array.isArray(t.imageUrls) ? t.imageUrls : [],
         isHidden: !!t.isHidden,
         kind: t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
         points: t.points,
@@ -984,6 +986,7 @@ libraryRouter.get("/tasks/:id", authOptional, async (req: AuthRequest, res: Resp
         id: t.id,
         input: t.input,
         expectedOutput: t.expectedOutput,
+        imageUrls: Array.isArray(t.imageUrls) ? t.imageUrls : [],
         isHidden: !!t.isHidden,
         kind: t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
         points: t.points,
@@ -1884,6 +1887,7 @@ libraryRouter.post("/tasks", authRequired, async (req: AuthRequest, res: Respons
           libraryTask: { id: task.id },
           input: String(t.input ?? ""),
           expectedOutput: String(t.expectedOutput ?? ""),
+          imageUrls: Array.isArray(t.imageUrls) ? t.imageUrls : [],
           isHidden: !!t.isHidden,
           kind: t.isHidden ? "JUDGE" : "SAMPLE",
           source: "LIBRARY_IMPORTED",
@@ -2036,6 +2040,7 @@ libraryRouter.patch("/tasks/:id", authRequired, async (req: AuthRequest, res: Re
             libraryTask: { id: task.id },
             input: String(t.input ?? ""),
             expectedOutput: String(t.expectedOutput ?? ""),
+            imageUrls: Array.isArray(t.imageUrls) ? t.imageUrls : [],
             isHidden: !!t.isHidden,
             kind: t.isHidden ? "JUDGE" : "SAMPLE",
             source: "LIBRARY_IMPORTED",
@@ -2201,6 +2206,7 @@ libraryRouter.post("/tasks/:id/copy-to-topic", authRequired, teacherOrAdminGuard
           topicTask: { id: newTopicTask.id },
           input: t.input,
           expectedOutput: t.expectedOutput,
+          imageUrls: Array.isArray(t.imageUrls) ? t.imageUrls : [],
           isHidden: !!t.isHidden,
           kind: t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
           source: "LIBRARY_IMPORTED",
@@ -2558,13 +2564,14 @@ async function importSingleLibraryArchive(params: {
 
   const testsEntry = zip.getEntry("tests.json");
   if (testsEntry) {
-    const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number | string }>>(zip, "tests.json", zipBudget);
+    const tests = readZipJson<Array<{ input: string; expectedOutput: string; imageUrls?: string[]; isHidden?: boolean; points?: number; subtask?: number | string }>>(zip, "tests.json", zipBudget);
     if (Array.isArray(tests) && tests.length > 0) {
       const rows = tests.map(t =>
         testDataRepo().create({
           libraryTask: { id: task.id },
           input: String(t.input ?? ""),
           expectedOutput: String(t.expectedOutput ?? ""),
+          imageUrls: Array.isArray(t.imageUrls) ? t.imageUrls.filter(url => /^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/.test(url)).slice(0, 8) : [],
           isHidden: !!t.isHidden,
           kind: t.isHidden ? "JUDGE" : "SAMPLE",
           source: "LIBRARY_IMPORTED",
@@ -2840,6 +2847,7 @@ libraryRouter.get("/tasks/:id/export-archive", authRequired, async (req: AuthReq
             tests.map(t => ({
               input: t.input,
               expectedOutput: t.expectedOutput,
+              imageUrls: Array.isArray(t.imageUrls) ? t.imageUrls : [],
               isHidden: !!t.isHidden,
               points: t.points,
               subtask: t.subtask ?? null,

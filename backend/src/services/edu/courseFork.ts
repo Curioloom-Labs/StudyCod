@@ -29,7 +29,7 @@ export interface PlannedTask {
   webTemplateFiles?: EduTask["webTemplateFiles"];
   webValidationRules?: EduTask["webValidationRules"];
   webValidationProfile?: EduTask["webValidationProfile"];
-  tests?: Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }>;
+  tests?: Array<{ input: string; expectedOutput: string; imageUrls?: string[]; isHidden?: boolean; points?: number }>;
 }
 
 export interface PlannedLesson {
@@ -115,6 +115,9 @@ export function planTaskFromItem(item: Pick<CourseItem, "id" | "kind" | "title" 
         .map((test) => ({
           input: String(test.input),
           expectedOutput: String(test.expectedOutput),
+          imageUrls: Array.isArray(test.imageUrls)
+            ? test.imageUrls.filter((url): url is string => typeof url === "string" && /^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/.test(url)).slice(0, 8)
+            : [],
           ...(typeof test.isHidden === "boolean" ? { isHidden: test.isHidden } : {}),
           ...(typeof test.points === "number" ? { points: test.points } : {})
         }))
@@ -271,6 +274,7 @@ export async function assignCourseToClass(input: {
             task,
             input: test.input,
             expectedOutput: test.expectedOutput,
+            imageUrls: test.imageUrls ?? [],
             isHidden: test.isHidden === true,
             kind: test.isHidden === true ? "JUDGE" : "SAMPLE",
             points: Math.max(1, Math.min(1000, Number(test.points) || 1)),

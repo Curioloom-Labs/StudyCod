@@ -11,6 +11,8 @@ import { Badge } from "../../components/ui/Badge";
 import { Modal } from "../../components/ui/Modal";
 import { Input } from "../../components/ui/Input";
 import { MarkdownView } from "../../components/MarkdownView";
+import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
+import { TestImagesJsonField } from "../../components/TestImageAttachments";
 import { CodeEditor } from "../../components/CodeEditor";
 import { Skeleton } from "../../components/ui/Skeleton";
 import {
@@ -106,6 +108,7 @@ import {
 type ParsedTestInput = {
   input?: unknown;
   expectedOutput?: unknown;
+  imageUrls?: unknown;
   isHidden?: unknown;
   points?: unknown;
 };
@@ -175,7 +178,7 @@ function fromDateTimeLocalInput(value: string): string | null {
   return d.toISOString();
 }
 
-function parseTestsJson(raw: string): Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number }> {
+function parseTestsJson(raw: string): Array<{ input: string; expectedOutput: string; imageUrls?: string[]; isHidden?: boolean; points?: number }> {
   const text = String(raw ?? "").trim();
   if (!text) return [];
   const parsed = JSON.parse(text);
@@ -185,6 +188,7 @@ function parseTestsJson(raw: string): Array<{ input: string; expectedOutput: str
     return {
       input: String(t.input ?? ""),
       expectedOutput: String(t.expectedOutput ?? ""),
+      imageUrls: Array.isArray(t.imageUrls) ? t.imageUrls.filter((url): url is string => typeof url === "string").slice(0, 8) : [],
       isHidden: Boolean(t.isHidden),
       points: t.points != null ? Number(t.points) : undefined,
     };
@@ -994,6 +998,7 @@ export const ContestPage: React.FC = () => {
   const [addDescription, setAddDescription] = React.useState("");
   const [addTemplate, setAddTemplate] = React.useState("public class Main {\n  public static void main(String[] args) {\n    // TODO\n  }\n}\n");
   const [addTestsJson, setAddTestsJson] = React.useState("");
+  const addDescriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [addMaxAttempts, setAddMaxAttempts] = React.useState<number>(3);
   const [copyLibraryTaskId, setCopyLibraryTaskId] = React.useState("");
   const [copyQuery, setCopyQuery] = React.useState("");
@@ -3903,8 +3908,9 @@ export const ContestPage: React.FC = () => {
                 inputMode="numeric"
               />
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Опис", "Description")}</label>
+                <div className="flex flex-wrap items-center justify-between gap-2"><label className="text-xs font-semibold text-text-muted uppercase tracking-wider">{tr("Опис", "Description")}</label><MarkdownImageInsertButton value={addDescription} onChange={setAddDescription} textareaRef={addDescriptionRef} className="text-xs" /></div>
                 <textarea
+                  ref={addDescriptionRef}
                   value={addDescription}
                   onChange={(e) => setAddDescription(e.target.value)}
                   rows={7}
@@ -3932,6 +3938,7 @@ export const ContestPage: React.FC = () => {
                     "Example: [{\"input\":\"1 2\",\"expectedOutput\":\"3\",\"isHidden\":true,\"points\":75}]"
                   )}
                 />
+                <TestImagesJsonField value={addTestsJson} onChange={setAddTestsJson} disabled={adding} />
                 <div className="text-xs text-text-secondary">
                   {tr("Саме points у тестах задають вагу та часткове оцінювання задачі.", "Test points define problem weight and partial scoring.")}
                 </div>

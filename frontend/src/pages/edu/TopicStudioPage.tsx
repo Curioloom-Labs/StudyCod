@@ -36,7 +36,8 @@ import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
 import { ClassWorkspaceFrame } from "./ClassWorkspaceNavigation";
-import { TaskGenerationGuidanceField } from "./TaskGenerationGuidanceField";
+import { TaskAuthoringFields, type TaskAuthoringTab } from "./TaskAuthoringFields";
+import { TestImageAttachments } from "../../components/TestImageAttachments";
 import { withDevPreview } from "../../lib/devPreview";
 
 type TopicTask = {
@@ -212,7 +213,7 @@ export const TopicStudioPage: React.FC = () => {
   const [taskQuery, setTaskQuery] = React.useState("");
   const [taskFilter, setTaskFilter] = React.useState<"all" | "assigned" | "draft">("all");
   const [expandedTaskId, setExpandedTaskId] = React.useState<number | null>(null);
-  const [editorTab, setEditorTab] = React.useState<"statement" | "code" | "theory" | "settings">("statement");
+  const [editorTab, setEditorTab] = React.useState<TaskAuthoringTab>("statement");
   const [selectedTask, setSelectedTask] = React.useState<TopicTask | null>(null);
   const [editingTaskId, setEditingTaskId] = React.useState<number | null>(null);
   const [tests, setTests] = React.useState<TestData[]>([]);
@@ -246,7 +247,7 @@ export const TopicStudioPage: React.FC = () => {
     practiceCount: "2",
     formula: defaultControlFormula,
   });
-  const [testForm, setTestForm] = React.useState({ input: "", expectedOutput: "", points: "1", isHidden: true });
+  const [testForm, setTestForm] = React.useState({ input: "", expectedOutput: "", points: "1", isHidden: true, imageUrls: [] as string[] });
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -747,13 +748,13 @@ export const TopicStudioPage: React.FC = () => {
     setBusy(true);
     try {
       if (preview()) {
-        setTests((old) => [...old, { id: Date.now(), input: testForm.input, expectedOutput: testForm.expectedOutput, points: Number(testForm.points) || 1, isHidden: testForm.isHidden, source: "MANUAL" } as TestData]);
+        setTests((old) => [...old, { id: Date.now(), input: testForm.input, expectedOutput: testForm.expectedOutput, points: Number(testForm.points) || 1, isHidden: testForm.isHidden, imageUrls: testForm.imageUrls, source: "MANUAL" } as TestData]);
       } else {
-        await addTestData(selectedTask.id, [{ input: testForm.input, expectedOutput: testForm.expectedOutput, points: Number(testForm.points) || 1, isHidden: testForm.isHidden }]);
+        await addTestData(selectedTask.id, [{ input: testForm.input, expectedOutput: testForm.expectedOutput, points: Number(testForm.points) || 1, isHidden: testForm.isHidden, imageUrls: testForm.imageUrls }]);
         const data = await getTestData(selectedTask.id, { limit: 100, offset: 0 });
         setTests(data.testData || []);
       }
-      setTestForm({ input: "", expectedOutput: "", points: "1", isHidden: true });
+      setTestForm({ input: "", expectedOutput: "", points: "1", isHidden: true, imageUrls: [] });
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, tr("Не вдалося додати тест.", "Could not add the test.")));
     } finally {
@@ -824,15 +825,7 @@ export const TopicStudioPage: React.FC = () => {
         {mode === "task" && (
           <Modal error={error} title={editingTaskId ? tr("Редагувати практику", "Edit practice task") : tr("Нова практика", "New practice task")} caption={editingTaskId ? tr("Змініть умову, код, теорію або кількість спроб. Чернетку можна редагувати до відкриття учням.", "Edit the problem statement, code, theory, or attempt limit. You can edit the draft until it is assigned to students.") : tr("Одне вікно для умови, стартового коду й короткої теорії. Після створення відкриється налаштування тестів.", "Add the problem statement, starter code, and brief theory in one place. Test settings open after creation.")} onClose={() => { setMode(null); setEditingTaskId(null); }} wide>
             <form className="task-authoring" onSubmit={event => { event.preventDefault(); void createTask(); }}>
-              <label className="task-authoring__label" htmlFor="topic-task-title">{tr("Назва завдання", "Task title")}</label><input id="topic-task-title" name="taskTitle" required value={taskForm.title} onChange={event => setTaskForm({ ...taskForm, title: event.target.value })} placeholder={tr("Наприклад, Словник частот", "For example, Frequency map")} disabled={busy} className="task-authoring__title" />
-              <TaskGenerationGuidanceField topicId={id} taskTitle={taskForm.title} taskType="PRACTICE" responseLanguage={isEn ? "en" : "uk"} value={generationInstructions} onChange={setGenerationInstructions} enabled={!editingTaskId && !preview()} />
-              <div className="classroom-tabs" role="tablist" aria-label={tr("Розділи редактора", "Editor sections")}>{([{ id: "statement", label: tr("Умова", "Statement") }, { id: "code", label: tr("Стартовий код", "Starter code") }, { id: "theory", label: tr("Теорія", "Theory") }, { id: "settings", label: tr("Налаштування", "Settings") }] as const).map(tab => <button key={tab.id} type="button" role="tab" id={`task-editor-tab-${tab.id}`} aria-selected={editorTab === tab.id} aria-controls={`task-editor-panel-${tab.id}`} onClick={() => setEditorTab(tab.id)}>{tab.label}</button>)}</div>
-              <div className="task-authoring__panel" role="tabpanel" id={`task-editor-panel-${editorTab}`} aria-labelledby={`task-editor-tab-${editorTab}`}>
-                {editorTab === "statement" && <><div className="classroom-toolbar"><label className="task-authoring__label" htmlFor="topic-task-description">{tr("Що потрібно зробити учню", "What the student needs to do")}</label><button type="button" className="classroom-text-button" disabled={!!aiBusy || !taskForm.title.trim()} onClick={() => void generateCondition()}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "condition" ? tr("Генеруємо…", "Generating…") : tr("Допомога AI", "AI assistance")}</button></div><textarea id="topic-task-description" name="taskDescription" value={taskForm.description} onChange={event => setTaskForm({ ...taskForm, description: event.target.value })} placeholder={tr("Опишіть завдання, вхідні та вихідні дані, обмеження й приклади.", "Describe the problem, input, output, constraints, and examples.")} rows={13} disabled={busy} /><p className="classroom-caption">{tr("Підтримуються Markdown, приклади коду та математичні формули.", "Supports Markdown, code examples, and mathematical formulae.")}</p><details className="task-authoring__preview"><summary>{tr("Переглянути як учень", "Preview as a student")}</summary><MarkdownView content={taskForm.description || tr("Тут з’явиться умова завдання.", "The problem statement will appear here.")} /></details></>}
-                {editorTab === "code" && <><div className="classroom-toolbar"><label className="task-authoring__label" htmlFor="topic-task-template">{tr("Код, із якого учень почне розв’язання", "Code the student starts with")}</label><button type="button" className="classroom-text-button" disabled={!!aiBusy || !taskForm.title.trim()} onClick={() => void generateTemplate()}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "template" ? tr("Генеруємо…", "Generating…") : tr("Згенерувати", "Generate")}</button></div><textarea id="topic-task-template" name="taskTemplate" value={taskForm.template} onChange={event => setTaskForm({ ...taskForm, template: event.target.value })} rows={14} spellCheck={false} className="task-authoring__code" disabled={busy} /><p className="classroom-caption">{tr("Необов’язково. Можна залишити редактор учня порожнім.", "Optional. You can leave the student editor empty.")}</p></>}
-                {editorTab === "theory" && <><div className="classroom-toolbar"><label className="task-authoring__label" htmlFor="topic-task-theory">{tr("Пояснення перед практикою", "Explanation before practice")}</label><button type="button" className="classroom-text-button" disabled={!!aiBusy || !taskForm.description.trim()} onClick={() => void generateTheory()}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "theory" ? tr("Генеруємо…", "Generating…") : tr("Допомога AI", "AI assistance")}</button></div><textarea id="topic-task-theory" name="taskTheory" value={taskForm.theory} onChange={event => setTaskForm({ ...taskForm, theory: event.target.value })} rows={13} placeholder={tr("Додайте поняття, приклад і підказки для самостійної роботи.", "Add concepts, an example, and guidance for independent work.")} disabled={busy} /><details className="task-authoring__preview"><summary>{tr("Переглянути теорію", "Preview theory")}</summary><MarkdownView content={taskForm.theory || tr("Теорію ще не додано.", "No theory added yet.")} /></details></>}
-                {editorTab === "settings" && <><label className="task-authoring__label" htmlFor="topic-task-max-attempts">{tr("Максимальна кількість спроб", "Maximum attempts")}</label><input id="topic-task-max-attempts" name="maxAttempts" type="number" min="1" required value={taskForm.maxAttempts} onChange={event => setTaskForm({ ...taskForm, maxAttempts: event.target.value })} className="task-authoring__attempts" disabled={busy} /><p className="classroom-caption">{tr("Скільки разів учень може надіслати розв’язання на перевірку.", "How many times a student can submit a solution for checking.")}</p><details className="task-authoring__advanced" open={!!taskForm.projectSpecJson}><summary>{tr("Налаштування мініпроєкту", "Mini-project settings")}</summary><p className="classroom-caption">{tr("Для завдань з етапами та окремими критеріями. Вставте наявну специфікацію проєкту у форматі JSON.", "For tasks with milestones and individual criteria. Paste an existing project specification in JSON format.")}</p><label className="task-authoring__label" htmlFor="topic-task-project-spec">{tr("Специфікація мініпроєкту JSON", "Mini project JSON specification")}</label><textarea id="topic-task-project-spec" name="projectSpecJson" value={taskForm.projectSpecJson} onChange={event => setTaskForm({ ...taskForm, projectSpecJson: event.target.value })} rows={9} spellCheck={false} className="task-authoring__code" disabled={busy} /></details></>}
-              </div>
+              <TaskAuthoringFields idPrefix="topic-task" topicId={id} taskType="PRACTICE" responseLanguage={isEn ? "en" : "uk"} value={taskForm} onChange={patch => setTaskForm(old => ({ ...old, ...patch }))} generationGuidance={generationInstructions} onGenerationGuidanceChange={setGenerationInstructions} guidanceEnabled={!editingTaskId && !preview()} selectedTab={editorTab} onSelectedTabChange={setEditorTab} aiBusy={aiBusy} busy={busy} onGenerateCondition={() => void generateCondition()} onGenerateTemplate={() => void generateTemplate()} onGenerateTheory={() => void generateTheory()} />
               <div className="task-authoring__footer"><button type="button" className="classroom-button" disabled={busy} onClick={() => { setMode(null); setEditingTaskId(null); }}>{tr("Скасувати", "Cancel")}</button><button type="submit" className="classroom-button classroom-button--primary" disabled={busy || !!aiBusy || !taskForm.title.trim()}>{busy ? tr("Зберігаємо…", "Saving…") : tr("Зберегти й налаштувати тести", "Save and configure tests")}<ArrowRight className="size-4" aria-hidden="true" /></button></div>
             </form>
 
@@ -906,6 +899,7 @@ export const TopicStudioPage: React.FC = () => {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-mono text-xs text-text-primary dark:text-text-primary">in: {test.input || "∅"}</p>
                       <p className="mt-1 truncate font-mono text-xs text-text-primary dark:text-text-primary">out: {test.expectedOutput}</p>
+                      {!!test.imageUrls?.length && <div className="mt-2 flex gap-1">{test.imageUrls.map((url, imageIndex) => <img key={`${url}-${imageIndex}`} src={url} alt={tr(`Зображення тесту ${index + 1}`, `Test ${index + 1} image`)} className="h-10 w-12 rounded-md border border-border object-cover" loading="lazy" />)}</div>}
                     </div>
                     <button type="button" onClick={() => void removeTest(test)} aria-label={tr(`Видалити тест ${index + 1}`, `Delete test ${index + 1}`)} className="text-accent-error dark:text-accent-error"><Trash2 className="size-4" aria-hidden="true" /></button>
                   </div>
@@ -970,6 +964,7 @@ export const TopicStudioPage: React.FC = () => {
                   <h3 className="font-black">{tr("Додати тест вручну", "Add a test manually")}</h3>
                   <textarea id="topic-test-input" name="testInput" aria-label={tr("Вхідні дані тесту", "Test input")} value={testForm.input} onChange={(event) => setTestForm({ ...testForm, input: event.target.value })} placeholder={tr("Вхідні дані", "Input")} rows={4} spellCheck={false} className="mt-3 w-full resize-none rounded-xl border border-border/10 bg-bg-hover px-3 py-2 font-mono text-xs outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-bg-code" />
                   <textarea id="topic-test-output" name="expectedOutput" aria-label={tr("Очікуваний результат тесту", "Expected test output")} value={testForm.expectedOutput} onChange={(event) => setTestForm({ ...testForm, expectedOutput: event.target.value })} placeholder={tr("Очікуваний результат", "Expected output")} rows={4} spellCheck={false} className="mt-3 w-full resize-none rounded-xl border border-border/10 bg-bg-hover px-3 py-2 font-mono text-xs outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-bg-code" />
+                  <div className="mt-3"><TestImageAttachments value={testForm.imageUrls} onChange={imageUrls => setTestForm(old => ({ ...old, imageUrls }))} disabled={busy} /></div>
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <label htmlFor="topic-test-points" className="sr-only">{tr("Бали за тест", "Test points")}</label>
                     <input id="topic-test-points" name="testPoints" aria-label={tr("Бали за тест", "Test points")} value={testForm.points} onChange={(event) => setTestForm({ ...testForm, points: event.target.value })} type="number" min="1" className="w-24 rounded-xl border border-border/10 bg-bg-hover px-3 py-2 text-sm outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-bg-code" />

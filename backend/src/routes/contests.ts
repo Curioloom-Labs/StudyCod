@@ -3621,6 +3621,7 @@ contestsRouter.post("/:id/problems", authRequired, async (req: AuthRequest, res:
         tests: z.array(z.object({
           input: z.string(),
           expectedOutput: z.string(),
+          imageUrls: z.array(z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/)).max(8).optional(),
           isHidden: z.boolean().optional(),
           points: z.number().int().min(1).max(1000).optional(),
           // Optional subtask identifier for binary (0/full) subtask scoring.
@@ -3655,6 +3656,7 @@ contestsRouter.post("/:id/problems", authRequired, async (req: AuthRequest, res:
               libraryTask: { id: savedTask.id },
               input: String(tt.input ?? ""),
               expectedOutput: String(tt.expectedOutput ?? ""),
+              imageUrls: Array.isArray(tt.imageUrls) ? tt.imageUrls : [],
               isHidden: !!tt.isHidden,
               kind: !!tt.isHidden ? "JUDGE" : "SAMPLE",
               points: tt.points ?? 1,
@@ -3698,6 +3700,7 @@ contestsRouter.post("/:id/problems", authRequired, async (req: AuthRequest, res:
             isHidden: t.isHidden,
             kind: t.kind ?? (t.isHidden ? "JUDGE" : "SAMPLE"),
             points: t.points,
+            imageUrls: Array.isArray(t.imageUrls) ? t.imageUrls : [],
             subtask: t.subtask ?? null,
             libraryTask: { id: savedClone.id },
           }))
@@ -4154,6 +4157,7 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
 
     const task = problem.libraryTask;
     if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    const publicTests = await testDataRepo().find({ where: { libraryTask: { id: task.id }, isHidden: false }, order: { id: "ASC" }, take: 20 });
 
     const uiLanguage = normalizeUiLocale(req.query.uiLang, req.uiLanguage ?? resolveUiLocaleFromHeaders(req.headers));
     const localized = uiLanguage === "en" ? (await localizeLibraryTasksToEn([task], req)).get(task.id) : undefined;
@@ -4168,6 +4172,7 @@ contestsRouter.get("/:id/problems/:problemId", authOptional, async (req: AuthReq
         id: task.id,
         title: localized?.title ?? task.title,
         description: localized?.description ?? task.description,
+        publicTests: publicTests.map(test => ({ testId: test.id, input: test.input, expectedOutput: test.expectedOutput, imageUrls: Array.isArray(test.imageUrls) ? test.imageUrls : [] })),
         statementLanguage: localized ? "en" : detectStatementLanguage(task.description),
         limitsByLanguage: taskLimitsByLanguage(task, DEFAULT_LIMITS_BY_LANG, getAllowedJudgeLanguages(task)),
         template: task.template,

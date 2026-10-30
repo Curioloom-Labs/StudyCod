@@ -69,6 +69,17 @@ function normalizeTestDataSource(raw: unknown): TestDataSourceValue {
   return "MANUAL";
 }
 
+function normalizeTestImageUrls(raw: unknown): string[] {
+  let value = raw;
+  if (typeof value === "string") {
+    try { value = JSON.parse(value) as unknown; } catch { return []; }
+  }
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((url): url is string => typeof url === "string" && /^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/.test(url))
+    .slice(0, 8);
+}
+
 function parseTestDataSourceFilter(raw: unknown): TestDataSourceValue | null {
   const normalized = String(raw ?? "").trim().toUpperCase();
   if (!normalized) return null;
@@ -101,6 +112,7 @@ function parsePreviewChars(raw: unknown, fallback = 600): number {
 }
 
 const subtaskSchema = z.union([z.string().max(64), z.number().int().min(1).max(100000), z.null()]).optional();
+const testImageUrlsSchema = z.array(z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/)).max(8).optional();
 
 // Keep limits aligned with judge-worker request constraints.
 const testDataItemSchema = z.object({
@@ -108,7 +120,8 @@ const testDataItemSchema = z.object({
   expectedOutput: z.string().max(64 * 1024),
   points: z.number().int().min(1).max(1000).optional(),
   isHidden: z.boolean().optional(),
-  subtask: subtaskSchema
+  subtask: subtaskSchema,
+  imageUrls: testImageUrlsSchema,
 });
 
 const addTestDataSchema = z.object({
@@ -127,7 +140,8 @@ const updateSchema = z
     expectedOutput: z.string().max(64 * 1024).optional(),
     points: z.number().int().min(1).max(1000).optional(),
     isHidden: z.boolean().optional(),
-    subtask: subtaskSchema
+    subtask: subtaskSchema,
+    imageUrls: testImageUrlsSchema,
   })
   .strict();
 
@@ -235,6 +249,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
            is_hidden AS isHidden,
            source,
            subtask,
+           image_urls AS imageUrls,
            CHAR_LENGTH(input) AS inputFullLength,
            CHAR_LENGTH(expected_output) AS expectedOutputFullLength
          FROM test_data
@@ -251,6 +266,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
         isHidden: number | boolean;
         source: string | null;
         subtask: string | null;
+        imageUrls: string[] | string | null;
         inputFullLength: number;
         expectedOutputFullLength: number;
       }>;
@@ -268,6 +284,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
           isHidden: row.isHidden === true || Number(row.isHidden) === 1,
           source: normalizeTestDataSource(row.source),
           subtask: normalizeSubtaskValue(row.subtask),
+          imageUrls: normalizeTestImageUrls(row.imageUrls),
           isInputTruncated: inputFullLength > input.length,
           inputFullLength,
           isExpectedOutputTruncated: expectedOutputFullLength > expectedOutput.length,
@@ -302,7 +319,8 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
          points,
          is_hidden AS isHidden,
          source,
-         subtask
+         subtask,
+         image_urls AS imageUrls
        FROM test_data
        WHERE ${whereSql}
        ORDER BY created_at ASC, id ASC${paginationSql}`,
@@ -317,6 +335,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
       isHidden: number | boolean;
       source: string | null;
       subtask: string | null;
+      imageUrls: string[] | string | null;
     }>;
 
     const mapped = rows.map(td => ({
@@ -326,7 +345,8 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
       points: Number(td.points ?? 1),
       isHidden: td.isHidden === true || Number(td.isHidden) === 1,
       source: normalizeTestDataSource(td.source),
-      subtask: normalizeSubtaskValue(td.subtask)
+      subtask: normalizeSubtaskValue(td.subtask),
+      imageUrls: normalizeTestImageUrls(td.imageUrls)
     }));
 
     res.json({
@@ -397,7 +417,8 @@ router.get("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
         points: testData.points,
         isHidden: testData.isHidden === true,
         source: normalizeTestDataSource(testData.source),
-        subtask: normalizeSubtaskValue(testData.subtask)
+        subtask: normalizeSubtaskValue(testData.subtask),
+        imageUrls: normalizeTestImageUrls(testData.imageUrls)
       }
     });
   } catch (error: unknown) {
@@ -450,8 +471,10 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
         expectedOutput: td.expectedOutput,
         points: td.points || 1,
         isHidden: td.isHidden === true,
+        kind: td.isHidden === true ? "JUDGE" : "SAMPLE",
         source: "MANUAL",
-        subtask: normalizeSubtaskValue(td.subtask)
+        subtask: normalizeSubtaskValue(td.subtask),
+        imageUrls: normalizeTestImageUrls(td.imageUrls)
       })
     );
 
@@ -466,7 +489,8 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
         points: td.points,
         isHidden: td.isHidden === true,
         source: normalizeTestDataSource(td.source),
-        subtask: normalizeSubtaskValue(td.subtask)
+        subtask: normalizeSubtaskValue(td.subtask),
+        imageUrls: normalizeTestImageUrls(td.imageUrls)
       }))
     });
   } catch (error: unknown) {
@@ -642,7 +666,8 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         points: td.points,
         isHidden: td.isHidden === true,
         source: normalizeTestDataSource(td.source),
-        subtask: normalizeSubtaskValue(td.subtask)
+        subtask: normalizeSubtaskValue(td.subtask),
+        imageUrls: normalizeTestImageUrls(td.imageUrls)
       }))
     });
   } catch (error: unknown) {
@@ -694,13 +719,14 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
       return res.status(400).json({ message: messageForZodIssue(parsed.error) });
     }
 
-    const { input, expectedOutput, points, isHidden, subtask } = parsed.data;
+    const { input, expectedOutput, points, isHidden, subtask, imageUrls } = parsed.data;
 
     if (input !== undefined) testData.input = input;
     if (expectedOutput !== undefined) testData.expectedOutput = expectedOutput;
     if (points !== undefined) testData.points = points;
     if (isHidden !== undefined) testData.isHidden = isHidden === true;
     if (subtask !== undefined) testData.subtask = normalizeSubtaskValue(subtask);
+    if (imageUrls !== undefined) testData.imageUrls = normalizeTestImageUrls(imageUrls);
 
     await testDataRepo().save(testData);
 
@@ -713,7 +739,8 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
         points: testData.points,
         isHidden: testData.isHidden === true,
         source: normalizeTestDataSource(testData.source),
-        subtask: normalizeSubtaskValue(testData.subtask)
+        subtask: normalizeSubtaskValue(testData.subtask),
+        imageUrls: normalizeTestImageUrls(testData.imageUrls)
       }
     });
   } catch (error: unknown) {

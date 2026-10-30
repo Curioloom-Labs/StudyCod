@@ -62,13 +62,7 @@ function isControlTaskVisibleToStudent(task: TopicTask, controlWork: ControlWork
   return isAssignedToStudent(true, (controlWork).assignedStudentIds, studentId);
 }
 
-const CONTROL_TASK_MAX_ATTEMPTS = 3;
-
 function resolveTaskMaxAttempts(task: Pick<TopicTask, "type" | "maxAttempts">): number {
-  if (task.type === "CONTROL") {
-    return CONTROL_TASK_MAX_ATTEMPTS;
-  }
-
   const parsed = Number(task.maxAttempts);
   if (!Number.isFinite(parsed)) {
     return 3;

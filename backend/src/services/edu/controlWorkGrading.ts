@@ -14,13 +14,7 @@ function clampGradeToInt(raw: unknown): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-const CONTROL_TASK_MAX_ATTEMPTS = 3;
-
 function resolveTaskMaxAttempts(task: Pick<TopicTask, "type" | "maxAttempts">): number {
-  if (task.type === "CONTROL") {
-    return CONTROL_TASK_MAX_ATTEMPTS;
-  }
-
   const parsed = Number(task.maxAttempts);
   if (!Number.isFinite(parsed)) {
     return 3;
