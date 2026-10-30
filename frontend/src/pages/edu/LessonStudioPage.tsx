@@ -763,7 +763,17 @@ const StudentLessonWorkspace: React.FC = () => {
       })
       .catch((caught) => {
         if (!active) return;
-        if (preview()) setLesson(exampleLesson);
+        if (preview()) {
+          setLesson({
+            ...exampleLesson,
+            tasks: exampleLesson.tasks.map((task) => ({
+              ...task,
+              description: task.description ?? "",
+              template: task.template ?? "",
+              testDataCount: task.testDataCount ?? 0,
+            })),
+          });
+        }
         else
           setError(
             getErrorMessageFromUnknown(
