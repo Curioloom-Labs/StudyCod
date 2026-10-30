@@ -205,6 +205,11 @@ function sanitizeParams(mode: AIMode, params: unknown): JsonObject {
   if ('taskTitle' in p) p.taskTitle = sanitizeText(p.taskTitle, 200);
   if ('description' in p) p.description = sanitizeText(p.description, 8000);
   if ('responseLanguage' in p) p.responseLanguage = sanitizeText(p.responseLanguage, 64);
+  if ('generationGuidance' in p) {
+    const guidance = sanitizeText(p.generationGuidance, 4000);
+    if (guidance) p.generationGuidance = guidance;
+    else delete p.generationGuidance;
+  }
 
   if (mode === 'generateTask') {
     p.numInTopic = typeof p.numInTopic === 'number' ? Math.max(1, Math.floor(p.numInTopic)) : p.numInTopic;
@@ -650,6 +655,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
                 ? sanitizedParams.taskType
                 : undefined,
               difficulty: optionalNumber(sanitizedParams.difficulty),
+              generationGuidance: optionalString(sanitizedParams.generationGuidance),
               responseLanguage: optionalString(sanitizedParams.responseLanguage),
               userId: optionalNumber(sanitizedParams.userId),
               topicId: optionalNumber(sanitizedParams.topicId),
@@ -678,6 +684,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
               taskTitle: optionalString(sanitizedParams.taskTitle),
               taskType: requiredTaskType(sanitizedParams.taskType),
               difficulty: optionalNumber(sanitizedParams.difficulty),
+              generationGuidance: optionalString(sanitizedParams.generationGuidance),
               language: requiredTaskLanguage(sanitizedParams.language),
               responseLanguage: optionalString(sanitizedParams.responseLanguage),
               userId: optionalNumber(sanitizedParams.userId),
@@ -693,6 +700,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
               taskTitle: optionalString(sanitizedParams.taskTitle),
               language: requiredTaskLanguage(sanitizedParams.language),
               description: optionalString(sanitizedParams.description),
+              generationGuidance: optionalString(sanitizedParams.generationGuidance),
               responseLanguage: optionalString(sanitizedParams.responseLanguage),
               userId: optionalNumber(sanitizedParams.userId),
               topicId: optionalNumber(sanitizedParams.topicId),
