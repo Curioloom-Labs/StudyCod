@@ -139,7 +139,7 @@ test('reference generation exposes validation feedback and clearly requires a Py
   assert.match(seen[0].instructions, /do not return Java or C\+\+/i);
 });
 
-test('compiler failures preserve the rejected Python source for a bounded repair and fresh review', async () => {
+test('compiler failures preserve the rejected Python source for primary-model repair and fresh review', async () => {
   const broken = 'if __name__ == "__main__\':\n    print(int(input()) + 1)';
   const fixed = 'print(int(input()) + 1)';
   const payloads: Array<Record<string, unknown>> = [];
@@ -148,7 +148,7 @@ test('compiler failures preserve the rejected Python source for a bounded repair
       payloads.push(JSON.parse(prompt));
       if (payloads.length === 1) return { referenceSolution: broken, inputs: ['2', '3', '4'] } as T;
       if (payloads.length === 2) {
-        assert.equal(options?.validationRetry, true);
+        assert.equal(options?.validationRetry, undefined, 'validation feedback should retry with the configured primary model');
         return { referenceSolution: fixed, inputs: ['2', '3', '4'] } as T;
       }
       assert.equal(payloads.length, 3, 'repair must still undergo independent test review');
