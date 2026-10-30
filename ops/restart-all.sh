@@ -47,7 +47,7 @@ update_repo() {
     elif git merge-base --is-ancestor origin/main HEAD; then
       echo "Local server integration is ahead of origin/main; preserving it."
     else
-      git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" merge --no-edit origin/main
+      git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" merge --no-edit -X theirs origin/main
     fi
   )
 }

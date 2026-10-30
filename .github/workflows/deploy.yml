@@ -228,6 +228,10 @@ jobs:
             artifact_dir='$FRONTEND_ARTIFACT_REMOTE'
             deploy_script=/tmp/studycod-restart-all.next
             trap 'rm -f \"\$deploy_script\"; rm -rf -- \"\$artifact_dir\" \"\$artifact_dir.tar.gz\"' EXIT
+            if git -C \"\$repo\" rev-parse --verify -q MERGE_HEAD >/dev/null 2>&1; then
+              echo 'Aborting incomplete merge left by a failed deploy.'
+              git -C \"\$repo\" merge --abort
+            fi
             if [[ -n \$(git -C \"\$repo\" status --porcelain --untracked-files=no) ]]; then
               echo 'Deploy blocked: the server worktree has tracked local changes.'
               git -C \"\$repo\" status --short
