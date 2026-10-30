@@ -8,7 +8,7 @@ import { normalizeTopicLanguage, TOPIC_LANGUAGES } from '../../utils/topicLangua
 import { buildTaskValidationFeedback, cannotRepairByRegeneratingTests, requireCompleteTaskDescription, resolveTestDataIoType } from '../llm/TaskContractReview';
 import { executeReferenceTests } from '../executeReferenceTests';
 import { REFERENCE_LANGUAGE } from '../llm/ReferenceTestData';
-export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
+export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTaskGuidance' | 'generateTestData';
 export interface AIError {
   statusCode: number;
   message: string;
@@ -368,6 +368,20 @@ function validateInputParams(mode: AIMode, params: JsonObject): void {
         throw new Error(`language is required and must be one of: ${TOPIC_LANGUAGES.join(', ')}`);
       }
       break;
+    case 'generateTaskGuidance':
+      if (!params.topicTitle || typeof params.topicTitle !== 'string' || !params.topicTitle.trim()) {
+        throw new Error('topicTitle is required and must be a non-empty string');
+      }
+      if (!params.taskTitle || typeof params.taskTitle !== 'string' || !params.taskTitle.trim()) {
+        throw new Error('taskTitle is required and must be a non-empty string');
+      }
+      if (typeof params.taskType !== 'string' || !['PRACTICE', 'CONTROL'].includes(params.taskType)) {
+        throw new Error('taskType is required and must be "PRACTICE" or "CONTROL"');
+      }
+      if (!normalizeTopicLanguage(params.language)) {
+        throw new Error(`language is required and must be one of: ${TOPIC_LANGUAGES.join(', ')}`);
+      }
+      break;
     case 'generateTestData':
       if (!params.taskDescription || typeof params.taskDescription !== 'string' || !params.taskDescription.trim()) {
         throw new Error('taskDescription is required and must be a non-empty string');
@@ -424,6 +438,11 @@ function validateResultBeforeSave(mode: AIMode, result: unknown, options: { allo
     case 'generateTaskTemplate':
       if (!resultObject.template || typeof resultObject.template !== 'string' || !resultObject.template.trim()) {
         throw new Error('Generated task template is empty or invalid');
+      }
+      break;
+    case 'generateTaskGuidance':
+      if (typeof resultObject.guidance !== 'string' || resultObject.guidance.trim().length < 20) {
+        throw new Error('Generated task guidance is empty or invalid');
       }
       break;
     case 'generateTestData':
@@ -708,6 +727,21 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
               signal: controller?.signal
             });
             result = AIResponseValidator.validateGenerateTaskTemplate(result);
+            break;
+          case 'generateTaskGuidance':
+            result = await orchestrator.generateTaskGenerationGuidance({
+              topicTitle: requiredString(sanitizedParams.topicTitle, 'topicTitle'),
+              taskTitle: requiredString(sanitizedParams.taskTitle, 'taskTitle'),
+              taskType: requiredTaskType(sanitizedParams.taskType),
+              language: requiredTaskLanguage(sanitizedParams.language),
+              classTitle: optionalString(sanitizedParams.classTitle),
+              responseLanguage: optionalString(sanitizedParams.responseLanguage),
+              userId: optionalNumber(sanitizedParams.userId),
+              topicId: optionalNumber(sanitizedParams.topicId),
+              userLanguage: language,
+              signal: controller?.signal
+            });
+            result = AIResponseValidator.validateGenerateTaskGuidance(result);
             break;
           case 'generateTestData':
             const testIoType = resolveTestDataIoType(requiredString(sanitizedParams.taskDescription, 'taskDescription'), optionalTaskIoType(sanitizedParams.ioType));
