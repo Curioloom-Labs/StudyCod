@@ -122,7 +122,9 @@ function quizOptions(raw: unknown, labels: string[]): Record<string, string> {
     return Object.fromEntries(labels.map((label, index) => [label, String(raw[index] ?? "")]));
   }
   if (isRecord(raw)) {
-    return Object.fromEntries(labels.map(label => [label, String(raw[label] ?? "")]));
+    const latinLabels = ["A", "B", "C", "D", "E"];
+    const ukrainianLabels = ["А", "Б", "В", "Г", "Д"];
+    return Object.fromEntries(labels.map((label, index) => [label, String(raw[label] ?? raw[latinLabels[index]] ?? raw[ukrainianLabels[index]] ?? raw[String(index)] ?? "")]));
   }
   return Object.fromEntries(labels.map(label => [label, ""]));
 }

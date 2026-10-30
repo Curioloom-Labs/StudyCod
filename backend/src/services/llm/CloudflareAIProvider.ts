@@ -512,14 +512,26 @@ ${JSON.stringify(schema, null, 2)}
     lang: TopicLanguage;
     prevTopics: string;
     count?: number;
+    difficulty?: number;
+    questionStyle?: "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
+    generationGuidance?: string;
     responseLanguage?: string;
     userId?: number;
     topicId?: number;
   }, options?: LLMGenerateOptions): Promise<{
     quizJson: string;
   }> {
+    const count = Math.max(1, Math.min(50, Math.floor(params.count || 12)));
+    const prompt = [
+      `Topic: ${params.prevTopics}`,
+      `Programming language: ${params.lang}`,
+      `Generate exactly ${count} multiple-choice questions. Each question must have exactly five non-empty answer options and exactly one correct answer.`,
+      `Return only a valid JSON array. Each item must have the format {"q":"question text","options":["A","B","C","D","E"],"correct":0}; correct is a zero-based option index from 0 to 4.`,
+      params.responseLanguage ? `Write question and option text in: ${params.responseLanguage}.` : "",
+      params.generationGuidance || ""
+    ].filter(Boolean).join("\n");
     const response = await this.callCloudflareWorker('generate-quiz', {
-      prompt: JSON.stringify(params)
+      prompt
     }, {
       userId: params.userId,
       topicId: params.topicId,

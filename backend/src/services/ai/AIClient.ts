@@ -89,6 +89,10 @@ export class AIClient {
     lang: "JAVA" | "PYTHON";
     prevTopics: string;
     count?: number;
+    difficulty?: number;
+    questionStyle?: "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
+    generationGuidance?: string;
+    responseLanguage?: string;
     userId?: number;
     topicId?: number;
   }): Promise<{

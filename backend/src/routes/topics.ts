@@ -1262,7 +1262,7 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
     if (!validated.success) {
       return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
     }
-    const { topicTitle, count, responseLanguage, language: requestedLanguage } = validated.data;
+    const { topicTitle, count, difficulty, questionStyle, generationGuidance, responseLanguage, language: requestedLanguage } = validated.data;
     const controlWorkId = parseInt(req.params.controlWorkId, 10);
     if (isNaN(controlWorkId)) {
       return res.status(400).json({
@@ -1299,12 +1299,15 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
       });
     }
     const language = controlWork.topic.language;
-    const userLanguage: "uk" | "en" = requestedLanguage === "en" || req.headers['accept-language']?.includes('en') ? "en" : "uk";
+    const userLanguage: "uk" | "en" = requestedLanguage || (req.headers['accept-language']?.includes('en') ? "en" : "uk");
     const aiStartedAt = Date.now();
     const result = await safeAICall('generateQuiz', {
       lang: language,
       prevTopics: quizTopicTitle.trim(),
       count: quizCount,
+      difficulty,
+      questionStyle,
+      generationGuidance,
       responseLanguage: normalizeResponseLanguage(responseLanguage),
       userId: user.id,
       topicId: controlWork.topic.id

@@ -115,16 +115,32 @@ const parseQuizQuestions = (raw: string): QuizQuestion[] => {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     const options: QuizOption[] = ["А", "Б", "В", "Г", "Д"];
+    const latinOptions = ["A", "B", "C", "D", "E"];
     return parsed.flatMap((item) => {
       if (typeof item !== "object" || item === null) return [];
-      const question = (item as { question?: unknown }).question;
-      const correct = (item as { correct?: unknown }).correct;
-      const rawOptions = (item as { options?: unknown }).options;
+      const value = item as { question?: unknown; q?: unknown; correct?: unknown; options?: unknown };
+      const question = value.question ?? value.q;
+      const rawCorrect = value.correct;
       if (typeof question !== "string") return [];
-      if (!options.includes(correct as QuizOption)) return [];
-      if (typeof rawOptions !== "object" || rawOptions === null) return [];
-      const mapped = Object.fromEntries(options.map((key) => [key, String((rawOptions as Record<string, unknown>)[key] ?? "")])) as Record<QuizOption, string>;
-      return [{ question, correct: correct as QuizOption, options: mapped }];
+      const correctIndex = typeof rawCorrect === "number"
+        ? rawCorrect
+        : latinOptions.indexOf(String(rawCorrect ?? "").toUpperCase());
+      const correct = typeof rawCorrect === "number"
+        ? options[rawCorrect]
+        : correctIndex >= 0
+          ? options[correctIndex]
+          : options.includes(rawCorrect as QuizOption)
+            ? rawCorrect as QuizOption
+            : undefined;
+      if (!correct || typeof value.options !== "object" || value.options === null) return [];
+      const rawOptions = value.options as Record<string, unknown>;
+      const mapped = Object.fromEntries(options.map((key, index) => [
+        key,
+        String(Array.isArray(value.options)
+          ? value.options[index] ?? ""
+          : rawOptions[key] ?? rawOptions[latinOptions[index]] ?? rawOptions[String(index)] ?? "")
+      ])) as Record<QuizOption, string>;
+      return [{ question, correct, options: mapped }];
     });
   } catch {
     return [];

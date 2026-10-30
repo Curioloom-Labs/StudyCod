@@ -65,6 +65,32 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
+type QuizQuestionStyle = "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
+
+function buildQuizGenerationGuidance(params: { difficulty?: number; questionStyle?: QuizQuestionStyle; generationGuidance?: string }, language?: "uk" | "en"): string {
+  const isEnglish = language === "en";
+  const difficultyLabels = isEnglish
+    ? ["introductory", "easy", "intermediate", "advanced", "expert"]
+    : ["початкова", "легка", "середня", "висока", "поглиблена"];
+  const styleInstructions: Record<QuizQuestionStyle, string> = isEnglish ? {
+    MIXED: "Mix conceptual questions and short code-reading questions.",
+    CONCEPTS: "Focus on concepts, terminology, and rules; avoid long code snippets.",
+    CODE_READING: "Focus on short code snippets and reasoning about their behavior or output.",
+    DEBUGGING: "Focus on identifying mistakes in short code snippets or choosing a correct fix."
+  } : {
+    MIXED: "Поєднуй питання на розуміння понять і короткі завдання на читання коду.",
+    CONCEPTS: "Зосередься на поняттях, термінах і правилах; не використовуй довгі фрагменти коду.",
+    CODE_READING: "Зосередься на коротких фрагментах коду та міркуванні про їхню поведінку або результат.",
+    DEBUGGING: "Зосередься на пошуку помилок у коротких фрагментах коду або виборі правильного виправлення."
+  };
+  const difficulty = typeof params.difficulty === "number" ? Math.max(1, Math.min(5, Math.floor(params.difficulty))) : undefined;
+  return [
+    difficulty ? (isEnglish ? `Difficulty: ${difficultyLabels[difficulty - 1]}.` : `Складність: ${difficultyLabels[difficulty - 1]}.`) : "",
+    params.questionStyle ? styleInstructions[params.questionStyle] : "",
+    params.generationGuidance?.trim() ? (isEnglish ? `Teacher instructions: ${params.generationGuidance.trim()}` : `Побажання вчителя: ${params.generationGuidance.trim()}`) : ""
+  ].filter(Boolean).join("\n");
+}
+
 type TaskAnchor = {
   topic: string;
   coreOperation: string;
@@ -1688,6 +1714,9 @@ REQUIREMENTS (mandatory):
     lang: LLMTaskLanguage;
     prevTopics: string;
     count?: number;
+    difficulty?: number;
+    questionStyle?: "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
+    generationGuidance?: string;
     responseLanguage?: string;
     userId?: number;
     topicId?: number;
@@ -1704,6 +1733,9 @@ REQUIREMENTS (mandatory):
         lang: params.lang,
         prevTopics: params.prevTopics,
         count: params.count,
+        difficulty: params.difficulty,
+        questionStyle: params.questionStyle,
+        generationGuidance: buildQuizGenerationGuidance(params, params.language),
         responseLanguage: params.responseLanguage,
         userId: params.userId,
         topicId: params.topicId
@@ -1767,6 +1799,9 @@ REQUIREMENTS (mandatory):
     lang: LLMTaskLanguage;
     prevTopics: string;
     count?: number;
+    difficulty?: number;
+    questionStyle?: "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
+    generationGuidance?: string;
     responseLanguage?: string;
     userId?: number;
     topicId?: number;
@@ -1778,6 +1813,7 @@ REQUIREMENTS (mandatory):
     const questionCount = params.count || 12;
     const isEnglish = params.language === "en";
     const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
+    const quizGuidance = buildQuizGenerationGuidance(params, params.language);
     const systemPrompt = isEnglish
       ? `You are a programming examiner. Produce quiz questions with exactly one correct answer. Return ONLY a JSON array and no extra text.`
       : `Ти екзаменатор з програмування. Створюй тестові питання з правильною відповіддю. Відповідай ТІЛЬКИ JSON-масивом без додаткового тексту.`;
@@ -1788,14 +1824,14 @@ REQUIREMENTS:
 - Each question has exactly 5 options
 - Output format: ONLY valid JSON array
 - Each item format: {"q": "question", "options": ["A", "B", "C", "D", "E"], "correct": 0}
-- Return ONLY JSON array, no markdown, no explanations.${responseLanguageInstruction}`
+- Return ONLY JSON array, no markdown, no explanations.${quizGuidance ? `\n${quizGuidance}` : ""}${responseLanguageInstruction}`
       : `Створи тест виключно по мові ${langName}. Теми для питань: ${params.prevTopics}.
 ВИМОГИ:
 - Кількість питань: РІВНО ${questionCount}
 - Кожне питання має рівно 5 варіантів відповіді
 - Формат: ТІЛЬКИ ВАЛІДНИЙ JSON масив без жодного додаткового тексту
 - Кожне питання має формат: {"q": "питання", "options": ["А", "Б", "В", "Г", "Д"], "correct": 0}
-- Відповідай ТІЛЬКИ JSON масивом, без пояснень, без markdown.${responseLanguageInstruction}`;
+- Відповідай ТІЛЬКИ JSON масивом, без пояснень, без markdown.${quizGuidance ? `\n${quizGuidance}` : ""}${responseLanguageInstruction}`;
     let lastError: Error | null = null;
     const maxRetries = 2;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
