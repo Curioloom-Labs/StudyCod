@@ -925,6 +925,7 @@ export async function submitHintFeedback(taskId: number, payload: {
 
 export async function generateTestData(taskId: number, count: number, options?: {
   replaceGenerated?: boolean;
+  requiredCases?: string[];
 }): Promise<{
   count: number;
   skippedDuplicates?: number;
@@ -941,7 +942,8 @@ export async function generateTestData(taskId: number, count: number, options?: 
 }> {
   const res = await api.post(eduTaskUrl(taskId, "/test-data/generate"), {
     count,
-    ...(typeof options?.replaceGenerated === "boolean" ? { replaceGenerated: options.replaceGenerated } : {})
+    ...(typeof options?.replaceGenerated === "boolean" ? { replaceGenerated: options.replaceGenerated } : {}),
+    ...(options?.requiredCases?.length ? { requiredCases: options.requiredCases } : {})
   });
   return res.data;
 }

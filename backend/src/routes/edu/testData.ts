@@ -116,7 +116,8 @@ const addTestDataSchema = z.object({
 
 const generateSchema = z.object({
   count: z.number().int().min(1).max(50).optional(),
-  replaceGenerated: z.boolean().optional()
+  replaceGenerated: z.boolean().optional(),
+  requiredCases: z.array(z.string().max(240)).max(24).optional()
 });
 
 const updateSchema = z
@@ -524,6 +525,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         taskTitle: topicTask.title,
         lang: topicTask.topic.language,
         count: testCount,
+        requiredCases: parsed.data.requiredCases,
         userId: req.userId
       },
       {

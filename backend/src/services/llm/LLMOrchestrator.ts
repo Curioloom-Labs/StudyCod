@@ -1530,6 +1530,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     taskDescription?: string;
     taskType?: "PRACTICE" | "CONTROL";
     difficulty?: number;
+    generationGuidance?: string;
     responseLanguage?: string;
     userId?: number;
     topicId?: number;
@@ -1548,6 +1549,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
         taskDescription: params.taskDescription,
         taskType: params.taskType,
         difficulty: params.difficulty,
+        generationGuidance: params.generationGuidance,
         responseLanguage: params.responseLanguage,
         userId: params.userId,
         topicId: params.topicId
@@ -1613,6 +1615,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     taskDescription?: string;
     taskType?: "PRACTICE" | "CONTROL";
     difficulty?: number;
+    generationGuidance?: string;
     responseLanguage?: string;
     language?: "uk" | "en";
     userId?: number;
@@ -1623,6 +1626,10 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     const langName = topicLanguageLabel(params.lang);
     const isEnglish = params.language === "en";
     const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
+    const generationGuidance = params.generationGuidance?.trim();
+    const guidanceSection = generationGuidance
+      ? (isEnglish ? `\n\nTEACHER GUIDANCE (follow within the required format and topic):\n${generationGuidance}` : `\n\nПОБАЖАННЯ ВЧИТЕЛЯ (врахуй у межах обов’язкового формату й теми):\n${generationGuidance}`)
+      : "";
     const systemPrompt = isEnglish
       ? `You are an experienced programming teacher. Return a clear, concise, beginner-friendly theoretical explanation in Markdown.`
       : `Ти досвідчений викладач програмування. Повертай чітке, компактне й зрозуміле новачку теоретичне пояснення у форматі Markdown.`;
@@ -1643,7 +1650,7 @@ REQUIREMENTS (mandatory):
 - Allowed: concept explanations, syntax notes, and short valid code snippets as illustration.
 - Code fences must be balanced. Do not put raw JSON, interactive blocks, or Markdown headings inside a code fence.
 - Prefer one focused example and explain the key lines briefly instead of repeating the same idea.
-- Format: Markdown only.${responseLanguageInstruction}`;
+- Format: Markdown only.${guidanceSection}${responseLanguageInstruction}`;
     } else {
       userPrompt = `Згенеруй ТІЛЬКИ теоретичне пояснення теми "${params.topicTitle}" для мови ${langName}.${context}
 
@@ -1656,7 +1663,7 @@ REQUIREMENTS (mandatory):
 - МОЖНА: пояснення понять, синтаксис і короткі валідні приклади коду як ілюстрацію.
 - Markdown-фенси коду мають бути збалансовані. Не клади сирий JSON, interactive-блоки або заголовки Markdown усередину code fence.
 - Краще один сфокусований приклад із коротким поясненням ключових рядків, ніж повторення тієї самої думки.
-- Формат: Markdown. Без вступів на кшталт "Ось теорія".${responseLanguageInstruction}`;
+- Формат: Markdown. Без вступів на кшталт "Ось теорія".${guidanceSection}${responseLanguageInstruction}`;
     }
     try {
       const content = await provider.generateText(userPrompt, systemPrompt, {
@@ -1908,6 +1915,7 @@ REQUIREMENTS:
     taskTitle?: string;
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
+    generationGuidance?: string;
     language: LLMTaskLanguage;
     responseLanguage?: string;
     userId?: number;
@@ -1928,6 +1936,7 @@ REQUIREMENTS:
         taskType: params.taskType,
         difficulty: params.difficulty,
         language: params.language,
+        generationGuidance: params.generationGuidance,
         responseLanguage: params.responseLanguage,
         userId: params.userId,
         topicId: params.topicId
@@ -1993,6 +2002,7 @@ REQUIREMENTS:
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
     language: LLMTaskLanguage;
+    generationGuidance?: string;
     responseLanguage?: string;
     userId?: number;
     topicId?: number;
@@ -2011,6 +2021,10 @@ REQUIREMENTS:
       : (params.taskType === "CONTROL" ? "КОНТРОЛЬНЕ завдання для перевірки знань по темі" : "ПРАКТИЧНЕ завдання для відпрацювання матеріалу");
     const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
     const teacherTaskTitle = (params.taskTitle || "").trim();
+    const generationGuidance = params.generationGuidance?.trim();
+    const guidanceSection = generationGuidance
+      ? (isEnglish ? `\n\nTEACHER GUIDANCE (respect all mandatory input/output and topic rules):\n${generationGuidance}` : `\n\nПОБАЖАННЯ ВЧИТЕЛЯ (дотримуйся обов’язкових правил теми та вводу/виводу):\n${generationGuidance}`)
+      : "";
     const effectiveTitle = teacherTaskTitle || params.topicTitle;
     const systemPrompt = isEnglish
       ? `You are an experienced programming teacher. Create judgeable programming tasks with deterministic I/O. Output must be strictly specified.`
@@ -2047,7 +2061,7 @@ REQUIREMENTS:
   - "Examples" (each example has an Input block and an Output block)
 - The task should be related to the topic "${params.topicTitle}"
 
-Return ONLY the task description in Markdown format without additional comments.${responseLanguageInstruction}` : `Створи детальну умову ${taskTypeText.toLowerCase()} "${effectiveTitle}" для мови ${langName}.
+Return ONLY the task description in Markdown format without additional comments.${guidanceSection}${responseLanguageInstruction}` : `Створи детальну умову ${taskTypeText.toLowerCase()} "${effectiveTitle}" для мови ${langName}.
 
 ТЕМА: "${params.topicTitle}"
 ${teacherTaskTitle ? `НАЗВА ЗАВДАННЯ (вчитель): "${teacherTaskTitle}"\nКРИТИЧНО: Використай назву вчителя як ОСНОВНУ ідею та не вигадуй іншу назву.` : ""}
@@ -2082,7 +2096,7 @@ ${difficultyPrompt}
 - В output виводь лише потрібні значення (числа/рядки) у вказаному порядку.
 - НЕ використовуй мітки на кшталт "Ціле число:", "Рядок:".
 
-Поверни ТІЛЬКИ умову завдання у форматі Markdown без додаткових коментарів.${responseLanguageInstruction}`;
+Поверни ТІЛЬКИ умову завдання у форматі Markdown без додаткових коментарів.${guidanceSection}${responseLanguageInstruction}`;
     try {
       const content = await provider.generateText(userPrompt, systemPrompt, {
         timeout: 30000,
@@ -2107,6 +2121,7 @@ ${difficultyPrompt}
     language: LLMTaskLanguage;
     description?: string;
     responseLanguage?: string;
+    generationGuidance?: string;
     userId?: number;
     topicId?: number;
     userLanguage?: "uk" | "en";
@@ -2126,6 +2141,7 @@ ${difficultyPrompt}
         description: params.description,
         responseLanguage: params.responseLanguage,
         userId: params.userId,
+        generationGuidance: params.generationGuidance,
         topicId: params.topicId
       }, {
         language: params.userLanguage,
@@ -2200,6 +2216,7 @@ ${difficultyPrompt}
     description?: string;
     responseLanguage?: string;
     userId?: number;
+    generationGuidance?: string;
     topicId?: number;
     userLanguage?: "uk" | "en";
     signal?: AbortSignal;
@@ -2212,6 +2229,10 @@ ${difficultyPrompt}
     const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
     const todoText = isEnglish ? 'implement the solution according to the statement' : 'реалізуйте рішення задачі згідно з умовою';
     const teacherTaskTitle = (params.taskTitle || '').trim();
+    const generationGuidance = params.generationGuidance?.trim();
+    const guidanceSection = generationGuidance
+      ? (isEnglish ? `\n\nTEACHER GUIDANCE (respect the empty-template requirements):\n${generationGuidance}` : `\n\nПОБАЖАННЯ ВЧИТЕЛЯ (дотримуйся вимоги порожнього шаблону):\n${generationGuidance}`)
+      : "";
     const effectiveTitle = teacherTaskTitle || params.topicTitle;
 
     const systemPrompt = isEnglish
@@ -2272,7 +2293,7 @@ int main() {
   return 0;
 }
 
-Return ONLY the code, no explanations.${responseLanguageInstruction}` : `Створи порожній шаблон коду для завдання "${effectiveTitle}" на мові ${langName}.
+Return ONLY the code, no explanations.${guidanceSection}${responseLanguageInstruction}` : `Створи порожній шаблон коду для завдання "${effectiveTitle}" на мові ${langName}.
 
 ТЕМА: "${params.topicTitle}"
 ${teacherTaskTitle ? `НАЗВА ЗАВДАННЯ (вчитель): "${teacherTaskTitle}"` : ""}
@@ -2353,7 +2374,7 @@ public class Main {
 }
 \`\`\`
 
-Поверни ТІЛЬКИ код без markdown блоків та пояснень.${responseLanguageInstruction}`;
+Поверни ТІЛЬКИ код без markdown блоків та пояснень.${guidanceSection}${responseLanguageInstruction}`;
     try {
       const content = await provider.generateText(userPrompt, systemPrompt, {
         timeout: 30000,
