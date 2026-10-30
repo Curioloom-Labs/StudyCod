@@ -12,7 +12,7 @@ import type { JudgeResponse } from "../judgeWorker/types";
 export const courseTestSchema = z.object({
   input: z.string().max(65536), expectedOutput: z.string().max(65536),
   points: z.number().int().min(1).max(1000).default(1), isHidden: z.boolean().default(false),
-  imageUrls: z.array(z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/)).max(8).default([]),
+  imageUrls: z.array(z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/)).max(8).optional(),
   subtask: z.string().trim().max(64).nullable().optional(),
 }).strict().refine(test => Boolean(test.input.trim() || test.expectedOutput.trim()), "EMPTY_TEST");
 export const courseTestsSchema = z.array(courseTestSchema).max(50);
