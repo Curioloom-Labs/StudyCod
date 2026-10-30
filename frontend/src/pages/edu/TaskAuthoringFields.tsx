@@ -4,6 +4,7 @@ import { tr } from "../../i18n";
 import { MarkdownView } from "../../components/MarkdownView";
 import { TaskGenerationGuidanceField } from "./TaskGenerationGuidanceField";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
+import type { TaskGenerationProfile } from "./taskGenerationSettings";
 
 export type TaskAuthoringTab = "statement" | "code" | "theory" | "settings";
 export type TaskAuthoringDraft = {
@@ -24,6 +25,8 @@ type TaskAuthoringFieldsProps = {
   onChange: (patch: Partial<TaskAuthoringDraft>) => void;
   generationGuidance: string;
   onGenerationGuidanceChange: (value: string) => void;
+  generationProfile: TaskGenerationProfile;
+  onGenerationProfileChange: (profile: TaskGenerationProfile) => void;
   guidanceEnabled: boolean;
   selectedTab: TaskAuthoringTab;
   onSelectedTabChange: (value: TaskAuthoringTab) => void;
@@ -43,6 +46,8 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
   onChange,
   generationGuidance,
   onGenerationGuidanceChange,
+  generationProfile,
+  onGenerationProfileChange,
   guidanceEnabled,
   selectedTab,
   onSelectedTabChange,
@@ -71,7 +76,7 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
     <>
       <label className="task-authoring__label" htmlFor={titleId}>{tr("Назва завдання", "Task title")}</label>
       <input id={titleId} name="taskTitle" required maxLength={512} value={value.title} onChange={event => onChange({ title: event.target.value })} placeholder={tr("Наприклад, Словник частот", "For example, Frequency map")} disabled={busy} className="task-authoring__title" />
-      <TaskGenerationGuidanceField topicId={topicId} taskTitle={value.title} taskType={taskType} responseLanguage={responseLanguage} value={generationGuidance} onChange={onGenerationGuidanceChange} enabled={guidanceEnabled} />
+      <TaskGenerationGuidanceField topicId={topicId} taskTitle={value.title} taskType={taskType} responseLanguage={responseLanguage} value={generationGuidance} onChange={onGenerationGuidanceChange} profile={generationProfile} onProfileChange={onGenerationProfileChange} busy={busy} enabled={guidanceEnabled} />
       <div className="classroom-tabs" role="tablist" aria-label={tr("Розділи редактора", "Editor sections")}>
         {tabs.map(tab => <button key={tab.id} type="button" role="tab" id={`${idPrefix}-tab-${tab.id}`} aria-selected={selectedTab === tab.id} aria-controls={`${idPrefix}-panel-${tab.id}`} onClick={() => onSelectedTabChange(tab.id)}>{tab.label}</button>)}
       </div>

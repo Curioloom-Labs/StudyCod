@@ -969,7 +969,7 @@ topicsRouter.post("/:topicId/tasks/generate-guidance", authRequired, async (req:
       totalTimeoutMs: 20_000,
     });
     if (!result.success) return sendAIError(res, result.error);
-    return res.json({ guidance: result.data.guidance });
+    return res.json({ guidance: result.data.guidance, settings: result.data.settings });
   } catch (error: unknown) {
     logger.error("[topics] Error generating task guidance", { requestId: req.requestId, err: error });
     const statusCode = errorStatusCode(error);

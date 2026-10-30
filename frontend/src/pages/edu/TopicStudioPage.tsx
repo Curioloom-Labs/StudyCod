@@ -37,6 +37,7 @@ import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
 import { ClassWorkspaceFrame } from "./ClassWorkspaceNavigation";
 import { TaskAuthoringFields, type TaskAuthoringTab } from "./TaskAuthoringFields";
+import { buildTaskGenerationGuidance, defaultTaskGenerationProfile, type TaskGenerationProfile } from "./taskGenerationSettings";
 import { TestImageAttachments } from "../../components/TestImageAttachments";
 import { withDevPreview } from "../../lib/devPreview";
 
@@ -238,6 +239,7 @@ export const TopicStudioPage: React.FC = () => {
     projectSpecJson: "",
   });
   const [generationInstructions, setGenerationInstructions] = React.useState("");
+  const [generationProfile, setGenerationProfile] = React.useState<TaskGenerationProfile>(defaultTaskGenerationProfile);
   const [controlForm, setControlForm] = React.useState({
     title: "",
     timeLimitMinutes: "45",
@@ -278,6 +280,7 @@ export const TopicStudioPage: React.FC = () => {
     setEditingTaskId(null);
     setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "" });
     setGenerationInstructions("");
+    setGenerationProfile(defaultTaskGenerationProfile);
     setMode("task");
   };
 
@@ -295,6 +298,7 @@ export const TopicStudioPage: React.FC = () => {
       projectSpecJson: task.projectSpec ? JSON.stringify(task.projectSpec, null, 2) : "",
     });
     setGenerationInstructions("");
+    setGenerationProfile(defaultTaskGenerationProfile);
     setMode("task");
   };
 
@@ -321,7 +325,8 @@ export const TopicStudioPage: React.FC = () => {
       const response = await api.post(`/topics/${id}/tasks/generate-condition`, {
         taskTitle: taskForm.title.trim(),
         taskType: "PRACTICE",
-        generationGuidance: generationInstructions.trim(),
+        difficulty: generationProfile.difficulty,
+        generationGuidance: buildTaskGenerationGuidance(generationProfile, generationInstructions, isEn),
         language: isEn ? "en" : "uk",
       });
       setTaskForm((old) => ({ ...old, description: String(response.data?.description ?? old.description) }));
@@ -347,7 +352,7 @@ export const TopicStudioPage: React.FC = () => {
         taskTitle: taskForm.title.trim(),
         description: taskForm.description,
         language: isEn ? "en" : "uk",
-        generationGuidance: generationInstructions.trim(),
+        generationGuidance: buildTaskGenerationGuidance(generationProfile, generationInstructions, isEn),
       });
       setTaskForm((old) => ({ ...old, template: String(response.data?.template ?? old.template) }));
     } catch (caught) {
@@ -372,7 +377,8 @@ export const TopicStudioPage: React.FC = () => {
         taskTitle: taskForm.title.trim(),
         taskDescription: taskForm.description,
         taskType: "PRACTICE",
-        generationGuidance: generationInstructions.trim(),
+        difficulty: generationProfile.difficulty,
+        generationGuidance: buildTaskGenerationGuidance(generationProfile, generationInstructions, isEn),
         language: isEn ? "en" : "uk",
       });
       setTaskForm((old) => ({ ...old, theory: String(response.data?.theory ?? old.theory) }));
@@ -825,7 +831,7 @@ export const TopicStudioPage: React.FC = () => {
         {mode === "task" && (
           <Modal error={error} title={editingTaskId ? tr("Редагувати практику", "Edit practice task") : tr("Нова практика", "New practice task")} caption={editingTaskId ? tr("Змініть умову, код, теорію або кількість спроб. Чернетку можна редагувати до відкриття учням.", "Edit the problem statement, code, theory, or attempt limit. You can edit the draft until it is assigned to students.") : tr("Одне вікно для умови, стартового коду й короткої теорії. Після створення відкриється налаштування тестів.", "Add the problem statement, starter code, and brief theory in one place. Test settings open after creation.")} onClose={() => { setMode(null); setEditingTaskId(null); }} wide>
             <form className="task-authoring" onSubmit={event => { event.preventDefault(); void createTask(); }}>
-              <TaskAuthoringFields idPrefix="topic-task" topicId={id} taskType="PRACTICE" responseLanguage={isEn ? "en" : "uk"} value={taskForm} onChange={patch => setTaskForm(old => ({ ...old, ...patch }))} generationGuidance={generationInstructions} onGenerationGuidanceChange={setGenerationInstructions} guidanceEnabled={!editingTaskId && !preview()} selectedTab={editorTab} onSelectedTabChange={setEditorTab} aiBusy={aiBusy} busy={busy} onGenerateCondition={() => void generateCondition()} onGenerateTemplate={() => void generateTemplate()} onGenerateTheory={() => void generateTheory()} />
+              <TaskAuthoringFields idPrefix="topic-task" topicId={id} taskType="PRACTICE" responseLanguage={isEn ? "en" : "uk"} value={taskForm} onChange={patch => setTaskForm(old => ({ ...old, ...patch }))} generationGuidance={generationInstructions} onGenerationGuidanceChange={setGenerationInstructions} generationProfile={generationProfile} onGenerationProfileChange={setGenerationProfile} guidanceEnabled={!editingTaskId && !preview()} selectedTab={editorTab} onSelectedTabChange={setEditorTab} aiBusy={aiBusy} busy={busy} onGenerateCondition={() => void generateCondition()} onGenerateTemplate={() => void generateTemplate()} onGenerateTheory={() => void generateTheory()} />
               <div className="task-authoring__footer"><button type="button" className="classroom-button" disabled={busy} onClick={() => { setMode(null); setEditingTaskId(null); }}>{tr("Скасувати", "Cancel")}</button><button type="submit" className="classroom-button classroom-button--primary" disabled={busy || !!aiBusy || !taskForm.title.trim()}>{busy ? tr("Зберігаємо…", "Saving…") : tr("Зберегти й налаштувати тести", "Save and configure tests")}<ArrowRight className="size-4" aria-hidden="true" /></button></div>
             </form>
 

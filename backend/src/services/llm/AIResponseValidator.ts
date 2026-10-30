@@ -438,6 +438,18 @@ const TaskTemplateSchema = z.object({
 
 const TaskGenerationGuidanceSchema = z.object({
   guidance: z.string().trim().min(20, 'guidance must be at least 20 characters').max(4000),
+  settings: z.object({
+    learnerLevel: z.enum(["AUTO", "BEGINNER", "INTERMEDIATE", "ADVANCED", "OLYMPIAD"]),
+    studentContext: z.string().trim().max(240),
+    difficulty: z.number().int().min(1).max(5),
+    structure: z.enum(["AUTO", "SINGLE_CONCEPT", "MULTI_STEP", "EDGE_CASES", "COMBINED"]),
+    contextStyle: z.enum(["AUTO", "NEUTRAL", "REAL_WORLD", "CREATIVE"]),
+    learningGoal: z.string().trim().max(240),
+    includeConcepts: z.string().trim().max(240),
+    avoidConcepts: z.string().trim().max(240),
+    stayOnTopic: z.boolean(),
+    avoidSolutionHints: z.boolean(),
+  }),
 });
 
 const TestDataItemSchema = z.object({
@@ -974,6 +986,18 @@ export class AIResponseValidator {
   }
   static validateGenerateTaskGuidance(data: unknown): {
     guidance: string;
+    settings: {
+      learnerLevel: "AUTO" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "OLYMPIAD";
+      studentContext: string;
+      difficulty: number;
+      structure: "AUTO" | "SINGLE_CONCEPT" | "MULTI_STEP" | "EDGE_CASES" | "COMBINED";
+      contextStyle: "AUTO" | "NEUTRAL" | "REAL_WORLD" | "CREATIVE";
+      learningGoal: string;
+      includeConcepts: string;
+      avoidConcepts: string;
+      stayOnTopic: boolean;
+      avoidSolutionHints: boolean;
+    };
   } {
     try {
       return TaskGenerationGuidanceSchema.parse(data);

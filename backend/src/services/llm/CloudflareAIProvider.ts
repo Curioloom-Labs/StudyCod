@@ -52,6 +52,20 @@ export class CloudflareAIProvider implements LLMProvider {
     const isEnglish = lang === "en";
     const taskTypeText = params.taskType === "CONTROL" ? (isEnglish ? "control" : "контрольне") : (isEnglish ? "practice" : "практичне");
     const taskTitle = params.taskTitle?.trim();
+    const difficulty = Math.max(1, Math.min(5, Math.floor(params.difficulty || 3)));
+    const difficultyPrompt = isEnglish ? [
+      "1/5 · Introductory: one basic operation, minimal reasoning.",
+      "2/5 · Easy: one main concept and straightforward reasoning.",
+      "3/5 · Intermediate: apply the topic across several ordinary cases.",
+      "4/5 · Hard: several connected reasoning steps and meaningful boundaries within the taught topic.",
+      "5/5 · Very hard: deep reasoning across interacting cases and careful boundary analysis; do not add unrelated prerequisites or only inflate numbers."
+    ][difficulty - 1] : [
+      "1/5 · Початкова: одна базова дія, мінімум міркувань.",
+      "2/5 · Легка: одне основне поняття й прямолінійні міркування.",
+      "3/5 · Середня: застосування теми до кількох звичайних випадків.",
+      "4/5 · Складна: кілька пов’язаних кроків і змістовні межі в межах вивченої теми.",
+      "5/5 · Дуже складна: глибоке міркування над взаємопов’язаними випадками й уважний аналіз меж; не додавай сторонніх попередніх знань і не ускладнюй лише числами."
+    ][difficulty - 1];
     const systemPrompt = isEnglish
       ? "You create judgeable programming tasks with deterministic stdin/stdout. Output must be strictly specified."
       : "Ти створюєш задачі для судді: детермінований stdin/stdout, строгий формат виводу без зайвих слів.";
@@ -71,13 +85,16 @@ CRITICAL FOR AUTO-TESTS:
 - Output must NOT contain prompts/labels.
 - No randomness, time/date, files, or network.
 
+EXACT DIFFICULTY (mandatory, do not downgrade): ${difficultyPrompt}
+Before returning the statement, check that the reasoning and cases actually meet this difficulty. Rewrite it if it feels easier.
+
 FORMAT (Markdown headings required):
 ## Problem
 ## Input
 ## Output
 ## Examples (at least 3; each example contains raw Input/Output blocks)
 
-Return ONLY the Markdown statement.${params.generationGuidance?.trim() ? `\n\nTEACHER GUIDANCE (within the required topic and judge rules):\n${params.generationGuidance.trim()}` : ""}${responseLanguageInstruction}`
+Return ONLY the Markdown statement.${params.generationGuidance?.trim() ? `\n\nMANDATORY TEACHER CONTROLS (hard requirements; follow the selected values and prefer explicit settings over vague prose):\n${params.generationGuidance.trim()}` : ""}${responseLanguageInstruction}`
       : `Створи детальну умову ${taskTypeText} задачі по темі "${params.topicTitle}" для мови ${langName}.${taskTitle ? ` Використай надану вчителем назву як основну ідею: "${taskTitle}".` : ""}
 
 КРИТИЧНО ДЛЯ АВТОТЕСТІВ:
@@ -86,13 +103,16 @@ Return ONLY the Markdown statement.${params.generationGuidance?.trim() ? `\n\nTE
 - У виводі НЕМАЄ зайвих слів/міток ("Введіть", "Відповідь:" тощо).
 - Без випадковості, часу/дати, файлів або мережі.
 
+ТОЧНА СКЛАДНІСТЬ (обов’язково, не знижуй): ${difficultyPrompt}
+Перед поверненням умови перевір, що потрібні міркування й випадки справді відповідають рівню. Якщо задача простіша — перероби її.
+
 ФОРМАТ (обов'язково Markdown-заголовки):
 ## Умова
 ## Вхідні дані
 ## Вихідні дані
 ## Приклади (мінімум 3; кожен приклад має «Input» і «Output» у code-block)
 
-Поверни ТІЛЬКИ Markdown-текст умови.${params.generationGuidance?.trim() ? `\n\nПОБАЖАННЯ ВЧИТЕЛЯ (у межах обов’язкових правил теми й автоперевірки):\n${params.generationGuidance.trim()}` : ""}${responseLanguageInstruction}`;
+Поверни ТІЛЬКИ Markdown-текст умови.${params.generationGuidance?.trim() ? `\n\nОБОВ’ЯЗКОВІ НАЛАШТУВАННЯ ВЧИТЕЛЯ (жорсткі вимоги; виконай обрані значення й орієнтуйся на явні параметри, якщо текст нечіткий):\n${params.generationGuidance.trim()}` : ""}${responseLanguageInstruction}`;
 
     return { prompt, systemPrompt };
   }

@@ -11,6 +11,7 @@ import { ClassWorkspaceFrame } from "./ClassWorkspaceNavigation";
 import { withDevPreview } from "../../lib/devPreview";
 import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
 import { TaskAuthoringFields, type TaskAuthoringDraft, type TaskAuthoringTab } from "./TaskAuthoringFields";
+import { buildTaskGenerationGuidance, defaultTaskGenerationProfile, type TaskGenerationProfile } from "./taskGenerationSettings";
 import { TestImageAttachments } from "../../components/TestImageAttachments";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
 
@@ -110,6 +111,7 @@ export const ControlStudioPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = React.useState(false);
   const [newTask, setNewTask] = React.useState<TaskAuthoringDraft & { generationInstructions: string }>(emptyTaskDraft);
+  const [taskGenerationProfile, setTaskGenerationProfile] = React.useState<TaskGenerationProfile>(defaultTaskGenerationProfile);
   const [taskEditorTab, setTaskEditorTab] = React.useState<TaskAuthoringTab>("statement");
   const [editingTaskId, setEditingTaskId] = React.useState<number | null>(null);
   const [taskAiBusy, setTaskAiBusy] = React.useState<"condition" | "template" | "theory" | null>(null);
@@ -253,6 +255,7 @@ export const ControlStudioPage: React.FC = () => {
       generationInstructions: "",
     });
     setDraftManualTests([]);
+    setTaskGenerationProfile(defaultTaskGenerationProfile);
     setShowCreateTask(true);
     setTestEditorTask(null);
   };
@@ -477,7 +480,8 @@ export const ControlStudioPage: React.FC = () => {
         const response = await api.post(`/topics/${control.topic.id}/tasks/generate-condition`, {
           taskTitle: newTask.title.trim(),
           taskType: "CONTROL",
-          generationGuidance: newTask.generationInstructions.trim(),
+          difficulty: taskGenerationProfile.difficulty,
+          generationGuidance: buildTaskGenerationGuidance(taskGenerationProfile, newTask.generationInstructions, isEn),
           language: isEn ? "en" : "uk",
         });
         setNewTask(old => ({ ...old, description: String(response.data?.description ?? old.description) }));
@@ -501,7 +505,7 @@ export const ControlStudioPage: React.FC = () => {
           taskTitle: newTask.title.trim(),
           description: newTask.description.trim(),
           language: isEn ? "en" : "uk",
-          generationGuidance: newTask.generationInstructions.trim(),
+          generationGuidance: buildTaskGenerationGuidance(taskGenerationProfile, newTask.generationInstructions, isEn),
         });
         setNewTask(old => ({ ...old, template: String(response.data?.template ?? old.template) }));
       }
@@ -524,7 +528,8 @@ export const ControlStudioPage: React.FC = () => {
           taskTitle: newTask.title.trim(),
           taskDescription: newTask.description,
           taskType: "CONTROL",
-          generationGuidance: newTask.generationInstructions.trim(),
+          difficulty: taskGenerationProfile.difficulty,
+          generationGuidance: buildTaskGenerationGuidance(taskGenerationProfile, newTask.generationInstructions, isEn),
           language: isEn ? "en" : "uk",
         });
         setNewTask(old => ({ ...old, theory: String(response.data?.theory ?? old.theory) }));
@@ -662,7 +667,7 @@ export const ControlStudioPage: React.FC = () => {
             </div>
             <div className="mt-6 space-y-3">
               <div className="flex justify-end">
-                <button type="button" onClick={() => { setNewTask(emptyTaskDraft()); setDraftManualTests([]); setEditingTaskId(null); setTaskEditorTab("statement"); setShowCreateTask(value => !value); }} className="inline-flex items-center gap-2 rounded-xl border border-accent-warn/25 px-4 py-2.5 text-sm font-bold text-accent-warn transition hover:bg-bg-hover dark:border-accent-warn/25 dark:text-accent-warn dark:hover:bg-accent-warn/10">
+                <button type="button" onClick={() => { setNewTask(emptyTaskDraft()); setDraftManualTests([]); setTaskGenerationProfile(defaultTaskGenerationProfile); setEditingTaskId(null); setTaskEditorTab("statement"); setShowCreateTask(value => !value); }} className="inline-flex items-center gap-2 rounded-xl border border-accent-warn/25 px-4 py-2.5 text-sm font-bold text-accent-warn transition hover:bg-bg-hover dark:border-accent-warn/25 dark:text-accent-warn dark:hover:bg-accent-warn/10">
                   <Plus className="h-4 w-4" />{showCreateTask ? tr("Скасувати", "Cancel") : tr("Додати практичну задачу", "Add practice problem")}
                 </button>
               </div>
@@ -678,6 +683,8 @@ export const ControlStudioPage: React.FC = () => {
                     onChange={patch => setNewTask(old => ({ ...old, ...patch }))}
                     generationGuidance={newTask.generationInstructions}
                     onGenerationGuidanceChange={generationInstructions => setNewTask(old => ({ ...old, generationInstructions }))}
+                    generationProfile={taskGenerationProfile}
+                    onGenerationProfileChange={setTaskGenerationProfile}
                     guidanceEnabled={!editingTaskId && !preview()}
                     selectedTab={taskEditorTab}
                     onSelectedTabChange={setTaskEditorTab}
