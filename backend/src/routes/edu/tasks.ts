@@ -7,6 +7,8 @@ import { authorizeClassForReq } from "../../middleware/orgContext";
 import { User } from "../../entities/User";
 import { Student } from "../../entities/Student";
 import { TopicTask } from "../../entities/TopicTask";
+import { EduTask } from "../../entities/EduTask";
+import { CourseAssignment } from "../../entities/CourseAssignment";
 import { TestData } from "../../entities/TestData";
 import { EduGrade } from "../../entities/EduGrade";
 import { TaskTheory } from "../../entities/TaskTheory";
@@ -21,6 +23,7 @@ import { LessonAttempt } from "../../entities/LessonAttempt";
 import { AssessmentType } from "../../types/AssessmentType";
 import { markControlWorkAttemptCompletedIfReadyWithManager, saveControlSummaryGradeForNewSystemWithManager } from "../../services/edu/controlWorkGrading";
 import { logger } from "../../utils/logger";
+import { writeAudit } from "../../services/audit/auditLog";
 import { HttpError } from "../../utils/httpError";
 import { chooseDefaultCheckerFromExpectedOutputs } from "../../utils/checkerSpec";
 import { createRouteLimiter } from "../../middleware/routeRateLimit";
@@ -60,6 +63,55 @@ const hintFeedbackRepo = () => AppDataSource.getRepository(EduHintFeedback);
 const taskTheoryRepo = () => AppDataSource.getRepository(TaskTheory);
 const controlWorkRepo = () => AppDataSource.getRepository(ControlWork);
 const lessonAttemptRepo = () => AppDataSource.getRepository(LessonAttempt);
+
+router.delete("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const taskId = Number(req.params.taskId);
+    if (!Number.isSafeInteger(taskId) || taskId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    if (!req.userId || req.studentId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_TEACHERS_CAN_DELETE_TASKS" });
+
+    const task = await AppDataSource.getRepository(EduTask).findOne({
+      where: { id: taskId },
+      relations: ["lesson", "lesson.class"],
+    });
+    if (!task) return res.status(404).json({ message: "TASK_NOT_FOUND" });
+    const access = await authorizeClassForReq(req, task.lesson.class.id, "CONTENT_AUTHOR");
+    if (!access) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
+    if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const activeAttemptCount = await lessonAttemptRepo().count({ where: { lesson: { id: task.lesson.id }, status: "IN_PROGRESS" } });
+    if (activeAttemptCount > 0) return res.status(409).json({ message: "ASSESSMENT_IN_PROGRESS" });
+
+    await AppDataSource.transaction(async (manager) => {
+      const assignmentRepo = manager.getRepository(CourseAssignment);
+      const assignments = await assignmentRepo.find({ where: { class: { id: task.lesson.class.id } } });
+      for (const assignment of assignments) {
+        let changed = false;
+        const originMap = { ...(assignment.originMap ?? {}) };
+        for (const [sourceItemId, origin] of Object.entries(originMap)) {
+          if (origin.eduTaskId === taskId) {
+            originMap[sourceItemId] = { ...origin, eduTaskId: null };
+            changed = true;
+          }
+        }
+        if (changed) {
+          assignment.originMap = originMap;
+          await assignmentRepo.save(assignment);
+        }
+      }
+      await manager.getRepository(EduTask).delete({ id: taskId });
+    });
+
+    await writeAudit({
+      actorType: "USER", actorId: req.userId, action: "edu.task.delete", targetType: "edu_task", targetId: taskId,
+      orgId: task.lesson.class.organizationId ?? null, requestId: req.requestId, ip: req.ip,
+    });
+    return res.json({ deleted: true, taskId });
+  } catch (error: unknown) {
+    logger.error("[edu/tasks] delete task failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
 
 // Route-level rate limits (enabled in production by default).
 // These endpoints can be CPU/IO intensive (judge + AI hints), so keep them protected.

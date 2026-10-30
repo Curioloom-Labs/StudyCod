@@ -2,7 +2,7 @@ import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Calculator, Clock3, FileCheck2, Plus, Save, Sparkles, Wand2, Trash2 } from "lucide-react";
 import { api } from "../../lib/api/client";
-import { updateControlWorkFormula } from "../../lib/api/edu";
+import { generateTestData, getTestData, updateControlWorkFormula } from "../../lib/api/edu";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { showToast } from "../../lib/toast";
 import { useTranslation } from "react-i18next";
@@ -59,7 +59,8 @@ function parseQuiz(raw?: string | null): QuizItem[] {
 }
 
 export const ControlStudioPage: React.FC = () => {
-  useTranslation();
+  const { i18n } = useTranslation();
+  const isEn = i18n.language.startsWith("en");
   const { controlWorkId } = useParams<{ controlWorkId: string }>();
   const id = Number(controlWorkId);
   const navigate = useNavigate();
@@ -72,7 +73,9 @@ export const ControlStudioPage: React.FC = () => {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = React.useState(false);
-  const [newTask, setNewTask] = React.useState({ title: "", description: "", template: "" });
+  const [newTask, setNewTask] = React.useState({ title: "", description: "", template: "", difficulty: "3", testCount: "5", replaceGeneratedTests: true });
+  const [testCounts, setTestCounts] = React.useState<Record<number, number>>({});
+  const [generatingTestsFor, setGeneratingTestsFor] = React.useState<number | null>(null);
   const [parentClass, setParentClass] = React.useState<{ id: number; name: string } | null>(null);
 
   React.useEffect(() => {
@@ -93,6 +96,7 @@ export const ControlStudioPage: React.FC = () => {
     try {
       if (preview()) {
         setControl(demo);
+        setTestCounts({ 11: 4, 12: 3 });
         setTitle(demo.title || "");
         setMinutes(String(demo.timeLimitMinutes || 45));
         setFormula(demo.formula || "");
@@ -103,6 +107,16 @@ export const ControlStudioPage: React.FC = () => {
       const response = await api.get(`/topics/control-works/${id}`);
       const value = response.data.controlWork || response.data;
       setControl(value);
+      const loadedTasks = Array.isArray(value.tasks) ? value.tasks as ControlTask[] : [];
+      const counts = await Promise.all(loadedTasks.map(async task => {
+        try {
+          const result = await getTestData(task.id, { limit: 1, offset: 0 });
+          return [task.id, result.pagination?.total ?? result.testData.length] as const;
+        } catch {
+          return [task.id, 0] as const;
+        }
+      }));
+      setTestCounts(Object.fromEntries(counts));
       setTitle(value.title || "");
       setMinutes(String(value.timeLimitMinutes || 45));
       setFormula(value.formula || "0.35 * test + 0.65 * avg(practice)");
@@ -175,22 +189,122 @@ export const ControlStudioPage: React.FC = () => {
       return;
     }
     setBusy(true);
+    setError(null);
+    let generatedCount = 0;
+    let testGenerationError: unknown = null;
     try {
-      await api.post(`/topics/${control.topic.id}/tasks`, {
-        title: newTask.title.trim(),
-        description: newTask.description.trim(),
-        template: newTask.template,
-        type: "CONTROL",
-        controlWorkId: id,
-        order: (control.tasks?.length || 0) + 1,
-        maxAttempts: 1,
-      });
-      setNewTask({ title: "", description: "", template: "" });
+      const testCount = Math.max(1, Math.min(50, Number(newTask.testCount) || 5));
+      if (preview()) {
+        const taskId = Date.now();
+        setControl(old => old ? { ...old, tasks: [...(old.tasks || []), { id: taskId, title: newTask.title.trim(), description: newTask.description.trim() }] } : old);
+        setTestCounts(old => ({ ...old, [taskId]: testCount }));
+        generatedCount = testCount;
+      } else {
+        const response = await api.post(`/topics/${control.topic.id}/tasks`, {
+          title: newTask.title.trim(),
+          description: newTask.description.trim(),
+          template: newTask.template,
+          type: "CONTROL",
+          controlWorkId: id,
+          order: (control.tasks?.length || 0) + 1,
+          maxAttempts: 1,
+        });
+        const createdTask = response.data?.task ?? response.data?.topicTask ?? response.data;
+        const taskId = Number(createdTask?.id);
+        if (Number.isSafeInteger(taskId) && taskId > 0) {
+          try {
+            const result = await generateTestData(taskId, testCount, { replaceGenerated: newTask.replaceGeneratedTests });
+            generatedCount = result.count;
+          } catch (caught) {
+            testGenerationError = caught;
+          }
+        } else {
+          testGenerationError = new Error("TASK_ID_MISSING_AFTER_CREATE");
+        }
+      }
+      setNewTask(old => ({ ...old, title: "", description: "", template: "" }));
       setShowCreateTask(false);
-      await load();
-      showToast({ type: "success", message: tr("Практичну задачу додано до контрольної.", "Practice problem added to the assessment.") });
+      if (!preview()) await load();
+      if (testGenerationError) {
+        const detail = getErrorMessageFromUnknown(testGenerationError, tr("перевірте умову задачі й спробуйте ще раз", "check the problem statement and try again"));
+        setError(tr(`Задачу додано, але тести не згенерувалися (${detail}). Натисніть «Згенерувати тести» біля задачі, щоб повторити.`, `The problem was added, but tests were not generated (${detail}). Click “Generate tests” beside the problem to retry.`));
+      } else {
+        showToast({ type: "success", message: tr(`Задачу додано до контрольної разом із ${generatedCount} тестами.`, `Problem added to the assessment with ${generatedCount} tests.`) });
+      }
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, tr("Не вдалося додати практичну задачу.", "Could not add practice problem.")));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const generateTaskTests = async (task: ControlTask) => {
+    const count = Math.max(1, Math.min(50, Number(newTask.testCount) || 5));
+    setGeneratingTestsFor(task.id);
+    setError(null);
+    try {
+      if (preview()) {
+        setTestCounts(old => ({ ...old, [task.id]: count }));
+      } else {
+        const result = await generateTestData(task.id, count, { replaceGenerated: newTask.replaceGeneratedTests });
+        let currentCount = newTask.replaceGeneratedTests ? result.count : (testCounts[task.id] ?? 0) + result.count;
+        try {
+          const current = await getTestData(task.id, { limit: 1, offset: 0 });
+          currentCount = current.pagination?.total ?? current.testData.length;
+        } catch {
+          // Keep the count returned by generation if the follow-up refresh fails.
+        }
+        setTestCounts(old => ({ ...old, [task.id]: currentCount }));
+        showToast({ type: "success", message: tr(`Додано ${result.count} тестів до задачі «${task.title}».`, `Added ${result.count} tests to “${task.title}”.`) });
+      }
+      if (preview()) showToast({ type: "success", message: tr(`Для задачі «${task.title}» підготовлено ${count} тестів.`, `Prepared ${count} tests for “${task.title}”.`) });
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr(`Не вдалося згенерувати тести для «${task.title}».`, `Could not generate tests for “${task.title}”.`)));
+    } finally {
+      setGeneratingTestsFor(null);
+    }
+  };
+
+  const generateTaskCondition = async () => {
+    if (!control?.topic?.id || !newTask.title.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (preview()) {
+        setNewTask(old => ({ ...old, description: tr(`## Завдання\n\nСтворіть програму для теми **${control.topic?.title || ""}**: ${old.title.trim()}.\n\n### Вхідні дані\nОпишіть значення, які отримує програма.\n\n### Вихідні дані\nВиведіть результат згідно з умовою.`, `## Problem\n\nWrite a program for **${control.topic?.title || ""}**: ${old.title.trim()}.\n\n### Input\nDescribe the values provided to the program.\n\n### Output\nPrint the result as required.`) }));
+      } else {
+        const response = await api.post(`/topics/${control.topic.id}/tasks/generate-condition`, {
+          taskTitle: newTask.title.trim(),
+          taskType: "CONTROL",
+          difficulty: Math.max(1, Math.min(5, Number(newTask.difficulty) || 3)),
+          language: isEn ? "en" : "uk",
+        });
+        setNewTask(old => ({ ...old, description: String(response.data?.description ?? old.description) }));
+      }
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося згенерувати умову.", "Could not generate the problem statement.")));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const generateTaskTemplate = async () => {
+    if (!control?.topic?.id || !newTask.title.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (preview()) {
+        setNewTask(old => ({ ...old, template: "def solve():\n    # TODO: read input and implement the solution\n    pass\n\nif __name__ == \"__main__\":\n    solve()\n" }));
+      } else {
+        const response = await api.post(`/topics/${control.topic.id}/tasks/generate-template`, {
+          taskTitle: newTask.title.trim(),
+          description: newTask.description.trim(),
+          language: isEn ? "en" : "uk",
+        });
+        setNewTask(old => ({ ...old, template: String(response.data?.template ?? old.template) }));
+      }
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося згенерувати стартовий код.", "Could not generate starter code.")));
     } finally {
       setBusy(false);
     }
@@ -232,12 +346,24 @@ export const ControlStudioPage: React.FC = () => {
                 <div className="rounded-2xl border border-accent-warn/20 bg-bg-hover p-5 dark:border-accent-warn/20 dark:bg-[var(--surface-warning)]">
                   <p className="text-sm font-bold">{tr("Нова задача контрольної", "New assessment problem")}</p>
                   <label className="mt-4 block text-sm font-bold">{tr("Назва", "Title")}<input aria-label={tr("Назва практичної задачі", "Practice problem title")} value={newTask.title} onChange={(event) => setNewTask({ ...newTask, title: event.target.value })} className="mt-2 w-full rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-accent-warn/15 dark:border-white/10 dark:bg-bg-code" /></label>
-                  <label className="mt-4 block text-sm font-bold">{tr("Умова", "Problem statement")}<textarea aria-label={tr("Умова практичної задачі", "Practice problem statement")} value={newTask.description} onChange={(event) => setNewTask({ ...newTask, description: event.target.value })} rows={4} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-accent-warn/15 dark:border-white/10 dark:bg-bg-code" /></label>
-                  <label className="mt-4 block text-sm font-bold">{tr("Стартовий код", "Starter code")}<textarea aria-label={tr("Стартовий код практичної задачі", "Practice problem starter code")} value={newTask.template} onChange={(event) => setNewTask({ ...newTask, template: event.target.value })} rows={5} spellCheck={false} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 font-mono text-xs leading-6 outline-none focus:ring-4 focus:ring-accent-warn/15 dark:border-white/10 dark:bg-bg-code" /></label>
+                  <div className="mt-4 flex flex-wrap items-end justify-between gap-3"><p className="flex-1 text-sm font-bold">{tr("Умова", "Problem statement")}</p><button type="button" disabled={busy || !newTask.title.trim()} onClick={() => void generateTaskCondition()} className="classroom-text-button"><Sparkles className="size-4" aria-hidden="true" />{busy ? tr("Генеруємо…", "Generating…") : tr("Згенерувати умову", "Generate statement")}</button></div>
+                  <textarea aria-label={tr("Умова практичної задачі", "Practice problem statement")} value={newTask.description} onChange={(event) => setNewTask({ ...newTask, description: event.target.value })} rows={5} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-accent-warn/15 dark:border-white/10 dark:bg-bg-code" />
+                  <div className="mt-4 flex flex-wrap items-end justify-between gap-3"><p className="flex-1 text-sm font-bold">{tr("Стартовий код", "Starter code")}</p><button type="button" disabled={busy || !newTask.title.trim()} onClick={() => void generateTaskTemplate()} className="classroom-text-button"><Sparkles className="size-4" aria-hidden="true" />{busy ? tr("Генеруємо…", "Generating…") : tr("Згенерувати код", "Generate code")}</button></div>
+                  <textarea aria-label={tr("Стартовий код практичної задачі", "Practice problem starter code")} value={newTask.template} onChange={(event) => setNewTask({ ...newTask, template: event.target.value })} rows={5} spellCheck={false} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 font-mono text-xs leading-6 outline-none focus:ring-4 focus:ring-accent-warn/15 dark:border-white/10 dark:bg-bg-code" />
+                  <section className="mt-5 rounded-xl border border-border/10 bg-white/60 p-4 dark:border-white/10 dark:bg-black/10" aria-label={tr("Налаштування генератора", "Generator settings")}>
+                    <h3 className="text-sm font-bold">{tr("Налаштування генератора", "Generator settings")}</h3>
+                    <p className="mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Ці параметри керують складністю умови й набором тестів для задачі.", "These settings control statement difficulty and the generated test set.")}</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <label className="text-sm font-semibold">{tr("Складність умови", "Statement difficulty")}<select value={newTask.difficulty} onChange={event => setNewTask(old => ({ ...old, difficulty: event.target.value }))} className="mt-2 w-full rounded-xl border border-border/10 bg-white px-3 py-3 text-sm dark:border-white/10 dark:bg-bg-code"><option value="1">{tr("1 · Початкова", "1 · Introductory")}</option><option value="2">{tr("2 · Легка", "2 · Easy")}</option><option value="3">{tr("3 · Середня", "3 · Medium")}</option><option value="4">{tr("4 · Складна", "4 · Hard")}</option><option value="5">{tr("5 · Поглиблена", "5 · Advanced")}</option></select></label>
+                      <label className="text-sm font-semibold">{tr("Кількість тестів", "Test count")}<input type="number" min="1" max="50" value={newTask.testCount} onChange={event => setNewTask(old => ({ ...old, testCount: event.target.value }))} className="mt-2 w-full rounded-xl border border-border/10 bg-white px-3 py-3 text-sm dark:border-white/10 dark:bg-bg-code" /></label>
+                    </div>
+                    <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-text-muted dark:text-text-secondary"><input type="checkbox" checked={newTask.replaceGeneratedTests} onChange={event => setNewTask(old => ({ ...old, replaceGeneratedTests: event.target.checked }))} className="mt-0.5 size-4 accent-primary" />{tr("Замінювати попередні AI-тести під час повторної генерації. Ручні тести залишаться.", "Replace previous AI tests when generating again. Manual tests are kept.")}</label>
+                    <p className="mt-3 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Після додавання задачі генератор одразу підготує вказану кількість тестів.", "After adding the problem, the generator will create the selected number of tests.")}</p>
+                  </section>
                   <button type="button" disabled={busy} onClick={() => void createTask()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground">{busy ? tr("Додаємо…", "Adding…") : tr("Додати до контрольної", "Add to assessment")}</button>
                 </div>
               )}
-              {tasks.map((task, index) => <div key={task.id} className="flex items-start gap-4 rounded-2xl bg-bg-hover p-4 dark:bg-white/[.045]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-xs font-extrabold text-accent-warn shadow-sm dark:bg-bg-base dark:text-accent-warn">{String(index + 1).padStart(2, "0")}</span><div><p className="font-bold">{task.title}</p><p className="mt-1 text-sm leading-6 text-text-muted dark:text-text-secondary">{task.description || tr("Практична частина контрольної.", "Practice section of the assessment.")}</p></div></div>)}
+              {tasks.map((task, index) => <div key={task.id} className="flex items-start gap-4 rounded-2xl bg-bg-hover p-4 dark:bg-white/[.045]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-xs font-extrabold text-accent-warn shadow-sm dark:bg-bg-base dark:text-accent-warn">{String(index + 1).padStart(2, "0")}</span><div className="min-w-0 flex-1"><p className="font-bold">{task.title}</p><p className="mt-1 text-sm leading-6 text-text-muted dark:text-text-secondary">{task.description || tr("Практична частина контрольної.", "Practice section of the assessment.")}</p><div className="mt-3 flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-text-muted dark:text-text-secondary">{tr("Тестів", "Tests")}: {testCounts[task.id] ?? 0}</span><button type="button" disabled={generatingTestsFor !== null || busy} onClick={() => void generateTaskTests(task)} className="classroom-text-button"><Sparkles className="size-3.5" aria-hidden="true" />{generatingTestsFor === task.id ? tr("Генеруємо…", "Generating…") : testCounts[task.id] ? newTask.replaceGeneratedTests ? tr("Замінити AI-тести", "Replace AI tests") : tr("Додати тести", "Add tests") : tr("Згенерувати тести", "Generate tests")}</button></div></div></div>)}
               {!tasks.length && <p className="rounded-2xl border border-dashed border-border/15 px-5 py-8 text-center text-sm text-text-muted dark:border-white/10 dark:text-text-secondary">{tr("Практичних задач ще немає.", "No practice problems yet.")}</p>}
             </div>
           </section>

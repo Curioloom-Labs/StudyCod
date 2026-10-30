@@ -1,7 +1,7 @@
 import React, { useEffect, useState, Suspense, useCallback, useMemo, useRef, useContext, startTransition } from "react";
 import { Routes, Route, useLocation, useNavigate, useSearchParams, useParams, Navigate, type Location } from "react-router-dom";
 import { enforceSubdomain, getHostContext } from "./lib/subdomain";
-import { getCachedMeUser, getMe, isGetMeSessionChanged } from "./lib/api/profile";
+import { getCachedMeUser, getMe, isGetMeSessionChanged, USER_PROFILE_REFRESH_REQUESTED_EVENT } from "./lib/api/profile";
 import type { User } from "./types";
 import { useTranslation } from "react-i18next";
 import { AnimatedPage } from "./components/layout/AnimatedPage";
@@ -1691,6 +1691,30 @@ const EduRoutes: React.FC = React.memo(() => {
     });
     return unsubscribe;
   }, []);
+
+  useEffect(() => {
+    if (isEduDevPreview) return;
+    let requestId = 0;
+    const refreshUserProfile = () => {
+      const currentRequestId = ++requestId;
+      const authGeneration = authGenerationRef.current;
+      void getMe({ force: true, suppressAuthRedirect: true })
+        .then((nextUser) => {
+          if (currentRequestId !== requestId || authGeneration !== authGenerationRef.current) return;
+          setUser(nextUser);
+        })
+        .catch((error: unknown) => {
+          if (import.meta.env.DEV && currentRequestId === requestId && authGeneration === authGenerationRef.current) {
+            console.error("EDU profile refresh failed", error);
+          }
+        });
+    };
+    window.addEventListener(USER_PROFILE_REFRESH_REQUESTED_EVENT, refreshUserProfile);
+    return () => {
+      requestId += 1;
+      window.removeEventListener(USER_PROFILE_REFRESH_REQUESTED_EVENT, refreshUserProfile);
+    };
+  }, [isEduDevPreview]);
 
   useEffect(() => {
     if (!controlExamSession) return;

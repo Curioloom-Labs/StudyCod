@@ -267,6 +267,27 @@ router.put("/courses/:courseId", authRequired, async (req: AuthRequest, res: Res
   }
 });
 
+router.delete("/courses/:courseId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const courseId = Number(req.params.courseId);
+    if (!Number.isSafeInteger(courseId) || courseId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const course = await getAuthorableCourse(req, res, courseId);
+    if (!course) return;
+    if (course.catalogKey) return res.status(409).json({ message: "SOURCE_MANAGED_COURSE_DELETE_UNSUPPORTED" });
+
+    await AppDataSource.getRepository(Course).delete({ id: courseId });
+    await writeAudit({
+      actorType: "USER", actorId: req.userId!, action: "course.delete", targetType: "course", targetId: courseId,
+      orgId: course.organizationId ?? null, requestId: req.requestId, ip: req.ip,
+    });
+    return res.json({ deleted: true, courseId });
+  } catch (error: unknown) {
+    logger.error("[edu/courses] delete course failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
 // Add a module to a course.
 router.post("/courses/:courseId/modules", authRequired, async (req: AuthRequest, res: Response) => {
   try {
@@ -316,6 +337,27 @@ router.put("/modules/:moduleId", authRequired, async (req: AuthRequest, res: Res
     return res.json({ module: { id: saved.id, title: saved.title, order: saved.order } });
   } catch (error: unknown) {
     logger.error("[edu/courses] update module failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.delete("/modules/:moduleId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const moduleId = Number(req.params.moduleId);
+    if (!Number.isSafeInteger(moduleId) || moduleId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const module = await getAuthorableModule(req, res, moduleId);
+    if (!module) return;
+    if (module.course.catalogKey) return res.status(409).json({ message: "SOURCE_MANAGED_COURSE_DELETE_UNSUPPORTED" });
+
+    await AppDataSource.getRepository(CourseModule).delete({ id: moduleId });
+    await writeAudit({
+      actorType: "USER", actorId: req.userId!, action: "course.module.delete", targetType: "course_module", targetId: moduleId,
+      orgId: module.course.organizationId ?? null, requestId: req.requestId, ip: req.ip,
+    });
+    return res.json({ deleted: true, moduleId });
+  } catch (error: unknown) {
+    logger.error("[edu/courses] delete module failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
@@ -424,6 +466,29 @@ router.put("/items/:itemId", authRequired, async (req: AuthRequest, res: Respons
     return res.json({ item: { id: saved.id, kind: saved.kind, title: saved.title, order: saved.order, content: saved.content ?? null } });
   } catch (error: unknown) {
     logger.error("[edu/courses] update item failed", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
+});
+
+router.delete("/items/:itemId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireUser(req, res)) return;
+    const itemId = Number(req.params.itemId);
+    if (!Number.isSafeInteger(itemId) || itemId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    const item = await AppDataSource.getRepository(CourseItem).findOne({ where: { id: itemId }, relations: ["module", "module.course"] });
+    if (!item) return res.status(404).json({ message: "ITEM_NOT_FOUND" });
+    const course = await getAuthorableCourse(req, res, item.module.courseId);
+    if (!course) return;
+    if (course.catalogKey) return res.status(409).json({ message: "SOURCE_MANAGED_COURSE_DELETE_UNSUPPORTED" });
+
+    await AppDataSource.getRepository(CourseItem).delete({ id: itemId });
+    await writeAudit({
+      actorType: "USER", actorId: req.userId!, action: "course.item.delete", targetType: "course_item", targetId: itemId,
+      orgId: course.organizationId ?? null, requestId: req.requestId, ip: req.ip,
+    });
+    return res.json({ deleted: true, itemId });
+  } catch (error: unknown) {
+    logger.error("[edu/courses] delete item failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });

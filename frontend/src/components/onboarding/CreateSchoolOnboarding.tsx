@@ -6,6 +6,7 @@ import { api } from "../../lib/api/client";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
 import { getErrorMessageFromUnknown } from "../../lib/safeError";
+import { requestUserProfileRefresh } from "../../lib/api/profile";
 
 const controlClass =
   "w-full bg-bg-code border border-border text-text-primary rounded-[var(--ui-control-radius)] px-4 py-3 text-base leading-[1.45] focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/70 transition-colors placeholder:text-text-muted";
@@ -30,6 +31,7 @@ export const CreateSchoolOnboarding: React.FC<Props> = ({ onCreated }) => {
     setBusy(true);
     try {
       const { data } = await api.post(`/edu/orgs`, { name: trimmed });
+      requestUserProfileRefresh();
       const org = data?.org;
       if (!org?.id) throw new Error("INVALID_RESPONSE");
       showToast({ type: "success", message: tr("Школу створено", "School created") });

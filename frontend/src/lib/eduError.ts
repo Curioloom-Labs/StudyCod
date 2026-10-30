@@ -38,6 +38,7 @@ export function getEduErrorMessage(error: unknown, fallback: string): string {
     NO_TESTS_CONFIGURED: ["Викладач ще налаштовує перевірку цього завдання. Поверніться до уроку або зверніться до викладача.", "Your teacher is still configuring this task's grading. Return to the lesson or contact your teacher."],
     TESTS_CHANGED: ["Налаштування перевірки змінилися. Завантажте актуальні тести й повторіть дію.", "The grading setup changed. Load current tests and try again."],
     ASSESSMENT_HAS_STARTED: ["Учні вже почали контрольну або здали роботу. Для інших критеріїв створіть нове завдання.", "Students have started this assessment or submitted work. Create a new task for different criteria."],
+    ASSESSMENT_IN_PROGRESS: ["Не можна видалити матеріал, поки учні проходять контрольну. Дочекайтеся завершення спроб і повторіть дію.", "This material cannot be deleted while learners are taking the assessment. Wait for their attempts to finish and try again."],
     ATTEMPT_LIMIT_TOO_LOW: ["Цей ліміт менший за вже використану учнем кількість спроб. Залиште поточний ліміт або збільште його.", "This limit is below the number of attempts already used. Keep or increase the current limit."],
     INVALID_TEST_DATA: ["Перевірте вхідні дані, очікуваний вивід і цілі додатні бали кожного тесту.", "Check every test's input, expected output, and positive whole points."],
     JUDGE_RESULT_INCOMPLETE: ["Перевірка не повернула всі результати. Спробу не списано; спробуйте ще раз.", "Grading did not return every result. Your attempt was not used; please retry."],
@@ -80,6 +81,7 @@ export function getEduErrorMessage(error: unknown, fallback: string): string {
     AI_GENERATION_FAILED: ["Не вдалося згенерувати матеріал. Спробуйте ще раз або додайте його вручну.", "Material generation failed. Try again or add it manually."],
     COURSE_MUST_BE_DRAFT_TO_EDIT_STRUCTURE: ["Щоб додати модуль або урок до синхронізованого курсу, спершу зніми курс з публікації. Наявний матеріал можна редагувати окремо.", "Unpublish a synced course before adding modules or lessons. Existing material can be edited in place."],
     COURSE_CONTENT_INCOMPLETE: ["Зміна не збережена: матеріал має залишатися повним і коректним, поки курс опублікований.", "The change was not saved: published course content must remain complete and valid."],
+    SOURCE_MANAGED_COURSE_DELETE_UNSUPPORTED: ["Цей курс синхронізується з навчальною програмою. Видалення доступне для власних курсів.", "This course syncs with the curriculum. Deletion is available for courses you created."],
     "Network Error": ["Немає зв’язку із сервером. Перевірте інтернет і спробуйте ще раз.", "Cannot reach the server. Check your connection and try again."],
   };
   const localized = messages[message];

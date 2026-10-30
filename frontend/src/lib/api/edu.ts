@@ -620,6 +620,10 @@ export async function createLesson(classId: number, lesson: CreateLessonRequest)
   const res = await api.post(`/edu/classes/${classId}/lessons`, lesson);
   return res.data.lesson;
 }
+export async function deleteEduLesson(lessonId: number): Promise<{ deleted: boolean; lessonId: number; classId: number }> {
+  const res = await api.delete(`/edu/lessons/${lessonId}`);
+  return res.data;
+}
 export async function getLessons(classId: number): Promise<Lesson[]> {
   const res = await api.get(`/edu/classes/${classId}/lessons`);
   return res.data.lessons;
@@ -746,6 +750,9 @@ export async function uploadStatementImage(file: File): Promise<{ url: string; m
 export async function createTask(lessonId: number, task: CreateTaskRequest): Promise<Task> {
   const res = await api.post(`/edu/lessons/${lessonId}/tasks`, task);
   return res.data.task;
+}
+export async function deleteEduTask(taskId: number): Promise<void> {
+  await api.delete(`/edu/tasks/${taskId}`);
 }
 /** Carry the storage source only while viewing this exact EDU task. */
 function eduTaskUrl(taskId: number, action = ""): string {

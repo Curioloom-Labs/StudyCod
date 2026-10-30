@@ -5,6 +5,7 @@ const GET_ME_CACHE_TTL_MS = 60000;
 const GET_ME_STALE_FALLBACK_MS = 5 * 60 * 1000;
 const GET_ME_SNAPSHOT_STORAGE_KEY = "studycod.userSnapshot";
 const SESSION_CHANGED_ERROR = "SESSION_CHANGED_DURING_PROFILE_REQUEST";
+export const USER_PROFILE_REFRESH_REQUESTED_EVENT = "studycod:user-profile-refresh-requested";
 
 type CachedUser = {
   session: "cookie";
@@ -125,6 +126,14 @@ export function clearGetMeCache(options?: { clearSnapshot?: boolean }): void {
   inFlightGetMeToken = null;
   if (options?.clearSnapshot) {
     clearUserSnapshot();
+  }
+}
+
+/** Ask the mounted EDU shell to reload role and membership context after a change. */
+export function requestUserProfileRefresh(): void {
+  clearGetMeCache({ clearSnapshot: true });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(USER_PROFILE_REFRESH_REQUESTED_EVENT));
   }
 }
 
