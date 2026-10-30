@@ -65,7 +65,6 @@ If authoritativeExamples is true, existingExamples are authored tests: repair th
     ...(params.referenceExamplesAreAuthoritative ? { authoritativeExamples: true } : {}),
   }), schema, instructions, {
     userId: params.userId, signal: params.signal, timeout: 30_000,
-    validationRetry: Boolean(params.validationFeedback),
     maxRetries: 1, temperature: 0, maxTokens: 3000,
   });
   const parsed = ResponseSchema.safeParse(raw);
@@ -98,7 +97,6 @@ If authoritativeExamples is true, existingExamples are authored tests: repair th
     if (outputs.length !== selectedInputs.length) throw makeAIValidationError('generateTestData', 'Reference execution returned an incomplete test suite');
     const tests = AIResponseValidator.validateGenerateTestData(selectedInputs.map((input, index) => ({ input, output: outputs[index] })), count, 'STDIN_STDOUT', { allowEmptyOutput: params.allowEmptyOutput });
     await reviewGeneratedTests(provider, statement, 'STDIN_STDOUT', tests, {
-      validationRetry: Boolean(params.validationFeedback),
       allowEmptyOutput: params.allowEmptyOutput,
       signal: params.signal, userId: params.userId,
       requiredCases: params.requiredCases,
