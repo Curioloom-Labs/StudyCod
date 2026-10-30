@@ -22,7 +22,7 @@ export const createTopicSchema = z.object({
 
 export const createTaskSchema = z.object({
   title: z.string().min(1).max(512),
-  description: z.string().min(1),
+  description: z.string().min(1).or(z.literal("")),
   template: z.unknown().optional(),
   taskMode: z.unknown().optional(),
   webTemplateFiles: z.unknown().optional(),
@@ -74,6 +74,7 @@ export const generateTheorySchema = z.object({
   taskType: z.enum(["PRACTICE", "CONTROL"]),
   difficulty: optionalPositiveInt,
   taskTitle: z.string().optional(),
+  generationGuidance: z.string().max(4000).optional(),
   responseLanguage: z.string().optional(),
   language: z.enum(["uk", "en"]).optional(),
 });

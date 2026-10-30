@@ -504,6 +504,9 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       deadline,
       controlWorkId,
     } = validated.data;
+    if (type !== "CONTROL" && !description.trim()) {
+      return res.status(400).json({ message: "INVALID_INPUT" });
+    }
     const topicId = parseInt(req.params.topicId, 10);
     if (isNaN(topicId)) {
       return res.status(400).json({
@@ -544,7 +547,7 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       webValidationProfile,
     });
     const normalizedProjectSpec = normalizeProjectSpec(projectSpec);
-    if (normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
+    if (type !== "CONTROL" && normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
       return res.status(400).json({
         message: "INVALID_INPUT"
       });
@@ -896,6 +899,9 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
         message: "TASK_NOT_FOUND"
       });
     }
+    if (task.type !== "CONTROL" && !description.trim()) {
+      return res.status(400).json({ message: "INVALID_INPUT" });
+    }
     const normalizedTaskInput = normalizeWebTaskInput({
       taskMode,
       template,
@@ -904,7 +910,7 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
       webValidationProfile,
     });
     const normalizedProjectSpec = normalizeProjectSpec(projectSpec);
-    if (normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
+    if (task.type !== "CONTROL" && normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
       return res.status(400).json({
         message: "INVALID_INPUT"
       });
@@ -978,7 +984,8 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       difficulty,
       language,
       taskTitle,
-      responseLanguage
+      responseLanguage,
+      generationGuidance
     } = req.body || {};
     if (!taskType || taskType !== "PRACTICE" && taskType !== "CONTROL") {
       return res.status(400).json({
@@ -995,6 +1002,7 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
       taskType: taskType as "PRACTICE" | "CONTROL",
       difficulty: difficulty || 3,
+      generationGuidance,
       language: topic.language,
       responseLanguage: normalizeResponseLanguage(responseLanguage),
       userId: user.id,
@@ -1065,7 +1073,8 @@ topicsRouter.post("/:topicId/tasks/generate-template", authRequired, async (req:
     const {
       description,
       taskTitle,
-      responseLanguage
+      responseLanguage,
+      generationGuidance
     } = req.body || {};
     const userLanguage: "uk" | "en" = req.headers['accept-language']?.includes('en') || req.body?.language === 'en' ? "en" : "uk";
     const topicTitleForAi = userLanguage === "en"
@@ -1077,6 +1086,7 @@ topicsRouter.post("/:topicId/tasks/generate-template", authRequired, async (req:
       taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
       language: topic.language,
       description,
+      generationGuidance,
       responseLanguage: normalizeResponseLanguage(responseLanguage),
       userId: user.id,
       topicId: topic.id
@@ -1487,7 +1497,7 @@ topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: A
     if (!validated.success) {
       return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
     }
-    const { taskDescription, taskType, difficulty, taskTitle, responseLanguage, language: requestedLanguage } = validated.data;
+    const { taskDescription, taskType, difficulty, taskTitle, responseLanguage, language: requestedLanguage, generationGuidance } = validated.data;
     const topicId = parseInt(req.params.topicId, 10);
     if (isNaN(topicId)) {
       return res.status(400).json({
@@ -1529,6 +1539,7 @@ topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: A
       taskDescription: taskDescription.trim(),
       taskType: taskType as "PRACTICE" | "CONTROL",
       difficulty: difficultyNum,
+      generationGuidance,
       lang: topic.language,
       responseLanguage: normalizeResponseLanguage(responseLanguage),
       userId: user.id,

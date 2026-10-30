@@ -41,14 +41,17 @@ function errorMessage(error: unknown): string {
 export class CloudflareAIProvider implements LLMProvider {
   private buildTaskConditionPrompt(params: {
     topicTitle: string;
+    taskTitle?: string;
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
+    generationGuidance?: string;
     language: TopicLanguage;
     responseLanguage?: string;
   }, lang: "uk" | "en"): { prompt: string; systemPrompt: string } {
     const langName = topicLanguageLabel(params.language);
     const isEnglish = lang === "en";
     const taskTypeText = params.taskType === "CONTROL" ? (isEnglish ? "control" : "контрольне") : (isEnglish ? "practice" : "практичне");
+    const taskTitle = params.taskTitle?.trim();
     const systemPrompt = isEnglish
       ? "You create judgeable programming tasks with deterministic stdin/stdout. Output must be strictly specified."
       : "Ти створюєш задачі для судді: детермінований stdin/stdout, строгий формат виводу без зайвих слів.";
@@ -60,7 +63,7 @@ export class CloudflareAIProvider implements LLMProvider {
       : "";
 
     const prompt = isEnglish
-      ? `Write a detailed ${taskTypeText} programming task about topic "${params.topicTitle}" for ${langName}.
+      ? `Write a detailed ${taskTypeText} programming task about topic "${params.topicTitle}" for ${langName}.${taskTitle ? ` Use this teacher-provided task title as the main idea: "${taskTitle}".` : ""}
 
 CRITICAL FOR AUTO-TESTS:
 - Use stdin/stdout.
@@ -74,8 +77,8 @@ FORMAT (Markdown headings required):
 ## Output
 ## Examples (at least 3; each example contains raw Input/Output blocks)
 
-Return ONLY the Markdown statement.${responseLanguageInstruction}`
-      : `Створи детальну умову ${taskTypeText} задачі по темі "${params.topicTitle}" для мови ${langName}.
+Return ONLY the Markdown statement.${params.generationGuidance?.trim() ? `\n\nTEACHER GUIDANCE (within the required topic and judge rules):\n${params.generationGuidance.trim()}` : ""}${responseLanguageInstruction}`
+      : `Створи детальну умову ${taskTypeText} задачі по темі "${params.topicTitle}" для мови ${langName}.${taskTitle ? ` Використай надану вчителем назву як основну ідею: "${taskTitle}".` : ""}
 
 КРИТИЧНО ДЛЯ АВТОТЕСТІВ:
 - stdin/stdout.
@@ -89,7 +92,7 @@ Return ONLY the Markdown statement.${responseLanguageInstruction}`
 ## Вихідні дані
 ## Приклади (мінімум 3; кожен приклад має «Input» і «Output» у code-block)
 
-Поверни ТІЛЬКИ Markdown-текст умови.${responseLanguageInstruction}`;
+Поверни ТІЛЬКИ Markdown-текст умови.${params.generationGuidance?.trim() ? `\n\nПОБАЖАННЯ ВЧИТЕЛЯ (у межах обов’язкових правил теми й автоперевірки):\n${params.generationGuidance.trim()}` : ""}${responseLanguageInstruction}`;
 
     return { prompt, systemPrompt };
   }
@@ -483,6 +486,7 @@ ${JSON.stringify(schema, null, 2)}
     taskDescription?: string;
     taskType?: "PRACTICE" | "CONTROL";
     difficulty?: number;
+    generationGuidance?: string;
     responseLanguage?: string;
     userId?: number;
     topicId?: number;
@@ -531,8 +535,10 @@ ${JSON.stringify(schema, null, 2)}
   }
   async generateTaskCondition(params: {
     topicTitle: string;
+    taskTitle?: string;
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
+    generationGuidance?: string;
     language: TopicLanguage;
     responseLanguage?: string;
     userId?: number;
@@ -543,8 +549,10 @@ ${JSON.stringify(schema, null, 2)}
     const lang: "uk" | "en" = options?.language === "en" ? "en" : "uk";
     const built = this.buildTaskConditionPrompt({
       topicTitle: params.topicTitle,
+      taskTitle: params.taskTitle,
       taskType: params.taskType,
       difficulty: params.difficulty,
+      generationGuidance: params.generationGuidance,
       language: params.language,
       responseLanguage: params.responseLanguage
     }, lang);
@@ -566,8 +574,10 @@ ${JSON.stringify(schema, null, 2)}
   }
   async generateTaskTemplate(params: {
     topicTitle: string;
+    taskTitle?: string;
     language: TopicLanguage;
     description?: string;
+    generationGuidance?: string;
     responseLanguage?: string;
     userId?: number;
     topicId?: number;

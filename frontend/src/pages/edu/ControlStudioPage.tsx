@@ -1,14 +1,15 @@
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Calculator, Clock3, FileCheck2, Plus, Save, Sparkles, Wand2, Trash2 } from "lucide-react";
+import { ArrowLeft, Calculator, Clock3, FileCheck2, FlaskConical, Plus, Save, Sparkles, Upload, Wand2, Trash2 } from "lucide-react";
 import { api } from "../../lib/api/client";
-import { generateTestData, getTestData, updateControlWorkFormula } from "../../lib/api/edu";
+import { addTestData, deleteTestData, generateTestData, getTestData, updateControlWorkFormula, type TestData } from "../../lib/api/edu";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { showToast } from "../../lib/toast";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
 import { ClassWorkspaceFrame } from "./ClassWorkspaceNavigation";
 import { withDevPreview } from "../../lib/devPreview";
+import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
 
 type ControlTask = { id: number; title: string; description?: string; maxAttempts?: number };
 type QuizItem = { question?: string; options?: Record<string, string>; correct?: string };
@@ -73,9 +74,16 @@ export const ControlStudioPage: React.FC = () => {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = React.useState(false);
-  const [newTask, setNewTask] = React.useState({ title: "", description: "", template: "", difficulty: "3", testCount: "5", replaceGeneratedTests: true });
+  const [newTask, setNewTask] = React.useState({ title: "", description: "", template: "", generationInstructions: "" });
+  const [testSettings, setTestSettings] = React.useState({ count: "5", requiredCases: "", replaceGenerated: true });
   const [testCounts, setTestCounts] = React.useState<Record<number, number>>({});
   const [generatingTestsFor, setGeneratingTestsFor] = React.useState<number | null>(null);
+  const [testEditorTask, setTestEditorTask] = React.useState<ControlTask | null>(null);
+  const [taskTests, setTaskTests] = React.useState<TestData[]>([]);
+  const [testEditorBusy, setTestEditorBusy] = React.useState(false);
+  const [manualTest, setManualTest] = React.useState({ input: "", expectedOutput: "", points: "1", isHidden: true });
+  const [importFiles, setImportFiles] = React.useState<File[]>([]);
+  const [importInputKey, setImportInputKey] = React.useState(0);
   const [parentClass, setParentClass] = React.useState<{ id: number; name: string } | null>(null);
 
   React.useEffect(() => {
@@ -184,8 +192,8 @@ export const ControlStudioPage: React.FC = () => {
 
   const createTask = async () => {
     if (!control?.topic?.id) return;
-    if (!newTask.title.trim() || !newTask.description.trim() || !newTask.template.trim()) {
-      setError(tr("Заповніть назву, умову та стартовий код практичної задачі.", "Fill in the title, problem statement, and starter code."));
+    if (!newTask.title.trim()) {
+      setError(tr("Додайте назву задачі.", "Add a task title."));
       return;
     }
     setBusy(true);
@@ -193,7 +201,7 @@ export const ControlStudioPage: React.FC = () => {
     let generatedCount = 0;
     let testGenerationError: unknown = null;
     try {
-      const testCount = Math.max(1, Math.min(50, Number(newTask.testCount) || 5));
+      const testCount = Math.max(1, Math.min(50, Number(testSettings.count) || 5));
       if (preview()) {
         const taskId = Date.now();
         setControl(old => old ? { ...old, tasks: [...(old.tasks || []), { id: taskId, title: newTask.title.trim(), description: newTask.description.trim() }] } : old);
@@ -211,25 +219,34 @@ export const ControlStudioPage: React.FC = () => {
         });
         const createdTask = response.data?.task ?? response.data?.topicTask ?? response.data;
         const taskId = Number(createdTask?.id);
-        if (Number.isSafeInteger(taskId) && taskId > 0) {
+        if (Number.isSafeInteger(taskId) && taskId > 0 && newTask.description.trim()) {
           try {
-            const result = await generateTestData(taskId, testCount, { replaceGenerated: newTask.replaceGeneratedTests });
+            const requiredCases = testSettings.requiredCases.split(/\r?\n/).map(value => value.trim().slice(0, 240)).filter(Boolean).slice(0, 24);
+            const result = await generateTestData(taskId, testCount, { replaceGenerated: testSettings.replaceGenerated, requiredCases });
             generatedCount = result.count;
+            try {
+              const current = await getTestData(taskId, { limit: 1, offset: 0 });
+              setTestCounts(old => ({ ...old, [taskId]: current.pagination?.total ?? current.testData.length }));
+            } catch { /* The generated count confirms that test creation succeeded. */ }
           } catch (caught) {
             testGenerationError = caught;
           }
+        } else if (Number.isSafeInteger(taskId) && taskId > 0) {
+          setTestCounts(old => ({ ...old, [taskId]: 0 }));
         } else {
           testGenerationError = new Error("TASK_ID_MISSING_AFTER_CREATE");
         }
       }
-      setNewTask(old => ({ ...old, title: "", description: "", template: "" }));
+      setNewTask(old => ({ ...old, title: "", description: "", template: "", generationInstructions: "" }));
       setShowCreateTask(false);
       if (!preview()) await load();
       if (testGenerationError) {
         const detail = getErrorMessageFromUnknown(testGenerationError, tr("перевірте умову задачі й спробуйте ще раз", "check the problem statement and try again"));
         setError(tr(`Задачу додано, але тести не згенерувалися (${detail}). Натисніть «Згенерувати тести» біля задачі, щоб повторити.`, `The problem was added, but tests were not generated (${detail}). Click “Generate tests” beside the problem to retry.`));
-      } else {
+      } else if (generatedCount > 0) {
         showToast({ type: "success", message: tr(`Задачу додано до контрольної разом із ${generatedCount} тестами.`, `Problem added to the assessment with ${generatedCount} tests.`) });
+      } else {
+        showToast({ type: "success", message: tr("Задачу додано. Додайте умову, щоб згенерувати тести.", "Problem added. Add a statement to generate tests.") });
       }
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, tr("Не вдалося додати практичну задачу.", "Could not add practice problem.")));
@@ -239,15 +256,18 @@ export const ControlStudioPage: React.FC = () => {
   };
 
   const generateTaskTests = async (task: ControlTask) => {
-    const count = Math.max(1, Math.min(50, Number(newTask.testCount) || 5));
+    const count = Math.max(1, Math.min(50, Number(testSettings.count) || 5));
     setGeneratingTestsFor(task.id);
+    setTestEditorBusy(true);
     setError(null);
     try {
       if (preview()) {
         setTestCounts(old => ({ ...old, [task.id]: count }));
+        setTaskTests(Array.from({ length: count }, (_, index) => ({ id: Date.now() + index, input: `${index + 1}`, expectedOutput: `${index + 1}`, points: 1, source: "AI_GENERATED" } as TestData)));
       } else {
-        const result = await generateTestData(task.id, count, { replaceGenerated: newTask.replaceGeneratedTests });
-        let currentCount = newTask.replaceGeneratedTests ? result.count : (testCounts[task.id] ?? 0) + result.count;
+        const requiredCases = testSettings.requiredCases.split(/\r?\n/).map(value => value.trim().slice(0, 240)).filter(Boolean).slice(0, 24);
+        const result = await generateTestData(task.id, count, { replaceGenerated: testSettings.replaceGenerated, requiredCases });
+        let currentCount = testSettings.replaceGenerated ? result.count : (testCounts[task.id] ?? 0) + result.count;
         try {
           const current = await getTestData(task.id, { limit: 1, offset: 0 });
           currentCount = current.pagination?.total ?? current.testData.length;
@@ -255,6 +275,12 @@ export const ControlStudioPage: React.FC = () => {
           // Keep the count returned by generation if the follow-up refresh fails.
         }
         setTestCounts(old => ({ ...old, [task.id]: currentCount }));
+        if (testEditorTask?.id === task.id) {
+          try {
+            const refreshed = await getTestData(task.id, { limit: 100, offset: 0 });
+            setTaskTests(refreshed.testData || []);
+          } catch { /* Keep the generated count visible if refreshing the list fails. */ }
+        }
         showToast({ type: "success", message: tr(`Додано ${result.count} тестів до задачі «${task.title}».`, `Added ${result.count} tests to “${task.title}”.`) });
       }
       if (preview()) showToast({ type: "success", message: tr(`Для задачі «${task.title}» підготовлено ${count} тестів.`, `Prepared ${count} tests for “${task.title}”.`) });
@@ -262,6 +288,7 @@ export const ControlStudioPage: React.FC = () => {
       setError(getErrorMessageFromUnknown(caught, tr(`Не вдалося згенерувати тести для «${task.title}».`, `Could not generate tests for “${task.title}”.`)));
     } finally {
       setGeneratingTestsFor(null);
+      setTestEditorBusy(false);
     }
   };
 
@@ -276,7 +303,7 @@ export const ControlStudioPage: React.FC = () => {
         const response = await api.post(`/topics/${control.topic.id}/tasks/generate-condition`, {
           taskTitle: newTask.title.trim(),
           taskType: "CONTROL",
-          difficulty: Math.max(1, Math.min(5, Number(newTask.difficulty) || 3)),
+          generationGuidance: newTask.generationInstructions.trim(),
           language: isEn ? "en" : "uk",
         });
         setNewTask(old => ({ ...old, description: String(response.data?.description ?? old.description) }));
@@ -300,6 +327,7 @@ export const ControlStudioPage: React.FC = () => {
           taskTitle: newTask.title.trim(),
           description: newTask.description.trim(),
           language: isEn ? "en" : "uk",
+          generationGuidance: newTask.generationInstructions.trim(),
         });
         setNewTask(old => ({ ...old, template: String(response.data?.template ?? old.template) }));
       }
@@ -307,6 +335,101 @@ export const ControlStudioPage: React.FC = () => {
       setError(getErrorMessageFromUnknown(caught, tr("Не вдалося згенерувати стартовий код.", "Could not generate starter code.")));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const openTaskTests = async (task: ControlTask) => {
+    if (testEditorTask?.id === task.id) {
+      setTestEditorTask(null);
+      return;
+    }
+    setTestEditorTask(task);
+    setTaskTests([]);
+    setError(null);
+    setTestEditorBusy(true);
+    try {
+      if (preview()) {
+        const count = testCounts[task.id] || 0;
+        setTaskTests(Array.from({ length: count }, (_, index) => ({ id: Date.now() + index, input: `${index + 1}`, expectedOutput: `${index + 1}`, points: 1, source: "AI_GENERATED" } as TestData)));
+      } else {
+        const result = await getTestData(task.id, { limit: 100, offset: 0 });
+        setTaskTests(result.testData || []);
+        setTestCounts(old => ({ ...old, [task.id]: result.pagination?.total ?? result.testData.length }));
+      }
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося завантажити тести.", "Could not load tests.")));
+    } finally {
+      setTestEditorBusy(false);
+    }
+  };
+
+  const addManualTaskTest = async () => {
+    if (!testEditorTask || !manualTest.expectedOutput.trim()) return;
+    setTestEditorBusy(true);
+    setError(null);
+    try {
+      const item = { input: manualTest.input, expectedOutput: manualTest.expectedOutput, points: Math.max(1, Number(manualTest.points) || 1), isHidden: manualTest.isHidden };
+      if (preview()) {
+        setTaskTests(old => [...old, { ...item, id: Date.now(), source: "MANUAL" as const }]);
+      } else {
+        await addTestData(testEditorTask.id, [item]);
+        const refreshed = await getTestData(testEditorTask.id, { limit: 100, offset: 0 });
+        setTaskTests(refreshed.testData || []);
+        setTestCounts(old => ({ ...old, [testEditorTask.id]: refreshed.pagination?.total ?? refreshed.testData.length }));
+      }
+      setManualTest(old => ({ ...old, input: "", expectedOutput: "" }));
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося додати тест.", "Could not add the test.")));
+    } finally {
+      setTestEditorBusy(false);
+    }
+  };
+
+  const removeTaskTest = async (test: TestData) => {
+    if (!testEditorTask) return;
+    setTestEditorBusy(true);
+    setError(null);
+    try {
+      if (preview()) {
+        setTaskTests(old => old.filter(item => item.id !== test.id));
+        setTestCounts(old => ({ ...old, [testEditorTask.id]: Math.max(0, (old[testEditorTask.id] ?? 0) - 1) }));
+      } else {
+        await deleteTestData(testEditorTask.id, test.id);
+        const refreshed = await getTestData(testEditorTask.id, { limit: 100, offset: 0 });
+        setTaskTests(refreshed.testData || []);
+        setTestCounts(old => ({ ...old, [testEditorTask.id]: refreshed.pagination?.total ?? refreshed.testData.length }));
+      }
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося видалити тест.", "Could not delete the test.")));
+    } finally {
+      setTestEditorBusy(false);
+    }
+  };
+
+  const importTaskTests = async () => {
+    if (!testEditorTask || !importFiles.length) return;
+    setTestEditorBusy(true);
+    setError(null);
+    try {
+      const parsed = await importTestsFromInOutFiles(importFiles);
+      const imported = parsed.tests.map(test => ({ input: test.input, expectedOutput: test.expectedOutput, points: 1, isHidden: true }));
+      if (imported.length) {
+        if (preview()) {
+          setTaskTests(old => [...old, ...imported.map((test, index) => ({ ...test, id: Date.now() + index, source: "MANUAL" } as TestData))]);
+        } else {
+          await addTestData(testEditorTask.id, imported);
+          const refreshed = await getTestData(testEditorTask.id, { limit: 100, offset: 0 });
+          setTaskTests(refreshed.testData || []);
+          setTestCounts(old => ({ ...old, [testEditorTask.id]: refreshed.pagination?.total ?? refreshed.testData.length }));
+        }
+      }
+      if (parsed.errors.length) setError(parsed.errors.join("; "));
+      setImportFiles([]);
+      setImportInputKey(old => old + 1);
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося імпортувати тести.", "Could not import tests.")));
+    } finally {
+      setTestEditorBusy(false);
     }
   };
 
@@ -345,25 +468,36 @@ export const ControlStudioPage: React.FC = () => {
               {showCreateTask && (
                 <div className="rounded-2xl border border-accent-warn/20 bg-bg-hover p-5 dark:border-accent-warn/20 dark:bg-[var(--surface-warning)]">
                   <p className="text-sm font-bold">{tr("Нова задача контрольної", "New assessment problem")}</p>
-                  <label className="mt-4 block text-sm font-bold">{tr("Назва", "Title")}<input aria-label={tr("Назва практичної задачі", "Practice problem title")} value={newTask.title} onChange={(event) => setNewTask({ ...newTask, title: event.target.value })} className="mt-2 w-full rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-accent-warn/15 dark:border-white/10 dark:bg-bg-code" /></label>
+                  <label className="mt-4 block text-sm font-bold">{tr("Назва", "Title")}<input required aria-label={tr("Назва практичної задачі", "Practice problem title")} value={newTask.title} onChange={(event) => setNewTask({ ...newTask, title: event.target.value })} className="mt-2 w-full rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-accent-warn/15 dark:border-white/10 dark:bg-bg-code" /></label>
                   <div className="mt-4 flex flex-wrap items-end justify-between gap-3"><p className="flex-1 text-sm font-bold">{tr("Умова", "Problem statement")}</p><button type="button" disabled={busy || !newTask.title.trim()} onClick={() => void generateTaskCondition()} className="classroom-text-button"><Sparkles className="size-4" aria-hidden="true" />{busy ? tr("Генеруємо…", "Generating…") : tr("Згенерувати умову", "Generate statement")}</button></div>
-                  <textarea aria-label={tr("Умова практичної задачі", "Practice problem statement")} value={newTask.description} onChange={(event) => setNewTask({ ...newTask, description: event.target.value })} rows={5} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-accent-warn/15 dark:border-white/10 dark:bg-bg-code" />
+                  <textarea aria-label={tr("Умова практичної задачі", "Practice problem statement")} value={newTask.description} onChange={(event) => setNewTask({ ...newTask, description: event.target.value })} placeholder={tr("Додайте умову самостійно або згенеруйте її за назвою.", "Write the statement or generate it from the title.")} rows={5} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal outline-none focus:ring-4 focus:ring-accent-warn/15 dark:border-white/10 dark:bg-bg-code" />
                   <div className="mt-4 flex flex-wrap items-end justify-between gap-3"><p className="flex-1 text-sm font-bold">{tr("Стартовий код", "Starter code")}</p><button type="button" disabled={busy || !newTask.title.trim()} onClick={() => void generateTaskTemplate()} className="classroom-text-button"><Sparkles className="size-4" aria-hidden="true" />{busy ? tr("Генеруємо…", "Generating…") : tr("Згенерувати код", "Generate code")}</button></div>
-                  <textarea aria-label={tr("Стартовий код практичної задачі", "Practice problem starter code")} value={newTask.template} onChange={(event) => setNewTask({ ...newTask, template: event.target.value })} rows={5} spellCheck={false} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 font-mono text-xs leading-6 outline-none focus:ring-4 focus:ring-accent-warn/15 dark:border-white/10 dark:bg-bg-code" />
+                  <textarea aria-label={tr("Стартовий код практичної задачі", "Practice problem starter code")} value={newTask.template} onChange={(event) => setNewTask({ ...newTask, template: event.target.value })} placeholder={tr("Необов’язково: учень може почати й з порожнього редактора.", "Optional: the student can start from an empty editor.")} rows={5} spellCheck={false} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 font-mono text-xs leading-6 outline-none focus:ring-4 focus:ring-accent-warn/15 dark:border-white/10 dark:bg-bg-code" />
                   <section className="mt-5 rounded-xl border border-border/10 bg-white/60 p-4 dark:border-white/10 dark:bg-black/10" aria-label={tr("Налаштування генератора", "Generator settings")}>
                     <h3 className="text-sm font-bold">{tr("Налаштування генератора", "Generator settings")}</h3>
-                    <p className="mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Ці параметри керують складністю умови й набором тестів для задачі.", "These settings control statement difficulty and the generated test set.")}</p>
+                    <p className="mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Опишіть контекст і правила для ШІ, а тести спрямуйте на конкретні випадки.", "Set the AI context and rules, then point tests at the cases you care about.")}</p>
+                    <label className="mt-3 block text-sm font-semibold">{tr("Що врахувати генератору", "What the generator should consider")}<textarea value={newTask.generationInstructions} onChange={event => setNewTask(old => ({ ...old, generationInstructions: event.target.value }))} rows={4} maxLength={4000} placeholder={tr("Наприклад: для 8 класу; учні знають цикли, але ще не вивчали словники. Сюжет — про шкільну бібліотеку. Не показуй готове рішення.", "For example: for 8th graders who know loops but not dictionaries. Use a school library scenario. Do not reveal the solution.")} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
+                    <p className="mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Можна вказати рівень учнів, навчальну ціль, стиль, тему контексту та заборонені поняття.", "Describe student readiness, learning goals, style, context, or concepts to avoid.")}</p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <label className="text-sm font-semibold">{tr("Складність умови", "Statement difficulty")}<select value={newTask.difficulty} onChange={event => setNewTask(old => ({ ...old, difficulty: event.target.value }))} className="mt-2 w-full rounded-xl border border-border/10 bg-white px-3 py-3 text-sm dark:border-white/10 dark:bg-bg-code"><option value="1">{tr("1 · Початкова", "1 · Introductory")}</option><option value="2">{tr("2 · Легка", "2 · Easy")}</option><option value="3">{tr("3 · Середня", "3 · Medium")}</option><option value="4">{tr("4 · Складна", "4 · Hard")}</option><option value="5">{tr("5 · Поглиблена", "5 · Advanced")}</option></select></label>
-                      <label className="text-sm font-semibold">{tr("Кількість тестів", "Test count")}<input type="number" min="1" max="50" value={newTask.testCount} onChange={event => setNewTask(old => ({ ...old, testCount: event.target.value }))} className="mt-2 w-full rounded-xl border border-border/10 bg-white px-3 py-3 text-sm dark:border-white/10 dark:bg-bg-code" /></label>
+                      <label className="text-sm font-semibold">{tr("Кількість тестів", "Test count")}<input type="number" min="1" max="50" value={testSettings.count} onChange={event => setTestSettings(old => ({ ...old, count: event.target.value }))} className="mt-2 w-full rounded-xl border border-border/10 bg-white px-3 py-3 text-sm dark:border-white/10 dark:bg-bg-code" /></label>
+                      <label className="text-sm font-semibold">{tr("Випадки для тестів · один на рядок", "Test cases · one per line")}<textarea value={testSettings.requiredCases} onChange={event => setTestSettings(old => ({ ...old, requiredCases: event.target.value }))} rows={3} maxLength={4000} placeholder={tr("Мінімальний ввід\nПовторювані значення\nГраничне значення", "Smallest input\nRepeated values\nBoundary value")} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
                     </div>
-                    <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-text-muted dark:text-text-secondary"><input type="checkbox" checked={newTask.replaceGeneratedTests} onChange={event => setNewTask(old => ({ ...old, replaceGeneratedTests: event.target.checked }))} className="mt-0.5 size-4 accent-primary" />{tr("Замінювати попередні AI-тести під час повторної генерації. Ручні тести залишаться.", "Replace previous AI tests when generating again. Manual tests are kept.")}</label>
-                    <p className="mt-3 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Після додавання задачі генератор одразу підготує вказану кількість тестів.", "After adding the problem, the generator will create the selected number of tests.")}</p>
+                    <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-text-muted dark:text-text-secondary"><input type="checkbox" checked={testSettings.replaceGenerated} onChange={event => setTestSettings(old => ({ ...old, replaceGenerated: event.target.checked }))} className="mt-0.5 size-4 accent-primary" />{tr("Замінювати попередні AI-тести під час повторної генерації. Ручні тести залишаться.", "Replace previous AI tests when generating again. Manual tests are kept.")}</label>
+                    <p className="mt-3 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Тести згенеруються автоматично, якщо в задачі вже є умова. Стартовий код необов’язковий.", "Tests will be generated automatically when the task has a statement. Starter code is optional.")}</p>
                   </section>
-                  <button type="button" disabled={busy} onClick={() => void createTask()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground">{busy ? tr("Додаємо…", "Adding…") : tr("Додати до контрольної", "Add to assessment")}</button>
+                  <button type="button" disabled={busy || !newTask.title.trim()} onClick={() => void createTask()} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground">{busy ? tr("Додаємо…", "Adding…") : tr("Додати до контрольної", "Add to assessment")}</button>
                 </div>
               )}
-              {tasks.map((task, index) => <div key={task.id} className="flex items-start gap-4 rounded-2xl bg-bg-hover p-4 dark:bg-white/[.045]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-xs font-extrabold text-accent-warn shadow-sm dark:bg-bg-base dark:text-accent-warn">{String(index + 1).padStart(2, "0")}</span><div className="min-w-0 flex-1"><p className="font-bold">{task.title}</p><p className="mt-1 text-sm leading-6 text-text-muted dark:text-text-secondary">{task.description || tr("Практична частина контрольної.", "Practice section of the assessment.")}</p><div className="mt-3 flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-text-muted dark:text-text-secondary">{tr("Тестів", "Tests")}: {testCounts[task.id] ?? 0}</span><button type="button" disabled={generatingTestsFor !== null || busy} onClick={() => void generateTaskTests(task)} className="classroom-text-button"><Sparkles className="size-3.5" aria-hidden="true" />{generatingTestsFor === task.id ? tr("Генеруємо…", "Generating…") : testCounts[task.id] ? newTask.replaceGeneratedTests ? tr("Замінити AI-тести", "Replace AI tests") : tr("Додати тести", "Add tests") : tr("Згенерувати тести", "Generate tests")}</button></div></div></div>)}
+              {tasks.map((task, index) => <React.Fragment key={task.id}><div className="flex items-start gap-4 rounded-2xl bg-bg-hover p-4 dark:bg-white/[.045]"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-xs font-extrabold text-accent-warn shadow-sm dark:bg-bg-base dark:text-accent-warn">{String(index + 1).padStart(2, "0")}</span><div className="min-w-0 flex-1"><p className="font-bold">{task.title}</p><p className="mt-1 text-sm leading-6 text-text-muted dark:text-text-secondary">{task.description || tr("Практична частина контрольної.", "Practice section of the assessment.")}</p><div className="mt-3 flex flex-wrap items-center gap-3"><span className="text-xs font-semibold text-text-muted dark:text-text-secondary">{tr("Тестів", "Tests")}: {testCounts[task.id] ?? 0}</span><button type="button" disabled={testEditorBusy || busy} onClick={() => void openTaskTests(task)} className="classroom-text-button"><FlaskConical className="size-3.5" aria-hidden="true" />{testEditorTask?.id === task.id ? tr("Закрити тести", "Close tests") : tr("Налаштувати тести", "Manage tests")}</button>{testEditorTask?.id === task.id && <button type="button" disabled={generatingTestsFor !== null || busy || testEditorBusy || !task.description?.trim()} onClick={() => void generateTaskTests(task)} className="classroom-text-button"><Sparkles className="size-3.5" aria-hidden="true" />{generatingTestsFor === task.id ? tr("Генеруємо…", "Generating…") : tr("Згенерувати ще", "Generate more")}</button>}</div></div></div>{testEditorTask?.id === task.id && <section className="ml-12 space-y-4 rounded-2xl border border-border/10 bg-white/70 p-4 dark:border-white/10 dark:bg-black/10" aria-label={tr("Керування тестами", "Test management")}>
+                <div className="flex items-center justify-between gap-3"><h3 className="font-bold">{tr("Тестові дані", "Test cases")}</h3><span className="text-xs text-text-muted dark:text-text-secondary">{testEditorBusy ? tr("Оновлюємо…", "Loading…") : taskTests.length}</span></div>
+                <div className="grid gap-3 sm:grid-cols-[120px_1fr]"><label className="text-xs font-bold">{tr("Кількість тестів", "Test count")}<input type="number" min="1" max="50" value={testSettings.count} onChange={event => setTestSettings(old => ({ ...old, count: event.target.value }))} className="mt-1 w-full rounded-xl border border-border/10 bg-white px-3 py-2 text-sm dark:border-white/10 dark:bg-bg-code" /></label><label className="text-xs font-bold">{tr("Випадки, які мають покрити тести · один на рядок", "Cases to cover · one per line")}<textarea value={testSettings.requiredCases} onChange={event => setTestSettings(old => ({ ...old, requiredCases: event.target.value }))} rows={3} maxLength={4000} className="mt-1 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-2 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label></div>
+                <label className="flex items-center gap-2 text-xs text-text-muted dark:text-text-secondary"><input type="checkbox" checked={testSettings.replaceGenerated} onChange={event => setTestSettings(old => ({ ...old, replaceGenerated: event.target.checked }))} />{tr("Замінювати попередні AI-тести. Ручні тести залишаться.", "Replace previous AI tests. Manual tests are kept.")}</label>
+                {taskTests.map((test, testIndex) => <div key={test.id} className="grid gap-2 rounded-xl bg-bg-hover p-3 text-xs dark:bg-white/[.04] sm:grid-cols-[1fr_1fr_auto]"><div className="min-w-0"><span className="font-bold">{tr("Ввід", "Input")}</span><pre className="mt-1 max-h-20 overflow-auto whitespace-pre-wrap font-mono">{test.input || "∅"}</pre></div><div className="min-w-0"><span className="font-bold">{tr("Очікуваний результат", "Expected output")}</span><pre className="mt-1 max-h-20 overflow-auto whitespace-pre-wrap font-mono">{test.expectedOutput || "∅"}</pre></div><button type="button" disabled={testEditorBusy} onClick={() => void removeTaskTest(test)} className="text-left font-bold text-accent-error sm:text-right">{tr(`Видалити №${testIndex + 1}`, `Delete #${testIndex + 1}`)}</button></div>)}
+                {!taskTests.length && <p className="rounded-xl border border-dashed border-border/15 px-4 py-5 text-center text-sm text-text-muted dark:border-white/10 dark:text-text-secondary">{tr("Тестів поки немає. Згенеруйте їх, додайте вручну або імпортуйте .in/.out файли.", "No tests yet. Generate them, add one manually, or import .in/.out files.")}</p>}
+                <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-bold">{tr("Вхідні дані", "Input")}<textarea value={manualTest.input} onChange={event => setManualTest(old => ({ ...old, input: event.target.value }))} rows={3} className="mt-1 w-full rounded-xl border border-border/10 bg-white p-3 font-mono text-xs dark:border-white/10 dark:bg-bg-code" /></label><label className="text-xs font-bold">{tr("Очікуваний результат", "Expected output")}<textarea value={manualTest.expectedOutput} onChange={event => setManualTest(old => ({ ...old, expectedOutput: event.target.value }))} rows={3} className="mt-1 w-full rounded-xl border border-border/10 bg-white p-3 font-mono text-xs dark:border-white/10 dark:bg-bg-code" /></label></div>
+                <div className="flex flex-wrap items-center gap-3"><label className="text-xs font-semibold">{tr("Балів", "Points")} <input type="number" min="1" value={manualTest.points} onChange={event => setManualTest(old => ({ ...old, points: event.target.value }))} className="ml-1 w-16 rounded-lg border border-border/10 bg-white px-2 py-1.5 dark:border-white/10 dark:bg-bg-code" /></label><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={manualTest.isHidden} onChange={event => setManualTest(old => ({ ...old, isHidden: event.target.checked }))} />{tr("Прихований тест", "Hidden test")}</label><button type="button" disabled={testEditorBusy || !manualTest.expectedOutput.trim()} onClick={() => void addManualTaskTest()} className="classroom-button">{tr("Додати тест вручну", "Add test manually")}</button></div>
+                <div className="flex flex-wrap items-center gap-3 border-t border-border/10 pt-3 dark:border-white/10"><label className="inline-flex items-center gap-2 text-xs font-semibold"><Upload className="size-4" />{tr("Імпорт .in/.out", "Import .in/.out")}<input key={importInputKey} type="file" accept=".in,.out" multiple className="max-w-48 text-xs" onChange={event => setImportFiles(Array.from(event.target.files || []))} /></label><button type="button" disabled={testEditorBusy || !importFiles.length} onClick={() => void importTaskTests()} className="classroom-button">{tr("Імпортувати", "Import files")}</button></div>
+              </section>}</React.Fragment>)}
               {!tasks.length && <p className="rounded-2xl border border-dashed border-border/15 px-5 py-8 text-center text-sm text-text-muted dark:border-white/10 dark:text-text-secondary">{tr("Практичних задач ще немає.", "No practice problems yet.")}</p>}
             </div>
           </section>

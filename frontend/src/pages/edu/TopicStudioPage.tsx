@@ -218,6 +218,7 @@ export const TopicStudioPage: React.FC = () => {
   const [testNotice, setTestNotice] = React.useState<string | null>(null);
   const [testGenerationCount, setTestGenerationCount] = React.useState("5");
   const [replaceGeneratedTests, setReplaceGeneratedTests] = React.useState(true);
+  const [testCoverage, setTestCoverage] = React.useState("");
   const [importFiles, setImportFiles] = React.useState<File[]>([]);
   const [importPoints, setImportPoints] = React.useState("1");
   const [importIsHidden, setImportIsHidden] = React.useState(false);
@@ -234,7 +235,7 @@ export const TopicStudioPage: React.FC = () => {
     theory: "",
     projectSpecJson: "",
   });
-  const [generatorDifficulty, setGeneratorDifficulty] = React.useState("3");
+  const [generationInstructions, setGenerationInstructions] = React.useState("");
   const [controlForm, setControlForm] = React.useState({
     title: "",
     timeLimitMinutes: "45",
@@ -274,6 +275,7 @@ export const TopicStudioPage: React.FC = () => {
     setEditorTab("statement");
     setEditingTaskId(null);
     setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "" });
+    setGenerationInstructions("");
     setMode("task");
   };
 
@@ -290,6 +292,7 @@ export const TopicStudioPage: React.FC = () => {
       theory: task.theory?.content || "",
       projectSpecJson: task.projectSpec ? JSON.stringify(task.projectSpec, null, 2) : "",
     });
+    setGenerationInstructions("");
     setMode("task");
   };
 
@@ -316,7 +319,7 @@ export const TopicStudioPage: React.FC = () => {
       const response = await api.post(`/topics/${id}/tasks/generate-condition`, {
         taskTitle: taskForm.title.trim(),
         taskType: "PRACTICE",
-        difficulty: Math.max(1, Math.min(5, Number(generatorDifficulty) || 3)),
+        generationGuidance: generationInstructions.trim(),
         language: isEn ? "en" : "uk",
       });
       setTaskForm((old) => ({ ...old, description: String(response.data?.description ?? old.description) }));
@@ -342,6 +345,7 @@ export const TopicStudioPage: React.FC = () => {
         taskTitle: taskForm.title.trim(),
         description: taskForm.description,
         language: isEn ? "en" : "uk",
+        generationGuidance: generationInstructions.trim(),
       });
       setTaskForm((old) => ({ ...old, template: String(response.data?.template ?? old.template) }));
     } catch (caught) {
@@ -366,7 +370,7 @@ export const TopicStudioPage: React.FC = () => {
         taskTitle: taskForm.title.trim(),
         taskDescription: taskForm.description,
         taskType: "PRACTICE",
-        difficulty: Math.max(1, Math.min(5, Number(generatorDifficulty) || 3)),
+        generationGuidance: generationInstructions.trim(),
         language: isEn ? "en" : "uk",
       });
       setTaskForm((old) => ({ ...old, theory: String(response.data?.theory ?? old.theory) }));
@@ -381,6 +385,7 @@ export const TopicStudioPage: React.FC = () => {
     setSelectedTask(task);
     setTestNotice(null);
     setImportFiles([]);
+    setTestCoverage("");
     setMode("tests");
     try {
       if (preview()) {
@@ -417,7 +422,8 @@ export const TopicStudioPage: React.FC = () => {
         setTestNotice(tr(`Додано ${count} демонстраційних тестів.`, `Added ${count} demo tests.`));
         return;
       }
-      const result = await generateTestData(selectedTask.id, count, { replaceGenerated: replaceGeneratedTests });
+      const requiredCases = testCoverage.split(/\r?\n/).map(value => value.trim().slice(0, 240)).filter(Boolean).slice(0, 24);
+      const result = await generateTestData(selectedTask.id, count, { replaceGenerated: replaceGeneratedTests, requiredCases });
       await reloadTests(selectedTask.id);
       setTestNotice(tr(`Згенеровано ${result.count} тестів${result.skippedDuplicates ? `; дублі пропущено: ${result.skippedDuplicates}` : ""}.`, `Generated ${result.count} tests${result.skippedDuplicates ? `; skipped duplicates: ${result.skippedDuplicates}` : ""}.`));
     } catch (caught) {
@@ -782,7 +788,9 @@ export const TopicStudioPage: React.FC = () => {
 
   if (!topic) return <div className={root}><div className="mx-auto max-w-[1480px]">{error || tr("Тему не знайдено.", "Topic not found.")}</div></div>;
 
-  const tasks = topic.tasks || [];
+  // Control-work practice tasks are also stored in topic.tasks. Keep them in
+  // the Control Studio list and out of the topic's regular practice tab.
+  const tasks = (topic.tasks || []).filter((task) => task.type !== "CONTROL");
   const controls = topic.controlWorks || [];
   const assignedTasks = tasks.filter((task) => task.isAssigned).length;
 
@@ -791,7 +799,7 @@ export const TopicStudioPage: React.FC = () => {
       <ClassWorkspaceFrame classId={topic.class?.id || "0"} className={topic.class?.name || tr("Клас", "Class")} active="learning">
         <header className="classroom-heading">
           <div><p>{tr("Теми та завдання", "Topics and tasks")} / {tr("Тема", "Topic")}</p><h1>{topic.title}</h1><span>{topic.description || tr("Матеріали та завдання для учнів класу.", "Materials and tasks for your class.")}</span></div>
-          <div className="classroom-actions"><button type="button" className="classroom-button" onClick={openControlBuilder}><ClipboardCheck className="size-4" aria-hidden="true" />{tr("Контрольна", "Assessment")}</button><button type="button" className="classroom-button classroom-button--primary" onClick={openTaskBuilder}><Plus className="size-4" aria-hidden="true" />{tr("Додати завдання", "Add task")}</button>{topic.class?.id && <button type="button" disabled={busy} onClick={() => void deleteTopic()} className="classroom-text-button classroom-text-button--danger"><Trash2 className="size-4" aria-hidden="true" />{tr("Видалити тему", "Delete topic")}</button>}</div>
+          <div className="classroom-actions">{topic.class?.id && <button type="button" className="classroom-button classroom-button--danger" disabled={busy} onClick={() => void deleteTopic()}><Trash2 className="size-4" aria-hidden="true" />{tr("Видалити тему", "Delete topic")}</button>}<button type="button" className="classroom-button" onClick={openControlBuilder}><ClipboardCheck className="size-4" aria-hidden="true" />{tr("Контрольна", "Assessment")}</button><button type="button" className="classroom-button classroom-button--primary" onClick={openTaskBuilder}><Plus className="size-4" aria-hidden="true" />{tr("Додати завдання", "Add task")}</button></div>
         </header>
         <div className="classroom-facts"><span className="classroom-language">{topic.language}</span><span>{tr("Завдання", "Tasks")}: {tasks.length}</span><span><span className="classroom-status-dot" />{tr("Відкрито учням", "Open to students")}: {assignedTasks}</span></div>
         {error && <div className="classroom-notice classroom-notice--error" role="alert">{error}</div>}
@@ -809,7 +817,7 @@ export const TopicStudioPage: React.FC = () => {
           {!tasks.filter(task => task.title.toLocaleLowerCase().includes(taskQuery.toLocaleLowerCase()) && (taskFilter === "all" || (taskFilter === "assigned" ? task.isAssigned : !task.isAssigned))).length && <div className="classroom-empty"><TerminalSquare className="size-6" aria-hidden="true" /><strong>{tasks.length ? tr("Завдань не знайдено", "No matching tasks") : tr("Почніть із першого завдання", "Start with your first task")}</strong><p>{tasks.length ? tr("Змініть пошук або фільтр.", "Change the search or filter.") : tr("Додайте умову, теорію та тести для перевірки.", "Add a problem statement, theory, and test cases.")}</p></div>}
           <button type="button" className="classroom-add-row" onClick={openTaskBuilder}><Plus className="size-4" aria-hidden="true" />{tr("Додати завдання", "Add task")}</button>
           <p className="classroom-list-hint">{tr("Натисніть назву, щоб редагувати. Стрілка праворуч відкриває доступ, дедлайн і тести.", "Select a title to edit. The arrow on the right opens access, deadline, and test settings.")}</p>
-        </section> : <section role="tabpanel" id="topic-panel-controls" aria-labelledby="topic-tab-controls" className="classroom-task-workspace"><div className="classroom-toolbar"><p className="classroom-caption">{tr("Перевірка знань із теми", "Assess knowledge of this topic")}</p></div>{controls.map(control => <article key={control.id} className="classroom-assessment"><span className="classroom-assessment__icon"><ClipboardCheck className="size-5" aria-hidden="true" /></span><div><h2>{control.title || tr("Контрольна робота", "Assessment")}</h2><p>{control.timeLimitMinutes ? `${control.timeLimitMinutes} ${tr("хвилин", "minutes")}` : tr("Без обмеження часу", "No time limit")}</p></div><span className={`classroom-status ${control.isAssigned ? "is-open" : ""}`}><i aria-hidden="true" />{control.isAssigned ? tr("Відкрито", "Open") : tr("Чернетка", "Draft")}</span><div className="classroom-actions"><button type="button" className="classroom-button" disabled={assignmentBusyId === control.id} onClick={() => void toggleControl(control)}>{control.isAssigned ? tr("Закрити доступ", "Close access") : tr("Відкрити учням", "Open to students")}</button><button type="button" className="classroom-text-button" onClick={() => navigate(withDevPreview(`/edu/control-works/${control.id}`))}>{tr("Налаштувати", "Configure")}<ArrowRight className="size-4" aria-hidden="true" /></button><button type="button" className="classroom-text-button classroom-text-button--danger" disabled={assignmentBusyId === control.id} onClick={() => void deleteControl(control)} aria-label={tr("Видалити контрольну", "Delete assessment")}><Trash2 className="size-4" aria-hidden="true" />{tr("Видалити", "Delete")}</button></div></article>)}{!controls.length && <div className="classroom-empty"><ClipboardCheck className="size-6" aria-hidden="true" /><strong>{tr("Контрольних ще немає", "No assessments yet")}</strong><p>{tr("Створіть контрольну, коли матеріали теми будуть готові.", "Create an assessment when the topic materials are ready.")}</p></div>}<button type="button" className="classroom-add-row" onClick={openControlBuilder}><Plus className="size-4" aria-hidden="true" />{tr("Створити контрольну", "Create assessment")}</button></section>}
+        </section> : <section role="tabpanel" id="topic-panel-controls" aria-labelledby="topic-tab-controls" className="classroom-task-workspace"><div className="classroom-toolbar"><p className="classroom-caption">{tr("Перевірка знань із теми", "Assess knowledge of this topic")}</p></div>{controls.map(control => <article key={control.id} className="classroom-assessment"><span className="classroom-assessment__icon"><ClipboardCheck className="size-5" aria-hidden="true" /></span><div><h2>{control.title || tr("Контрольна робота", "Assessment")}</h2><p>{control.timeLimitMinutes ? `${control.timeLimitMinutes} ${tr("хвилин", "minutes")}` : tr("Без обмеження часу", "No time limit")}</p></div><span className={`classroom-status ${control.isAssigned ? "is-open" : ""}`}><i aria-hidden="true" />{control.isAssigned ? tr("Відкрито", "Open") : tr("Чернетка", "Draft")}</span><div className="classroom-actions"><button type="button" className="classroom-button" disabled={assignmentBusyId === control.id} onClick={() => void toggleControl(control)}>{control.isAssigned ? tr("Закрити доступ", "Close access") : tr("Відкрити учням", "Open to students")}</button><button type="button" className="classroom-text-button" onClick={() => navigate(withDevPreview(`/edu/control-works/${control.id}`))}>{tr("Налаштувати", "Configure")}<ArrowRight className="size-4" aria-hidden="true" /></button><button type="button" className="classroom-text-button classroom-text-button--danger" disabled={assignmentBusyId === control.id} onClick={() => void deleteControl(control)} aria-label={tr(`Видалити контрольну ${control.title || ""}`, `Delete assessment ${control.title || ""}`)}><Trash2 className="size-4" aria-hidden="true" />{tr("Видалити", "Delete")}</button></div></article>)}{!controls.length && <div className="classroom-empty"><ClipboardCheck className="size-6" aria-hidden="true" /><strong>{tr("Контрольних ще немає", "No assessments yet")}</strong><p>{tr("Створіть контрольну, коли матеріали теми будуть готові.", "Create an assessment when the topic materials are ready.")}</p></div>}<button type="button" className="classroom-add-row" onClick={openControlBuilder}><Plus className="size-4" aria-hidden="true" />{tr("Створити контрольну", "Create assessment")}</button></section>}
 
 
         {mode === "task" && (
@@ -821,7 +829,7 @@ export const TopicStudioPage: React.FC = () => {
                 {editorTab === "statement" && <><div className="classroom-toolbar"><label className="task-authoring__label" htmlFor="topic-task-description">{tr("Що потрібно зробити учню", "What the student needs to do")}</label><button type="button" className="classroom-text-button" disabled={!!aiBusy || !taskForm.title.trim()} onClick={() => void generateCondition()}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "condition" ? tr("Генеруємо…", "Generating…") : tr("Допомога AI", "AI assistance")}</button></div><textarea id="topic-task-description" name="taskDescription" value={taskForm.description} onChange={event => setTaskForm({ ...taskForm, description: event.target.value })} placeholder={tr("Опишіть завдання, вхідні та вихідні дані, обмеження й приклади.", "Describe the problem, input, output, constraints, and examples.")} rows={13} disabled={busy} /><p className="classroom-caption">{tr("Підтримуються Markdown, приклади коду та математичні формули.", "Supports Markdown, code examples, and mathematical formulae.")}</p><details className="task-authoring__preview"><summary>{tr("Переглянути як учень", "Preview as a student")}</summary><MarkdownView content={taskForm.description || tr("Тут з’явиться умова завдання.", "The problem statement will appear here.")} /></details></>}
                 {editorTab === "code" && <><div className="classroom-toolbar"><label className="task-authoring__label" htmlFor="topic-task-template">{tr("Код, із якого учень почне розв’язання", "Code the student starts with")}</label><button type="button" className="classroom-text-button" disabled={!!aiBusy || !taskForm.title.trim()} onClick={() => void generateTemplate()}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "template" ? tr("Генеруємо…", "Generating…") : tr("Згенерувати", "Generate")}</button></div><textarea id="topic-task-template" name="taskTemplate" value={taskForm.template} onChange={event => setTaskForm({ ...taskForm, template: event.target.value })} rows={14} spellCheck={false} className="task-authoring__code" disabled={busy} /><p className="classroom-caption">{tr("Необов’язково. Можна залишити редактор учня порожнім.", "Optional. You can leave the student editor empty.")}</p></>}
                 {editorTab === "theory" && <><div className="classroom-toolbar"><label className="task-authoring__label" htmlFor="topic-task-theory">{tr("Пояснення перед практикою", "Explanation before practice")}</label><button type="button" className="classroom-text-button" disabled={!!aiBusy || !taskForm.description.trim()} onClick={() => void generateTheory()}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "theory" ? tr("Генеруємо…", "Generating…") : tr("Допомога AI", "AI assistance")}</button></div><textarea id="topic-task-theory" name="taskTheory" value={taskForm.theory} onChange={event => setTaskForm({ ...taskForm, theory: event.target.value })} rows={13} placeholder={tr("Додайте поняття, приклад і підказки для самостійної роботи.", "Add concepts, an example, and guidance for independent work.")} disabled={busy} /><details className="task-authoring__preview"><summary>{tr("Переглянути теорію", "Preview theory")}</summary><MarkdownView content={taskForm.theory || tr("Теорію ще не додано.", "No theory added yet.")} /></details></>}
-                {editorTab === "settings" && <><label className="task-authoring__label" htmlFor="topic-task-max-attempts">{tr("Максимальна кількість спроб", "Maximum attempts")}</label><input id="topic-task-max-attempts" name="maxAttempts" type="number" min="1" required value={taskForm.maxAttempts} onChange={event => setTaskForm({ ...taskForm, maxAttempts: event.target.value })} className="task-authoring__attempts" disabled={busy} /><p className="classroom-caption">{tr("Скільки разів учень може надіслати розв’язання на перевірку.", "How many times a student can submit a solution for checking.")}</p><label className="task-authoring__label" htmlFor="topic-task-generator-difficulty">{tr("Складність генерації", "Generation difficulty")}<select id="topic-task-generator-difficulty" value={generatorDifficulty} onChange={event => setGeneratorDifficulty(event.target.value)} className="task-authoring__attempts"><option value="1">{tr("1 · Початкова", "1 · Introductory")}</option><option value="2">{tr("2 · Легка", "2 · Easy")}</option><option value="3">{tr("3 · Середня", "3 · Medium")}</option><option value="4">{tr("4 · Складна", "4 · Hard")}</option><option value="5">{tr("5 · Поглиблена", "5 · Advanced")}</option></select></label><p className="classroom-caption">{tr("Складність застосовується до умови й теорії, які створює генератор.", "This setting applies to generated problem statements and theory.")}</p><details className="task-authoring__advanced" open={!!taskForm.projectSpecJson}><summary>{tr("Налаштування мініпроєкту", "Mini-project settings")}</summary><p className="classroom-caption">{tr("Для завдань з етапами та окремими критеріями. Вставте наявну специфікацію проєкту у форматі JSON.", "For tasks with milestones and individual criteria. Paste an existing project specification in JSON format.")}</p><label className="task-authoring__label" htmlFor="topic-task-project-spec">{tr("Специфікація мініпроєкту JSON", "Mini project JSON specification")}</label><textarea id="topic-task-project-spec" name="projectSpecJson" value={taskForm.projectSpecJson} onChange={event => setTaskForm({ ...taskForm, projectSpecJson: event.target.value })} rows={9} spellCheck={false} className="task-authoring__code" disabled={busy} /></details></>}
+                {editorTab === "settings" && <><label className="task-authoring__label" htmlFor="topic-task-ai-guidance">{tr("Що врахувати генератору", "What the generator should consider")}</label><textarea id="topic-task-ai-guidance" name="generationGuidance" value={generationInstructions} onChange={event => setGenerationInstructions(event.target.value)} rows={5} maxLength={4000} placeholder={tr("Наприклад: для учнів 8 класу, які вже знають цикли, але ще не вивчали словники. Використай сюжет про шкільну бібліотеку; не показуй готовий алгоритм.", "For example: for 8th graders who know loops but have not studied dictionaries. Use a school library scenario; do not reveal the complete algorithm.")} className="task-authoring__code" disabled={busy} /><p className="classroom-caption">{tr("Вкажіть клас і підготовку учнів, навчальну ціль, бажаний контекст, стиль або обмеження. Це врахують генерація умови, коду й теорії.", "Describe the students’ level, learning goal, preferred context, style, or constraints. Statement, code, and theory generation will use these instructions.")}</p><label className="task-authoring__label" htmlFor="topic-task-max-attempts">{tr("Максимальна кількість спроб", "Maximum attempts")}</label><input id="topic-task-max-attempts" name="maxAttempts" type="number" min="1" required value={taskForm.maxAttempts} onChange={event => setTaskForm({ ...taskForm, maxAttempts: event.target.value })} className="task-authoring__attempts" disabled={busy} /><p className="classroom-caption">{tr("Скільки разів учень може надіслати розв’язання на перевірку.", "How many times a student can submit a solution for checking.")}</p><details className="task-authoring__advanced" open={!!taskForm.projectSpecJson}><summary>{tr("Налаштування мініпроєкту", "Mini-project settings")}</summary><p className="classroom-caption">{tr("Для завдань з етапами та окремими критеріями. Вставте наявну специфікацію проєкту у форматі JSON.", "For tasks with milestones and individual criteria. Paste an existing project specification in JSON format.")}</p><label className="task-authoring__label" htmlFor="topic-task-project-spec">{tr("Специфікація мініпроєкту JSON", "Mini project JSON specification")}</label><textarea id="topic-task-project-spec" name="projectSpecJson" value={taskForm.projectSpecJson} onChange={event => setTaskForm({ ...taskForm, projectSpecJson: event.target.value })} rows={9} spellCheck={false} className="task-authoring__code" disabled={busy} /></details></>}
               </div>
               <div className="task-authoring__footer"><button type="button" className="classroom-button" disabled={busy} onClick={() => { setMode(null); setEditingTaskId(null); }}>{tr("Скасувати", "Cancel")}</button><button type="submit" className="classroom-button classroom-button--primary" disabled={busy || !!aiBusy || !taskForm.title.trim()}>{busy ? tr("Зберігаємо…", "Saving…") : tr("Зберегти й налаштувати тести", "Save and configure tests")}<ArrowRight className="size-4" aria-hidden="true" /></button></div>
             </form>
@@ -928,6 +936,8 @@ export const TopicStudioPage: React.FC = () => {
                     <input name="replaceGeneratedTests" type="checkbox" checked={replaceGeneratedTests} onChange={(event) => setReplaceGeneratedTests(event.target.checked)} />
                     {tr("Замінювати попередні AI-тести", "Replace previous AI tests")}
                   </label>
+                  <label className="mt-3 block text-xs font-bold text-text-muted dark:text-text-secondary" htmlFor="topic-test-coverage">{tr("Що мають покрити тести? Додайте по одному випадку в рядок.", "What should the tests cover? Add one case per line.")}</label>
+                  <textarea id="topic-test-coverage" value={testCoverage} onChange={event => setTestCoverage(event.target.value)} rows={4} maxLength={4000} placeholder={tr("Наприклад:\n- мінімальний допустимий ввід\n- однакові значення\n- велике значення на межі обмежень", "For example:\n- smallest valid input\n- repeated values\n- a large value at the constraint boundary")} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-bg-code" />
                 </div>
                 <div className="rounded-2xl border border-border/10 bg-bg-hover p-4 dark:border-white/10 dark:bg-white/[.04]">
                   <div className="flex items-start gap-3">
