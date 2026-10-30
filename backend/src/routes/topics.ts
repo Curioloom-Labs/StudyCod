@@ -14,6 +14,7 @@ import { User } from "../entities/User";
 import { SummaryGrade } from "../entities/SummaryGrade";
 import { EduGrade } from "../entities/EduGrade";
 import { TestData } from "../entities/TestData";
+import { LessonAttempt } from "../entities/LessonAttempt";
 import { emailService } from "../services/emailService";
 import { safeAICall, sendAIError } from "../services/ai/safeAICall";
 import { translateSingleTopicTitleUkToEn as translateSingleTopicTitleUkToEnService } from "../services/translation/topicTitleTranslator";
@@ -28,6 +29,7 @@ import { authorizeClassForReq } from "../middleware/orgContext";
 import type { LibraryTaskProjectSpec } from "../entities/LibraryTask";
 import { env } from "../env";
 import { normalizeTopicLanguage } from "../utils/topicLanguage";
+import { writeAudit } from "../services/audit/auditLog";
 import {
   assignmentSchema,
   createControlWorkSchema,
@@ -383,6 +385,42 @@ topicsRouter.get("/:topicId", authRequired, async (req: AuthRequest, res: Respon
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
+  }
+});
+topicsRouter.delete("/:topicId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const topicId = Number(req.params.topicId);
+    if (!Number.isSafeInteger(topicId) || topicId <= 0) return res.status(400).json({ message: "INVALID_TOPIC_ID" });
+    if (!req.userId || req.userType === "STUDENT" || req.studentId) return res.status(403).json({ message: "ONLY_TEACHERS_CAN_DELETE_TOPICS" });
+
+    const user = await userRepo().findOne({ where: { id: req.userId } });
+    if (!user || user.userMode !== "EDUCATIONAL") return res.status(403).json({ message: "ONLY_TEACHERS_CAN_DELETE_TOPICS" });
+
+    const topic = await topicRepo().findOne({ where: { id: topicId }, relations: ["class"] });
+    if (!topic) return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
+    if (topic.class) {
+      const access = await authorizeClassForReq(req, topic.class.id, "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    } else if (req.userRole !== "SYSTEM_ADMIN") {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
+    }
+
+    await AppDataSource.getRepository(TopicNew).delete({ id: topicId });
+    await writeAudit({
+      actorType: "USER",
+      actorId: req.userId,
+      action: "topic.delete",
+      targetType: "topic",
+      targetId: topicId,
+      orgId: topic.class?.organizationId ?? null,
+      requestId: req.requestId,
+      ip: req.ip,
+    });
+    return res.json({ deleted: true, topicId });
+  } catch (error: unknown) {
+    logger.error("[topics] Error deleting topic", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 topicsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => {
@@ -2166,21 +2204,12 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
         message: "TASK_NOT_FOUND"
       });
     }
+    if (task.type === "CONTROL") return res.status(409).json({ message: "CONTROL_TASK_DELETE_WITH_ASSESSMENT" });
     if (task.topic.class) {
-      const cls = await classRepo().findOne({
-        where: {
-          id: task.topic.class.id,
-          teacher: {
-            id: req.userId
-          }
-        }
-      });
-      if (!cls) {
-        return res.status(403).json({
-          message: "ACCESS_DENIED"
-        });
-      }
-    } else {
+      const access = await authorizeClassForReq(req, task.topic.class.id, "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    } else if (req.userRole !== "SYSTEM_ADMIN") {
       const cls = await classRepo().findOne({
         where: {
           teacher: { id: req.userId }
@@ -2192,17 +2221,14 @@ topicsRouter.delete("/:topicId/tasks/:taskId", authRequired, async (req: AuthReq
         });
       }
     }
-    const gradeRepo = () => AppDataSource.getRepository(EduGrade);
-
-    await gradeRepo().delete({
-      topicTask: {
-        id: taskId
-      }
+    await AppDataSource.transaction(async (manager) => {
+      await manager.getRepository(EduGrade).delete({ topicTask: { id: taskId } });
+      await manager.getRepository(TopicTask).delete({ id: taskId });
     });
-    if (task.theory) {
-      await theoryRepo().remove(task.theory);
-    }
-    await taskRepo().remove(task);
+    await writeAudit({
+      actorType: "USER", actorId: req.userId!, action: "edu.topic_task.delete", targetType: "topic_task", targetId: taskId,
+      orgId: task.topic.class?.organizationId ?? null, requestId: req.requestId, ip: req.ip,
+    });
     res.json({
       message: "TASK_DELETED"
     });
@@ -2243,53 +2269,23 @@ topicsRouter.delete("/control-works/:controlWorkId", authRequired, async (req: A
       });
     }
     if (controlWork.topic.class) {
-      const cls = await classRepo().findOne({
-        where: {
-          id: controlWork.topic.class.id,
-          teacher: {
-            id: req.userId
-          }
-        }
-      });
-      if (!cls) {
-        return res.status(403).json({
-          message: "ACCESS_DENIED"
-        });
-      }
-    } else {
-      const cls = await classRepo().findOne({
-        where: {
-          teacher: { id: req.userId }
-        }
-      });
-      if (!cls) {
-        return res.status(403).json({
-          message: "ACCESS_DENIED"
-        });
-      }
+      const access = await authorizeClassForReq(req, controlWork.topic.class.id, "CONTENT_AUTHOR");
+      if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
+      if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    } else if (req.userRole !== "SYSTEM_ADMIN") {
+      return res.status(403).json({ message: "ACCESS_DENIED" });
     }
-    const summaryGradeRepo = () => AppDataSource.getRepository(SummaryGrade);
-    await summaryGradeRepo().delete({
-      controlWork: {
-        id: controlWorkId
-      }
+    const activeAttempts = await AppDataSource.getRepository(LessonAttempt).count({
+      where: { controlWork: { id: controlWorkId }, status: "IN_PROGRESS" },
     });
-    const controlTasks = (controlWork.topic.tasks || []).filter(t => t.type === "CONTROL");
-    const taskIds = controlTasks.map(t => t.id);
-    if (taskIds.length > 0) {
-      const gradeRepo = () => AppDataSource.getRepository(EduGrade);
-      for (const taskId of taskIds) {
-        await gradeRepo().delete({
-          topicTask: {
-            id: taskId
-          }
-        });
-      }
-    }
-    await controlWorkRepo().remove(controlWork);
-    res.json({
-      message: "CONTROL_WORK_DELETED"
+    if (activeAttempts > 0) return res.status(409).json({ message: "ASSESSMENT_IN_PROGRESS" });
+
+    await AppDataSource.getRepository(ControlWork).delete({ id: controlWorkId });
+    await writeAudit({
+      actorType: "USER", actorId: req.userId!, action: "edu.control_work.delete", targetType: "control_work", targetId: controlWorkId,
+      orgId: controlWork.topic.class?.organizationId ?? null, requestId: req.requestId, ip: req.ip,
     });
+    return res.json({ message: "CONTROL_WORK_DELETED", deleted: true, controlWorkId });
   } catch (error: unknown) {
     logger.error("[topics] Error deleting control work", { requestId: req.requestId, err: error });
     res.status(500).json({

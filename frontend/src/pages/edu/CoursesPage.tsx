@@ -7,6 +7,7 @@ import { api } from "../../lib/api/client";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
+import { requestUserProfileRefresh } from "../../lib/api/profile";
 
 interface Org {
   orgId: number;
@@ -64,6 +65,7 @@ export const CoursesPage: React.FC = () => {
     setBusy(true);
     try {
       const { data } = await api.post(`/edu/orgs`, { name: orgName.trim() });
+      requestUserProfileRefresh();
       const org = data?.org;
       setOrgs(prev => [...prev, { orgId: org.id, role: "ORG_ADMIN", name: org.name }]);
       setActiveOrg(org.id);

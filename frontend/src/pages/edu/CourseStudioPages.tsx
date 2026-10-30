@@ -2,7 +2,7 @@ import React from "react";
 import { Modal } from "../../components/ui/Modal";
 import "./eduWorkspace.css";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, Eye, FileText, FolderPlus, GraduationCap, Layers3, LoaderCircle, Pencil, Plus, Save, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, Eye, FileText, FolderPlus, GraduationCap, Layers3, LoaderCircle, Pencil, Plus, Save, Sparkles, Trash2 } from "lucide-react";
 import { api } from "../../lib/api/client";
 import { MarkdownView } from "../../components/MarkdownView";
 import { LessonBlocksEditor } from "../../components/lesson/LessonBlocksEditor";
@@ -12,6 +12,7 @@ import { interactiveLessonToMarkdown, normalizeInteractiveLesson, type Interacti
 import { isOlympiadPracticeContractText, OlympiadPracticeContractEditor } from "../../components/edu/OlympiadPracticeContractEditor";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { getClasses, type Class } from "../../lib/api/edu";
+import { requestUserProfileRefresh } from "../../lib/api/profile";
 import { createOlympiadPracticeContractDraft, validateOlympiadPracticeContractDraft } from "../../lib/edu/olympiadPracticeContract";
 import { emptyCourseQuizQuestion, normalizeCourseQuiz, serializeCourseQuiz, validateCourseQuiz, type CourseQuizQuestionDraft } from "../../lib/courseQuiz";
 import { useTranslation } from "react-i18next";
@@ -164,6 +165,7 @@ export const CourseStudioPage: React.FC = () => {
           setCourses([]);
         } else {
           const { data } = await api.post("/edu/orgs", { name: name.trim() });
+          requestUserProfileRefresh();
           const created = { orgId: data.org.id, role: "ORG_ADMIN", name: data.org.name };
           setOrgs((old) => [...old, created]);
           await chooseOrg(created.orgId);
@@ -287,6 +289,19 @@ export const CourseStudioDetailPage: React.FC = () => {
     } finally { setBusy(false); }
   };
 
+  const deleteCourse = async () => {
+    if (!course || course.isSourceManagedCourse) return;
+    if (!window.confirm(tr(`Видалити курс «${course.title}» і його шаблон? Копії, вже призначені класам, залишаться у класах.`, `Delete the “${course.title}” course template? Copies already assigned to classes will remain in those classes.`))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (!review()) await api.delete(`/edu/courses/${numericId}`);
+      navigate(`/edu/courses${review() ? "?preview=true" : ""}`);
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося видалити курс.", "Could not delete the course.")));
+    } finally { setBusy(false); }
+  };
+
   const addModule = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!course || !moduleTitle.trim()) return;
@@ -320,6 +335,24 @@ export const CourseStudioDetailPage: React.FC = () => {
       }
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, tr("Не вдалося зберегти модуль.", "Could not save the module.")));
+    } finally { setBusy(false); }
+  };
+
+  const deleteModule = async (module: CourseModule) => {
+    if (!course || course.isSourceManagedCourse) return;
+    if (!window.confirm(tr(`Видалити модуль «${module.title}» разом із ${module.items.length} елементами?`, `Delete module “${module.title}” and its ${module.items.length} items?`))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (review()) {
+        setCourse({ ...course, modules: course.modules.filter((entry) => entry.id !== module.id) });
+        setExpanded((current) => current === module.id ? null : current);
+      } else {
+        await api.delete(`/edu/modules/${module.id}`);
+        await load();
+      }
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося видалити модуль.", "Could not delete the module.")));
     } finally { setBusy(false); }
   };
 
@@ -539,6 +572,25 @@ export const CourseStudioDetailPage: React.FC = () => {
     } finally { setBusy(false); }
   };
 
+  const deleteItem = async (module: CourseModule, item: CourseItem) => {
+    if (!course || course.isSourceManagedCourse) return;
+    if (!window.confirm(tr(`Видалити «${item.title}» із курсу?`, `Remove “${item.title}” from the course?`))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (review()) {
+        setCourse({ ...course, modules: course.modules.map((entry) => entry.id === module.id ? { ...entry, items: entry.items.filter((candidate) => candidate.id !== item.id) } : entry) });
+      } else {
+        await api.delete(`/edu/items/${item.id}`);
+        await load();
+      }
+      if (editingItemId === item.id) setEditingItemId(null);
+      if (previewItem?.id === item.id) setPreviewItem(null);
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося видалити елемент.", "Could not delete the course item.")));
+    } finally { setBusy(false); }
+  };
+
   const moveItem = async (module: CourseModule, index: number, direction: -1 | 1) => {
     const orderedItems = module.items.slice().sort((a, b) => a.order - b.order || a.id - b.id);
     const otherIndex = index + direction;
@@ -592,7 +644,7 @@ export const CourseStudioDetailPage: React.FC = () => {
   if (loading) return <Page eyebrow="EDU / course" title={tr("Відкриваємо структуру", "Loading course")}><div className="h-80 animate-pulse rounded-[28px] bg-bg-hover dark:bg-white/[.05]" /></Page>;
   if (!course) return <Page eyebrow="EDU / course" title={tr("Курс недоступний", "Course unavailable")}><p className="rounded-2xl bg-accent-error/10 p-4 text-accent-error">{error || tr("Курс не знайдено.", "Course not found.")}</p></Page>;
 
-  return <Page eyebrow={`EDU / ${course.variants?.[0]?.runtime ?? "COURSE"}`} title={course.title} description={course.description || tr("Впорядкуй матеріал, практику й перевірки за модулями, а потім признач курс класу.", "Organize material, practice, and checks into modules, then assign the course to a class.")} showAssignment={!course.isGlobalCatalogCourse} action={<button type="button" onClick={() => navigate(`/edu/courses${review() ? "?preview=true" : ""}`)} className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-text-muted"><ArrowLeft className="size-4" />{tr("Усі курси", "All courses")}</button>}>
+  return <Page eyebrow={`EDU / ${course.variants?.[0]?.runtime ?? "COURSE"}`} title={course.title} description={course.description || tr("Впорядкуй матеріал, практику й перевірки за модулями, а потім признач курс класу.", "Organize material, practice, and checks into modules, then assign the course to a class.")} showAssignment={!course.isGlobalCatalogCourse} action={<div className="flex flex-wrap gap-2">{!course.isSourceManagedCourse && <button type="button" disabled={busy} onClick={() => void deleteCourse()} className="inline-flex items-center gap-2 rounded-xl border border-accent-error/25 px-3 py-2 text-sm font-bold text-accent-error disabled:opacity-50"><Trash2 className="size-4" />{tr("Видалити курс", "Delete course")}</button>}<button type="button" onClick={() => navigate(`/edu/courses${review() ? "?preview=true" : ""}`)} className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-text-muted"><ArrowLeft className="size-4" />{tr("Усі курси", "All courses")}</button></div>}>
     {error && <div role="alert" className="mb-5 rounded-2xl bg-accent-error/10 p-4 text-sm text-accent-error">{error}</div>}
     {course.isSourceManagedCourse && <div className="mb-5 rounded-2xl border border-primary/15 bg-primary/[.04] p-4 text-sm leading-6 text-text-secondary">{tr("Курс синхронізується з навчальною програмою. Зміни, внесені тут, зберігаються окремо й переживають наступний sync; поля, які ти не редагував, і далі оновлюються з програми.", "This course is synced from the curriculum. Edits made here are stored separately and survive later syncs; fields you have not edited continue to update from the curriculum.")}{course.hasAuthoringOverrides && <span className="ml-1 font-semibold text-primary-strong">{tr("Є збережені зміни автора.", "Author edits are saved.")}</span>}</div>}
     <form onSubmit={saveCourse} className="edu-course-studio__settings mb-7 grid gap-3 rounded-[28px] bg-bg-surface p-5 text-text-primary sm:grid-cols-[1fr_auto] sm:items-end sm:p-7">
@@ -601,8 +653,8 @@ export const CourseStudioDetailPage: React.FC = () => {
     </form>
     <form onSubmit={addModule} className="edu-course-studio__add-module mb-6 flex flex-col gap-2 rounded-2xl border border-border/10 bg-bg-hover p-3 sm:flex-row dark:border-white/[.09] dark:bg-white/[.04]"><input value={moduleTitle} onChange={(event) => setModuleTitle(event.target.value)} aria-label={tr("Назва нового модуля", "New module name")} className={control} placeholder={tr("Назва нового модуля", "New module name")} /><button type="submit" disabled={busy || !moduleTitle.trim()} className="shrink-0 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-primary-foreground disabled:opacity-55"><Plus className="mr-2 inline size-4" />{tr("Додати модуль", "Add module")}</button></form>
     <div className="edu-course-studio__outline space-y-3">{course.modules.slice().sort((a, b) => a.order - b.order || a.id - b.id).map((module, index) => <section key={module.id} className="edu-course-studio__module overflow-hidden rounded-[23px] border border-border/10 bg-white dark:border-white/[.09] dark:bg-bg-surface">
-      <div className="flex flex-wrap items-center gap-3 p-5"><span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-sm font-extrabold text-primary-strong dark:text-primary-soft">{String(index + 1).padStart(2, "0")}</span><input value={moduleTitles[module.id] ?? module.title} onChange={(event) => setModuleTitles((old) => ({ ...old, [module.id]: event.target.value }))} aria-label={tr("Назва модуля", "Module title")} className="min-w-40 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 font-[family-name:var(--font-display)] text-xl font-bold focus:border-border focus:outline-none" /><span className="text-sm text-text-muted">{tr(`${module.items.length} елементів`, `${module.items.length} items`)}</span><button type="button" disabled={busy} onClick={() => void saveModule(module, module.order)} className="rounded-lg border border-border/15 px-2.5 py-2 text-xs font-bold">{tr("Зберегти", "Save")}</button><button type="button" aria-label={tr("Перемістити модуль угору", "Move module up")} disabled={busy || index === 0} onClick={() => void moveModule(index, -1)} className="rounded-lg border border-border/15 p-2 disabled:opacity-40"><ArrowUp className="size-4" /></button><button type="button" aria-label={tr("Перемістити модуль униз", "Move module down")} disabled={busy || index === course.modules.length - 1} onClick={() => void moveModule(index, 1)} className="rounded-lg border border-border/15 p-2 disabled:opacity-40"><ArrowDown className="size-4" /></button><button type="button" onClick={() => { setExpanded(expanded === module.id ? null : module.id); setItemTitle(""); }} className="rounded-xl bg-bg-hover px-3 py-2 text-sm font-bold">+ {tr("Елемент", "Item")}</button></div>
-      {module.items.length > 0 && <div className="border-t border-border/8 px-5 py-3 dark:border-white/[.08]">{module.items.slice().sort((a, b) => a.order - b.order || a.id - b.id).map((item, itemIndex) => <React.Fragment key={item.id}><div className="flex flex-wrap items-center gap-3 py-2.5"><span className="grid size-8 place-items-center rounded-lg bg-bg-hover dark:bg-white/[.05]">{iconFor(item.kind)}</span><span className="min-w-40 flex-1 text-sm font-semibold">{item.title}</span><span className="text-xs font-bold text-text-muted">{kinds.find((entry) => entry.value === item.kind)?.label || item.kind}</span><button type="button" aria-label={tr("Перемістити елемент угору", "Move item up")} disabled={busy || itemIndex === 0} onClick={() => void moveItem(module, itemIndex, -1)} className="rounded-lg border border-border/15 p-2 disabled:opacity-40"><ArrowUp className="size-4" /></button><button type="button" aria-label={tr("Перемістити елемент униз", "Move item down")} disabled={busy || itemIndex === module.items.length - 1} onClick={() => void moveItem(module, itemIndex, 1)} className="rounded-lg border border-border/15 p-2 disabled:opacity-40"><ArrowDown className="size-4" /></button><button type="button" onClick={() => editItem(item)} className="inline-flex items-center gap-1 rounded-lg border border-border/15 px-2.5 py-2 text-xs font-bold"><Pencil className="size-3.5" />{tr("Редагувати", "Edit")}</button></div>
+      <div className="flex flex-wrap items-center gap-3 p-5"><span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-sm font-extrabold text-primary-strong dark:text-primary-soft">{String(index + 1).padStart(2, "0")}</span><input value={moduleTitles[module.id] ?? module.title} onChange={(event) => setModuleTitles((old) => ({ ...old, [module.id]: event.target.value }))} aria-label={tr("Назва модуля", "Module title")} className="min-w-40 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 font-[family-name:var(--font-display)] text-xl font-bold focus:border-border focus:outline-none" /><span className="text-sm text-text-muted">{tr(`${module.items.length} елементів`, `${module.items.length} items`)}</span><button type="button" disabled={busy} onClick={() => void saveModule(module, module.order)} className="rounded-lg border border-border/15 px-2.5 py-2 text-xs font-bold">{tr("Зберегти", "Save")}</button><button type="button" aria-label={tr("Перемістити модуль угору", "Move module up")} disabled={busy || index === 0} onClick={() => void moveModule(index, -1)} className="rounded-lg border border-border/15 p-2 disabled:opacity-40"><ArrowUp className="size-4" /></button><button type="button" aria-label={tr("Перемістити модуль униз", "Move module down")} disabled={busy || index === course.modules.length - 1} onClick={() => void moveModule(index, 1)} className="rounded-lg border border-border/15 p-2 disabled:opacity-40"><ArrowDown className="size-4" /></button><button type="button" onClick={() => { setExpanded(expanded === module.id ? null : module.id); setItemTitle(""); }} className="rounded-xl bg-bg-hover px-3 py-2 text-sm font-bold">+ {tr("Елемент", "Item")}</button>{!course.isSourceManagedCourse && <button type="button" disabled={busy} onClick={() => void deleteModule(module)} aria-label={tr(`Видалити модуль ${module.title}`, `Delete module ${module.title}`)} className="rounded-lg border border-accent-error/25 p-2 text-accent-error disabled:opacity-45"><Trash2 className="size-4" /></button>}</div>
+      {module.items.length > 0 && <div className="border-t border-border/8 px-5 py-3 dark:border-white/[.08]">{module.items.slice().sort((a, b) => a.order - b.order || a.id - b.id).map((item, itemIndex) => <React.Fragment key={item.id}><div className="flex flex-wrap items-center gap-3 py-2.5"><span className="grid size-8 place-items-center rounded-lg bg-bg-hover dark:bg-white/[.05]">{iconFor(item.kind)}</span><span className="min-w-40 flex-1 text-sm font-semibold">{item.title}</span><span className="text-xs font-bold text-text-muted">{kinds.find((entry) => entry.value === item.kind)?.label || item.kind}</span><button type="button" aria-label={tr("Перемістити елемент угору", "Move item up")} disabled={busy || itemIndex === 0} onClick={() => void moveItem(module, itemIndex, -1)} className="rounded-lg border border-border/15 p-2 disabled:opacity-40"><ArrowUp className="size-4" /></button><button type="button" aria-label={tr("Перемістити елемент униз", "Move item down")} disabled={busy || itemIndex === module.items.length - 1} onClick={() => void moveItem(module, itemIndex, 1)} className="rounded-lg border border-border/15 p-2 disabled:opacity-40"><ArrowDown className="size-4" /></button><button type="button" onClick={() => editItem(item)} className="inline-flex items-center gap-1 rounded-lg border border-border/15 px-2.5 py-2 text-xs font-bold"><Pencil className="size-3.5" />{tr("Редагувати", "Edit")}</button>{!course.isSourceManagedCourse && <button type="button" disabled={busy} onClick={() => void deleteItem(module, item)} aria-label={tr(`Видалити елемент ${item.title}`, `Delete item ${item.title}`)} className="rounded-lg border border-accent-error/25 p-2 text-accent-error disabled:opacity-45"><Trash2 className="size-4" /></button>}</div>
         {editingItemId === item.id && <div className="mb-4 rounded-2xl border border-primary/20 bg-bg-hover p-4 dark:bg-white/[.035]"><div className="grid gap-2 sm:grid-cols-[1fr_160px_100px]"><input value={editingItemTitle} onChange={(event) => setEditingItemTitle(event.target.value)} aria-label={tr("Назва елемента", "Item title")} className={control} /><select aria-label={tr("Тип елемента", "Item type")} value={editingItemKind} onChange={(event) => { const nextKind = event.target.value as ItemKind; setEditingItemKind(nextKind); if (nextKind === "QUIZ" && item.kind !== "QUIZ") { setEditingQuizMode("structured"); setEditingQuizQuestions([emptyCourseQuizQuestion()]); setEditingQuizJson("[]"); } }} className={control}>{kinds.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><input type="number" min={0} value={editingItemOrder} onChange={(event) => setEditingItemOrder(Math.max(0, Number(event.target.value) || 0))} aria-label={tr("Порядок", "Order")} className={control} /></div>{editingItemKind === "THEORY" && <div className="mt-3 space-y-3">
   <div role="group" aria-label={tr("Формат теорії", "Theory format")} className="flex flex-wrap gap-2">
     <button type="button" aria-pressed={editingTheoryMode === "markdown"} onClick={() => {

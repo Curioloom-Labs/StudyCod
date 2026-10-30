@@ -17,6 +17,7 @@ import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { requireClassCapability, type ClassAccessRequest } from "../middleware/orgContext";
 import { EduLesson, LessonType } from "../entities/EduLesson";
 import { EduTask, type EduTaskMode } from "../entities/EduTask";
+import { CourseAssignment } from "../entities/CourseAssignment";
 import { EduGrade } from "../entities/EduGrade";
 import { SummaryGrade } from "../entities/SummaryGrade";
 import { ControlWork } from "../entities/ControlWork";
@@ -65,6 +66,7 @@ import { EduRegistrationIntent } from "../entities/EduRegistrationIntent";
 import { Organization, EDUCATIONAL_INSTITUTION_TYPES } from "../entities/Organization";
 import { Membership } from "../entities/Membership";
 import { createLessonBodySchema } from "./edu/lessonContracts";
+import { writeAudit } from "../services/audit/auditLog";
 const eduRouter = Router();
 const userRepo = () => AppDataSource.getRepository(User);
 const classRepo = () => AppDataSource.getRepository(Class);
@@ -608,6 +610,65 @@ eduRouter.post("/classes/:classId/lessons", authRequired, requireClassCapability
   res.status(201).json({
     lesson
   });
+});
+eduRouter.delete("/lessons/:lessonId", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const lessonId = Number(req.params.lessonId);
+    if (!Number.isSafeInteger(lessonId) || lessonId <= 0) return res.status(400).json({ message: "INVALID_ID" });
+    if (!req.userId || req.studentId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_TEACHERS_CAN_DELETE_LESSONS" });
+
+    const lesson = await lessonRepo().findOne({ where: { id: lessonId }, relations: ["class"] });
+    if (!lesson) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
+    const access = await authorizeClassAction(req.userId, lesson.class.id, "CONTENT_AUTHOR", {
+      isSystemAdmin: req.userRole === "SYSTEM_ADMIN",
+    });
+    if (!access) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
+    if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+
+    const activeAttempts = await AppDataSource.getRepository(LessonAttempt).count({
+      where: { lesson: { id: lessonId }, status: "IN_PROGRESS" },
+    });
+    if (activeAttempts > 0) return res.status(409).json({ message: "ASSESSMENT_IN_PROGRESS" });
+
+    await AppDataSource.transaction(async (manager) => {
+      const taskRepo = manager.getRepository(EduTask);
+      const taskIds = (await taskRepo.find({ where: { lesson: { id: lessonId } }, select: { id: true } })).map((task) => task.id);
+      const taskIdSet = new Set(taskIds);
+      const assignments = await manager.getRepository(CourseAssignment).find({ where: { class: { id: lesson.class.id } } });
+      for (const assignment of assignments) {
+        const originMap = { ...(assignment.originMap ?? {}) };
+        const moduleMap = { ...(assignment.moduleMap ?? {}) };
+        let changed = false;
+        for (const [sourceItemId, origin] of Object.entries(originMap)) {
+          if (origin.eduTaskId != null && taskIdSet.has(origin.eduTaskId)) {
+            originMap[sourceItemId] = { ...origin, eduTaskId: null };
+            changed = true;
+          }
+        }
+        for (const [sourceModuleId, mappedLessonId] of Object.entries(moduleMap)) {
+          if (mappedLessonId === lessonId) {
+            delete moduleMap[sourceModuleId];
+            changed = true;
+          }
+        }
+        if (changed) {
+          assignment.originMap = originMap;
+          assignment.moduleMap = moduleMap;
+          await manager.getRepository(CourseAssignment).save(assignment);
+        }
+      }
+      await manager.getRepository(EduLesson).delete({ id: lessonId });
+    });
+
+    await writeAudit({
+      actorType: "USER", actorId: req.userId, action: "edu.lesson.delete", targetType: "edu_lesson", targetId: lessonId,
+      orgId: lesson.class.organizationId ?? null, requestId: req.requestId, ip: req.ip,
+    });
+    return res.json({ deleted: true, lessonId, classId: lesson.class.id });
+  } catch (error: unknown) {
+    logger.error("[edu] Error deleting lesson", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
 });
 eduRouter.post("/lessons/:lessonId/tasks", authRequired, async (req: AuthRequest, res: Response) => {
   if (!req.userId || req.studentId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_TEACHERS_CAN_CREATE_TASKS" });

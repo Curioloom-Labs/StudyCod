@@ -17,10 +17,13 @@ import {
   Play,
   Plus,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { useDialogA11y } from "../../components/ui/useDialogA11y";
 import {
   createTask as apiCreateTask,
+  deleteEduLesson,
+  deleteEduTask,
   generateQuiz,
   getLesson,
   saveQuiz,
@@ -45,6 +48,8 @@ type Quiz = {
   options: Record<string, string>;
   correct: string;
 };
+type LessonTask = NonNullable<Lesson["tasks"]>[number] & { createdAt: string };
+type LessonWithTasks = Omit<Lesson, "tasks"> & { tasks: LessonTask[] };
 type MiniProjectSpec = {
   version: 1;
   kind: "MINI_PROJECT";
@@ -88,7 +93,7 @@ const preview = () =>
   import.meta.env.DEV &&
   new URLSearchParams(window.location.search).get("preview") === "true";
 const shell = "edu-workspace mx-auto max-w-[1260px] px-4 py-7 sm:px-6 lg:px-10 lg:py-10";
-const exampleLesson: Lesson & { tasks: Task[] } = {
+const exampleLesson: LessonWithTasks = {
   id: 41,
   type: "LESSON",
   title: "Цикли: від ідеї до коду",
@@ -183,9 +188,7 @@ const LessonTeacherStudio: React.FC = () => {
   const [params] = useSearchParams();
   const lessonType = params.get("type") as
     "TOPIC" | "CONTROL" | "LESSON" | null;
-  const [lesson, setLesson] = React.useState<
-    (Lesson & { tasks: Task[] }) | null
-  >(null);
+  const [lesson, setLesson] = React.useState<LessonWithTasks | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [modal, setModal] = React.useState<"task" | "quiz" | null>(null);
@@ -212,6 +215,37 @@ const LessonTeacherStudio: React.FC = () => {
       ...payload,
       ...(projectSpec ? { projectSpec } : {}),
     });
+  };
+  const deleteTask = async (entry: LessonTask) => {
+    if (!window.confirm(tr(`Видалити «${entry.title}» разом зі зданими роботами й оцінками?`, `Delete “${entry.title}” along with submitted work and grades?`))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (preview()) setLesson((current) => current ? { ...current, tasks: current.tasks.filter((task) => task.id !== entry.id) } : current);
+      else {
+        await deleteEduTask(entry.id);
+        await load();
+      }
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося видалити завдання.", "Could not delete the task.")));
+    } finally { setBusy(false); }
+  };
+  const deleteLesson = async () => {
+    if (!lesson || lesson.source !== "course") return;
+    const lessonTitle = lesson.title || tr("Навчальний блок", "Learning module");
+    if (!window.confirm(tr(`Видалити урок «${lessonTitle}» разом із завданнями, відповідями, спробами й оцінками учнів?`, `Delete “${lessonTitle}” with its tasks, responses, attempts, and student grades?`))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (preview()) {
+        navigate(-1);
+      } else {
+        const result = await deleteEduLesson(id);
+        navigate(withDevPreview(`/edu/classes/${result.classId}?view=learning`));
+      }
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося видалити урок.", "Could not delete the lesson.")));
+    } finally { setBusy(false); }
   };
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -340,6 +374,7 @@ const LessonTeacherStudio: React.FC = () => {
             </p>
           </div>
           <div className="edu-teacher-lesson__actions flex flex-wrap gap-2">
+            {lesson.source === "course" && <button type="button" disabled={busy} onClick={() => void deleteLesson()} className="min-h-11 rounded-xl border border-accent-error/25 px-4 py-3 text-sm font-semibold text-accent-error disabled:opacity-50"><Trash2 className="mr-2 inline size-4" />{tr("Видалити урок", "Delete lesson")}</button>}
             {lesson.source === "course" && lesson.type === "CONTROL" && <button type="button" onClick={() => navigate(`/edu/lessons/${id}/results`)} className="min-h-11 rounded-xl border border-border px-4 py-3 text-sm font-semibold">{tr("Результати контрольної", "Assessment results")}</button>}
             {lesson.quizJson && <button type="button" onClick={() => navigate(withDevPreview(`/edu/lessons/${id}/quiz/review`))} className="min-h-11 rounded-xl border border-border px-4 py-3 text-sm font-semibold">{tr("Перевірити відповіді учнів", "Review student answers")}</button>}
             <button type="button"
@@ -497,27 +532,17 @@ const LessonTeacherStudio: React.FC = () => {
         </div>
         <div className="edu-teacher-lesson__task-list mt-5 grid gap-3 md:grid-cols-2">
           {tasks.map((entry, index) => (
-            <button type="button"
-              key={entry.id}
-              onClick={() =>
-                (entry.taskMode === "MANUAL" ? navigate(withDevPreview(`/edu/manual-tasks/${entry.id}/submissions`)) : setSelectedTask(entry))
-              }
-              className="edu-teacher-lesson__task group rounded-[24px] border border-border/10 bg-white p-5 text-left transition hover:shadow-lg dark:border-white/[.09] dark:bg-bg-surface"
-            >
-              <div className="flex gap-4">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-bg-hover text-sm font-extrabold text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <div>
-                  <h3 className="font-bold group-hover:text-primary-strong dark:group-hover:text-primary-soft">
-                    {entry.title}
-                  </h3>
-                  <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
-                    {entry.description}
-                  </p>
-                </div>
+            <article key={entry.id} className="edu-teacher-lesson__task rounded-[24px] border border-border/10 bg-white p-4 transition hover:shadow-lg dark:border-white/[.09] dark:bg-bg-surface">
+              <div className="flex items-start gap-3">
+                <button type="button" onClick={() => (entry.taskMode === "MANUAL" ? navigate(withDevPreview(`/edu/manual-tasks/${entry.id}/submissions`)) : setSelectedTask(entry))} className="group min-w-0 flex-1 p-1 text-left">
+                  <div className="flex gap-4">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-bg-hover text-sm font-extrabold text-accent-warn dark:bg-accent-warn/12 dark:text-accent-warn">{String(index + 1).padStart(2, "0")}</span>
+                    <div className="min-w-0"><h3 className="font-bold group-hover:text-primary-strong dark:group-hover:text-primary-soft">{entry.title}</h3><p className="mt-2 line-clamp-2 text-sm leading-6 text-text-muted dark:text-text-secondary">{entry.description}</p></div>
+                  </div>
+                </button>
+                <button type="button" disabled={busy} onClick={() => void deleteTask(entry)} aria-label={tr(`Видалити завдання ${entry.title}`, `Delete task ${entry.title}`)} className="rounded-xl border border-accent-error/25 p-2.5 text-accent-error disabled:opacity-45"><Trash2 className="size-4" aria-hidden="true" /></button>
               </div>
-            </button>
+            </article>
           ))}
           {!tasks.length && (
             <button type="button"
