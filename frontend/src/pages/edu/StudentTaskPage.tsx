@@ -2109,7 +2109,7 @@ export const StudentTaskPage: React.FC = () => {
                   </div>}
               </div>}
 
-            {hints.length > 0 && <div className="mb-4 p-3 rounded-lg border border-border bg-bg-surface">
+            {task.lesson.type !== "CONTROL" && hints.length > 0 && <div className="mb-4 p-3 rounded-lg border border-border bg-bg-surface">
                 <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-2">{tr("Підказки", "Hints")}</div>
                 <div className="space-y-2">
                   {hints.slice(0, revealedHints).map((h, i) => <div key={i} className="text-xs font-mono text-text-primary whitespace-pre-wrap">
@@ -2211,6 +2211,7 @@ export const StudentTaskPage: React.FC = () => {
               const sameHash = String(latest.codeHash) === String(learningFeedbackMeta.codeHash);
               const sameId = !latest.submissionId || String(latest.submissionId) === String(learningFeedbackMeta.submissionId);
               if (!sameHash || !sameId) return null;
+              if (task.lesson.type === "CONTROL") return null;
               const analysis = learningFeedback?.analysis ?? null;
               if (!analysis) return null;
 

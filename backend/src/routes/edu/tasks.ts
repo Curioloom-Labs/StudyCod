@@ -1516,7 +1516,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
 
     let feedback: string | null = null;
 
-    if (passed < tests.length) {
+    if (passed < tests.length && topicTask.type !== "CONTROL") {
       try {
         const expectedById = new Map<number, string>();
         for (const t of tests) expectedById.set(t.id, (t.expectedOutput || "").toString());
@@ -1642,7 +1642,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       logger.warn("[learning] edu outcome persistence failed", { requestId: req.requestId, error: errorMessage(error) });
     }
 
-    const learningFailureAnalysis = buildLearningFailureAnalysis({
+    const learningFailureAnalysis = topicTask.type === "CONTROL" ? null : buildLearningFailureAnalysis({
       verdict: workerRes?.verdict ?? null,
       firstFailure: learningFirstFailure,
       hints: hintsForUser
@@ -2084,7 +2084,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
 
     let feedback: string | null = null;
 
-    if (passed < tests.length) {
+    if (passed < tests.length && topicTask.type !== "CONTROL") {
       try {
         const expectedById = new Map<number, string>();
         for (const t of tests) expectedById.set(t.id, (t.expectedOutput || "").toString());
@@ -2294,7 +2294,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       logger.warn("[learning] edu completion persistence failed", { requestId: req.requestId, error: errorMessage(error) });
     }
 
-    const learningFailureAnalysis = buildLearningFailureAnalysis({
+    const learningFailureAnalysis = topicTask.type === "CONTROL" ? null : buildLearningFailureAnalysis({
       verdict: workerRes?.verdict ?? null,
       firstFailure: learningFirstFailure,
       hints: hintsForUser

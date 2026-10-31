@@ -2,6 +2,7 @@ import { AppDataSource } from '../../data-source';
 import { ControlWork } from '../../entities/ControlWork';
 import { LessonAttempt } from '../../entities/LessonAttempt';
 import { Student } from '../../entities/Student';
+import { Class } from '../../entities/Class';
 import { TopicTask } from '../../entities/TopicTask';
 import { TestData } from '../../entities/TestData';
 import { HttpError } from '../../utils/httpError';
@@ -12,7 +13,11 @@ import { saveControlSummaryGradeForNewSystemWithManager } from './controlWorkGra
 
 export async function changeLegacyControlSession(id: number, studentId: number, action: 'START' | 'FINISH') {
   return AppDataSource.transaction('READ COMMITTED', async manager => {
-    const student = await manager.getRepository(Student).findOne({ where: { id: studentId }, relations: ['class'], lock: { mode: 'pessimistic_write' } });
+    const snapshot = await manager.getRepository(Student).findOne({ where: { id: studentId }, relations: ['class'] });
+    if (!snapshot?.class) throw new HttpError(403, 'ACCESS_DENIED');
+    // Use the same class → student → assessment lock order as quiz submission.
+    await manager.getRepository(Class).findOne({ where: { id: snapshot.class.id }, lock: { mode: 'pessimistic_write' } });
+    const student = await manager.getRepository(Student).findOne({ where: { id: studentId, class: { id: snapshot.class.id } }, relations: ['class'], lock: { mode: 'pessimistic_write' } });
     const control = await manager.getRepository(ControlWork).findOne({ where: { id }, relations: ['topic', 'topic.class'], lock: { mode: 'pessimistic_write' } });
     if (!control || !student?.class || student.class.id !== control.topic.class?.id || !isAssignedToStudent(control.isAssigned, control.assignedStudentIds, studentId)) throw new HttpError(403, 'ACCESS_DENIED');
     const repo = manager.getRepository(LessonAttempt);

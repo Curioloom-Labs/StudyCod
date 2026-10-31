@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AppDataSource } from '../../data-source';
 import { Student } from '../../entities/Student';
+import { Class } from '../../entities/Class';
 import { ControlWork } from '../../entities/ControlWork';
 import { LessonAttempt } from '../../entities/LessonAttempt';
 import { TopicTask } from '../../entities/TopicTask';
@@ -15,6 +16,7 @@ function setup(t: any, overrides: Record<string, any> = {}) {
   const attempts: any[] = overrides.attempts ?? [];
   let taskReads = 0;
   const manager = { getRepository(entity: unknown): any {
+    if (entity === Class) return { findOne: async () => ({ id: 3 }) };
     if (entity === Student) return { findOne: async () => ({ id: 7, class: { id: 3 } }) };
     if (entity === ControlWork) return { findOne: async () => control };
     if (entity === TopicTask) return { find: async () => { taskReads++; return overrides.tasks ?? [{ id: 1, description: 'Solve', taskMode: 'CODE' }]; } };
