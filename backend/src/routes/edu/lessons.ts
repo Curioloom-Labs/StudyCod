@@ -1,3 +1,6 @@
+import { normalizeLegacyAnswer } from "../../../../shared/utils/legacyQuiz";
+import { changeLegacyControlSession } from "../../services/edu/legacyControlSession";
+import { assessmentRemainingSeconds } from "../../../../shared/utils/assessmentClock";
 import { persistControlQuiz } from "../../services/edu/controlQuizWrite";
 import { HttpError } from "../../utils/httpError";
 import { courseTaskTestCounts } from "../../services/edu/courseTaskTests";
@@ -93,17 +96,7 @@ function computePracticeAverageFromLatestGrades(controlTasks: TopicTask[], lates
 }
 
 function getAttemptRemainingSeconds(attempt: Pick<LessonAttempt, "startedAt" | "timeLimitMinutes">, deadline?: Date | null): number | null {
-  const limitMinutes = Number(attempt.timeLimitMinutes ?? 0);
-  const elapsedSeconds = Math.floor((Date.now() - attempt.startedAt.getTime()) / 1000);
-  const timedRemaining = Number.isFinite(limitMinutes) && limitMinutes > 0
-    ? Math.max(0, Math.floor(limitMinutes * 60) - elapsedSeconds)
-    : null;
-  const deadlineRemaining = deadline
-    ? Math.max(0, Math.floor((deadline.getTime() - Date.now()) / 1000))
-    : null;
-  if (timedRemaining === null) return deadlineRemaining;
-  if (deadlineRemaining === null) return timedRemaining;
-  return Math.min(timedRemaining, deadlineRemaining);
+  return assessmentRemainingSeconds(attempt.startedAt, attempt.timeLimitMinutes || 45, deadline);
 }
 
 function isTimedAttemptExpired(attempt: Pick<LessonAttempt, "startedAt" | "timeLimitMinutes">, deadline?: Date | null): boolean {
@@ -304,6 +297,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
         });
       }
 
+      let assessmentAttempt: { status: string; startedAt: string; timeLimitMinutes: number; remainingSeconds: number | null } | null = null;
       let quizSubmitted: boolean | undefined = undefined;
       let quizGrade: number | null | undefined = undefined;
       let quizReview: unknown = undefined;
@@ -335,7 +329,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
       const attemptsByTaskId = new Map<number, number>();
 
       if (req.studentId) {
-        const sg = await summaryGradeRepo()
+        let sg = await summaryGradeRepo()
           .createQueryBuilder("sg")
           .where("sg.student_id = :studentId", { studentId: req.studentId })
           .andWhere("sg.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
@@ -421,17 +415,17 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
         const latestAttemptTimedOut = !!latestAttempt && isTimedAttemptExpired(latestAttempt, controlWork.deadline);
         let completedByAttempt = latestAttempt?.status === "COMPLETED";
 
-        if (latestAttempt?.status === "COMPLETED" && !fullyCompleted && !hasAnyEvidence && !latestAttemptTimedOut) {
-          await lessonAttemptRepo().remove(latestAttempt);
-          completedByAttempt = false;
-        } else if (latestAttempt?.status === "IN_PROGRESS" && (fullyCompleted || latestAttemptTimedOut)) {
+        if (latestAttempt?.status === "IN_PROGRESS" && (fullyCompleted || latestAttemptTimedOut)) {
           latestAttempt.status = "COMPLETED";
           latestAttempt.finishedAt = new Date();
           latestAttempt.isFinished = true;
           await lessonAttemptRepo().save(latestAttempt);
+          await changeLegacyControlSession(controlWork.id, req.studentId, "FINISH");
+          sg = await summaryGradeRepo().findOne({ where: { controlWork: { id: controlWork.id }, student: { id: req.studentId } } });
           completedByAttempt = true;
         }
 
+        assessmentAttempt = latestAttempt ? { status: latestAttempt.status, startedAt: latestAttempt.startedAt.toISOString(), timeLimitMinutes: latestAttempt.timeLimitMinutes || 45, remainingSeconds: getAttemptRemainingSeconds(latestAttempt, controlWork.deadline) } : null;
         reportOnly = completedByAttempt || deadlineExpired;
         reportReason = reportOnly ? completedByAttempt ? "COMPLETED" : "DEADLINE_EXPIRED" : null;
 
@@ -445,7 +439,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
         const finalGradeSafe = sg?.grade === null || sg?.grade === undefined
           ? null
           : clampGradeToInt(sg.grade);
-        const practiceGrade = computePracticeAverageFromLatestGrades(controlTasks, latestGradeByTaskId);
+        const practiceGrade = controlWork.hasPractice === false ? null : computePracticeAverageFromLatestGrades(controlTasks, latestGradeByTaskId);
         const formulaSnapshot = (sg?.formulaSnapshot || controlWork.formula || null) as string | null;
 
         controlReport = {
@@ -481,7 +475,8 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           timeLimitMinutes: controlWork.timeLimitMinutes || null,
           deadline: controlWork.deadline ? controlWork.deadline.toISOString() : null,
           deadlineTimezone: controlDeadlineTimezone,
-          quizJson: req.studentId ? studentQuizJson(controlWork.quizJson) : controlWork.quizJson || null,
+          assessmentAttempt,
+          quizJson: req.studentId ? (assessmentAttempt ? studentQuizJson(controlWork.quizJson) : null) : controlWork.quizJson || null,
           quizSubmitted,
           quizGrade,
           quizReview,
@@ -489,11 +484,11 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           reportReason,
           controlReport,
           studentControlProgress,
-          tasks: controlTasks.map(task => ({
+          tasks: (controlWork.hasPractice === false ? [] : controlTasks).map(task => ({
             id: task.id,
             title: task.title,
-            description: task.description,
-            template: task.template,
+            description: req.studentId && !assessmentAttempt ? "" : task.description,
+            template: req.studentId && !assessmentAttempt ? "" : task.template,
             taskMode: task.taskMode,
             projectSpec: task.projectSpec ?? null,
             maxAttempts: resolveTaskMaxAttempts(task),
@@ -692,14 +687,12 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
             const hasAnyEvidence = hasTheoryEvidence || hasPracticeEvidence;
             const attemptTimedOut = isTimedAttemptExpired(attempt, cw.deadline);
 
-            if (attempt.status === "COMPLETED" && !fullyCompleted && !hasAnyEvidence && !attemptTimedOut) {
-              await lessonAttemptRepo().remove(attempt);
-              studentStatus = "NOT_STARTED";
-            } else if (attempt.status === "IN_PROGRESS" && (fullyCompleted || attemptTimedOut)) {
+            if (attempt.status === "IN_PROGRESS" && (fullyCompleted || attemptTimedOut)) {
               attempt.status = "COMPLETED";
               attempt.finishedAt = new Date();
               attempt.isFinished = true;
               await lessonAttemptRepo().save(attempt);
+              await changeLegacyControlSession(cw.id, req.studentId!, "FINISH");
               studentStatus = "COMPLETED";
             } else {
               studentStatus = attempt.status;
@@ -911,13 +904,6 @@ router.get("/lessons/:id/control-work-status", authRequired, async (req: AuthReq
 
     let actualStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" = attempt.status;
 
-    if (attempt.status === "COMPLETED" && !fullyCompleted && !hasAnyEvidence && !attemptTimedOut) {
-      await lessonAttemptRepo().remove(attempt);
-      return res.json({
-        status: "NOT_STARTED",
-        timeLimitMinutes: controlWork.timeLimitMinutes || null
-      });
-    }
 
     if (attempt.status === "IN_PROGRESS" && (fullyCompleted || attemptTimedOut)) {
       actualStatus = "COMPLETED";
@@ -925,6 +911,7 @@ router.get("/lessons/:id/control-work-status", authRequired, async (req: AuthReq
       attempt.finishedAt = new Date();
       attempt.isFinished = true;
       await lessonAttemptRepo().save(attempt);
+      await changeLegacyControlSession(controlWork.id, req.studentId, "FINISH");
     }
 
     return res.json({
@@ -996,7 +983,6 @@ router.get("/lessons/:id/attempt-status", authRequired, async (req: AuthRequest,
       .createQueryBuilder("attempt")
       .where("attempt.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
       .andWhere("attempt.student_id = :studentId", { studentId: req.studentId })
-      .andWhere("attempt.status = :status", { status: "IN_PROGRESS" })
       .orderBy("attempt.started_at", "DESC")
       .getOne();
 
@@ -1009,6 +995,7 @@ router.get("/lessons/:id/attempt-status", authRequired, async (req: AuthRequest,
       });
     }
 
+    if (attempt.status === "COMPLETED") return res.json({ hasActiveAttempt: false, status: "COMPLETED", remainingSeconds: 0, startedAt: attempt.startedAt.toISOString(), timeLimitMinutes: attempt.timeLimitMinutes });
     const remainingSecondsRaw = getAttemptRemainingSeconds(attempt, controlWork.deadline);
     const remainingSeconds = remainingSecondsRaw === null ? 0 : remainingSecondsRaw;
 
@@ -1017,6 +1004,7 @@ router.get("/lessons/:id/attempt-status", authRequired, async (req: AuthRequest,
       attempt.finishedAt = new Date();
       attempt.isFinished = true;
       await lessonAttemptRepo().save(attempt);
+      await changeLegacyControlSession(controlWork.id, req.studentId, "FINISH");
 
       return res.json({
         hasActiveAttempt: false,
@@ -1112,177 +1100,9 @@ router.post("/lessons/:id/start-attempt", authRequired, async (req: AuthRequest,
       }
     }
 
-    const controlWork = await controlWorkRepo()
-      .createQueryBuilder("controlWork")
-      .leftJoinAndSelect("controlWork.topic", "topic")
-      .leftJoinAndSelect("topic.class", "class")
-      .where("controlWork.id = :id", { id })
-      .getOne();
-
-    if (!controlWork) {
-      return res.status(404).json({
-        message: "CONTROL_WORK_NOT_FOUND"
-      });
-    }
-
-    const student = await studentRepo().findOne({
-      where: { id: req.studentId },
-      relations: ["class"]
-    });
-
-    if (!student || !student.class || student.class.id !== controlWork.topic.class?.id) {
-      return res.status(403).json({
-        message: "ACCESS_DENIED"
-      });
-    }
-
-    if (!isControlWorkVisibleToStudent(controlWork, req.studentId)) {
-      return res.status(403).json({
-        message: "ACCESS_DENIED"
-      });
-    }
-
-    if (controlWork.deadline && new Date() > controlWork.deadline) {
-      return res.status(403).json({
-        message: "CONTROL_WORK_DEADLINE_PASSED"
-      });
-    }
-
-    const existingAttempt = await lessonAttemptRepo()
-      .createQueryBuilder("attempt")
-      .where("attempt.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
-      .andWhere("attempt.student_id = :studentId", { studentId: req.studentId })
-      .andWhere("attempt.status = :status", { status: "IN_PROGRESS" })
-      .getOne();
-
-    if (existingAttempt) {
-      const remainingSeconds = getAttemptRemainingSeconds(existingAttempt, controlWork.deadline);
-      if (remainingSeconds === null || remainingSeconds > 0) {
-        return res.json({
-          attemptId: existingAttempt.id,
-          startedAt: existingAttempt.startedAt.toISOString(),
-          timeLimitMinutes: existingAttempt.timeLimitMinutes,
-          remainingSeconds: remainingSeconds ?? 0
-        });
-      }
-
-      existingAttempt.status = "COMPLETED";
-      existingAttempt.finishedAt = new Date();
-      existingAttempt.isFinished = true;
-      await lessonAttemptRepo().save(existingAttempt);
-    }
-
-    const completedAttempt = await lessonAttemptRepo()
-      .createQueryBuilder("attempt")
-      .where("attempt.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
-      .andWhere("attempt.student_id = :studentId", { studentId: req.studentId })
-      .orderBy("attempt.started_at", "DESC")
-      .andWhere("attempt.status = :status", { status: "COMPLETED" })
-      .getOne();
-
-    if (completedAttempt) {
-      const hasTheoryPart = !!controlWork.hasTheory;
-      const hasPracticePart = controlWork.hasPractice !== false;
-
-      let theoryCompleted = true;
-      let hasTheoryEvidence = false;
-
-      if (hasTheoryPart) {
-        const summary = await summaryGradeRepo()
-          .createQueryBuilder("sg")
-          .where("sg.student_id = :studentId", { studentId: req.studentId })
-          .andWhere("sg.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
-          .getOne();
-
-        const hasTheoryGrade = summary?.theoryGrade !== null && summary?.theoryGrade !== undefined;
-        const hasQuizAnswers = !!summary?.quizAnswersJson;
-
-        theoryCompleted = hasTheoryGrade;
-        hasTheoryEvidence = !!summary && (hasTheoryGrade || hasQuizAnswers);
-      }
-
-      let practiceCompleted = true;
-      let hasPracticeEvidence = false;
-
-      if (hasPracticePart) {
-        const controlTasks = (await topicTaskRepo()
-          .createQueryBuilder("task")
-          .where("task.topic_id = :topicId", { topicId: controlWork.topic.id })
-          .andWhere("task.type = :controlType", { controlType: "CONTROL" })
-          .andWhere("task.control_work_id = :controlWorkId", { controlWorkId: controlWork.id })
-          .orderBy("task.order", "ASC")
-          .getMany()).filter(task => isControlTaskVisibleToStudent(task, controlWork, req.studentId!));
-
-        const taskIds = controlTasks.map(task => task.id);
-        if (taskIds.length > 0) {
-          const allTaskGrades = await gradeRepo()
-            .createQueryBuilder("grade")
-            .leftJoinAndSelect("grade.topicTask", "topicTask")
-            .where("grade.student_id = :studentId", { studentId: req.studentId })
-            .andWhere("grade.topic_task_id IN (:...taskIds)", { taskIds })
-            .orderBy("grade.created_at", "DESC")
-            .getMany();
-
-          const latestByTaskId = new Map<number, EduGrade>();
-          const attemptsByTaskId = new Map<number, number>();
-
-          for (const grade of allTaskGrades) {
-            const topicTaskId = (grade).topicTask?.id;
-            if (!topicTaskId) continue;
-            if (!latestByTaskId.has(topicTaskId)) {
-              latestByTaskId.set(topicTaskId, grade);
-            }
-            attemptsByTaskId.set(topicTaskId, (attemptsByTaskId.get(topicTaskId) || 0) + 1);
-          }
-
-          hasPracticeEvidence = allTaskGrades.length > 0;
-
-          for (const task of controlTasks) {
-            const latest = latestByTaskId.get(task.id) || null;
-            const attemptsUsed = attemptsByTaskId.get(task.id) || 0;
-            const completed = isControlTaskCompletedForProgress(task, latest, attemptsUsed);
-            if (!completed) {
-              practiceCompleted = false;
-              break;
-            }
-          }
-        }
-      }
-
-      const fullyCompleted = theoryCompleted && practiceCompleted;
-      const hasAnyEvidence = hasTheoryEvidence || hasPracticeEvidence;
-
-      const completedAttemptTimedOut = isTimedAttemptExpired(completedAttempt, controlWork.deadline);
-
-      if (!fullyCompleted && !hasAnyEvidence && !completedAttemptTimedOut) {
-        await lessonAttemptRepo().remove(completedAttempt);
-      } else {
-        return res.status(409).json({
-          message: "CONTROL_WORK_COMPLETED"
-        });
-      }
-    }
-
-    const normalizedTimeLimitMinutes = Math.max(0, Number(controlWork.timeLimitMinutes || 0));
-
-    const startedAt = new Date();
-    const attempt = lessonAttemptRepo().create({
-      controlWork: controlWork,
-      student: student,
-      startedAt,
-      timeLimitMinutes: normalizedTimeLimitMinutes,
-      status: "IN_PROGRESS"
-    });
-
-    await lessonAttemptRepo().save(attempt);
-
-    return res.json({
-      attemptId: attempt.id,
-      startedAt: attempt.startedAt.toISOString(),
-      timeLimitMinutes: attempt.timeLimitMinutes,
-      remainingSeconds: getAttemptRemainingSeconds(attempt, controlWork.deadline) ?? 0
-    });
+    return res.json(await changeLegacyControlSession(id, req.studentId, "START"));
   } catch (error: unknown) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     logger.error("[edu/lessons] Error starting attempt", { requestId: req.requestId, studentId: req.studentId, error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -1388,12 +1208,12 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
 
       let normalizedCorrect: string;
       if (typeof correctAnswer === "number") {
-        normalizedCorrect = ["А", "Б", "В", "Г", "Д"][correctAnswer] || "А";
+        normalizedCorrect = normalizeLegacyAnswer(correctAnswer);
       } else {
-        normalizedCorrect = String(correctAnswer).toUpperCase();
+        normalizedCorrect = normalizeLegacyAnswer(correctAnswer);
       }
 
-      const normalizedStudent = String(studentAnswer || "").toUpperCase().trim();
+      const normalizedStudent = normalizeLegacyAnswer(studentAnswer);
       const isCorrect = normalizedStudent === normalizedCorrect;
 
       if (isCorrect) {
@@ -1454,6 +1274,30 @@ router.post("/lessons/:id/submit-quiz", authRequired, async (req: AuthRequest, r
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
     });
+  }
+});
+
+router.get("/active-control-session", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.studentId) return res.json({ session: null });
+  try {
+    const attempt = await lessonAttemptRepo().findOne({ where: { student: { id: req.studentId }, status: "IN_PROGRESS" }, relations: ["controlWork"], order: { startedAt: "DESC", id: "DESC" } });
+    const control = attempt?.controlWork;
+    if (!attempt || !control || !isControlWorkVisibleToStudent(control, req.studentId)) return res.json({ session: null });
+    if (getAttemptRemainingSeconds(attempt, control.deadline) === 0) { await changeLegacyControlSession(control.id, req.studentId, "FINISH"); return res.json({ session: null }); }
+    const tasks = control.hasPractice === false ? [] : await topicTaskRepo().find({ where: { controlWork: { id: control.id }, type: "CONTROL" } });
+    return res.json({ session: { controlWorkId: control.id, taskIds: tasks.filter(task => isControlTaskVisibleToStudent(task, control, req.studentId!)).map(task => task.id) } });
+  } catch (error) { logger.error("[edu/lessons] active session failed", { error }); return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" }); }
+});
+
+router.post("/lessons/:id/finish-attempt", authRequired, async (req: AuthRequest, res: Response) => {
+  const parsed = lessonIdParamSchema.safeParse(req.params.id);
+  if (!parsed.success) return res.status(400).json({ message: "INVALID_ID" });
+  if (!req.studentId) return res.status(403).json({ message: "ONLY_STUDENTS_CAN_START_ATTEMPT" });
+  try { return res.json(await changeLegacyControlSession(parsed.data, req.studentId, "FINISH")); }
+  catch (error) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
+    logger.error("[edu/lessons] finish failed", { error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
   }
 });
 

@@ -121,6 +121,7 @@ export interface StudentCredentials {
   password: string;
 }
 export interface Lesson {
+  assessmentAttempt?: { status: string; startedAt: string; timeLimitMinutes: number; remainingSeconds: number | null } | null;
   id: number;
   source?: "course" | "legacy";
   courseReport?: {

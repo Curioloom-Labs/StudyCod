@@ -3,6 +3,7 @@ import { currentPrincipalStorageId } from "./storageScope";
 export type ControlExamSession = {
   controlWorkId: number;
   active: true;
+  taskIds?: number[];
   activatedAt: string;
 };
 
@@ -36,7 +37,7 @@ function isValidSession(value: unknown): value is ControlExamSession {
 export function getControlExamSession(): ControlExamSession | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(scopedStorageKey());
+    const raw = window.localStorage.getItem(scopedStorageKey());
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return isValidSession(parsed) ? parsed : null;
@@ -45,23 +46,24 @@ export function getControlExamSession(): ControlExamSession | null {
   }
 }
 
-export function activateControlExamSession(controlWorkId: number): void {
+export function activateControlExamSession(controlWorkId: number, taskIds?: number[]): void {
   if (typeof window === "undefined") return;
   if (!Number.isFinite(controlWorkId) || controlWorkId <= 0) return;
   const payload: ControlExamSession = {
     controlWorkId: Math.floor(controlWorkId),
     active: true,
+    taskIds,
     activatedAt: new Date().toISOString()
   };
-  window.sessionStorage.setItem(scopedStorageKey(), JSON.stringify(payload));
+  window.localStorage.setItem(scopedStorageKey(), JSON.stringify(payload));
   dispatchSessionChanged();
 }
 
 export function clearControlExamSession(): void {
   if (typeof window === "undefined") return;
-  window.sessionStorage.removeItem(scopedStorageKey());
+  window.localStorage.removeItem(scopedStorageKey());
   // Remove the pre-isolation key left by older builds.
-  window.sessionStorage.removeItem(STORAGE_KEY);
+  window.localStorage.removeItem(STORAGE_KEY);
   dispatchSessionChanged();
 }
 
@@ -89,7 +91,11 @@ export function subscribeControlExamSession(listener: () => void): () => void {
 
 export function isPathAllowedInControlExam(pathname: string, controlWorkId: number): boolean {
   if (!pathname) return false;
-  if (/^\/edu\/tasks\/\d+\/?$/i.test(pathname)) return true;
+  const task = pathname.match(/^\/edu\/tasks\/(\d+)\/?$/i);
+  if (task) {
+    const session = getControlExamSession();
+    return session?.controlWorkId === controlWorkId && (session.taskIds?.includes(Number(task[1])) ?? false);
+  }
 
   const lessonMatch = pathname.match(/^\/edu\/lessons\/(\d+)\/?$/i);
   if (!lessonMatch) return false;

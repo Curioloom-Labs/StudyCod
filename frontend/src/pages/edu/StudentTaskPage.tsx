@@ -1,3 +1,4 @@
+import { activateControlExamSession } from "../../lib/controlExamSession";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useTranslation } from "react-i18next";
@@ -769,7 +770,7 @@ export const StudentTaskPage: React.FC = () => {
       if (remaining <= 0) {
         clearInterval(interval);
         toastInfo(t("timeUpAutoSubmit"));
-        if (currentCode && handleSubmitRef.current) void handleSubmitRef.current();
+        navigate(`/edu/lessons/${currentTask.lesson.id}?type=CONTROL`, { replace: true });
       }
     }, 1000);
     return () => clearInterval(interval);
@@ -931,10 +932,11 @@ export const StudentTaskPage: React.FC = () => {
         try {
           let status = await getLessonAttemptStatus(data.lesson.id);
           if (!status.hasActiveAttempt && status.status === "NOT_STARTED") {
-            const started = await startLessonAttempt(data.lesson.id);
-            status = { ...status, hasActiveAttempt: true, startedAt: started.startedAt, remainingSeconds: started.remainingSeconds, timeLimitMinutes: started.timeLimitMinutes, status: "IN_PROGRESS" };
+            navigate(`/edu/lessons/${data.lesson.id}?type=CONTROL`, { replace: true });
+            return data;
           }
           if (status.hasActiveAttempt && status.startedAt) {
+            activateControlExamSession(data.lesson.id, [data.id]);
             const startedAt = new Date(status.startedAt);
             const remaining = Math.max(0, Number(status.remainingSeconds) || 0);
             setTimeRemaining(remaining);
@@ -948,14 +950,8 @@ export const StudentTaskPage: React.FC = () => {
             localStorage.removeItem(scopedStorageKey("task_start_time_timestamp", taskId));
           }
         } catch {
-          // Keep legacy tasks usable if the attempt-status endpoint is absent.
-          const startTime = localStorage.getItem(timerKey);
-          const startedAt = startTime ? parseInt(startTime, 10) : Date.now();
-          const remaining = Math.max(0, data.lesson.timeLimitMinutes * 60 - Math.floor((Date.now() - startedAt) / 1000));
-          localStorage.setItem(timerKey, startedAt.toString());
-          localStorage.setItem(scopedStorageKey("task_start_time_timestamp", taskId), startedAt.toString());
-          setTimeRemaining(remaining);
-          setTimeStarted(new Date(startedAt));
+          setTimeRemaining(0); setTimeStarted(null);
+          navigate(`/edu/lessons/${data.lesson.id}?type=CONTROL`, { replace: true });
         }
       }
       return data;

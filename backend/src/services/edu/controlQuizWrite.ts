@@ -42,7 +42,7 @@ export async function persistControlQuiz(input: {
     if (summary && (summary.quizAnswersJson || summary.theoryGrade != null)) throw new HttpError(409, "QUIZ_ALREADY_SUBMITTED");
     const attempts = manager.getRepository(LessonAttempt), attempt = await attempts.findOne({ where: { controlWork: { id: control.id }, student: { id: student.id }, status: "IN_PROGRESS" }, order: { startedAt: "DESC", id: "DESC" }, lock: { mode: "pessimistic_write" } });
     if (!attempt) throw new HttpError(403, "CONTROL_WORK_NOT_STARTED");
-    if (attempt.timeLimitMinutes > 0 && Date.now() >= attempt.startedAt.getTime() + attempt.timeLimitMinutes * 60000) {
+    if (Date.now() >= attempt.startedAt.getTime() + (attempt.timeLimitMinutes || 45) * 60000) {
       await attempts.update(attempt.id, { status: "COMPLETED", finishedAt: new Date(), isFinished: true });
       return { expired: true as const };
     }

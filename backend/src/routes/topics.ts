@@ -1,3 +1,4 @@
+import { HttpError } from "../utils/httpError";
 import { Router, Response } from "express";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { AppDataSource } from "../data-source";
@@ -1240,6 +1241,8 @@ topicsRouter.put("/control-works/:controlWorkId", authRequired, async (req: Auth
       if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
       if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
+    if (!(hasTheory ?? controlWork.hasTheory) && (hasPractice ?? controlWork.hasPractice) === false) return res.status(400).json({ message: "ASSESSMENT_REQUIRES_SECTION" });
+    const structureChanged = hasTheory !== undefined && hasTheory !== controlWork.hasTheory || hasPractice !== undefined && hasPractice !== controlWork.hasPractice || timeLimitMinutes !== undefined && timeLimitMinutes !== controlWork.timeLimitMinutes || quizJson !== undefined && quizJson !== controlWork.quizJson;
     if (deadline !== undefined) {
       const normalizedDeadline = deadline === null ? null : new Date(deadline);
       if (normalizedDeadline && !Number.isFinite(normalizedDeadline.getTime())) {
@@ -1259,6 +1262,8 @@ topicsRouter.put("/control-works/:controlWorkId", authRequired, async (req: Auth
     if (hasPractice !== undefined) controlWork.hasPractice = hasPractice;
     if (quizJson !== undefined) controlWork.quizJson = quizJson;
     await AppDataSource.transaction("READ COMMITTED", async manager => {
+      await manager.getRepository(ControlWork).findOne({ where: { id: controlWork.id }, lock: { mode: "pessimistic_write" } });
+      if (structureChanged && await manager.getRepository(LessonAttempt).count({ where: { controlWork: { id: controlWork.id }, status: "IN_PROGRESS" } })) throw new HttpError(409, "CONTROL_WORK_HAS_ACTIVE_ATTEMPTS");
       await manager.getRepository(ControlWork).save(controlWork);
       if (deadline !== undefined && controlWork.isAssigned) {
         const tasks = await manager.getRepository(TopicTask).find({
@@ -1272,6 +1277,7 @@ topicsRouter.put("/control-works/:controlWorkId", authRequired, async (req: Auth
       controlWork
     });
   } catch (error: unknown) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     logger.error("[topics] Error updating control work", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: "INTERNAL_SERVER_ERROR"
@@ -1362,12 +1368,17 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
     logger.debug("[topics] Saving quiz", { requestId: req.requestId, questionsCount: questions.length });
     controlWork.quizJson = result.data.quizJson;
     controlWork.hasTheory = true;
-    await controlWorkRepo().save(controlWork);
+    await AppDataSource.transaction("READ COMMITTED", async manager => {
+      await manager.getRepository(ControlWork).findOne({ where: { id: controlWork.id }, lock: { mode: "pessimistic_write" } });
+      if (await manager.getRepository(LessonAttempt).count({ where: { controlWork: { id: controlWork.id }, status: "IN_PROGRESS" } })) throw new HttpError(409, "CONTROL_WORK_HAS_ACTIVE_ATTEMPTS");
+      await manager.getRepository(ControlWork).save(controlWork);
+    });
     logger.debug("[topics] Quiz saved successfully", { requestId: req.requestId, questionsCount: questions.length });
     res.json({
       questions
     });
   } catch (error: unknown) {
+    if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     logger.error("[topics] Error generating quiz", { requestId: req.requestId, err: error });
     res.status(500).json({
       message: errorMessage(error) || "INTERNAL_SERVER_ERROR"

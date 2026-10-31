@@ -133,6 +133,7 @@ export const ControlStudioPage: React.FC = () => {
   const navigate = useNavigate();
   const [control, setControl] = React.useState<Control | null>(null);
   const [title, setTitle] = React.useState("");
+  const [parts, setParts] = React.useState({ hasTheory: true, hasPractice: true });
   const [minutes, setMinutes] = React.useState("45");
   const [deadline, setDeadline] = React.useState(() => toDateTimeLocalValue());
   const [formula, setFormula] = React.useState("");
@@ -180,6 +181,7 @@ export const ControlStudioPage: React.FC = () => {
     try {
       if (preview()) {
         setControl(demo);
+        setParts({ hasTheory: !!demo.hasTheory, hasPractice: demo.hasPractice !== false });
         setTestCounts({ 11: 4, 12: 3 });
         setTitle(demo.title || "");
         setMinutes(String(demo.timeLimitMinutes || 45));
@@ -192,6 +194,7 @@ export const ControlStudioPage: React.FC = () => {
       const response = await api.get(`/topics/control-works/${id}`);
       const value = response.data.controlWork || response.data;
       setControl(value);
+      setParts({ hasTheory: !!value.hasTheory, hasPractice: value.hasPractice !== false });
       const loadedTasks = Array.isArray(value.tasks) ? value.tasks as ControlTask[] : [];
       const counts = await Promise.all(loadedTasks.map(async task => {
         try {
@@ -221,6 +224,8 @@ export const ControlStudioPage: React.FC = () => {
     setBusy(true);
     setError(null);
     try {
+      if (!Number.isInteger(Number(minutes)) || Number(minutes) < 1 || Number(minutes) > 1440) { setError(tr("Укажіть час від 1 до 1440 хвилин.", "Choose a duration from 1 to 1440 minutes.")); return; }
+      if (!parts.hasTheory && !parts.hasPractice) { setError(tr("Оберіть хоча б одну частину роботи.", "Choose at least one section.")); return; }
       if (quizText.trim()) JSON.parse(quizText);
       const deadlineIso = fromDateTimeLocalValue(deadline);
       if (!deadlineIso || new Date(deadlineIso).getTime() <= Date.now()) {
@@ -230,6 +235,7 @@ export const ControlStudioPage: React.FC = () => {
       if (!preview()) {
         await api.put(`/topics/control-works/${id}`, {
           title: title.trim(),
+          ...parts,
           timeLimitMinutes: Number(minutes) || null,
           deadline: deadlineIso,
           quizJson: quizText.trim() || null,
@@ -237,7 +243,7 @@ export const ControlStudioPage: React.FC = () => {
         await updateControlWorkFormula(id, formula.trim() || null);
         await load();
       } else {
-        setControl(old => old ? { ...old, title: title.trim(), timeLimitMinutes: Number(minutes) || null, deadline: deadlineIso, quizJson: quizText.trim() || null, formula: formula.trim() || null } : old);
+        setControl(old => old ? { ...old, ...parts, title: title.trim(), timeLimitMinutes: Number(minutes) || null, deadline: deadlineIso, quizJson: quizText.trim() || null, formula: formula.trim() || null } : old);
       }
       showToast({ type: "success", message: tr("Контрольну збережено.", "Assessment saved.") });
     } catch (caught) {
@@ -798,6 +804,7 @@ export const ControlStudioPage: React.FC = () => {
         <aside className="rounded-[30px] border border-border/10 bg-white p-6 dark:border-white/[.09] dark:bg-bg-surface">
           <p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong dark:text-primary-soft">{tr("Налаштування", "Settings")}</p>
           <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">{tr("Параметри роботи", "Assessment settings")}</h2>
+          <fieldset className="mt-5 rounded-xl border border-border p-4"><legend className="px-2 text-sm font-bold">{tr("Склад контрольної", "Assessment sections")}</legend><label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={parts.hasTheory} onChange={event => setParts(old => ({ ...old, hasTheory: event.target.checked }))} />{tr("Тестова частина", "Quiz")}</label><label className="mt-3 flex items-center gap-3 text-sm"><input type="checkbox" checked={parts.hasPractice} onChange={event => setParts(old => ({ ...old, hasPractice: event.target.checked }))} />{tr("Практичні завдання", "Practice tasks")}</label><p className="mt-3 text-xs text-text-muted">{tr("Можна залишити лише тест, лише практику або обидві частини. Таймер спільний.", "Choose quiz only, practice only, or both. All sections share one timer.")}</p></fieldset>
           <label className="mt-6 block text-sm font-bold">{tr("Назва", "Title")}<input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
           <label className="mt-4 block text-sm font-bold">{tr("Час, хв", "Time, min")}<input value={minutes} onChange={(event) => setMinutes(event.target.value)} type="number" min="1" className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
           <label className="mt-4 block text-sm font-bold">{tr("Дедлайн", "Deadline")}<input value={deadline} onChange={event => setDeadline(event.target.value)} type="datetime-local" min={toDateTimeLocalValue(new Date().toISOString())} className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>

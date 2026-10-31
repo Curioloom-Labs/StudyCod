@@ -1,3 +1,4 @@
+import { ControlAssessmentWorkspace } from "./ControlAssessmentWorkspace";
 import React from "react";
 import {
   Link,
@@ -818,6 +819,7 @@ const StudentLessonWorkspace: React.FC = () => {
     }).catch(caught => { if (active) setError(getErrorMessageFromUnknown(caught, tr("Не вдалося оновити результат.", "Could not refresh the result."))); });
     return () => { active = false; };
   }, [attemptCompleted, id, requestedType, source, lesson?.courseAttempt?.status, lesson?.source, lesson?.type]);
+  if (lesson?.type === "CONTROL" && lesson.source !== "course") return <ControlAssessmentWorkspace />;
   if (loading)
     return (
       <div className={shell}>
@@ -1080,4 +1082,8 @@ const StudentLessonWorkspace: React.FC = () => {
 
 export const LessonStudioPage: React.FC<{ student?: boolean }> = ({
   student = false,
-}) => (student ? <StudentLessonWorkspace /> : <LessonTeacherStudio />);
+}) => {
+  const [params] = useSearchParams();
+  if (student && params.get("type") === "CONTROL" && params.get("source") !== "course") return <ControlAssessmentWorkspace />;
+  return student ? <StudentLessonWorkspace /> : <LessonTeacherStudio />;
+};

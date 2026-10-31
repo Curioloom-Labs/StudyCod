@@ -1,3 +1,4 @@
+import { api } from "./lib/api/client";
 import React, { useEffect, useState, Suspense, useCallback, useMemo, useRef, useContext, startTransition } from "react";
 import { Routes, Route, useLocation, useNavigate, useSearchParams, useParams, Navigate, type Location } from "react-router-dom";
 import { enforceSubdomain, getHostContext } from "./lib/subdomain";
@@ -27,7 +28,7 @@ import { getControlWorkStatus } from "./lib/api/edu";
 import { TheoryModalProvider } from "./components/theory/TheoryModalProvider";
 import { ToastViewport } from "./components/ui/ToastViewport";
 import { getErrorMessageFromUnknown } from "./lib/safeError";
-import { clearControlExamSession, getControlExamSession, isPathAllowedInControlExam, subscribeControlExamSession } from "./lib/controlExamSession";
+import { activateControlExamSession, clearControlExamSession, getControlExamSession, isPathAllowedInControlExam, subscribeControlExamSession } from "./lib/controlExamSession";
 import { setActiveEduStudentId } from "./lib/eduContext";
 import { chooseEducationalContext, selectEducationalContext } from "./lib/eduSession";
 import { applySeo } from "./lib/seo";
@@ -1137,6 +1138,8 @@ const ContestEntryRoute: React.FC = () => {
 
 export const App: React.FC = () => {
   const location = useLocation();
+  const [examSession, setExamSession] = useState(() => getControlExamSession());
+  useEffect(() => subscribeControlExamSession(() => setExamSession(getControlExamSession())), []);
   const isContestSurface = /^\/(?:contest|contests)(?:\/|$)/.test(location.pathname);
   const isAssessSurface = /^\/(?:assess|companies)(?:\/|$)/.test(location.pathname);
   const { i18n } = useTranslation();
@@ -1169,13 +1172,14 @@ export const App: React.FC = () => {
     if (ctx === "school") subdomainNavigate("/edu", { replace: true });
     else if (ctx === "contest") subdomainNavigate("/contest", { replace: true });
   }, [location.pathname, subdomainNavigate]);
+  if (examSession && (!isPathAllowedInControlExam(location.pathname, examSession.controlWorkId) || new URLSearchParams(location.search).get("source") === "course" || (/^\/edu\/lessons\//.test(location.pathname) && new URLSearchParams(location.search).get("type") !== "CONTROL"))) return <Navigate to={withDevPreview(`/edu/lessons/${examSession.controlWorkId}?type=CONTROL`, location.search)} replace />;
   return <PageLoadingProvider>
     <TheoryModalProvider>
         <RouteScrollReset />
         <ToastViewport />
-        {!isContestSurface && !isAssessSurface && <GlobalQuickSearch />}
+        {!examSession && !isContestSurface && !isAssessSurface && <GlobalQuickSearch />}
         <NetworkStatus />
-        {!isContestSurface && !isAssessSurface && <MascotCompanion />}
+        {!examSession && !isContestSurface && !isAssessSurface && <MascotCompanion />}
         <AnimatedPage key={productRouteKey} className="w-full">
         <PersonalWorkspaceFrame routeLocation={location}><ContestOnlySurfaceGuard>
           <AnimatedPage key={topLevelRouteKey} className="w-full">
@@ -1760,7 +1764,7 @@ const EduRoutes: React.FC = React.memo(() => {
         }
 
         // Transient failure (5xx / network blip): retry a few times, but never
-        // leave the student locked forever — release after the retries run out.
+        // preserve the assessment session and retry while the network recovers.
         attempts += 1;
         if (attempts < 5) {
           retryTimer = window.setTimeout(() => {
@@ -1768,15 +1772,17 @@ const EduRoutes: React.FC = React.memo(() => {
           }, 2000);
           return;
         }
-        releaseKiosk();
+        retryTimer = window.setTimeout(() => { void validateControlSession(); }, 15000);
       }
     };
 
     void validateControlSession();
+    const validationInterval = window.setInterval(() => { void validateControlSession(); }, 15000);
 
     return () => {
       cancelled = true;
       if (retryTimer) window.clearTimeout(retryTimer);
+      window.clearInterval(validationInterval);
     };
   }, [controlExamSession?.controlWorkId, navigate]);
 
@@ -1875,6 +1881,14 @@ const EduRoutes: React.FC = React.memo(() => {
     setUser(null);
     void logoutAndReload("/");
   }, [loggingOut]);
+  useEffect(() => {
+    if (!user?.studentId || controlExamSession) return;
+    let alive = true;
+    void api.get('/edu/active-control-session').then(({ data }) => {
+      if (alive && data.session) activateControlExamSession(data.session.controlWorkId, data.session.taskIds);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [user?.studentId, controlExamSession?.controlWorkId]);
   const isControlExamActive = !!controlExamSession;
   if (loggingOut) {
     return <PageLoader />;

@@ -1,3 +1,5 @@
+import { changeLegacyControlSession } from "../../services/edu/legacyControlSession";
+import { assessmentRemainingSeconds } from "../../../../shared/utils/assessmentClock";
 import { Router, Response } from "express";
 import { z } from "zod";
 import { createHash } from "crypto";
@@ -407,14 +409,7 @@ function isControlTaskCompletedForProgress(params: {
 }
 
 function getAttemptRemainingSeconds(attempt: Pick<LessonAttempt, "startedAt" | "timeLimitMinutes">): number | null {
-  const limitMinutes = Number(attempt.timeLimitMinutes ?? 0);
-  if (!Number.isFinite(limitMinutes) || limitMinutes <= 0) {
-    return null;
-  }
-
-  const elapsedSeconds = Math.floor((Date.now() - attempt.startedAt.getTime()) / 1000);
-  const totalSeconds = Math.floor(limitMinutes * 60);
-  return Math.max(0, totalSeconds - elapsedSeconds);
+  return assessmentRemainingSeconds(attempt.startedAt, attempt.timeLimitMinutes || 45);
 }
 
 async function markAttemptCompletedIfTimedOut(attempt: LessonAttempt): Promise<boolean> {
@@ -445,6 +440,7 @@ async function assertControlTaskUnlockedForStudent(
     throw new HttpError(403, "CONTROL_WORK_DEADLINE_PASSED", { expose: true });
   }
 
+  if (topicTask.controlWork.hasPractice === false) throw new HttpError(403, "CONTROL_PRACTICE_DISABLED");
   const controlWorkId = topicTask.controlWork.id;
 
   const latestAttempt = await AppDataSource
@@ -470,6 +466,7 @@ async function assertControlTaskUnlockedForStudent(
     const remainingSeconds = getAttemptRemainingSeconds(latestAttempt);
     if (remainingSeconds !== null && remainingSeconds <= 0) {
       await markAttemptCompletedIfTimedOut(latestAttempt);
+      await changeLegacyControlSession(controlWorkId, studentId, "FINISH");
       throw new HttpError(403, "CONTROL_WORK_TIME_EXPIRED", { expose: true });
     }
   }
@@ -666,7 +663,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       lessonId = controlWork.id;
       lessonTitle = controlWork.title || `Контрольна робота #${controlWork.id}`;
       hasTheory = controlWork.hasTheory || false;
-      timeLimitMinutes = controlWork.timeLimitMinutes || null;
+      timeLimitMinutes = controlWork.timeLimitMinutes || 45;
     }
 
     const taskTheory = await taskTheoryRepo()
@@ -837,6 +834,7 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
                 }
               }
             : {}),
+          deadline: topicTask.controlWork?.deadline?.toISOString() ?? topicTask.deadline?.toISOString() ?? null,
           timeLimitMinutes: timeLimitMinutes || undefined
         }
       }

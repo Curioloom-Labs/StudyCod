@@ -98,9 +98,12 @@ async function calculateControlGradeForNewSystemWithManager(
     theoryGrade = clampGradeToInt(Number(summaryGrade.theoryGrade));
   }
 
+  const finished = await manager.getRepository(LessonAttempt).count({ where: { controlWork: { id: controlWorkId }, student: { id: studentId }, status: "COMPLETED" } }) > 0;
+  if (finished && hasPracticePart) averageTaskGrade = averageTaskGrade * practiceGradedCount / taskIds.length;
+  if (finished && controlWork.hasTheory && theoryGrade === null) theoryGrade = 0;
   const hasTheoryPart = !!controlWork.hasTheory;
   const hasTestGrade = hasTheoryPart && theoryGrade !== null;
-  const hasPracticeGrade = hasPracticePart && practiceGradedCount > 0;
+  const hasPracticeGrade = hasPracticePart && (practiceGradedCount > 0 || finished);
 
   if (!hasTestGrade && !hasPracticeGrade) {
     return null;
@@ -192,9 +195,7 @@ export async function saveControlSummaryGradeForNewSystemWithManager(
     }
     summaryGrade.calculatedGrade = gradeData.finalGrade;
     summaryGrade.grade = summaryGrade.manualOverrideGrade ?? gradeData.finalGrade;
-    if (theoryGrade !== null) {
-      summaryGrade.theoryGrade = theoryGrade;
-    }
+    if (gradeData.theoryGrade !== null) summaryGrade.theoryGrade = gradeData.theoryGrade;
     summaryGrade.formulaSnapshot = gradeData.formulaSnapshot;
     summaryGrade.calculatedAt = calculatedAt;
     await summaryGradeRepoManager.save(summaryGrade);
@@ -213,7 +214,7 @@ export async function saveControlSummaryGradeForNewSystemWithManager(
       assessmentType: AssessmentType.CONTROL,
       grade: gradeData.finalGrade,
       calculatedGrade: gradeData.finalGrade,
-      theoryGrade: theoryGrade,
+      theoryGrade: gradeData.theoryGrade,
       formulaSnapshot: gradeData.formulaSnapshot,
       calculatedAt: calculatedAt
     });

@@ -4,6 +4,9 @@ import { tr } from "../i18n";
 export function getEduErrorMessage(error: unknown, fallback: string): string {
   const message = getErrorMessageFromUnknown(error, fallback);
   const messages: Record<string, [string, string]> = {
+    ASSESSMENT_NOT_READY: ["Учитель ще готує роботу: перевірте запитання, умови та тести практичних задач.", "Your teacher is preparing the assessment. Check questions, statements and practice test cases."],
+    ASSESSMENT_REQUIRES_SECTION: ["Залиште хоча б одну частину: тест або практику.", "Enable at least the quiz or practice section."],
+    CONTROL_WORK_HAS_ACTIVE_ATTEMPTS: ["Учні вже виконують роботу. Склад, питання та ліміт часу можна змінити після завершення їхніх спроб.", "Students are working on this assessment. Change sections, questions and time limit after their attempts finish."],
     RUBRIC_LOCKED: ["За цією рубрикою вже є роботи або розпочаті спроби. Збережіть чинні критерії для цих робіт; для іншої рубрики створіть нове завдання.", "Submissions or attempts already use this rubric. Keep the existing criteria for these responses; create a new task for a different rubric."],
     INVALID_RUBRIC: ["Перевірте назви критеріїв і додатні цілі бали. Доступно до 30 критеріїв та 100 000 балів сумарно.", "Check criterion names and positive whole points. Maximum: 30 criteria and 100,000 total points."],
     INVALID_RUBRIC_SCORES: ["Укажіть бали для кожного критерію в межах його максимуму.", "Enter a score for every criterion within its individual maximum."],
@@ -33,7 +36,6 @@ export function getEduErrorMessage(error: unknown, fallback: string): string {
     INVALID_STUDENT_IMPORT: ["Перевірте заголовки й рядки таблиці. Потрібні ім’я та прізвище, коректний email за потреби; пароль — від 8 символів. До 200 учнів за раз.", "Check the table headers and rows. First and last names are required, any email must be valid, and optional passwords need at least 8 characters. Up to 200 students per import."],
     DUPLICATE_STUDENT_EMAIL: ["Одна адреса email повторюється в списку. Перевірте рядки перед додаванням.", "An email address appears more than once in the roster. Check the rows before adding them."],
     PASSWORD_RESET_CONFIRMATION_REQUIRED: ["Підтвердьте скидання пароля у вікні учня.", "Confirm the password reset in the student's dialog."],
-    ASSESSMENT_NOT_READY: ["Викладач ще готує квіз або перевірку завдань цієї контрольної. Спробу й таймер не запущено. Спробуйте пізніше або зверніться до викладача.", "Your teacher is still preparing this assessment's quiz or grading setup. Your attempt and timer have not started. Try later or contact your teacher."],
     TASK_ALREADY_COMPLETED: ["Завдання вже успішно здано або перевірено вчителем. Збережену оцінку можна переглянути після оновлення сторінки.", "This task has already been passed or reviewed by your teacher. Reload to view your saved grade."],
     NO_TESTS_CONFIGURED: ["Викладач ще налаштовує перевірку цього завдання. Поверніться до уроку або зверніться до викладача.", "Your teacher is still configuring this task's grading. Return to the lesson or contact your teacher."],
     TESTS_CHANGED: ["Налаштування перевірки змінилися. Завантажте актуальні тести й повторіть дію.", "The grading setup changed. Load current tests and try again."],
