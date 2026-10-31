@@ -165,7 +165,7 @@
 .classroom-product .classroom-frame .class-management__tab { min-height: 3rem; border-bottom: 2px solid transparent; border-radius: 0; padding: .65rem .2rem; font-size: .8rem; font-weight: 500; }
 .classroom-product .classroom-frame .class-management__tab[aria-selected="true"] { border-bottom-color: var(--primary); color: var(--text-primary); }
 .classroom-product .classroom-frame .class-management__tab::after { display: none; }
-.classroom-product .classroom-frame .class-management__panel { border: 0; border-radius: 0; padding: 0; background: transparent; box-shadow: none; }
+.classroom-product .classroom-frame .class-management__panel { border: 0; border-radius: 0; padding: clamp(1.15rem, 2vw, 1.75rem); background: transparent; box-shadow: none; }
 .classroom-product .classroom-frame .class-management__panel button { border-radius: var(--ui-control-radius); font-size: .75rem; font-weight: 500; }
 .classroom-product .classroom-frame .class-management__roster-toolbar { margin-top: .8rem; border: 0; padding-block: .65rem; }
 .classroom-product .classroom-frame .class-management__search { min-height: 2.5rem; max-width: 23rem; border-radius: var(--ui-control-radius); background: var(--bg-surface); }
