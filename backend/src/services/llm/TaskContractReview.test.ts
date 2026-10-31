@@ -661,6 +661,20 @@ test('Python oracle compile failures have an accurate user-facing validation mes
   }
 });
 
+test('task guidance validation failures have an accurate user-facing message', async t => {
+  t.mock.method(getLLMOrchestrator(), 'generateTaskGenerationGuidance', async () => {
+    throw makeAIValidationError('generateTaskGuidance', 'Task generation guidance validation failed: guidance: Invalid input, expected string, received array');
+  });
+  const result = await safeAICall('generateTaskGuidance', {
+    topicTitle: 'Python input', taskTitle: 'Read a value', taskType: 'PRACTICE', language: 'PYTHON',
+  }, { maxAttempts: 1 });
+  assert.equal(result.success, false);
+  if (!result.success) {
+    assert.equal(result.error.message, 'AI_GENERATION_FAILED: Generated task guidance was invalid');
+    assert.match(result.error.error ?? '', /received array/);
+  }
+});
+
 test('EDU blank expected answers survive the final save guard for ordinary stdin tasks', async t => {
   const tests = [{ input: '0\n', output: '\n' }, { input: '1\n5\n', output: '' }, { input: '3\n1 2 3\n', output: '6\n' }];
   t.mock.method(getLLMOrchestrator(), 'generateTestDataWithAI', async () => tests);

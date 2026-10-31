@@ -868,7 +868,9 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
               statusCode: 502,
               message: /Reference program compilation failed/i.test(errorMsg)
                 ? 'AI_GENERATION_FAILED: Generated Python reference program failed to compile'
-                : 'AI_GENERATION_FAILED: Invalid response structure',
+                : /Task generation guidance validation failed/i.test(errorMsg)
+                  ? 'AI_GENERATION_FAILED: Generated task guidance was invalid'
+                  : 'AI_GENERATION_FAILED: Invalid response structure',
                 error: errorMsg,
               details: {
                 mode,

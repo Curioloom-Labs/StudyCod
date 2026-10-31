@@ -10,6 +10,37 @@ const contractTask = {
   examples: [{ input: '2 3', output: '5', explanation: '2 + 3 = 5.' }], codeTemplate: '# TODO',
 };
 
+test('task guidance accepts string bullets returned as an array and joins them for editing', () => {
+  const guidance = [
+    '1. Create a realistic scenario with a clear calculation.',
+    '2. Read values with input() and convert their types.',
+    '3. Specify exact output formatting and boundary tests.',
+  ];
+  const result = AIResponseValidator.validateGenerateTaskGuidance({
+    guidance,
+    clarifyingQuestions: [],
+    settings: {
+      learnerLevel: 'INTERMEDIATE', studentContext: '', difficulty: 3, structure: 'MULTI_STEP',
+      contextStyle: 'REAL_WORLD', learningGoal: 'Practice input and output.',
+      includeConcepts: 'input(), int(), f-strings', avoidConcepts: '',
+      stayOnTopic: true, avoidSolutionHints: true,
+    },
+  });
+  assert.equal(result.guidance, guidance.join('\n'));
+});
+
+test('task guidance rejects arrays that contain non-text values', () => {
+  assert.throws(() => AIResponseValidator.validateGenerateTaskGuidance({
+    guidance: ['Use input().', { text: 'Print the result.' }],
+    clarifyingQuestions: [],
+    settings: {
+      learnerLevel: 'INTERMEDIATE', studentContext: '', difficulty: 3, structure: 'MULTI_STEP',
+      contextStyle: 'REAL_WORLD', learningGoal: 'Practice input and output.',
+      includeConcepts: 'input()', avoidConcepts: '', stayOnTopic: true, avoidSolutionHints: true,
+    },
+  }), /guidance: Invalid input/);
+});
+
 test('authored EDU tests preserve blank output while generated course tests remain strict', () => {
   const tests = [{ input: '0\n', output: '\n' }, { input: '1\n5\n', output: '' }, { input: '3\n3 3 3\n', output: '  3.00\n' }];
   assert.deepEqual(AIResponseValidator.validateGenerateTestData(tests, 3, 'STDIN_STDOUT', { allowEmptyOutput: true }).map(test => test.output), ['\n', '', '  3.00\n']);
