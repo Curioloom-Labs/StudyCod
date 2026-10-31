@@ -1,7 +1,11 @@
+import { createHash } from 'crypto';
 import { z } from "zod";
 import { getLLMProvider } from "../llm/provider";
 import { redisKey, runWithRedis } from "../redis/sharedRedis";
 import { env } from "../../env";
+import { generatePromptJSON } from "../llm/promptExecution";
+import { PROMPT_SCHEMA_VERSION } from "../../../../shared/ai/prompts";
+import { getActivePromptBundleVersion } from "../llm/promptExecution";
 
 export type AIDetectorLikelihood = "unlikely" | "possible" | "likely";
 
@@ -28,7 +32,7 @@ type CacheEntry = {
   value: Omit<AICodeDetectionResult, "cached">;
 };
 
-const cacheByGradeId = new Map<number, CacheEntry>();
+const cacheByGradeId = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 15 * 60_000;
 const CACHE_TTL_SECONDS = Math.max(1, Math.ceil(CACHE_TTL_MS / 1000));
 
@@ -42,8 +46,43 @@ function clampText(input: unknown, maxLen: number): string {
   return cleaned.length > maxLen ? cleaned.slice(0, maxLen) : cleaned;
 }
 
-function detectorRedisKey(gradeId: number): string {
-  return redisKey("ai-detector", "grade", gradeId);
+function detectorCacheFingerprint(params: {
+  gradeId: number;
+  language: string;
+  taskTitle: string;
+  taskDescription: string;
+  template: string;
+  submittedCode: string;
+}, model: string, promptVersion: string): string {
+  const modelConfig = [
+    env.LLM_PROVIDER,
+    env.OPENROUTER_MODEL,
+    env.OPENROUTER_TEXT_MODEL,
+    env.OPENROUTER_JSON_MODEL,
+    env.OPENROUTER_FALLBACK_MODELS,
+    env.OPENROUTER_MODEL_FALLBACKS,
+  ].map(value => String(value ?? '').trim()).join('|');
+  const input = JSON.stringify({
+    gradeId: params.gradeId,
+    language: params.language,
+    taskTitle: clampText(params.taskTitle, 200),
+    taskDescription: clampText(params.taskDescription, 3000),
+    template: clampText(params.template, 3000),
+    submittedCode: clampText(params.submittedCode, 6000),
+    model,
+    modelConfig,
+    promptVersion,
+    schemaVersion: PROMPT_SCHEMA_VERSION,
+  });
+  return createHash('sha256').update(input).digest('hex').slice(0, 24);
+}
+
+function detectorRedisKey(gradeId: number, fingerprint: string, promptVersion: string): string {
+  return redisKey("ai-detector", promptVersion, PROMPT_SCHEMA_VERSION, "grade", gradeId, fingerprint);
+}
+
+function detectorCacheKey(gradeId: number, fingerprint: string, promptVersion: string): string {
+  return `${promptVersion}:${PROMPT_SCHEMA_VERSION}:${gradeId}:${fingerprint}`;
 }
 
 function isCachedValue(value: unknown): value is Omit<AICodeDetectionResult, "cached"> {
@@ -67,7 +106,11 @@ export async function detectAICode(params: {
   userId?: number;
   topicTaskId?: number;
 }): Promise<AICodeDetectionResult> {
-  const cached = cacheByGradeId.get(params.gradeId);
+  const model = (env.OPENROUTER_MODEL || "openai/gpt-4o-mini").trim() || "openai/gpt-4o-mini";
+  const promptVersion = getActivePromptBundleVersion();
+  const fingerprint = detectorCacheFingerprint(params, model, promptVersion);
+  const cacheKey = detectorCacheKey(params.gradeId, fingerprint, promptVersion);
+  const cached = cacheByGradeId.get(cacheKey);
   if (cached && cached.expiresAt > nowMs()) {
     return {
       ...cached.value,
@@ -76,7 +119,7 @@ export async function detectAICode(params: {
   }
 
   const cachedFromRedisRaw = await runWithRedis("ai detector cache get", async redis => {
-    return await redis.get(detectorRedisKey(params.gradeId));
+    return await redis.get(detectorRedisKey(params.gradeId, fingerprint, promptVersion));
   });
 
   if (typeof cachedFromRedisRaw === "string" && cachedFromRedisRaw.trim()) {
@@ -84,7 +127,7 @@ export async function detectAICode(params: {
       const parsed = JSON.parse(cachedFromRedisRaw);
       if (isCachedValue(parsed)) {
         const value = parsed as Omit<AICodeDetectionResult, "cached">;
-        cacheByGradeId.set(params.gradeId, {
+        cacheByGradeId.set(cacheKey, {
           expiresAt: nowMs() + CACHE_TTL_MS,
           value,
         });
@@ -98,9 +141,7 @@ export async function detectAICode(params: {
     }
   }
 
-  const model = (env.OPENROUTER_MODEL || "openai/gpt-4o-mini").trim() || "openai/gpt-4o-mini";
-
-  const system = `Ти інструмент для вчителя: оціни ймовірність того, що код учня написаний з суттєвою допомогою AI (ChatGPT/LLM), а не самостійно.\n\nВАЖЛИВО: прості задачі часто дають дуже схожі рішення у всіх. Не карай за "очевидність". Якщо завдання просте або шаблон коду сильно задає структуру — знижуй впевненість.\n\nВідповідай ТІЛЬКИ JSON без пояснень.`;
+  const system = `Ти — інструмент для попередньої перевірки коду вчителем. Код сам собою не доводить, хто його написав: визначай лише обмежені сигнали, пояснюй альтернативні причини схожості та явно вказуй невизначеність. Результат є орієнтиром для подальшої перевірки, не доказом порушення і не підставою автоматично карати учня.\n\nВАЖЛИВО: прості задачі часто дають дуже схожі рішення у всіх. Не карай за "очевидність". Якщо завдання просте або шаблон коду сильно задає структуру — знижуй впевненість.\n\nВідповідай ТІЛЬКИ JSON без пояснень.`;
 
   const taskTitle = clampText(params.taskTitle, 200);
   const taskDescription = clampText(params.taskDescription, 3000);
@@ -123,12 +164,13 @@ export async function detectAICode(params: {
     }
   };
 
-  const parsed: unknown = await provider.generateJSON(user, jsonSchema, system, {
+  const parsed: unknown = await generatePromptJSON(provider, "integrity.code-detection", user, jsonSchema, system, {
     timeout: 25_000,
     maxRetries: 1,
     userId: params.userId,
     topicId: params.topicTaskId,
     traceId: params.requestId,
+    language: "uk",
     temperature: 0.1,
     maxTokens: 450
   });
@@ -140,13 +182,13 @@ export async function detectAICode(params: {
     model
   };
 
-  cacheByGradeId.set(params.gradeId, {
+  cacheByGradeId.set(cacheKey, {
     expiresAt: nowMs() + CACHE_TTL_MS,
     value
   });
 
   await runWithRedis("ai detector cache set", async redis => {
-    await redis.set(detectorRedisKey(params.gradeId), JSON.stringify(value), {
+    await redis.set(detectorRedisKey(params.gradeId, fingerprint, promptVersion), JSON.stringify(value), {
       EX: CACHE_TTL_SECONDS,
     });
     return true;

@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { CloudflareAIProvider } from './CloudflareAIProvider';
 import { OpenRouterProvider } from './OpenRouterProvider';
 import { LocalLLMProvider } from './LocalLLMProvider';
@@ -16,6 +17,8 @@ import { generateReferenceTestData, type ReferenceTestExecutor } from './Referen
 import { parseOlympiadPracticeContract } from '../learning/learningContract';
 import { ensureOlympiadCompleteProgramRequest, validateOlympiadDebuggingTask, validateOlympiadTaskExamples, validateOlympiadTaskNarrativeDomain } from './OlympiadTaskExamples';
 import { TASK_AI_TRAP_START } from '../../../../shared/utils/taskAiTrap';
+import { consumeCurrentAIExecutionRetry, generatePromptJSON, generatePromptText, getActivePromptBundleVersion, runWithPromptExecutionContext } from './promptExecution';
+import { PROMPT_SCHEMA_VERSION } from '../../../../shared/ai/prompts';
 
 export type LLMTaskLanguage = TopicLanguage;
 
@@ -177,7 +180,9 @@ function buildTaskAnchorCacheKey(params: {
   // Bump this when the semantic anchor contract changes. Old anchors can
   // contain implementation hints (for example, "use if/else or switch") and
   // must not leak into otherwise clean task prompts after a deployment.
-  return `v2|${params.lang}|${String(params.topicTitle ?? '').trim().toLowerCase()}`;
+  const modelConfig = [env.LLM_PROVIDER, env.OPENROUTER_MODEL, env.OPENROUTER_TEXT_MODEL, env.OPENROUTER_JSON_MODEL, env.OPENROUTER_FALLBACK_MODELS, env.OPENROUTER_MODEL_FALLBACKS, env.LOCAL_LLM_MODEL].map(value => String(value ?? '').trim()).join('|');
+  const modelVersion = createHash('sha256').update(modelConfig).digest('hex').slice(0, 10);
+  return `v3|${getActivePromptBundleVersion()}|${PROMPT_SCHEMA_VERSION}|${modelVersion}|${params.lang}|${String(params.topicTitle ?? '').trim().toLowerCase()}`;
 }
 
 function compactPromptText(raw: string, maxLength: number): string {
@@ -296,6 +301,10 @@ function preferredProvider(): 'cloudflare' | 'openrouter' | 'local' | 'auto' {
   if (raw === 'openrouter') return 'openrouter';
   if (raw === 'local' || raw === 'local-llm' || raw === 'selfhosted') return 'local';
   return 'auto';
+}
+
+function consumeRetryOrThrow(reason: string): void {
+  if (!consumeCurrentAIExecutionRetry()) throw new Error(`AI_GENERATION_FAILED: Shared retry budget exhausted before ${reason}`);
 }
 function isRetryableError(error: unknown): boolean {
   if (!error) return false;
@@ -428,6 +437,33 @@ export class LLMOrchestrator {
     /** Inbound request id for trace correlation across HTTP -> orchestrator. */
     requestId?: string;
   }): Promise<AiTaskGenerationResult> {
+    return runWithPromptExecutionContext('task.generate', { signal: params.signal, traceId: params.requestId }, () => this.generateTaskWithAIInPromptContext(params));
+  }
+  private async generateTaskWithAIInPromptContext(params: {
+    topicTitle: string;
+    theory: string;
+    lang: LLMTaskLanguage;
+    topicIndex?: number;
+    numInTopic: number;
+    isFirstTask: boolean;
+    difus?: number;
+    isControl?: boolean;
+    prevTopics?: string;
+    /** Optional brief list of previously generated tasks in the same topic (to enforce uniqueness). */
+    previousTasks?: string;
+    /** Optional IO-type allowlist (e.g., disallow STDIN before input is taught). */
+    allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
+    userId?: number;
+    topicId?: number;
+    language?: "uk" | "en";
+    /** Optional request cancellation/deadline. */
+    signal?: AbortSignal;
+    /** Semantic-gate retries inside generateTaskFromAnchor (0..2). */
+    semanticRetries?: number;
+    validationFeedback?: string;
+    /** Inbound request id for trace correlation across HTTP -> orchestrator. */
+    requestId?: string;
+  }): Promise<AiTaskGenerationResult> {
     const olympiadContract = parseOlympiadPracticeContract(params.theory);
     if (params.topicIndex === 0 && !olympiadContract) {
       logger.info("[llm] introductory task generation parameters", {
@@ -448,14 +484,18 @@ export class LLMOrchestrator {
       });
     }
 
+    let providerAttempts = 0;
+    const enterProviderAttempt = () => { if (providerAttempts++ > 0) consumeRetryOrThrow('provider fallback'); };
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
     const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
+      enterProviderAttempt();
       let validationFeedback = params.validationFeedback;
       for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (attempt > 0) consumeRetryOrThrow('Cloudflare task repair');
         try {
           const raw = await this.cloudflareProvider.generateTaskWithAI({
             topicTitle: params.topicTitle,
@@ -507,10 +547,12 @@ export class LLMOrchestrator {
     };
 
     const tryOpenRouter = async () => {
+      enterProviderAttempt();
       return await this.generateTaskWithAI_OpenRouter(params);
     };
 
     const tryLocal = async () => {
+      enterProviderAttempt();
       return await this.generateTaskWithAI_OpenRouter(params, this.localProvider);
     };
 
@@ -685,20 +727,22 @@ Return ONLY JSON without explanations.`
     const maxAnchorAttempts = 2;
     let lastErr: unknown = null;
     for (let attempt = 1; attempt <= maxAnchorAttempts; attempt++) {
+      if (attempt > 1) consumeRetryOrThrow('task anchor repair');
       try {
-        const parsed = await provider.generateJSON<{
+        const parsed = await generatePromptJSON<{
           topic: string;
           coreOperation: string;
           allowedScope: string[];
           forbiddenScope: string[];
-        }>(userPrompt, anchorSchema, systemPrompt, {
+        }>(provider, 'task.anchor', userPrompt, anchorSchema, systemPrompt, {
           timeout: LLM_TASK_TIMEOUT_MS,
           maxRetries: 0,
           userId: params.userId,
           topicId: params.topicId,
           signal: params.signal,
           temperature: 0.2,
-          maxTokens: 500
+          maxTokens: 500,
+          language: params.language ?? 'uk',
         });
 
         const parsedTopicRaw = typeof parsed?.topic === 'string' ? parsed.topic.trim() : '';
@@ -1463,9 +1507,10 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     })();
     let lastError: Error | null = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) consumeRetryOrThrow('task semantic repair');
       try {
         const retryFeedback = lastError ? `\nPREVIOUS VALIDATION FAILURE: ${buildTaskValidationFeedback(lastError.message, readProperty(lastError, 'rawResponse'))}\nGenerate a complete corrected task; explicitly resolve this issue without inventing hidden rules.` : '';
-        const parsed = await provider.generateJSON<unknown>(userPrompt + retryFeedback, jsonSchema, systemPrompt, {
+        const parsed = await generatePromptJSON<unknown>(provider, 'task.generate', userPrompt + retryFeedback, jsonSchema, systemPrompt, {
           validationRetry: Boolean(lastError || params.validationFeedback),
           timeout: LLM_TASK_TIMEOUT_MS,
           maxRetries: 0,
@@ -1473,7 +1518,8 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
           topicId: params.topicId,
           signal: params.signal,
           temperature: 0.15,
-          maxTokens: LLM_TASK_MAX_TOKENS
+          maxTokens: LLM_TASK_MAX_TOKENS,
+          language: params.language ?? 'uk',
         });
         const validated = await validateAndReviewGeneratedTask(provider, parsed, {
           expectedTopic: params.anchor.topic,
@@ -1625,12 +1671,30 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     language?: "uk" | "en";
     signal?: AbortSignal;
   }): Promise<AiTheoryResult> {
+    return runWithPromptExecutionContext('task.theory', { signal: params.signal }, () => this.generateTheoryWithAIInPromptContext(params));
+  }
+  private async generateTheoryWithAIInPromptContext(params: {
+    topicTitle: string;
+    lang: LLMTaskLanguage;
+    taskDescription?: string;
+    taskType?: "PRACTICE" | "CONTROL";
+    difficulty?: number;
+    generationGuidance?: string;
+    responseLanguage?: string;
+    userId?: number;
+    topicId?: number;
+    language?: "uk" | "en";
+    signal?: AbortSignal;
+  }): Promise<AiTheoryResult> {
+    let providerAttempts = 0;
+    const enterProviderAttempt = () => { if (providerAttempts++ > 0) consumeRetryOrThrow('provider fallback'); };
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
     const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
+      enterProviderAttempt();
       const raw = await this.cloudflareProvider.generateTheoryWithAI({
         topicTitle: params.topicTitle,
         lang: params.lang,
@@ -1649,10 +1713,12 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     };
 
     const tryOpenRouter = async () => {
+      enterProviderAttempt();
       return await this.generateTheoryWithAI_OpenRouter(params);
     };
 
     const tryLocal = async () => {
+      enterProviderAttempt();
       return await this.generateTheoryWithAI_OpenRouter(params, this.localProvider);
     };
 
@@ -1754,13 +1820,14 @@ REQUIREMENTS (mandatory):
 - Формат: Markdown. Без вступів на кшталт "Ось теорія".${guidanceSection}${responseLanguageInstruction}`;
     }
     try {
-      const content = await provider.generateText(userPrompt, systemPrompt, {
+      const content = await generatePromptText(provider, 'task.theory', userPrompt, systemPrompt, {
         timeout: 30000,
         userId: params.userId,
         topicId: params.topicId,
         signal: params.signal,
         temperature: 0.7,
-        maxTokens: 2200
+        maxTokens: 2200,
+        language: params.language ?? 'uk',
       });
       const validated = AIResponseValidator.validateGenerateTheory({
         theory: content.trim()
@@ -1784,12 +1851,31 @@ REQUIREMENTS (mandatory):
     language?: "uk" | "en";
     signal?: AbortSignal;
   }): Promise<AiQuizResult> {
+    return runWithPromptExecutionContext('task.quiz', { signal: params.signal }, () => this.generateQuizWithAIInPromptContext(params));
+  }
+  private async generateQuizWithAIInPromptContext(params: {
+    lang: LLMTaskLanguage;
+    prevTopics: string;
+    count?: number;
+    difficulty?: number;
+    questionStyle?: "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
+    codeLength?: QuizCodeLength;
+    generationGuidance?: string;
+    responseLanguage?: string;
+    userId?: number;
+    topicId?: number;
+    language?: "uk" | "en";
+    signal?: AbortSignal;
+  }): Promise<AiQuizResult> {
+    let providerAttempts = 0;
+    const enterProviderAttempt = () => { if (providerAttempts++ > 0) consumeRetryOrThrow('provider fallback'); };
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
     const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
+      enterProviderAttempt();
       const raw = await this.cloudflareProvider.generateQuizWithAI({
         lang: params.lang,
         prevTopics: params.prevTopics,
@@ -1809,10 +1895,12 @@ REQUIREMENTS (mandatory):
     };
 
     const tryOpenRouter = async () => {
+      enterProviderAttempt();
       return await this.generateQuizWithAI_OpenRouter(params);
     };
 
     const tryLocal = async () => {
+      enterProviderAttempt();
       return await this.generateQuizWithAI_OpenRouter(params, this.localProvider);
     };
 
@@ -1902,15 +1990,17 @@ REQUIREMENTS:
     let lastError: Error | null = null;
     const maxRetries = 2;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) consumeRetryOrThrow('quiz format repair');
       try {
         const maxTokens = Math.min(10000, Math.max(3000, questionCount * (params.codeLength === "LONG" ? 500 : 240)));
-        const content = await provider.generateText(userPrompt, systemPrompt, {
+        const content = await generatePromptText(provider, 'task.quiz', userPrompt, systemPrompt, {
           timeout: 30000,
           userId: params.userId,
           topicId: params.topicId,
           signal: params.signal,
           temperature: 0.7,
-          maxTokens
+          maxTokens,
+          language: params.language ?? 'uk',
         });
         if (!content) throw new Error('Empty AI response');
         let parsed: unknown;
@@ -2043,6 +2133,37 @@ REQUIREMENTS:
       avoidSolutionHints: boolean;
     };
   }> {
+    return runWithPromptExecutionContext('task.generation-guidance', { signal: params.signal }, () => this.generateTaskGenerationGuidanceInPromptContext(params));
+  }
+  private async generateTaskGenerationGuidanceInPromptContext(params: {
+    topicTitle: string;
+    taskTitle: string;
+    taskType: "PRACTICE" | "CONTROL";
+    language: LLMTaskLanguage;
+    classTitle?: string;
+    responseLanguage?: string;
+    userId?: number;
+    topicId?: number;
+    userLanguage?: "uk" | "en";
+    signal?: AbortSignal;
+  }): Promise<{
+    guidance: string;
+    clarifyingQuestions: string[];
+    settings: {
+      learnerLevel: "AUTO" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "OLYMPIAD";
+      studentContext: string;
+      difficulty: number;
+      structure: "AUTO" | "SINGLE_CONCEPT" | "MULTI_STEP" | "EDGE_CASES" | "COMBINED";
+      contextStyle: "AUTO" | "NEUTRAL" | "REAL_WORLD" | "CREATIVE";
+      learningGoal: string;
+      includeConcepts: string;
+      avoidConcepts: string;
+      stayOnTopic: boolean;
+      avoidSolutionHints: boolean;
+    };
+  }> {
+    let providerAttempts = 0;
+    const enterProviderAttempt = () => { if (providerAttempts++ > 0) consumeRetryOrThrow('provider fallback'); };
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
@@ -2080,6 +2201,33 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
 
 Обери складність від 1 до 5 за назвою, класом і попередніми знаннями. Якщо клас відомий — спирайся на нього; ніколи не вигадуй клас. Текст рекомендацій і параметри мають узгоджуватися. Для високої складності додавай змістовніше міркування й випадки, але не вводь невивчені теми. Постав від 0 до 3 коротких уточнювальних запитань лише тоді, коли важливу вимогу не можна безпечно зрозуміти з назви й контексту (наприклад, неоднозначно, що саме обчислювати, або можливі два різні трактування). Не питай про параметри, які вже задаються налаштуваннями; якщо завдання зрозуміле — поверни порожній масив. Не додавай Markdown-фенси чи текст поза JSON.${responseLanguageInstruction}`;
 
+    const guidanceSchema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        guidance: { type: "string", minLength: 20 },
+        clarifyingQuestions: { type: "array", items: { type: "string" }, maxItems: 3 },
+        settings: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            learnerLevel: { type: "string", enum: ["AUTO", "BEGINNER", "INTERMEDIATE", "ADVANCED", "OLYMPIAD"] },
+            studentContext: { type: "string" },
+            difficulty: { type: "integer", minimum: 1, maximum: 5 },
+            structure: { type: "string", enum: ["AUTO", "SINGLE_CONCEPT", "MULTI_STEP", "EDGE_CASES", "COMBINED"] },
+            contextStyle: { type: "string", enum: ["AUTO", "NEUTRAL", "REAL_WORLD", "CREATIVE"] },
+            learningGoal: { type: "string" },
+            includeConcepts: { type: "string" },
+            avoidConcepts: { type: "string" },
+            stayOnTopic: { type: "boolean" },
+            avoidSolutionHints: { type: "boolean" },
+          },
+          required: ["learnerLevel", "studentContext", "difficulty", "structure", "contextStyle", "learningGoal", "includeConcepts", "avoidConcepts", "stayOnTopic", "avoidSolutionHints"],
+        },
+      },
+      required: ["guidance", "clarifyingQuestions", "settings"],
+    } as const;
+
     const generateWith = async (provider: LLMProvider): Promise<{
       guidance: string;
       clarifyingQuestions: string[];
@@ -2096,7 +2244,7 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
         avoidSolutionHints: boolean;
       };
     }> => {
-      const content = await provider.generateText(userPrompt, systemPrompt, {
+      const result = await generatePromptJSON<unknown>(provider, 'task.generation-guidance', userPrompt, guidanceSchema, systemPrompt, {
         timeout: 25000,
         userId: params.userId,
         topicId: params.topicId,
@@ -2105,17 +2253,11 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
         maxTokens: 1000,
         language: params.userLanguage || "uk",
       });
-      let jsonContent = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-      if (!jsonContent.startsWith("{")) {
-        const start = jsonContent.indexOf("{");
-        const end = jsonContent.lastIndexOf("}");
-        if (start >= 0 && end > start) jsonContent = jsonContent.slice(start, end + 1);
-      }
-      return AIResponseValidator.validateGenerateTaskGuidance(JSON.parse(jsonContent));
+      return AIResponseValidator.validateGenerateTaskGuidance(result);
     };
-    const tryCloudflare = async () => generateWith(this.cloudflareProvider);
-    const tryOpenRouter = async () => generateWith(this.openRouterProvider);
-    const tryLocal = async () => generateWith(this.localProvider);
+    const tryCloudflare = async () => { enterProviderAttempt(); return generateWith(this.cloudflareProvider); };
+    const tryOpenRouter = async () => { enterProviderAttempt(); return generateWith(this.openRouterProvider); };
+    const tryLocal = async () => { enterProviderAttempt(); return generateWith(this.localProvider); };
 
     if (pref === "local") {
       if (!canLocal) {
@@ -2166,13 +2308,33 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
   }): Promise<{
     description: string;
   }> {
+    return runWithPromptExecutionContext('task.condition', { signal: params.signal }, () => this.generateTaskConditionInPromptContext(params));
+  }
+  private async generateTaskConditionInPromptContext(params: {
+    topicTitle: string;
+    taskTitle?: string;
+    taskType: "PRACTICE" | "CONTROL";
+    difficulty?: number;
+    generationGuidance?: string;
+    language: LLMTaskLanguage;
+    responseLanguage?: string;
+    userId?: number;
+    topicId?: number;
+    userLanguage?: "uk" | "en";
+    signal?: AbortSignal;
+  }): Promise<{
+    description: string;
+  }> {
     const requireAiTrap = Boolean(params.generationGuidance?.includes(TASK_AI_TRAP_START));
+    let providerAttempts = 0;
+    const enterProviderAttempt = () => { if (providerAttempts++ > 0) consumeRetryOrThrow('provider fallback'); };
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
     const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
+      enterProviderAttempt();
       const raw = await this.cloudflareProvider.generateTaskCondition({
         topicTitle: params.topicTitle,
         taskType: params.taskType,
@@ -2190,10 +2352,12 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
     };
 
     const tryOpenRouter = async () => {
+      enterProviderAttempt();
       return await this.generateTaskCondition_OpenRouter(params);
     };
 
     const tryLocal = async () => {
+      enterProviderAttempt();
       return await this.generateTaskCondition_OpenRouter(params, this.localProvider);
     };
 
@@ -2351,10 +2515,11 @@ ${difficultyPrompt}
     try {
       let lastValidationError: unknown;
       for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) consumeRetryOrThrow('task statement repair');
         const retryInstruction = attempt === 0 ? "" : isEnglish
           ? `\n\nREPAIR THE PREVIOUS INCOMPLETE RESPONSE. Return a fresh, complete task statement, not a continuation. Keep it concise, include exactly three examples, and close every code block. Validation finding: ${errorMessage(lastValidationError)}`
           : `\n\nВИПРАВ НЕПОВНУ ПОПЕРЕДНЮ ВІДПОВІДЬ. Поверни умову повністю заново, не продовжуй обірваний текст. Пиши стисло, додай рівно три приклади й закрий кожен блок коду. Помилка перевірки: ${errorMessage(lastValidationError)}`;
-        const content = await provider.generateText(`${userPrompt}${retryInstruction}`, systemPrompt, {
+        const content = await generatePromptText(provider, 'task.condition', `${userPrompt}${retryInstruction}`, systemPrompt, {
           timeout: attempt === 0 ? 25000 : 18000,
           userId: params.userId,
           topicId: params.topicId,
@@ -2391,12 +2556,31 @@ ${difficultyPrompt}
   }): Promise<{
     template: string;
   }> {
+    return runWithPromptExecutionContext('task.template', { signal: params.signal }, () => this.generateTaskTemplateInPromptContext(params));
+  }
+  private async generateTaskTemplateInPromptContext(params: {
+    topicTitle: string;
+    taskTitle?: string;
+    language: LLMTaskLanguage;
+    description?: string;
+    responseLanguage?: string;
+    generationGuidance?: string;
+    userId?: number;
+    topicId?: number;
+    userLanguage?: "uk" | "en";
+    signal?: AbortSignal;
+  }): Promise<{
+    template: string;
+  }> {
+    let providerAttempts = 0;
+    const enterProviderAttempt = () => { if (providerAttempts++ > 0) consumeRetryOrThrow('provider fallback'); };
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
     const canLocal = isLocalConfigured();
 
     const tryCloudflare = async () => {
+      enterProviderAttempt();
       const raw = await this.cloudflareProvider.generateTaskTemplate({
         topicTitle: params.topicTitle,
         language: params.language,
@@ -2423,10 +2607,12 @@ ${difficultyPrompt}
     };
 
     const tryOpenRouter = async () => {
+      enterProviderAttempt();
       return await this.generateTaskTemplate_OpenRouter(params);
     };
 
     const tryLocal = async () => {
+      enterProviderAttempt();
       return await this.generateTaskTemplate_OpenRouter(params, this.localProvider);
     };
 
@@ -2638,7 +2824,7 @@ public class Main {
 
 Поверни ТІЛЬКИ код без markdown блоків та пояснень.${guidanceSection}${responseLanguageInstruction}`;
     try {
-      const content = await provider.generateText(userPrompt, systemPrompt, {
+      const content = await generatePromptText(provider, 'task.template', userPrompt, systemPrompt, {
         timeout: 30000,
         userId: params.userId,
         topicId: params.topicId,
@@ -2679,12 +2865,32 @@ public class Main {
     allowEmptyOutput?: boolean;
     referenceExamplesAreAuthoritative?: boolean;
   }): Promise<TestDataExample[]> {
+    return runWithPromptExecutionContext('task.generated-tests', { signal: params.signal }, () => this.generateTestDataWithAIInPromptContext(params));
+  }
+  private async generateTestDataWithAIInPromptContext(params: {
+    taskDescription: string;
+    taskTitle: string;
+    lang: LLMTaskLanguage;
+    count: number;
+    ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
+    language?: "uk" | "en";
+    userId?: number;
+    signal?: AbortSignal;
+    validationFeedback?: string;
+    publicExamples?: TestDataExample[];
+    requiredCases?: string[];
+    executeReference?: ReferenceTestExecutor;
+    allowEmptyOutput?: boolean;
+    referenceExamplesAreAuthoritative?: boolean;
+  }): Promise<TestDataExample[]> {
     const canonicalTaskDescription = requireCompleteTaskDescription(params.taskDescription);
     params = {
       ...params,
       taskDescription: canonicalTaskDescription,
       ioType: resolveTestDataIoType(canonicalTaskDescription, params.ioType),
     };
+    let providerAttempts = 0;
+    const enterProviderAttempt = () => { if (providerAttempts++ > 0) consumeRetryOrThrow('provider fallback'); };
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
@@ -2694,6 +2900,7 @@ public class Main {
       : Math.max(1, Math.floor(params.count));
 
     const tryCloudflare = async () => {
+      enterProviderAttempt();
       if (params.executeReference && params.ioType === 'STDIN_STDOUT') {
         return generateReferenceTestData(this.cloudflareProvider, { ...params, executeReference: params.executeReference });
       }
@@ -2722,10 +2929,12 @@ public class Main {
     };
 
     const tryOpenRouter = async () => {
+      enterProviderAttempt();
       return await this.generateTestDataWithAI_OpenRouter(params);
     };
 
     const tryLocal = async () => {
+      enterProviderAttempt();
       return await this.generateTestDataWithAI_OpenRouter(params, this.localProvider);
     };
 
@@ -2898,15 +3107,14 @@ IMPORTANT:
 `.trim();
     // safeAICall owns semantic retries and carries the failure into the next
     // attempt. Retrying here multiplied model calls and then lost that feedback.
-    const parsed = await provider.generateJSON<{ tests: TestDataExample[] }>(
-      userPrompt + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nReturn corrected tests and resolve every reported issue.` : ''),
-      jsonSchema, systemPrompt, {
+    const parsed = await generatePromptJSON<{ tests: TestDataExample[] }>(provider, 'task.generated-tests', userPrompt + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nReturn corrected tests and resolve every reported issue.` : ''), jsonSchema, systemPrompt, {
         timeout: 30000,
         maxRetries: 1,
         userId: params.userId,
         signal: params.signal,
         temperature: 0.08,
-        maxTokens: 3000
+        maxTokens: 3000,
+        language: params.language ?? 'uk',
       });
     const validated = AIResponseValidator.validateGenerateTestData(parsed, desiredCount, ioTypeLabel, { allowEmptyOutput: params.allowEmptyOutput });
     await reviewGeneratedTests(provider, taskDesc, ioTypeLabel, validated, {

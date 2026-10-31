@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { AiTaskGenerationResult, TestDataExample } from './LLMOrchestrator';
 import type { LLMGenerateOptions, LLMProvider } from './LLMProvider';
+import { consumeCurrentAIExecutionRetry, generatePromptJSON } from './promptExecution';
 import { AIValidationError, makeAIValidationError } from './AIResponseValidator';
 import { stripTaskAiTrapSegments } from '../../../../shared/utils/taskAiTrap';
 
@@ -119,17 +120,21 @@ async function reviewContract(
   const serializedPayload = JSON.stringify(payload);
   let formatFailure: 'invalid' | 'inconsistent' = 'invalid';
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0 && !consumeCurrentAIExecutionRetry()) {
+      throw makeAIValidationError(mode, 'TASK_CONTRACT_REVIEW_FAILED: shared retry budget exhausted before reviewer format repair');
+    }
     const prompt = attempt === 0
       ? serializedPayload
       : `${serializedPayload}\n\nRESPONSE FORMAT REPAIR: Your previous response did not satisfy the required verdict schema. Re-evaluate the same supplied data and return only a JSON object with exactly valid (boolean), invalidSource (none, statement, publicExamples, or candidateTests), and issues (up to three short strings). Use valid=true, invalidSource=none, issues=[] only if every check passes.`;
     let raw: unknown;
     try {
-      raw = await provider.generateJSON<unknown>(prompt, reviewJsonSchema, reviewInstructions, {
+      raw = await generatePromptJSON<unknown>(provider, 'task.contract-review', prompt, reviewJsonSchema, reviewInstructions, {
         ...options,
         timeout: 15_000,
         maxRetries: 0,
         temperature: 0,
         maxTokens: 800,
+        language: options.language ?? 'en',
       });
     } catch (error) {
       // Keep the original provider error on the first call. If the optional

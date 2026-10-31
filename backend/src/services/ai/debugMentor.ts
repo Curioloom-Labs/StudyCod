@@ -12,9 +12,10 @@
  * turn, so no session storage is needed.
  */
 import { getLLMProvider } from "../llm/provider";
+import { generatePromptText } from "../llm/promptExecution";
+import { formatUntrustedData } from "../../../../shared/ai/prompts";
 import { logger } from "../../utils/logger";
 import { classifyErrorKind, type FailureCase, type HintLanguage } from "./failureHints";
-import { neutralizePromptInjection } from "./safeAICall";
 
 export type DebugChatRole = "student" | "mentor";
 export interface DebugChatMessage {
@@ -74,15 +75,12 @@ RULES:
 
 /** Backward-compatible prompt helper used by existing callers and tests. */
 export function mentorSystemPrompt(locale: "uk" | "en" = "uk"): string {
-  if (locale !== "en") return DEBUG_MENTOR_SYSTEM_PROMPT;
-  return DEBUG_MENTOR_SYSTEM_PROMPT
-    .replace("Зазвичай відповідай простою українською", "Reply in clear English only (including questions and examples)")
-    .replace("На рівнях 1–3 не давай повне розв’язання.", "Не давай повний код чи повне розв’язання задачі.");
+  return locale === "en" ? DEBUG_MENTOR_SYSTEM_PROMPT_EN : DEBUG_MENTOR_SYSTEM_PROMPT;
 }
 
 function sanitizeMentorText(value: unknown, maxLength: number): string {
   const cleaned = String(value ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
-  return neutralizePromptInjection(cleaned).slice(0, maxLength);
+  return cleaned.slice(0, maxLength);
 }
 
 function sanitizeMentorContext(ctx: DebugMentorContext): DebugMentorContext {
@@ -155,13 +153,13 @@ export function buildContextBlock(inputContext: DebugMentorContext): string {
     : "(немає невдалих тестів — ймовірно помилка компіляції/виконання)";
 
   return [
-    `Завдання: ${ctx.taskTitle}`,
-    `Умова (скорочено):\n${String(ctx.taskText || "").slice(0, 1200)}`,
-    ctx.learningContext ? `Навчальний контекст (урок і попередній досвід):\n${String(ctx.learningContext).slice(0, 2200)}` : "",
+    `Завдання:\n${formatUntrustedData("task_title", ctx.taskTitle)}`,
+    `Умова (скорочено):\n${formatUntrustedData("task_statement", String(ctx.taskText || "").slice(0, 1200))}`,
+    ctx.learningContext ? `Навчальний контекст (урок і попередній досвід):\n${formatUntrustedData("learning_context", String(ctx.learningContext).slice(0, 2200))}` : "",
     `Мова: ${ctx.language}`,
     `Вердикт: ${String(ctx.verdict || "(невідомо)")}`,
-    `Код студента:\n${String(ctx.code || "").slice(0, 5000)}`,
-    stderr ? `Повідомлення про помилку:\n${JSON.stringify(stderr)}` : "",
+    `Код студента:\n${formatUntrustedData("student_code", String(ctx.code || "").slice(0, 5000))}`,
+    stderr ? `Повідомлення про помилку:\n${formatUntrustedData("judge_message", stderr)}` : "",
     `Невдалі тести:\n${failuresBlock}`,
   ]
     .filter(Boolean)
@@ -213,14 +211,15 @@ export async function debugMentorReply(params: {
   };
   const history = params.history;
 
-  const transcript = history
-    .map(m => `${m.role === "student" ? "Учень" : "Наставник"}: ${String(m.content ?? "").slice(0, DEBUG_CHAT_MAX_MESSAGE_CHARS)}`)
-    .join("\n");
+  const transcript = formatUntrustedData("mentor_transcript", history.map(m => ({
+    role: m.role === "student" ? "student" : "mentor",
+    content: String(m.content ?? "").slice(0, DEBUG_CHAT_MAX_MESSAGE_CHARS),
+  })));
 
   const prompt = `${buildContextBlock(params.context)}
 
 --- ДІАЛОГ ---
-${transcript || "Учень: (ще нічого не написав)"}
+${transcript}
 
 Дай наступну коротку відповідь Наставника: підтверди/спростуй, вкажи, що перевірити, і постав одне навідне питання. Без готового коду.`;
 
@@ -228,7 +227,7 @@ ${transcript || "Учень: (ще нічого не написав)"}
     const provider = getLLMProvider();
     const locale = params.context.uiLanguage ?? params.context.uiLocale ?? "uk";
     const systemPrompt = locale === "en" ? DEBUG_MENTOR_SYSTEM_PROMPT_EN : DEBUG_MENTOR_SYSTEM_PROMPT;
-    const raw = await provider.generateText(prompt, systemPrompt, { temperature: 0.3, maxTokens: 320 });
+    const raw = await generatePromptText(provider, "mentor.debug", prompt, systemPrompt, { temperature: 0.3, maxTokens: 320, language: locale });
     const reply = stripCodeFromMentorReply(raw, locale).slice(0, 1200).trim();
     if (reply) return { reply, source: "ai" };
   } catch (err: unknown) {

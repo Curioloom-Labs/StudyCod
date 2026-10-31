@@ -9,6 +9,9 @@ import { buildTaskValidationFeedback, cannotRepairByRegeneratingTests, requireCo
 import { executeReferenceTests } from '../executeReferenceTests';
 import { REFERENCE_LANGUAGE } from '../llm/ReferenceTestData';
 import { TASK_AI_TRAP_START } from '../../../../shared/utils/taskAiTrap';
+import { randomUUID } from 'crypto';
+import { createExecutionContext, type PromptId } from '../../../../shared/ai/prompts';
+import { getActivePromptBundleVersion, getCurrentAIExecutionContext, consumeCurrentAIExecutionRetry, runWithAIExecutionContext, waitWithinAIExecutionContext } from '../llm/promptExecution';
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTaskGuidance' | 'generateTestData';
 export interface AIError {
   statusCode: number;
@@ -86,10 +89,6 @@ function computeDefaultRetryAfterMs(statusCode: number): number {
 // in-memory fallback). See ./aiCircuitBreaker. The breaker is keyed by AI mode.
 function getNowMs(): number {
   return Date.now();
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Patterns that try to break out of the surrounding prompt context. Matches at
@@ -465,12 +464,56 @@ function validateResultBeforeSave(mode: AIMode, result: unknown, options: { allo
       break;
   }
 }
-export async function safeAICall<T = any>(mode: AIMode, params: unknown, options?: {
+
+function promptIdForMode(mode: AIMode): PromptId {
+  switch (mode) {
+    case 'generateTask': return 'task.generate';
+    case 'generateTheory': return 'task.theory';
+    case 'generateQuiz': return 'task.quiz';
+    case 'generateTaskCondition': return 'task.condition';
+    case 'generateTaskTemplate': return 'task.template';
+    case 'generateTaskGuidance': return 'task.generation-guidance';
+    case 'generateTestData': return 'task.generated-tests';
+  }
+}
+export function safeAICall<T = any>(mode: AIMode, params: unknown, options?: {
   expectedCount?: number;
   logRawResponse?: boolean;
   language?: "uk" | "en";
   requestId?: string;
-  /** Override default retry attempts (default: 4). */
+  /** Maximum total attempts (default: 3, within the shared retry budget). */
+  maxAttempts?: number;
+  /** Hard deadline for this AI call (in milliseconds). Aborts upstream fetches when supported. */
+  totalTimeoutMs?: number;
+}): Promise<{
+  success: true;
+  data: T;
+} | {
+  success: false;
+  error: AIError;
+}> {
+  const inherited = getCurrentAIExecutionContext();
+  const promptId = promptIdForMode(mode);
+  const now = Date.now();
+  const requestedDeadline = typeof options?.totalTimeoutMs === 'number' && Number.isFinite(options.totalTimeoutMs)
+    ? now + Math.max(500, Math.floor(options.totalTimeoutMs))
+    : undefined;
+  const deadlineAt = Math.min(requestedDeadline ?? Number.POSITIVE_INFINITY, inherited?.deadlineAt ?? Number.POSITIVE_INFINITY, requestedDeadline === undefined && inherited?.deadlineAt === undefined ? now + 120_000 : Number.POSITIVE_INFINITY);
+  return runWithAIExecutionContext(createExecutionContext(promptId, {
+    traceId: options?.requestId ?? inherited?.traceId ?? 'trace-' + randomUUID(),
+    deadlineAt,
+    signal: inherited?.signal,
+    retryBudget: inherited?.retryBudget ?? { remaining: 2 },
+    promptVersion: inherited?.promptVersion ?? getActivePromptBundleVersion(),
+  }), () => safeAICallInner<T>(mode, params, options));
+}
+
+async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?: {
+  expectedCount?: number;
+  logRawResponse?: boolean;
+  language?: "uk" | "en";
+  requestId?: string;
+  /** Maximum total attempts (default: 3, within the shared retry budget). */
   maxAttempts?: number;
   /** Hard deadline for this AI call (in milliseconds). Aborts upstream fetches when supported. */
   totalTimeoutMs?: number;
@@ -506,23 +549,30 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
     const startedAt = getNowMs();
 
     const maxAttempts = typeof options?.maxAttempts === 'number' && Number.isFinite(options.maxAttempts)
-      ? Math.max(1, Math.min(6, Math.floor(options.maxAttempts)))
-      : 4;
+      ? Math.max(1, Math.min(3, Math.floor(options.maxAttempts)))
+      : 3;
 
-    const totalTimeoutMs = typeof options?.totalTimeoutMs === 'number' && Number.isFinite(options.totalTimeoutMs)
-      ? Math.max(500, Math.floor(options.totalTimeoutMs))
-      : null;
+    const executionContext = getCurrentAIExecutionContext();
+    const totalTimeoutMs = Math.max(0, Math.floor((executionContext?.deadlineAt ?? startedAt + 120_000) - startedAt));
 
     const AbortControllerCtor = globalThis.AbortController as (new () => AbortController) | undefined;
-    const controller = totalTimeoutMs && AbortControllerCtor ? new AbortControllerCtor() : null;
+    const controller = AbortControllerCtor ? new AbortControllerCtor() : null;
+    const upstreamSignal = executionContext?.signal;
+    const onUpstreamAbort = () => controller?.abort();
+    if (controller && upstreamSignal) {
+      if (upstreamSignal.aborted) controller.abort();
+      else upstreamSignal.addEventListener('abort', onUpstreamAbort, { once: true });
+    }
     const timeoutId = totalTimeoutMs && controller ? setTimeout(() => controller.abort(), totalTimeoutMs) : null;
     // For rate limiting (429), a short retry often hits the same window.
     // Be slightly more patient to reduce user-visible 429s.
     let lastRetryAfterMs = 0;
     try {
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (upstreamSignal?.aborted || getNowMs() >= (executionContext?.deadlineAt ?? Number.POSITIVE_INFINITY)) break;
+        if (attempt > 1 && !consumeCurrentAIExecutionRetry()) break;
         try {
-          if (totalTimeoutMs !== null && getNowMs() - startedAt >= totalTimeoutMs) {
+          if (upstreamSignal?.aborted || getNowMs() >= (executionContext?.deadlineAt ?? Number.POSITIVE_INFINITY)) {
             throw new Error('AI_GENERATION_FAILED: Request aborted (deadline exceeded)');
           }
           switch (mode) {
@@ -793,7 +843,8 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
         await recordAiCircuitSuccess(mode);
         break;
         } catch (error) {
-        const errorMsg = errorMessage(error);
+          result = undefined;
+          const errorMsg = errorMessage(error);
         const looksLikeValidationError =
           error instanceof AIValidationError ||
           String(error && typeof error === 'object' && 'name' in error ? error.name : '') === 'AIValidationError' ||
@@ -835,30 +886,10 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
           if (canRetryValidation) {
             const backoff = Math.min(2000, 250 * attempt) + Math.floor(Math.random() * 250);
             lastRetryAfterMs = backoff;
-            if (totalTimeoutMs !== null) {
-              const remaining = totalTimeoutMs - (getNowMs() - startedAt);
-              const sleepMs = Math.max(0, Math.min(backoff, remaining - 50));
-              if (sleepMs > 0) await sleep(sleepMs);
-              else {
-                return {
-                  success: false,
-                  error: {
-                    statusCode: 504,
-                    message: 'AI_GENERATION_FAILED: Invalid response structure',
-                    error: 'AI_GENERATION_FAILED: Request aborted (deadline exceeded)',
-                    details: {
-                      mode,
-                      requestId: options?.requestId || null,
-                      attempt,
-                      elapsedMs: getNowMs() - startedAt,
-                      validationError: errorMsg
-                    }
-                  }
-                };
-              }
-            } else {
-              await sleep(backoff);
-            }
+            const remaining = (executionContext?.deadlineAt ?? startedAt + 120_000) - getNowMs();
+            const sleepMs = Math.max(0, Math.min(backoff, remaining - 50));
+            if (sleepMs <= 0) break;
+            await waitWithinAIExecutionContext(sleepMs, { signal: controller?.signal });
             continue;
           }
 
@@ -906,29 +937,10 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
             ? computeDefaultRetryAfterMs(429) + Math.floor(Math.random() * 500)
             : expBackoff;
           lastRetryAfterMs = backoff;
-          if (totalTimeoutMs !== null) {
-            const remaining = totalTimeoutMs - (getNowMs() - startedAt);
-            const sleepMs = Math.max(0, Math.min(backoff, remaining - 50));
-            if (sleepMs > 0) await sleep(sleepMs);
-            else {
-              return {
-                success: false,
-                error: {
-                  statusCode: 504,
-                  message: 'AI_GENERATION_FAILED: AI provider error',
-                  error: 'AI_GENERATION_FAILED: Request aborted (deadline exceeded)',
-                  details: {
-                    mode,
-                    requestId: options?.requestId || null,
-                    attempt,
-                    elapsedMs: getNowMs() - startedAt
-                  }
-                }
-              };
-            }
-          } else {
-            await sleep(backoff);
-          }
+          const remaining = (executionContext?.deadlineAt ?? startedAt + 120_000) - getNowMs();
+          const sleepMs = Math.max(0, Math.min(backoff, remaining - 50));
+          if (sleepMs <= 0) break;
+          await waitWithinAIExecutionContext(sleepMs, { signal: controller?.signal });
           continue;
         }
 
@@ -953,6 +965,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
       }
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
+      if (controller && upstreamSignal) upstreamSignal.removeEventListener('abort', onUpstreamAbort);
     }
 
     if (result === undefined) {

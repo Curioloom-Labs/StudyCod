@@ -2,9 +2,9 @@ import { randomUUID } from 'crypto';
 import { logger } from '../../utils/logger';
 import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
-import { AppDataSource } from '../../data-source';
-import { User } from '../../entities/User';
 import { env } from '../../env';
+import { consumeRetryBudget } from '../../../../shared/ai/prompts';
+import { waitWithinAIExecutionContext } from './promptExecution';
 
 type KeyHealthState = {
   cooldownUntilMs: number;
@@ -663,6 +663,10 @@ export class OpenRouterProvider implements LLMProvider {
     try {
       const adminModelRaw = String(env.OPENROUTER_ADMIN_MODEL || '').trim();
       if (adminModelRaw && options?.userId) {
+        const [{ AppDataSource }, { User }] = await Promise.all([
+          import('../../data-source.js'),
+          import('../../entities/User.js'),
+        ]);
         const user = await AppDataSource.getRepository(User).findOne({ where: { id: options.userId }, select: ['id', 'role'] });
         if (user && user.role === 'SYSTEM_ADMIN') {
           const adminModel = resolveTextModel(adminModelRaw);
@@ -711,6 +715,9 @@ export class OpenRouterProvider implements LLMProvider {
         const canFallback = hasNext && shouldFallbackToNextModel(error);
 
         if (canFallback) {
+          if (!consumeRetryBudget(options.retryBudget)) {
+            throw new Error(`AI_GENERATION_FAILED: Shared retry budget exhausted before model fallback. ${errorMessage(error)}`);
+          }
           logger.warn('OpenRouter model fallback triggered', {
             traceId: options.traceId,
             userId: options.userId,
@@ -773,7 +780,7 @@ export class OpenRouterProvider implements LLMProvider {
       delete adaptedRequest.response_format;
     }
     const primary = (env.OPENROUTER_API_KEY || '').trim();
-    const backups = (env.OPENROUTER_BACKUP_API_KEYS || '').split(',').map(s => s.trim()).filter(Boolean);
+    const backups = String(env.OPENROUTER_BACKUP_API_KEYS || '').split(',').map(value => value.trim()).filter(Boolean);
     const allKeys = normalizeAndDeduplicateKeys(primary, backups);
     if (allKeys.length === 0) {
       throw new Error('AI_GENERATION_FAILED: No OpenRouter API keys configured');
@@ -796,6 +803,7 @@ export class OpenRouterProvider implements LLMProvider {
     }
 
     let lastError: Error | null = null;
+    let hasStartedRequest = false;
 
     const errorsSummary: Array<{ keyIndex: number; status?: number; message: string }> = [];
     const keyDisableMs = (() => {
@@ -869,12 +877,21 @@ export class OpenRouterProvider implements LLMProvider {
 
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         const attemptStartedAt = Date.now();
+        const deadlineRemaining = typeof options.deadlineAt === 'number'
+          ? options.deadlineAt - Date.now()
+          : Number.POSITIVE_INFINITY;
+        if (deadlineRemaining <= 0) {
+          throw new Error('AI_GENERATION_FAILED: Request deadline exceeded before OpenRouter attempt');
+        }
+        const attemptTimeoutMs = requestTimeoutMs === null
+          ? (Number.isFinite(deadlineRemaining) ? deadlineRemaining : null)
+          : Math.min(requestTimeoutMs, deadlineRemaining);
         const controller = new AbortController();
         const onAbort = () => controller.abort();
         let timeoutId: ReturnType<typeof setTimeout> | null = null;
         try {
-          if (requestTimeoutMs !== null) {
-            timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+          if (attemptTimeoutMs !== null) {
+            timeoutId = setTimeout(() => controller.abort(), attemptTimeoutMs);
           }
           if (signal) {
             if (signal.aborted) controller.abort();
@@ -884,14 +901,15 @@ export class OpenRouterProvider implements LLMProvider {
             traceId,
             userId,
             topicId,
+            promptId: options.promptId,
+            promptVersion: options.promptVersion,
             attempt: attempt + 1,
             maxRetries: maxRetries + 1,
             keyIndex,
             keysAvailable: allKeys.length,
             model,
-            timeoutMs: requestTimeoutMs
+            timeoutMs: attemptTimeoutMs
           };
-          logger.info("OpenRouter request started", logContext);
           const finalMessages = normalizeMessagesForOutgoingPayload(adaptedRequest.messages, model);
           const outgoingRoles = finalMessages.map(m => m.role);
           const hasUnknownRole = outgoingRoles.some(r => r !== 'system' && r !== 'user' && r !== 'assistant' && r !== 'tool');
@@ -915,6 +933,11 @@ export class OpenRouterProvider implements LLMProvider {
             });
           }
 
+          if (hasStartedRequest && !consumeRetryBudget(options.retryBudget)) {
+            throw new Error('AI_GENERATION_FAILED: Shared retry budget exhausted before OpenRouter retry');
+          }
+          hasStartedRequest = true;
+          logger.info("OpenRouter request started", logContext);
           const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -938,7 +961,7 @@ export class OpenRouterProvider implements LLMProvider {
             logger.warn("OpenRouter request failed", {
               ...logContext,
               status: response.status,
-              error: errorText
+              error: String(errorText).slice(0, 400)
             });
 
             keyHealth.consecutiveFailures += 1;
@@ -993,7 +1016,7 @@ export class OpenRouterProvider implements LLMProvider {
                   status: response.status,
                   delay
                 });
-                await new Promise(resolve => setTimeout(resolve, delay));
+                await waitWithinAIExecutionContext(delay, options);
                 continue;
               }
               lastError = error;
@@ -1038,7 +1061,7 @@ export class OpenRouterProvider implements LLMProvider {
                   attempt: attempt + 1,
                   delay
                 });
-                await new Promise(resolve => setTimeout(resolve, delay));
+                await waitWithinAIExecutionContext(delay, options);
                 continue;
               }
               // Rate limited on this key: move on to the next configured key.
@@ -1082,7 +1105,7 @@ export class OpenRouterProvider implements LLMProvider {
               topicId,
               attempt: attempt + 1
             });
-            const timeoutSeconds = Math.max(1, Math.round(requestTimeoutMs / 1000));
+            const timeoutSeconds = Math.max(1, Math.round((attemptTimeoutMs ?? requestTimeoutMs ?? 30_000) / 1000));
             throw new Error(`AI_GENERATION_FAILED: Request timeout (${timeoutSeconds}s exceeded)`);
           }
           if (errMessage.includes('Invalid request for model')) {
@@ -1107,7 +1130,7 @@ export class OpenRouterProvider implements LLMProvider {
             attempt: attempt + 1,
             delay
           });
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await waitWithinAIExecutionContext(delay, options);
         } finally {
           if (timeoutId) clearTimeout(timeoutId);
           if (signal) signal.removeEventListener('abort', onAbort);
@@ -1291,6 +1314,9 @@ export class OpenRouterProvider implements LLMProvider {
       });
 
       try {
+        if (!consumeRetryBudget(options.retryBudget)) {
+          throw new Error('AI_GENERATION_FAILED: Shared retry budget exhausted before JSON format repair');
+        }
         const repairCandidates = normalizeAndDeduplicateModels([model, ...modelCandidates]);
         const {
           response: repaired,
@@ -1333,6 +1359,9 @@ export class OpenRouterProvider implements LLMProvider {
             preview: repairedContent.slice(0, 160)
           });
 
+          if (!consumeRetryBudget(options.retryBudget)) {
+            throw new Error('AI_GENERATION_FAILED: Shared retry budget exhausted before strict JSON regeneration');
+          }
           const strictCandidates = normalizeAndDeduplicateModels([repairModel, ...repairCandidates]);
           const {
             response: strictResponse

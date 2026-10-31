@@ -14,6 +14,14 @@ export interface LLMGenerateOptions {
    * Providers should abort upstream fetches when this signal is aborted.
    */
   signal?: AbortSignal;
+  /** Stable ID from the shared StudyCod prompt registry. */
+  promptId?: import('../../../../shared/ai/prompts').PromptId;
+  /** Prompt package version used for this call. */
+  promptVersion?: string;
+  /** Mutable per-request budget shared by provider and orchestration retries. */
+  retryBudget?: { remaining: number };
+  /** Absolute wall-clock deadline shared with nested AI calls. */
+  deadlineAt?: number;
 }
 export interface LLMProvider {
   generateText(prompt: string, systemPrompt?: string, options?: LLMGenerateOptions): Promise<string>;

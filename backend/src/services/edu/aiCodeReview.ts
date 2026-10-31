@@ -1,4 +1,6 @@
 import { getLLMProvider } from "../llm/provider";
+import { generatePromptJSON } from "../llm/promptExecution";
+import { formatUntrustedData } from "../../../../shared/ai/prompts";
 import { logger } from "../../utils/logger";
 
 /**
@@ -29,15 +31,23 @@ function langName(language: string): string {
 }
 
 /** Pure: assemble the user prompt (code + language + optional task context). */
-export function buildReviewUserPrompt(code: string, language: string, taskDescription?: string): string {
+export function buildReviewUserPrompt(code: string, language: string, taskDescription?: string, uiLanguage: "uk" | "en" = "uk"): string {
   const ln = langName(language);
+  const numberedCode = (code || "").split("\n").map((line, index) => `${index + 1}: ${line}`).join("\n");
+  if (uiLanguage === "en") {
+    return [
+      `Review this ${ln} submission for confirmed correctness issues and useful improvements.`,
+      taskDescription ? `Task context:\n${formatUntrustedData("task_statement", taskDescription)}` : "",
+      "Student source, with line numbers:",
+      formatUntrustedData("student_code", numberedCode),
+      'Return ONLY JSON: { "summary": "one or two concise sentences", "comments": [ { "line": integer or null, "severity": "info|suggestion|warning|error", "message": "specific, constructive feedback" } ] }. Use null for a whole-program comment and cite a line only when the issue is present on that line. Do not invent bugs or provide a complete replacement solution.'
+    ].filter(Boolean).join("\n");
+  }
   return [
     `Зроби код-рев'ю наступного рішення мовою ${ln}.`,
-    taskDescription ? `Контекст завдання:\n${taskDescription}` : "",
+    taskDescription ? `Контекст завдання:\n${formatUntrustedData("task_statement", taskDescription)}` : "",
     "Код студента (рядки пронумеровані):",
-    "```",
-    (code || "").split("\n").map((l, i) => `${i + 1}: ${l}`).join("\n"),
-    "```",
+    formatUntrustedData("student_code", numberedCode),
     "",
     "Поверни ТІЛЬКИ JSON: { \"summary\": \"стислий підсумок 1-2 речення\", \"comments\": [ { \"line\": номер_рядка_або_null, \"severity\": \"info|suggestion|warning|error\", \"message\": \"конкретна порада\" } ] }.",
     "Прив'язуй коментарі до конкретних рядків. Будь конкретним і конструктивним. Без markdown."
@@ -46,6 +56,8 @@ export function buildReviewUserPrompt(code: string, language: string, taskDescri
 
 const REVIEW_SYSTEM_PROMPT =
   "Ти досвідчений, доброзичливий code reviewer. Аналізуєш коректність, баги, стиль, читабельність та оптимізації. Відповідаєш українською, ТІЛЬКИ валідним JSON.";
+const REVIEW_SYSTEM_PROMPT_EN =
+  "You are a careful, supportive code reviewer. Report only confirmed issues supported by the code or task, use real line references, and return valid JSON only. Match feedback to the learner's level and do not provide a complete replacement solution.";
 
 const REVIEW_SCHEMA = {
   type: "object",
@@ -56,7 +68,7 @@ const REVIEW_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          line: { type: "integer" },
+          line: { type: ["integer", "null"] },
           severity: { type: "string", enum: SEVERITIES },
           message: { type: "string" }
         },
@@ -102,15 +114,18 @@ export function normalizeReviewResult(raw: unknown, lineCount: number): CodeRevi
  * Run an AI review for a submission. Throws "AI_UNAVAILABLE" if the provider
  * fails so the route can signal a retriable error (vs. an empty review).
  */
-export async function reviewCode(params: { code: string; language: string; taskDescription?: string }): Promise<CodeReviewResult> {
+export async function reviewCode(params: { code: string; language: string; taskDescription?: string; uiLanguage?: "uk" | "en" }): Promise<CodeReviewResult> {
   const lineCount = (params.code || "").split("\n").length;
+  const uiLanguage = params.uiLanguage === "en" ? "en" : "uk";
   try {
     const provider = getLLMProvider();
-    const raw = await provider.generateJSON(
-      buildReviewUserPrompt(params.code, params.language, params.taskDescription),
+    const raw = await generatePromptJSON(
+      provider,
+      "edu.code-review",
+      buildReviewUserPrompt(params.code, params.language, params.taskDescription, uiLanguage),
       REVIEW_SCHEMA,
-      REVIEW_SYSTEM_PROMPT,
-      { timeout: 30000, temperature: 0.3, maxTokens: 1500 }
+      uiLanguage === "en" ? REVIEW_SYSTEM_PROMPT_EN : REVIEW_SYSTEM_PROMPT,
+      { timeout: 30000, temperature: 0.3, maxTokens: 1500, language: uiLanguage }
     );
     return normalizeReviewResult(raw, lineCount);
   } catch (error: unknown) {

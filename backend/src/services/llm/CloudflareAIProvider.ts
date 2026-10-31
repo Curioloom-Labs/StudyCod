@@ -6,6 +6,8 @@ import { topicLanguageLabel, type TopicLanguage } from '../../utils/topicLanguag
 import { requireCompleteTaskDescription, resolveTestDataIoType, TASK_PRECISION_INSTRUCTIONS } from './TaskContractReview';
 import { AIResponseValidator } from './AIResponseValidator';
 import { parseOlympiadPracticeContract } from '../learning/learningContract';
+import { consumeRetryBudget, isPromptBundleVersion, isPromptId, type PromptId } from '../../../../shared/ai/prompts';
+import { getActivePromptBundleVersion, getCurrentAIExecutionContext, waitWithinAIExecutionContext } from './promptExecution';
 interface CloudflareWorkerRequest {
   mode: string;
   language: "uk" | "en";
@@ -15,6 +17,10 @@ interface CloudflareWorkerRequest {
     schema?: object;
     temperature?: number;
     maxTokens?: number;
+    promptId?: PromptId;
+    promptVersion?: string;
+    traceId?: string;
+    deadlineAt?: number;
   };
 }
 interface CloudflareWorkerResponse {
@@ -36,6 +42,19 @@ function isJsonRecord(value: unknown): value is JsonRecord {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function defaultPromptId(mode: string): PromptId {
+  switch (mode) {
+    case 'generate-task': return 'task.generate';
+    case 'generate-theory': return 'task.theory';
+    case 'generate-quiz': return 'task.quiz';
+    case 'generate-task-condition': return 'task.condition';
+    case 'generate-task-template': return 'task.template';
+    case 'generate-test-data': return 'task.generated-tests';
+    case 'generate-text': return 'platform.generic-text';
+    default: return 'platform.general';
+  }
 }
 
 export class CloudflareAIProvider implements LLMProvider {
@@ -206,9 +225,17 @@ ${JSON.stringify(schema, null, 2)}
       maxRetries = 1,
       userId,
       topicId,
-      traceId = `trace-${randomUUID()}`,
-      signal
     } = options;
+    const inherited = getCurrentAIExecutionContext();
+    const retryBudget = options.retryBudget ?? inherited?.retryBudget;
+    const traceId = options.traceId ?? inherited?.traceId ?? `trace-${randomUUID()}`;
+    const requestedPromptVersion = options.promptVersion ?? inherited?.promptVersion;
+    const promptVersion = isPromptBundleVersion(requestedPromptVersion)
+      ? requestedPromptVersion
+      : getActivePromptBundleVersion();
+    const signal = options.signal ?? inherited?.signal;
+    const deadlineRemaining = inherited?.deadlineAt ? inherited.deadlineAt - Date.now() : Infinity;
+    if (deadlineRemaining <= 0) throw new Error('AI_GENERATION_FAILED: Request deadline exceeded before Cloudflare call');
     const url = env.CLOUDFLARE_AI_URL;
     if (!url) {
       throw new Error('AI_GENERATION_FAILED: CLOUDFLARE_AI_URL not configured');
@@ -219,6 +246,10 @@ ${JSON.stringify(schema, null, 2)}
       language,
       params: {
         ...params,
+        promptId: isPromptId(params.promptId) ? params.promptId : options.promptId ?? inherited?.promptId ?? defaultPromptId(mode),
+        promptVersion,
+        traceId,
+        deadlineAt: options.deadlineAt ?? inherited?.deadlineAt,
         temperature: params.temperature ?? options.temperature,
         maxTokens: params.maxTokens ?? options.maxTokens
       }
@@ -227,13 +258,18 @@ ${JSON.stringify(schema, null, 2)}
       traceId,
       userId,
       topicId,
-      mode
+      mode,
+      promptId: requestPayload.params.promptId,
+      promptVersion: requestPayload.params.promptVersion
     };
     let lastError: Error | null = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const currentDeadlineRemaining = inherited?.deadlineAt ? inherited.deadlineAt - Date.now() : Infinity;
+      if (currentDeadlineRemaining <= 0) throw new Error('AI_GENERATION_FAILED: Request deadline exceeded before Cloudflare retry');
+      const requestTimeoutMs = Math.max(1, Math.min(timeout, currentDeadlineRemaining));
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
         const onAbort = () => controller.abort();
         if (signal) {
           if (signal.aborted) controller.abort();
@@ -260,7 +296,7 @@ ${JSON.stringify(schema, null, 2)}
             ...logContext,
             attempt: attempt + 1,
             status: response.status,
-            error: String(errorText).slice(0, 2000)
+            error: String(errorText).slice(0, 400)
           });
           if (response.status === 502) {
             const fallbackError = new Error(`AI_GENERATION_FAILED: Cloudflare Worker returned 502 (Bad Gateway). Fallback to OpenRouter.`) as FallbackError;
@@ -270,11 +306,11 @@ ${JSON.stringify(schema, null, 2)}
           if (response.status >= 400 && response.status < 500) {
             throw error;
           }
-          if (attempt < maxRetries && (response.status >= 500 || response.status === 429)) {
+          if (attempt < maxRetries && (response.status >= 500 || response.status === 429) && consumeRetryBudget(retryBudget)) {
             lastError = error;
             const delay = Math.min(1000 * Math.pow(2, attempt), 2000);
             logger.debug('[cf-ai] retry', { ...logContext, attempt: attempt + 1, delayMs: delay, status: response.status });
-            await new Promise(resolve => setTimeout(resolve, delay));
+            await waitWithinAIExecutionContext(delay, options);
             continue;
           }
           throw error;
@@ -401,23 +437,23 @@ ${JSON.stringify(schema, null, 2)}
         }
         if (normalizedError.name === 'AbortError' || normalizedError.message.includes('timeout')) {
           logger.warn('[cf-ai] timeout', { ...logContext, attempt: attempt + 1 });
-          if (attempt < maxRetries) {
+          if (attempt < maxRetries && consumeRetryBudget(retryBudget)) {
             const delay = Math.min(1000 * Math.pow(2, attempt), 2000);
             logger.debug('[cf-ai] retry', { ...logContext, attempt: attempt + 1, delayMs: delay, reason: 'timeout' });
-            await new Promise(resolve => setTimeout(resolve, delay));
+            await waitWithinAIExecutionContext(delay, options);
             continue;
           }
-          throw new Error('AI_GENERATION_FAILED: Request timeout (20s exceeded)');
+          throw new Error(`AI_GENERATION_FAILED: Request timeout (${requestTimeoutMs}ms exceeded)`);
         }
         if (normalizedError.message.includes('AI_GENERATION_FAILED') && normalizedError.message.includes('HTTP 4')) {
           throw normalizedError;
         }
         const errorCode = isJsonRecord(err) ? err.code : undefined;
         const isNetworkError = normalizedError.message.includes('ECONNREFUSED') || normalizedError.message.includes('ENOTFOUND') || normalizedError.message.includes('network') || errorCode === 'ECONNREFUSED' || errorCode === 'ENOTFOUND';
-        if (isNetworkError && attempt < maxRetries) {
+        if (isNetworkError && attempt < maxRetries && consumeRetryBudget(retryBudget)) {
           const delay = Math.min(1000 * Math.pow(2, attempt), 2000);
           logger.debug('[cf-ai] retry', { ...logContext, attempt: attempt + 1, delayMs: delay, reason: 'network' });
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await waitWithinAIExecutionContext(delay, options);
           continue;
         }
         if (normalizedError.message.includes('AI_GENERATION_FAILED')) {
@@ -493,6 +529,7 @@ ${JSON.stringify(schema, null, 2)}
       prompt: JSON.stringify(params),
       systemPrompt: TASK_PRECISION_INSTRUCTIONS + olympiadPolicy + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nResolve this issue in a complete corrected task.` : '')
     }, {
+      promptId: options?.promptId ?? 'task.generate',
       userId: params.userId,
       topicId: params.topicId,
       timeout: options?.timeout ?? taskTimeoutMs,
@@ -524,6 +561,7 @@ ${JSON.stringify(schema, null, 2)}
     const response = await this.callCloudflareWorker('generate-theory', {
       prompt: JSON.stringify(params)
     }, {
+      promptId: options?.promptId ?? 'task.theory',
       userId: params.userId,
       topicId: params.topicId,
       timeout: 30000,
@@ -565,6 +603,7 @@ ${JSON.stringify(schema, null, 2)}
       prompt,
       maxTokens
     }, {
+      promptId: options?.promptId ?? 'task.quiz',
       userId: params.userId,
       topicId: params.topicId,
       timeout: 30000,

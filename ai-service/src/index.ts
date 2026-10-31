@@ -6,6 +6,8 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import { logger } from '../../backend/src/utils/logger';
+import { generatePromptJSON, generatePromptText } from '../../backend/src/services/llm/promptExecution';
+import { isPromptId, type PromptId } from '../../shared/ai/prompts';
 import { readAIServiceConfig } from './config';
 
 // IMPORTANT: Load env only from ai-service/.env.
@@ -143,23 +145,27 @@ app.post('/', async (req: Request, res: Response) => {
           } = await import('../../backend/src/services/llm/OpenRouterProvider');
           const openRouterProvider = new OpenRouterProvider();
           if (mode === 'generate-text') {
-            const textResult = await openRouterProvider.generateText(parsedParams.prompt, parsedParams.systemPrompt, {
+            const promptId: PromptId = isPromptId(parsedParams.promptId) ? parsedParams.promptId : 'platform.generic-text';
+            const textResult = await generatePromptText(openRouterProvider, promptId, String(parsedParams.prompt), String(parsedParams.systemPrompt ?? ''), {
               language: language || 'uk',
               temperature: parsedParams.temperature,
               maxTokens: parsedParams.maxTokens,
               userId: parsedParams.userId,
-              topicId: parsedParams.topicId
+              topicId: parsedParams.topicId,
+              traceId: typeof parsedParams.traceId === 'string' ? parsedParams.traceId : undefined
             });
             result = {
               content: textResult
             };
           } else {
-            const jsonResult = await openRouterProvider.generateJSON(parsedParams.prompt, parsedParams.schema || {}, parsedParams.systemPrompt, {
+            const promptId: PromptId = isPromptId(parsedParams.promptId) ? parsedParams.promptId : 'platform.general';
+            const jsonResult = await generatePromptJSON(openRouterProvider, promptId, String(parsedParams.prompt), (parsedParams.schema && typeof parsedParams.schema === 'object' ? parsedParams.schema : {}) as object, String(parsedParams.systemPrompt ?? ''), {
               language: language || 'uk',
               temperature: parsedParams.temperature,
               maxTokens: parsedParams.maxTokens,
               userId: parsedParams.userId,
-              topicId: parsedParams.topicId
+              topicId: parsedParams.topicId,
+              traceId: typeof parsedParams.traceId === 'string' ? parsedParams.traceId : undefined
             });
             result = {
               content: JSON.stringify(jsonResult)

@@ -1,5 +1,6 @@
 import { Task } from "../entities/Task";
 import { getLLMProvider } from "../services/llm/provider";
+import { generatePromptJSON } from "../services/llm/promptExecution";
 import { logger } from "../utils/logger";
 interface AiScoreResult {
   work: number;
@@ -139,8 +140,9 @@ ${params.code}
     required: ["work", "optimization", "integrity", "feedback"]
   };
   try {
-    const parsed = await provider.generateJSON<unknown>(userPrompt, schema, systemPrompt, {
-      temperature: 0.1
+    const parsed = await generatePromptJSON<unknown>(provider, "grading.evaluation", userPrompt, schema, systemPrompt, {
+      temperature: 0.1,
+      language: "uk",
     });
     const parsedRecord = isRecord(parsed) ? parsed : {};
     const work = clamp(Number(readProperty(parsedRecord, "work") ?? 0), 0, 5);

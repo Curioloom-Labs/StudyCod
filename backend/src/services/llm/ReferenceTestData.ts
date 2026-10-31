@@ -3,6 +3,7 @@ import type { LLMProvider } from './LLMProvider';
 import type { LLMTaskLanguage, TestDataExample } from './LLMOrchestrator';
 import { AIResponseValidator, AIValidationError, makeAIValidationError } from './AIResponseValidator';
 import { requireCompleteTaskDescription, reviewGeneratedTests } from './TaskContractReview';
+import { generatePromptJSON } from './promptExecution';
 
 export type ReferenceTestExecutor = (source: string, inputs: string[], publicExamples: TestDataExample[], signal?: AbortSignal) => Promise<string[]>;
 export const REFERENCE_LANGUAGE = 'PYTHON' as const;
@@ -57,7 +58,7 @@ If requiredCoverage is supplied as separate internal metadata, choose inputs tha
 If validationFeedback is non-null, treat it as an authoritative validator finding and fix the reported issue before returning. In particular, the referenceSolution MUST be Python 3 source code regardless of the student's language; do not return Java or C++ code.
 ${params.allowEmptyOutput ? 'Empty stdout or a blank output line is valid only when explicitly required by the authored statement. Preserve that result exactly; never substitute a sentinel or discard those boundary inputs.' : 'The program must produce non-empty stdout for each valid input.'}
 If authoritativeExamples is true, existingExamples are authored tests: repair the oracle to match them, never rewrite their expected answers. If rules are ambiguous, do not invent them. Keep the program concise, with no explanations or Markdown. Return only the supplied JSON shape.`;
-  const raw = await provider.generateJSON<unknown>(JSON.stringify({
+  const raw = await generatePromptJSON<unknown>(provider, 'task.reference-tests', JSON.stringify({
     statement,
     existingExamples: params.publicExamples ?? [],
     requiredCoverage: params.requiredCases ?? [],
@@ -65,7 +66,7 @@ If authoritativeExamples is true, existingExamples are authored tests: repair th
     ...(params.referenceExamplesAreAuthoritative ? { authoritativeExamples: true } : {}),
   }), schema, instructions, {
     userId: params.userId, signal: params.signal, timeout: 30_000,
-    maxRetries: 1, temperature: 0, maxTokens: 3000,
+    maxRetries: 1, temperature: 0, maxTokens: 3000, language: 'en',
   });
   const parsed = ResponseSchema.safeParse(raw);
   if (!parsed.success) throw makeAIValidationError('generateTestData', 'Reference test generation validation failed: expected a complete reference program and valid inputs');

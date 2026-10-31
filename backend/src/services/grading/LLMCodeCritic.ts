@@ -1,6 +1,7 @@
 import { CodeSubmission, LLMCodeCritiqueResult } from './interfaces';
 import { getLLMProvider } from '../llm/provider';
 import { logger } from '../../utils/logger';
+import { generatePromptJSON } from '../llm/promptExecution';
 export interface ILLMCodeCritic {
   critique(submission: CodeSubmission, taskDescription?: string): Promise<LLMCodeCritiqueResult>;
 }
@@ -52,7 +53,7 @@ ${code}
 `.trim();
     try {
       const provider = getLLMProvider();
-      const response = await provider.generateJSON<{
+      const response = await generatePromptJSON<{
         readability: string;
         style: string;
         logic: string;
@@ -62,7 +63,7 @@ ${code}
         codeOrganization: "EXCELLENT" | "GOOD" | "FAIR" | "POOR";
         errorHandling: "EXCELLENT" | "GOOD" | "FAIR" | "POOR" | "NONE";
         documentation: "EXCELLENT" | "GOOD" | "FAIR" | "POOR" | "NONE";
-      }>(userPrompt, {
+      }>(provider, "grading.code-critic", userPrompt, {
         type: "object",
         properties: {
           readability: {
@@ -106,6 +107,7 @@ ${code}
         required: ["readability", "style", "logic", "optimizations", "warnings", "namingConventions", "codeOrganization", "errorHandling", "documentation"]
       }, systemPrompt, {
         timeout: 30000,
+        language: "uk",
         temperature: 0.7,
         maxTokens: 2000
       });

@@ -1,8 +1,19 @@
+import {
+  buildPrompt,
+  isPromptBundleVersion,
+  isPromptId,
+  PROMPT_BUNDLE_VERSION,
+  PROMPT_CATALOG,
+  resolvePromptBundleVersion,
+} from "../../../shared/ai/prompts";
+import type { PromptBundleVersion, PromptId } from "../../../shared/ai/prompts";
+
 export interface Env {
   AI: {
     run: (model: string, options: Record<string, unknown>) => Promise<unknown>;
   };
   ENVIRONMENT?: string;
+  AI_PROMPT_BUNDLE_ENABLED?: string;
   /**
    * Shared secret required in the `x-internal-secret` request header.
    * Configure via `wrangler secret put WORKER_SHARED_SECRET`. Without it the
@@ -70,6 +81,10 @@ interface WorkerRequest {
     schema?: object;
     temperature?: number;
     maxTokens?: number;
+    promptId?: PromptId;
+    promptVersion?: string;
+    traceId?: string;
+    deadlineAt?: number;
   };
 }
 export function normalizeMode(mode?: string): string {
@@ -93,8 +108,9 @@ export function normalizeMode(mode?: string): string {
 export function isJSONMode(mode: string, schema?: object): boolean {
   return mode === "generate-json" || mode === "generate-test-data" || !!schema;
 }
-export function resolveMaxTokens(mode: string, requested?: number): number {
+export function resolveMaxTokens(mode: string, requested?: number, promptId?: PromptId, promptVersion: PromptBundleVersion = PROMPT_BUNDLE_VERSION): number {
   if (requested && requested > 0) return Math.min(requested, 4096);
+  if (promptId && promptVersion === PROMPT_BUNDLE_VERSION) return Math.min(PROMPT_CATALOG[promptId].generation.maxTokens, 4096);
   const map: Record<string, number> = {
     "generate-task": 3500,
     "generate-task-condition": 1500,
@@ -143,6 +159,46 @@ ${modeRule[mode] ?? modeRule["generate-text"]}
 - змінювати мову
 - додавати пояснення у JSON
 `;
+}
+
+function promptIdForMode(mode: string): PromptId {
+  switch (mode) {
+    case "generate-task": return "task.generate";
+    case "generate-theory": return "task.theory";
+    case "generate-quiz": return "task.quiz";
+    case "generate-task-condition": return "task.condition";
+    case "generate-task-template": return "task.template";
+    case "generate-test-data": return "task.generated-tests";
+    case "generate-json": return "platform.general";
+    default: return "platform.generic-text";
+  }
+}
+
+export function buildRegisteredWorkerPrompt(
+  mode: string,
+  lang: Language,
+  promptText: string,
+  providedSystemPrompt?: string,
+  requestedPromptId?: unknown,
+  requestedPromptVersion?: unknown,
+) {
+  const normalizedMode = normalizeMode(mode);
+  const ioDirective = normalizedMode === "generate-task" ? buildIoTypeDirective(promptText, lang) : "";
+  const systemPrompt = buildSystemPrompt(normalizedMode, lang)
+    + ioDirective
+    + (providedSystemPrompt ? `\n\n${lang === "en" ? "Additional instructions:" : "Додаткові умови:"}\n${providedSystemPrompt}` : "");
+  const promptVersion: PromptBundleVersion = requestedPromptVersion === undefined
+    ? PROMPT_BUNDLE_VERSION
+    : isPromptBundleVersion(requestedPromptVersion)
+      ? requestedPromptVersion
+      : (() => { throw new Error("Unknown prompt bundle version"); })();
+  return buildPrompt(
+    isPromptId(requestedPromptId) ? requestedPromptId : promptIdForMode(normalizedMode),
+    promptText,
+    systemPrompt,
+    lang,
+    promptVersion,
+  );
 }
 // The backend ships the no-stdin curriculum policy inside params.allowedIoTypes,
 // but the model never sees an instruction explaining it. Without this directive
@@ -371,16 +427,46 @@ export default {
       const mode = normalizeMode(body.mode);
       const jsonMode = isJSONMode(mode, body.params.schema);
       const language: Language = body.language === "en" ? "en" : "uk";
-      const ioDirective = mode === "generate-task" ? buildIoTypeDirective(body.params.prompt, language) : "";
-      const systemPrompt = buildSystemPrompt(mode, language) + ioDirective + (body.params.systemPrompt ? "\n\nДодаткові умови:\n" + body.params.systemPrompt : "");
+      const promptVersion = body.params.promptVersion ?? resolvePromptBundleVersion(env.AI_PROMPT_BUNDLE_ENABLED);
+      const prompt = buildRegisteredWorkerPrompt(mode, language, body.params.prompt, body.params.systemPrompt, body.params.promptId, promptVersion);
+      const startedAt = Date.now();
+      if (typeof body.params.deadlineAt === "number" && body.params.deadlineAt <= startedAt) {
+        return new Response(JSON.stringify({ error: "AI_GENERATION_FAILED: Request deadline exceeded before Worker inference" }), {
+          status: 504,
+          headers: { ...cors, "Content-Type": "application/json" }
+        });
+      }
       const messages = [{
         role: "system",
-        content: systemPrompt
+        content: prompt.systemPrompt
       }, {
         role: "user",
-        content: body.params.prompt
+        content: prompt.prompt
       }];
-      const result = await callWorkersAI(env, messages, body.params.temperature ?? 0.7, resolveMaxTokens(mode, body.params.maxTokens), jsonMode);
+      const result = await callWorkersAI(
+        env,
+        messages,
+        body.params.temperature ?? (prompt.bundleVersion === PROMPT_BUNDLE_VERSION ? PROMPT_CATALOG[prompt.id].generation.temperature : 0.7),
+        resolveMaxTokens(mode, body.params.maxTokens, prompt.id, prompt.bundleVersion),
+        jsonMode,
+      );
+      if (typeof body.params.deadlineAt === "number" && Date.now() >= body.params.deadlineAt) {
+        return new Response(JSON.stringify({ error: "AI_GENERATION_FAILED: Request deadline exceeded during Worker inference" }), {
+          status: 504,
+          headers: { ...cors, "Content-Type": "application/json" }
+        });
+      }
+      console.info(JSON.stringify({
+        event: "ai_prompt_call",
+        traceId: body.params.traceId,
+        promptId: prompt.id,
+        promptVersion: prompt.bundleVersion,
+        locale: language,
+        mode,
+        outcome: "success",
+        durationMs: Date.now() - startedAt,
+        responseChars: typeof result === "string" ? result.length : JSON.stringify(result)?.length ?? 0,
+      }));
       return new Response(JSON.stringify({
         content: result
       }), {

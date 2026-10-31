@@ -1,6 +1,8 @@
 import * as crypto from 'crypto';
 import { logger } from '../../utils/logger';
 import { env } from '../../env';
+import { PROMPT_SCHEMA_VERSION } from '../../../../shared/ai/prompts';
+import { getActivePromptBundleVersion } from './promptExecution';
 export type LLMCacheMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTestData';
 interface CacheEntry<T> {
   data: T;
@@ -199,8 +201,19 @@ export class LLMCacheService {
       }
     }
     const normalized = JSON.stringify(cleaned) ?? "{}";
-    const hash = crypto.createHash('sha256').update(`${mode}:${normalized}`).digest('hex').substring(0, 16);
-    const key = `${this.cachePrefix}${mode}:${hash}`;
+    const promptVersion = getActivePromptBundleVersion();
+    const modelConfig = [
+      env.LLM_PROVIDER,
+      env.OPENROUTER_MODEL,
+      env.OPENROUTER_TEXT_MODEL,
+      env.OPENROUTER_JSON_MODEL,
+      env.OPENROUTER_FALLBACK_MODELS,
+      env.OPENROUTER_MODEL_FALLBACKS,
+      env.LOCAL_LLM_MODEL,
+    ].map(value => String(value ?? '').trim()).join('|');
+    const modelVersion = crypto.createHash('sha256').update(modelConfig).digest('hex').substring(0, 10);
+    const hash = crypto.createHash('sha256').update(`${promptVersion}:${PROMPT_SCHEMA_VERSION}:${modelVersion}:${mode}:${normalized}`).digest('hex').substring(0, 16);
+    const key = `${this.cachePrefix}${promptVersion}:${PROMPT_SCHEMA_VERSION}:${modelVersion}:${mode}:${hash}`;
     logger.debug('[llm-cache] key', { mode, key, paramsKeys: Object.keys(cleaned) });
     return key;
   }

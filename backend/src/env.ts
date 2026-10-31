@@ -112,6 +112,8 @@ const EnvSchema = z.object({
   OPENROUTER_REFERER: z.string().optional(),
   AI_SERVICE_URL: z.string().optional(),
   AI_SERVICE_TIMEOUT: z.string().optional(),
+  /** Set false to roll back shared prompt policy/defaults as one package. */
+  AI_PROMPT_BUNDLE_ENABLED: z.string().optional(),
   TURNSTILE_SECRET_KEY: z.string().optional(),
   TURNSTILE_VERIFY_URL: z.string().optional(),
   TURNSTILE_ENFORCE_AUTH: z.string().optional(),

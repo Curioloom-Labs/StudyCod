@@ -1,4 +1,5 @@
 import { getLLMProvider } from "../llm/provider";
+import { generatePromptJSON } from "../llm/promptExecution";
 import { logger } from "../../utils/logger";
 
 export type LiveCodeStatus = "not_started" | "in_progress" | "stuck" | "passed";
@@ -177,7 +178,9 @@ Return JSON: {"headline": string, "diagnosis": string, "actions": string[2..4]}.
 Refer to students by group/situation, not by name.
 `.trim();
 
-    const parsed = await provider.generateJSON<{ headline?: string; diagnosis?: string; actions?: string[] }>(
+    const parsed = await generatePromptJSON<{ headline?: string; diagnosis?: string; actions?: string[] }>(
+      provider,
+      "edu.live-copilot",
       userPrompt,
       briefingSchema,
       systemPrompt,

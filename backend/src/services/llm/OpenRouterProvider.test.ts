@@ -1124,3 +1124,121 @@ test('content repair starts with the next configured model without changing norm
   await provider.callOpenRouterWithModelFallback(factory, {}, ['configured-primary', 'configured-backup'], 'json');
   assert.deepEqual(requested, ['configured-backup', 'configured-primary']);
 });
+
+test('OpenRouterProvider spends the shared retry budget before switching API keys', async (t) => {
+  const names = [
+    'OPENROUTER_API_KEY', 'OPENROUTER_BACKUP_API_KEYS', 'OPENROUTER_MODEL',
+    'OPENROUTER_TEXT_MODEL', 'OPENROUTER_JSON_MODEL', 'OPENROUTER_FALLBACK_MODELS',
+    'OPENROUTER_MODEL_FALLBACKS', 'OPENROUTER_URL', 'OPENROUTER_RETRY_BASE_DELAY_MS', 'OPENROUTER_RETRY_MAX_DELAY_MS',
+  ];
+  const previous = names.map(name => process.env[name]);
+  t.after(() => names.forEach((name, index) => {
+    if (previous[index] === undefined) delete process.env[name];
+    else process.env[name] = previous[index];
+  }));
+  process.env.OPENROUTER_API_KEY = 'sk-or-v1-retry_budget_primary_test';
+  process.env.OPENROUTER_BACKUP_API_KEYS = 'sk-or-v1-retry_budget_backup_test';
+  process.env.OPENROUTER_MODEL = 'openai/gpt-4o-mini';
+  process.env.OPENROUTER_TEXT_MODEL = '';
+  process.env.OPENROUTER_JSON_MODEL = '';
+  process.env.OPENROUTER_FALLBACK_MODELS = '';
+  process.env.OPENROUTER_MODEL_FALLBACKS = '';
+  process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+  process.env.OPENROUTER_RETRY_BASE_DELAY_MS = '1';
+  process.env.OPENROUTER_RETRY_MAX_DELAY_MS = '1';
+
+  const calls: string[] = [];
+  t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit | undefined) => {
+    const headers = init?.headers as Record<string, string>;
+    calls.push(String(headers?.Authorization ?? ''));
+    return makeErrorResponse(401, { error: { message: 'Unauthorized test key', code: 401 } });
+  });
+
+  await assert.rejects(
+    new OpenRouterProvider().generateText('hello', 'system', {
+      maxRetries: 2,
+      retryBudget: { remaining: 0 },
+      deadlineAt: Date.now() + 5_000,
+    }),
+    /shared retry budget exhausted/i,
+  );
+  assert.equal(calls.length, 1, 'the backup key would be an additional provider call');
+});
+
+test('OpenRouterProvider does not retry a network failure after the shared retry budget is exhausted', async (t) => {
+  const names = ['OPENROUTER_API_KEY', 'OPENROUTER_BACKUP_API_KEYS', 'OPENROUTER_MODEL', 'OPENROUTER_TEXT_MODEL', 'OPENROUTER_JSON_MODEL', 'OPENROUTER_FALLBACK_MODELS', 'OPENROUTER_MODEL_FALLBACKS', 'OPENROUTER_URL', 'OPENROUTER_RETRY_BASE_DELAY_MS', 'OPENROUTER_RETRY_MAX_DELAY_MS'];
+  const previous = names.map(name => process.env[name]);
+  t.after(() => names.forEach((name, index) => {
+    if (previous[index] === undefined) delete process.env[name];
+    else process.env[name] = previous[index];
+  }));
+  process.env.OPENROUTER_API_KEY = 'sk-or-v1_retry_budget_network_test';
+  process.env.OPENROUTER_BACKUP_API_KEYS = '';
+  process.env.OPENROUTER_MODEL = 'openai/gpt-4o-mini';
+  process.env.OPENROUTER_TEXT_MODEL = '';
+  process.env.OPENROUTER_JSON_MODEL = '';
+  process.env.OPENROUTER_FALLBACK_MODELS = '';
+  process.env.OPENROUTER_MODEL_FALLBACKS = '';
+  process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+  process.env.OPENROUTER_RETRY_BASE_DELAY_MS = '1';
+  process.env.OPENROUTER_RETRY_MAX_DELAY_MS = '1';
+
+  let requests = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    requests++;
+    throw new TypeError('simulated network failure');
+  });
+  await assert.rejects(
+    new OpenRouterProvider().generateText('hello', 'system', {
+      maxRetries: 2,
+      retryBudget: { remaining: 0 },
+      deadlineAt: Date.now() + 5_000,
+    }),
+    /shared retry budget exhausted/i,
+  );
+  assert.equal(requests, 1);
+});
+
+test('OpenRouterProvider counts JSON format repair against the shared retry budget', async (t) => {
+  const names = ['OPENROUTER_API_KEY', 'OPENROUTER_BACKUP_API_KEYS', 'OPENROUTER_MODEL', 'OPENROUTER_TEXT_MODEL', 'OPENROUTER_JSON_MODEL', 'OPENROUTER_FALLBACK_MODELS', 'OPENROUTER_MODEL_FALLBACKS', 'OPENROUTER_URL'];
+  const previous = names.map(name => process.env[name]);
+  t.after(() => names.forEach((name, index) => {
+    if (previous[index] === undefined) delete process.env[name];
+    else process.env[name] = previous[index];
+  }));
+  process.env.OPENROUTER_API_KEY = 'sk-or-v1_retry_budget_json_test';
+  process.env.OPENROUTER_BACKUP_API_KEYS = '';
+  process.env.OPENROUTER_MODEL = 'openai/gpt-4o-mini';
+  process.env.OPENROUTER_TEXT_MODEL = '';
+  process.env.OPENROUTER_JSON_MODEL = '';
+  process.env.OPENROUTER_FALLBACK_MODELS = '';
+  process.env.OPENROUTER_MODEL_FALLBACKS = '';
+  process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+  let requests = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    requests++;
+    return makeOkResponse(requests === 1 ? '{"answer":' : '{"answer":"repaired"}');
+  });
+  const provider = new OpenRouterProvider();
+  await assert.rejects(
+    provider.generateJSON('Return an object', { type: 'object' }, 'JSON only', {
+      maxRetries: 0,
+      retryBudget: { remaining: 0 },
+      deadlineAt: Date.now() + 5_000,
+    }),
+    /shared retry budget exhausted before JSON format repair/i,
+  );
+  assert.equal(requests, 1);
+
+  requests = 0;
+  const budget = { remaining: 1 };
+  const repaired = await provider.generateJSON<{ answer: string }>('Return an object', { type: 'object' }, 'JSON only', {
+    maxRetries: 0,
+    retryBudget: budget,
+    deadlineAt: Date.now() + 5_000,
+  });
+  assert.deepEqual(repaired, { answer: 'repaired' });
+  assert.equal(requests, 2);
+  assert.equal(budget.remaining, 0);
+});

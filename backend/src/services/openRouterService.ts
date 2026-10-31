@@ -2,6 +2,7 @@ import { getLLMOrchestrator } from './llm/LLMOrchestrator';
 import type { LLMTaskLanguage } from './llm/LLMOrchestrator';
 import { getLLMProvider } from './llm/provider';
 import { topicLanguageLabel } from '../utils/topicLanguage';
+import { generatePromptText } from './llm/promptExecution';
 export interface AiTaskGenerationResult {
   title: string;
   topic: string;
@@ -143,10 +144,11 @@ export async function generateInteractiveLessonWithAI(params: {
   const userPrompt = `Створи інтерактивний урок по темі: "${params.topicTitle}" для мови ${langName}.`;
 
   try {
-    const content = await provider.generateText(userPrompt, systemPrompt, {
+    const content = await generatePromptText(provider, "content.interactive-lesson", userPrompt, systemPrompt, {
       timeout: 60000,
       userId: params.userId,
       topicId: params.topicId,
+      language: "uk",
       temperature: 0.6,
       maxTokens: 4000
     });

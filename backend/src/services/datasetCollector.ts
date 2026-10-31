@@ -1,6 +1,8 @@
 import { AppDataSource } from '../data-source';
 import { Task } from '../entities/Task';
 import { logger } from '../utils/logger';
+import { buildPrompt } from '../../../shared/ai/prompts';
+import { getActivePromptBundleVersion } from './llm/promptExecution';
 const taskRepo = () => AppDataSource.getRepository(Task);
 export interface TrainingExample {
   messages: Array<{
@@ -99,13 +101,14 @@ ${theoryMarkdown.slice(0, 3000)}
       }],
       codeTemplate: task.template
     };
+    const prompt = buildPrompt('content.dataset', userPrompt, systemPrompt, 'uk', getActivePromptBundleVersion());
     return {
       messages: [{
         role: 'system',
-        content: systemPrompt
+        content: prompt.systemPrompt
       }, {
         role: 'user',
-        content: userPrompt
+        content: prompt.prompt
       }, {
         role: 'assistant',
         content: JSON.stringify(expectedResponse, null, 2)
