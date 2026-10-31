@@ -138,7 +138,7 @@ export const ControlStudioPage: React.FC = () => {
   const [deadline, setDeadline] = React.useState(() => toDateTimeLocalValue());
   const [formula, setFormula] = React.useState("");
   const [quizText, setQuizText] = React.useState("");
-  const [quizGenerationSettings, setQuizGenerationSettings] = React.useState({ count: "10", difficulty: "3", questionStyle: "MIXED" as QuizQuestionStyle, codeLength: "MEDIUM" as QuizCodeLength, guidance: "" });
+  const [quizGenerationSettings, setQuizGenerationSettings] = React.useState({ count: "10", difficulty: "3", questionStyle: "MIXED" as QuizQuestionStyle, codeLength: "MEDIUM" as QuizCodeLength, guidance: "", appendToQuiz: true });
   const quizQuestionRefs = React.useRef<Record<number, HTMLTextAreaElement | null>>({});
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
@@ -258,10 +258,17 @@ export const ControlStudioPage: React.FC = () => {
     setBusy(true);
     try {
       if (preview()) {
-        setQuizText(JSON.stringify(Array.from({ length: count }, (_, index) => demoQuiz[index % demoQuiz.length]), null, 2));
+        const generated = Array.from({ length: count }, (_, index) => demoQuiz[index % demoQuiz.length]);
+        const nextQuestions = quizGenerationSettings.appendToQuiz ? [...parseQuiz(quizText), ...generated] : generated;
+        setQuizText(JSON.stringify(nextQuestions, null, 2));
       } else {
+        const existingQuiz = quizText.trim();
+        if (quizGenerationSettings.appendToQuiz && parseQuiz(existingQuiz).length > 0 && existingQuiz !== (control?.quizJson || "").trim()) {
+          await api.put(`/topics/control-works/${id}`, { quizJson: existingQuiz });
+        }
         await api.post(`/topics/control-works/${id}/generate-quiz`, {
           count,
+          append: quizGenerationSettings.appendToQuiz,
           topicTitle: control?.topic?.title || title,
           difficulty: Number(quizGenerationSettings.difficulty) || 3,
           questionStyle: quizGenerationSettings.questionStyle,
@@ -271,7 +278,8 @@ export const ControlStudioPage: React.FC = () => {
         });
         await load();
       }
-      showToast({ type: "success", message: tr("Квіз підготовлено.", "Quiz is ready.") });
+      const appended = quizGenerationSettings.appendToQuiz && parseQuiz(quizText).length > 0;
+      showToast({ type: "success", message: appended ? tr(`Додано ${count} запитань до квізу.`, `Added ${count} questions to the quiz.`) : tr("Квіз підготовлено.", "Quiz is ready.") });
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, tr("Не вдалося підготувати квіз.", "Could not prepare the quiz.")));
     } finally {
@@ -790,8 +798,8 @@ export const ControlStudioPage: React.FC = () => {
               </div>
               <p className="mt-2 text-xs text-text-muted dark:text-text-secondary">{tr("Питання, які посилаються на код, завжди міститимуть сам фрагмент. Для розгорнутого обсягу генератор створює змістовніші приклади коду.", "Questions that refer to code will include the snippet. Extended length creates more substantial code examples.")}</p>
               <label className="mt-3 block text-xs font-bold">{tr("Що врахувати генератору", "Additional instructions")}<textarea value={quizGenerationSettings.guidance} onChange={event => setQuizGenerationSettings(old => ({ ...old, guidance: event.target.value }))} rows={3} maxLength={4000} placeholder={tr("Наприклад: для учнів 8 класу; зосередься на циклах і масивах; не включай теми, яких ще не проходили.", "For example: for grade 8; focus on loops and arrays; avoid topics not covered yet.")} className="mt-1 w-full resize-y rounded-xl border border-border/10 bg-white p-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
-              {hasQuiz && <p className="mt-2 text-xs text-text-muted dark:text-text-secondary">{tr("Повторна генерація замінить поточні запитання квізу.", "Regenerating replaces the current quiz questions.")}</p>}
-              <button type="button" className="classroom-button mt-3" disabled={busy} onClick={() => void generateQuiz()}><Wand2 className="mr-2 inline size-4" aria-hidden="true" />{busy ? tr("Готуємо…", "Preparing…") : tr(`Згенерувати ${Math.max(1, Math.min(50, Number(quizGenerationSettings.count) || 10))} запитань`, `Generate ${Math.max(1, Math.min(50, Number(quizGenerationSettings.count) || 10))} questions`)}</button>
+              {hasQuiz && <><label className="mt-3 flex items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={quizGenerationSettings.appendToQuiz} onChange={event => setQuizGenerationSettings(old => ({ ...old, appendToQuiz: event.target.checked }))} className="size-4 accent-primary" />{tr("Додавати згенеровані запитання до поточного квізу", "Add generated questions to the current quiz")}</label><p className="mt-2 text-xs text-text-muted dark:text-text-secondary">{quizGenerationSettings.appendToQuiz ? tr("Нові запитання буде додано в кінець. Ручні зміни збережуться перед генерацією.", "New questions will be appended. Manual edits are saved before generation.") : tr("Генерація замінить поточні запитання квізу.", "Generation will replace the current quiz questions.")}</p></>}
+              <button type="button" className="classroom-button mt-3" disabled={busy} onClick={() => void generateQuiz()}><Wand2 className="mr-2 inline size-4" aria-hidden="true" />{busy ? tr("Готуємо…", "Preparing…") : quizGenerationSettings.appendToQuiz && hasQuiz ? tr(`Додати ще ${Math.max(1, Math.min(50, Number(quizGenerationSettings.count) || 10))} запитань`, `Add ${Math.max(1, Math.min(50, Number(quizGenerationSettings.count) || 10))} more questions`) : tr(`Згенерувати ${Math.max(1, Math.min(50, Number(quizGenerationSettings.count) || 10))} запитань`, `Generate ${Math.max(1, Math.min(50, Number(quizGenerationSettings.count) || 10))} questions)}</button>
             </section>
             <p className="classroom-caption">{tr("Введіть запитання й варіанти відповідей. Позначте правильну відповідь кружечком.", "Enter a question and its answer options. Mark the correct answer using the circle.")}</p>
             {quiz.map((item, index) => <fieldset key={index} className="classroom-quiz-question"><legend>{tr("Запитання", "Question")} {index + 1}</legend><div className="classroom-quiz-question__heading"><div className="min-w-0 flex-1"><textarea ref={element => { quizQuestionRefs.current[index] = element; }} aria-label={tr(`Текст запитання ${index + 1}`, `Question ${index + 1} text`)} value={item.question || ""} onChange={event => setQuizText(JSON.stringify(quiz.map((q, i) => i === index ? { ...q, question: event.target.value } : q), null, 2))} rows={2} placeholder={tr("Введіть запитання…", "Enter a question…")} /><div className="mt-1 flex justify-end"><MarkdownImageInsertButton value={item.question || ""} onChange={question => setQuizText(JSON.stringify(quiz.map((q, i) => i === index ? { ...q, question } : q), null, 2))} textareaRef={{ current: quizQuestionRefs.current[index] }} className="text-xs" /></div></div><button type="button" className="classroom-icon-button" aria-label={tr(`Прибрати запитання ${index + 1}`, `Remove question ${index + 1}`)} onClick={() => setQuizText(JSON.stringify(quiz.filter((_, i) => i !== index), null, 2))}><Trash2 className="size-4" aria-hidden="true" /></button></div><div className="classroom-quiz-options">{Object.entries(item.options || { A: "", B: "", C: "", D: "" }).map(([key, value]) => <label key={key}><input type="radio" name={`quiz-correct-${index}`} checked={item.correct === key} aria-label={tr(`Правильна відповідь ${key} для запитання ${index + 1}`, `Correct answer ${key} for question ${index + 1}`)} onChange={() => setQuizText(JSON.stringify(quiz.map((q, i) => i === index ? { ...q, correct: key } : q), null, 2))} /><span>{key}</span><input type="text" aria-label={tr(`Варіант ${key} запитання ${index + 1}`, `Question ${index + 1} option ${key}`)} value={value} onChange={event => setQuizText(JSON.stringify(quiz.map((q, i) => i === index ? { ...q, options: { ...q.options, [key]: event.target.value } } : q), null, 2))} placeholder={tr("Варіант відповіді", "Answer option")} /></label>)}</div></fieldset>)}

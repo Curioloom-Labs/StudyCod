@@ -865,7 +865,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
           return {
             success: false,
             error: {
-              statusCode: 400,
+              statusCode: 502,
               message: 'AI_GENERATION_FAILED: Invalid response structure',
                 error: errorMsg,
               details: {
@@ -993,7 +993,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
       return {
         success: false,
         error: {
-          statusCode: 400,
+          statusCode: 502,
           message: 'AI_GENERATION_FAILED: Generated data is invalid',
           error: validationErrorMessage,
           details: {

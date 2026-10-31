@@ -1038,7 +1038,7 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
     }, {
       language: userLanguage,
       requestId: req.requestId,
-      maxAttempts: 2,
+      maxAttempts: 3,
       ...(TOPICS_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: Math.max(TOPICS_AI_BUDGET_MS, 45_000) })
     });
     const aiElapsedMs = Date.now() - aiStartedAt;
@@ -1290,7 +1290,7 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
     if (!validated.success) {
       return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
     }
-    const { topicTitle, count, difficulty, questionStyle, codeLength, generationGuidance, responseLanguage, language: requestedLanguage } = validated.data;
+    const { topicTitle, count, difficulty, questionStyle, codeLength, generationGuidance, append = false, responseLanguage, language: requestedLanguage } = validated.data;
     const controlWorkId = parseInt(req.params.controlWorkId, 10);
     if (isNaN(controlWorkId)) {
       return res.status(400).json({
@@ -1365,18 +1365,30 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
       logger.warn("[topics] Empty or invalid questions array", { requestId: req.requestId, questions });
       throw new Error("EMPTY_QUIZ_GENERATED");
     }
-    logger.debug("[topics] Saving quiz", { requestId: req.requestId, questionsCount: questions.length });
-    controlWork.quizJson = result.data.quizJson;
-    controlWork.hasTheory = true;
+    let totalQuestions = questions.length;
     await AppDataSource.transaction("READ COMMITTED", async manager => {
-      await manager.getRepository(ControlWork).findOne({ where: { id: controlWork.id }, lock: { mode: "pessimistic_write" } });
+      const repo = manager.getRepository(ControlWork);
+      const currentControlWork = await repo.findOne({ where: { id: controlWork.id }, lock: { mode: "pessimistic_write" } });
+      if (!currentControlWork) throw new HttpError(404, "CONTROL_WORK_NOT_FOUND");
       if (await manager.getRepository(LessonAttempt).count({ where: { controlWork: { id: controlWork.id }, status: "IN_PROGRESS" } })) throw new HttpError(409, "CONTROL_WORK_HAS_ACTIVE_ATTEMPTS");
-      await manager.getRepository(ControlWork).save(controlWork);
+
+      let existingQuestions: unknown[] = [];
+      if (append && currentControlWork.quizJson) {
+        try {
+          const parsed = JSON.parse(currentControlWork.quizJson);
+          existingQuestions = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.questions) ? parsed.questions : [];
+        } catch {
+          existingQuestions = [];
+        }
+      }
+      const savedQuestions = append ? [...existingQuestions, ...questions] : questions;
+      currentControlWork.quizJson = JSON.stringify(savedQuestions);
+      currentControlWork.hasTheory = true;
+      totalQuestions = savedQuestions.length;
+      await repo.save(currentControlWork);
     });
-    logger.debug("[topics] Quiz saved successfully", { requestId: req.requestId, questionsCount: questions.length });
-    res.json({
-      questions
-    });
+    logger.debug("[topics] Quiz saved successfully", { requestId: req.requestId, generatedCount: questions.length, totalQuestions, appended: append });
+    res.json({ questions, appended: append, totalQuestions });
   } catch (error: unknown) {
     if (error instanceof HttpError) return res.status(error.statusCode).json({ message: error.message });
     logger.error("[topics] Error generating quiz", { requestId: req.requestId, err: error });
