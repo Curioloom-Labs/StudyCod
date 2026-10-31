@@ -841,6 +841,7 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
   const processedContent = useMemo(() => {
     if (!content) return "";
     let processed = normalizeMarkdownEscapes(content);
+    processed = processed.replace(/<!--\s*STUDYCOD_AI_TRAP_(?:START|END)\s*-->/gi, "");
     // Older database records can still contain authoring metadata. It is not
     // learner content and must never be rendered in the lesson.
     processed = processed.replace(/<!--\s*STUDYCOD_LEARNING_META_START[\s\S]*?STUDYCOD_LEARNING_META_END\s*-->/gi, "");

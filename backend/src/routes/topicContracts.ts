@@ -43,6 +43,7 @@ export const updateTaskSchema = createTaskSchema
 export const updateControlWorkSchema = z.object({
   title: z.string().nullable().optional(),
   timeLimitMinutes: optionalNonNegativeInt.nullable().optional(),
+  deadline: dateInput.nullable().optional(),
   hasTheory: z.boolean().optional(),
   hasPractice: z.boolean().optional(),
   quizJson: z.string().nullable().optional(),

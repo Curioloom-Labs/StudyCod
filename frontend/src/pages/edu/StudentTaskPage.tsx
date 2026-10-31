@@ -761,7 +761,10 @@ export const StudentTaskPage: React.FC = () => {
       const currentCode = codeRef.current;
       if (!currentTask || !timeStarted) return;
       const elapsedSeconds = Math.floor((Date.now() - timeStarted.getTime()) / 1000);
-      const remaining = Math.max(0, (currentTask.lesson.timeLimitMinutes || 0) * 60 - elapsedSeconds);
+      const timeLimitRemaining = Math.max(0, (currentTask.lesson.timeLimitMinutes || 0) * 60 - elapsedSeconds);
+      const deadlineTimestamp = currentTask.lesson.deadline ? new Date(currentTask.lesson.deadline).getTime() : null;
+      const deadlineSecondsRemaining = deadlineTimestamp === null ? null : Math.max(0, Math.floor((deadlineTimestamp - Date.now()) / 1000));
+      const remaining = deadlineSecondsRemaining === null ? timeLimitRemaining : Math.min(timeLimitRemaining, deadlineSecondsRemaining);
       setTimeRemaining(remaining);
       if (remaining <= 0) {
         clearInterval(interval);

@@ -273,6 +273,7 @@ export interface TaskWithGrade {
     id: number;
     title: string;
     type: "TOPIC" | "CONTROL" | "LESSON";
+    deadline?: string | null;
     deadlineTimezone?: string | null;
     hasTheory: boolean;
     theory?: string;

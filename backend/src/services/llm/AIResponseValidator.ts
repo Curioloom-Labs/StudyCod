@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { hasValidTaskAiTrap } from '../../../../shared/utils/taskAiTrap';
 import type { AiQuizResult, AiTaskGenerationResult, AiTheoryResult, TestDataExample } from './LLMOrchestrator';
 import { isFunctionsTopic, looksLikeFunctionImplementationTask } from '../ai/curriculumPolicy';
 
@@ -967,13 +968,19 @@ export class AIResponseValidator {
       throw new AIValidationError('generateQuiz', emptyZod(), `Quiz generation validation failed: ${unknownErr(error)}`);
     }
   }
-  static validateGenerateTaskCondition(data: unknown): {
+  static validateGenerateTaskCondition(data: unknown, options: { requireAiTrap?: boolean } = {}): {
     description: string;
   } {
     try {
       const validated = TaskConditionSchema.parse(data);
+      if (options.requireAiTrap && !hasValidTaskAiTrap(validated.description)) {
+        throw new AIValidationError('generateTaskCondition', emptyZod(), 'Task condition must contain one complete, marked AI trap segment', data);
+      }
       return validated;
     } catch (error) {
+      if (error instanceof AIValidationError) {
+        throw error;
+      }
       if (error instanceof z.ZodError) {
         throw new AIValidationError('generateTaskCondition', error, `Task condition validation failed: ${zodMessages(error)}`);
       }

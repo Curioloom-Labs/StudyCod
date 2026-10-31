@@ -27,6 +27,7 @@ type Control = {
   topic?: { id: number; title: string };
   topicId?: number;
   timeLimitMinutes?: number | null;
+  deadline?: string | null;
   isAssigned?: boolean;
   assignedStudentIds?: number[] | null;
   quizJson?: string | null;
@@ -38,6 +39,16 @@ type Control = {
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
 const root = "edu-workspace edu-control-workspace";
+const defaultAssessmentDeadline = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+const toDateTimeLocalValue = (value?: string | null) => {
+  const date = new Date(value || defaultAssessmentDeadline());
+  if (Number.isNaN(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+};
+const fromDateTimeLocalValue = (value: string) => {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
 function formatControlTaskStatement(markdown: string): string {
   return String(markdown ?? "")
     .replace(/\r\n?/g, "\n")
@@ -123,6 +134,7 @@ export const ControlStudioPage: React.FC = () => {
   const [control, setControl] = React.useState<Control | null>(null);
   const [title, setTitle] = React.useState("");
   const [minutes, setMinutes] = React.useState("45");
+  const [deadline, setDeadline] = React.useState(() => toDateTimeLocalValue());
   const [formula, setFormula] = React.useState("");
   const [quizText, setQuizText] = React.useState("");
   const [quizGenerationSettings, setQuizGenerationSettings] = React.useState({ count: "10", difficulty: "3", questionStyle: "MIXED" as QuizQuestionStyle, codeLength: "MEDIUM" as QuizCodeLength, guidance: "" });
@@ -171,6 +183,7 @@ export const ControlStudioPage: React.FC = () => {
         setTestCounts({ 11: 4, 12: 3 });
         setTitle(demo.title || "");
         setMinutes(String(demo.timeLimitMinutes || 45));
+        setDeadline(toDateTimeLocalValue(demo.deadline));
         setFormula(demo.formula || "");
         setQuizText(demo.quizJson || "");
         setError(null);
@@ -191,6 +204,7 @@ export const ControlStudioPage: React.FC = () => {
       setTestCounts(Object.fromEntries(counts));
       setTitle(value.title || "");
       setMinutes(String(value.timeLimitMinutes || 45));
+      setDeadline(toDateTimeLocalValue(value.deadline));
       setFormula(value.formula || "0.35 * test + 0.65 * avg(practice)");
       setQuizText(value.quizJson || "");
       setError(null);
@@ -208,16 +222,22 @@ export const ControlStudioPage: React.FC = () => {
     setError(null);
     try {
       if (quizText.trim()) JSON.parse(quizText);
+      const deadlineIso = fromDateTimeLocalValue(deadline);
+      if (!deadlineIso || new Date(deadlineIso).getTime() <= Date.now()) {
+        setError(tr("Оберіть майбутній дедлайн контрольної.", "Choose a future assessment deadline."));
+        return;
+      }
       if (!preview()) {
         await api.put(`/topics/control-works/${id}`, {
           title: title.trim(),
           timeLimitMinutes: Number(minutes) || null,
+          deadline: deadlineIso,
           quizJson: quizText.trim() || null,
         });
         await updateControlWorkFormula(id, formula.trim() || null);
         await load();
       } else {
-        setControl(old => old ? { ...old, title: title.trim(), timeLimitMinutes: Number(minutes) || null, quizJson: quizText.trim() || null, formula: formula.trim() || null } : old);
+        setControl(old => old ? { ...old, title: title.trim(), timeLimitMinutes: Number(minutes) || null, deadline: deadlineIso, quizJson: quizText.trim() || null, formula: formula.trim() || null } : old);
       }
       showToast({ type: "success", message: tr("Контрольну збережено.", "Assessment saved.") });
     } catch (caught) {
@@ -503,7 +523,7 @@ export const ControlStudioPage: React.FC = () => {
           taskTitle: newTask.title.trim(),
           taskType: "CONTROL",
           difficulty: taskGenerationProfile.difficulty,
-          generationGuidance: buildTaskGenerationGuidance(taskGenerationProfile, newTask.generationInstructions, isEn),
+          generationGuidance: buildTaskGenerationGuidance(taskGenerationProfile, newTask.generationInstructions, isEn, true),
           language: isEn ? "en" : "uk",
         });
         setNewTask(old => ({ ...old, description: String(response.data?.description ?? old.description) }));
@@ -780,6 +800,8 @@ export const ControlStudioPage: React.FC = () => {
           <h2 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.05em]">{tr("Параметри роботи", "Assessment settings")}</h2>
           <label className="mt-6 block text-sm font-bold">{tr("Назва", "Title")}<input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
           <label className="mt-4 block text-sm font-bold">{tr("Час, хв", "Time, min")}<input value={minutes} onChange={(event) => setMinutes(event.target.value)} type="number" min="1" className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
+          <label className="mt-4 block text-sm font-bold">{tr("Дедлайн", "Deadline")}<input value={deadline} onChange={event => setDeadline(event.target.value)} type="datetime-local" min={toDateTimeLocalValue(new Date().toISOString())} className="mt-2 w-full rounded-xl border border-border/10 bg-bg-surface px-3 py-3 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
+          <p className="mt-2 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Учень може почати й надіслати роботу до цього часу. Якщо до дедлайну залишиться менше за ліміт роботи, час виконання скоротиться до залишку.", "Students can start and submit until this time. If less time remains than the assessment limit, their available time is shortened to the time left.")}</p>
           <div className="mt-6 rounded-2xl bg-bg-hover p-4 dark:bg-white/[.045]">
             <div className="flex items-center gap-2"><Calculator className="h-4 w-4 text-primary-strong dark:text-primary-soft" /><p className="text-sm font-bold">{tr("Формула результату", "Score formula")}</p></div>
             <textarea value={formula} onChange={(event) => setFormula(event.target.value)} rows={3} className="mt-3 w-full resize-none rounded-xl border border-border/10 bg-white px-3 py-2 font-mono text-xs dark:border-white/10 dark:bg-bg-code" />

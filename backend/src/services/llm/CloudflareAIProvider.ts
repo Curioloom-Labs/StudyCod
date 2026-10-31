@@ -663,8 +663,9 @@ ${JSON.stringify(schema, null, 2)}
     output: string;
     explanation?: string;
   }>> {
+    const canonicalTaskDescription = requireCompleteTaskDescription(params.taskDescription);
     const built = this.buildTestDataPrompt({
-      taskDescription: params.taskDescription,
+      taskDescription: canonicalTaskDescription,
       taskTitle: params.taskTitle,
       lang: params.lang,
       count: params.count,
@@ -691,7 +692,7 @@ ${JSON.stringify(schema, null, 2)}
     } catch (error: unknown) {
       throw new Error(`AI_GENERATION_FAILED: Failed to parse test data: ${errorMessage(error)}`);
     }
-    const ioType = resolveTestDataIoType(params.taskDescription, params.ioType);
+    const ioType = resolveTestDataIoType(canonicalTaskDescription, params.ioType);
     const count = ioType === 'STDIN_STDOUT' ? Math.max(1, Math.floor(params.count)) : 1;
     return AIResponseValidator.validateGenerateTestData(parsed, count, ioType, { allowEmptyOutput: params.allowEmptyOutput });
   }

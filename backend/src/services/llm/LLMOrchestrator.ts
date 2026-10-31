@@ -15,6 +15,7 @@ import { validateAndReviewGeneratedTask } from './GeneratedTaskContract';
 import { generateReferenceTestData, type ReferenceTestExecutor } from './ReferenceTestData';
 import { parseOlympiadPracticeContract } from '../learning/learningContract';
 import { ensureOlympiadCompleteProgramRequest, validateOlympiadDebuggingTask, validateOlympiadTaskExamples, validateOlympiadTaskNarrativeDomain } from './OlympiadTaskExamples';
+import { TASK_AI_TRAP_START } from '../../../../shared/utils/taskAiTrap';
 
 export type LLMTaskLanguage = TopicLanguage;
 
@@ -2165,6 +2166,7 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
   }): Promise<{
     description: string;
   }> {
+    const requireAiTrap = Boolean(params.generationGuidance?.includes(TASK_AI_TRAP_START));
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();
@@ -2184,7 +2186,7 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
         language: params.userLanguage,
         signal: params.signal
       });
-      return AIResponseValidator.validateGenerateTaskCondition(raw);
+      return AIResponseValidator.validateGenerateTaskCondition(raw, { requireAiTrap });
     };
 
     const tryOpenRouter = async () => {
@@ -2262,6 +2264,7 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
     const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
     const teacherTaskTitle = (params.taskTitle || "").trim();
     const generationGuidance = params.generationGuidance?.trim();
+    const requireAiTrap = Boolean(generationGuidance?.includes(TASK_AI_TRAP_START));
     const guidanceSection = generationGuidance
       ? (isEnglish ? `\n\nMANDATORY TEACHER CONTROLS (the selected values are hard requirements, not suggestions; follow each one and prefer explicit controls over vague prose):\n${generationGuidance}` : `\n\nОБОВ’ЯЗКОВІ НАЛАШТУВАННЯ ВЧИТЕЛЯ (обрані значення є жорсткими вимогами, а не побажаннями; виконай кожне та у разі суперечності орієнтуйся на явні параметри):\n${generationGuidance}`)
       : "";
@@ -2362,7 +2365,7 @@ ${difficultyPrompt}
           language: params.userLanguage || "uk"
         });
         try {
-          return AIResponseValidator.validateGenerateTaskCondition({ description: content.trim() });
+          return AIResponseValidator.validateGenerateTaskCondition({ description: content.trim() }, { requireAiTrap });
         } catch (error: unknown) {
           lastValidationError = error;
           if (attempt > 0) throw error;
@@ -2676,8 +2679,12 @@ public class Main {
     allowEmptyOutput?: boolean;
     referenceExamplesAreAuthoritative?: boolean;
   }): Promise<TestDataExample[]> {
-    requireCompleteTaskDescription(params.taskDescription);
-    params = { ...params, ioType: resolveTestDataIoType(params.taskDescription, params.ioType) };
+    const canonicalTaskDescription = requireCompleteTaskDescription(params.taskDescription);
+    params = {
+      ...params,
+      taskDescription: canonicalTaskDescription,
+      ioType: resolveTestDataIoType(canonicalTaskDescription, params.ioType),
+    };
     const pref = preferredProvider();
     const canCf = isCloudflareConfigured();
     const canOr = isOpenRouterConfigured();

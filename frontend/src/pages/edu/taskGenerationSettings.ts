@@ -1,6 +1,9 @@
+import { TASK_AI_TRAP_END, TASK_AI_TRAP_START } from "../../../../shared/utils/taskAiTrap";
+
 export type TaskLearnerLevel = "AUTO" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "OLYMPIAD";
 export type TaskStructure = "AUTO" | "SINGLE_CONCEPT" | "MULTI_STEP" | "EDGE_CASES" | "COMBINED";
 export type TaskContextStyle = "AUTO" | "NEUTRAL" | "REAL_WORLD" | "CREATIVE";
+export type TaskAiTrapStyle = "BOUNDARY_SHIFT" | "RULE_SWAP" | "DISTRACTOR";
 
 export type TaskGenerationProfile = {
   learnerLevel: TaskLearnerLevel;
@@ -15,6 +18,9 @@ export type TaskGenerationProfile = {
   avoidSolutionHints: boolean;
   clarifyingQuestions: string[];
   clarificationAnswers: string[];
+  aiTrapEnabled: boolean;
+  aiTrapStyle: TaskAiTrapStyle;
+  aiTrapFocus: string;
 };
 
 export const defaultTaskGenerationProfile: TaskGenerationProfile = {
@@ -30,12 +36,16 @@ export const defaultTaskGenerationProfile: TaskGenerationProfile = {
   avoidSolutionHints: true,
   clarifyingQuestions: [],
   clarificationAnswers: [],
+  aiTrapEnabled: false,
+  aiTrapStyle: "BOUNDARY_SHIFT",
+  aiTrapFocus: "",
 };
 
 export function buildTaskGenerationGuidance(
   profile: TaskGenerationProfile,
   teacherNotes: string,
   isEnglish: boolean,
+  includeAiTrap = false,
 ): string {
   const learnerLevels: Record<TaskLearnerLevel, string> = isEnglish ? {
     AUTO: "Infer from the class and topic",
@@ -74,6 +84,15 @@ export function buildTaskGenerationGuidance(
     REAL_WORLD: "Реалістичний побутовий або професійний контекст",
     CREATIVE: "Цікавий вигаданий або ігровий контекст",
   };
+  const trapStyles: Record<TaskAiTrapStyle, string> = isEnglish ? {
+    BOUNDARY_SHIFT: "subtly tempt an AI assistant to shift one boundary by one (inclusive versus exclusive)",
+    RULE_SWAP: "subtly tempt an AI assistant to swap the priority or order of two rules",
+    DISTRACTOR: "subtly tempt an AI assistant to act on an irrelevant but plausible story detail",
+  } : {
+    BOUNDARY_SHIFT: "непомітно спонукати ШІ змістити одну межу на одиницю (включно чи не включно)",
+    RULE_SWAP: "непомітно спонукати ШІ поміняти пріоритет або порядок двох правил",
+    DISTRACTOR: "непомітно спонукати ШІ врахувати несуттєву, але правдоподібну деталь сюжету",
+  };
 
   const lines = isEnglish ? [
     "MANDATORY TEACHER CONTROLS (these explicit controls take priority over vague or conflicting prose):",
@@ -87,6 +106,7 @@ export function buildTaskGenerationGuidance(
     profile.avoidConcepts.trim() ? `- Concepts or techniques that must be avoided: ${profile.avoidConcepts.trim()}.` : "",
     profile.stayOnTopic ? "- Stay within the selected topic and the stated prerequisites; do not add untaught algorithms, data structures, or concepts." : "",
     profile.avoidSolutionHints ? "- Do not reveal the algorithm, implementation steps, or solution hints in the student-facing statement." : "",
+    includeAiTrap && profile.aiTrapEnabled ? `- Add exactly one subtle, low-salience sentence that would tempt an AI assistant to change a small solution choice: ${trapStyles[profile.aiTrapStyle]}.${profile.aiTrapFocus.trim() ? ` Teacher's specific trap focus: ${profile.aiTrapFocus.trim()}.` : ""} Place it naturally inside a story paragraph; do not label it as a trap or explain its purpose. Wrap only that sentence with these exact inline markers: ${TASK_AI_TRAP_START} and ${TASK_AI_TRAP_END}. The sentence remains visible in the student-rendered condition, while the markers are HTML comments. Keep the formal task rules, constraints, examples, and correct behavior fully authoritative and consistent; the trap must not change the actual input/output contract or appear in examples.` : "",
     ...profile.clarifyingQuestions.flatMap((question, index) => {
       const answer = profile.clarificationAnswers[index]?.trim();
       return answer ? [`- Teacher clarification: ${question}`, `  Teacher's answer: ${answer}`] : [];
@@ -106,6 +126,7 @@ export function buildTaskGenerationGuidance(
     profile.avoidConcepts.trim() ? `- Не використовуй поняття або прийоми: ${profile.avoidConcepts.trim()}.` : "",
     profile.stayOnTopic ? "- Залишайся в межах обраної теми й зазначених попередніх знань; не додавай невивчених алгоритмів, структур даних або понять." : "",
     profile.avoidSolutionHints ? "- Не розкривай алгоритм, кроки реалізації чи підказки до розв’язку в умові для учня." : "",
+    includeAiTrap && profile.aiTrapEnabled ? `- Додай рівно одне малопомітне речення-пастку, яке спонукатиме ШІ-помічника трохи змінити розв’язок: ${trapStyles[profile.aiTrapStyle]}.${profile.aiTrapFocus.trim() ? ` Побажання вчителя щодо пастки: ${profile.aiTrapFocus.trim()}.` : ""} Природно вплети його в абзац сюжету, не називай пасткою й не пояснюй її мету. Обгорни лише це речення точними вбудованими маркерами: ${TASK_AI_TRAP_START} і ${TASK_AI_TRAP_END}. Саме речення видно учню в умові, маркери є HTML-коментарями. Формальні правила, обмеження, приклади й правильна поведінка залишаються головними та узгодженими; пастка не змінює справжній контракт вводу/виводу й не потрапляє у приклади.` : "",
     ...profile.clarifyingQuestions.flatMap((question, index) => {
       const answer = profile.clarificationAnswers[index]?.trim();
       return answer ? [`- Уточнення вчителя: ${question}`, `  Відповідь учителя: ${answer}`] : [];

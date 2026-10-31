@@ -326,7 +326,7 @@ export const TopicStudioPage: React.FC = () => {
         taskTitle: taskForm.title.trim(),
         taskType: "PRACTICE",
         difficulty: generationProfile.difficulty,
-        generationGuidance: buildTaskGenerationGuidance(generationProfile, generationInstructions, isEn),
+        generationGuidance: buildTaskGenerationGuidance(generationProfile, generationInstructions, isEn, true),
         language: isEn ? "en" : "uk",
       });
       setTaskForm((old) => ({ ...old, description: String(response.data?.description ?? old.description) }));
@@ -739,7 +739,7 @@ export const TopicStudioPage: React.FC = () => {
         setTopic((old) => old ? { ...old, controlWorks: (old.controlWorks || []).map((item) => item.id === control.id ? { ...item, isAssigned: !item.isAssigned } : item) } : old);
       } else {
         if (control.isAssigned) await unassignControlWork(control.id);
-        else await api.post(`/topics/control-works/${control.id}/assign`, { deadline: defaultAssignmentDeadline() });
+        else await api.post(`/topics/control-works/${control.id}/assign`, { deadline: control.deadline || defaultAssignmentDeadline() });
         await load();
       }
     } catch (caught) {

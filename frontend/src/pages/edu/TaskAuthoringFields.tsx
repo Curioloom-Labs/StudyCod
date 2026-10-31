@@ -92,6 +92,7 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
           </div>
           <textarea ref={descriptionRef} id={descriptionId} name="taskDescription" value={value.description} onChange={event => onChange({ description: event.target.value })} placeholder={tr("Опишіть завдання, вхідні та вихідні дані, обмеження й приклади.", "Describe the problem, input, output, constraints, and examples.")} rows={13} disabled={busy} />
           <p className="classroom-caption">{tr("Підтримуються Markdown, приклади коду та математичні формули.", "Supports Markdown, code examples, and mathematical formulae.")}</p>
+          {generationProfile.aiTrapEnabled && <p className="classroom-caption">{tr("Залишайте маркери STUDYCOD_AI_TRAP_START та STUDYCOD_AI_TRAP_END навколо фрази-пастки: генератор тестів виключає лише цей фрагмент.", "Keep the STUDYCOD_AI_TRAP_START and STUDYCOD_AI_TRAP_END markers around the trap phrase; test generation excludes only that fragment.")}</p>}
           <details className="task-authoring__preview"><summary>{tr("Переглянути як учень", "Preview as a student")}</summary><MarkdownView content={value.description || tr("Тут з’явиться умова завдання.", "The problem statement will appear here.")} /></details>
         </>}
         {selectedTab === "code" && <>

@@ -1207,7 +1207,7 @@ topicsRouter.put("/control-works/:controlWorkId", authRequired, async (req: Auth
     if (!validated.success) {
       return res.status(400).json({ message: "INVALID_INPUT", errors: validated.error.issues });
     }
-    const { title, timeLimitMinutes, hasTheory, hasPractice, quizJson } = validated.data;
+    const { title, timeLimitMinutes, deadline, hasTheory, hasPractice, quizJson } = validated.data;
     const controlWorkId = parseInt(req.params.controlWorkId, 10);
     if (isNaN(controlWorkId)) {
       return res.status(400).json({
@@ -1240,12 +1240,34 @@ topicsRouter.put("/control-works/:controlWorkId", authRequired, async (req: Auth
       if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
       if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
     }
+    if (deadline !== undefined) {
+      const normalizedDeadline = deadline === null ? null : new Date(deadline);
+      if (normalizedDeadline && !Number.isFinite(normalizedDeadline.getTime())) {
+        return res.status(400).json({ message: "INVALID_DEADLINE" });
+      }
+      if (normalizedDeadline && normalizedDeadline.getTime() <= Date.now()) {
+        return res.status(400).json({ message: "DEADLINE_MUST_BE_IN_FUTURE" });
+      }
+      if (controlWork.isAssigned && !normalizedDeadline) {
+        return res.status(400).json({ message: "ASSIGNED_CONTROL_WORK_REQUIRES_DEADLINE" });
+      }
+      controlWork.deadline = normalizedDeadline;
+    }
     if (title !== undefined) controlWork.title = title;
     if (timeLimitMinutes !== undefined) controlWork.timeLimitMinutes = timeLimitMinutes;
     if (hasTheory !== undefined) controlWork.hasTheory = hasTheory;
     if (hasPractice !== undefined) controlWork.hasPractice = hasPractice;
     if (quizJson !== undefined) controlWork.quizJson = quizJson;
-    await controlWorkRepo().save(controlWork);
+    await AppDataSource.transaction("READ COMMITTED", async manager => {
+      await manager.getRepository(ControlWork).save(controlWork);
+      if (deadline !== undefined && controlWork.isAssigned) {
+        const tasks = await manager.getRepository(TopicTask).find({
+          where: { controlWork: { id: controlWork.id }, type: "CONTROL" }
+        });
+        for (const task of tasks) task.deadline = controlWork.deadline;
+        if (tasks.length) await manager.getRepository(TopicTask).save(tasks);
+      }
+    });
     res.json({
       controlWork
     });

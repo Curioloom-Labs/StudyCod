@@ -92,19 +92,22 @@ function computePracticeAverageFromLatestGrades(controlTasks: TopicTask[], lates
   return clampGradeToInt(avg);
 }
 
-function getAttemptRemainingSeconds(attempt: Pick<LessonAttempt, "startedAt" | "timeLimitMinutes">): number | null {
+function getAttemptRemainingSeconds(attempt: Pick<LessonAttempt, "startedAt" | "timeLimitMinutes">, deadline?: Date | null): number | null {
   const limitMinutes = Number(attempt.timeLimitMinutes ?? 0);
-  if (!Number.isFinite(limitMinutes) || limitMinutes <= 0) {
-    return null;
-  }
-
   const elapsedSeconds = Math.floor((Date.now() - attempt.startedAt.getTime()) / 1000);
-  const totalSeconds = Math.floor(limitMinutes * 60);
-  return Math.max(0, totalSeconds - elapsedSeconds);
+  const timedRemaining = Number.isFinite(limitMinutes) && limitMinutes > 0
+    ? Math.max(0, Math.floor(limitMinutes * 60) - elapsedSeconds)
+    : null;
+  const deadlineRemaining = deadline
+    ? Math.max(0, Math.floor((deadline.getTime() - Date.now()) / 1000))
+    : null;
+  if (timedRemaining === null) return deadlineRemaining;
+  if (deadlineRemaining === null) return timedRemaining;
+  return Math.min(timedRemaining, deadlineRemaining);
 }
 
-function isTimedAttemptExpired(attempt: Pick<LessonAttempt, "startedAt" | "timeLimitMinutes">): boolean {
-  const remainingSeconds = getAttemptRemainingSeconds(attempt);
+function isTimedAttemptExpired(attempt: Pick<LessonAttempt, "startedAt" | "timeLimitMinutes">, deadline?: Date | null): boolean {
+  const remainingSeconds = getAttemptRemainingSeconds(attempt, deadline);
   return remainingSeconds !== null && remainingSeconds <= 0;
 }
 
@@ -415,7 +418,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
         const fullyCompleted = theoryGatePassed && practiceGatePassed;
         const hasAnyEvidence = quizSubmitted === true || completedTasks > 0;
         const deadlineExpired = !!controlWork.deadline && new Date() > controlWork.deadline;
-        const latestAttemptTimedOut = !!latestAttempt && isTimedAttemptExpired(latestAttempt);
+        const latestAttemptTimedOut = !!latestAttempt && isTimedAttemptExpired(latestAttempt, controlWork.deadline);
         let completedByAttempt = latestAttempt?.status === "COMPLETED";
 
         if (latestAttempt?.status === "COMPLETED" && !fullyCompleted && !hasAnyEvidence && !latestAttemptTimedOut) {
@@ -687,7 +690,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
 
             const fullyCompleted = theoryCompleted && practiceCompleted;
             const hasAnyEvidence = hasTheoryEvidence || hasPracticeEvidence;
-            const attemptTimedOut = isTimedAttemptExpired(attempt);
+            const attemptTimedOut = isTimedAttemptExpired(attempt, cw.deadline);
 
             if (attempt.status === "COMPLETED" && !fullyCompleted && !hasAnyEvidence && !attemptTimedOut) {
               await lessonAttemptRepo().remove(attempt);
@@ -904,7 +907,7 @@ router.get("/lessons/:id/control-work-status", authRequired, async (req: AuthReq
 
     const fullyCompleted = testCompleted && practiceCompleted;
     const hasAnyEvidence = hasTheoryEvidence || hasPracticeEvidence;
-    const attemptTimedOut = isTimedAttemptExpired(attempt);
+    const attemptTimedOut = isTimedAttemptExpired(attempt, controlWork.deadline);
 
     let actualStatus: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" = attempt.status;
 
@@ -1006,7 +1009,7 @@ router.get("/lessons/:id/attempt-status", authRequired, async (req: AuthRequest,
       });
     }
 
-    const remainingSecondsRaw = getAttemptRemainingSeconds(attempt);
+    const remainingSecondsRaw = getAttemptRemainingSeconds(attempt, controlWork.deadline);
     const remainingSeconds = remainingSecondsRaw === null ? 0 : remainingSecondsRaw;
 
     if (remainingSecondsRaw !== null && remainingSecondsRaw <= 0) {
@@ -1153,7 +1156,7 @@ router.post("/lessons/:id/start-attempt", authRequired, async (req: AuthRequest,
       .getOne();
 
     if (existingAttempt) {
-      const remainingSeconds = getAttemptRemainingSeconds(existingAttempt);
+      const remainingSeconds = getAttemptRemainingSeconds(existingAttempt, controlWork.deadline);
       if (remainingSeconds === null || remainingSeconds > 0) {
         return res.json({
           attemptId: existingAttempt.id,
@@ -1249,7 +1252,7 @@ router.post("/lessons/:id/start-attempt", authRequired, async (req: AuthRequest,
       const fullyCompleted = theoryCompleted && practiceCompleted;
       const hasAnyEvidence = hasTheoryEvidence || hasPracticeEvidence;
 
-      const completedAttemptTimedOut = isTimedAttemptExpired(completedAttempt);
+      const completedAttemptTimedOut = isTimedAttemptExpired(completedAttempt, controlWork.deadline);
 
       if (!fullyCompleted && !hasAnyEvidence && !completedAttemptTimedOut) {
         await lessonAttemptRepo().remove(completedAttempt);
@@ -1262,10 +1265,11 @@ router.post("/lessons/:id/start-attempt", authRequired, async (req: AuthRequest,
 
     const normalizedTimeLimitMinutes = Math.max(0, Number(controlWork.timeLimitMinutes || 0));
 
+    const startedAt = new Date();
     const attempt = lessonAttemptRepo().create({
       controlWork: controlWork,
       student: student,
-      startedAt: new Date(),
+      startedAt,
       timeLimitMinutes: normalizedTimeLimitMinutes,
       status: "IN_PROGRESS"
     });
@@ -1276,7 +1280,7 @@ router.post("/lessons/:id/start-attempt", authRequired, async (req: AuthRequest,
       attemptId: attempt.id,
       startedAt: attempt.startedAt.toISOString(),
       timeLimitMinutes: attempt.timeLimitMinutes,
-      remainingSeconds: attempt.timeLimitMinutes * 60
+      remainingSeconds: getAttemptRemainingSeconds(attempt, controlWork.deadline) ?? 0
     });
   } catch (error: unknown) {
     logger.error("[edu/lessons] Error starting attempt", { requestId: req.requestId, studentId: req.studentId, error });

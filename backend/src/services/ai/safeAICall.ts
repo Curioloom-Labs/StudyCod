@@ -8,6 +8,7 @@ import { normalizeTopicLanguage, TOPIC_LANGUAGES } from '../../utils/topicLangua
 import { buildTaskValidationFeedback, cannotRepairByRegeneratingTests, requireCompleteTaskDescription, resolveTestDataIoType } from '../llm/TaskContractReview';
 import { executeReferenceTests } from '../executeReferenceTests';
 import { REFERENCE_LANGUAGE } from '../llm/ReferenceTestData';
+import { TASK_AI_TRAP_START } from '../../../../shared/utils/taskAiTrap';
 export type AIMode = 'generateTask' | 'generateTheory' | 'generateQuiz' | 'generateTaskCondition' | 'generateTaskTemplate' | 'generateTaskGuidance' | 'generateTestData';
 export interface AIError {
   statusCode: number;
@@ -718,7 +719,9 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
               userLanguage: language,
               signal: controller?.signal
             });
-            result = AIResponseValidator.validateGenerateTaskCondition(result);
+            result = AIResponseValidator.validateGenerateTaskCondition(result, {
+              requireAiTrap: optionalString(sanitizedParams.generationGuidance)?.includes(TASK_AI_TRAP_START) ?? false,
+            });
             break;
           case 'generateTaskTemplate':
             result = await orchestrator.generateTaskTemplate({
@@ -751,9 +754,10 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
             result = AIResponseValidator.validateGenerateTaskGuidance(result);
             break;
           case 'generateTestData':
-            const testIoType = resolveTestDataIoType(requiredString(sanitizedParams.taskDescription, 'taskDescription'), optionalTaskIoType(sanitizedParams.ioType));
+            const canonicalTaskDescription = requireCompleteTaskDescription(requiredString(sanitizedParams.taskDescription, 'taskDescription'));
+            const testIoType = resolveTestDataIoType(canonicalTaskDescription, optionalTaskIoType(sanitizedParams.ioType));
             result = await orchestrator.generateTestDataWithAI({
-              taskDescription: requiredString(sanitizedParams.taskDescription, 'taskDescription'),
+              taskDescription: canonicalTaskDescription,
               taskTitle: requiredString(sanitizedParams.taskTitle, 'taskTitle'),
               lang: requiredTaskLanguage(sanitizedParams.lang),
               count: Number(sanitizedParams.count),

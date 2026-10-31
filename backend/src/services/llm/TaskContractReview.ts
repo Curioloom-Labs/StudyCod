@@ -2,16 +2,18 @@ import { z } from 'zod';
 import type { AiTaskGenerationResult, TestDataExample } from './LLMOrchestrator';
 import type { LLMGenerateOptions, LLMProvider } from './LLMProvider';
 import { AIValidationError, makeAIValidationError } from './AIResponseValidator';
+import { stripTaskAiTrapSegments } from '../../../../shared/utils/taskAiTrap';
 
 // Reject oversized contracts rather than silently discarding their last rules.
 export const MAX_TASK_DESCRIPTION_CHARS = 64_000;
 
 export function requireCompleteTaskDescription(description: string): string {
-  if (!description.trim()) throw makeAIValidationError('generateTestData', 'Task statement is empty');
-  if (description.length > MAX_TASK_DESCRIPTION_CHARS) {
+  const canonicalDescription = stripTaskAiTrapSegments(description);
+  if (!canonicalDescription.trim()) throw makeAIValidationError('generateTestData', 'Task statement is empty');
+  if (canonicalDescription.length > MAX_TASK_DESCRIPTION_CHARS) {
     throw makeAIValidationError('generateTestData', 'Task statement is too long to review in full; refusing to truncate the IO contract');
   }
-  return description;
+  return canonicalDescription;
 }
 
 export function resolveTestDataIoType(description: string, explicit?: AiTaskGenerationResult['ioType']): NonNullable<AiTaskGenerationResult['ioType']> {

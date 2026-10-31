@@ -94,6 +94,9 @@ export const TaskGenerationGuidanceField: React.FC<TaskGenerationGuidanceFieldPr
             avoidSolutionHints: typeof suggested.avoidSolutionHints === "boolean" ? suggested.avoidSolutionHints : defaultTaskGenerationProfile.avoidSolutionHints,
             clarifyingQuestions,
             clarificationAnswers: clarifyingQuestions.map(() => ""),
+            aiTrapEnabled: profile.aiTrapEnabled,
+            aiTrapStyle: profile.aiTrapStyle,
+            aiTrapFocus: profile.aiTrapFocus,
           });
         }
         setStatus("ready");
@@ -181,6 +184,14 @@ export const TaskGenerationGuidanceField: React.FC<TaskGenerationGuidanceFieldPr
         <div><p className="text-xs font-bold">{tr("Потрібні уточнення", "A few details are needed")}</p><p className="classroom-caption mt-1">{tr("Щоб не вигадувати важливі правила задачі, відповідайте на ці запитання перед генерацією умови.", "Answer these before generating so the task does not rely on invented rules.")}</p></div>
         {profile.clarifyingQuestions.map((question, index) => <label key={`${index}-${question}`} className="block text-xs font-semibold">{question}<textarea value={profile.clarificationAnswers[index] ?? ""} onChange={event => handleProfileChange({ clarificationAnswers: profile.clarifyingQuestions.map((_, answerIndex) => answerIndex === index ? event.target.value : profile.clarificationAnswers[answerIndex] ?? "") })} rows={2} maxLength={600} disabled={busy} placeholder={tr("Ваша відповідь…", "Your answer…")} className="mt-1 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-2 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>)}
       </div>}
+      <div className="mt-4 rounded-xl border border-border/10 bg-white/40 p-3 dark:border-white/10 dark:bg-white/[.025]">
+        <label className="flex items-start gap-2 text-xs font-bold"><input type="checkbox" checked={profile.aiTrapEnabled} onChange={event => handleProfileChange({ aiTrapEnabled: event.target.checked })} disabled={busy} className="mt-0.5 size-4 accent-primary" />{tr("Додати малопомітну пастку для ШІ", "Add a subtle AI trap")}</label>
+        <p className="classroom-caption mt-1 pl-6">{tr("В умові з’явиться непомітна фраза, яка може схилити ШІ до трохи іншого розв’язку. Тести генеруються без цього фрагмента.", "The statement will contain a subtle phrase that may nudge AI toward a slightly different solution. Tests are generated without this fragment.")}</p>
+        {profile.aiTrapEnabled && <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="text-xs font-bold">{tr("Тип пастки", "Trap style")}<select value={profile.aiTrapStyle} onChange={event => handleProfileChange({ aiTrapStyle: event.target.value as TaskGenerationProfile["aiTrapStyle"] })} disabled={busy} className="mt-1 w-full rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm font-normal dark:border-white/10 dark:bg-bg-code"><option value="BOUNDARY_SHIFT">{tr("Зсув межі на 1", "Shift a boundary by 1")}</option><option value="RULE_SWAP">{tr("Зміна пріоритету правил", "Swap rule priority")}</option><option value="DISTRACTOR">{tr("Відволікальна деталь", "Distracting detail")}</option></select></label>
+          <label className="text-xs font-bold">{tr("Що має змінити ШІ? (необов’язково)", "What should AI be nudged to change? (optional)")}<input value={profile.aiTrapFocus} onChange={event => handleProfileChange({ aiTrapFocus: event.target.value })} maxLength={240} placeholder={tr("Наприклад: трактування рівності порогу", "For example: how equality at a threshold is handled")} disabled={busy} className="mt-1 w-full rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
+        </div>}
+      </div>
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
         <label className="flex items-start gap-2"><input type="checkbox" checked={profile.stayOnTopic} onChange={event => handleProfileChange({ stayOnTopic: event.target.checked })} disabled={busy} className="mt-0.5 size-4 accent-primary" />{tr("Тільки вивчена тема й зазначені знання", "Only taught topic and stated prerequisites")}</label>
         <label className="flex items-start gap-2"><input type="checkbox" checked={profile.avoidSolutionHints} onChange={event => handleProfileChange({ avoidSolutionHints: event.target.checked })} disabled={busy} className="mt-0.5 size-4 accent-primary" />{tr("Не показувати підказки до розв’язку", "Do not reveal solution hints")}</label>
