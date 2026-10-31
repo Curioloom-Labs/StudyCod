@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { hasValidTaskAiTrap } from '../../../../shared/utils/taskAiTrap';
 import type { AiQuizResult, AiTaskGenerationResult, AiTheoryResult, TestDataExample } from './LLMOrchestrator';
+import type { TaskConditionDraft } from './taskConditionDraft';
 import { isFunctionsTopic, looksLikeFunctionImplementationTask } from '../ai/curriculumPolicy';
 
 const TaskGenerationSchema = z.object({
@@ -434,7 +435,7 @@ const QuizResponseSchema = z.array(QuizQuestionSchema).min(1, 'quiz must contain
 const TaskConditionSchema = z.object({
   description: z.string().min(1, 'description must be a non-empty string'),
 }).superRefine(({ description }, context) => {
-  const exampleHeadings = description.match(/^\s*#{1,4}\s*(?:приклад|example)\b/gim) ?? [];
+  const exampleHeadings = description.match(/^\s*#{1,4}\s*(?:приклад|example)(?=\s|$)/gim) ?? [];
   if (exampleHeadings.length < 3) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['description'], message: 'task condition must contain three complete examples' });
   }
@@ -443,6 +444,17 @@ const TaskConditionSchema = z.object({
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['description'], message: 'task condition has missing or unclosed input/output example blocks' });
   }
 });
+
+const TaskConditionDraftSchema = z.object({
+  statement: z.string().trim().min(1).max(6000),
+  inputFormat: z.string().trim().min(1).max(2000),
+  outputFormat: z.string().trim().min(1).max(2000),
+  constraints: z.string().trim().max(2000),
+  examples: z.array(z.object({
+    input: z.string().max(4000),
+    output: z.string().max(4000).refine(value => value.trim().length > 0, 'example output must be non-empty'),
+  }).strict()).length(3),
+}).strict();
 
 const TaskTemplateSchema = z.object({
   template: z.string().min(1, 'template must be a non-empty string'),
@@ -978,6 +990,17 @@ export class AIResponseValidator {
       throw new AIValidationError('generateQuiz', emptyZod(), `Quiz generation validation failed: ${unknownErr(error)}`);
     }
   }
+  static validateGenerateTaskConditionDraft(data: unknown): TaskConditionDraft {
+    try {
+      return TaskConditionDraftSchema.parse(data) as TaskConditionDraft;
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        throw new AIValidationError('generateTaskCondition', error, `Task condition draft validation failed: ${zodMessages(error)}`, data);
+      }
+      throw new AIValidationError('generateTaskCondition', emptyZod(), `Task condition draft validation failed: ${unknownErr(error)}`, data);
+    }
+  }
+
   static validateGenerateTaskCondition(data: unknown, options: { requireAiTrap?: boolean } = {}): {
     description: string;
   } {

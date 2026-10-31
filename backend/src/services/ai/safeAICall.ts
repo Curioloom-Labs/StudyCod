@@ -210,6 +210,7 @@ function sanitizeParams(mode: AIMode, params: unknown): JsonObject {
     if (guidance) p.generationGuidance = guidance;
     else delete p.generationGuidance;
   }
+  if ('validationFeedback' in p) p.validationFeedback = sanitizeText(p.validationFeedback, 2000);
 
   if (mode === 'generateTask') {
     p.numInTopic = typeof p.numInTopic === 'number' ? Math.max(1, Math.floor(p.numInTopic)) : p.numInTopic;
@@ -470,7 +471,7 @@ function promptIdForMode(mode: AIMode): PromptId {
     case 'generateTask': return 'task.generate';
     case 'generateTheory': return 'task.theory';
     case 'generateQuiz': return 'task.quiz';
-    case 'generateTaskCondition': return 'task.condition';
+    case 'generateTaskCondition': return 'task.condition-draft';
     case 'generateTaskTemplate': return 'task.template';
     case 'generateTaskGuidance': return 'task.generation-guidance';
     case 'generateTestData': return 'task.generated-tests';
@@ -762,6 +763,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
               taskType: requiredTaskType(sanitizedParams.taskType),
               difficulty: optionalNumber(sanitizedParams.difficulty),
               generationGuidance: optionalString(sanitizedParams.generationGuidance),
+              validationFeedback: optionalString(sanitizedParams.validationFeedback),
               language: requiredTaskLanguage(sanitizedParams.language),
               responseLanguage: optionalString(sanitizedParams.responseLanguage),
               userId: optionalNumber(sanitizedParams.userId),
