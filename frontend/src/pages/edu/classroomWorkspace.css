@@ -181,11 +181,11 @@
 .classroom-product .classroom-frame .class-management__student-username { font-size: .73rem; }
 .classroom-product .classroom-frame .class-management__student-action { min-height: 2.4rem; padding: .4rem; color: var(--text-secondary); font-size: .72rem; font-weight: 500; }
 .classroom-product .classroom-frame .class-management__settings { display: block; }
-.classroom-product .classroom-frame .class-management__settings-card { display: grid; grid-template-columns: minmax(12rem, .85fr) minmax(0, 1.15fr); gap: 2rem; border-bottom: 1px solid var(--border); padding-block: 1.75rem; }
+.classroom-product .classroom-frame .class-management__settings-card { display: grid; grid-template-columns: minmax(12rem, .85fr) minmax(0, 1.15fr); gap: 2rem; border-bottom: 1px solid var(--border); padding: 1.75rem clamp(1.25rem, 2vw, 2rem); }
 .classroom-setting-description > p:first-child { display: none; }
 .classroom-product .classroom-frame .class-management__settings-card h2 { margin-top: 0; font-family: var(--font-sans); font-size: 1rem; font-weight: 600; letter-spacing: -.015em; }
 .classroom-setting-description > p:last-child { max-width: 42ch; color: var(--text-muted); font-size: .8rem; line-height: 1.65; }
-.classroom-setting-controls { min-width: 0; }
+.classroom-setting-controls { width: min(100%, 42rem); min-width: 0; }
 .classroom-setting-controls > :first-child { margin-top: 0; }
 .classroom-product .classroom-frame .class-management__settings-card :is(select, input, button) { border-radius: var(--ui-control-radius); font-weight: 500; }
 .classroom-product .classroom-frame .class-management__settings-card select { min-height: 2.7rem; background: var(--bg-surface); }
