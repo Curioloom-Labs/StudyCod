@@ -799,7 +799,7 @@ export async function safeAICall<T = any>(mode: AIMode, params: unknown, options
         if (looksLikeValidationError) {
           // Some validation errors are transient/model-specific. For generation modes, retry a few times
           // instead of failing fast (bounded by maxAttempts and totalTimeoutMs).
-          const canRetryValidation = (mode === 'generateTask' || (mode === 'generateTestData' && !cannotRepairByRegeneratingTests(error))) && attempt < maxAttempts;
+          const canRetryValidation = (mode === 'generateTask' || mode === 'generateTaskCondition' || (mode === 'generateTestData' && !cannotRepairByRegeneratingTests(error))) && attempt < maxAttempts;
           if (canRetryValidation) {
             sanitizedParams.validationFeedback = buildTaskValidationFeedback(errorMsg,
               error instanceof AIValidationError ? error.rawResponse : undefined);

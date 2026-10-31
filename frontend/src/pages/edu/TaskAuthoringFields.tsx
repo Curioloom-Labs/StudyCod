@@ -71,11 +71,12 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
   const theoryId = `${idPrefix}-theory`;
   const attemptsId = `${idPrefix}-max-attempts`;
   const projectId = `${idPrefix}-project-spec`;
+  const unansweredClarification = generationProfile.clarifyingQuestions.some((_, index) => !generationProfile.clarificationAnswers[index]?.trim());
 
   return (
     <>
       <label className="task-authoring__label" htmlFor={titleId}>{tr("Назва завдання", "Task title")}</label>
-      <input id={titleId} name="taskTitle" required maxLength={512} value={value.title} onChange={event => onChange({ title: event.target.value })} placeholder={tr("Наприклад, Словник частот", "For example, Frequency map")} disabled={busy} className="task-authoring__title" />
+      <input id={titleId} name="taskTitle" required maxLength={512} value={value.title} onChange={event => { onChange({ title: event.target.value }); if (generationProfile.clarifyingQuestions.length) onGenerationProfileChange({ ...generationProfile, clarifyingQuestions: [], clarificationAnswers: [] }); }} placeholder={tr("Наприклад, Словник частот", "For example, Frequency map")} disabled={busy} className="task-authoring__title" />
       <TaskGenerationGuidanceField topicId={topicId} taskTitle={value.title} taskType={taskType} responseLanguage={responseLanguage} value={generationGuidance} onChange={onGenerationGuidanceChange} profile={generationProfile} onProfileChange={onGenerationProfileChange} busy={busy} enabled={guidanceEnabled} />
       <div className="classroom-tabs" role="tablist" aria-label={tr("Розділи редактора", "Editor sections")}>
         {tabs.map(tab => <button key={tab.id} type="button" role="tab" id={`${idPrefix}-tab-${tab.id}`} aria-selected={selectedTab === tab.id} aria-controls={`${idPrefix}-panel-${tab.id}`} onClick={() => onSelectedTabChange(tab.id)}>{tab.label}</button>)}
@@ -86,7 +87,7 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
             <label className="task-authoring__label" htmlFor={descriptionId}>{tr("Що потрібно зробити учню", "What the student needs to do")}</label>
             <div className="flex flex-wrap items-center gap-2">
               <MarkdownImageInsertButton value={value.description} onChange={description => onChange({ description })} textareaRef={descriptionRef} className="classroom-text-button" />
-              <button type="button" className="classroom-text-button" disabled={!!aiBusy || busy || !value.title.trim()} onClick={onGenerateCondition}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "condition" ? tr("Генеруємо…", "Generating…") : tr("Допомога AI", "AI assistance")}</button>
+              <button type="button" className="classroom-text-button" disabled={!!aiBusy || busy || !value.title.trim() || unansweredClarification} title={unansweredClarification ? tr("Відповідайте на уточнення, щоб умова не спиралася на вигадані правила.", "Answer the clarifications so the statement does not rely on invented rules.") : undefined} onClick={onGenerateCondition}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "condition" ? tr("Генеруємо…", "Generating…") : tr("Допомога AI", "AI assistance")}</button>
             </div>
           </div>
           <textarea ref={descriptionRef} id={descriptionId} name="taskDescription" value={value.description} onChange={event => onChange({ description: event.target.value })} placeholder={tr("Опишіть завдання, вхідні та вихідні дані, обмеження й приклади.", "Describe the problem, input, output, constraints, and examples.")} rows={13} disabled={busy} />

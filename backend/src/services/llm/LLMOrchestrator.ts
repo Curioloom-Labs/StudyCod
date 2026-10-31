@@ -231,19 +231,19 @@ function getExactTaskDifficultyPrompt(level: number, isEnglish: boolean): string
     "1/5 · Introductory: check one basic operation with minimal reasoning and no edge-case complexity.",
     "2/5 · Easy: check one main concept with a small amount of straightforward reasoning.",
     "3/5 · Intermediate: require applying the topic and handling several ordinary cases.",
-    "4/5 · Hard: require multiple connected reasoning steps and meaningful boundary cases within the taught topic.",
-    "5/5 · Very hard: require deep reasoning across several interacting cases, careful boundary analysis, and a non-obvious but fair task contract; do not add unrelated prerequisites or merely inflate numbers."
+    "4/5 · Hard: require at least three connected decisions or transformations, including a meaningful boundary case; students must track how an earlier result affects a later step.",
+    "5/5 · Very hard: require at least three linked reasoning stages and interacting rules, force careful choices across ordinary, boundary, and exceptional valid cases, and make a single copied formula or one-pass trivial scan insufficient. Keep every technique within the taught topic and stated prerequisites; never fake difficulty with obscure wording, arbitrary huge values, or unrelated prerequisites."
   ] : [
     "1/5 · Початкова: перевір одне базове вміння з мінімумом міркувань і без складних граничних випадків.",
     "2/5 · Легка: перевір одне основне поняття з невеликою кількістю прямолінійних міркувань.",
     "3/5 · Середня: вимагай застосувати тему й обробити кілька звичайних випадків.",
-    "4/5 · Складна: вимагай кількох пов’язаних кроків міркування та змістовних граничних випадків у межах вивченої теми.",
-    "5/5 · Дуже складна: вимагай глибокого міркування над кількома взаємопов’язаними випадками, уважного аналізу меж і неочевидної, але чесної умови; не додавай сторонніх попередніх знань і не ускладнюй задачу лише великими числами."
+    "4/5 · Складна: вимагай щонайменше трьох пов’язаних рішень або перетворень і змістовного граничного випадку; учень має простежити, як попередній результат впливає на наступний крок.",
+    "5/5 · Дуже складна: вимагай щонайменше трьох послідовно пов’язаних етапів міркування й взаємодії правил; потрібно уважно опрацювати звичайні, граничні та виняткові допустимі випадки, а однієї формули чи прямого одноразового проходу має бути недостатньо. Залишайся в межах вивченої теми й указаних знань; не імітуй складність заплутаним текстом, довільно великими числами чи сторонніми темами."
   ];
   const bounded = Math.max(1, Math.min(5, Math.floor(level)));
   return isEnglish
-    ? `EXACT DIFFICULTY CONTRACT (mandatory; do not downgrade): ${descriptions[bounded - 1]} Self-check before responding: if the task does not demand this level of reasoning, redesign it.`
-    : `ТОЧНИЙ КОНТРАКТ СКЛАДНОСТІ (обов’язково; не знижуй рівень): ${descriptions[bounded - 1]} Перед відповіддю перевір: якщо задача не вимагає такого рівня міркування, перероби її.`;
+    ? `EXACT DIFFICULTY CONTRACT (mandatory; do not downgrade): ${descriptions[bounded - 1]} Before responding, list internally the distinct reasoning decisions the student must make and trace how they depend on each other. Reject and redesign any candidate that is mostly one direct calculation, a single familiar loop, or merely long wording. Do not expose this self-check in the statement.`
+    : `ТОЧНИЙ КОНТРАКТ СКЛАДНОСТІ (обов’язково; не знижуй рівень): ${descriptions[bounded - 1]} Перед відповіддю внутрішньо переліч окремі рішення, які має прийняти учень, і перевір, як вони залежать одне від одного. Відкинь і перероби задачу, якщо це переважно одна пряма дія, знайомий цикл без пов’язаних рішень або просто довга умова. Не показуй цю самоперевірку в тексті задачі.`;
 }
 
 function normalizeResponseLanguage(raw: unknown): string | null {
@@ -2028,6 +2028,7 @@ REQUIREMENTS:
     signal?: AbortSignal;
   }): Promise<{
     guidance: string;
+    clarifyingQuestions: string[];
     settings: {
       learnerLevel: "AUTO" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "OLYMPIAD";
       studentContext: string;
@@ -2063,23 +2064,24 @@ Class: "${params.classTitle?.trim() || "not specified"}"
 Programming language: ${topicLanguageLabel(params.language)}
 
 Return exactly one JSON object with this shape, choosing exactly one enum value per field:
-{"settings":{"learnerLevel":"INTERMEDIATE","studentContext":"short prior-knowledge description or empty string","difficulty":3,"structure":"MULTI_STEP","contextStyle":"REAL_WORLD","learningGoal":"one short objective","includeConcepts":"must-use concepts or empty string","avoidConcepts":"concepts to avoid or empty string","stayOnTopic":true,"avoidSolutionHints":true},"guidance":"5-8 concise editable bullets with relevant concepts, deterministic input/output, and test coverage"}
+{"settings":{"learnerLevel":"INTERMEDIATE","studentContext":"short prior-knowledge description or empty string","difficulty":3,"structure":"MULTI_STEP","contextStyle":"REAL_WORLD","learningGoal":"one short objective","includeConcepts":"must-use concepts or empty string","avoidConcepts":"concepts to avoid or empty string","stayOnTopic":true,"avoidSolutionHints":true},"guidance":"5-8 concise editable bullets with relevant concepts, deterministic input/output, and test coverage","clarifyingQuestions":[]}
 Allowed learnerLevel: AUTO, BEGINNER, INTERMEDIATE, ADVANCED, OLYMPIAD. Allowed structure: AUTO, SINGLE_CONCEPT, MULTI_STEP, EDGE_CASES, COMBINED. Allowed contextStyle: AUTO, NEUTRAL, REAL_WORLD, CREATIVE.
 
-Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If the class is known, use it; never invent one. The guidance and settings must agree. For higher difficulty, add richer reasoning and cases without adding untaught topics. Do not include markdown fences or text outside JSON.${responseLanguageInstruction}`
+Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If the class is known, use it; never invent one. The guidance and settings must agree. For higher difficulty, add richer reasoning and cases without adding untaught topics. Ask 0-3 short clarifying questions only when an essential requirement cannot be safely inferred (for example, what result to compute when the title is ambiguous, or which of two competing interpretations is intended). Do not ask about details already covered by settings, and use an empty array when the task is clear. Do not include markdown fences or text outside JSON.${responseLanguageInstruction}`
       : `Запропонуй налаштування для ${taskType} з назвою «${params.taskTitle.trim()}».
 Тема: «${params.topicTitle.trim()}»
 Клас: «${params.classTitle?.trim() || "не вказаний"}»
 Мова програмування: ${topicLanguageLabel(params.language)}
 
 Поверни лише один JSON-об’єкт точно такої форми, обравши рівно одне значення для кожного поля-переліку:
-{"settings":{"learnerLevel":"INTERMEDIATE","studentContext":"короткий опис попередніх знань або порожній рядок","difficulty":3,"structure":"MULTI_STEP","contextStyle":"REAL_WORLD","learningGoal":"одна коротка ціль","includeConcepts":"обов’язкові поняття або порожній рядок","avoidConcepts":"поняття, яких слід уникати, або порожній рядок","stayOnTopic":true,"avoidSolutionHints":true},"guidance":"5–8 коротких редагованих пунктів про потрібні поняття, однозначний ввід/вивід і покриття тестами"}
+{"settings":{"learnerLevel":"INTERMEDIATE","studentContext":"короткий опис попередніх знань або порожній рядок","difficulty":3,"structure":"MULTI_STEP","contextStyle":"REAL_WORLD","learningGoal":"одна коротка ціль","includeConcepts":"обов’язкові поняття або порожній рядок","avoidConcepts":"поняття, яких слід уникати, або порожній рядок","stayOnTopic":true,"avoidSolutionHints":true},"guidance":"5–8 коротких редагованих пунктів про потрібні поняття, однозначний ввід/вивід і покриття тестами","clarifyingQuestions":[]}
 Допустимі learnerLevel: AUTO, BEGINNER, INTERMEDIATE, ADVANCED, OLYMPIAD. Допустимі structure: AUTO, SINGLE_CONCEPT, MULTI_STEP, EDGE_CASES, COMBINED. Допустимі contextStyle: AUTO, NEUTRAL, REAL_WORLD, CREATIVE.
 
-Обери складність від 1 до 5 за назвою, класом і попередніми знаннями. Якщо клас відомий — спирайся на нього; ніколи не вигадуй клас. Текст рекомендацій і параметри мають узгоджуватися. Для високої складності додавай змістовніше міркування й випадки, але не вводь невивчені теми. Не додавай Markdown-фенси чи текст поза JSON.${responseLanguageInstruction}`;
+Обери складність від 1 до 5 за назвою, класом і попередніми знаннями. Якщо клас відомий — спирайся на нього; ніколи не вигадуй клас. Текст рекомендацій і параметри мають узгоджуватися. Для високої складності додавай змістовніше міркування й випадки, але не вводь невивчені теми. Постав від 0 до 3 коротких уточнювальних запитань лише тоді, коли важливу вимогу не можна безпечно зрозуміти з назви й контексту (наприклад, неоднозначно, що саме обчислювати, або можливі два різні трактування). Не питай про параметри, які вже задаються налаштуваннями; якщо завдання зрозуміле — поверни порожній масив. Не додавай Markdown-фенси чи текст поза JSON.${responseLanguageInstruction}`;
 
     const generateWith = async (provider: LLMProvider): Promise<{
       guidance: string;
+      clarifyingQuestions: string[];
       settings: {
         learnerLevel: "AUTO" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "OLYMPIAD";
         studentContext: string;
@@ -2280,6 +2282,8 @@ CRITICAL FOR AUTO-TESTS (judge):
 - Output MUST NOT contain extra words/labels like "Enter N" / "Answer:".
 - Do NOT allow “choose any values”, “print any message”, or other open-ended output.
 - No randomness, no current date/time, no external files, no network.
+- Define one exact token/line grammar, types and valid limits; define every tie, equality, ordering, duplicate, default and no-result rule that can affect the answer.
+- Make every example valid under that grammar and manually re-evaluate its output. Do not leave rules implicit in the title or examples.
 
 ${difficultyPrompt}
 
@@ -2296,8 +2300,10 @@ REQUIREMENTS:
   - "Problem"
   - "Input"
   - "Output"
-  - "Examples" (each example has an Input block and an Output block)
+  - "Examples" with separate headings "### Example 1", "### Example 2", and "### Example 3"; each has separate complete Input and Output code blocks
 - The task should be related to the topic "${params.topicTitle}"
+
+Keep the statement concise but complete. Do not append questions to the teacher or student after the task; essential questions belong before generation. If a minor choice remains, state one simple deterministic rule explicitly.
 
 Return ONLY the task description in Markdown format without additional comments.${guidanceSection}${responseLanguageInstruction}` : `Створи детальну умову ${taskTypeText.toLowerCase()} "${effectiveTitle}" для мови ${langName}.
 
@@ -2312,6 +2318,8 @@ ${teacherTaskTitle ? `НАЗВА ЗАВДАННЯ (вчитель): "${teacherTa
 - Заборонено додавати у вивід будь-які слова/мітки типу "Введіть...", "Відповідь:".
 - Заборонено формулювання, де учень обирає значення сам ("вкажіть будь-які", "задайте в коді").
 - Без випадковості, без поточної дати/часу, без файлів/мережі.
+- Задай одну точну граматику рядків/токенів, типи й допустимі межі; явно визнач нічиї, рівність, порядок, дублікати, стандартний результат і випадок відсутності результату, якщо це впливає на відповідь.
+- Кожен приклад має відповідати цій граматиці; вручну перерахуй його результат. Не залишай важливі правила лише в назві або прикладах.
 
 ${difficultyPrompt}
 
@@ -2328,27 +2336,40 @@ ${difficultyPrompt}
   - "Умова"
   - "Вхідні дані"
   - "Вихідні дані"
-  - "Приклади" (кожен приклад має блоки Input та Output)
+  - "Приклади" з окремими заголовками "### Приклад 1", "### Приклад 2" і "### Приклад 3"; кожен має окремі завершені блоки Input та Output
 
 ВИВІД:
 - В output виводь лише потрібні значення (числа/рядки) у вказаному порядку.
 - НЕ використовуй мітки на кшталт "Ціле число:", "Рядок:".
 
+Пиши стисло, але повно. Не додавай запитань учителю або учню після умови: важливі запитання ставляться до генерації. Якщо лишається несуттєвий вибір, явно зафіксуй одне просте детерміноване правило.
+
 Поверни ТІЛЬКИ умову завдання у форматі Markdown без додаткових коментарів.${guidanceSection}${responseLanguageInstruction}`;
     try {
-      const content = await provider.generateText(userPrompt, systemPrompt, {
-        timeout: 30000,
-        userId: params.userId,
-        topicId: params.topicId,
-        signal: params.signal,
-        temperature: 0.7,
-        maxTokens: 1500,
-        language: params.userLanguage || "uk"
-      });
-      const validated = AIResponseValidator.validateGenerateTaskCondition({
-        description: content.trim()
-      });
-      return validated;
+      let lastValidationError: unknown;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const retryInstruction = attempt === 0 ? "" : isEnglish
+          ? `\n\nREPAIR THE PREVIOUS INCOMPLETE RESPONSE. Return a fresh, complete task statement, not a continuation. Keep it concise, include exactly three examples, and close every code block. Validation finding: ${errorMessage(lastValidationError)}`
+          : `\n\nВИПРАВ НЕПОВНУ ПОПЕРЕДНЮ ВІДПОВІДЬ. Поверни умову повністю заново, не продовжуй обірваний текст. Пиши стисло, додай рівно три приклади й закрий кожен блок коду. Помилка перевірки: ${errorMessage(lastValidationError)}`;
+        const content = await provider.generateText(`${userPrompt}${retryInstruction}`, systemPrompt, {
+          timeout: attempt === 0 ? 25000 : 18000,
+          userId: params.userId,
+          topicId: params.topicId,
+          signal: params.signal,
+          temperature: attempt === 0 ? 0.3 : 0.2,
+          maxTokens: attempt === 0 ? 2800 : 3200,
+          validationRetry: attempt > 0,
+          language: params.userLanguage || "uk"
+        });
+        try {
+          return AIResponseValidator.validateGenerateTaskCondition({ description: content.trim() });
+        } catch (error: unknown) {
+          lastValidationError = error;
+          if (attempt > 0) throw error;
+          logger.warn("Generated task condition was incomplete; retrying once", { topicId: params.topicId, reason: errorMessage(error) });
+        }
+      }
+      throw lastValidationError instanceof Error ? lastValidationError : new Error("Task condition was incomplete");
     } catch (error: unknown) {
       throw new Error(`AI_GENERATION_FAILED: ${errorMessage(error) || 'Unknown error'}`);
     }

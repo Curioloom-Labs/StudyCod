@@ -969,7 +969,7 @@ topicsRouter.post("/:topicId/tasks/generate-guidance", authRequired, async (req:
       totalTimeoutMs: 20_000,
     });
     if (!result.success) return sendAIError(res, result.error);
-    return res.json({ guidance: result.data.guidance, settings: result.data.settings });
+    return res.json({ guidance: result.data.guidance, settings: result.data.settings, clarifyingQuestions: result.data.clarifyingQuestions });
   } catch (error: unknown) {
     logger.error("[topics] Error generating task guidance", { requestId: req.requestId, err: error });
     const statusCode = errorStatusCode(error);
@@ -1038,7 +1038,7 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       language: userLanguage,
       requestId: req.requestId,
       maxAttempts: 2,
-      ...(TOPICS_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: TOPICS_AI_BUDGET_MS })
+      ...(TOPICS_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: Math.max(TOPICS_AI_BUDGET_MS, 45_000) })
     });
     const aiElapsedMs = Date.now() - aiStartedAt;
     logger.info("[topics] generate-condition AI completed", {

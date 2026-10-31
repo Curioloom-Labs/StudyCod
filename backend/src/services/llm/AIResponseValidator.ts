@@ -432,6 +432,15 @@ const QuizResponseSchema = z.array(QuizQuestionSchema).min(1, 'quiz must contain
 
 const TaskConditionSchema = z.object({
   description: z.string().min(1, 'description must be a non-empty string'),
+}).superRefine(({ description }, context) => {
+  const exampleHeadings = description.match(/^\s*#{1,4}\s*(?:приклад|example)\b/gim) ?? [];
+  if (exampleHeadings.length < 3) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['description'], message: 'task condition must contain three complete examples' });
+  }
+  const codeFenceCount = (description.match(/^\s*```/gm) ?? []).length;
+  if (codeFenceCount < 12 || codeFenceCount % 2 !== 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['description'], message: 'task condition has missing or unclosed input/output example blocks' });
+  }
 });
 
 const TaskTemplateSchema = z.object({
@@ -440,6 +449,7 @@ const TaskTemplateSchema = z.object({
 
 const TaskGenerationGuidanceSchema = z.object({
   guidance: z.string().trim().min(20, 'guidance must be at least 20 characters').max(4000),
+  clarifyingQuestions: z.array(z.string().trim().min(10).max(240)).max(3).default([]),
   settings: z.object({
     learnerLevel: z.enum(["AUTO", "BEGINNER", "INTERMEDIATE", "ADVANCED", "OLYMPIAD"]),
     studentContext: z.string().trim().max(240),
@@ -995,6 +1005,7 @@ export class AIResponseValidator {
   }
   static validateGenerateTaskGuidance(data: unknown): {
     guidance: string;
+    clarifyingQuestions: string[];
     settings: {
       learnerLevel: "AUTO" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "OLYMPIAD";
       studentContext: string;

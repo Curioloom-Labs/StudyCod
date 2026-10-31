@@ -57,14 +57,14 @@ export class CloudflareAIProvider implements LLMProvider {
       "1/5 · Introductory: one basic operation, minimal reasoning.",
       "2/5 · Easy: one main concept and straightforward reasoning.",
       "3/5 · Intermediate: apply the topic across several ordinary cases.",
-      "4/5 · Hard: several connected reasoning steps and meaningful boundaries within the taught topic.",
-      "5/5 · Very hard: deep reasoning across interacting cases and careful boundary analysis; do not add unrelated prerequisites or only inflate numbers."
+      "4/5 · Hard: at least three connected decisions or transformations, including a meaningful boundary case; an earlier result must affect a later step.",
+      "5/5 · Very hard: at least three linked reasoning stages and interacting rules, with careful choices across ordinary, boundary, and exceptional valid cases. A single copied formula or trivial one-pass scan must not suffice. Stay within the taught topic; never fake difficulty with obscure wording, huge numbers, or unrelated prerequisites."
     ][difficulty - 1] : [
       "1/5 · Початкова: одна базова дія, мінімум міркувань.",
       "2/5 · Легка: одне основне поняття й прямолінійні міркування.",
       "3/5 · Середня: застосування теми до кількох звичайних випадків.",
-      "4/5 · Складна: кілька пов’язаних кроків і змістовні межі в межах вивченої теми.",
-      "5/5 · Дуже складна: глибоке міркування над взаємопов’язаними випадками й уважний аналіз меж; не додавай сторонніх попередніх знань і не ускладнюй лише числами."
+      "4/5 · Складна: щонайменше три пов’язані рішення або перетворення й змістовний граничний випадок; попередній результат має впливати на наступний крок.",
+      "5/5 · Дуже складна: щонайменше три пов’язані етапи міркування та взаємодія правил, з уважним опрацюванням звичайних, граничних і виняткових допустимих випадків. Однієї формули чи прямого одноразового проходу має бути недостатньо. Залишайся в межах вивченої теми; не імітуй складність заплутаним текстом, великими числами чи сторонніми попередніми знаннями."
     ][difficulty - 1];
     const systemPrompt = isEnglish
       ? "You create judgeable programming tasks with deterministic stdin/stdout. Output must be strictly specified."
@@ -86,13 +86,17 @@ CRITICAL FOR AUTO-TESTS:
 - No randomness, time/date, files, or network.
 
 EXACT DIFFICULTY (mandatory, do not downgrade): ${difficultyPrompt}
-Before returning the statement, check that the reasoning and cases actually meet this difficulty. Rewrite it if it feels easier.
+Before returning the statement, internally list the student's distinct reasoning decisions and how they depend on one another. Reject and redesign a candidate that is mostly one direct calculation, a familiar loop without connected decisions, or merely long wording. Do not expose this self-check.
+
+PRECISION CHECK: State one exact line/token grammar, types and valid limits. Explicitly define every tie, equality, ordering, duplicate, default and no-result rule that affects the answer. Every example must follow the same grammar; manually recompute each expected output. Never leave an essential rule implicit in the title or examples.
 
 FORMAT (Markdown headings required):
 ## Problem
 ## Input
 ## Output
-## Examples (at least 3; each example contains raw Input/Output blocks)
+## Examples with separate headings "### Example 1", "### Example 2", and "### Example 3"; each has separate complete raw Input and Output code blocks
+
+Keep the statement concise but complete. Never append questions to the teacher or student after the task; essential questions belong before generation. If a minor choice remains, state one simple deterministic rule explicitly.
 
 Return ONLY the Markdown statement.${params.generationGuidance?.trim() ? `\n\nMANDATORY TEACHER CONTROLS (hard requirements; follow the selected values and prefer explicit settings over vague prose):\n${params.generationGuidance.trim()}` : ""}${responseLanguageInstruction}`
       : `Створи детальну умову ${taskTypeText} задачі по темі "${params.topicTitle}" для мови ${langName}.${taskTitle ? ` Використай надану вчителем назву як основну ідею: "${taskTitle}".` : ""}
@@ -104,13 +108,17 @@ Return ONLY the Markdown statement.${params.generationGuidance?.trim() ? `\n\nMA
 - Без випадковості, часу/дати, файлів або мережі.
 
 ТОЧНА СКЛАДНІСТЬ (обов’язково, не знижуй): ${difficultyPrompt}
-Перед поверненням умови перевір, що потрібні міркування й випадки справді відповідають рівню. Якщо задача простіша — перероби її.
+Перед поверненням умови внутрішньо переліч окремі рішення учня та їхні залежності. Відкинь і перероби задачу, якщо це переважно одна пряма дія, знайомий цикл без пов’язаних рішень або просто довгий текст. Не показуй цю самоперевірку.
+
+ПЕРЕВІРКА ТОЧНОСТІ: Задай точну граматику рядків/токенів, типи й допустимі межі. Явно визнач кожну нічию, рівність, порядок, дублікати, стандартний результат і відсутність результату, якщо це впливає на відповідь. Кожен приклад має відповідати цій граматиці; вручну перерахуй очікуваний результат. Не залишай важливі правила лише в назві або прикладах.
 
 ФОРМАТ (обов'язково Markdown-заголовки):
 ## Умова
 ## Вхідні дані
 ## Вихідні дані
-## Приклади (мінімум 3; кожен приклад має «Input» і «Output» у code-block)
+## Приклади з окремими заголовками «### Приклад 1», «### Приклад 2» і «### Приклад 3»; кожен має окремі завершені блоки «Input» та «Output»
+
+Пиши стисло, але повно. Не додавай запитань учителю або учню після умови: важливі запитання ставляться до генерації. Якщо лишається несуттєвий вибір, явно зафіксуй одне просте детерміноване правило.
 
 Поверни ТІЛЬКИ Markdown-текст умови.${params.generationGuidance?.trim() ? `\n\nОБОВ’ЯЗКОВІ НАЛАШТУВАННЯ ВЧИТЕЛЯ (жорсткі вимоги; виконай обрані значення й орієнтуйся на явні параметри, якщо текст нечіткий):\n${params.generationGuidance.trim()}` : ""}${responseLanguageInstruction}`;
 
@@ -599,6 +607,7 @@ ${JSON.stringify(schema, null, 2)}
       userId: params.userId,
       topicId: params.topicId,
       timeout: 30000,
+      maxTokens: 3200,
       language: options?.language ?? "uk"
     });
     if (!response.content) {

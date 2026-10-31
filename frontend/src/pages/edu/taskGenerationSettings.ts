@@ -13,6 +13,8 @@ export type TaskGenerationProfile = {
   avoidConcepts: string;
   stayOnTopic: boolean;
   avoidSolutionHints: boolean;
+  clarifyingQuestions: string[];
+  clarificationAnswers: string[];
 };
 
 export const defaultTaskGenerationProfile: TaskGenerationProfile = {
@@ -26,6 +28,8 @@ export const defaultTaskGenerationProfile: TaskGenerationProfile = {
   avoidConcepts: "",
   stayOnTopic: true,
   avoidSolutionHints: true,
+  clarifyingQuestions: [],
+  clarificationAnswers: [],
 };
 
 export function buildTaskGenerationGuidance(
@@ -83,8 +87,13 @@ export function buildTaskGenerationGuidance(
     profile.avoidConcepts.trim() ? `- Concepts or techniques that must be avoided: ${profile.avoidConcepts.trim()}.` : "",
     profile.stayOnTopic ? "- Stay within the selected topic and the stated prerequisites; do not add untaught algorithms, data structures, or concepts." : "",
     profile.avoidSolutionHints ? "- Do not reveal the algorithm, implementation steps, or solution hints in the student-facing statement." : "",
+    ...profile.clarifyingQuestions.flatMap((question, index) => {
+      const answer = profile.clarificationAnswers[index]?.trim();
+      return answer ? [`- Teacher clarification: ${question}`, `  Teacher's answer: ${answer}`] : [];
+    }),
     teacherNotes.trim() ? `- Additional teacher instructions: ${teacherNotes.trim()}` : "",
     "- Difficulty must come from the reasoning and cases required, not from obscure wording, arbitrary large numbers, or unrelated prerequisites.",
+    "- The statement must be deterministic and complete: define exact input grammar, valid limits, every decision rule and exact output; include exactly three compact, internally verified examples.",
   ] : [
     "ОБОВ’ЯЗКОВІ НАЛАШТУВАННЯ ВЧИТЕЛЯ (явні параметри важливіші за загальні або суперечливі побажання в тексті):",
     `- Цільовий рівень учнів: ${learnerLevels[profile.learnerLevel]}.`,
@@ -97,8 +106,13 @@ export function buildTaskGenerationGuidance(
     profile.avoidConcepts.trim() ? `- Не використовуй поняття або прийоми: ${profile.avoidConcepts.trim()}.` : "",
     profile.stayOnTopic ? "- Залишайся в межах обраної теми й зазначених попередніх знань; не додавай невивчених алгоритмів, структур даних або понять." : "",
     profile.avoidSolutionHints ? "- Не розкривай алгоритм, кроки реалізації чи підказки до розв’язку в умові для учня." : "",
+    ...profile.clarifyingQuestions.flatMap((question, index) => {
+      const answer = profile.clarificationAnswers[index]?.trim();
+      return answer ? [`- Уточнення вчителя: ${question}`, `  Відповідь учителя: ${answer}`] : [];
+    }),
     teacherNotes.trim() ? `- Додаткові вимоги вчителя: ${teacherNotes.trim()}` : "",
     "- Складність має визначатися потрібним міркуванням і випадками, а не заплутаним текстом, довільно великими числами чи сторонніми попередніми знаннями.",
+    "- Умова має бути однозначною й повною: точний формат вводу, допустимі межі, кожне правило та точний формат виводу; додай рівно три стислі приклади й перевір їх вручну.",
   ];
   return lines.filter(Boolean).join("\n");
 }

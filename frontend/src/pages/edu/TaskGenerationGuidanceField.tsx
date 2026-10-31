@@ -75,6 +75,9 @@ export const TaskGenerationGuidanceField: React.FC<TaskGenerationGuidanceFieldPr
         onChangeRef.current(guidance);
         const suggested = response.data?.settings as Partial<TaskGenerationProfile> | undefined;
         if (suggested && typeof suggested === "object") {
+          const clarifyingQuestions = Array.isArray(response.data?.clarifyingQuestions)
+            ? response.data.clarifyingQuestions.filter((question: unknown): question is string => typeof question === "string" && Boolean(question.trim())).slice(0, 3)
+            : [];
           const learnerLevels: TaskGenerationProfile["learnerLevel"][] = ["AUTO", "BEGINNER", "INTERMEDIATE", "ADVANCED", "OLYMPIAD"];
           const structures: TaskGenerationProfile["structure"][] = ["AUTO", "SINGLE_CONCEPT", "MULTI_STEP", "EDGE_CASES", "COMBINED"];
           const contexts: TaskGenerationProfile["contextStyle"][] = ["AUTO", "NEUTRAL", "REAL_WORLD", "CREATIVE"];
@@ -89,6 +92,8 @@ export const TaskGenerationGuidanceField: React.FC<TaskGenerationGuidanceFieldPr
             avoidConcepts: typeof suggested.avoidConcepts === "string" ? suggested.avoidConcepts.slice(0, 240) : "",
             stayOnTopic: typeof suggested.stayOnTopic === "boolean" ? suggested.stayOnTopic : defaultTaskGenerationProfile.stayOnTopic,
             avoidSolutionHints: typeof suggested.avoidSolutionHints === "boolean" ? suggested.avoidSolutionHints : defaultTaskGenerationProfile.avoidSolutionHints,
+            clarifyingQuestions,
+            clarificationAnswers: clarifyingQuestions.map(() => ""),
           });
         }
         setStatus("ready");
@@ -172,6 +177,10 @@ export const TaskGenerationGuidanceField: React.FC<TaskGenerationGuidanceFieldPr
         <label className="text-xs font-bold">{tr("Обов’язково використати", "Must include")}<input value={profile.includeConcepts} onChange={event => handleProfileChange({ includeConcepts: event.target.value })} maxLength={240} placeholder={tr("Наприклад: цикл і підрахунок кількості", "For example: a loop and counting occurrences")} disabled={busy} className="mt-1 w-full rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
         <label className="text-xs font-bold">{tr("Не використовувати", "Avoid using")}<input value={profile.avoidConcepts} onChange={event => handleProfileChange({ avoidConcepts: event.target.value })} maxLength={240} placeholder={tr("Наприклад: масиви, функції або готові алгоритми", "For example: arrays, functions, or built-in algorithms")} disabled={busy} className="mt-1 w-full rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>
       </div>
+      {profile.clarifyingQuestions.length > 0 && <div className="mt-3 space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-3 dark:bg-primary/10">
+        <div><p className="text-xs font-bold">{tr("Потрібні уточнення", "A few details are needed")}</p><p className="classroom-caption mt-1">{tr("Щоб не вигадувати важливі правила задачі, відповідайте на ці запитання перед генерацією умови.", "Answer these before generating so the task does not rely on invented rules.")}</p></div>
+        {profile.clarifyingQuestions.map((question, index) => <label key={`${index}-${question}`} className="block text-xs font-semibold">{question}<textarea value={profile.clarificationAnswers[index] ?? ""} onChange={event => handleProfileChange({ clarificationAnswers: profile.clarifyingQuestions.map((_, answerIndex) => answerIndex === index ? event.target.value : profile.clarificationAnswers[answerIndex] ?? "") })} rows={2} maxLength={600} disabled={busy} placeholder={tr("Ваша відповідь…", "Your answer…")} className="mt-1 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-2 text-sm font-normal dark:border-white/10 dark:bg-bg-code" /></label>)}
+      </div>}
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
         <label className="flex items-start gap-2"><input type="checkbox" checked={profile.stayOnTopic} onChange={event => handleProfileChange({ stayOnTopic: event.target.checked })} disabled={busy} className="mt-0.5 size-4 accent-primary" />{tr("Тільки вивчена тема й зазначені знання", "Only taught topic and stated prerequisites")}</label>
         <label className="flex items-start gap-2"><input type="checkbox" checked={profile.avoidSolutionHints} onChange={event => handleProfileChange({ avoidSolutionHints: event.target.checked })} disabled={busy} className="mt-0.5 size-4 accent-primary" />{tr("Не показувати підказки до розв’язку", "Do not reveal solution hints")}</label>
