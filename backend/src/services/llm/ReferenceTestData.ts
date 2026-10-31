@@ -54,7 +54,14 @@ The student's language is ${params.lang}; the internal oracle is Python. Impleme
 Implement the entire input domain and every explicit rule, including branches, ties, integer casts/division, literals, line order, precision and rounding. For explicit decimal half-up rounding use decimal.Decimal and ROUND_HALF_UP. Never hardcode examples or test inputs. Use only the standard library; read stdin and write only the required stdout.
 Choose allowed boundary and ordinary inputs, cover every branch when present, and include relevant fractional/truncation cases. A formula task may have only one execution path: varying valid values is allowed. Do not copy existing example inputs or invent invalid cases for variety.
 If requiredCoverage is supplied as separate internal metadata, choose inputs that cover each listed case when it is defined by the statement. This metadata is a test-design checklist, not permission to add rules to the learner-facing task.
-If validationFeedback is non-null, treat it as an authoritative validator finding and fix the reported issue before returning. In particular, the referenceSolution MUST be Python 3 source code regardless of the student's language; do not return Java or C++ code.
+If validationFeedback is non-null, treat it as an authoritative validator finding and fix the reported issue before returning. In particular, the referenceSolution MUST be complete, syntactically valid Python 3 source code regardless of the student's language; do not return Java or C++ code.
+Python syntax requirements (mandatory):
+- If you define main(), end the program with this exact entry point; copy it verbatim:
+if __name__ == "__main__":
+    main()
+- Keep the two ASCII double quotes around __main__ matched exactly as shown, and keep the trailing colon. Do not mix single and double quotes on this line or use typographic quotes.
+- Before returning, check that every string literal, bracket, parenthesis, and brace is closed and indentation is valid Python 3. Never return a partial program or a syntax-error example.
+- If validationFeedback reports a SyntaxError or compilation error, fix the complete referenceSolution at the reported location and return the full corrected program; do not change test inputs to hide a broken reference program.
 ${params.allowEmptyOutput ? 'Empty stdout or a blank output line is valid only when explicitly required by the authored statement. Preserve that result exactly; never substitute a sentinel or discard those boundary inputs.' : 'The program must produce non-empty stdout for each valid input.'}
 If authoritativeExamples is true, existingExamples are authored tests: repair the oracle to match them, never rewrite their expected answers. If rules are ambiguous, do not invent them. Keep the program concise, with no explanations or Markdown. Return only the supplied JSON shape.`;
   const raw = await provider.generateJSON<unknown>(JSON.stringify({
