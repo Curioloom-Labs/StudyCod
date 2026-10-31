@@ -14,7 +14,7 @@ export const courseTestSchema = z.object({
   points: z.number().int().min(1).max(1000).default(1), isHidden: z.boolean().default(false),
   imageUrls: z.array(z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/)).max(8).optional(),
   subtask: z.string().trim().max(64).nullable().optional(),
-  subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).default("ABSOLUTE"),
+  subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).optional(),
 }).strict().refine(test => Boolean(test.input.trim() || test.expectedOutput.trim()), "EMPTY_TEST");
 export const courseTestsSchema = z.array(courseTestSchema).max(50);
 export type CourseTestInput = z.infer<typeof courseTestSchema>;
@@ -61,7 +61,7 @@ export async function replaceCourseTaskTests(task: EduTask, tests: CourseTestInp
     if (!sameTests) {
       await manager.getRepository(TestData).delete({ task: { id: current.id } });
       if (tests.length) await manager.getRepository(TestData).save(tests.map(test => manager.getRepository(TestData).create({
-        ...test, task: current, source: "MANUAL", kind: test.isHidden ? "JUDGE" : "SAMPLE",
+        ...test, subtaskScoringMode: test.subtaskScoringMode || "ABSOLUTE", task: current, source: "MANUAL", kind: test.isHidden ? "JUDGE" : "SAMPLE",
       })));
     }
     current.maxAttempts = maxAttempts;
