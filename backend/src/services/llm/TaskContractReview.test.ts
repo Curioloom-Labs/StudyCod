@@ -62,6 +62,7 @@ test('generated EDU condition review receives separate constraints and all three
   const payload = JSON.parse(calls[0]);
   assert.equal(payload.practicalTask, 'Sort the temperatures above `5`.');
   assert.equal(payload.constraints, '`1 <= n <= 1000`\n`-1000 <= t[i] <= 1000`');
+  assert.equal(payload.allowEmptyOutput, true);
   assert.equal(payload.publicExamples.length, 3);
 });
 

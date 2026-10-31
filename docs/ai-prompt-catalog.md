@@ -1,6 +1,6 @@
 # StudyCod AI prompt package
 
-Current package version: `studycod-ai-2026-10-31-v3` in `shared/ai/prompts/index.ts`.
+Current package version: `studycod-ai-2026-10-31-v4` in `shared/ai/prompts/index.ts`.
 
 Set `AI_PROMPT_BUNDLE_ENABLED=false` in the backend environment to select the legacy shared-policy/defaults version. The backend sends that version to the Worker, and prompt, schema, and model-aware caches use a separate legacy namespace. For a full rollback of scenario-specific instruction edits, deploy the previous application revision as well.
 

@@ -84,10 +84,21 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
   assert.match(result.description, /### Приклад 3/);
 });
 
-test('task condition draft rejects missing examples and empty expected output', () => {
+test('task condition draft rejects missing examples and preserves explicitly empty stdout', () => {
   assert.throws(() => AIResponseValidator.validateGenerateTaskConditionDraft({ ...draft, examples: draft.examples.slice(0, 2) }));
-  assert.throws(() => AIResponseValidator.validateGenerateTaskConditionDraft({
+  const emptyOutputDraft = AIResponseValidator.validateGenerateTaskConditionDraft({
     ...draft,
-    examples: [{ ...draft.examples[0], output: '  ' }, draft.examples[1], draft.examples[2]],
-  }));
+    statement: 'Print all input integers greater than 5 in their original order; print an empty line if none qualify.',
+    inputFormat: 'One line contains three space-separated integers.',
+    outputFormat: 'Print selected integers separated by single spaces, or print an empty line if none qualify.',
+    constraints: ['There are exactly three integers.', 'Each integer is between -10 and 10.'],
+    examples: [
+      { input: '1 2 5', output: '' },
+      { input: '6 4 9', output: '6 9' },
+      { input: '-3 7 5', output: '7' },
+    ],
+  });
+  assert.equal(emptyOutputDraft.examples[0].output, '');
+  const formatted = formatTaskConditionDraft(emptyOutputDraft, 'en');
+  assert.match(formatted, /Output:\n```\n\n```/);
 });

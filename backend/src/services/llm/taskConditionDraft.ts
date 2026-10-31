@@ -30,7 +30,7 @@ export const TASK_CONDITION_DRAFT_JSON_SCHEMA = {
         type: "object",
         properties: {
           input: { type: "string", maxLength: 4000 },
-          output: { type: "string", minLength: 1, maxLength: 4000 },
+          output: { type: "string", maxLength: 4000 },
         },
         required: ["input", "output"],
         additionalProperties: false,
