@@ -5,6 +5,7 @@ import { Task } from "./Task";
 import { LibraryTask } from "./LibraryTask";
 export type TestKind = "SAMPLE" | "JUDGE";
 export type TestSource = "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
+export type SubtaskScoringMode = "ABSOLUTE" | "PARTIAL";
 @Index("idx_test_data_personal_task", ["personalTask"])
 @Index("idx_test_data_input_sha256", ["inputSha256"])
 @Index("idx_test_data_output_sha256", ["outputSha256"])
@@ -86,14 +87,22 @@ export class TestData {
   @Column({ type: "simple-json", name: "image_urls", nullable: true })
   imageUrls?: string[] | null;
 
-  // Optional: subtask identifier used for binary (0 or full) subtask scoring.
-  // When null/empty => falls back to legacy public/hidden grouping.
+  // Optional subtask identifier. When empty, tests use the public/hidden legacy grouping.
   @Column({
     type: "varchar",
     length: 64,
     nullable: true,
   })
   subtask?: string | null;
+
+  // Shared by tests in a named subtask: all-or-nothing or weighted per-test score.
+  @Column({
+    type: "enum",
+    enum: ["ABSOLUTE", "PARTIAL"],
+    default: "ABSOLUTE",
+    name: "subtask_scoring_mode",
+  })
+  subtaskScoringMode!: SubtaskScoringMode;
 
   // sha256 (hex) of `input` / `expected_output`, used to address the on-disk test cache so
   // /check can read metadata only and skip pulling large text blobs. Lazily backfilled.

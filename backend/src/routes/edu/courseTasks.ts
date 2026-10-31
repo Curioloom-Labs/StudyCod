@@ -191,13 +191,13 @@ router.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, res:
     if (used >= Math.max(1, task.maxAttempts)) return res.status(403).json({ message: "MAX_ATTEMPTS_REACHED" });
     const tests = await testRepo().find({ where: { task: { id: task.id } }, order: { id: "ASC" } });
     if (!tests.length) return res.status(409).json({ message: "NO_TESTS_CONFIGURED" });
-    const hasSubtasks = tests.some(test => Boolean(test.subtask));
+    const hasSubtasks = tests.some(test => String(test.subtask ?? "").trim().length > 0);
     const workerResult = await judgeWithSemaphore({
       submission_id: `edu_course_${student.id}_${task.id}_${randomUUID()}`, cache_owner: `edu-student:${student.id}`,
       language: "python", source: code.data, run_all: true, debug: false,
-      group_scoring_mode: hasSubtasks ? "BINARY_ALL_OR_NOT" : "SUM",
+      group_scoring_mode: "SUM",
       tests: tests.map(test => ({ id: test.id, input: test.input, output: test.expectedOutput, hidden: test.isHidden,
-        weight: test.points || 1, group: hasSubtasks ? test.subtask || `unassigned_${test.id}` : test.isHidden ? "hidden" : "public" })),
+        weight: test.points || 1, group: hasSubtasks ? String(test.subtask ?? "").trim() || `unassigned_${test.id}` : test.isHidden ? "hidden" : "public" })),
       checker: { type: "whitespace" }, limits: { time_limit_ms: 2000, memory_limit_mb: 256, output_limit_kb: 256 },
     });
     const result = courseJudgeGrade(tests, workerResult);

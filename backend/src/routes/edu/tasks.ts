@@ -51,6 +51,7 @@ import { isAssignedToStudent } from "../../utils/assignmentVisibility";
 import { extractTimezoneFromProfileMeta } from "../../utils/profileTimezone";
 import { applyHintStrategyVariant, resolveHintStrategyVariant, type HintStrategyVariant } from "../../services/edu/hintStrategy";
 import { syncControlWorkAssignmentsWithManager, syncTopicTaskAssignmentsWithManager } from "../../services/edu/assignmentTargetsService";
+import { calculateEduTestScores } from "../../services/edu/testScoring";
 import { TOPIC_ENTRY_FILES, topicLanguageToJudgeLanguage, type TopicLanguage } from "../../utils/topicLanguage";
 import type { JudgeLanguage } from "../../services/judgeWorker/types";
 
@@ -1415,7 +1416,7 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       language: judgeLang,
       source: sourceText,
       ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
-      group_scoring_mode: hasSubtasks ? "BINARY_ALL_OR_NOT" : undefined,
+      group_scoring_mode: hasSubtasks ? "SUM" : undefined,
       tests: judgeTests,
       limits: defaultLimitsByLang[judgeLang],
       checker: chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || "")),
@@ -1501,18 +1502,13 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       }
     }
 
-    if (workerRes && typeof workerRes.score === "number" && typeof workerRes.max_score === "number") {
-      passedScore = workerRes.score;
-      maxScore = workerRes.max_score;
-    }
-
-    if (workerRes?.group_scores) {
-      scoringGroupScores = workerRes.group_scores.map(gs => ({
-        group: String(gs.group ?? ""),
-        score: Number(gs.score ?? 0),
-        maxScore: Number(gs.max_score ?? 0)
-      }));
-    }
+    const passedTestIds = new Set((workerRes?.verdict === "CE" ? [] : workerRes?.tests ?? [])
+      .filter(result => result.verdict === "AC")
+      .map(result => String(result.test_id)));
+    const eduScoring = calculateEduTestScores(tests, passedTestIds);
+    passedScore = eduScoring.score;
+    maxScore = eduScoring.maxScore;
+    scoringGroupScores = eduScoring.groupScores;
 
     let feedback: string | null = null;
 
@@ -1983,7 +1979,7 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       language: judgeLang,
       source: sourceText,
       ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
-      group_scoring_mode: hasSubtasks ? "BINARY_ALL_OR_NOT" : undefined,
+      group_scoring_mode: hasSubtasks ? "SUM" : undefined,
       tests: judgeTests,
       limits: defaultLimitsByLang[judgeLang],
       checker: chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || "")),
@@ -2069,18 +2065,13 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       }
     }
 
-    if (workerRes && typeof workerRes.score === "number" && typeof workerRes.max_score === "number") {
-      passedScore = workerRes.score;
-      maxScore = workerRes.max_score;
-    }
-
-    if (workerRes?.group_scores) {
-      scoringGroupScores = workerRes.group_scores.map(gs => ({
-        group: String(gs.group ?? ""),
-        score: Number(gs.score ?? 0),
-        maxScore: Number(gs.max_score ?? 0)
-      }));
-    }
+    const passedTestIds = new Set((workerRes?.verdict === "CE" ? [] : workerRes?.tests ?? [])
+      .filter(result => result.verdict === "AC")
+      .map(result => String(result.test_id)));
+    const eduScoring = calculateEduTestScores(tests, passedTestIds);
+    passedScore = eduScoring.score;
+    maxScore = eduScoring.maxScore;
+    scoringGroupScores = eduScoring.groupScores;
 
     let feedback: string | null = null;
 

@@ -62,6 +62,23 @@ function normalizeSubtaskValue(raw: unknown): string | null {
   return normalized.slice(0, 64);
 }
 
+function normalizeSubtaskScoringMode(raw: unknown): "ABSOLUTE" | "PARTIAL" {
+  return String(raw ?? "").trim().toUpperCase() === "PARTIAL" ? "PARTIAL" : "ABSOLUTE";
+}
+
+async function synchronizeSubtaskScoringModes(taskId: number, tests: TestData[]): Promise<void> {
+  const modesBySubtask = new Map<string, "ABSOLUTE" | "PARTIAL">();
+  for (const test of tests) {
+    const subtask = normalizeSubtaskValue(test.subtask);
+    if (subtask) modesBySubtask.set(subtask, normalizeSubtaskScoringMode(test.subtaskScoringMode));
+  }
+  for (const [subtask, mode] of modesBySubtask) {
+    const groupTests = await testDataRepo().find({ where: { topicTask: { id: taskId }, subtask } });
+    groupTests.forEach(test => { test.subtaskScoringMode = mode; });
+    await testDataRepo().save(groupTests);
+  }
+}
+
 function normalizeTestDataSource(raw: unknown): TestDataSourceValue {
   const normalized = String(raw ?? "").trim().toUpperCase();
   if (normalized === "AI_GENERATED") return "AI_GENERATED";
@@ -121,6 +138,7 @@ const testDataItemSchema = z.object({
   points: z.number().int().min(1).max(1000).optional(),
   isHidden: z.boolean().optional(),
   subtask: subtaskSchema,
+  subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).optional(),
   imageUrls: testImageUrlsSchema,
 });
 
@@ -131,7 +149,11 @@ const addTestDataSchema = z.object({
 const generateSchema = z.object({
   count: z.number().int().min(1).max(50).optional(),
   replaceGenerated: z.boolean().optional(),
-  requiredCases: z.array(z.string().max(240)).max(24).optional()
+  requiredCases: z.array(z.string().max(240)).max(24).optional(),
+  points: z.number().int().min(1).max(1000).optional(),
+  isHidden: z.boolean().optional(),
+  subtask: subtaskSchema,
+  subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).optional(),
 });
 
 const updateSchema = z
@@ -141,6 +163,7 @@ const updateSchema = z
     points: z.number().int().min(1).max(1000).optional(),
     isHidden: z.boolean().optional(),
     subtask: subtaskSchema,
+    subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).optional(),
     imageUrls: testImageUrlsSchema,
   })
   .strict();
@@ -249,6 +272,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
            is_hidden AS isHidden,
            source,
            subtask,
+           subtask_scoring_mode AS subtaskScoringMode,
            image_urls AS imageUrls,
            CHAR_LENGTH(input) AS inputFullLength,
            CHAR_LENGTH(expected_output) AS expectedOutputFullLength
@@ -266,6 +290,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
         isHidden: number | boolean;
         source: string | null;
         subtask: string | null;
+        subtaskScoringMode: string | null;
         imageUrls: string[] | string | null;
         inputFullLength: number;
         expectedOutputFullLength: number;
@@ -284,6 +309,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
           isHidden: row.isHidden === true || Number(row.isHidden) === 1,
           source: normalizeTestDataSource(row.source),
           subtask: normalizeSubtaskValue(row.subtask),
+          subtaskScoringMode: normalizeSubtaskScoringMode(row.subtaskScoringMode),
           imageUrls: normalizeTestImageUrls(row.imageUrls),
           isInputTruncated: inputFullLength > input.length,
           inputFullLength,
@@ -320,6 +346,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
          is_hidden AS isHidden,
          source,
          subtask,
+         subtask_scoring_mode AS subtaskScoringMode,
          image_urls AS imageUrls
        FROM test_data
        WHERE ${whereSql}
@@ -335,6 +362,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
       isHidden: number | boolean;
       source: string | null;
       subtask: string | null;
+      subtaskScoringMode: string | null;
       imageUrls: string[] | string | null;
     }>;
 
@@ -346,6 +374,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
       isHidden: td.isHidden === true || Number(td.isHidden) === 1,
       source: normalizeTestDataSource(td.source),
       subtask: normalizeSubtaskValue(td.subtask),
+      subtaskScoringMode: normalizeSubtaskScoringMode(td.subtaskScoringMode),
       imageUrls: normalizeTestImageUrls(td.imageUrls)
     }));
 
@@ -418,6 +447,7 @@ router.get("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
         isHidden: testData.isHidden === true,
         source: normalizeTestDataSource(testData.source),
         subtask: normalizeSubtaskValue(testData.subtask),
+        subtaskScoringMode: normalizeSubtaskScoringMode(testData.subtaskScoringMode),
         imageUrls: normalizeTestImageUrls(testData.imageUrls)
       }
     });
@@ -474,11 +504,13 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
         kind: td.isHidden === true ? "JUDGE" : "SAMPLE",
         source: "MANUAL",
         subtask: normalizeSubtaskValue(td.subtask),
+        subtaskScoringMode: normalizeSubtaskScoringMode(td.subtaskScoringMode),
         imageUrls: normalizeTestImageUrls(td.imageUrls)
       })
     );
 
     await testDataRepo().save(createdTests);
+    await synchronizeSubtaskScoringModes(taskId, createdTests);
 
     res.status(201).json({
       message: "TEST_DATA_ADDED",
@@ -490,6 +522,7 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
         isHidden: td.isHidden === true,
         source: normalizeTestDataSource(td.source),
         subtask: normalizeSubtaskValue(td.subtask),
+        subtaskScoringMode: normalizeSubtaskScoringMode(td.subtaskScoringMode),
         imageUrls: normalizeTestImageUrls(td.imageUrls)
       }))
     });
@@ -536,6 +569,10 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
     }
     const testCount = parsed.data.count ?? 5;
     const replaceGenerated = parsed.data.replaceGenerated ?? true;
+    const testPoints = parsed.data.points ?? 1;
+    const testIsHidden = parsed.data.isHidden ?? false;
+    const testSubtask = normalizeSubtaskValue(parsed.data.subtask);
+    const testSubtaskScoringMode = normalizeSubtaskScoringMode(parsed.data.subtaskScoringMode);
 
     const safeTaskDescription =
       String(topicTask.description || "").trim() ||
@@ -652,14 +689,16 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         topicTask: { id: taskId },
         input: td.input,
         expectedOutput: td.expectedOutput,
-        points: 1,
-        isHidden: false,
+        points: testPoints,
+        isHidden: testIsHidden,
         source: "AI_GENERATED",
-        subtask: null
+        subtask: testSubtask,
+        subtaskScoringMode: testSubtaskScoringMode
       })
     );
 
     await testDataRepo().save(createdTests);
+    await synchronizeSubtaskScoringModes(taskId, createdTests);
 
     res.json({
       count: createdTests.length,
@@ -673,6 +712,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         isHidden: td.isHidden === true,
         source: normalizeTestDataSource(td.source),
         subtask: normalizeSubtaskValue(td.subtask),
+        subtaskScoringMode: normalizeSubtaskScoringMode(td.subtaskScoringMode),
         imageUrls: normalizeTestImageUrls(td.imageUrls)
       }))
     });
@@ -725,16 +765,25 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
       return res.status(400).json({ message: messageForZodIssue(parsed.error) });
     }
 
-    const { input, expectedOutput, points, isHidden, subtask, imageUrls } = parsed.data;
+    const { input, expectedOutput, points, isHidden, subtask, subtaskScoringMode, imageUrls } = parsed.data;
 
     if (input !== undefined) testData.input = input;
     if (expectedOutput !== undefined) testData.expectedOutput = expectedOutput;
     if (points !== undefined) testData.points = points;
     if (isHidden !== undefined) testData.isHidden = isHidden === true;
     if (subtask !== undefined) testData.subtask = normalizeSubtaskValue(subtask);
+    if (subtaskScoringMode !== undefined) testData.subtaskScoringMode = subtaskScoringMode;
     if (imageUrls !== undefined) testData.imageUrls = normalizeTestImageUrls(imageUrls);
 
-    await testDataRepo().save(testData);
+    const normalizedSubtask = normalizeSubtaskValue(testData.subtask);
+    if (subtaskScoringMode !== undefined && normalizedSubtask) {
+      const groupTests = await testDataRepo().find({ where: { topicTask: { id: taskId }, subtask: normalizedSubtask } });
+      const groupToSave = [...groupTests.filter(item => item.id !== testData.id), testData];
+      groupToSave.forEach(item => { item.subtaskScoringMode = subtaskScoringMode; });
+      await testDataRepo().save(groupToSave);
+    } else {
+      await testDataRepo().save(testData);
+    }
 
     res.json({
       message: "TEST_DATA_UPDATED",
@@ -746,6 +795,7 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
         isHidden: testData.isHidden === true,
         source: normalizeTestDataSource(testData.source),
         subtask: normalizeSubtaskValue(testData.subtask),
+        subtaskScoringMode: normalizeSubtaskScoringMode(testData.subtaskScoringMode),
         imageUrls: normalizeTestImageUrls(testData.imageUrls)
       }
     });

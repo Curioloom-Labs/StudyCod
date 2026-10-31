@@ -716,7 +716,7 @@ export async function saveQuiz(lessonId: number, quiz: QuizItem[]): Promise<void
     quiz
   });
 }
-export type CourseTestInput = { input: string; expectedOutput: string; points: number; isHidden: boolean; imageUrls?: string[]; subtask?: string | null };
+export type CourseTestInput = { input: string; expectedOutput: string; points: number; isHidden: boolean; imageUrls?: string[]; subtask?: string | null; subtaskScoringMode?: "ABSOLUTE" | "PARTIAL" };
 export type CourseTestConfig = { task: { id: number; title: string; lessonId: number }; testData: CourseTestInput[]; maxAttempts: number; revision: string; gradingLocked: boolean };
 export async function getCourseTaskTests(taskId: number): Promise<CourseTestConfig> { return (await api.get(`/edu/course-tasks/${taskId}/tests`)).data; }
 export async function saveCourseTaskTests(taskId: number, input: { testData: CourseTestInput[]; maxAttempts: number; expectedRevision: string }): Promise<CourseTestConfig> { return (await api.put(`/edu/course-tasks/${taskId}/tests`, input)).data; }
@@ -930,6 +930,10 @@ export async function submitHintFeedback(taskId: number, payload: {
 export async function generateTestData(taskId: number, count: number, options?: {
   replaceGenerated?: boolean;
   requiredCases?: string[];
+  points?: number;
+  isHidden?: boolean;
+  subtask?: string | null;
+  subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
 }): Promise<{
   count: number;
   skippedDuplicates?: number;
@@ -942,13 +946,18 @@ export async function generateTestData(taskId: number, count: number, options?: 
     isHidden?: boolean;
     source?: "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
     subtask?: string | null;
+    subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
     imageUrls?: string[];
   }>;
 }> {
   const res = await api.post(eduTaskUrl(taskId, "/test-data/generate"), {
     count,
     ...(typeof options?.replaceGenerated === "boolean" ? { replaceGenerated: options.replaceGenerated } : {}),
-    ...(options?.requiredCases?.length ? { requiredCases: options.requiredCases } : {})
+    ...(options?.requiredCases?.length ? { requiredCases: options.requiredCases } : {}),
+    ...(typeof options?.points === "number" ? { points: options.points } : {}),
+    ...(typeof options?.isHidden === "boolean" ? { isHidden: options.isHidden } : {}),
+    ...(typeof options?.subtask === "string" || options?.subtask === null ? { subtask: options.subtask } : {}),
+    ...(options?.subtaskScoringMode ? { subtaskScoringMode: options.subtaskScoringMode } : {})
   });
   return res.data;
 }
@@ -958,6 +967,7 @@ export interface TestDataItem {
   points: number;
   isHidden?: boolean;
   subtask?: string | null;
+  subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
   imageUrls?: string[];
 }
 export async function addTestData(taskId: number, testData: TestDataItem[]): Promise<{
@@ -976,6 +986,7 @@ export interface TestData {
   isHidden?: boolean;
   source?: "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
   subtask?: string | null;
+  subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
   imageUrls?: string[];
   isInputTruncated?: boolean;
   inputFullLength?: number;
@@ -1039,6 +1050,7 @@ export async function updateTestData(taskId: number, testDataId: number, update:
   points?: number;
   isHidden?: boolean;
   subtask?: string | null;
+  subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
   imageUrls?: string[];
 }): Promise<{
   message: string;

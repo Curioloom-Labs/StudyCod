@@ -211,6 +211,7 @@ async function applyIdentityAndTaskPatches(): Promise<void> {
   await ensureTestDataIsHiddenColumn();
   await ensureTestDataKindColumn();
   await ensureTestDataSubtaskColumn();
+  await ensureTestDataSubtaskScoringModeColumn();
   await ensureTestDataSourceColumn();
   await ensureTestDataPaginationIndexes();
   await backfillTestDataKindFromIsHidden();
@@ -2417,6 +2418,27 @@ async function ensureTestDataSubtaskColumn(): Promise<void> {
     logger.info("[DB Patch] Added column test_data.subtask");
   } catch (err: unknown) {
     logger.error("[DB Patch] Failed to ensure test_data.subtask column:", {
+      message: sqlErrorProperty(err, "message"),
+      code: sqlErrorProperty(err, "code"),
+      errno: sqlErrorProperty(err, "errno"),
+      sqlState: sqlErrorProperty(err, "sqlState")
+    });
+  }
+}
+
+async function ensureTestDataSubtaskScoringModeColumn(): Promise<void> {
+  try {
+    const tables = (await query("SHOW TABLES LIKE 'test_data'")) as Array<SqlRow>;
+    if (!Array.isArray(tables) || tables.length === 0) return;
+
+    const rows = (await query("SHOW COLUMNS FROM `test_data` LIKE 'subtask_scoring_mode'")) as Array<SqlRow>;
+    if (Array.isArray(rows) && rows.length > 0) return;
+
+    logger.warn("[DB Patch] Column test_data.subtask_scoring_mode is missing. Applying ALTER TABLE...");
+    await query("ALTER TABLE `test_data` ADD COLUMN `subtask_scoring_mode` ENUM('ABSOLUTE','PARTIAL') NOT NULL DEFAULT 'ABSOLUTE' AFTER `subtask`");
+    logger.info("[DB Patch] Added column test_data.subtask_scoring_mode");
+  } catch (err: unknown) {
+    logger.error("[DB Patch] Failed to ensure test_data.subtask_scoring_mode column:", {
       message: sqlErrorProperty(err, "message"),
       code: sqlErrorProperty(err, "code"),
       errno: sqlErrorProperty(err, "errno"),
