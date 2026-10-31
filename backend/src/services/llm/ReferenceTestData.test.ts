@@ -139,8 +139,42 @@ test('reference generation exposes validation feedback and clearly requires a Py
   assert.match(seen[0].instructions, /do not return Java or C\+\+/i);
 });
 
+test('repairs mismatched quotes in a Python main guard after compiler rejection', async () => {
+  const variants = [
+    { guard: 'if __name__ == "__main__\':', newline: '\n' },
+    { guard: "if __name__ == '__main__'", newline: '\r\n' },
+  ];
+  for (const { guard, newline } of variants) {
+    const broken = `${guard}${newline}    print(int(input()) + 1)`;
+    const repaired = `if __name__ == "__main__":${newline}    print(int(input()) + 1)`;
+    const prompts: Array<Record<string, unknown>> = [];
+    let executions = 0;
+    const provider: LLMProvider = {
+      async generateJSON<T>(prompt: string): Promise<T> {
+        prompts.push(JSON.parse(prompt));
+        if (prompts.length === 1) return { referenceSolution: broken, inputs: ['2', '3'] } as T;
+        assert.equal((prompts[1].executedReference as { source?: string }).source, repaired);
+        return { valid: true, invalidSource: 'none', issues: [] } as T;
+      },
+      async generateText() { throw new Error('Unexpected text call'); },
+    };
+    const result = await generateReferenceTestData(provider, {
+      taskDescription: 'Read an integer n in [1,10]. Print n+1.', lang: 'PYTHON', count: 1,
+      executeReference: async source => {
+        executions++;
+        if (source === broken) throw makeAIValidationError('generateTestData', 'Reference program compilation failed: SyntaxError: unterminated string literal');
+        assert.equal(source, repaired);
+        return ['3'];
+      },
+    });
+    assert.deepEqual(result.map(({ input, output }) => ({ input, output })), [{ input: '2', output: '3' }]);
+    assert.equal(executions, 2);
+    assert.equal(prompts.length, 2, 'a local guard repair should not spend another model call');
+  }
+});
+
 test('compiler failures preserve the rejected Python source for primary-model repair and fresh review', async () => {
-  const broken = 'if __name__ == "__main__\':\n    print(int(input()) + 1)';
+  const broken = 'print(int(input()) + 1';
   const fixed = 'print(int(input()) + 1)';
   const payloads: Array<Record<string, unknown>> = [];
   const provider: LLMProvider = {

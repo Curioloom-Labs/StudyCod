@@ -33,6 +33,34 @@ function nonPythonOracleLanguage(source: string): 'JAVA' | 'CPP' | null {
   return null;
 }
 
+function repairMalformedPythonMainGuard(source: string): string | null {
+  const repaired = source.replace(
+    /^([ \t]*)if[ \t]+__name__[ \t]*==[ \t]*(["'])__main__(['"])([ \t]*)(:)?[ \t]*(#.*)?(\r?)$/gm,
+    (_line, indentation: string, openingQuote: string, closingQuote: string, _spaceBeforeColon: string, colon: string | undefined, comment: string | undefined, lineEnding: string) => {
+      if (openingQuote === closingQuote && colon) return _line;
+      return `${indentation}if __name__ == "__main__":${comment ? ` ${comment.trim()}` : ''}${lineEnding}`;
+    },
+  );
+  return repaired === source ? null : repaired;
+}
+
+async function executeReferenceWithMainGuardRepair(
+  source: string,
+  inputs: string[],
+  publicExamples: TestDataExample[],
+  signal: AbortSignal | undefined,
+  executeReference: ReferenceTestExecutor,
+): Promise<{ source: string; outputs: string[] }> {
+  try {
+    return { source, outputs: await executeReference(source, inputs, publicExamples, signal) };
+  } catch (error) {
+    if (!(error instanceof AIValidationError) || !/Reference program compilation failed:/i.test(error.message)) throw error;
+    const repaired = repairMalformedPythonMainGuard(source);
+    if (!repaired) throw error;
+    return { source: repaired, outputs: await executeReference(repaired, inputs, publicExamples, signal) };
+  }
+}
+
 export async function generateReferenceTestData(provider: LLMProvider, params: ReferenceTestDataParams): Promise<TestDataExample[]> {
   const statement = requireCompleteTaskDescription(params.taskDescription);
   const count = Math.max(1, Math.floor(params.count));
@@ -100,7 +128,14 @@ If authoritativeExamples is true, existingExamples are authored tests: repair th
     );
   }
   try {
-    const outputs = await params.executeReference(referenceSolution, selectedInputs, params.publicExamples ?? [], params.signal);
+    const execution = await executeReferenceWithMainGuardRepair(
+      referenceSolution,
+      selectedInputs,
+      params.publicExamples ?? [],
+      params.signal,
+      params.executeReference,
+    );
+    const outputs = execution.outputs;
     if (outputs.length !== selectedInputs.length) throw makeAIValidationError('generateTestData', 'Reference execution returned an incomplete test suite');
     const tests = AIResponseValidator.validateGenerateTestData(selectedInputs.map((input, index) => ({ input, output: outputs[index] })), count, 'STDIN_STDOUT', { allowEmptyOutput: params.allowEmptyOutput });
     await reviewGeneratedTests(provider, statement, 'STDIN_STDOUT', tests, {
@@ -108,7 +143,7 @@ If authoritativeExamples is true, existingExamples are authored tests: repair th
       signal: params.signal, userId: params.userId,
       requiredCases: params.requiredCases,
       publicExamples: params.publicExamples,
-      executedReference: { language: REFERENCE_LANGUAGE, source: referenceSolution },
+      executedReference: { language: REFERENCE_LANGUAGE, source: execution.source },
     });
     return tests;
   } catch (error) {

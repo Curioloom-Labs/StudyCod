@@ -647,6 +647,20 @@ test('EDU authored examples may have genuinely empty stdin for a no-input task',
   if (result.success) assert.deepEqual(result.data, [{ input: '', output: '\n', explanation: undefined }]);
 });
 
+test('Python oracle compile failures have an accurate user-facing validation message', async t => {
+  t.mock.method(getLLMOrchestrator(), 'generateTestDataWithAI', async () => {
+    throw makeAIValidationError('generateTestData', 'Reference program compilation failed: SyntaxError: unterminated string literal');
+  });
+  const result = await safeAICall('generateTestData', {
+    taskDescription: 'Read an integer and print it.', taskTitle: 'Echo', lang: 'PYTHON', count: 1, ioType: 'STDIN_STDOUT',
+  }, { maxAttempts: 1 });
+  assert.equal(result.success, false);
+  if (!result.success) {
+    assert.equal(result.error.message, 'AI_GENERATION_FAILED: Generated Python reference program failed to compile');
+    assert.match(result.error.error ?? '', /unterminated string literal/);
+  }
+});
+
 test('EDU blank expected answers survive the final save guard for ordinary stdin tasks', async t => {
   const tests = [{ input: '0\n', output: '\n' }, { input: '1\n5\n', output: '' }, { input: '3\n1 2 3\n', output: '6\n' }];
   t.mock.method(getLLMOrchestrator(), 'generateTestDataWithAI', async () => tests);
