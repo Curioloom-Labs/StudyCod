@@ -113,10 +113,11 @@ export function tryFixJsonResponse(text: string): unknown {
     cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
   }
 
+  const escaped = repairJsonStringEscapes(cleaned);
   try {
-    return JSON.parse(cleaned);
+    return JSON.parse(escaped);
   } catch (e) {
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    const jsonMatch = escaped.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
         return JSON.parse(jsonMatch[0]);
@@ -125,6 +126,7 @@ export function tryFixJsonResponse(text: string): unknown {
           .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
           .replace(/([{,]\s*)(\w+)(\s*):/g, '$1"$2"$3:') // Quote unquoted keys
           .replace(/:\s*'([^']*)'/g, ': "$1"'); // Replace single quotes with double
+        fixed = repairJsonStringEscapes(fixed);
         try {
           return JSON.parse(fixed);
         } catch (e3) {
@@ -134,5 +136,62 @@ export function tryFixJsonResponse(text: string): unknown {
     }
     throw new Error(`No JSON object found in response: ${e instanceof Error ? e.message : 'Unknown error'}`);
   }
+}
+
+/**
+ * Preserve literal backslashes in model-authored JSON strings (for example,
+ * LaTeX commands such as `\le`) when the model forgot JSON's extra escape.
+ * Valid JSON escapes are left intact unless they clearly start a common LaTeX command.
+ */
+export function repairJsonStringEscapes(json: string): string {
+  const latexCommandsWithJsonEscapePrefixes = new Set([
+    "begin", "beta", "big", "binom", "boldsymbol", "mathbf", "bar",
+    "fbox", "frac", "forall", "floor", "flushleft", "flushright",
+    "neq", "neg", "nleq", "ngeq", "not", "nabla", "newline",
+    "right", "rho", "rangle", "rbrace", "rfloor", "rvert", "rm",
+    "rule", "rightarrow", "Rightarrow", "text", "textbf", "textit",
+    "texttt", "times", "theta", "tan", "to", "top", "tau", "tilde",
+  ]);
+  let result = '';
+  let inString = false;
+
+  for (let i = 0; i < json.length; i += 1) {
+    const character = json[i];
+    if (!inString) {
+      result += character;
+      if (character === '"') inString = true;
+      continue;
+    }
+
+    if (character === '"') {
+      result += character;
+      inString = false;
+      continue;
+    }
+
+    if (character !== '\\') {
+      result += character;
+      continue;
+    }
+
+    const next = json[i + 1];
+    const command = json.slice(i + 1).match(/^[a-zA-Z]+/)?.[0];
+    const isLatexCommandWithJsonEscapePrefix = Boolean(command && latexCommandsWithJsonEscapePrefixes.has(command));
+    const isSimpleEscape = next !== undefined && '"\\/bfnrt'.includes(next);
+    const isUnicodeEscape = next === 'u' && /^[\da-fA-F]{4}$/.test(json.slice(i + 2, i + 6));
+    if ((isSimpleEscape && !isLatexCommandWithJsonEscapePrefix) || isUnicodeEscape) {
+      result += character + next;
+      if (isUnicodeEscape) result += json.slice(i + 2, i + 6);
+      i += isUnicodeEscape ? 5 : 1;
+      continue;
+    }
+
+    // This is either an invalid JSON escape or an ambiguous JSON escape that
+    // starts a common LaTeX command (for example, \frac starts with \f).
+    // Double the slash and process the following character normally.
+    result += '\\\\';
+  }
+
+  return result;
 }
 

@@ -38,6 +38,34 @@ function makeErrorResponse(status: number, body: any, headers?: Record<string, s
   });
 }
 
+test('OpenRouterProvider preserves LaTeX commands whose prefixes are valid JSON escapes', async (t) => {
+  const names = ['OPENROUTER_API_KEY', 'OPENROUTER_BACKUP_API_KEYS', 'OPENROUTER_MODEL', 'OPENROUTER_TEXT_MODEL', 'OPENROUTER_JSON_MODEL', 'OPENROUTER_FALLBACK_MODELS', 'OPENROUTER_MODEL_FALLBACKS', 'OPENROUTER_URL'];
+  const previous = names.map(name => process.env[name]);
+  t.after(() => names.forEach((name, index) => {
+    if (previous[index] === undefined) delete process.env[name];
+    else process.env[name] = previous[index];
+  }));
+  process.env.OPENROUTER_API_KEY = 'sk-or-v1_latex_json_test';
+  process.env.OPENROUTER_BACKUP_API_KEYS = '';
+  process.env.OPENROUTER_MODEL = 'openai/gpt-4o-mini';
+  process.env.OPENROUTER_TEXT_MODEL = '';
+  process.env.OPENROUTER_JSON_MODEL = '';
+  process.env.OPENROUTER_FALLBACK_MODELS = '';
+  process.env.OPENROUTER_MODEL_FALLBACKS = '';
+  process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+  t.mock.method(globalThis, 'fetch', async () => makeOkResponse(String.raw`{"frac":"\frac{1}{2}","text":"\text{x}","neq":"\neq"}`));
+  const result = await new OpenRouterProvider().generateJSON<{ frac: string; text: string; neq: string }>(
+    'Return one formula object',
+    { type: 'object' },
+    'Return JSON only',
+    { maxRetries: 0 },
+  );
+  assert.equal(result.frac, String.fromCharCode(92) + 'frac{1}{2}');
+  assert.equal(result.text, String.fromCharCode(92) + 'text{x}');
+  assert.equal(result.neq, String.fromCharCode(92) + 'neq');
+});
+
 test('OpenRouterProvider disables invalid keys (401) and skips them on subsequent calls', async () => {
   const old = {
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,

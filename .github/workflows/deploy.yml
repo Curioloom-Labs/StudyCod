@@ -159,6 +159,9 @@ jobs:
           # Keep shared-only edits out of the Worker release scope; Worker
           # deployments remain opt-in through changes inside its package.
           has_path '^shared/ai/prompts/' && backend=1
+          # The shared JSON response fixer is consumed by the backend LLM
+          # providers and should not broaden its deploy to the Cloudflare Worker.
+          has_path '^shared/utils/taskValidator(\.test)?\.ts$' && backend=1
           infra_only=0
           if ! grep -Evq '^(\.github/workflows/|ops/)' <<< "$changed"; then
             infra_only=1

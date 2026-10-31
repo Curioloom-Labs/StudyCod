@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { logger } from '../../utils/logger';
 import { LLMProvider, LLMGenerateOptions } from './LLMProvider';
-import { tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
+import { repairJsonStringEscapes, tryFixJsonResponse } from '../../../../shared/utils/taskValidator';
 import { env } from '../../env';
 import { consumeRetryBudget } from '../../../../shared/ai/prompts';
 import { waitWithinAIExecutionContext } from './promptExecution';
@@ -279,7 +279,7 @@ function extractBalancedJsonObject(text: string): string | null {
 }
 
 function parseModelJsonOrThrow<T = unknown>(raw: string): T {
-  const content = String(raw ?? '').trim();
+  const content = repairJsonStringEscapes(String(raw ?? '').trim());
   if (!content) {
     throw new Error('Empty JSON response content');
   }

@@ -4,9 +4,9 @@
  * Worker can use the same prompt contract.
  */
 
-export const PROMPT_BUNDLE_VERSION = "studycod-ai-2026-10-31-v4" as const;
+export const PROMPT_BUNDLE_VERSION = "studycod-ai-2026-10-31-v5" as const;
 export const LEGACY_PROMPT_BUNDLE_VERSION = "studycod-ai-legacy-v0" as const;
-export const PROMPT_SCHEMA_VERSION = "studycod-ai-schema-2026-10-31-v4" as const;
+export const PROMPT_SCHEMA_VERSION = "studycod-ai-schema-2026-10-31-v5" as const;
 export type PromptBundleVersion = typeof PROMPT_BUNDLE_VERSION | typeof LEGACY_PROMPT_BUNDLE_VERSION;
 
 export function resolvePromptBundleVersion(enabled: unknown): PromptBundleVersion {

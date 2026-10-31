@@ -32,3 +32,22 @@ test("repairs fenced JSON responses without accepting arbitrary values", () => {
   assert.deepEqual(tryFixJsonResponse("```json\n{\"ok\":true,}\n```"), { ok: true });
   assert.throws(() => tryFixJsonResponse("not json"), /No JSON object found/);
 });
+
+test("repairs unescaped LaTeX backslashes inside JSON strings", () => {
+  const result = tryFixJsonResponse('{"statement":"$1 \\le n \\le 1000$"}') as { statement: string };
+  assert.equal(result.statement, "$1 \\le n \\le 1000$");
+});
+
+test("preserves valid JSON escapes while repairing invalid string backslashes", () => {
+  const result = tryFixJsonResponse('{"text":"quote: \\" and newline: \\n; latex: \\frac{1}{2}; text: \\text{n}; path: C:\\\\temp"}') as { text: string };
+  assert.ok(result.text.includes('quote: "'));
+  assert.ok(result.text.includes("and newline: \n"));
+  assert.equal(result.text.split("latex: ")[1].split(";")[0], String.fromCharCode(92) + "frac{1}{2}");
+  assert.ok(result.text.includes(String.fromCharCode(92) + "text{n}"));
+  assert.equal(result.text.split("path: ")[1], "C:" + String.fromCharCode(92) + "temp");
+});
+
+test("preserves valid Unicode escapes and turns malformed ones into literal text", () => {
+  const result = tryFixJsonResponse('{"text":"valid: \\u03B1; literal: \\u12xz"}') as { text: string };
+  assert.equal(result.text, "valid: α; literal: \\u12xz");
+});
