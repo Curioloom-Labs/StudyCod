@@ -1013,7 +1013,8 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       language,
       taskTitle,
       responseLanguage,
-      generationGuidance
+      generationGuidance,
+      includeSubtasks
     } = req.body || {};
     if (!taskType || taskType !== "PRACTICE" && taskType !== "CONTROL") {
       return res.status(400).json({
@@ -1031,6 +1032,7 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       taskType: taskType as "PRACTICE" | "CONTROL",
       difficulty: difficulty || 3,
       generationGuidance,
+      includeSubtasks: includeSubtasks !== false,
       language: topic.language,
       responseLanguage: normalizeResponseLanguage(responseLanguage),
       userId: user.id,

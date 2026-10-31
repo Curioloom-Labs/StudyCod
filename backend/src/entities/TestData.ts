@@ -104,6 +104,14 @@ export class TestData {
   })
   subtaskScoringMode!: SubtaskScoringMode;
 
+  // Optional share of the task's maximum score allocated to this subtask.
+  @Column({
+    type: "int",
+    nullable: true,
+    name: "subtask_weight_percent",
+  })
+  subtaskWeightPercent?: number | null;
+
   // sha256 (hex) of `input` / `expected_output`, used to address the on-disk test cache so
   // /check can read metadata only and skip pulling large text blobs. Lazily backfilled.
   @Column({

@@ -46,6 +46,7 @@ export async function generateTaskCondition(params: {
   taskTitle?: string;
   taskType: "PRACTICE" | "CONTROL";
   difficulty?: number;
+  includeSubtasks?: boolean;
   language: "JAVA" | "PYTHON";
   userId?: number;
   topicId?: number;

@@ -11,6 +11,7 @@ const draft: TaskConditionDraft = {
   inputFormat: 'One line contains two integers a and b.',
   outputFormat: 'Print a + b.',
   constraints: ['$-100 \\le a,b \\le 100$.', 'The input contains exactly two integers.'],
+  subtasks: [],
   examples: [
     { input: '2 3', output: '5' },
     { input: '0 0', output: '0' },
@@ -37,6 +38,34 @@ test('task condition draft has a registered JSON contract matching its three-exa
   assert.match(prompt.format, /exactly three/);
   assert.match(prompt.validation, /canonical Markdown formatting/);
   assert.match(prompt.format, /inline Markdown and LaTeX/);
+  assert.match(prompt.format, /percentage/);
+});
+
+test('condition renderer includes learner-facing subtasks with weights when requested', () => {
+  const result = formatTaskConditionDraft({
+    ...draft,
+    subtasks: [
+      { name: 'Positive values', description: 'Handle positive inputs.', weightPercent: 40 },
+      { name: 'All integers', description: 'Handle zero and negative inputs.', weightPercent: 60 },
+    ],
+  }, 'en');
+  assert.match(result, /## Subtasks/);
+  assert.match(result, /### 1\. Positive values — 40%/);
+  assert.match(result, /### 2\. All integers — 60%/);
+  assert.deepEqual(AIResponseValidator.validateGenerateTaskConditionDraft({
+    ...draft,
+    subtasks: [
+      { name: 'Positive values', description: 'Handle positive inputs.', weightPercent: 40 },
+      { name: 'All integers', description: 'Handle zero and negative inputs.', weightPercent: 60 },
+    ],
+  }).subtasks.map(item => item.weightPercent), [40, 60]);
+  assert.throws(() => AIResponseValidator.validateGenerateTaskConditionDraft({
+    ...draft,
+    subtasks: [
+      { name: 'Positive values', description: 'Handle positive inputs.', weightPercent: 40 },
+      { name: 'All integers', description: 'Handle zero and negative inputs.', weightPercent: 50 },
+    ],
+  }));
 });
 
 test('EDU task condition uses structured JSON generation and forwards repair feedback', async () => {

@@ -15,6 +15,7 @@ export const courseTestSchema = z.object({
   imageUrls: z.array(z.string().max(512).regex(/^\/api\/edu\/statement-images\/[A-Za-z0-9._-]+$/)).max(8).optional(),
   subtask: z.string().trim().max(64).nullable().optional(),
   subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).optional(),
+  subtaskWeightPercent: z.number().int().min(1).max(100).nullable().optional(),
 }).strict().refine(test => Boolean(test.input.trim() || test.expectedOutput.trim()), "EMPTY_TEST");
 export const courseTestsSchema = z.array(courseTestSchema).max(50);
 export type CourseTestInput = z.infer<typeof courseTestSchema>;
@@ -22,7 +23,7 @@ export function courseTestsRevision(tests: Array<Partial<TestData>>, maxAttempts
   return createHash("sha256").update(JSON.stringify({ maxAttempts, tests: tests.map(test => ({
     input: test.input ?? "", expectedOutput: test.expectedOutput ?? "", points: test.points || 1,
     isHidden: test.isHidden === true, imageUrls: Array.isArray(test.imageUrls) ? test.imageUrls : [], subtask: test.subtask || null,
-    subtaskScoringMode: test.subtaskScoringMode || "ABSOLUTE",
+    subtaskScoringMode: test.subtaskScoringMode || "ABSOLUTE", subtaskWeightPercent: test.subtaskWeightPercent ?? null,
   })) })).digest("hex");
 }
 export async function courseTaskTestCounts(taskIds: number[]) {
@@ -40,7 +41,7 @@ async function hasStarted(task: EduTask, manager: EntityManager) {
 export async function courseTaskTestConfig(task: EduTask, manager = AppDataSource.manager) {
   const tests = await manager.getRepository(TestData).find({ where: { task: { id: task.id } }, order: { id: "ASC" } });
   return { task: { id: task.id, title: task.title, lessonId: task.lesson.id },
-    testData: tests.map(test => ({ input: test.input, expectedOutput: test.expectedOutput, points: test.points, isHidden: test.isHidden, imageUrls: Array.isArray(test.imageUrls) ? test.imageUrls : [], subtask: test.subtask || null, subtaskScoringMode: test.subtaskScoringMode || "ABSOLUTE" })),
+    testData: tests.map(test => ({ input: test.input, expectedOutput: test.expectedOutput, points: test.points, isHidden: test.isHidden, imageUrls: Array.isArray(test.imageUrls) ? test.imageUrls : [], subtask: test.subtask || null, subtaskScoringMode: test.subtaskScoringMode || "ABSOLUTE", subtaskWeightPercent: test.subtaskWeightPercent ?? null })),
     maxAttempts: task.maxAttempts, revision: courseTestsRevision(tests, task.maxAttempts), gradingLocked: await hasStarted(task, manager) };
 }
 export async function replaceCourseTaskTests(task: EduTask, tests: CourseTestInput[], maxAttempts: number, expectedRevision: string) {
@@ -80,10 +81,19 @@ export function courseJudgeGrade(tests: TestData[], response: JudgeResponse) {
   const groups = new Map<string, TestData[]>();
   tests.forEach(test => { const group = hasSubtasks ? String(test.subtask ?? "").trim() || `unassigned_${test.id}` : test.isHidden ? "hidden" : "public"; groups.set(group, [...(groups.get(group) || []), test]); });
   const groupScores = [...groups].map(([group, items]) => {
-    const maxScore = items.reduce((sum, test) => sum + (test.points || 1), 0);
+    const rawMaxScore = items.reduce((sum, test) => sum + (test.points || 1), 0);
     const passed = items.filter(test => !compileFailed && byId.get(String(test.id))?.verdict === "AC");
     const isNamedSubtask = items.some(test => Boolean(String(test.subtask ?? "").trim()));
     const isPartial = items.some(test => test.subtaskScoringMode === "PARTIAL");
+    const weightPercent = isNamedSubtask ? items.find(test => Number.isInteger(test.subtaskWeightPercent)
+      && Number(test.subtaskWeightPercent) >= 1 && Number(test.subtaskWeightPercent) <= 100)?.subtaskWeightPercent : undefined;
+    if (weightPercent !== undefined && weightPercent !== null) {
+      const maxScore = weightPercent * 100;
+      return { group, maxScore, score: isNamedSubtask && !isPartial
+        ? passed.length === items.length ? maxScore : 0
+        : Math.round(maxScore * passed.reduce((sum, test) => sum + (test.points || 1), 0) / rawMaxScore) };
+    }
+    const maxScore = rawMaxScore;
     return { group, maxScore, score: isNamedSubtask && !isPartial ? passed.length === items.length ? maxScore : 0 : passed.reduce((sum, test) => sum + (test.points || 1), 0) };
   });
   const maxScore = groupScores.reduce((sum, item) => sum + item.maxScore, 0);

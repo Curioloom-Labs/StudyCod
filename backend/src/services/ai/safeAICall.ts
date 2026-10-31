@@ -764,6 +764,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
               difficulty: optionalNumber(sanitizedParams.difficulty),
               generationGuidance: optionalString(sanitizedParams.generationGuidance),
               validationFeedback: optionalString(sanitizedParams.validationFeedback),
+              includeSubtasks: sanitizedParams.includeSubtasks !== false,
               language: requiredTaskLanguage(sanitizedParams.language),
               responseLanguage: optionalString(sanitizedParams.responseLanguage),
               userId: optionalNumber(sanitizedParams.userId),

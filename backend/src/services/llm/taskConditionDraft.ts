@@ -3,11 +3,18 @@ export interface TaskConditionDraftExample {
   output: string;
 }
 
+export interface TaskConditionSubtaskDraft {
+  name: string;
+  description: string;
+  weightPercent: number;
+}
+
 export interface TaskConditionDraft {
   statement: string;
   inputFormat: string;
   outputFormat: string;
   constraints: string[];
+  subtasks: TaskConditionSubtaskDraft[];
   examples: [TaskConditionDraftExample, TaskConditionDraftExample, TaskConditionDraftExample];
 }
 
@@ -21,6 +28,20 @@ export const TASK_CONDITION_DRAFT_JSON_SCHEMA = {
       type: "array",
       maxItems: 12,
       items: { type: "string", minLength: 1, maxLength: 300 },
+    },
+    subtasks: {
+      type: "array",
+      maxItems: 5,
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 64 },
+          description: { type: "string", minLength: 1, maxLength: 500 },
+          weightPercent: { type: "integer", minimum: 1, maximum: 100 },
+        },
+        required: ["name", "description", "weightPercent"],
+        additionalProperties: false,
+      },
     },
     examples: {
       type: "array",
@@ -37,7 +58,7 @@ export const TASK_CONDITION_DRAFT_JSON_SCHEMA = {
       },
     },
   },
-  required: ["statement", "inputFormat", "outputFormat", "constraints", "examples"],
+  required: ["statement", "inputFormat", "outputFormat", "constraints", "subtasks", "examples"],
   additionalProperties: false,
 } as const;
 
@@ -78,6 +99,15 @@ export function formatTaskConditionDraft(draft: TaskConditionDraft, locale: "uk"
       "",
       `## ${isEnglish ? "Constraints" : "Обмеження"}`,
       ...draft.constraints.map(constraint => `- ${constraint.trim()}`),
+    ] : []),
+    ...(draft.subtasks.length ? [
+      "",
+      `## ${isEnglish ? "Subtasks" : "Підзадачі"}`,
+      ...draft.subtasks.flatMap((subtask, index) => [
+        `### ${index + 1}. ${subtask.name.trim()} — ${subtask.weightPercent}%`,
+        subtask.description.trim(),
+        "",
+      ]).slice(0, -1),
     ] : []),
     "",
     `## ${isEnglish ? "Examples" : "Приклади"}`,

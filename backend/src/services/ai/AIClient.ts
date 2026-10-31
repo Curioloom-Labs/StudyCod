@@ -104,6 +104,7 @@ export class AIClient {
     topicTitle: string;
     taskType: "PRACTICE" | "CONTROL";
     difficulty?: number;
+    includeSubtasks?: boolean;
     language: "JAVA" | "PYTHON";
     userId?: number;
     topicId?: number;

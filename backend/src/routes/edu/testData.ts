@@ -11,6 +11,8 @@ import { createRouteLimiter } from "../../middleware/routeRateLimit";
 import { authorizeClassAction } from "../../services/edu/classAccess";
 import type { Capability } from "../../services/edu/rbac";
 import { env } from "../../env";
+import { allocateSubtaskTestCounts, parseTaskSubtasks } from "../../services/edu/taskSubtasks";
+import { resolveTestDataIoType } from "../../services/llm/TaskContractReview";
 
 const router = Router();
 
@@ -66,15 +68,30 @@ function normalizeSubtaskScoringMode(raw: unknown): "ABSOLUTE" | "PARTIAL" {
   return String(raw ?? "").trim().toUpperCase() === "PARTIAL" ? "PARTIAL" : "ABSOLUTE";
 }
 
+function normalizeSubtaskWeightPercent(raw: unknown): number | null {
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 1 && value <= 100 ? value : null;
+}
+
 async function synchronizeSubtaskScoringModes(taskId: number, tests: TestData[]): Promise<void> {
-  const modesBySubtask = new Map<string, "ABSOLUTE" | "PARTIAL">();
+  const settingsBySubtask = new Map<string, { mode: "ABSOLUTE" | "PARTIAL"; weight: number | null }>();
   for (const test of tests) {
     const subtask = normalizeSubtaskValue(test.subtask);
-    if (subtask) modesBySubtask.set(subtask, normalizeSubtaskScoringMode(test.subtaskScoringMode));
+    if (!subtask) continue;
+    const current = settingsBySubtask.get(subtask);
+    const weight = normalizeSubtaskWeightPercent(test.subtaskWeightPercent);
+    settingsBySubtask.set(subtask, {
+      mode: normalizeSubtaskScoringMode(test.subtaskScoringMode),
+      weight: weight ?? current?.weight ?? null,
+    });
   }
-  for (const [subtask, mode] of modesBySubtask) {
+  for (const [subtask, settings] of settingsBySubtask) {
     const groupTests = await testDataRepo().find({ where: { topicTask: { id: taskId }, subtask } });
-    groupTests.forEach(test => { test.subtaskScoringMode = mode; });
+    const weight = settings.weight ?? groupTests.map(test => normalizeSubtaskWeightPercent(test.subtaskWeightPercent)).find(value => value !== null) ?? null;
+    groupTests.forEach(test => {
+      test.subtaskScoringMode = settings.mode;
+      if (weight !== null) test.subtaskWeightPercent = weight;
+    });
     await testDataRepo().save(groupTests);
   }
 }
@@ -139,6 +156,7 @@ const testDataItemSchema = z.object({
   isHidden: z.boolean().optional(),
   subtask: subtaskSchema,
   subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).optional(),
+  subtaskWeightPercent: z.number().int().min(1).max(100).nullable().optional(),
   imageUrls: testImageUrlsSchema,
 });
 
@@ -154,6 +172,8 @@ const generateSchema = z.object({
   isHidden: z.boolean().optional(),
   subtask: subtaskSchema,
   subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).optional(),
+  subtaskWeightPercent: z.number().int().min(1).max(100).nullable().optional(),
+  groupByTaskSubtasks: z.boolean().optional(),
 });
 
 const updateSchema = z
@@ -164,6 +184,7 @@ const updateSchema = z
     isHidden: z.boolean().optional(),
     subtask: subtaskSchema,
     subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).optional(),
+    subtaskWeightPercent: z.number().int().min(1).max(100).nullable().optional(),
     imageUrls: testImageUrlsSchema,
   })
   .strict();
@@ -273,6 +294,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
            source,
            subtask,
            subtask_scoring_mode AS subtaskScoringMode,
+           subtask_weight_percent AS subtaskWeightPercent,
            image_urls AS imageUrls,
            CHAR_LENGTH(input) AS inputFullLength,
            CHAR_LENGTH(expected_output) AS expectedOutputFullLength
@@ -291,6 +313,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
         source: string | null;
         subtask: string | null;
         subtaskScoringMode: string | null;
+        subtaskWeightPercent: number | null;
         imageUrls: string[] | string | null;
         inputFullLength: number;
         expectedOutputFullLength: number;
@@ -310,6 +333,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
           source: normalizeTestDataSource(row.source),
           subtask: normalizeSubtaskValue(row.subtask),
           subtaskScoringMode: normalizeSubtaskScoringMode(row.subtaskScoringMode),
+          subtaskWeightPercent: normalizeSubtaskWeightPercent(row.subtaskWeightPercent),
           imageUrls: normalizeTestImageUrls(row.imageUrls),
           isInputTruncated: inputFullLength > input.length,
           inputFullLength,
@@ -347,6 +371,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
          source,
          subtask,
          subtask_scoring_mode AS subtaskScoringMode,
+         subtask_weight_percent AS subtaskWeightPercent,
          image_urls AS imageUrls
        FROM test_data
        WHERE ${whereSql}
@@ -363,6 +388,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
       source: string | null;
       subtask: string | null;
       subtaskScoringMode: string | null;
+      subtaskWeightPercent: number | null;
       imageUrls: string[] | string | null;
     }>;
 
@@ -375,6 +401,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
       source: normalizeTestDataSource(td.source),
       subtask: normalizeSubtaskValue(td.subtask),
       subtaskScoringMode: normalizeSubtaskScoringMode(td.subtaskScoringMode),
+      subtaskWeightPercent: normalizeSubtaskWeightPercent(td.subtaskWeightPercent),
       imageUrls: normalizeTestImageUrls(td.imageUrls)
     }));
 
@@ -448,6 +475,7 @@ router.get("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
         source: normalizeTestDataSource(testData.source),
         subtask: normalizeSubtaskValue(testData.subtask),
         subtaskScoringMode: normalizeSubtaskScoringMode(testData.subtaskScoringMode),
+        subtaskWeightPercent: normalizeSubtaskWeightPercent(testData.subtaskWeightPercent),
         imageUrls: normalizeTestImageUrls(testData.imageUrls)
       }
     });
@@ -505,6 +533,7 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
         source: "MANUAL",
         subtask: normalizeSubtaskValue(td.subtask),
         subtaskScoringMode: normalizeSubtaskScoringMode(td.subtaskScoringMode),
+        subtaskWeightPercent: normalizeSubtaskWeightPercent(td.subtaskWeightPercent),
         imageUrls: normalizeTestImageUrls(td.imageUrls)
       })
     );
@@ -523,6 +552,7 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
         source: normalizeTestDataSource(td.source),
         subtask: normalizeSubtaskValue(td.subtask),
         subtaskScoringMode: normalizeSubtaskScoringMode(td.subtaskScoringMode),
+        subtaskWeightPercent: normalizeSubtaskWeightPercent(td.subtaskWeightPercent),
         imageUrls: normalizeTestImageUrls(td.imageUrls)
       }))
     });
@@ -579,6 +609,33 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
       String(topicTask.template || "").trim() ||
       `Завдання: ${topicTask.title}`;
 
+    let taskUsesInput = false;
+    try { taskUsesInput = resolveTestDataIoType(safeTaskDescription) === "STDIN_STDOUT"; } catch { /* The AI contract validator returns the actionable statement error below. */ }
+    const automaticSubtasks = !testSubtask && parsed.data.groupByTaskSubtasks !== false && taskUsesInput
+      ? parseTaskSubtasks(safeTaskDescription)
+      : [];
+    const automaticSubtaskCounts = automaticSubtasks.length
+      ? allocateSubtaskTestCounts(testCount, automaticSubtasks)
+      : null;
+    const english = String(req.headers["x-ui-language"] ?? req.headers["accept-language"] ?? "").toLowerCase().startsWith("en");
+    if (automaticSubtasks.length && !automaticSubtaskCounts) {
+      return res.status(422).json({
+        code: "EDU_SUBTASK_TEST_COUNT_TOO_LOW",
+        message: english
+          ? `Generate at least ${automaticSubtasks.length} tests so every subtask gets coverage, or turn off subtask grouping.`
+          : `Згенеруй щонайменше ${automaticSubtasks.length} тестів, щоб покрити кожну підзадачу, або вимкни групування тестів за підзадачами.`,
+      });
+    }
+    const subtaskPlan = automaticSubtaskCounts
+      ? automaticSubtasks.flatMap((subtask, index) => Array.from({ length: automaticSubtaskCounts[index] }, () => subtask))
+      : [];
+    const subtaskCoverage = automaticSubtasks.map((subtask, index) =>
+      `${subtask.name} (${subtask.weightPercent}%, ${automaticSubtaskCounts?.[index] ?? 0} consecutive tests): ${subtask.description}`
+    );
+    const groupOrderInstruction = automaticSubtasks.length
+      ? `${english ? "SUBTASK ORDER: Return each subtask's cases consecutively in the exact order listed below. Each group must contain exactly the stated number of cases; do not add labels to stdin/stdout." : "ПОРЯДОК ПІДЗАДАЧ: поверни тести кожної підзадачі підряд у наведеному порядку. Кожна група має містити рівно вказану кількість тестів; не додавай назви до stdin/stdout."}`
+      : null;
+
     const authoredTests = await AppDataSource.query(
       "SELECT input, expected_output AS output FROM test_data WHERE topic_task_id = ? AND source <> 'AI_GENERATED' ORDER BY id LIMIT 40",
       [taskId],
@@ -594,7 +651,11 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         allowEmptyOutput: true,
         referenceExamplesAreAuthoritative: true,
         publicExamples: authoredTests.map(test => ({ input: String(test.input), output: String(test.output) })),
-        requiredCases: parsed.data.requiredCases,
+        requiredCases: [
+          ...(groupOrderInstruction ? [groupOrderInstruction] : []),
+          ...subtaskCoverage,
+          ...(parsed.data.requiredCases ?? []).slice(0, Math.max(0, 24 - (groupOrderInstruction ? 1 : 0) - subtaskCoverage.length)),
+        ],
         userId: req.userId
       },
       {
@@ -618,7 +679,6 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
     if (!testDataResult.success) {
       const error = testDataResult.error;
       const finding = String(error.details?.validationError ?? error.error ?? "");
-      const english = String(req.headers["x-ui-language"] ?? req.headers["accept-language"] ?? "").toLowerCase().startsWith("en");
       if (/TASK_CONTRACT_REVIEW_FAILED\[(statement|publicExamples)\]/.test(finding)) {
         const issue = finding
           .replace(/^TASK_CONTRACT_REVIEW_FAILED\[(?:statement|publicExamples)\]:\s*/i, "")
@@ -670,9 +730,9 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
       existingRows.map(row => buildGeneratedTestFingerprint(row.input, row.expectedOutput))
     );
 
-    const uniqueGenerated: Array<{ input: string; expectedOutput: string }> = [];
+    const uniqueGenerated: Array<{ input: string; expectedOutput: string; subtask: string | null; subtaskWeightPercent: number | null }> = [];
     let skippedDuplicates = 0;
-    for (const td of testData as Array<{ input: string; output: string }>) {
+    for (const [index, td] of (testData as Array<{ input: string; output: string }>).entries()) {
       const input = String(td?.input ?? "");
       const expectedOutput = String(td?.output ?? "");
       const fingerprint = buildGeneratedTestFingerprint(input, expectedOutput);
@@ -681,7 +741,15 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         continue;
       }
       knownFingerprints.add(fingerprint);
-      uniqueGenerated.push({ input, expectedOutput });
+      const assignedSubtask = automaticSubtasks.length
+        ? subtaskPlan[index]
+        : null;
+      uniqueGenerated.push({
+        input,
+        expectedOutput,
+        subtask: assignedSubtask?.name ?? testSubtask,
+        subtaskWeightPercent: assignedSubtask?.weightPercent ?? normalizeSubtaskWeightPercent(parsed.data.subtaskWeightPercent),
+      });
     }
 
     const createdTests = uniqueGenerated.map((td) =>
@@ -692,8 +760,9 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         points: testPoints,
         isHidden: testIsHidden,
         source: "AI_GENERATED",
-        subtask: testSubtask,
-        subtaskScoringMode: testSubtaskScoringMode
+        subtask: td.subtask,
+        subtaskScoringMode: testSubtaskScoringMode,
+        subtaskWeightPercent: td.subtaskWeightPercent,
       })
     );
 
@@ -713,6 +782,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         source: normalizeTestDataSource(td.source),
         subtask: normalizeSubtaskValue(td.subtask),
         subtaskScoringMode: normalizeSubtaskScoringMode(td.subtaskScoringMode),
+        subtaskWeightPercent: normalizeSubtaskWeightPercent(td.subtaskWeightPercent),
         imageUrls: normalizeTestImageUrls(td.imageUrls)
       }))
     });
@@ -765,7 +835,7 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
       return res.status(400).json({ message: messageForZodIssue(parsed.error) });
     }
 
-    const { input, expectedOutput, points, isHidden, subtask, subtaskScoringMode, imageUrls } = parsed.data;
+    const { input, expectedOutput, points, isHidden, subtask, subtaskScoringMode, subtaskWeightPercent, imageUrls } = parsed.data;
 
     if (input !== undefined) testData.input = input;
     if (expectedOutput !== undefined) testData.expectedOutput = expectedOutput;
@@ -773,16 +843,12 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
     if (isHidden !== undefined) testData.isHidden = isHidden === true;
     if (subtask !== undefined) testData.subtask = normalizeSubtaskValue(subtask);
     if (subtaskScoringMode !== undefined) testData.subtaskScoringMode = subtaskScoringMode;
+    if (subtaskWeightPercent !== undefined) testData.subtaskWeightPercent = normalizeSubtaskWeightPercent(subtaskWeightPercent);
     if (imageUrls !== undefined) testData.imageUrls = normalizeTestImageUrls(imageUrls);
 
-    const normalizedSubtask = normalizeSubtaskValue(testData.subtask);
-    if (subtaskScoringMode !== undefined && normalizedSubtask) {
-      const groupTests = await testDataRepo().find({ where: { topicTask: { id: taskId }, subtask: normalizedSubtask } });
-      const groupToSave = [...groupTests.filter(item => item.id !== testData.id), testData];
-      groupToSave.forEach(item => { item.subtaskScoringMode = subtaskScoringMode; });
-      await testDataRepo().save(groupToSave);
-    } else {
-      await testDataRepo().save(testData);
+    await testDataRepo().save(testData);
+    if (subtaskScoringMode !== undefined || subtaskWeightPercent !== undefined) {
+      await synchronizeSubtaskScoringModes(taskId, [testData]);
     }
 
     res.json({
@@ -796,6 +862,7 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
         source: normalizeTestDataSource(testData.source),
         subtask: normalizeSubtaskValue(testData.subtask),
         subtaskScoringMode: normalizeSubtaskScoringMode(testData.subtaskScoringMode),
+        subtaskWeightPercent: normalizeSubtaskWeightPercent(testData.subtaskWeightPercent),
         imageUrls: normalizeTestImageUrls(testData.imageUrls)
       }
     });

@@ -35,6 +35,18 @@ test("imported subtasks score all or nothing while unassigned cases stay indepen
   assert.equal(grade.score, 5); assert.equal(grade.maxScore, 15); assert.equal(grade.total, 33);
   assert.equal(courseJudgeGrade(grouped, response(["AC", "AC", "AC"])).total, 100);
 });
+test("generated subtask percentages scale course scores independently of authored points", () => {
+  const weighted = [
+    { id: 1, input: "1", expectedOutput: "1", points: 1, isHidden: true, subtask: "Basic", subtaskScoringMode: "PARTIAL", subtaskWeightPercent: 30 },
+    { id: 2, input: "2", expectedOutput: "2", points: 1, isHidden: true, subtask: "Basic", subtaskScoringMode: "PARTIAL", subtaskWeightPercent: 30 },
+    { id: 3, input: "3", expectedOutput: "3", points: 1, isHidden: true, subtask: "Advanced", subtaskScoringMode: "ABSOLUTE", subtaskWeightPercent: 70 },
+    { id: 4, input: "4", expectedOutput: "4", points: 1, isHidden: true, subtask: "Advanced", subtaskScoringMode: "ABSOLUTE", subtaskWeightPercent: 70 },
+  ] as TestData[];
+  const grade = courseJudgeGrade(weighted, response(["AC", "WA", "AC", "WA"]));
+  assert.equal(grade.maxScore, 10_000);
+  assert.equal(grade.score, 1_500);
+  assert.equal(grade.total, 15);
+});
 test("compile failure cannot receive points even when a contradictory response contains passed cases", () => {
   const grade = courseJudgeGrade(tests, response(["AC", "AC"], { verdict: "CE", compile: { stderr: "SyntaxError" } }));
   assert.equal(grade.score, 0); assert.equal(grade.testsPassed, 0); assert.equal(grade.isCompleted, false);

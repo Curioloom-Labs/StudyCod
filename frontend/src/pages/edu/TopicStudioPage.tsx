@@ -221,6 +221,7 @@ export const TopicStudioPage: React.FC = () => {
   const [testNotice, setTestNotice] = React.useState<string | null>(null);
   const [testGenerationCount, setTestGenerationCount] = React.useState("5");
   const [replaceGeneratedTests, setReplaceGeneratedTests] = React.useState(true);
+  const [groupByTaskSubtasks, setGroupByTaskSubtasks] = React.useState(true);
   const [testCoverage, setTestCoverage] = React.useState("");
   const [importFiles, setImportFiles] = React.useState<File[]>([]);
   const [importPoints, setImportPoints] = React.useState("1");
@@ -240,6 +241,7 @@ export const TopicStudioPage: React.FC = () => {
   });
   const [generationInstructions, setGenerationInstructions] = React.useState("");
   const [generationProfile, setGenerationProfile] = React.useState<TaskGenerationProfile>(defaultTaskGenerationProfile);
+  const [includeSubtasks, setIncludeSubtasks] = React.useState(true);
   const [controlForm, setControlForm] = React.useState({
     title: "",
     timeLimitMinutes: "45",
@@ -327,6 +329,7 @@ export const TopicStudioPage: React.FC = () => {
         taskType: "PRACTICE",
         difficulty: generationProfile.difficulty,
         generationGuidance: buildTaskGenerationGuidance(generationProfile, generationInstructions, isEn, true),
+        includeSubtasks,
         language: isEn ? "en" : "uk",
       });
       setTaskForm((old) => ({ ...old, description: String(response.data?.description ?? old.description) }));
@@ -431,7 +434,7 @@ export const TopicStudioPage: React.FC = () => {
         return;
       }
       const requiredCases = testCoverage.split(/\r?\n/).map(value => value.trim().slice(0, 240)).filter(Boolean).slice(0, 24);
-      const result = await generateTestData(selectedTask.id, count, { replaceGenerated: replaceGeneratedTests, requiredCases });
+      const result = await generateTestData(selectedTask.id, count, { replaceGenerated: replaceGeneratedTests, requiredCases, groupByTaskSubtasks });
       await reloadTests(selectedTask.id);
       setTestNotice(tr(`Згенеровано ${result.count} тестів${result.skippedDuplicates ? `; дублі пропущено: ${result.skippedDuplicates}` : ""}.`, `Generated ${result.count} tests${result.skippedDuplicates ? `; skipped duplicates: ${result.skippedDuplicates}` : ""}.`));
     } catch (caught) {
@@ -831,7 +834,7 @@ export const TopicStudioPage: React.FC = () => {
         {mode === "task" && (
           <Modal error={error} title={editingTaskId ? tr("Редагувати практику", "Edit practice task") : tr("Нова практика", "New practice task")} caption={editingTaskId ? tr("Змініть умову, код, теорію або кількість спроб. Чернетку можна редагувати до відкриття учням.", "Edit the problem statement, code, theory, or attempt limit. You can edit the draft until it is assigned to students.") : tr("Одне вікно для умови, стартового коду й короткої теорії. Після створення відкриється налаштування тестів.", "Add the problem statement, starter code, and brief theory in one place. Test settings open after creation.")} onClose={() => { setMode(null); setEditingTaskId(null); }} wide>
             <form className="task-authoring" onSubmit={event => { event.preventDefault(); void createTask(); }}>
-              <TaskAuthoringFields idPrefix="topic-task" topicId={id} taskType="PRACTICE" responseLanguage={isEn ? "en" : "uk"} value={taskForm} onChange={patch => setTaskForm(old => ({ ...old, ...patch }))} generationGuidance={generationInstructions} onGenerationGuidanceChange={setGenerationInstructions} generationProfile={generationProfile} onGenerationProfileChange={setGenerationProfile} guidanceEnabled={!editingTaskId && !preview()} selectedTab={editorTab} onSelectedTabChange={setEditorTab} aiBusy={aiBusy} busy={busy} onGenerateCondition={() => void generateCondition()} onGenerateTemplate={() => void generateTemplate()} onGenerateTheory={() => void generateTheory()} />
+              <TaskAuthoringFields idPrefix="topic-task" topicId={id} taskType="PRACTICE" responseLanguage={isEn ? "en" : "uk"} value={taskForm} onChange={patch => setTaskForm(old => ({ ...old, ...patch }))} generationGuidance={generationInstructions} onGenerationGuidanceChange={setGenerationInstructions} generationProfile={generationProfile} onGenerationProfileChange={setGenerationProfile} includeSubtasks={includeSubtasks} onIncludeSubtasksChange={setIncludeSubtasks} guidanceEnabled={!editingTaskId && !preview()} selectedTab={editorTab} onSelectedTabChange={setEditorTab} aiBusy={aiBusy} busy={busy} onGenerateCondition={() => void generateCondition()} onGenerateTemplate={() => void generateTemplate()} onGenerateTheory={() => void generateTheory()} />
               <div className="task-authoring__footer"><button type="button" className="classroom-button" disabled={busy} onClick={() => { setMode(null); setEditingTaskId(null); }}>{tr("Скасувати", "Cancel")}</button><button type="submit" className="classroom-button classroom-button--primary" disabled={busy || !!aiBusy || !taskForm.title.trim()}>{busy ? tr("Зберігаємо…", "Saving…") : tr("Зберегти й налаштувати тести", "Save and configure tests")}<ArrowRight className="size-4" aria-hidden="true" /></button></div>
             </form>
 
@@ -905,6 +908,7 @@ export const TopicStudioPage: React.FC = () => {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-mono text-xs text-text-primary dark:text-text-primary">in: {test.input || "∅"}</p>
                       <p className="mt-1 truncate font-mono text-xs text-text-primary dark:text-text-primary">out: {test.expectedOutput}</p>
+                      {test.subtask && <p className="mt-1 text-[10px] font-semibold text-text-muted dark:text-text-secondary">{test.subtask}{test.subtaskWeightPercent ? ` · ${test.subtaskWeightPercent}% ${tr("максимуму", "of max")}` : ""}</p>}
                       {!!test.imageUrls?.length && <div className="mt-2 flex gap-1">{test.imageUrls.map((url, imageIndex) => <img key={`${url}-${imageIndex}`} src={url} alt={tr(`Зображення тесту ${index + 1}`, `Test ${index + 1} image`)} className="h-10 w-12 rounded-md border border-border object-cover" loading="lazy" />)}</div>}
                     </div>
                     <button type="button" onClick={() => void removeTest(test)} aria-label={tr(`Видалити тест ${index + 1}`, `Delete test ${index + 1}`)} className="text-accent-error dark:text-accent-error"><Trash2 className="size-4" aria-hidden="true" /></button>
@@ -937,6 +941,10 @@ export const TopicStudioPage: React.FC = () => {
                   <label className="mt-3 flex items-center gap-2 text-xs font-bold text-text-muted dark:text-text-secondary">
                     <input name="replaceGeneratedTests" type="checkbox" checked={replaceGeneratedTests} onChange={(event) => setReplaceGeneratedTests(event.target.checked)} />
                     {tr("Замінювати попередні AI-тести", "Replace previous AI tests")}
+                  </label>
+                  <label className="mt-3 flex items-center gap-2 text-xs font-bold text-text-muted dark:text-text-secondary">
+                    <input name="groupByTaskSubtasks" type="checkbox" checked={groupByTaskSubtasks} onChange={event => setGroupByTaskSubtasks(event.target.checked)} />
+                    {tr("Автоматично групувати тести за підзадачами з умови", "Automatically group tests by subtasks in the statement")}
                   </label>
                   <label className="mt-3 block text-xs font-bold text-text-muted dark:text-text-secondary" htmlFor="topic-test-coverage">{tr("Що мають покрити тести? Додайте по одному випадку в рядок.", "What should the tests cover? Add one case per line.")}</label>
                   <textarea id="topic-test-coverage" value={testCoverage} onChange={event => setTestCoverage(event.target.value)} rows={4} maxLength={4000} placeholder={tr("Наприклад:\n- мінімальний допустимий ввід\n- однакові значення\n- велике значення на межі обмежень", "For example:\n- smallest valid input\n- repeated values\n- a large value at the constraint boundary")} className="mt-2 w-full resize-y rounded-xl border border-border/10 bg-white px-3 py-2.5 text-sm outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-bg-code" />

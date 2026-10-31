@@ -450,11 +450,30 @@ const TaskConditionDraftSchema = z.object({
   inputFormat: z.string().trim().min(1).max(2000),
   outputFormat: z.string().trim().min(1).max(2000),
   constraints: z.array(z.string().trim().min(1).max(300)).max(12),
+  subtasks: z.array(z.object({
+    name: z.string().trim().min(1).max(64),
+    description: z.string().trim().min(1).max(500),
+    weightPercent: z.number().int().min(1).max(100),
+  }).strict()).max(5),
   examples: z.array(z.object({
     input: z.string().max(4000),
     output: z.string().max(4000),
   }).strict()).length(3),
-}).strict();
+}).strict().superRefine((draft, context) => {
+  if (draft.subtasks.length === 1) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["subtasks"], message: "A task must have either no subtasks or at least two" });
+  }
+  if (draft.subtasks.length > 0) {
+    const names = draft.subtasks.map(subtask => subtask.name.toLocaleLowerCase());
+    if (new Set(names).size !== names.length) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["subtasks"], message: "Subtask names must be unique" });
+    }
+    const totalWeight = draft.subtasks.reduce((sum, subtask) => sum + subtask.weightPercent, 0);
+    if (totalWeight !== 100) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["subtasks"], message: "Subtask weight percentages must total 100" });
+    }
+  }
+});
 
 const TaskTemplateSchema = z.object({
   template: z.string().min(1, 'template must be a non-empty string'),

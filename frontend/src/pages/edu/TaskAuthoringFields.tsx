@@ -27,6 +27,8 @@ type TaskAuthoringFieldsProps = {
   onGenerationGuidanceChange: (value: string) => void;
   generationProfile: TaskGenerationProfile;
   onGenerationProfileChange: (profile: TaskGenerationProfile) => void;
+  includeSubtasks: boolean;
+  onIncludeSubtasksChange: (value: boolean) => void;
   guidanceEnabled: boolean;
   selectedTab: TaskAuthoringTab;
   onSelectedTabChange: (value: TaskAuthoringTab) => void;
@@ -48,6 +50,8 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
   onGenerationGuidanceChange,
   generationProfile,
   onGenerationProfileChange,
+  includeSubtasks,
+  onIncludeSubtasksChange,
   guidanceEnabled,
   selectedTab,
   onSelectedTabChange,
@@ -91,6 +95,10 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
             </div>
           </div>
           <textarea ref={descriptionRef} id={descriptionId} name="taskDescription" value={value.description} onChange={event => onChange({ description: event.target.value })} placeholder={tr("Опишіть завдання, вхідні та вихідні дані, обмеження й приклади.", "Describe the problem, input, output, constraints, and examples.")} rows={13} disabled={busy} />
+          <label className="mt-2 inline-flex items-start gap-2 text-xs leading-5 text-text-muted dark:text-text-secondary">
+            <input type="checkbox" checked={includeSubtasks} disabled={busy || !!aiBusy} onChange={event => onIncludeSubtasksChange(event.target.checked)} />
+            <span>{tr("Автоматично розбивати складніші задачі на підзадачі з вагами у відсотках (якщо це доречно).", "Automatically split multi-step tasks into subtasks with percentage weights when appropriate.")}</span>
+          </label>
           <p className="classroom-caption">{tr("Підтримуються Markdown, приклади коду та математичні формули.", "Supports Markdown, code examples, and mathematical formulae.")}</p>
           {generationProfile.aiTrapEnabled && <p className="classroom-caption">{tr("Залишайте маркери STUDYCOD_AI_TRAP_START та STUDYCOD_AI_TRAP_END навколо фрази-пастки: генератор тестів виключає лише цей фрагмент.", "Keep the STUDYCOD_AI_TRAP_START and STUDYCOD_AI_TRAP_END markers around the trap phrase; test generation excludes only that fragment.")}</p>}
           <details className="task-authoring__preview"><summary>{tr("Переглянути як учень", "Preview as a student")}</summary><MarkdownView content={value.description || tr("Тут з’явиться умова завдання.", "The problem statement will appear here.")} /></details>

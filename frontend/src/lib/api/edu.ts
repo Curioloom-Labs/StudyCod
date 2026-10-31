@@ -716,7 +716,7 @@ export async function saveQuiz(lessonId: number, quiz: QuizItem[]): Promise<void
     quiz
   });
 }
-export type CourseTestInput = { input: string; expectedOutput: string; points: number; isHidden: boolean; imageUrls?: string[]; subtask?: string | null; subtaskScoringMode?: "ABSOLUTE" | "PARTIAL" };
+export type CourseTestInput = { input: string; expectedOutput: string; points: number; isHidden: boolean; imageUrls?: string[]; subtask?: string | null; subtaskScoringMode?: "ABSOLUTE" | "PARTIAL"; subtaskWeightPercent?: number | null };
 export type CourseTestConfig = { task: { id: number; title: string; lessonId: number }; testData: CourseTestInput[]; maxAttempts: number; revision: string; gradingLocked: boolean };
 export async function getCourseTaskTests(taskId: number): Promise<CourseTestConfig> { return (await api.get(`/edu/course-tasks/${taskId}/tests`)).data; }
 export async function saveCourseTaskTests(taskId: number, input: { testData: CourseTestInput[]; maxAttempts: number; expectedRevision: string }): Promise<CourseTestConfig> { return (await api.put(`/edu/course-tasks/${taskId}/tests`, input)).data; }
@@ -934,6 +934,8 @@ export async function generateTestData(taskId: number, count: number, options?: 
   isHidden?: boolean;
   subtask?: string | null;
   subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
+  subtaskWeightPercent?: number | null;
+  groupByTaskSubtasks?: boolean;
 }): Promise<{
   count: number;
   skippedDuplicates?: number;
@@ -947,6 +949,7 @@ export async function generateTestData(taskId: number, count: number, options?: 
     source?: "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
     subtask?: string | null;
     subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
+    subtaskWeightPercent?: number | null;
     imageUrls?: string[];
   }>;
 }> {
@@ -957,7 +960,9 @@ export async function generateTestData(taskId: number, count: number, options?: 
     ...(typeof options?.points === "number" ? { points: options.points } : {}),
     ...(typeof options?.isHidden === "boolean" ? { isHidden: options.isHidden } : {}),
     ...(typeof options?.subtask === "string" || options?.subtask === null ? { subtask: options.subtask } : {}),
-    ...(options?.subtaskScoringMode ? { subtaskScoringMode: options.subtaskScoringMode } : {})
+    ...(options?.subtaskScoringMode ? { subtaskScoringMode: options.subtaskScoringMode } : {}),
+    ...(typeof options?.subtaskWeightPercent === "number" || options?.subtaskWeightPercent === null ? { subtaskWeightPercent: options.subtaskWeightPercent } : {}),
+    ...(typeof options?.groupByTaskSubtasks === "boolean" ? { groupByTaskSubtasks: options.groupByTaskSubtasks } : {})
   });
   return res.data;
 }
@@ -968,6 +973,7 @@ export interface TestDataItem {
   isHidden?: boolean;
   subtask?: string | null;
   subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
+  subtaskWeightPercent?: number | null;
   imageUrls?: string[];
 }
 export async function addTestData(taskId: number, testData: TestDataItem[]): Promise<{
@@ -987,6 +993,7 @@ export interface TestData {
   source?: "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
   subtask?: string | null;
   subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
+  subtaskWeightPercent?: number | null;
   imageUrls?: string[];
   isInputTruncated?: boolean;
   inputFullLength?: number;
@@ -1051,6 +1058,7 @@ export async function updateTestData(taskId: number, testDataId: number, update:
   isHidden?: boolean;
   subtask?: string | null;
   subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
+  subtaskWeightPercent?: number | null;
   imageUrls?: string[];
 }): Promise<{
   message: string;
