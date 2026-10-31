@@ -845,7 +845,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
         } catch (error) {
           result = undefined;
           const errorMsg = errorMessage(error);
-        const looksLikeValidationError =
+          const looksLikeValidationError =
           error instanceof AIValidationError ||
           String(error && typeof error === 'object' && 'name' in error ? error.name : '') === 'AIValidationError' ||
           /validation failed/i.test(errorMsg) ||
@@ -897,7 +897,11 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
             success: false,
             error: {
               statusCode: 502,
-              message: 'AI_GENERATION_FAILED: Invalid response structure',
+              message: /Reference program compilation failed/i.test(errorMsg)
+                ? 'AI_GENERATION_FAILED: Generated Python reference program failed to compile'
+                : /Task generation guidance validation failed/i.test(errorMsg)
+                  ? 'AI_GENERATION_FAILED: Generated task guidance was invalid'
+                  : 'AI_GENERATION_FAILED: Invalid response structure',
                 error: errorMsg,
               details: {
                 mode,

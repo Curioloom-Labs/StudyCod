@@ -140,7 +140,7 @@ test('reference generation exposes validation feedback and clearly requires a Py
 });
 
 test('compiler failures preserve the rejected Python source for primary-model repair and fresh review', async () => {
-  const broken = 'if __name__ == "__main__\':\n    print(int(input()) + 1)';
+  const broken = 'print(int(input()) + )';
   const fixed = 'print(int(input()) + 1)';
   const payloads: Array<Record<string, unknown>> = [];
   const provider: LLMProvider = {
@@ -160,7 +160,7 @@ test('compiler failures preserve the rejected Python source for primary-model re
     taskDescription: 'Read one integer n in [1,10]. Print n+1.', lang: 'JAVA' as const, count: 1,
     publicExamples: [{ input: '1', output: '2' }],
     executeReference: async (source: string, inputs: string[]) => {
-      if (source === broken) throw makeAIValidationError('generateTestData', 'Reference program compilation failed: SyntaxError: unterminated string literal');
+      if (source === broken) throw makeAIValidationError('generateTestData', 'Reference program compilation failed: SyntaxError: invalid syntax');
       assert.equal(source, fixed);
       return inputs.map(input => String(Number(input) + 1));
     },
@@ -177,4 +177,42 @@ test('compiler failures preserve the rejected Python source for primary-model re
   assert.ok(feedback.includes(JSON.stringify(broken)), 'quotes in the rejected source must survive feedback serialization');
   assert.equal(payloads[1].statement, params.taskDescription);
   assert.equal(payloads[1].validationFeedback, feedback);
+});
+
+test('a malformed Python main guard is repaired before Judge execution and contract review', async () => {
+  const malformed = 'if __name__ == "__main__\':\n    print(int(input()) + 1)';
+  const repaired = 'if __name__ == "__main__":\n    print(int(input()) + 1)';
+  const calls: Array<Record<string, unknown>> = [];
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string): Promise<T> {
+      const payload = JSON.parse(prompt) as Record<string, unknown>;
+      calls.push(payload);
+      if ('requiredCoverage' in payload || 'existingExamples' in payload) {
+        return { referenceSolution: malformed, inputs: ['2', '3', '4'] } as T;
+      }
+      assert.equal((payload.executedReference as { source: string }).source, repaired);
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+  const executions: string[] = [];
+  const result = await generateReferenceTestData(provider, {
+    taskDescription: 'Read one integer n in [1,10]. Print n+1.',
+    lang: 'PYTHON',
+    count: 1,
+    publicExamples: [{ input: '1', output: '2' }],
+    executeReference: async (source, inputs) => {
+      executions.push(source);
+      if (source === malformed) {
+        throw makeAIValidationError('generateTestData', 'Reference program compilation failed: SyntaxError in main guard');
+      }
+      assert.equal(source, repaired);
+      return inputs.map(input => String(Number(input) + 1));
+    },
+  });
+
+  assert.deepEqual(result.map(test => test.output), ['3']);
+  assert.deepEqual(executions, [malformed, repaired]);
+  assert.equal(calls.length, 2);
+  assert.deepEqual((calls[1].executedReference as { source: string }).source, repaired);
 });

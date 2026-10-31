@@ -465,6 +465,16 @@ const TaskGenerationGuidanceSchema = z.object({
   }),
 });
 
+function normalizeTaskGenerationGuidance(data: unknown): unknown {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  const response = data as Record<string, unknown>;
+  if (!Array.isArray(response.guidance) || !response.guidance.every(item => typeof item === 'string')) return data;
+  return {
+    ...response,
+    guidance: response.guidance.map(item => item.trim()).filter(Boolean).join('\n'),
+  };
+}
+
 const TestDataItemSchema = z.object({
   input: z.string(),
   output: z.string().min(1, 'test output must be a non-empty string'),
@@ -1027,7 +1037,7 @@ export class AIResponseValidator {
     };
   } {
     try {
-      return TaskGenerationGuidanceSchema.parse(data);
+      return TaskGenerationGuidanceSchema.parse(normalizeTaskGenerationGuidance(data));
     } catch (error) {
       if (error instanceof z.ZodError) {
         throw new AIValidationError('generateTaskGuidance', error, `Task generation guidance validation failed: ${zodMessages(error)}`);

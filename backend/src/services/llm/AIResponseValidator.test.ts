@@ -2,6 +2,26 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AIResponseValidator } from './AIResponseValidator';
 
+test('task guidance normalizes provider bullet arrays into the declared string contract', () => {
+  const guidance = AIResponseValidator.validateGenerateTaskGuidance({
+    guidance: ['  Cover ordinary cases.  ', '', 'Include one boundary case.'],
+    clarifyingQuestions: [],
+    settings: {
+      learnerLevel: 'INTERMEDIATE',
+      studentContext: 'Has learned loops.',
+      difficulty: 3,
+      structure: 'MULTI_STEP',
+      contextStyle: 'NEUTRAL',
+      learningGoal: 'Practice loop invariants.',
+      includeConcepts: 'Loops',
+      avoidConcepts: 'Arrays',
+      stayOnTopic: true,
+      avoidSolutionHints: true,
+    },
+  });
+  assert.equal(guidance.guidance, 'Cover ordinary cases.\nInclude one boundary case.');
+});
+
 const contractTask = {
   title: 'Sum', topic: 'Arithmetic', difficulty: 1, theoryMarkdown: 'Addition combines values.',
   practicalTask: 'Read two integers a and b and calculate their sum. Print exactly one integer containing a + b, with no labels, extra values or explanations. The input contains the two integers on one line separated by a space.',
