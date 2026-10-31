@@ -33,7 +33,8 @@
   "overrides": {
     "esbuild": "0.28.1",
     "path-to-regexp": "8.4.2",
-    "minimatch": "9.0.9",
+    "glob": "14.0.2",
+    "minimatch": "11.0.1",
     "brace-expansion": "2.1.7",
     "proxy-addr": "2.0.8"
   },
