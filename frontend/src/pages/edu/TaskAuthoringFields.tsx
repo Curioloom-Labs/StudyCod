@@ -64,7 +64,6 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
   const templateId = `${idPrefix}-template`;
   const theoryId = `${idPrefix}-theory`;
   const attemptsId = `${idPrefix}-max-attempts`;
-  const projectId = `${idPrefix}-project-spec`;
 
   const generateCondition = () => {
     if (value.description.trim() && !window.confirm(tr("Замінити поточну умову новою AI-версією?", "Replace the current statement with a new AI draft?"))) return;
@@ -166,7 +165,7 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
         <summary>
           <span>3</span>
           <span>{tr("Додатково — необов’язково", "More options — optional")}</span>
-          <small>{tr("Стартовий код, теорія, спроби й мініпроєкт", "Starter code, theory, attempts, and mini-project")}</small>
+          <small>{tr("Стартовий код, теорія та спроби", "Starter code, theory, and attempts")}</small>
           <ArrowRight className="size-4" aria-hidden="true" />
         </summary>
         <div className="task-authoring__advanced-content">
@@ -203,13 +202,6 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
             </label>
             <div className="classroom-caption self-end pb-2">{tr("Скільки разів учень може надіслати розв’язання на перевірку.", "How many times the student may submit a solution.")}</div>
           </div>
-
-          <details className="task-authoring__project" open={!!value.projectSpecJson}>
-            <summary>{tr("Налаштування мініпроєкту", "Mini-project settings")}</summary>
-            <p className="classroom-caption">{tr("Для проєктів з етапами та окремими критеріями оцінювання.", "For projects with milestones and individual grading criteria.")}</p>
-            <label className="task-authoring__label" htmlFor={projectId}>{tr("Специфікація мініпроєкту JSON", "Mini-project JSON specification")}</label>
-            <textarea id={projectId} name="projectSpecJson" value={value.projectSpecJson} onChange={event => onChange({ projectSpecJson: event.target.value })} rows={7} spellCheck={false} className="task-authoring__code" disabled={busy} />
-          </details>
         </div>
       </details>
     </div>

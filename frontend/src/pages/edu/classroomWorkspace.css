@@ -153,8 +153,8 @@
 .task-authoring__statement { display: block; width: 100%; min-height: 17rem; margin-top: 1rem; resize: vertical; border: 1px solid var(--border); border-radius: .9rem; background: var(--bg-base); padding: .9rem 1rem; color: var(--text-primary); font-size: .875rem; line-height: 1.75; }
 .task-authoring__statement:focus, .task-authoring__title:focus { border-color: var(--primary); outline: 3px solid color-mix(in srgb, var(--primary) 18%, transparent); }
 .task-authoring__statement-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin-top: .8rem; }
-.task-authoring__preview, .task-authoring__project { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .85rem; color: var(--text-secondary); font-size: .8rem; }
-.task-authoring__preview summary, .task-authoring__project summary { min-height: 2rem; cursor: pointer; font-weight: 650; }
+.task-authoring__preview { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .85rem; color: var(--text-secondary); font-size: .8rem; }
+.task-authoring__preview summary { min-height: 2rem; cursor: pointer; font-weight: 650; }
 .task-authoring__preview[open] > div { margin-top: .75rem; max-height: 24rem; overflow: auto; border-radius: .8rem; background: var(--bg-base); padding: 1rem; }
 .task-authoring__code { font-family: var(--font-mono); }
 .task-authoring__advanced { overflow: hidden; border: 1px solid var(--border); border-radius: 1rem; background: color-mix(in srgb, var(--bg-surface) 80%, transparent); color: var(--text-secondary); }
