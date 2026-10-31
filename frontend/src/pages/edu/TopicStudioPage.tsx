@@ -435,8 +435,14 @@ export const TopicStudioPage: React.FC = () => {
       }
       const requiredCases = testCoverage.split(/\r?\n/).map(value => value.trim().slice(0, 240)).filter(Boolean).slice(0, 24);
       const result = await generateTestData(selectedTask.id, count, { replaceGenerated: replaceGeneratedTests, requiredCases, groupByTaskSubtasks });
+      if (result.conditionRepaired && result.description) {
+        const taskId = selectedTask.id;
+        setSelectedTask(old => old?.id === taskId ? { ...old, description: result.description } : old);
+        setTopic(old => old ? { ...old, tasks: old.tasks?.map(task => task.id === taskId ? { ...task, description: result.description } : task) } : old);
+      }
       await reloadTests(selectedTask.id);
-      setTestNotice(tr(`Згенеровано ${result.count} тестів${result.skippedDuplicates ? `; дублі пропущено: ${result.skippedDuplicates}` : ""}.`, `Generated ${result.count} tests${result.skippedDuplicates ? `; skipped duplicates: ${result.skippedDuplicates}` : ""}.`));
+      const repairedNotice = result.conditionRepaired ? tr("Умову автоматично виправлено й повторно перевірено. ", "The condition was automatically repaired and rechecked. ") : "";
+      setTestNotice(`${repairedNotice}${tr(`Згенеровано ${result.count} тестів${result.skippedDuplicates ? `; дублі пропущено: ${result.skippedDuplicates}` : ""}.`, `Generated ${result.count} tests${result.skippedDuplicates ? `; skipped duplicates: ${result.skippedDuplicates}` : ""}.`)}`);
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, tr("Не вдалося згенерувати тести.", "Could not generate tests.")));
     } finally {

@@ -423,6 +423,9 @@ export const ControlStudioPage: React.FC = () => {
               groupByTaskSubtasks: testSettings.groupByTaskSubtasks,
             });
             generatedCount = result.count;
+            if (result.conditionRepaired && result.description && savedTask) {
+              savedTask = { ...savedTask, description: result.description };
+            }
             try {
               const current = await getTestData(taskId, { limit: 1, offset: 0 });
               setTestCounts(old => ({ ...old, [taskId]: current.pagination?.total ?? current.testData.length }));
@@ -497,6 +500,10 @@ export const ControlStudioPage: React.FC = () => {
           subtaskScoringMode: testSettings.subtaskScoringMode,
           groupByTaskSubtasks: testSettings.groupByTaskSubtasks,
         });
+        if (result.conditionRepaired && result.description) {
+          setControl(old => old ? { ...old, tasks: old.tasks?.map(item => item.id === task.id ? { ...item, description: result.description } : item) } : old);
+          setTestEditorTask(old => old?.id === task.id ? { ...old, description: result.description } : old);
+        }
         let currentCount = testSettings.replaceGenerated ? result.count : (testCounts[task.id] ?? 0) + result.count;
         try {
           const current = await getTestData(task.id, { limit: 1, offset: 0 });
@@ -511,7 +518,8 @@ export const ControlStudioPage: React.FC = () => {
             setTaskTests(refreshed.testData || []);
           } catch { /* Keep the generated count visible if refreshing the list fails. */ }
         }
-        showToast({ type: "success", message: tr(`Додано ${result.count} тестів до задачі «${task.title}».`, `Added ${result.count} tests to “${task.title}”.`) });
+        const repairedNotice = result.conditionRepaired ? tr(" Умову автоматично виправлено й повторно перевірено.", " The condition was automatically repaired and rechecked.") : "";
+        showToast({ type: "success", message: `${tr(`Додано ${result.count} тестів до задачі «${task.title}».`, `Added ${result.count} tests to “${task.title}”.`)}${repairedNotice}` });
       }
       if (preview()) showToast({ type: "success", message: tr(`Для задачі «${task.title}» підготовлено ${count} тестів.`, `Prepared ${count} tests for “${task.title}”.`) });
     } catch (caught) {

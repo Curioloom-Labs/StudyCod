@@ -15,6 +15,8 @@ export interface TaskConditionDraft {
   outputFormat: string;
   constraints: string[];
   subtasks: TaskConditionSubtaskDraft[];
+  /** Hidden Python oracle used only to execute and verify every public example. */
+  referenceSolution: string;
   examples: [TaskConditionDraftExample, TaskConditionDraftExample, TaskConditionDraftExample];
 }
 
@@ -43,6 +45,7 @@ export const TASK_CONDITION_DRAFT_JSON_SCHEMA = {
         additionalProperties: false,
       },
     },
+    referenceSolution: { type: "string", minLength: 1, maxLength: 32000 },
     examples: {
       type: "array",
       minItems: 3,
@@ -58,7 +61,7 @@ export const TASK_CONDITION_DRAFT_JSON_SCHEMA = {
       },
     },
   },
-  required: ["statement", "inputFormat", "outputFormat", "constraints", "subtasks", "examples"],
+  required: ["statement", "inputFormat", "outputFormat", "constraints", "subtasks", "referenceSolution", "examples"],
   additionalProperties: false,
 } as const;
 

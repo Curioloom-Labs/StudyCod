@@ -5,6 +5,7 @@ import { LLMOrchestrator } from './LLMOrchestrator';
 import type { LLMGenerateOptions, LLMProvider } from './LLMProvider';
 import { PROMPT_CATALOG } from '../../../../shared/ai/prompts';
 import { formatTaskConditionDraft, type TaskConditionDraft } from './taskConditionDraft';
+import * as referenceExecution from '../executeReferenceTests';
 
 const draft: TaskConditionDraft = {
   statement: 'Read two integers and print their sum.',
@@ -12,6 +13,7 @@ const draft: TaskConditionDraft = {
   outputFormat: 'Print a + b.',
   constraints: ['$-100 \\le a,b \\le 100$.', 'The input contains exactly two integers.'],
   subtasks: [],
+  referenceSolution: 'a, b = map(int, input().split())\nprint(a + b)',
   examples: [
     { input: '2 3', output: '5' },
     { input: '0 0', output: '0' },
@@ -68,7 +70,14 @@ test('condition renderer includes learner-facing subtasks with weights when requ
   }));
 });
 
-test('EDU task condition uses structured JSON generation and forwards repair feedback', async () => {
+test('EDU task condition uses structured JSON generation and forwards repair feedback', async t => {
+  t.mock.method(referenceExecution, 'executeReferenceTests', async (source: string, language: string, inputs: string[], examples: Array<{ input: string; output: string }>) => {
+    assert.equal(language, 'PYTHON');
+    assert.equal(inputs.length, 0);
+    assert.equal(examples.length, 3);
+    assert.match(source, /print\(a \+ b\)/);
+    return [];
+  });
   const calls: Array<{ prompt: string; schema: object; systemPrompt?: string; options?: LLMGenerateOptions }> = [];
   const responses: unknown[] = [draft, { valid: true, invalidSource: 'none', issues: [] }];
   const provider: LLMProvider = {
@@ -112,6 +121,9 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
   assert.equal((call.schema as { properties?: { examples?: { minItems?: number; maxItems?: number } } }).properties?.examples?.maxItems, 3);
   assert.match(result.description, /### Приклад 1/);
   assert.match(result.description, /### Приклад 3/);
+  assert.doesNotMatch(result.description, /referenceSolution/);
+  assert.match(call.systemPrompt ?? '', /hidden verification data|приховані дані перевірки/);
+  assert.equal((call.schema as { required?: string[] }).required?.includes('referenceSolution'), true);
 });
 
 test('task condition draft rejects missing examples and preserves explicitly empty stdout', () => {

@@ -940,6 +940,8 @@ export async function generateTestData(taskId: number, count: number, options?: 
   count: number;
   skippedDuplicates?: number;
   replacedGeneratedCount?: number;
+  conditionRepaired?: boolean;
+  description?: string;
   testData: Array<{
     id: number;
     input: string;

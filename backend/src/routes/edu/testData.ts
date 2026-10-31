@@ -13,6 +13,9 @@ import type { Capability } from "../../services/edu/rbac";
 import { env } from "../../env";
 import { allocateSubtaskTestCounts, parseTaskSubtasks } from "../../services/edu/taskSubtasks";
 import { resolveTestDataIoType } from "../../services/llm/TaskContractReview";
+import { randomUUID } from "crypto";
+import { createExecutionContext } from "../../../../shared/ai/prompts";
+import { getActivePromptBundleVersion, runWithAIExecutionContext } from "../../services/llm/promptExecution";
 
 const router = Router();
 
@@ -609,53 +612,61 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
       String(topicTask.template || "").trim() ||
       `Завдання: ${topicTask.title}`;
 
-    let taskUsesInput = false;
-    try { taskUsesInput = resolveTestDataIoType(safeTaskDescription) === "STDIN_STDOUT"; } catch { /* The AI contract validator returns the actionable statement error below. */ }
-    const automaticSubtasks = !testSubtask && parsed.data.groupByTaskSubtasks !== false && taskUsesInput
-      ? parseTaskSubtasks(safeTaskDescription)
-      : [];
-    const automaticSubtaskCounts = automaticSubtasks.length
-      ? allocateSubtaskTestCounts(testCount, automaticSubtasks)
-      : null;
     const english = String(req.headers["x-ui-language"] ?? req.headers["accept-language"] ?? "").toLowerCase().startsWith("en");
-    if (automaticSubtasks.length && !automaticSubtaskCounts) {
-      return res.status(422).json({
-        code: "EDU_SUBTASK_TEST_COUNT_TOO_LOW",
-        message: english
-          ? `Generate at least ${automaticSubtasks.length} tests so every subtask gets coverage, or turn off subtask grouping.`
-          : `Згенеруй щонайменше ${automaticSubtasks.length} тестів, щоб покрити кожну підзадачу, або вимкни групування тестів за підзадачами.`,
-      });
-    }
-    const subtaskPlan = automaticSubtaskCounts
-      ? automaticSubtasks.flatMap((subtask, index) => Array.from({ length: automaticSubtaskCounts[index] }, () => subtask))
-      : [];
-    const subtaskCoverage = automaticSubtasks.map((subtask, index) =>
-      `${subtask.name} (${subtask.weightPercent}%, ${automaticSubtaskCounts?.[index] ?? 0} consecutive tests): ${subtask.description}`
-    );
-    const groupOrderInstruction = automaticSubtasks.length
-      ? `${english ? "SUBTASK ORDER: Return each subtask's cases consecutively in the exact order listed below. Each group must contain exactly the stated number of cases; do not add labels to stdin/stdout." : "ПОРЯДОК ПІДЗАДАЧ: поверни тести кожної підзадачі підряд у наведеному порядку. Кожна група має містити рівно вказану кількість тестів; не додавай назви до stdin/stdout."}`
-      : null;
+    const buildGenerationPlan = (description: string) => {
+      let taskUsesInput = false;
+      try { taskUsesInput = resolveTestDataIoType(description) === "STDIN_STDOUT"; } catch { /* The contract validator returns the actionable error below. */ }
+      const automaticSubtasks = !testSubtask && parsed.data.groupByTaskSubtasks !== false && taskUsesInput
+        ? parseTaskSubtasks(description)
+        : [];
+      const automaticSubtaskCounts = automaticSubtasks.length
+        ? allocateSubtaskTestCounts(testCount, automaticSubtasks)
+        : null;
+      const subtaskPlan = automaticSubtaskCounts
+        ? automaticSubtasks.flatMap((subtask, index) => Array.from({ length: automaticSubtaskCounts[index] }, () => subtask))
+        : [];
+      const subtaskCoverage = automaticSubtasks.map((subtask, index) =>
+        `${subtask.name} (${subtask.weightPercent}%, ${automaticSubtaskCounts?.[index] ?? 0} consecutive tests): ${subtask.description}`
+      );
+      const groupOrderInstruction = automaticSubtasks.length
+        ? `${english ? "SUBTASK ORDER: Return each subtask's cases consecutively in the exact order listed below. Each group must contain exactly the stated number of cases; do not add labels to stdin/stdout." : "ПОРЯДОК ПІДЗАДАЧ: поверни тести кожної підзадачі підряд у наведеному порядку. Кожна група має містити рівно вказану кількість тестів; не додавай назви до stdin/stdout."}`
+        : null;
+      return {
+        automaticSubtasks,
+        automaticSubtaskCounts,
+        subtaskPlan,
+        tooFewTests: automaticSubtasks.length > 0 && !automaticSubtaskCounts,
+        requiredCases: [
+          ...(groupOrderInstruction ? [groupOrderInstruction] : []),
+          ...subtaskCoverage,
+          ...(parsed.data.requiredCases ?? []).slice(0, Math.max(0, 24 - (groupOrderInstruction ? 1 : 0) - subtaskCoverage.length)),
+        ],
+      };
+    };
+    const subtaskCountError = (count: number) => res.status(422).json({
+      code: "EDU_SUBTASK_TEST_COUNT_TOO_LOW",
+      message: english
+        ? `Generate at least ${count} tests so every subtask gets coverage, or turn off subtask grouping.`
+        : `Згенеруй щонайменше ${count} тестів, щоб покрити кожну підзадачу, або вимкни групування тестів за підзадачами.`,
+    });
+    let generationPlan = buildGenerationPlan(safeTaskDescription);
+    if (generationPlan.tooFewTests) return subtaskCountError(generationPlan.automaticSubtasks.length);
 
     const authoredTests = await AppDataSource.query(
       "SELECT input, expected_output AS output FROM test_data WHERE topic_task_id = ? AND source <> 'AI_GENERATED' ORDER BY id LIMIT 40",
       [taskId],
     ) as Array<{ input: string; output: string }>;
-    const aiStartedAt = Date.now();
-    const testDataResult = await eduTestDataGenerationDependencies.safeAICall(
+    const runTestGeneration = (description: string, requiredCases: string[]) => eduTestDataGenerationDependencies.safeAICall(
       "generateTestData",
       {
-        taskDescription: safeTaskDescription,
+        taskDescription: description,
         taskTitle: topicTask.title,
         lang: topicTask.topic.language,
         count: testCount,
         allowEmptyOutput: true,
         referenceExamplesAreAuthoritative: true,
         publicExamples: authoredTests.map(test => ({ input: String(test.input), output: String(test.output) })),
-        requiredCases: [
-          ...(groupOrderInstruction ? [groupOrderInstruction] : []),
-          ...subtaskCoverage,
-          ...(parsed.data.requiredCases ?? []).slice(0, Math.max(0, 24 - (groupOrderInstruction ? 1 : 0) - subtaskCoverage.length)),
-        ],
+        requiredCases,
         userId: req.userId
       },
       {
@@ -665,6 +676,63 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         ...(EDU_TESTDATA_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: EDU_TESTDATA_AI_BUDGET_MS })
       }
     );
+    const aiStartedAt = Date.now();
+    let activeDescription = safeTaskDescription;
+    let conditionRepaired = false;
+    let repairFailure: string | null = null;
+    let testDataResult = await runWithAIExecutionContext(createExecutionContext('task.generated-tests', {
+      traceId: req.requestId || `trace-${randomUUID()}`,
+      deadlineAt: Date.now() + (EDU_TESTDATA_AI_DISABLE_DEADLINE ? 120_000 : EDU_TESTDATA_AI_BUDGET_MS),
+      retryBudget: { remaining: 2 },
+      promptVersion: getActivePromptBundleVersion(),
+    }), async () => {
+      let result = await runTestGeneration(activeDescription, generationPlan.requiredCases);
+      const finding = result.success ? "" : String(result.error.details?.validationError ?? result.error.error ?? "");
+      const brokenContract = /TASK_CONTRACT_REVIEW_FAILED\[(statement|publicExamples)\]/.test(finding);
+      if (!brokenContract || !String(topicTask.description ?? "").trim()) return result;
+
+      const issue = finding
+        .replace(/^TASK_CONTRACT_REVIEW_FAILED\[(?:statement|publicExamples)\]:\s*/i, "")
+        .replace(/[\u0000-\u001f\u007f]/g, " ")
+        .replace(/\s+/g, " ")
+        .slice(0, 600)
+        .trim();
+      const repair = await eduTestDataGenerationDependencies.safeAICall("generateTaskCondition", {
+        topicTitle: topicTask.topic.title,
+        taskTitle: topicTask.title,
+        taskType: topicTask.type === "CONTROL" ? "CONTROL" : "PRACTICE",
+        language: topicTask.topic.language,
+        responseLanguage: english ? "en" : "uk",
+        existingDescription: activeDescription,
+        validationFeedback: issue,
+        includeSubtasks: parseTaskSubtasks(activeDescription).length > 0,
+        userId: req.userId,
+        topicId: topicTask.topic.id,
+      }, {
+        language: english ? "en" : "uk",
+        requestId: req.requestId,
+        maxAttempts: 2,
+        ...(EDU_TESTDATA_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: EDU_TESTDATA_AI_BUDGET_MS }),
+      });
+      if (!repair.success || typeof repair.data?.description !== "string" || !repair.data.description.trim()) {
+        repairFailure = repair.success ? "AI returned an empty repaired condition." : repair.error.error || repair.error.message;
+        return result;
+      }
+
+      const repairedDescription = repair.data.description.trim();
+      const repairedPlan = buildGenerationPlan(repairedDescription);
+      if (repairedPlan.tooFewTests) {
+        generationPlan = repairedPlan;
+        repairFailure = "The repaired condition has more subtasks than the selected test count can cover.";
+        return result;
+      }
+      activeDescription = repairedDescription;
+      generationPlan = repairedPlan;
+      result = await runTestGeneration(activeDescription, generationPlan.requiredCases);
+      if (result.success) conditionRepaired = true;
+      else repairFailure = String(result.error.details?.validationError ?? result.error.error ?? result.error.message);
+      return result;
+    });
     const aiElapsedMs = Date.now() - aiStartedAt;
     logger.info("[edu.test-data] generate AI completed", {
       requestId: req.requestId,
@@ -673,8 +741,19 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
       success: testDataResult.success,
       elapsedMs: aiElapsedMs,
       budgetMs: EDU_TESTDATA_AI_DISABLE_DEADLINE ? null : EDU_TESTDATA_AI_BUDGET_MS,
-      requestedCount: testCount
+      requestedCount: testCount,
+      conditionRepaired,
     });
+
+    if (generationPlan.tooFewTests) return subtaskCountError(generationPlan.automaticSubtasks.length);
+    if (repairFailure) {
+      return res.status(422).json({
+        code: "EDU_TASK_CONDITION_REPAIR_FAILED",
+        message: english
+          ? "The examples conflict with the task rules. Automatic repair could not be verified, so no tests were saved. Please regenerate the condition or correct its examples."
+          : "Приклади суперечать правилам задачі. Автоматичне виправлення не пройшло перевірку, тому тести не збережено. Перегенеруй умову або виправ приклади.",
+      });
+    }
 
     if (!testDataResult.success) {
       const error = testDataResult.error;
@@ -687,10 +766,10 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
           .slice(0, 300)
           .trim();
         return res.status(422).json({
-          code: "EDU_TASK_CONTRACT_INVALID",
+          code: conditionRepaired ? "EDU_TASK_CONDITION_REPAIR_UNVERIFIED" : "EDU_TASK_CONTRACT_INVALID",
           message: english
-            ? `The task statement or examples contain a conflict${issue ? `: ${issue}` : "."} Edit the statement or examples before generating tests.`
-            : `В умові або прикладах є суперечність${issue ? `: ${issue}` : "."} Відредагуй умову чи приклади та повтори генерацію тестів.`,
+            ? `${conditionRepaired ? "The condition was repaired, but the second validation still found a conflict" : "AI could not safely repair the conflicting condition"}${issue ? `: ${issue}` : "."} No tests were saved.`
+            : `${conditionRepaired ? "Умову виправлено, але повторна перевірка ще знайшла суперечність" : "ШІ не зміг безпечно виправити суперечність в умові"}${issue ? `: ${issue}` : "."} Тести не збережено.`,
         });
       }
       if (/Invalid response structure/.test(error.message)) {
@@ -706,6 +785,22 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
     }
 
     const testData = Array.isArray(testDataResult.data) ? testDataResult.data : [];
+
+    if (conditionRepaired) {
+      const updateResult = await topicTaskRepo().update(
+        { id: taskId, description: topicTask.description },
+        { description: activeDescription },
+      );
+      if (updateResult.affected !== 1) {
+        return res.status(409).json({
+          code: "EDU_TASK_CHANGED_DURING_REPAIR",
+          message: english
+            ? "The task changed while AI was repairing it. No generated tests were saved; reload the task and try again."
+            : "Поки ШІ виправляв умову, задачу змінили. Тести не збережено; онови задачу й повтори дію.",
+        });
+      }
+      topicTask.description = activeDescription;
+    }
 
     let replacedGeneratedCount = 0;
     if (replaceGenerated) {
@@ -741,8 +836,8 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         continue;
       }
       knownFingerprints.add(fingerprint);
-      const assignedSubtask = automaticSubtasks.length
-        ? subtaskPlan[index]
+      const assignedSubtask = generationPlan.automaticSubtasks.length
+        ? generationPlan.subtaskPlan[index]
         : null;
       uniqueGenerated.push({
         input,
@@ -773,6 +868,8 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
       count: createdTests.length,
       skippedDuplicates,
       replacedGeneratedCount,
+      conditionRepaired,
+      ...(conditionRepaired ? { description: activeDescription } : {}),
       testData: createdTests.map((td: TestData) => ({
         id: td.id,
         input: td.input,

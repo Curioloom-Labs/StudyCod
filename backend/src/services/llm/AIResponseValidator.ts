@@ -455,6 +455,7 @@ const TaskConditionDraftSchema = z.object({
     description: z.string().trim().min(1).max(500),
     weightPercent: z.number().int().min(1).max(100),
   }).strict()).max(5),
+  referenceSolution: z.string().trim().min(1).max(32_000),
   examples: z.array(z.object({
     input: z.string().max(4000),
     output: z.string().max(4000),
