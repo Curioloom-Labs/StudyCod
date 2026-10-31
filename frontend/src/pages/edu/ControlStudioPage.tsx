@@ -15,6 +15,7 @@ import { buildTaskGenerationGuidance, defaultTaskGenerationProfile, type TaskGen
 import { TestImageAttachments } from "../../components/TestImageAttachments";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
 import { MarkdownView } from "../../components/MarkdownView";
+import { stripTaskAiTrapSegments } from "../../../../shared/utils/taskAiTrap";
 
 type ControlTask = { id: number; title: string; description?: string; template?: string; maxAttempts?: number; theory?: { content: string } | null; projectSpec?: unknown; isAssigned?: boolean; assignedStudentIds?: number[] | null };
 type QuizItem = { question?: string; options?: Record<string, string>; correct?: string };
@@ -56,7 +57,7 @@ function formatControlTaskStatement(markdown: string): string {
     .replace(/\s+(?=\d+\.\s+\*\*[^*\n]+\*\*)/g, "\n");
 }
 function compactControlTaskPreview(markdown: string): string {
-  const text = formatControlTaskStatement(markdown)
+  const text = formatControlTaskStatement(stripTaskAiTrapSegments(markdown))
     .replace(/<!--\s*STUDYCOD_LEARNING_META_START[\s\S]*?STUDYCOD_LEARNING_META_END\s*-->/gi, " ")
     .replace(/```[\s\S]*?```/g, " код ")
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")

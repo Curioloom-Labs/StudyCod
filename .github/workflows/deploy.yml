@@ -155,6 +155,10 @@ jobs:
           has_path '^(ai-service/|package-lock.json$)' && ai_service=1
           has_path '^(lsp-service/|package-lock.json$)' && lsp_service=1
           has_path '^ai-service/cloudflare-ai-worker/' && ai_worker=1
+          # The shared prompt manifest changes backend prompt/cache behavior.
+          # Keep shared-only edits out of the Worker release scope; Worker
+          # deployments remain opt-in through changes inside its package.
+          has_path '^shared/ai/prompts/' && backend=1
           infra_only=0
           if ! grep -Evq '^(\.github/workflows/|ops/)' <<< "$changed"; then
             infra_only=1

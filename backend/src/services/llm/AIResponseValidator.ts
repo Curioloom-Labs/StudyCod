@@ -449,7 +449,7 @@ const TaskConditionDraftSchema = z.object({
   statement: z.string().trim().min(1).max(6000),
   inputFormat: z.string().trim().min(1).max(2000),
   outputFormat: z.string().trim().min(1).max(2000),
-  constraints: z.string().trim().max(2000),
+  constraints: z.array(z.string().trim().min(1).max(300)).max(12),
   examples: z.array(z.object({
     input: z.string().max(4000),
     output: z.string().max(4000).refine(value => value.trim().length > 0, 'example output must be non-empty'),

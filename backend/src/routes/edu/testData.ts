@@ -583,11 +583,17 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
       const finding = String(error.details?.validationError ?? error.error ?? "");
       const english = String(req.headers["x-ui-language"] ?? req.headers["accept-language"] ?? "").toLowerCase().startsWith("en");
       if (/TASK_CONTRACT_REVIEW_FAILED\[(statement|publicExamples)\]/.test(finding)) {
+        const issue = finding
+          .replace(/^TASK_CONTRACT_REVIEW_FAILED\[(?:statement|publicExamples)\]:\s*/i, "")
+          .replace(/[\u0000-\u001f\u007f]/g, " ")
+          .replace(/\s+/g, " ")
+          .slice(0, 300)
+          .trim();
         return res.status(422).json({
           code: "EDU_TASK_CONTRACT_INVALID",
           message: english
-            ? "The task statement or examples contain conflicting rules. Check the input/output format and examples before generating tests."
-            : "В умові або прикладах задачі є суперечності. Перевір формат введення, виведення та приклади перед генерацією тестів.",
+            ? `The task statement or examples contain a conflict${issue ? `: ${issue}` : "."} Edit the statement or examples before generating tests.`
+            : `В умові або прикладах є суперечність${issue ? `: ${issue}` : "."} Відредагуй умову чи приклади та повтори генерацію тестів.`,
         });
       }
       if (/Invalid response structure/.test(error.message)) {

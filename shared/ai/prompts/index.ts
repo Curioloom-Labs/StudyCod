@@ -4,9 +4,9 @@
  * Worker can use the same prompt contract.
  */
 
-export const PROMPT_BUNDLE_VERSION = "studycod-ai-2026-10-31-v2" as const;
+export const PROMPT_BUNDLE_VERSION = "studycod-ai-2026-10-31-v3" as const;
 export const LEGACY_PROMPT_BUNDLE_VERSION = "studycod-ai-legacy-v0" as const;
-export const PROMPT_SCHEMA_VERSION = "studycod-ai-schema-2026-10-31-v2" as const;
+export const PROMPT_SCHEMA_VERSION = "studycod-ai-schema-2026-10-31-v3" as const;
 export type PromptBundleVersion = typeof PROMPT_BUNDLE_VERSION | typeof LEGACY_PROMPT_BUNDLE_VERSION;
 
 export function resolvePromptBundleVersion(enabled: unknown): PromptBundleVersion {
@@ -100,7 +100,7 @@ const definitions: Record<PromptId, PromptSpec> = {
   "task.anchor": spec({ id: "task.anchor", purpose: "Identify topic and learning scope", output: "json", inputContext: ["canonical topic", "curriculum theory", "course position"], format: "JSON matching anchorSchema", validation: "Topic is canonicalized; scopes are normalized before task generation", generation: { temperature: 0.2, maxTokens: 500 } }),
   "task.generate": spec({ id: "task.generate", purpose: "Generate one judgeable programming task", output: "json", inputContext: ["anchor", "topic and theory", "curriculum level", "allowed I/O", "language", "existing tasks"], format: "JSON matching the task generation schema", validation: "AIResponseValidator, curriculum policy, task-contract review, and Judge reference execution where available", generation: { temperature: 0.15, maxTokens: 5000 } }),
   "task.condition": spec({ id: "task.condition", purpose: "Write a task statement", output: "text", inputContext: ["topic", "task title and type", "difficulty", "language"], format: "Markdown task statement", validation: "AIResponseValidator task-condition checks", generation: { temperature: 0.7, maxTokens: 1500 } }),
-  "task.condition-draft": spec({ id: "task.condition-draft", purpose: "Draft a task statement with validated example data", output: "json", inputContext: ["topic", "task title and type", "difficulty", "teacher controls", "programming language", "response language", "validation feedback"], format: "JSON with statement, input/output contracts, constraints, and exactly three input/output examples", validation: "Zod draft schema, canonical Markdown formatting, and existing task-condition checks", generation: { temperature: 0.2, maxTokens: 2600 } }),
+  "task.condition-draft": spec({ id: "task.condition-draft", purpose: "Draft a task statement with validated example data", output: "json", inputContext: ["topic", "task title and type", "difficulty", "teacher controls", "programming language", "response language", "validation feedback"], format: "JSON with statement, input/output contracts, separate constraint items, inline Markdown and LaTeX, and exactly three raw input/output examples", validation: "Zod draft schema, canonical Markdown formatting, and task-contract review", generation: { temperature: 0.2, maxTokens: 2600 } }),
   "task.template": spec({ id: "task.template", purpose: "Create an empty starter program", output: "text", inputContext: ["task statement", "programming language", "I/O contract"], format: "Source code only with TODO placeholders", validation: "Starter-template validation and language-specific normalization", generation: { temperature: 0.3, maxTokens: 1000 } }),
   "task.theory": spec({ id: "task.theory", purpose: "Explain a programming topic", output: "text", inputContext: ["topic", "learner level", "language", "curriculum guidance"], format: "Markdown theory with examples", validation: "AIResponseValidator theory checks", generation: { temperature: 0.7, maxTokens: 2200 } }),
   "task.quiz": spec({ id: "task.quiz", purpose: "Create a formative quiz", output: "json", inputContext: ["language topic", "covered topics", "requested question count"], format: "JSON array of question, five options, and correct option index", validation: "JSON parsing and AIResponseValidator quiz checks", generation: { temperature: 0.7, maxTokens: 3000 } }),

@@ -50,6 +50,7 @@ for (const scenario of ['empty-success', 'oracle-failure', 'statement-conflict']
       assert.equal(status, scenario === 'statement-conflict' ? 422 : 503);
       assert.equal(body.code, scenario === 'statement-conflict' ? 'EDU_TASK_CONTRACT_INVALID' : 'EDU_TEST_GENERATION_FAILED');
       assert.doesNotMatch(body.message, /Invalid response structure/);
+      if (scenario === 'statement-conflict') assert.match(body.message, /Conflicting examples/);
       assert.equal(saved.length, 0);
     }
     assert.ok(queries.length > 0);

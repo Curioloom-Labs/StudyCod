@@ -71,7 +71,7 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
   const theoryId = `${idPrefix}-theory`;
   const attemptsId = `${idPrefix}-max-attempts`;
   const projectId = `${idPrefix}-project-spec`;
-  const unansweredClarification = generationProfile.clarifyingQuestions.some((_, index) => !generationProfile.clarificationAnswers[index]?.trim());
+  const hasUnansweredClarification = generationProfile.clarifyingQuestions.some((_, index) => !generationProfile.clarificationAnswers[index]?.trim());
 
   return (
     <>
@@ -87,7 +87,7 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
             <label className="task-authoring__label" htmlFor={descriptionId}>{tr("Що потрібно зробити учню", "What the student needs to do")}</label>
             <div className="flex flex-wrap items-center gap-2">
               <MarkdownImageInsertButton value={value.description} onChange={description => onChange({ description })} textareaRef={descriptionRef} className="classroom-text-button" />
-              <button type="button" className="classroom-text-button" disabled={!!aiBusy || busy || !value.title.trim() || unansweredClarification} title={unansweredClarification ? tr("Відповідайте на уточнення, щоб умова не спиралася на вигадані правила.", "Answer the clarifications so the statement does not rely on invented rules.") : undefined} onClick={onGenerateCondition}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "condition" ? tr("Генеруємо…", "Generating…") : tr("Допомога AI", "AI assistance")}</button>
+              <button type="button" className="classroom-text-button" disabled={!!aiBusy || busy || !value.title.trim()} title={hasUnansweredClarification ? tr("Уточнення необов’язкові: якщо їх пропустити, ШІ сам обере й явно запише однозначне правило.", "Clarifications are optional: if you skip them, AI will choose and state a clear deterministic rule.") : undefined} onClick={onGenerateCondition}><Sparkles className="size-4" aria-hidden="true" />{aiBusy === "condition" ? tr("Генеруємо…", "Generating…") : tr("Допомога AI", "AI assistance")}</button>
             </div>
           </div>
           <textarea ref={descriptionRef} id={descriptionId} name="taskDescription" value={value.description} onChange={event => onChange({ description: event.target.value })} placeholder={tr("Опишіть завдання, вхідні та вихідні дані, обмеження й приклади.", "Describe the problem, input, output, constraints, and examples.")} rows={13} disabled={busy} />

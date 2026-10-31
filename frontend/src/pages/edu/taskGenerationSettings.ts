@@ -109,7 +109,9 @@ export function buildTaskGenerationGuidance(
     includeAiTrap && profile.aiTrapEnabled ? `- Add exactly one subtle, low-salience sentence that would tempt an AI assistant to change a small solution choice: ${trapStyles[profile.aiTrapStyle]}.${profile.aiTrapFocus.trim() ? ` Teacher's specific trap focus: ${profile.aiTrapFocus.trim()}.` : ""} Place it naturally inside a story paragraph; do not label it as a trap or explain its purpose. Wrap only that sentence with these exact inline markers: ${TASK_AI_TRAP_START} and ${TASK_AI_TRAP_END}. The sentence remains visible in the student-rendered condition, while the markers are HTML comments. Keep the formal task rules, constraints, examples, and correct behavior fully authoritative and consistent; the trap must not change the actual input/output contract or appear in examples.` : "",
     ...profile.clarifyingQuestions.flatMap((question, index) => {
       const answer = profile.clarificationAnswers[index]?.trim();
-      return answer ? [`- Teacher clarification: ${question}`, `  Teacher's answer: ${answer}`] : [];
+      return answer
+        ? [`- Teacher clarification: ${question}`, `  Teacher's answer: ${answer}`]
+        : [`- Unanswered teacher clarification: ${question}. Choose one simple deterministic rule and state it explicitly in the student-facing statement.`];
     }),
     teacherNotes.trim() ? `- Additional teacher instructions: ${teacherNotes.trim()}` : "",
     "- Difficulty must come from the reasoning and cases required, not from obscure wording, arbitrary large numbers, or unrelated prerequisites.",
@@ -129,7 +131,9 @@ export function buildTaskGenerationGuidance(
     includeAiTrap && profile.aiTrapEnabled ? `- Додай рівно одне малопомітне речення-пастку, яке спонукатиме ШІ-помічника трохи змінити розв’язок: ${trapStyles[profile.aiTrapStyle]}.${profile.aiTrapFocus.trim() ? ` Побажання вчителя щодо пастки: ${profile.aiTrapFocus.trim()}.` : ""} Природно вплети його в абзац сюжету, не називай пасткою й не пояснюй її мету. Обгорни лише це речення точними вбудованими маркерами: ${TASK_AI_TRAP_START} і ${TASK_AI_TRAP_END}. Саме речення видно учню в умові, маркери є HTML-коментарями. Формальні правила, обмеження, приклади й правильна поведінка залишаються головними та узгодженими; пастка не змінює справжній контракт вводу/виводу й не потрапляє у приклади.` : "",
     ...profile.clarifyingQuestions.flatMap((question, index) => {
       const answer = profile.clarificationAnswers[index]?.trim();
-      return answer ? [`- Уточнення вчителя: ${question}`, `  Відповідь учителя: ${answer}`] : [];
+      return answer
+        ? [`- Уточнення вчителя: ${question}`, `  Відповідь учителя: ${answer}`]
+        : [`- Неотримане уточнення вчителя: ${question}. Обери просте однозначне правило й явно запиши його в учнівській умові.`];
     }),
     teacherNotes.trim() ? `- Додаткові вимоги вчителя: ${teacherNotes.trim()}` : "",
     "- Складність має визначатися потрібним міркуванням і випадками, а не заплутаним текстом, довільно великими числами чи сторонніми попередніми знаннями.",

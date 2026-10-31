@@ -7,7 +7,7 @@ export interface TaskConditionDraft {
   statement: string;
   inputFormat: string;
   outputFormat: string;
-  constraints: string;
+  constraints: string[];
   examples: [TaskConditionDraftExample, TaskConditionDraftExample, TaskConditionDraftExample];
 }
 
@@ -17,7 +17,11 @@ export const TASK_CONDITION_DRAFT_JSON_SCHEMA = {
     statement: { type: "string", minLength: 1, maxLength: 6000 },
     inputFormat: { type: "string", minLength: 1, maxLength: 2000 },
     outputFormat: { type: "string", minLength: 1, maxLength: 2000 },
-    constraints: { type: "string", maxLength: 2000 },
+    constraints: {
+      type: "array",
+      maxItems: 12,
+      items: { type: "string", minLength: 1, maxLength: 300 },
+    },
     examples: {
       type: "array",
       minItems: 3,
@@ -70,7 +74,11 @@ export function formatTaskConditionDraft(draft: TaskConditionDraft, locale: "uk"
     "",
     `## ${isEnglish ? "Output" : "Вихідні дані"}`,
     draft.outputFormat.trim(),
-    ...(draft.constraints.trim() ? ["", `## ${isEnglish ? "Constraints" : "Обмеження"}`, draft.constraints.trim()] : []),
+    ...(draft.constraints.length ? [
+      "",
+      `## ${isEnglish ? "Constraints" : "Обмеження"}`,
+      ...draft.constraints.map(constraint => `- ${constraint.trim()}`),
+    ] : []),
     "",
     `## ${isEnglish ? "Examples" : "Приклади"}`,
     ...examples.flatMap((example, index) => index === 0 ? [example] : ["", example]),

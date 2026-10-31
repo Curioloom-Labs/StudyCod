@@ -1,6 +1,6 @@
 # StudyCod AI prompt package
 
-Current package version: `studycod-ai-2026-10-31-v1` in `shared/ai/prompts/index.ts`.
+Current package version: `studycod-ai-2026-10-31-v3` in `shared/ai/prompts/index.ts`.
 
 Set `AI_PROMPT_BUNDLE_ENABLED=false` in the backend environment to select the legacy shared-policy/defaults version. The backend sends that version to the Worker, and prompt, schema, and model-aware caches use a separate legacy namespace. For a full rollback of scenario-specific instruction edits, deploy the previous application revision as well.
 
@@ -13,7 +13,7 @@ Set `AI_PROMPT_BUNDLE_ENABLED=false` in the backend environment to select the le
 | `task.anchor` | `backend/src/services/llm/LLMOrchestrator.ts` | Anchor JSON; canonical topic and normalized learning scope |
 | `task.generate` | `backend/src/services/llm/LLMOrchestrator.ts`, `backend/src/services/ai/safeAICall.ts`, Cloudflare Worker | Task JSON; response validator, curriculum policy, contract review, and reference execution when available |
 | `task.condition` | `backend/src/services/llm/LLMOrchestrator.ts`, Cloudflare Worker | Markdown statement; task-condition validation |
-| `task.condition-draft` | `backend/src/services/llm/LLMOrchestrator.ts` | Structured statement and exactly three examples; canonical Markdown rendering and task-condition validation |
+| `task.condition-draft` | `backend/src/services/llm/LLMOrchestrator.ts` | Structured statement, inline Markdown/LaTeX, separate constraint items and exactly three examples; independent task-contract review |
 | `task.template` | `backend/src/services/llm/LLMOrchestrator.ts`, Cloudflare Worker | Source-only starter template; language normalization and starter checks |
 | `task.theory` | `backend/src/services/llm/LLMOrchestrator.ts`, Cloudflare Worker | Markdown theory; theory validation |
 | `task.quiz` | `backend/src/services/llm/LLMOrchestrator.ts`, Cloudflare Worker | Quiz JSON; parser and count/options/correct-index validation |

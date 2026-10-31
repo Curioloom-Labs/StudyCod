@@ -4,7 +4,7 @@ import type { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { LLMOrchestrator, getLLMOrchestrator, type AiTaskGenerationResult } from './LLMOrchestrator';
 import { safeAICall } from '../ai/safeAICall';
 import { makeAIValidationError } from './AIResponseValidator';
-import { MAX_TASK_DESCRIPTION_CHARS, TaskContractReviewError, requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTask, reviewGeneratedTests } from './TaskContractReview';
+import { MAX_TASK_DESCRIPTION_CHARS, TaskContractReviewError, buildTaskValidationFeedback, requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTask, reviewGeneratedTaskCondition, reviewGeneratedTests } from './TaskContractReview';
 import { buildOlympiadPracticeContract } from '../learning/learningContract';
 
 const task: AiTaskGenerationResult = {
@@ -44,6 +44,43 @@ test('task review receives every public example and only the visible contract', 
   assert.equal(payload.theoryMarkdown, undefined);
   assert.equal(payload.title, undefined);
   assert.equal(payload.codeTemplate, undefined);
+});
+
+test('generated EDU condition review receives separate constraints and all three examples', async () => {
+  const calls: string[] = [];
+  await reviewGeneratedTaskCondition(fakeProvider([{ valid: true, invalidSource: 'none', issues: [] }], calls), {
+    statement: 'Sort the temperatures above `5`.',
+    inputFormat: 'One line contains integers separated by spaces.',
+    outputFormat: 'Print the selected values in descending order; print `NONE` when no values qualify.',
+    constraints: ['`1 <= n <= 1000`', '`-1000 <= t[i] <= 1000`'],
+    examples: [
+      { input: '3 6 1 8', output: '8 6' },
+      { input: '2 5 9', output: '9' },
+      { input: '1 -3', output: 'NONE' },
+    ],
+  });
+  const payload = JSON.parse(calls[0]);
+  assert.equal(payload.practicalTask, 'Sort the temperatures above `5`.');
+  assert.equal(payload.constraints, '`1 <= n <= 1000`\n`-1000 <= t[i] <= 1000`');
+  assert.equal(payload.publicExamples.length, 3);
+});
+
+test('condition review findings produce a focused repair prompt from the rejected draft', () => {
+  const feedback = buildTaskValidationFeedback(
+    'TASK_CONTRACT_REVIEW_FAILED[publicExamples]: Example 2 output is wrong.',
+    {
+      statement: 'Print values above `5`.',
+      inputFormat: 'One line contains integers.',
+      outputFormat: 'Print selected values.',
+      constraints: ['$1 \\le n \\le 10$'],
+      examples: [{ input: '1 6', output: '6' }],
+    },
+  );
+
+  assert.match(feedback, /REPAIR THE REJECTED CONDITION/);
+  assert.match(feedback, /Example 2 output is wrong/);
+  assert.match(feedback, /\"constraints\"/);
+  assert.match(feedback, /complete corrected condition-draft JSON/);
 });
 
 test('Olympiad task review receives the hidden algorithmic contract', async () => {

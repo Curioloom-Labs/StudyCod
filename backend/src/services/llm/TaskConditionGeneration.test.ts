@@ -10,7 +10,7 @@ const draft: TaskConditionDraft = {
   statement: 'Read two integers and print their sum.',
   inputFormat: 'One line contains two integers a and b.',
   outputFormat: 'Print a + b.',
-  constraints: '-100 <= a, b <= 100.',
+  constraints: ['$-100 \\le a,b \\le 100$.', 'The input contains exactly two integers.'],
   examples: [
     { input: '2 3', output: '5' },
     { input: '0 0', output: '0' },
@@ -27,6 +27,7 @@ test('task condition draft renders exactly three complete examples accepted by t
     const fences = result.description.match(/^\s*```/gm) ?? [];
     assert.equal(headings.length, 3, `${locale}: example heading count`);
     assert.equal(fences.length, 12, `${locale}: complete input/output code blocks`);
+    assert.match(result.description, /- \$-100 \\le a,b \\le 100\$\./);
   }
 });
 
@@ -35,17 +36,19 @@ test('task condition draft has a registered JSON contract matching its three-exa
   assert.equal(prompt.output, 'json');
   assert.match(prompt.format, /exactly three/);
   assert.match(prompt.validation, /canonical Markdown formatting/);
+  assert.match(prompt.format, /inline Markdown and LaTeX/);
 });
 
 test('EDU task condition uses structured JSON generation and forwards repair feedback', async () => {
-  let call: { prompt: string; schema: object; systemPrompt?: string; options?: LLMGenerateOptions } | undefined;
+  const calls: Array<{ prompt: string; schema: object; systemPrompt?: string; options?: LLMGenerateOptions }> = [];
+  const responses: unknown[] = [draft, { valid: true, invalidSource: 'none', issues: [] }];
   const provider: LLMProvider = {
     generateText: async () => {
       throw new Error('EDU task condition must use structured JSON output');
     },
     generateJSON: async <T>(prompt: string, schema: object, systemPrompt?: string, options?: LLMGenerateOptions): Promise<T> => {
-      call = { prompt, schema, systemPrompt, options };
-      return draft as T;
+      calls.push({ prompt, schema, systemPrompt, options });
+      return responses.shift() as T;
     },
   };
   const orchestrator = new LLMOrchestrator();
@@ -69,10 +72,12 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
     validationFeedback: 'Use three distinct examples.',
   }, provider);
 
-  assert.ok(call);
+  assert.equal(calls.length, 2, 'structured draft is independently reviewed');
+  const call = calls[0];
   assert.equal(call.options?.promptId, 'task.condition-draft');
   assert.match(call.prompt, /Use three distinct examples\./);
   assert.match(call.systemPrompt ?? '', /JSON-об’єкт/);
+  assert.match(call.systemPrompt ?? '', /вбудований Markdown/);
   assert.equal((call.schema as { properties?: { examples?: { minItems?: number; maxItems?: number } } }).properties?.examples?.minItems, 3);
   assert.equal((call.schema as { properties?: { examples?: { minItems?: number; maxItems?: number } } }).properties?.examples?.maxItems, 3);
   assert.match(result.description, /### Приклад 1/);
