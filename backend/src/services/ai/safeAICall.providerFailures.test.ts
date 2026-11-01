@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { getLLMOrchestrator } from "../llm/LLMOrchestrator";
 import { TaskContractReviewError } from "../llm/TaskContractReview";
 import { consumeCurrentAIExecutionRetry } from "../llm/promptExecution";
+import * as referenceExecution from "../executeReferenceTests";
 import { buildTaskConditionFailureMessage, safeAICall } from "./safeAICall";
 
 test("task-condition errors expose a concise actionable validation finding in the UI locale", () => {
@@ -59,6 +60,37 @@ test("safeAICall preserves the last task validation error when inner layers exha
     assert.notEqual(result.error.error, "No result");
   }
   assert.equal(attempts, 1, "do not schedule an outer retry after inner calls consumed the shared budget");
+});
+
+test("safeAICall forwards the Tkinter profile to the oracle generator and Judge executor", async (t) => {
+  const generatedInput = '{"events":[]}';
+  const generatedOutput = '{"geometry":"400x300","title":"tk","widgets":[]}';
+  let oracleParams: any = null;
+  t.mock.method(referenceExecution, "executeReferenceTests", async (...args: any[]) => {
+    assert.equal(args[1], "PYTHON");
+    assert.deepEqual(args[2], [generatedInput]);
+    assert.equal(args[5]?.pythonRuntimeProfile, "TKINTER");
+    return [generatedOutput];
+  });
+  t.mock.method(getLLMOrchestrator(), "generateTestDataWithAI", async (params: any) => {
+    oracleParams = params;
+    assert.equal(params.pythonRuntimeProfile, "TKINTER");
+    assert.equal(typeof params.executeReference, "function");
+    assert.deepEqual(await params.executeReference("import tkinter as tk", [generatedInput], []), [generatedOutput]);
+    return [{ input: generatedInput, output: generatedOutput }];
+  });
+
+  const result = await safeAICall("generateTestData", {
+    taskDescription: "Create a Tkinter window. Input is a JSON object with an events array.",
+    taskTitle: "Intro to Tkinter",
+    lang: "PYTHON",
+    ioType: "STDIN_STDOUT",
+    count: 1,
+    pythonRuntimeProfile: "TKINTER",
+  }, { expectedCount: 1, language: "uk", maxAttempts: 1 });
+
+  assert.equal(result.success, true);
+  assert.equal(oracleParams.pythonRuntimeProfile, "TKINTER");
 });
 
 test("safeAICall never reports its own exhausted retry budget as an AI provider outage", async (t) => {

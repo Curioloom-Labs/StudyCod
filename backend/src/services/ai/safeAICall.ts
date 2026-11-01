@@ -858,6 +858,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
               })) : [],
               allowEmptyOutput: sanitizedParams.allowEmptyOutput === true,
               referenceExamplesAreAuthoritative: sanitizedParams.referenceExamplesAreAuthoritative === true,
+              pythonRuntimeProfile: optionalPythonRuntimeProfile(sanitizedParams.pythonRuntimeProfile),
               ...(testIoType === 'STDIN_STDOUT' ? {
                 executeReference: (source: string, inputs: string[], examples: Array<{ input: string; output: string }>, signal?: AbortSignal) => executeReferenceTests(source, REFERENCE_LANGUAGE, inputs, examples, signal, {
                   allowEmptyOutput: sanitizedParams.allowEmptyOutput === true,
