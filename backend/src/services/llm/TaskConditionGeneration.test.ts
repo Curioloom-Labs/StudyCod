@@ -100,7 +100,7 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
       topicTitle: string;
       taskTitle: string;
       taskType: 'PRACTICE' | 'CONTROL';
-      language: 'PYTHON';
+      language: 'JAVA';
       userLanguage: 'uk';
       validationFeedback?: string;
     }, provider: LLMProvider) => Promise<{ description: string }>;
@@ -110,7 +110,7 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
     topicTitle: 'Арифметика',
     taskTitle: 'Сума чисел',
     taskType: 'PRACTICE',
-    language: 'PYTHON',
+    language: 'JAVA',
     userLanguage: 'uk',
     validationFeedback: 'Use three distinct examples.',
   }, provider);
@@ -122,6 +122,8 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
   assert.match(call.systemPrompt ?? '', /JSON-об’єкт/);
   assert.match(call.systemPrompt ?? '', /вбудований Markdown/);
   assert.match(call.systemPrompt ?? '', /n\+1 токенів/);
+  assert.match(call.systemPrompt ?? '', /лише прихований Python 3 оракул/);
+  assert.match(call.systemPrompt ?? '', /не пов’язаний з мовою програмування учня/);
   assert.ok((call.systemPrompt ?? '').includes("JSON пиши `" + String.fromCharCode(92).repeat(2) + "`, щоб"));
   assert.equal((call.schema as { properties?: { examples?: { minItems?: number; maxItems?: number } } }).properties?.examples?.minItems, 3);
   assert.equal((call.schema as { properties?: { examples?: { minItems?: number; maxItems?: number } } }).properties?.examples?.maxItems, 3);
@@ -132,7 +134,7 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
   const reviewPayload = JSON.parse(calls[1].prompt) as { exampleOutputMismatches?: Array<{ exampleNumber: number; generatedOutput: string; executedOutput: string }> };
   assert.deepEqual(reviewPayload.exampleOutputMismatches, [{ exampleNumber: 1, generatedOutput: '55', executedOutput: '5' }]);
   assert.doesNotMatch(result.description, /referenceSolution/);
-  assert.match(call.systemPrompt ?? '', /hidden verification data|приховані дані перевірки/);
+  assert.match(call.systemPrompt ?? '', /прихований Python 3 оракул/);
   assert.equal((call.schema as { required?: string[] }).required?.includes('referenceSolution'), true);
 });
 

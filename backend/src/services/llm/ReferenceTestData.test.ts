@@ -216,3 +216,41 @@ test('a malformed Python main guard is repaired before Judge execution and contr
   assert.equal(calls.length, 2);
   assert.deepEqual((calls[1].executedReference as { source: string }).source, repaired);
 });
+
+test('a leading backslash and a single equals sign in the Python main guard are repaired', async () => {
+  const repaired = 'if __name__ == "__main__":\n    print(int(input()) + 1)';
+  for (const malformed of [
+    '\\if __name__ == "__main__":\n    print(int(input()) + 1)',
+    'if __name__ = "__main__":\n    print(int(input()) + 1)',
+  ]) {
+    const provider: LLMProvider = {
+      async generateJSON<T>(prompt: string): Promise<T> {
+        const payload = JSON.parse(prompt) as Record<string, unknown>;
+        if ('requiredCoverage' in payload || 'existingExamples' in payload) {
+          return { referenceSolution: malformed, inputs: ['2', '3', '4'] } as T;
+        }
+        assert.equal((payload.executedReference as { source: string }).source, repaired);
+        return { valid: true, invalidSource: 'none', issues: [] } as T;
+      },
+      async generateText() { throw new Error('Unexpected text call'); },
+    };
+    const executions: string[] = [];
+    const result = await generateReferenceTestData(provider, {
+      taskDescription: 'Read one integer n in [1,10]. Print n+1.',
+      lang: 'PYTHON',
+      count: 1,
+      publicExamples: [{ input: '1', output: '2' }],
+      executeReference: async (source, inputs) => {
+        executions.push(source);
+        if (source === malformed) {
+          throw makeAIValidationError('generateTestData', 'Reference program compilation failed: SyntaxError in main guard');
+        }
+        assert.equal(source, repaired);
+        return inputs.map(input => String(Number(input) + 1));
+      },
+    });
+
+    assert.deepEqual(result.map(test => test.output), ['3']);
+    assert.deepEqual(executions, [malformed, repaired]);
+  }
+});
