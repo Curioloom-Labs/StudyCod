@@ -1140,7 +1140,7 @@ test('external cancellation remains connected while a response body is still gen
   assert.equal(requests, 1);
 });
 
-test('content repair starts with the next configured model without changing normal model preference', async (t) => {
+test('content repair uses the next model except task-condition repair keeps the configured primary', async (t) => {
   const provider = new OpenRouterProvider() as any;
   const requested: string[] = [];
   t.mock.method(provider, 'callOpenRouter', async (request: { model: string }) => {
@@ -1150,7 +1150,8 @@ test('content repair starts with the next configured model without changing norm
   const factory = (model: string) => ({ model, messages: [] });
   await provider.callOpenRouterWithModelFallback(factory, { validationRetry: true }, ['configured-primary', 'configured-backup'], 'json');
   await provider.callOpenRouterWithModelFallback(factory, {}, ['configured-primary', 'configured-backup'], 'json');
-  assert.deepEqual(requested, ['configured-backup', 'configured-primary']);
+  await provider.callOpenRouterWithModelFallback(factory, { validationRetry: true, promptId: 'task.condition-draft' }, ['configured-primary', 'configured-backup'], 'json');
+  assert.deepEqual(requested, ['configured-backup', 'configured-primary', 'configured-primary']);
 });
 
 test('OpenRouterProvider spends the shared retry budget before switching API keys', async (t) => {

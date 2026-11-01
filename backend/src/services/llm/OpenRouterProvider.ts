@@ -682,7 +682,7 @@ export class OpenRouterProvider implements LLMProvider {
     if (candidates.length === 0) {
       throw new Error('AI_GENERATION_FAILED: No OpenRouter model candidates configured');
     }
-    if (options.validationRetry && candidates.length > 1) {
+    if (options.validationRetry && options.promptId !== 'task.condition-draft' && candidates.length > 1) {
       const [rejectedPrimary, ...alternatives] = candidates;
       candidates = [...alternatives, rejectedPrimary];
       logger.info('OpenRouter trying another configured model after content validation failure', {
