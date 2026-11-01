@@ -40,7 +40,7 @@ test('large quizzes are generated in bounded batches and preserve the requested 
   assert.equal(JSON.parse(result.quizJson).length, 45);
 });
 
-test('large quizzes replace duplicate stems once and keep the complete question count', async () => {
+test('large quizzes make up to two targeted duplicate repairs and keep the complete count', async () => {
   const orchestrator = new LLMOrchestrator() as unknown as QuizBatchAccess;
   const requestedCounts: number[] = [];
   const result = await runWithPromptExecutionContext('task.quiz', { timeoutMs: 10_000 }, () => orchestrator.generateQuizInBatches({
@@ -48,8 +48,9 @@ test('large quizzes replace duplicate stems once and keep the complete question 
   }, async batch => {
     requestedCounts.push(batch.count);
     const isRepair = batch.generationGuidance?.includes('ВИПРАВЛЕННЯ ДУБЛІКАТІВ') ?? false;
-    if (isRepair) assert.equal(batch.avoidQuestionStems?.length, 15);
-    const start = isRepair ? 16 : 1;
+    const isSecondRepair = batch.generationGuidance?.includes('ДРУГА СПРОБА ВИПРАВЛЕННЯ ДУБЛІКАТУ') ?? false;
+    if (isRepair || isSecondRepair) assert.equal(batch.avoidQuestionStems?.length, 15);
+    const start = isSecondRepair ? 16 : 1;
     return {
       quizJson: JSON.stringify(Array.from({ length: batch.count }, (_, index) => ({
         q: `Question concept ${start + index}`,
@@ -59,6 +60,6 @@ test('large quizzes replace duplicate stems once and keep the complete question 
     };
   }));
 
-  assert.deepEqual(requestedCounts, [15, 1, 1]);
+  assert.deepEqual(requestedCounts, [15, 1, 1, 1]);
   assert.equal(JSON.parse(result.quizJson).length, 16);
 });

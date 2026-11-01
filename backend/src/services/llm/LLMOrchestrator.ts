@@ -1909,16 +1909,21 @@ REQUIREMENTS (mandatory):
       questions.push(...JSON.parse(validatedBatch.quizJson) as Array<{ q: string }>);
     }
 
-    const duplicateIndexes = duplicateQuizQuestionIndexes(questions);
-    if (duplicateIndexes.length > 0) {
+    let duplicateIndexes = duplicateQuizQuestionIndexes(questions);
+    let duplicateRepairAttempt = 0;
+    while (duplicateIndexes.length > 0 && duplicateRepairAttempt < 2) {
       if (duplicateIndexes.length > MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL - 3) {
         throw makeAIValidationError("generateQuiz", "Quiz validation failed: too many duplicate question stems to repair safely");
       }
       consumeRetryOrThrow('quiz duplicate repair');
       const uniqueQuestions = questions.filter((_, index) => !duplicateIndexes.includes(index));
       const repairGuidance = params.language === "en"
-        ? "DUPLICATE REPAIR: replace only the missing question slots with genuinely different concepts or behaviors. Do not paraphrase, change only numbers, or reuse the same reasoning as any reference stem."
-        : "ВИПРАВЛЕННЯ ДУБЛІКАТІВ: заповни лише відсутні позиції справді іншими поняттями або варіантами поведінки. Не перефразовуй, не змінюй лише числа й не повторюй міркування жодного з довідкових запитань.";
+        ? duplicateRepairAttempt === 0
+          ? "DUPLICATE REPAIR: replace only the missing question slots with genuinely different concepts or behaviors. Do not paraphrase, change only numbers, or reuse the same reasoning as any reference stem."
+          : "SECOND DUPLICATE REPAIR: your previous replacement repeated an existing question. Return a different question with a different tested rule and different wording from every listed stem."
+        : duplicateRepairAttempt === 0
+          ? "ВИПРАВЛЕННЯ ДУБЛІКАТІВ: заповни лише відсутні позиції справді іншими поняттями або варіантами поведінки. Не перефразовуй, не змінюй лише числа й не повторюй міркування жодного з довідкових запитань."
+          : "ДРУГА СПРОБА ВИПРАВЛЕННЯ ДУБЛІКАТУ: попереднє замінне запитання повторило вже наявне. Створи інше запитання про інше правило й сформулюй його інакше за кожне запитання зі списку.";
       const replacementResponse = await generateBatch({
         ...params,
         count: duplicateIndexes.length,
@@ -1930,9 +1935,11 @@ REQUIREMENTS (mandatory):
       duplicateIndexes.forEach((index, replacementIndex) => {
         questions[index] = replacementQuestions[replacementIndex];
       });
+      duplicateIndexes = duplicateQuizQuestionIndexes(questions);
+      duplicateRepairAttempt++;
     }
 
-    if (duplicateQuizQuestionIndexes(questions).length > 0) {
+    if (duplicateIndexes.length > 0) {
       throw makeAIValidationError("generateQuiz", "Quiz validation failed: duplicate question stems were generated across batches");
     }
     const validated = AIResponseValidator.validateGenerateQuiz(questions, expectedCount);
@@ -2034,8 +2041,8 @@ REQUIREMENTS (mandatory):
       quizAvoidanceGuidance(params.avoidQuestionStems, params.language),
     ].filter(Boolean).join("\n");
     const systemPrompt = isEnglish
-      ? `You are a programming examiner. Produce quiz questions with exactly one correct answer. Return ONLY a JSON array and no extra text.`
-      : `Ти екзаменатор з програмування. Створюй тестові питання з правильною відповіддю. Відповідай ТІЛЬКИ JSON-масивом без додаткового тексту.`;
+      ? `You are a programming examiner. Produce quiz questions with exactly one correct answer. Never repeat a question stem or code behavior in the same quiz. Return ONLY a JSON array and no extra text.`
+      : `Ти екзаменатор з програмування. Створюй тестові питання з правильною відповіддю. Не повторюй формулювання запитань або поведінку коду в одному квізі. Відповідай ТІЛЬКИ JSON-масивом без додаткового тексту.`;
     let userPrompt = isEnglish
       ? `Create a quiz only for ${langName}. Topics: ${params.prevTopics}.
 REQUIREMENTS:
