@@ -137,7 +137,15 @@ const dGdcProfile: CompilerProfile = {
 export const COMPILER_PROFILES: CompilerProfile[] = [
   // Python
   { id: "python", family: "python", label: "Python 3.14" },
-  { id: "python-libs", family: "python", label: "Python 3.14 (with extra libs)" },
+  {
+    id: "python-libs",
+    family: "python",
+    label: "Python 3.14 (with extra libs)",
+    run: () => ({
+      display: "python3 -B -u main.py",
+      argv: ["/usr/bin/python3", "-B", "-u", "main.py"]
+    })
+  },
   {
     id: "python-gui",
     family: "python",

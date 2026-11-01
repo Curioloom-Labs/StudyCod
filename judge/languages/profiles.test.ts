@@ -3,7 +3,9 @@ import test from "node:test";
 import { resolveProfile } from "./profiles";
 
 test("Python scientific and Tkinter compiler profiles are registered for reference execution", () => {
-  assert.equal(resolveProfile("python", "python-libs").id, "python-libs");
+  const scientific = resolveProfile("python", "python-libs");
+  assert.equal(scientific.id, "python-libs");
+  assert.deepEqual(scientific.run?.().argv, ["/usr/bin/python3", "-B", "-u", "main.py"]);
 
   const tkinter = resolveProfile("python", "python-gui");
   assert.equal(tkinter.id, "python-gui");
