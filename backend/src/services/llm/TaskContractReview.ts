@@ -93,6 +93,11 @@ export function cannotRepairByRegeneratingTests(error: unknown): boolean {
   return error instanceof TaskContractReviewError && error.invalidSource !== 'candidateTests';
 }
 
+/** Pick a configured reviewer that is not the provider that authored the draft. */
+export function selectIndependentReviewProvider<T>(generator: T, configuredProviders: readonly (T | undefined)[]): T {
+  return configuredProviders.find((candidate): candidate is T => candidate !== undefined && candidate !== generator) ?? generator;
+}
+
 const reviewJsonSchema = {
   type: 'object',
   properties: {
@@ -113,6 +118,7 @@ Then independently parse and recalculate EVERY public example and EVERY candidat
 For NO_INPUT_FIXED_OUTPUT there is exactly one fixed stdout and empty stdin. For NO_INPUT_FREE_OUTPUT any non-empty stdout must be permitted, with no extra content restrictions. For STDIN_STDOUT each allowed input has a deterministic answer, with numeric tolerance only when explicitly specified.
 For NO_INPUT_FIXED_OUTPUT, outputFormat may describe the output in natural language or contain literal stdout. A description need not textually equal the public example: independently derive the exact stdout from all stated rules and verify every example. Reject an incorrect result, an ambiguous format, or a conflicting literal stdout; never accept an example merely because it is supplied as expected output.
 When executedReference is supplied, candidate outputs were obtained by running that source in the judge sandbox. Verify that the reference program implements every observable stdin/stdout rule for the complete valid input domain, and that candidate inputs are valid. An internal oracle may use a different language from the student's task: do not require Java overloads or other student implementation constructs in a Python oracle. Use the executed outputs as arithmetic evidence; do not replace them with guessed mental floating-point calculations. Reject incorrect reference logic as candidateTests.
+When exampleOutputMismatches is supplied for a generated condition, it records an example number and the draft's original output beside the sandbox output. Match it to that numbered public example. Treat the pair as a review signal, not as proof that either output is correct: derive the required result from the statement, check the reference against the whole contract, and classify a wrong learner-visible example as publicExamples or a wrong reference/contract as statement. The returned condition may use corrected sandbox outputs only after this check passes.
 Check in order: statement rules, public examples (including examples embedded in statement), then candidate tests. Stop at the first failing category. Set invalidSource to statement, publicExamples, or candidateTests respectively. Regenerating candidate tests cannot repair a broken statement or public example.
 When learningContract is supplied with kind OLYMPIAD_ALGORITHMIC_PRACTICE, also verify that the learner-visible statement is one deterministic stdin/stdout problem matching its coreOperation, requiredInput, requiredOutput, and constraints. Treat the contract's valid domain as authoritative: do not ask for behavior or examples outside it. For example, if the contract says n ≥ 1, n=0 is invalid and the statement need not define an empty-array result. Compare numeric bounds with the contract; when its constraints require exact bounds, any narrower or wider bound is a conflict, not an acceptable substitute. Confirm that bounds make the stated target algorithm appropriate and that no unrelated technique or invalid-input behavior has been added. The hidden stage and variation are authoring criteria: FOUNDATION must be direct implementation; EDGE_CASES must include a valid required boundary case where a plausible lesson-relevant misconception changes the answer and a short, deliberately faulty code sample in the contract runtime that the learner is asked to diagnose and repair as a complete program. This supplied draft is intentionally incorrect and is not a reference solution: never reject the task because the draft fails the statement or produces an answer that differs from the correct public example. Inspect the draft as source code: it must be a plausible runnable program with exactly one lesson-relevant logical error, not a syntax or runtime failure. For task generation, at least one public example must expose the supplied bug while its correct output remains valid; do not require every public example to expose it, because other examples may cover ordinary or different boundary cases. A zero output is not inherently the sum of an empty subarray: for a non-empty maximum-subarray task, an all-zero array has a valid answer of zero. For a non-empty maximum-subarray contract, an all-negative array such as [-1,-2,-3] has answer -1, the largest element; the statement's non-empty rule defines this without a separate special-case sentence. Never claim that such a correct negative answer implies the empty subarray is allowed. In EDGE_CASES, the supplied draft may intentionally return 0 on all-negative input; that is the expected bug, not a contradiction in the statement or public example. Check all public examples as a set: each individual example need not cover every value class. For generated-test review, trace the draft against the required debugging case and confirm that at least one valid candidate test exposes it. TRANSFER must use a genuinely new context from which the learner must infer the practiced approach. Check these criteria against the statement and examples without exposing their labels or naming the algorithm in learner-facing text. Do not treat other hidden metadata as learner-facing requirements.
 When requiredCases is supplied for generated-test review, check the union of publicExamples and candidateTests against every listed case that is valid under the learner-visible statement. If a listed case is not defined by the statement, classify it as a statement issue; if it is defined but absent from the tests, classify it as a candidateTests issue. For the debugging-required case, also trace the supplied draft on that input and confirm that its result differs from the contract's correct output. Do not invent cases outside the statement's valid domain.
@@ -202,8 +208,12 @@ export async function reviewGeneratedTask(
 export async function reviewGeneratedTaskCondition(
   provider: LLMProvider,
   condition: Pick<TaskConditionDraft, 'statement' | 'inputFormat' | 'outputFormat' | 'constraints' | 'examples'>,
-  options: LLMGenerateOptions & { executedReference?: { language: string; source: string } } = {},
+  options: LLMGenerateOptions & {
+    executedReference?: { language: string; source: string };
+    exampleOutputMismatches?: Array<{ exampleNumber: number; generatedOutput: string; executedOutput: string }>;
+  } = {},
 ): Promise<void> {
+  const { exampleOutputMismatches, ...reviewOptions } = options;
   try {
     await reviewContract(provider, 'generateTask', {
       ioType: 'STDIN_STDOUT',
@@ -214,7 +224,8 @@ export async function reviewGeneratedTaskCondition(
       allowEmptyOutput: true,
       publicExamples: condition.examples.map(({ input, output }) => ({ input, output })),
       ...(options.executedReference ? { executedReference: options.executedReference } : {}),
-    }, options);
+      ...(exampleOutputMismatches?.length ? { exampleOutputMismatches } : {}),
+    }, reviewOptions);
   } catch (error) {
     if (error instanceof AIValidationError) error.rawResponse = condition;
     throw error;

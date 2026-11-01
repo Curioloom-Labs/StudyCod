@@ -4,7 +4,7 @@ import type { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { LLMOrchestrator, getLLMOrchestrator, type AiTaskGenerationResult } from './LLMOrchestrator';
 import { safeAICall } from '../ai/safeAICall';
 import { makeAIValidationError } from './AIResponseValidator';
-import { MAX_TASK_DESCRIPTION_CHARS, TaskContractReviewError, buildTaskValidationFeedback, requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTask, reviewGeneratedTaskCondition, reviewGeneratedTests } from './TaskContractReview';
+import { MAX_TASK_DESCRIPTION_CHARS, TaskContractReviewError, buildTaskValidationFeedback, requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTask, reviewGeneratedTaskCondition, reviewGeneratedTests, selectIndependentReviewProvider } from './TaskContractReview';
 import { buildOlympiadPracticeContract } from '../learning/learningContract';
 
 const task: AiTaskGenerationResult = {
@@ -64,6 +64,33 @@ test('generated EDU condition review receives separate constraints and all three
   assert.equal(payload.constraints, '`1 <= n <= 1000`\n`-1000 <= t[i] <= 1000`');
   assert.equal(payload.allowEmptyOutput, true);
   assert.equal(payload.publicExamples.length, 3);
+});
+
+test('generated EDU condition review receives original versus executed example-output discrepancies', async () => {
+  const calls: string[] = [];
+  await reviewGeneratedTaskCondition(fakeProvider([{ valid: true, invalidSource: 'none', issues: [] }], calls), {
+    statement: 'Read two integers and print their sum.',
+    inputFormat: 'One line contains two integers.',
+    outputFormat: 'Print the sum.',
+    constraints: [],
+    examples: [
+      { input: '2 3', output: '5' },
+      { input: '0 0', output: '0' },
+      { input: '-4 7', output: '3' },
+    ],
+  }, {
+    exampleOutputMismatches: [{ exampleNumber: 1, generatedOutput: '55', executedOutput: '5' }],
+  });
+  assert.deepEqual(JSON.parse(calls[0]).exampleOutputMismatches, [
+    { exampleNumber: 1, generatedOutput: '55', executedOutput: '5' },
+  ]);
+});
+
+test('task-condition review selects a configured provider distinct from the generator', () => {
+  const generator = { name: 'openrouter' };
+  const independent = { name: 'cloudflare' };
+  assert.equal(selectIndependentReviewProvider(generator, [generator, independent]), independent);
+  assert.equal(selectIndependentReviewProvider(generator, [generator, undefined]), generator);
 });
 
 test('condition review findings produce a focused repair prompt from the rejected draft', () => {

@@ -20,6 +20,11 @@ export interface TaskConditionDraft {
   examples: [TaskConditionDraftExample, TaskConditionDraftExample, TaskConditionDraftExample];
 }
 
+/** Remove one conventional final stdout line terminator from fenced examples. */
+export function normalizeTaskExampleOutput(output: string): string {
+  return output.replace(/\r\n/g, "\n").replace(/\n$/, "");
+}
+
 export const TASK_CONDITION_DRAFT_JSON_SCHEMA = {
   type: "object",
   properties: {

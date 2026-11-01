@@ -11,7 +11,7 @@ import { BoundedCache } from '../../utils/boundedCache';
 import { env } from '../../env';
 import { topicLanguageLabel, type TopicLanguage } from '../../utils/topicLanguage';
 import { createIntroductoryHelloWorldTask, shouldUseCanonicalIntroductoryPractice } from './introductoryTask';
-import { buildTaskValidationFeedback, requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTaskCondition, reviewGeneratedTests, TASK_PRECISION_INSTRUCTIONS } from './TaskContractReview';
+import { buildTaskValidationFeedback, requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTaskCondition, reviewGeneratedTests, selectIndependentReviewProvider, TASK_PRECISION_INSTRUCTIONS } from './TaskContractReview';
 import { validateAndReviewGeneratedTask } from './GeneratedTaskContract';
 import { generateReferenceTestData, type ReferenceTestExecutor } from './ReferenceTestData';
 import { executeReferenceTests } from '../executeReferenceTests';
@@ -20,7 +20,7 @@ import { ensureOlympiadCompleteProgramRequest, validateOlympiadDebuggingTask, va
 import { TASK_AI_TRAP_START } from '../../../../shared/utils/taskAiTrap';
 import { consumeCurrentAIExecutionRetry, generatePromptJSON, generatePromptText, getActivePromptBundleVersion, runWithPromptExecutionContext } from './promptExecution';
 import { formatUntrustedData, PROMPT_SCHEMA_VERSION } from '../../../../shared/ai/prompts';
-import { formatTaskConditionDraft, TASK_CONDITION_DRAFT_JSON_SCHEMA } from './taskConditionDraft';
+import { formatTaskConditionDraft, normalizeTaskExampleOutput, TASK_CONDITION_DRAFT_JSON_SCHEMA } from './taskConditionDraft';
 import type { TaskConditionDraft } from './taskConditionDraft';
 
 export type LLMTaskLanguage = TopicLanguage;
@@ -2391,7 +2391,7 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
     try {
       return await tryOpenRouter();
     } catch (e: unknown) {
-      if (canCf && shouldFallbackToCloudflare(e)) {
+      if (canCf && (shouldFallbackToCloudflare(e) || isRetryableError(e))) {
         return await tryCloudflare();
       }
       throw e;
@@ -2514,6 +2514,7 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
     );
     const draft = AIResponseValidator.validateGenerateTaskConditionDraft(raw);
     let verifiedDraft = draft;
+    let exampleOutputMismatches: Array<{ exampleNumber: number; generatedOutput: string; executedOutput: string }> = [];
     try {
       // Treat the Judge execution as the source of truth for example stdout.
       // Models often produce a correct reference program but mistype an example
@@ -2527,11 +2528,23 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
         params.signal,
         { allowEmptyOutput: true },
       );
+      if (executedOutputs.some(output => normalizeTaskExampleOutput(output).length > 4000)) {
+        throw makeAIValidationError('generateTaskCondition', 'Reference output for a public example exceeds the 4000-character condition-draft limit', draft);
+      }
+      exampleOutputMismatches = draft.examples.flatMap((example, index) => {
+        const executedOutput = normalizeTaskExampleOutput(executedOutputs[index] ?? example.output);
+        const generatedOutput = normalizeTaskExampleOutput(example.output);
+        return generatedOutput === executedOutput ? [] : [{
+          exampleNumber: index + 1,
+          generatedOutput,
+          executedOutput,
+        }];
+      });
       verifiedDraft = {
         ...draft,
         examples: draft.examples.map((example, index) => ({
           input: example.input,
-          output: executedOutputs[index] ?? example.output,
+          output: normalizeTaskExampleOutput(executedOutputs[index] ?? example.output),
         })) as TaskConditionDraft['examples'],
       };
     } catch (error) {
@@ -2546,12 +2559,22 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
     const validated = AIResponseValidator.validateGenerateTaskCondition({ description }, {
       requireAiTrap: generationGuidance.includes(TASK_AI_TRAP_START),
     });
-    await reviewGeneratedTaskCondition(provider, verifiedDraft, {
+    const configuredReviewers = [
+      isCloudflareConfigured() ? this.cloudflareProvider : undefined,
+      isOpenRouterConfigured() ? this.openRouterProvider : undefined,
+      isLocalConfigured() ? this.localProvider : undefined,
+    ];
+    const knownProvider = provider === this.cloudflareProvider || provider === this.openRouterProvider || provider === this.localProvider;
+    const reviewerProvider = knownProvider
+      ? selectIndependentReviewProvider(provider, configuredReviewers)
+      : provider;
+    await reviewGeneratedTaskCondition(reviewerProvider, verifiedDraft, {
       userId: params.userId,
       topicId: params.topicId,
       signal: params.signal,
       language: locale,
       executedReference: { language: 'python', source: draft.referenceSolution },
+      exampleOutputMismatches,
     });
     return validated;
   }

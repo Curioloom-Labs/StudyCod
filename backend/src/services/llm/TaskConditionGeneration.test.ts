@@ -4,7 +4,7 @@ import { AIResponseValidator } from './AIResponseValidator';
 import { LLMOrchestrator } from './LLMOrchestrator';
 import type { LLMGenerateOptions, LLMProvider } from './LLMProvider';
 import { PROMPT_CATALOG } from '../../../../shared/ai/prompts';
-import { formatTaskConditionDraft, type TaskConditionDraft } from './taskConditionDraft';
+import { formatTaskConditionDraft, normalizeTaskExampleOutput, type TaskConditionDraft } from './taskConditionDraft';
 import * as referenceExecution from '../executeReferenceTests';
 
 const draft: TaskConditionDraft = {
@@ -39,6 +39,7 @@ test('task condition draft has a registered JSON contract matching its three-exa
   assert.equal(prompt.output, 'json');
   assert.match(prompt.format, /exactly three/);
   assert.match(prompt.validation, /canonical Markdown formatting/);
+  assert.match(prompt.validation, /second-provider task-contract review/);
   assert.match(prompt.format, /inline Markdown and LaTeX/);
   assert.match(prompt.format, /percentage/);
 });
@@ -79,7 +80,11 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
     return ['5', '0', '3'];
   });
   const calls: Array<{ prompt: string; schema: object; systemPrompt?: string; options?: LLMGenerateOptions }> = [];
-  const responses: unknown[] = [draft, { valid: true, invalidSource: 'none', issues: [] }];
+  const draftWithMistypedExample: TaskConditionDraft = {
+    ...draft,
+    examples: [{ ...draft.examples[0], output: '55' }, ...draft.examples.slice(1)] as TaskConditionDraft['examples'],
+  };
+  const responses: unknown[] = [draftWithMistypedExample, { valid: true, invalidSource: 'none', issues: [] }];
   const provider: LLMProvider = {
     generateText: async () => {
       throw new Error('EDU task condition must use structured JSON output');
@@ -121,6 +126,10 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
   assert.equal((call.schema as { properties?: { examples?: { minItems?: number; maxItems?: number } } }).properties?.examples?.maxItems, 3);
   assert.match(result.description, /### Приклад 1/);
   assert.match(result.description, /### Приклад 3/);
+  assert.match(result.description, /Вихідні дані:\n```\n5\n```/);
+  assert.doesNotMatch(result.description, /\n```\n55\n```/);
+  const reviewPayload = JSON.parse(calls[1].prompt) as { exampleOutputMismatches?: Array<{ exampleNumber: number; generatedOutput: string; executedOutput: string }> };
+  assert.deepEqual(reviewPayload.exampleOutputMismatches, [{ exampleNumber: 1, generatedOutput: '55', executedOutput: '5' }]);
   assert.doesNotMatch(result.description, /referenceSolution/);
   assert.match(call.systemPrompt ?? '', /hidden verification data|приховані дані перевірки/);
   assert.equal((call.schema as { required?: string[] }).required?.includes('referenceSolution'), true);
@@ -143,4 +152,10 @@ test('task condition draft rejects missing examples and preserves explicitly emp
   assert.equal(emptyOutputDraft.examples[0].output, '');
   const formatted = formatTaskConditionDraft(emptyOutputDraft, 'en');
   assert.match(formatted, /Output:\n```\n\n```/);
+});
+
+test('reference stdout normalization removes only one conventional trailing newline', () => {
+  assert.equal(normalizeTaskExampleOutput('5\r\n'), '5');
+  assert.equal(normalizeTaskExampleOutput('a\n\n'), 'a\n');
+  assert.equal(normalizeTaskExampleOutput(''), '');
 });
