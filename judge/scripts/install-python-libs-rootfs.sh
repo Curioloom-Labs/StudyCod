@@ -29,7 +29,7 @@ if [[ ! -x "${ROOTFS}/usr/bin/apt-get" ]]; then
   exit 1
 fi
 DEBIAN_FRONTEND=noninteractive chroot "${ROOTFS}" /usr/bin/apt-get update
-DEBIAN_FRONTEND=noninteractive chroot "${ROOTFS}" /usr/bin/apt-get install -y --no-install-recommends python3-tk xvfb xauth
+DEBIAN_FRONTEND=noninteractive chroot "${ROOTFS}" /usr/bin/apt-get install -y --no-install-recommends python3-tk xvfb xauth libxft2
 
 # pip may be a different Python from the jail interpreter. Target the exact
 # Python ABI installed in the rootfs, and fail clearly for an unsupported ABI.
