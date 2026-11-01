@@ -273,15 +273,16 @@ test('Tkinter condition repairs a non-GUI reference once and injects valid event
   const orchestrator = new LLMOrchestrator();
   const generate = (orchestrator as unknown as {
     generateTaskCondition_OpenRouter: (params: {
-      topicTitle: string; taskTitle: string; taskType: 'PRACTICE'; language: 'PYTHON'; userLanguage: 'en';
+      topicTitle: string; taskTitle: string; taskType: 'PRACTICE'; language: 'PYTHON'; userLanguage: 'en'; difficulty?: number;
       pythonRuntimeProfile: 'TKINTER';
     }, provider: LLMProvider) => Promise<{ description: string }>;
   }).generateTaskCondition_OpenRouter;
 
   const result = await runWithPromptExecutionContext('task.condition-draft', {}, () => generate.call(orchestrator, {
     topicTitle: 'Python Tkinter events',
-    taskTitle: 'Counter button snapshot',
+    taskTitle: 'Intro to Tkinter after the first lesson',
     taskType: 'PRACTICE',
+    difficulty: 1,
     language: 'PYTHON',
     userLanguage: 'en',
     pythonRuntimeProfile: 'TKINTER',
@@ -294,7 +295,8 @@ test('Tkinter condition repairs a non-GUI reference once and injects valid event
   assert.match(calls[0].systemPrompt ?? '', /Do not read stdin, parse JSON/);
   assert.match(calls[0].systemPrompt ?? '', /exactly the harness snapshot object/);
   assert.match(calls[0].systemPrompt ?? '', /fixed placement with place\(x, y, width, height\)/);
-  assert.match(calls[0].systemPrompt ?? '', /coordinates inside the center of its named widget/);
+  assert.match(calls[0].systemPrompt ?? '', /click example lands strictly inside the center of its named widget/);
+  assert.match(calls[0].systemPrompt ?? '', /introductory Tkinter task.*avoid Entry\/Text/s);
   assert.doesNotMatch(calls[0].systemPrompt ?? '', /Each output must be exact stdout/);
   assert.match(calls[1].prompt, /Tkinter program did not create a Tk window/);
   assert.match(calls[2].prompt, /executedReference/);
