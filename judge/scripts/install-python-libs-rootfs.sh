@@ -79,7 +79,16 @@ PIP_PLATFORMS=(
   --platform manylinux_2_28_x86_64
 )
 
-SITE_PACKAGES="$(chroot "${ROOTFS}" /usr/bin/python3 -c 'import site; print(site.getsitepackages()[0])')"
+SITE_PACKAGES_RELATIVE="$(chroot "${ROOTFS}" /usr/bin/python3 -c 'import site; print(site.getsitepackages()[0])')"
+if [[ "${SITE_PACKAGES_RELATIVE}" != /* ]]; then
+  echo "Python site-packages path is not absolute inside ${ROOTFS}: ${SITE_PACKAGES_RELATIVE}" >&2
+  exit 1
+fi
+SITE_PACKAGES="${ROOTFS}${SITE_PACKAGES_RELATIVE}"
+if [[ "${SITE_PACKAGES}" != "${ROOTFS}/"* ]]; then
+  echo "Refusing to install Python packages outside ${ROOTFS}: ${SITE_PACKAGES}" >&2
+  exit 1
+fi
 STAGING_ROOT="$(mktemp -d /tmp/studycod-python-libs.XXXXXX)"
 trap 'rm -rf "${STAGING_ROOT}"' EXIT
 STAGING_SITE_PACKAGES="${STAGING_ROOT}/site-packages"
