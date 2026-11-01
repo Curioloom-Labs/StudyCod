@@ -2516,7 +2516,8 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
     const runtimeProfile = params.pythonRuntimeProfile ?? "STANDARD";
     const beginnerTkIntro = runtimeProfile === "TKINTER"
       && (params.difficulty ?? 3) <= 2
-      && /\b(first|intro|beginner|почат|перш|вступ|базов)/iu.test(`${effectiveTitle} ${generationGuidance}`);
+      // JavaScript \b is ASCII-only and fails before Ukrainian Cyrillic words.
+      && /(?<![\p{L}\p{N}_])(?:first|intro|beginner|почат|перш|вступ|базов)/iu.test(`${effectiveTitle} ${generationGuidance}`);
     if (runtimeProfile !== "STANDARD" && (params.language !== "PYTHON" || params.taskType !== "PRACTICE")) {
       throw makeAIValidationError("generateTaskCondition", "Scientific and Tkinter task generation requires a Python practice task");
     }
@@ -2648,6 +2649,24 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
         },
       );
       draft = AIResponseValidator.validateGenerateTaskConditionDraft(raw);
+      if (beginnerTkIntro) {
+        const createsTextEntry = /(?:\b(?:tk|ttk|tkinter)\s*\.\s*(?:Entry|Text)\b|\b(?:Entry|Text)\s*\()/i.test(draft.referenceSolution);
+        const usesTypingEvents = draft.examples.some(example => {
+          try {
+            const payload = JSON.parse(example.input) as { events?: Array<{ type?: unknown }> };
+            return Array.isArray(payload.events) && payload.events.some(event => event && (event.type === 'type' || event.type === 'key'));
+          } catch {
+            return false;
+          }
+        });
+        if (createsTextEntry || usesTypingEvents) {
+          throw makeAIValidationError(
+            'generateTaskCondition',
+            'Introductory Tkinter tasks must not create Entry/Text widgets or use type/key events; use only a simple Label/Button interaction and examples with zero, one, and two clicks.',
+            draft,
+          );
+        }
+      }
       try {
         // Judge execution is the source of truth for public-example output.
         const executedOutputs = await executeReferenceTests(

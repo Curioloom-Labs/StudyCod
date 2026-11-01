@@ -273,32 +273,80 @@ test('Tkinter condition repairs a non-GUI reference once and injects valid event
   const orchestrator = new LLMOrchestrator();
   const generate = (orchestrator as unknown as {
     generateTaskCondition_OpenRouter: (params: {
-      topicTitle: string; taskTitle: string; taskType: 'PRACTICE'; language: 'PYTHON'; userLanguage: 'en'; difficulty?: number;
+      topicTitle: string; taskTitle: string; taskType: 'PRACTICE'; language: 'PYTHON'; userLanguage: 'uk'; difficulty?: number;
+      generationGuidance?: string;
       pythonRuntimeProfile: 'TKINTER';
     }, provider: LLMProvider) => Promise<{ description: string }>;
   }).generateTaskCondition_OpenRouter;
 
   const result = await runWithPromptExecutionContext('task.condition-draft', {}, () => generate.call(orchestrator, {
-    topicTitle: 'Python Tkinter events',
-    taskTitle: 'Intro to Tkinter after the first lesson',
+    topicTitle: 'Tkinter',
+    taskTitle: 'Вступ до Tkinter',
     taskType: 'PRACTICE',
     difficulty: 1,
     language: 'PYTHON',
-    userLanguage: 'en',
+    userLanguage: 'uk',
+    generationGuidance: 'Перший код після прослуховування вступної теорії',
     pythonRuntimeProfile: 'TKINTER',
   }, provider));
 
   assert.equal(referenceAttempts, 2);
   assert.equal(calls.length, 3, 'one draft repair plus one required contract review');
   assert.equal(calls[1].options?.temperature, 0.15);
-  assert.match(calls[0].systemPrompt ?? '', /call root\.mainloop\(\)/);
-  assert.match(calls[0].systemPrompt ?? '', /Do not read stdin, parse JSON/);
-  assert.match(calls[0].systemPrompt ?? '', /exactly the harness snapshot object/);
-  assert.match(calls[0].systemPrompt ?? '', /fixed placement with place\(x, y, width, height\)/);
-  assert.match(calls[0].systemPrompt ?? '', /click example lands strictly inside the center of its named widget/);
-  assert.match(calls[0].systemPrompt ?? '', /introductory Tkinter task.*avoid Entry\/Text/s);
+  assert.match(calls[0].systemPrompt ?? '', /root\.mainloop\(\)/);
+  assert.match(calls[0].systemPrompt ?? '', /Не читай stdin, не розбирай JSON/);
+  assert.match(calls[0].systemPrompt ?? '', /об’єкт знімка harness формату/);
+  assert.match(calls[0].systemPrompt ?? '', /фіксоване розташування через place\(x, y, width, height\)/);
+  assert.match(calls[0].systemPrompt ?? '', /координата кожного кліку в прикладі має бути чітко всередині центру/);
+  assert.match(calls[0].systemPrompt ?? '', /Це вступна задача з Tkinter:.*не додавай Entry\/Text та поведінку з фокусом\/введенням/s);
   assert.doesNotMatch(calls[0].systemPrompt ?? '', /Each output must be exact stdout/);
   assert.match(calls[1].prompt, /Tkinter program did not create a Tk window/);
   assert.match(calls[2].prompt, /executedReference/);
   assert.match(result.description, /\{"title":"Counter","geometry":"58x52","widgets":\[\]\}/);
+});
+
+test('Ukrainian beginner Tkinter rejects text-entry controls and type events before Judge execution', async t => {
+  const invalidIntroDraft: TaskConditionDraft = {
+    statement: 'Create a Tkinter window with a text field. Type a greeting and display it.',
+    inputFormat: 'A JSON object with an events array.',
+    outputFormat: 'The exact JSON widget snapshot.',
+    constraints: ['Use one Tkinter window.'],
+    subtasks: [],
+    referenceSolution: 'import tkinter as tk\nroot = tk.Tk()\nentry = tk.Entry(root)\nentry.place(x=10, y=10, width=100, height=24)\nroot.mainloop()',
+    examples: [
+      { input: '{"events":[{"type":"type","text":"Привіт"}]}', output: '{}' },
+      { input: '{"events":[{"type":"click","x":50,"y":50}]}', output: '{}' },
+      { input: '{"events":[{"type":"type","text":"Test"}]}', output: '{}' },
+    ],
+  };
+  let generatedPrompt = '';
+  const provider: LLMProvider = {
+    generateText: async () => { throw new Error('Expected structured JSON'); },
+    generateJSON: async <T>(_prompt: string, _schema: object, systemPrompt?: string): Promise<T> => {
+      generatedPrompt = String(systemPrompt ?? '');
+      return invalidIntroDraft as T;
+    },
+  };
+  t.mock.method(referenceExecution, 'executeReferenceTests', async () => {
+    throw new Error('Judge must not run for an invalid introductory Tkinter draft');
+  });
+  const orchestrator = new LLMOrchestrator();
+  const generate = (orchestrator as unknown as {
+    generateTaskCondition_OpenRouter: (params: {
+      topicTitle: string; taskTitle: string; generationGuidance: string; taskType: 'PRACTICE'; language: 'PYTHON'; userLanguage: 'uk';
+      difficulty: number; pythonRuntimeProfile: 'TKINTER';
+    }, provider: LLMProvider) => Promise<{ description: string }>;
+  }).generateTaskCondition_OpenRouter;
+
+  await assert.rejects(runWithPromptExecutionContext('task.condition-draft', {}, () => generate.call(orchestrator, {
+    topicTitle: 'Tkinter',
+    taskTitle: 'Вступ до Tkinter',
+    generationGuidance: 'Перший код після прослуховування вступної теорії',
+    taskType: 'PRACTICE',
+    language: 'PYTHON',
+    userLanguage: 'uk',
+    difficulty: 1,
+    pythonRuntimeProfile: 'TKINTER',
+  }, provider)), /Introductory Tkinter tasks must not create Entry\/Text widgets or use type\/key events/);
+  assert.match(generatedPrompt, /Це вступна задача з Tkinter:.*не додавай Entry\/Text/s);
 });
