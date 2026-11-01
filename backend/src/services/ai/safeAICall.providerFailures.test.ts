@@ -10,6 +10,7 @@ test("task-condition errors expose a concise actionable validation finding in th
   assert.match(buildTaskConditionFailureMessage(finding, "uk"), /Перевірка умови знайшла проблему: Ambiguous rounding rule\./);
   assert.match(buildTaskConditionFailureMessage(finding, "en"), /Task consistency check failed: Ambiguous rounding rule\./);
   assert.match(buildTaskConditionFailureMessage("Invalid JSON response", "uk"), /не пройшла перевірку узгодженості/);
+  assert.match(buildTaskConditionFailureMessage("AI_RETRY_BUDGET_EXHAUSTED: Shared retry budget exhausted before Tkinter reference repair", "uk"), /Не вдалося повністю перевірити умову/);
 });
 
 test("safeAICall returns an actionable clarification instead of retrying it as a generation failure", async (t) => {
@@ -58,6 +59,32 @@ test("safeAICall preserves the last task validation error when inner layers exha
     assert.notEqual(result.error.error, "No result");
   }
   assert.equal(attempts, 1, "do not schedule an outer retry after inner calls consumed the shared budget");
+});
+
+test("safeAICall never reports its own exhausted retry budget as an AI provider outage", async (t) => {
+  let attempts = 0;
+  t.mock.method(getLLMOrchestrator(), "generateTaskCondition", async () => {
+    attempts += 1;
+    consumeCurrentAIExecutionRetry();
+    consumeCurrentAIExecutionRetry();
+    throw new Error("AI_RETRY_BUDGET_EXHAUSTED: Shared retry budget exhausted before Tkinter reference repair");
+  });
+
+  const result = await safeAICall("generateTaskCondition", {
+    topicTitle: "Tkinter",
+    taskTitle: "Intro to Tkinter",
+    taskType: "PRACTICE",
+    language: "PYTHON",
+    pythonRuntimeProfile: "TKINTER",
+  }, { maxAttempts: 3 });
+
+  assert.equal(result.success, false);
+  if (!result.success) {
+    assert.equal(result.error.statusCode, 502);
+    assert.match(result.error.message, /Не вдалося повністю перевірити умову/);
+    assert.match(String(result.error.details?.validationError), /AI_RETRY_BUDGET_EXHAUSTED/);
+  }
+  assert.equal(attempts, 1, "an exhausted shared budget must not trigger a provider retry");
 });
 
 for (const scenario of [

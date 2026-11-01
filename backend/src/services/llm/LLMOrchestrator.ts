@@ -357,7 +357,11 @@ function preferredProvider(): 'cloudflare' | 'openrouter' | 'local' | 'auto' {
 }
 
 function consumeRetryOrThrow(reason: string): void {
-  if (!consumeCurrentAIExecutionRetry()) throw new Error(`AI_GENERATION_FAILED: Shared retry budget exhausted before ${reason}`);
+  if (!consumeCurrentAIExecutionRetry()) {
+    // A depleted application retry budget is an internal validation boundary,
+    // not an upstream provider outage. Keep it out of the generic 503 path.
+    throw makeAIValidationError('aiRetryBudget', `AI_RETRY_BUDGET_EXHAUSTED: Shared retry budget exhausted before ${reason}`);
+  }
 }
 function isRetryableError(error: unknown): boolean {
   if (!error) return false;

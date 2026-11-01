@@ -608,6 +608,35 @@ test('review retries one malformed verdict for the same task before failing clos
   assert.match(calls[1], /RESPONSE FORMAT REPAIR/);
 });
 
+test('review normalizes blank optional strings without spending a format-repair call', async () => {
+  const calls: string[] = [];
+  const condition: Parameters<typeof reviewGeneratedTaskCondition>[1] = {
+    statement: 'Create a window with one button.',
+    inputFormat: 'A JSON object with an events array.',
+    outputFormat: 'The exact JSON widget snapshot.',
+    constraints: ['Use one Tk window.'],
+    examples: [
+      { input: '{"events":[]}', output: '{}' },
+      { input: '{"events":[{"type":"click","x":5,"y":5}]}', output: '{}' },
+      { input: '{"events":[{"type":"click","x":5,"y":5},{"type":"click","x":5,"y":5}]}', output: '{}' },
+    ],
+  };
+  await reviewGeneratedTaskCondition(fakeProvider([
+    { valid: true, invalidSource: 'none', issues: [' ', ''], clarificationQuestion: '' },
+  ], calls), condition, { pythonRuntimeProfile: 'TKINTER' });
+
+  assert.equal(calls.length, 1);
+
+  const findingCalls: string[] = [];
+  await assert.rejects(
+    reviewGeneratedTaskCondition(fakeProvider([
+      { valid: false, invalidSource: 'statement', issues: ['Click position is missing.'], clarificationQuestion: '  ' },
+    ], findingCalls), condition, { pythonRuntimeProfile: 'TKINTER' }),
+    error => error instanceof TaskContractReviewError && error.issues[0] === 'Click position is missing.' && error.clarificationQuestion === null,
+  );
+  assert.equal(findingCalls.length, 1, 'an actionable finding should not be retried because its optional question is blank');
+});
+
 test('review propagates provider errors rather than accepting unreviewed examples', async () => {
   const provider: LLMProvider = {
     async generateJSON(): Promise<never> { throw new Error('Review unavailable'); },

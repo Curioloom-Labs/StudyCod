@@ -92,6 +92,11 @@ function computeDefaultRetryAfterMs(statusCode: number): number {
 }
 
 export function buildTaskConditionFailureMessage(validationError: string, language: "uk" | "en"): string {
+  if (/AI_RETRY_BUDGET_EXHAUSTED|shared retry budget exhausted/i.test(validationError)) {
+    return language === "en"
+      ? "AI_GENERATION_FAILED: The task could not be fully verified within the retry limit. Please generate the condition again."
+      : "AI_GENERATION_FAILED: Не вдалося повністю перевірити умову в межах ліміту повторів. Спробуйте згенерувати її ще раз.";
+  }
   const match = validationError.match(/TASK_CONTRACT_REVIEW_FAILED(?:\[[^\]]+\])?:\s*([\s\S]+)/i);
   const issue = match?.[1]?.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 260);
   if (!issue) {
@@ -878,6 +883,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
           const looksLikeValidationError =
           error instanceof AIValidationError ||
           String(error && typeof error === 'object' && 'name' in error ? error.name : '') === 'AIValidationError' ||
+          /AI_RETRY_BUDGET_EXHAUSTED|shared retry budget exhausted/i.test(errorMsg) ||
           /validation failed/i.test(errorMsg) ||
           isSemanticValidationError(errorMsg);
 
