@@ -2436,6 +2436,7 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
           "Return one JSON object matching the supplied schema. Use inline Markdown (such as `code`, **emphasis**, and lists) and valid LaTeX math delimited with $...$ or $$...$$ in statement and format fields. Write each constraint as its own array item. The server renders section headings, subtask headings, and example code fences, so do not add headings or fenced code blocks inside JSON text fields. Example input/output values must remain raw stdin/stdout without Markdown.",
           "The statement must describe what the program does, never how to implement it. Do not reveal algorithms, solution steps, or implementation hints.",
           "Define a precise input grammar, valid domain, output format, and any boundary, tie, ordering, duplicate, default, or no-result rules that affect the answer.",
+          "For count-prefixed lists, the first token n is a header: one n token followed by exactly n values is valid and has n+1 total tokens. Verify the number of values after n; never require the total token count to equal n.",
           "Return referenceSolution as a complete Python 3 program that implements the statement for the full input domain. It is hidden verification data and will never be shown to learners. Do not hardcode the three examples. The server will execute it on every public example and reject any output mismatch.",
           params.includeSubtasks === false
             ? "Return an empty subtasks array."
@@ -2456,6 +2457,7 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
           "Поверни один JSON-об’єкт за наданою схемою. У текстах умови й форматів використовуй вбудований Markdown (наприклад, `код`, **виділення** та списки) і коректні формули LaTeX у $...$ або $$...$$. Кожне обмеження подавай окремим елементом масиву. Сервер сам додасть заголовки розділів, підзадач і блоки коду прикладів, тому не вставляй заголовки чи огороджені блоки коду в текстові поля JSON. Значення прикладів мають містити лише сирі stdin/stdout без Markdown.",
           "В умові описуй, що має робити програма, але не як це реалізувати. Не розкривай алгоритм, кроки розв’язання чи підказки щодо реалізації.",
           "Задай точну граматику вводу, допустиму область значень, формат виводу й усі правила меж, рівності, нічиїх, порядку, дублікатів, значень за замовчуванням і відсутності результату, якщо вони впливають на відповідь.",
+          "Для списку з лічильником перший токен n є заголовком: токен n і рівно n наступних значень утворюють коректний ввід із n+1 токенів. Перевіряй кількість значень після n; не вимагай, щоб загальна кількість токенів дорівнювала n.",
           "Поверни referenceSolution — повну програму Python 3, що реалізує умову для всієї допустимої області вводу. Це приховані дані перевірки, їх не буде показано учням. Не підставляй відповіді з трьох прикладів. Сервер виконає програму на кожному публічному прикладі й відхилить будь-яку розбіжність.",
           params.includeSubtasks === false
             ? "Поверни порожній масив subtasks."

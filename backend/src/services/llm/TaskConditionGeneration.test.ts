@@ -121,6 +121,7 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
   assert.match(call.prompt, /Use three distinct examples\./);
   assert.match(call.systemPrompt ?? '', /JSON-об’єкт/);
   assert.match(call.systemPrompt ?? '', /вбудований Markdown/);
+  assert.match(call.systemPrompt ?? '', /n\+1 токенів/);
   assert.ok((call.systemPrompt ?? '').includes("JSON пиши `" + String.fromCharCode(92).repeat(2) + "`, щоб"));
   assert.equal((call.schema as { properties?: { examples?: { minItems?: number; maxItems?: number } } }).properties?.examples?.minItems, 3);
   assert.equal((call.schema as { properties?: { examples?: { minItems?: number; maxItems?: number } } }).properties?.examples?.maxItems, 3);

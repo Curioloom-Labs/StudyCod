@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getLLMOrchestrator } from "../llm/LLMOrchestrator";
-import { safeAICall } from "./safeAICall";
+import { buildTaskConditionFailureMessage, safeAICall } from "./safeAICall";
+
+test("task-condition errors expose a concise actionable validation finding in the UI locale", () => {
+  const finding = "TASK_CONTRACT_REVIEW_FAILED[statement]: Ambiguous rounding rule.\nLong provider details.";
+  assert.match(buildTaskConditionFailureMessage(finding, "uk"), /Перевірка умови знайшла проблему: Ambiguous rounding rule\./);
+  assert.match(buildTaskConditionFailureMessage(finding, "en"), /Task consistency check failed: Ambiguous rounding rule\./);
+  assert.match(buildTaskConditionFailureMessage("Invalid JSON response", "uk"), /не пройшла перевірку узгодженості/);
+});
 
 for (const scenario of [
   {

@@ -85,6 +85,19 @@ function computeDefaultRetryAfterMs(statusCode: number): number {
   return 0;
 }
 
+export function buildTaskConditionFailureMessage(validationError: string, language: "uk" | "en"): string {
+  const match = validationError.match(/TASK_CONTRACT_REVIEW_FAILED(?:\[[^\]]+\])?:\s*([\s\S]+)/i);
+  const issue = match?.[1]?.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 260);
+  if (!issue) {
+    return language === "en"
+      ? "AI_GENERATION_FAILED: The generated task did not pass consistency checks after retries."
+      : "AI_GENERATION_FAILED: Задача не пройшла перевірку узгодженості після повторних спроб.";
+  }
+  return language === "en"
+    ? `AI_GENERATION_FAILED: Task consistency check failed: ${issue}`
+    : `AI_GENERATION_FAILED: Перевірка умови знайшла проблему: ${issue}`;
+}
+
 // Circuit breaker state is shared across instances via Redis (with a local
 // in-memory fallback). See ./aiCircuitBreaker. The breaker is keyed by AI mode.
 function getNowMs(): number {
@@ -906,9 +919,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
                 : /Task generation guidance validation failed/i.test(errorMsg)
                   ? 'AI_GENERATION_FAILED: Generated task guidance was invalid'
                   : mode === 'generateTaskCondition'
-                    ? language === 'en'
-                      ? 'AI_GENERATION_FAILED: The generated task did not pass consistency checks after retries.'
-                      : 'AI_GENERATION_FAILED: Згенерована задача не пройшла перевірку узгодженості після повторних спроб.'
+                    ? buildTaskConditionFailureMessage(errorMsg, language)
                   : 'AI_GENERATION_FAILED: Invalid response structure',
                 error: errorMsg,
               details: {

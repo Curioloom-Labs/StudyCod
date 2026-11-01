@@ -48,7 +48,8 @@ test('task review receives every public example and only the visible contract', 
 
 test('generated EDU condition review receives separate constraints and all three examples', async () => {
   const calls: string[] = [];
-  await reviewGeneratedTaskCondition(fakeProvider([{ valid: true, invalidSource: 'none', issues: [] }], calls), {
+  const systemPrompts: string[] = [];
+  await reviewGeneratedTaskCondition(fakeProvider([{ valid: true, invalidSource: 'none', issues: [] }], calls, systemPrompts), {
     statement: 'Sort the temperatures above `5`.',
     inputFormat: 'One line contains integers separated by spaces.',
     outputFormat: 'Print the selected values in descending order; print `NONE` when no values qualify.',
@@ -64,6 +65,44 @@ test('generated EDU condition review receives separate constraints and all three
   assert.equal(payload.constraints, '`1 <= n <= 1000`\n`-1000 <= t[i] <= 1000`');
   assert.equal(payload.allowEmptyOutput, true);
   assert.equal(payload.publicExamples.length, 3);
+  assert.match(systemPrompts[0], /a count n followed by n values.*n\+1 tokens/i);
+  assert.match(systemPrompts[0], /floor\(n\s*\/\s*2\) equals n\s*\/\s*2 exactly/i);
+});
+
+test('condition review ignores the provably false even-length half-rounding contradiction', async () => {
+  await reviewGeneratedTaskCondition(fakeProvider([{
+    valid: false,
+    invalidSource: 'statement',
+    issues: ["Ambiguous rule: 'половина довжини масиву завжди округлюється в меншу сторону' contradicts the constraint 'n — парне число' (half of an even number is always an integer)."],
+  }]), {
+    statement: 'Find half the length of an array, rounded down.',
+    inputFormat: 'The first integer is even n, followed by exactly n integers.',
+    outputFormat: 'Print n / 2.',
+    constraints: ['n is even.'],
+    examples: [
+      { input: '2 8 9', output: '1' },
+      { input: '4 1 2 3 4', output: '2' },
+      { input: '6 7 8 9 10 11 12', output: '3' },
+    ],
+  });
+});
+
+test('condition review still rejects a real rounding conflict on an odd domain', async () => {
+  await assert.rejects(reviewGeneratedTaskCondition(fakeProvider([{
+    valid: false,
+    invalidSource: 'statement',
+    issues: ['The rule rounds down for odd n, but the other rule requires rounding up.'],
+  }]), {
+    statement: 'Round half of odd n down and also up.',
+    inputFormat: 'Read odd n.',
+    outputFormat: 'Print the result.',
+    constraints: ['n is odd.'],
+    examples: [
+      { input: '3', output: '2' },
+      { input: '5', output: '3' },
+      { input: '7', output: '4' },
+    ],
+  }), /TASK_CONTRACT_REVIEW_FAILED\[statement\]/);
 });
 
 test('generated EDU condition review receives original versus executed example-output discrepancies', async () => {
