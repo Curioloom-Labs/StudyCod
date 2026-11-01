@@ -577,10 +577,24 @@ if (!baseUrl) {
     await page.keyboard.insertText(correctedLibraryCode);
     await page.waitForFunction(
       () => Array.from(document.querySelectorAll(".monaco-editor .view-lines"))
-        .some((lines) => lines.textContent?.includes("range(1, n + 1)")),
+        .some((lines) => lines.textContent?.replace(/\u00a0/g, " ").includes("range(1, n + 1)")),
       null,
       { timeout: 5_000 },
-    );
+    ).catch(async error => {
+      const editorState = await page.evaluate(() => ({
+        activeElement: document.activeElement?.outerHTML.slice(0, 400),
+        editors: Array.from(document.querySelectorAll(".monaco-editor")).map(editor => ({
+          visible: editor.getBoundingClientRect().width > 0 && editor.getBoundingClientRect().height > 0,
+          text: editor.querySelector(".view-lines")?.textContent?.slice(0, 300),
+          labels: Array.from(editor.querySelectorAll("textarea, input")).map(input => ({
+            aria: input.getAttribute("aria-label"),
+            value: input.value,
+            focused: input === document.activeElement,
+          })),
+        })),
+      }));
+      throw new Error(`${error.message}; Monaco state: ${JSON.stringify(editorState)}`);
+    });
     const correctedLibraryEditorText = (await page.locator(".monaco-editor .view-lines").innerText()).replace(/\u00a0/g, " ");
     if (!correctedLibraryEditorText.includes("range(1, n + 1)")) {
       throw new Error(`the library editor did not accept the corrected boundary: ${correctedLibraryEditorText.slice(0, 500)}`);
