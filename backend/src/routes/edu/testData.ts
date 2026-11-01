@@ -632,10 +632,6 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
     if (!topicTask || !topicTask.topic?.class?.teacher) {
       return res.status(404).json({ message: "TASK_NOT_FOUND", taskId });
     }
-    if (topicTask.pythonRuntimeProfile === "TKINTER") {
-      return res.status(409).json({ message: "TKINTER_TESTS_MUST_BE_CONFIGURED_MANUALLY" });
-    }
-
     if (!(await canActOnTopicTaskClass(req, topicTask, "CONTENT_AUTHOR"))) {
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
@@ -706,6 +702,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         taskDescription: description,
         taskTitle: topicTask.title,
         lang: topicTask.topic.language,
+        ioType: topicTask.pythonRuntimeProfile === "TKINTER" ? "STDIN_STDOUT" : undefined,
         count: testCount,
         allowEmptyOutput: true,
         referenceExamplesAreAuthoritative: true,

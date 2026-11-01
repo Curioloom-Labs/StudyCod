@@ -5,7 +5,7 @@ import { AppDataSource } from '../../data-source';
 import { TopicTask } from '../../entities/TopicTask';
 import { TestData } from '../../entities/TestData';
 
-for (const scenario of ['empty-success', 'oracle-failure', 'statement-conflict-repaired', 'statement-conflict-unrepairable'] as const) {
+for (const scenario of ['empty-success', 'oracle-failure', 'statement-conflict-repaired', 'statement-conflict-unrepairable', 'tkinter-success'] as const) {
   test(`EDU test generation: ${scenario}`, async t => {
     const authored = [{ input: '3\n1 2 3\n', output: '6\n' }];
     const queries: string[] = [];
@@ -16,6 +16,7 @@ for (const scenario of ['empty-success', 'oracle-failure', 'statement-conflict-r
       description: 'Read N and N integers; for N < 3 print an empty line.',
       template: '',
       type: 'PRACTICE',
+      pythonRuntimeProfile: scenario === 'tkinter-success' ? 'TKINTER' : 'STANDARD',
       topic: { id: 15, title: 'Arrays', language: 'PYTHON', class: { teacher: {} } },
     };
     const query = {
@@ -62,8 +63,16 @@ for (const scenario of ['empty-success', 'oracle-failure', 'statement-conflict-r
       assert.equal(params.allowEmptyOutput, true);
       assert.equal(params.referenceExamplesAreAuthoritative, true);
       assert.deepEqual(params.publicExamples, authored);
+      if (scenario === 'tkinter-success') {
+        assert.equal(params.pythonRuntimeProfile, 'TKINTER');
+        assert.equal(params.ioType, 'STDIN_STDOUT');
+      }
       assert.equal(options.maxAttempts, 2);
       if (scenario === 'empty-success') return { success: true, data: [{ input: '0\n', output: '\n' }] };
+      if (scenario === 'tkinter-success') return { success: true, data: [{
+        input: '{"events":[{"type":"click","x":50,"y":20}]}',
+        output: '{"geometry":"160x100","title":"Counter","widgets":[]}',
+      }] };
       if (scenario === 'oracle-failure') return { success: false, error: {
         statusCode: 400, message: 'AI_GENERATION_FAILED: Invalid response structure',
         details: { validationError: 'Reference program failed on input 3: WA; Wrong answer' },
@@ -108,6 +117,12 @@ for (const scenario of ['empty-success', 'oracle-failure', 'statement-conflict-r
       assert.equal(body.conditionRepaired, true);
       assert.equal(body.description, repairedDescription);
       assert.equal(saved.length, 1);
+    } else if (scenario === 'tkinter-success') {
+      assert.equal(status, 200, 'Tkinter tasks must use the validated UI-event generation path');
+      assert.equal(body.count, 1);
+      assert.equal(saved[0].input, '{"events":[{"type":"click","x":50,"y":20}]}');
+      assert.equal(saved[0].expectedOutput, '{"geometry":"160x100","title":"Counter","widgets":[]}');
+      assert.equal(saved[0].source, 'AI_GENERATED');
     } else {
       assert.equal(status, 422);
       assert.equal(body.code, 'EDU_TASK_CONDITION_REPAIR_FAILED');

@@ -61,6 +61,53 @@ test('expected outputs come from execution and the reviewer receives the execute
   assert.equal(calls, 2);
 });
 
+test('Tkinter reference generation uses validated JSON events and reviews UI snapshots as TKINTER', async () => {
+  const source = 'import tkinter as tk\nroot = tk.Tk()\nroot.title("Counter")\nroot.geometry("160x100")\nbutton = tk.Button(root, text="Count: 0")\nbutton.place(x=20, y=10, width=80, height=24)\nroot.mainloop()';
+  const input = '{"events":[{"type":"click","x":50,"y":20}]}';
+  let calls = 0;
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string, _schema: object, instructions = ''): Promise<T> {
+      calls++;
+      if (calls === 1) {
+        assert.match(instructions, /StudyCod's virtual-display Tkinter harness/);
+        assert.match(instructions, /must not read stdin, parse JSON, simulate events itself/);
+        assert.match(instructions, /JSON UI-event payload strings/);
+        assert.match(instructions, /WIDTHxHEIGHT/);
+        assert.equal(JSON.parse(prompt).existingExamples[0].input, '{"events":[]}');
+        return {
+          referenceSolution: source,
+          inputs: [input, '[{"type":"click","x":50,"y":20}]', '{"events":[{"type":"click","x":1280,"y":20}]}'],
+        } as T;
+      }
+      const payload = JSON.parse(prompt);
+      assert.equal(payload.ioType, 'TKINTER');
+      assert.equal(payload.candidateTests[0].input, input);
+      assert.equal(payload.candidateTests[0].output, '{"geometry":"160x100","title":"Counter","widgets":[]}');
+      assert.equal(payload.executedReference.source, source);
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+  const result = await generateReferenceTestData(provider, {
+    taskDescription: 'Create a Tkinter window titled Counter with geometry 160x100. Place a button at x=20,y=10,width=80,height=24. Input is a JSON object with events; clicking the button increments its displayed count. Output is the exact JSON snapshot from the virtual display.',
+    lang: 'PYTHON',
+    count: 1,
+    pythonRuntimeProfile: 'TKINTER',
+    publicExamples: [{ input: '{"events":[]}', output: '{"geometry":"160x100","title":"Counter","widgets":[]}' }],
+    executeReference: async (program, inputs, examples) => {
+      assert.equal(program, source);
+      assert.deepEqual(inputs, [input], 'canonical duplicate and out-of-range UI event candidates must be discarded');
+      assert.equal(examples.length, 1);
+      return ['{"geometry":"160x100","title":"Counter","widgets":[]}'];
+    },
+  });
+  assert.deepEqual(result.map(({ input: generatedInput, output }) => ({ input: generatedInput, output })), [{
+    input,
+    output: '{"geometry":"160x100","title":"Counter","widgets":[]}',
+  }]);
+  assert.equal(calls, 2);
+});
+
 test('public example and repeated candidate inputs are discarded before execution', async () => {
   let calls = 0;
   const source = 'a,b=map(int,input().split()); print(a+b)';

@@ -291,13 +291,14 @@ export async function reviewGeneratedTaskCondition(
 export async function reviewGeneratedTests(
   provider: LLMProvider,
   statement: string,
-  ioType: AiTaskGenerationResult['ioType'],
+  ioType: AiTaskGenerationResult['ioType'] | 'TKINTER',
   tests: TestDataExample[],
   options: LLMGenerateOptions & {
     executedReference?: { language: string; source: string };
     requiredCases?: string[];
     publicExamples?: TestDataExample[];
     allowEmptyOutput?: boolean;
+    pythonRuntimeProfile?: EduPythonRuntimeProfile;
   } = {},
 ): Promise<void> {
   await reviewContract(provider, 'generateTestData', {
