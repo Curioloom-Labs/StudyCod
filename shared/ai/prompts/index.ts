@@ -4,11 +4,11 @@
  * Worker can use the same prompt contract.
  */
 
-export const PROMPT_BUNDLE_VERSION = "studycod-ai-2026-11-01-v9" as const;
+export const PROMPT_BUNDLE_VERSION = "studycod-ai-2026-11-01-v10" as const;
 export const LEGACY_PROMPT_BUNDLE_VERSION = "studycod-ai-legacy-v0" as const;
 // Incremented for the generated-subtask output contract so pre-change cached
 // responses cannot mask the new format while the deployed Worker stays stable.
-export const PROMPT_SCHEMA_VERSION = "studycod-ai-schema-2026-11-01-v7" as const;
+export const PROMPT_SCHEMA_VERSION = "studycod-ai-schema-2026-11-01-v8" as const;
 export type PromptBundleVersion = typeof PROMPT_BUNDLE_VERSION | typeof LEGACY_PROMPT_BUNDLE_VERSION;
 
 export function resolvePromptBundleVersion(enabled: unknown): PromptBundleVersion {
@@ -109,7 +109,7 @@ const definitions: Record<PromptId, PromptSpec> = {
   "task.generation-guidance": spec({ id: "task.generation-guidance", purpose: "Recommend structured settings for task generation", output: "json", inputContext: ["task title", "topic", "task type", "learner class", "programming language", "UI locale"], format: "JSON object with editable guidance, clarifying questions, and bounded settings", validation: "AIResponseValidator task-generation guidance checks", generation: { temperature: 0.45, maxTokens: 1000 } }),
   "task.reference-tests": spec({ id: "task.reference-tests", purpose: "Build a reference oracle and candidate inputs", output: "json", inputContext: ["complete statement", "public examples", "coverage checklist", "student language"], format: "JSON with Python referenceSolution and candidate inputs", validation: "Zod schema, duplicate/public-example filtering, Judge execution, and contract review", generation: { temperature: 0, maxTokens: 3000 } }),
   "task.generated-tests": spec({ id: "task.generated-tests", purpose: "Generate Judge test cases", output: "json", inputContext: ["task statement", "I/O type", "required coverage", "public examples", "validator feedback"], format: "JSON matching generated-test schema", validation: "AIResponseValidator and test-contract review; expected outputs come from Judge when reference execution is available", generation: { temperature: 0.08, maxTokens: 3000 } }),
-  "task.contract-review": spec({ id: "task.contract-review", purpose: "Review a task statement and test contract", output: "json", inputContext: ["task statement", "examples", "tests", "I/O contract", "reference program evidence"], format: "JSON review verdict and findings", validation: "Review schema, contract invariants, and evidence checks", generation: { temperature: 0, maxTokens: 1200 } }),
+  "task.contract-review": spec({ id: "task.contract-review", purpose: "Review task consistency and request teacher input for unresolved ambiguity", output: "json", inputContext: ["task statement", "examples", "tests", "I/O contract", "reference program evidence", "response locale"], format: "JSON verdict, findings, and optional teacher clarification question", validation: "Review schema, contract invariants, and evidence checks", generation: { temperature: 0, maxTokens: 1200 } }),
   "mentor.hints": spec({ id: "mentor.hints", purpose: "Give progressive, evidence-based hints", output: "json", inputContext: ["task", "submission", "Judge failures", "previous hints", "UI locale"], format: "JSON object with a hint ladder", validation: "JSON schema, sanitization, bounded count, deterministic fallback", generation: { temperature: 0.2, maxTokens: 480 } }),
   "mentor.explain-error": spec({ id: "mentor.explain-error", purpose: "Explain an observed submission failure", output: "json", inputContext: ["submission", "observed compiler or Judge failure", "task", "UI locale"], format: "JSON object with a concise explanation", validation: "JSON schema and evidence-based normalization", generation: { temperature: 0.2, maxTokens: 600 } }),
   "mentor.debug": spec({ id: "mentor.debug", purpose: "Guide a learner through debugging", output: "text", inputContext: ["task", "current code", "recent attempts", "prior feedback", "learner question"], format: "Short coaching text with one next action", validation: "Non-empty response and tutor output normalization", generation: { temperature: 0.3, maxTokens: 320 } }),

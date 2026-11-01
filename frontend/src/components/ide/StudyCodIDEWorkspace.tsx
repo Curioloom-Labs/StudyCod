@@ -185,6 +185,7 @@ type Props = {
   toolbarStatus?: React.ReactNode;
   languageOptions?: JudgeLanguage[];
   disableAiAssistance?: boolean;
+  assessmentMode?: boolean;
   submitMode?: boolean;
   readOnly?: boolean;
   onBack?: () => void;
@@ -659,9 +660,10 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
       setActiveFile(props.entryFile);
     }
   }, [props.entryFile, props.task.id, props.theory, taskTheoryKey]);
+  const aiAssistanceDisabled = Boolean(props.disableAiAssistance || props.assessmentMode);
   React.useEffect(() => {
-    if (props.disableAiAssistance) setAssistantTab("task");
-  }, [props.disableAiAssistance]);
+    if (aiAssistanceDisabled) setAssistantTab("task");
+  }, [aiAssistanceDisabled]);
   React.useEffect(() => {
     setMobilePane("condition");
     setMobileResultUnread(false);
@@ -2584,7 +2586,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
               <aside
                 id="mobile-ide-panel-condition"
                 className="ide-statement"
-                data-assistance={!props.disableAiAssistance}
+                data-assistance={!aiAssistanceDisabled}
                 aria-label={tr("Умова задачі", "Problem statement")}
               >
                 <div className="ide-panel-bar">
@@ -2623,7 +2625,7 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                       <History />
                       {tr("Історія", "History")}
                     </button>
-                    {!props.disableAiAssistance ? (
+                    {!aiAssistanceDisabled ? (
                       <>
                         <button
                           type="button"

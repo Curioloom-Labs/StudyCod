@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getLLMOrchestrator } from "../llm/LLMOrchestrator";
+import { TaskContractReviewError } from "../llm/TaskContractReview";
 import { buildTaskConditionFailureMessage, safeAICall } from "./safeAICall";
 
 test("task-condition errors expose a concise actionable validation finding in the UI locale", () => {
@@ -8,6 +9,27 @@ test("task-condition errors expose a concise actionable validation finding in th
   assert.match(buildTaskConditionFailureMessage(finding, "uk"), /Перевірка умови знайшла проблему: Ambiguous rounding rule\./);
   assert.match(buildTaskConditionFailureMessage(finding, "en"), /Task consistency check failed: Ambiguous rounding rule\./);
   assert.match(buildTaskConditionFailureMessage("Invalid JSON response", "uk"), /не пройшла перевірку узгодженості/);
+});
+
+test("safeAICall returns an actionable clarification instead of retrying it as a generation failure", async (t) => {
+  let attempts = 0;
+  t.mock.method(getLLMOrchestrator(), "generateTaskCondition", async () => {
+    attempts += 1;
+    throw new TaskContractReviewError("generateTask", "statement", ["Comparison boundary is ambiguous."], "Should the sum be greater than or equal to 10*n?");
+  });
+
+  const result = await safeAICall("generateTaskCondition", {
+    topicTitle: "Arrays",
+    taskType: "PRACTICE",
+    language: "PYTHON",
+  }, { language: "en", maxAttempts: 3 });
+
+  assert.equal(result.success, false);
+  if (!result.success) {
+    assert.equal(result.error.statusCode, 422);
+    assert.deepEqual(result.error.clarification, { question: "Should the sum be greater than or equal to 10*n?" });
+  }
+  assert.equal(attempts, 1, "a teacher decision must be requested before another repair attempt");
 });
 
 for (const scenario of [

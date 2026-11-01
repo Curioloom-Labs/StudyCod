@@ -30,6 +30,7 @@ import {
   type TestData,
 } from "../../lib/api/edu";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
+import { getClarificationQuestionFromUnknown } from "../../lib/safeError";
 import { MarkdownView } from "../../components/MarkdownView";
 import { useDialogA11y } from "../../components/ui/useDialogA11y";
 import { importTestsFromInOutFiles } from "../../utils/testInOutImport";
@@ -40,6 +41,7 @@ import { TaskAuthoringFields, type TaskAuthoringTab } from "./TaskAuthoringField
 import { buildTaskGenerationGuidance, defaultTaskGenerationProfile, type TaskGenerationProfile } from "./taskGenerationSettings";
 import { TestImageAttachments } from "../../components/TestImageAttachments";
 import { withDevPreview } from "../../lib/devPreview";
+import { TaskGenerationClarification } from "./TaskGenerationClarification";
 
 type TopicTask = {
   id: number;
@@ -231,6 +233,8 @@ export const TopicStudioPage: React.FC = () => {
   const [assignmentBusyId, setAssignmentBusyId] = React.useState<number | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [aiBusy, setAiBusy] = React.useState<"condition" | "template" | "theory" | null>(null);
+  const [clarificationQuestion, setClarificationQuestion] = React.useState<string | null>(null);
+  const [generateIllustration, setGenerateIllustration] = React.useState(false);
   const [taskForm, setTaskForm] = React.useState({
     title: "",
     description: "",
@@ -313,9 +317,11 @@ export const TopicStudioPage: React.FC = () => {
     setMode("control");
   };
 
-  const generateCondition = async () => {
+  const generateCondition = async (clarificationAnswer?: string) => {
     if (!taskForm.title.trim() || !topic) return;
     setAiBusy("condition");
+    setError(null);
+    setClarificationQuestion(null);
     try {
       if (preview()) {
         setTaskForm((old) => ({
@@ -329,11 +335,37 @@ export const TopicStudioPage: React.FC = () => {
         taskType: "PRACTICE",
         difficulty: generationProfile.difficulty,
         generationGuidance: buildTaskGenerationGuidance(generationProfile, generationInstructions, isEn, true),
+        ...(clarificationAnswer ? { clarificationAnswer } : {}),
         includeSubtasks,
         language: isEn ? "en" : "uk",
       });
-      setTaskForm((old) => ({ ...old, description: String(response.data?.description ?? old.description) }));
+      const description = String(response.data?.description ?? taskForm.description);
+      if (generateIllustration) {
+        try {
+          const image = await api.post(`/topics/${id}/tasks/generate-illustration`, {
+            taskTitle: taskForm.title.trim(),
+            description,
+            language: isEn ? "en" : "uk",
+          });
+          const markdown = String(image.data?.markdown ?? "").trim();
+          setTaskForm(old => ({ ...old, description: markdown ? `${description}\n\n${markdown}` : description }));
+        } catch {
+          setTaskForm(old => ({ ...old, description }));
+          setError(tr("Умову створено, але ілюстрацію не вдалося згенерувати. Перевірте доступність сервісу зображень.", "The statement was generated, but its illustration could not be created. Check the image service availability."));
+          return;
+        }
+      } else {
+        setTaskForm((old) => ({ ...old, description }));
+      }
+      setClarificationQuestion(null);
     } catch (caught) {
+      const question = getClarificationQuestionFromUnknown(caught);
+      if (question) {
+        setClarificationQuestion(question);
+        setError(null);
+        return;
+      }
+      setClarificationQuestion(null);
       setError(getErrorMessageFromUnknown(caught, tr("Не вдалося згенерувати умову.", "Could not generate the problem statement.")));
     } finally {
       setAiBusy(null);
@@ -840,7 +872,8 @@ export const TopicStudioPage: React.FC = () => {
         {mode === "task" && (
           <Modal error={error} title={editingTaskId ? tr("Редагувати завдання", "Edit task") : tr("Нове завдання", "New task")} caption={editingTaskId ? tr("Змініть умову або необов’язкові матеріали. Чернетку можна редагувати до відкриття учням.", "Edit the statement or optional materials. You can edit the draft until it is assigned to students.") : tr("Додайте назву, опишіть задум або одразу створіть умову з AI. Тести налаштуються на наступному кроці.", "Add a title, describe the idea, or draft the statement with AI. Test setup comes next.")} onClose={() => { setMode(null); setEditingTaskId(null); }} wide>
             <form className="task-authoring" onSubmit={event => { event.preventDefault(); void createTask(); }}>
-              <TaskAuthoringFields idPrefix="topic-task" value={taskForm} onChange={patch => setTaskForm(old => ({ ...old, ...patch }))} generationGuidance={generationInstructions} onGenerationGuidanceChange={setGenerationInstructions} generationProfile={generationProfile} onGenerationProfileChange={setGenerationProfile} includeSubtasks={includeSubtasks} onIncludeSubtasksChange={setIncludeSubtasks} guidanceEnabled={!editingTaskId && !preview()} selectedTab={editorTab} onSelectedTabChange={setEditorTab} aiBusy={aiBusy} busy={busy} onGenerateCondition={() => void generateCondition()} onGenerateTemplate={() => void generateTemplate()} onGenerateTheory={() => void generateTheory()} />
+              <TaskAuthoringFields idPrefix="topic-task" value={taskForm} onChange={patch => setTaskForm(old => ({ ...old, ...patch }))} generationGuidance={generationInstructions} onGenerationGuidanceChange={setGenerationInstructions} generationProfile={generationProfile} onGenerationProfileChange={setGenerationProfile} includeSubtasks={includeSubtasks} onIncludeSubtasksChange={setIncludeSubtasks} generateIllustration={generateIllustration} onGenerateIllustrationChange={setGenerateIllustration} guidanceEnabled={!editingTaskId && !preview()} selectedTab={editorTab} onSelectedTabChange={setEditorTab} aiBusy={aiBusy} busy={busy} onGenerateCondition={() => void generateCondition()} onGenerateTemplate={() => void generateTemplate()} onGenerateTheory={() => void generateTheory()} />
+              {clarificationQuestion && <TaskGenerationClarification question={clarificationQuestion} busy={aiBusy === "condition"} onSubmit={answer => void generateCondition(answer)} />}
               <div className="task-authoring__footer"><button type="button" className="classroom-button" disabled={busy} onClick={() => { setMode(null); setEditingTaskId(null); }}>{tr("Скасувати", "Cancel")}</button><button type="submit" className="classroom-button classroom-button--primary" disabled={busy || !!aiBusy || !taskForm.title.trim()}>{busy ? tr("Зберігаємо…", "Saving…") : editingTaskId ? tr("Зберегти зміни", "Save changes") : tr("Створити завдання", "Create task")}<ArrowRight className="size-4" aria-hidden="true" /></button></div>
             </form>
 

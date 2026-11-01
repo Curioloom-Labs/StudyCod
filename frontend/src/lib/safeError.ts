@@ -24,3 +24,15 @@ export const getErrorMessageFromUnknown = (error: unknown, fallback: string): st
 
   return fallback;
 };
+
+export const getClarificationQuestionFromUnknown = (error: unknown): string | null => {
+  if (!error || typeof error !== "object") return null;
+  const response = Reflect.get(error, "response");
+  if (!response || typeof response !== "object") return null;
+  const data = Reflect.get(response, "data");
+  if (!data || typeof data !== "object") return null;
+  const clarification = Reflect.get(data, "clarification");
+  if (!clarification || typeof clarification !== "object") return null;
+  const question = Reflect.get(clarification, "question");
+  return typeof question === "string" && question.trim() ? question.trim().slice(0, 500) : null;
+};

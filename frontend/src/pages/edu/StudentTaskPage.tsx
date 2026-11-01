@@ -1621,7 +1621,7 @@ export const StudentTaskPage: React.FC = () => {
           onReset={() => { setCode(task.template); setFiles(ensureEntryFile(entryFile, [{ path: entryFile, content: task.template }], task.template)); }}
           readOnly={!canEdit}
           submitMode
-          disableAiAssistance={isControlTask}
+          assessmentMode={isControlTask}
           attemptsUsed={task.attemptsUsed ?? 0}
           maxAttempts={task.maxAttempts ?? null}
           toolbarStatus={isControlTask ? <div className="flex flex-wrap items-center gap-2 text-xs">

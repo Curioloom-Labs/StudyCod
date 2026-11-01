@@ -26,6 +26,8 @@ type TaskAuthoringFieldsProps = {
   onGenerationProfileChange: (profile: TaskGenerationProfile) => void;
   includeSubtasks: boolean;
   onIncludeSubtasksChange: (value: boolean) => void;
+  generateIllustration: boolean;
+  onGenerateIllustrationChange: (value: boolean) => void;
   guidanceEnabled: boolean;
   selectedTab: TaskAuthoringTab;
   onSelectedTabChange: (value: TaskAuthoringTab) => void;
@@ -48,6 +50,8 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
   onGenerationProfileChange,
   includeSubtasks,
   onIncludeSubtasksChange,
+  generateIllustration,
+  onGenerateIllustrationChange,
   guidanceEnabled,
   selectedTab,
   onSelectedTabChange,
@@ -147,6 +151,10 @@ export const TaskAuthoringFields: React.FC<TaskAuthoringFieldsProps> = ({
           <label className="flex items-start gap-2 text-xs leading-5 text-text-muted dark:text-text-secondary">
             <input type="checkbox" checked={includeSubtasks} disabled={busy || !!aiBusy} onChange={event => onIncludeSubtasksChange(event.target.checked)} className="mt-0.5 size-4 accent-primary" />
             <span>{tr("Доречні підзадачі й відсотки", "Add subtasks and percentage weights when useful")}</span>
+          </label>
+          <label className="flex items-start gap-2 text-xs leading-5 text-text-muted dark:text-text-secondary">
+            <input type="checkbox" checked={generateIllustration} disabled={busy || !!aiBusy} onChange={event => onGenerateIllustrationChange(event.target.checked)} className="mt-0.5 size-4 accent-primary" />
+            <span>{tr("Створити ілюстрацію разом з умовою", "Generate an illustration with the statement")}</span>
           </label>
           <p className="classroom-caption">{tr("Підтримуються Markdown, блоки коду та LaTeX.", "Markdown, code blocks, and LaTeX are supported.")}</p>
         </div>

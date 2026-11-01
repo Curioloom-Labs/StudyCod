@@ -4,6 +4,7 @@ import { ArrowLeft, Calculator, Clock3, FileCheck2, FlaskConical, Pencil, Plus, 
 import { api } from "../../lib/api/client";
 import { addTestData, deleteGeneratedTestData, deleteTestData, generateTestData, getTestData, updateControlWorkFormula, updateTestData, type TestData } from "../../lib/api/edu";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
+import { getClarificationQuestionFromUnknown } from "../../lib/safeError";
 import { showToast } from "../../lib/toast";
 import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
@@ -16,6 +17,7 @@ import { TestImageAttachments } from "../../components/TestImageAttachments";
 import { MarkdownImageInsertButton } from "../../components/MarkdownImageInsertButton";
 import { MarkdownView } from "../../components/MarkdownView";
 import { stripTaskAiTrapSegments } from "../../../../shared/utils/taskAiTrap";
+import { TaskGenerationClarification } from "./TaskGenerationClarification";
 
 type ControlTask = { id: number; title: string; description?: string; template?: string; maxAttempts?: number; theory?: { content: string } | null; projectSpec?: unknown; isAssigned?: boolean; assignedStudentIds?: number[] | null };
 type QuizItem = { question?: string; options?: Record<string, string>; correct?: string };
@@ -151,6 +153,8 @@ export const ControlStudioPage: React.FC = () => {
   const [taskEditorTab, setTaskEditorTab] = React.useState<TaskAuthoringTab>("statement");
   const [editingTaskId, setEditingTaskId] = React.useState<number | null>(null);
   const [taskAiBusy, setTaskAiBusy] = React.useState<"condition" | "template" | "theory" | null>(null);
+  const [clarificationQuestion, setClarificationQuestion] = React.useState<string | null>(null);
+  const [generateIllustration, setGenerateIllustration] = React.useState(false);
   const [testSettings, setTestSettings] = React.useState({ count: "5", requiredCases: "", replaceGenerated: true, groupByTaskSubtasks: true, points: "1", isHidden: false, subtask: "", subtaskScoringMode: "ABSOLUTE" as "ABSOLUTE" | "PARTIAL" });
   const [testCounts, setTestCounts] = React.useState<Record<number, number>>({});
   const [generatingTestsFor, setGeneratingTestsFor] = React.useState<number | null>(null);
@@ -551,10 +555,11 @@ export const ControlStudioPage: React.FC = () => {
     }
   };
 
-  const generateTaskCondition = async () => {
+  const generateTaskCondition = async (clarificationAnswer?: string) => {
     if (!control?.topic?.id || !newTask.title.trim()) return;
     setTaskAiBusy("condition");
     setError(null);
+    setClarificationQuestion(null);
     try {
       if (preview()) {
         setNewTask(old => ({ ...old, description: tr(`## Завдання\n\nСтворіть програму для теми **${control.topic?.title || ""}**: ${old.title.trim()}.\n\n### Вхідні дані\nОпишіть значення, які отримує програма.\n\n### Вихідні дані\nВиведіть результат згідно з умовою.`, `## Problem\n\nWrite a program for **${control.topic?.title || ""}**: ${old.title.trim()}.\n\n### Input\nDescribe the values provided to the program.\n\n### Output\nPrint the result as required.`) }));
@@ -564,12 +569,38 @@ export const ControlStudioPage: React.FC = () => {
           taskType: "CONTROL",
           difficulty: taskGenerationProfile.difficulty,
           generationGuidance: buildTaskGenerationGuidance(taskGenerationProfile, newTask.generationInstructions, isEn, true),
+          ...(clarificationAnswer ? { clarificationAnswer } : {}),
           includeSubtasks,
           language: isEn ? "en" : "uk",
         });
-        setNewTask(old => ({ ...old, description: String(response.data?.description ?? old.description) }));
+        const description = String(response.data?.description ?? newTask.description);
+        if (generateIllustration) {
+          try {
+            const image = await api.post(`/topics/${control.topic.id}/tasks/generate-illustration`, {
+              taskTitle: newTask.title.trim(),
+              description,
+              language: isEn ? "en" : "uk",
+            });
+            const markdown = String(image.data?.markdown ?? "").trim();
+            setNewTask(old => ({ ...old, description: markdown ? `${description}\n\n${markdown}` : description }));
+          } catch {
+            setNewTask(old => ({ ...old, description }));
+            setError(tr("Умову створено, але ілюстрацію не вдалося згенерувати. Перевірте доступність сервісу зображень.", "The statement was generated, but its illustration could not be created. Check the image service availability."));
+            return;
+          }
+        } else {
+          setNewTask(old => ({ ...old, description }));
+        }
       }
+      setClarificationQuestion(null);
     } catch (caught) {
+      const question = getClarificationQuestionFromUnknown(caught);
+      if (question) {
+        setClarificationQuestion(question);
+        setError(null);
+        return;
+      }
+      setClarificationQuestion(null);
       setError(getErrorMessageFromUnknown(caught, tr("Не вдалося згенерувати умову.", "Could not generate the problem statement.")));
     } finally {
       setTaskAiBusy(null);
@@ -783,7 +814,7 @@ export const ControlStudioPage: React.FC = () => {
               <StatusCard active={Boolean(control.hasPractice)} title={tr("Практика", "Practice")} text={control.hasPractice ? tr(`${tasks.length} задач у наборі.`, `${tasks.length} problems in the set.`) : tr("Вимкнено.", "Disabled.")} warm />
               <StatusCard active={hasQuiz} title={tr("Квіз", "Quiz")} text={hasQuiz ? tr(`${quiz.length} питань.`, `${quiz.length} questions.`) : tr("Питань ще немає.", "No questions yet.")} />
             </div>
-            <div className="mt-6 space-y-3">
+            {control.hasPractice !== false && <div className="mt-6 space-y-3">
               <div className="flex justify-end">
                 <button type="button" onClick={() => { setNewTask(emptyTaskDraft()); setDraftManualTests([]); setTaskGenerationProfile(defaultTaskGenerationProfile); setEditingTaskId(null); setTaskEditorTab("statement"); setShowCreateTask(value => !value); }} className="inline-flex items-center gap-2 rounded-xl border border-accent-warn/25 px-4 py-2.5 text-sm font-bold text-accent-warn transition hover:bg-bg-hover dark:border-accent-warn/25 dark:text-accent-warn dark:hover:bg-accent-warn/10">
                   <Plus className="h-4 w-4" />{showCreateTask ? tr("Скасувати", "Cancel") : tr("Додати практичну задачу", "Add practice problem")}
@@ -802,6 +833,8 @@ export const ControlStudioPage: React.FC = () => {
                     onGenerationProfileChange={setTaskGenerationProfile}
                     includeSubtasks={includeSubtasks}
                     onIncludeSubtasksChange={setIncludeSubtasks}
+                    generateIllustration={generateIllustration}
+                    onGenerateIllustrationChange={setGenerateIllustration}
                     guidanceEnabled={!editingTaskId && !preview()}
                     selectedTab={taskEditorTab}
                     onSelectedTabChange={setTaskEditorTab}
@@ -811,6 +844,7 @@ export const ControlStudioPage: React.FC = () => {
                     onGenerateTemplate={() => void generateTaskTemplate()}
                     onGenerateTheory={() => void generateTaskTheory()}
                   />
+                  {clarificationQuestion && <TaskGenerationClarification question={clarificationQuestion} busy={taskAiBusy === "condition"} onSubmit={answer => void generateTaskCondition(answer)} />}
                   <details className="mt-4 rounded-xl border border-border/10 bg-white/45 dark:border-white/10 dark:bg-black/10">
                     <summary className="cursor-pointer px-4 py-3 text-sm font-bold">{tr("Налаштувати тести й оцінювання", "Configure tests and scoring")}</summary>
                     <div className="border-t border-border/10 p-4 dark:border-white/10">
@@ -860,10 +894,10 @@ export const ControlStudioPage: React.FC = () => {
                 <div className="flex flex-wrap items-center gap-3 border-t border-border/10 pt-3 dark:border-white/10"><label className="inline-flex items-center gap-2 text-xs font-semibold"><Upload className="size-4" />{tr("Імпорт .in/.out", "Import .in/.out")}<input key={importInputKey} type="file" accept=".in,.out" multiple className="max-w-48 text-xs" onChange={event => setImportFiles(Array.from(event.target.files || []))} /></label><label className="text-xs font-semibold">{tr("Балів за тест", "Points per test")}<input type="number" min="1" max="1000" value={importTestSettings.points} onChange={event => setImportTestSettings(old => ({ ...old, points: event.target.value }))} className="ml-2 w-20 rounded-lg border border-border/10 bg-white px-2 py-1.5 dark:border-white/10 dark:bg-bg-code" /></label><label className="text-xs font-semibold">{tr("Підзадача", "Subtask")}<input maxLength={64} value={importTestSettings.subtask} onChange={event => setImportTestSettings(old => ({ ...old, subtask: event.target.value }))} className="ml-2 w-36 rounded-lg border border-border/10 bg-white px-2 py-1.5 dark:border-white/10 dark:bg-bg-code" /></label><label className="text-xs font-semibold">{tr("Оцінювання", "Scoring")}<select value={importTestSettings.subtaskScoringMode} onChange={event => setImportTestSettings(old => ({ ...old, subtaskScoringMode: event.target.value as "ABSOLUTE" | "PARTIAL" }))} className="ml-2 rounded-lg border border-border/10 bg-white px-2 py-1.5 dark:border-white/10 dark:bg-bg-code"><option value="ABSOLUTE">{tr("Абсолютне", "Absolute")}</option><option value="PARTIAL">{tr("Часткове", "Partial")}</option></select></label><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={importTestSettings.isHidden} onChange={event => setImportTestSettings(old => ({ ...old, isHidden: event.target.checked }))} />{tr("Приховані", "Hidden")}</label><button type="button" disabled={testEditorBusy || !importFiles.length} onClick={() => void importTaskTests()} className="classroom-button">{tr("Імпортувати", "Import files")}</button></div>
               </section>}</React.Fragment>)}
               {!tasks.length && <p className="rounded-2xl border border-dashed border-border/15 px-5 py-8 text-center text-sm text-text-muted dark:border-white/10 dark:text-text-secondary">{tr("Практичних задач ще немає.", "No practice problems yet.")}</p>}
-            </div>
+            </div>}
           </section>
 
-          <section className="classroom-quiz-editor">
+          {control.hasTheory !== false && <section className="classroom-quiz-editor">
             <div className="classroom-section-title"><h2>{tr("Запитання квізу", "Quiz questions")}<span>{quiz.length}</span></h2></div>
             <section className="mt-4 rounded-2xl border border-border/10 bg-bg-hover/70 p-4 dark:border-white/10 dark:bg-white/[.035]" aria-label={tr("Налаштування генерації квізу", "Quiz generation settings")}>
               <div className="mb-3"><h3 className="text-sm font-bold">{tr("Налаштування генерації", "Generation settings")}</h3><p className="mt-1 text-xs leading-5 text-text-muted dark:text-text-secondary">{tr("Вкажіть кількість і рівень. Згенеровані питання можна буде відредагувати або видалити вручну.", "Choose the number and level. You can edit or remove generated questions afterward.")}</p></div>
@@ -882,7 +916,7 @@ export const ControlStudioPage: React.FC = () => {
             {quiz.map((item, index) => <fieldset key={index} className="classroom-quiz-question"><legend>{tr("Запитання", "Question")} {index + 1}</legend><div className="classroom-quiz-question__heading"><div className="min-w-0 flex-1"><textarea ref={element => { quizQuestionRefs.current[index] = element; }} aria-label={tr(`Текст запитання ${index + 1}`, `Question ${index + 1} text`)} value={item.question || ""} onChange={event => setQuizText(JSON.stringify(quiz.map((q, i) => i === index ? { ...q, question: event.target.value } : q), null, 2))} rows={2} placeholder={tr("Введіть запитання…", "Enter a question…")} /><div className="mt-1 flex justify-end"><MarkdownImageInsertButton value={item.question || ""} onChange={question => setQuizText(JSON.stringify(quiz.map((q, i) => i === index ? { ...q, question } : q), null, 2))} textareaRef={{ current: quizQuestionRefs.current[index] }} className="text-xs" /></div></div><button type="button" className="classroom-icon-button" aria-label={tr(`Прибрати запитання ${index + 1}`, `Remove question ${index + 1}`)} onClick={() => setQuizText(JSON.stringify(quiz.filter((_, i) => i !== index), null, 2))}><Trash2 className="size-4" aria-hidden="true" /></button></div><div className="classroom-quiz-options">{Object.entries(item.options || { A: "", B: "", C: "", D: "" }).map(([key, value]) => <label key={key}><input type="radio" name={`quiz-correct-${index}`} checked={item.correct === key} aria-label={tr(`Правильна відповідь ${key} для запитання ${index + 1}`, `Correct answer ${key} for question ${index + 1}`)} onChange={() => setQuizText(JSON.stringify(quiz.map((q, i) => i === index ? { ...q, correct: key } : q), null, 2))} /><span>{key}</span><input type="text" aria-label={tr(`Варіант ${key} запитання ${index + 1}`, `Question ${index + 1} option ${key}`)} value={value} onChange={event => setQuizText(JSON.stringify(quiz.map((q, i) => i === index ? { ...q, options: { ...q.options, [key]: event.target.value } } : q), null, 2))} placeholder={tr("Варіант відповіді", "Answer option")} /></label>)}</div></fieldset>)}
             <button type="button" className="classroom-add-row" onClick={() => setQuizText(JSON.stringify([...quiz, { question: "", options: { "А": "", "Б": "", "В": "", "Г": "", "Д": "" }, correct: "А" }], null, 2))}><Plus className="size-4" aria-hidden="true" />{tr("Додати запитання", "Add question")}</button>
             <details className="classroom-quiz-source"><summary>{tr("Імпорт і розширений формат", "Import and advanced format")}</summary><p className="classroom-caption">{tr("Тут можна вставити набір запитань у форматі JSON.", "Paste a set of questions in JSON format here.")}</p><textarea aria-label={tr("Запитання у форматі JSON", "Questions in JSON format")} value={quizText} onChange={event => setQuizText(event.target.value)} rows={8} spellCheck={false} /><button type="button" className="classroom-text-button" onClick={normalizeQuiz}>{tr("Перевірити формат", "Check format")}</button></details>
-          </section>
+          </section>}
 
         </section>
 

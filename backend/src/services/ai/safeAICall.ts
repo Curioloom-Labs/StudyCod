@@ -5,7 +5,7 @@ import { logger } from '../../utils/logger';
 import { getCurriculumPolicyViolationForGeneratedTask } from './curriculumPolicy';
 import { isAiCircuitOpen, recordAiCircuitSuccess, recordAiCircuitFailure } from './aiCircuitBreaker';
 import { normalizeTopicLanguage, TOPIC_LANGUAGES } from '../../utils/topicLanguage';
-import { buildTaskValidationFeedback, cannotRepairByRegeneratingTests, requireCompleteTaskDescription, resolveTestDataIoType } from '../llm/TaskContractReview';
+import { buildTaskValidationFeedback, cannotRepairByRegeneratingTests, requireCompleteTaskDescription, resolveTestDataIoType, TaskContractReviewError } from '../llm/TaskContractReview';
 import { executeReferenceTests } from '../executeReferenceTests';
 import { REFERENCE_LANGUAGE } from '../llm/ReferenceTestData';
 import { TASK_AI_TRAP_START } from '../../../../shared/utils/taskAiTrap';
@@ -18,6 +18,7 @@ export interface AIError {
   message: string;
   error?: string;
   details?: Record<string, unknown>;
+  clarification?: { question: string };
 }
 
 type JsonObject = Record<string, unknown>;
@@ -279,6 +280,7 @@ function sanitizeParams(mode: AIMode, params: unknown): JsonObject {
   }
   if (mode === 'generateTaskCondition') {
     if (typeof p.difficulty === 'number') p.difficulty = Math.max(1, Math.min(5, Math.floor(p.difficulty)));
+    if (typeof p.clarificationAnswer === 'string') p.clarificationAnswer = sanitizeText(p.clarificationAnswer, 1200);
   }
   return p;
 }
@@ -375,6 +377,9 @@ function validateInputParams(mode: AIMode, params: JsonObject): void {
       }
       if (params.difficulty !== undefined && (typeof params.difficulty !== 'number' || params.difficulty < 1 || params.difficulty > 5)) {
         throw new Error('difficulty must be a number between 1 and 5 if provided');
+      }
+      if (params.clarificationAnswer !== undefined && (typeof params.clarificationAnswer !== 'string' || params.clarificationAnswer.length > 1200)) {
+        throw new Error('clarificationAnswer must be at most 1200 characters');
       }
       break;
     case 'generateTaskTemplate':
@@ -776,6 +781,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
               taskType: requiredTaskType(sanitizedParams.taskType),
               difficulty: optionalNumber(sanitizedParams.difficulty),
               generationGuidance: optionalString(sanitizedParams.generationGuidance),
+              clarificationAnswer: optionalString(sanitizedParams.clarificationAnswer),
               validationFeedback: optionalString(sanitizedParams.validationFeedback),
               existingDescription: optionalString(sanitizedParams.existingDescription),
               includeSubtasks: sanitizedParams.includeSubtasks !== false,
@@ -869,6 +875,20 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
           isSemanticValidationError(errorMsg);
 
         if (looksLikeValidationError) {
+          if (error instanceof TaskContractReviewError && error.clarificationQuestion) {
+            return {
+              success: false,
+              error: {
+                statusCode: 422,
+                message: language === 'en'
+                  ? 'The task needs clarification before it can be generated.'
+                  : 'Потрібне уточнення перед генерацією завдання.',
+                error: 'AI_CLARIFICATION_REQUIRED',
+                clarification: { question: error.clarificationQuestion },
+                details: { mode, requestId: options?.requestId || null },
+              },
+            };
+          }
           // Some validation errors are transient/model-specific. For generation modes, retry a few times
           // instead of failing fast (bounded by maxAttempts and totalTimeoutMs).
           const canRetryValidation = (mode === 'generateTask' || mode === 'generateTaskCondition' || (mode === 'generateTestData' && !cannotRepairByRegeneratingTests(error))) && attempt < maxAttempts;
@@ -1086,6 +1106,7 @@ export function sendAIError(res: Response, error: AIError): void {
   // retry hint needed by clients.
   res.status(statusCode).json({
     message: error.message,
+    ...(error.clarification?.question ? { clarification: { question: error.clarification.question } } : {}),
     ...(statusCode === 429 && Number.isFinite(retryAfterMs) && retryAfterMs > 0
       ? { details: { retryAfterMs } }
       : {})

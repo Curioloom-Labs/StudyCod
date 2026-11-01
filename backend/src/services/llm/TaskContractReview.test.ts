@@ -105,6 +105,48 @@ test('condition review still rejects a real rounding conflict on an odd domain',
   }), /TASK_CONTRACT_REVIEW_FAILED\[statement\]/);
 });
 
+test('condition review asks the teacher when the intended comparison cannot be inferred', async () => {
+  const question = 'Сума має бути строго більшою за 10 × n чи дорівнювати 10 × n?';
+  await assert.rejects(reviewGeneratedTaskCondition(fakeProvider([{
+    valid: false,
+    invalidSource: 'statement',
+    issues: ["The phrase 'sum is 10 times larger than n' could mean sum > 10*n or sum == 10*n."],
+    clarificationQuestion: question,
+  }]), {
+    statement: 'Print the sum if it is 10 times larger than n.',
+    inputFormat: 'The first integer is n, followed by n integers.',
+    outputFormat: 'Print the sum.',
+    constraints: ['1 <= n <= 20'],
+    examples: [
+      { input: '2 5 5', output: '10' },
+      { input: '3 1 2 3', output: '6' },
+      { input: '1 10', output: '10' },
+    ],
+  }), (error: unknown) => error instanceof TaskContractReviewError && error.clarificationQuestion === question);
+});
+
+test('condition review discards an impossible count-prefixed token complaint after exact recount', async () => {
+  await reviewGeneratedTaskCondition(fakeProvider([{
+    valid: false,
+    invalidSource: 'publicExamples',
+    issues: [
+      "Example 1: input '4 1 2 3 4' has 5 tokens, but N=4 implies 4 elements. Expected 4 elements after N.",
+      "Example 2: input '8 5 5 5 5 5 5 5 5' has 9 tokens, but N=8 implies 8 elements. Expected 8 elements after N.",
+      "Example 3: input '5 1 2 3 4 5' has 6 tokens, but N=5 implies 5 elements. Expected 5 elements after N.",
+    ],
+  }]), {
+    statement: 'Read n followed by exactly n integers.',
+    inputFormat: 'The first token n is followed by n array values.',
+    outputFormat: 'Print the values.',
+    constraints: ['1 <= n <= 8'],
+    examples: [
+      { input: '4 1 2 3 4', output: '1 2 3 4' },
+      { input: '8 5 5 5 5 5 5 5 5', output: '5 5 5 5 5 5 5 5' },
+      { input: '5 1 2 3 4 5', output: '1 2 3 4 5' },
+    ],
+  });
+});
+
 test('generated EDU condition review receives only corrected learner-visible examples and the executed oracle', async () => {
   const calls: string[] = [];
   await reviewGeneratedTaskCondition(fakeProvider([{ valid: true, invalidSource: 'none', issues: [] }], calls), {
