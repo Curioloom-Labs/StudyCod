@@ -905,6 +905,10 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
                 ? 'AI_GENERATION_FAILED: Generated Python reference program failed to compile'
                 : /Task generation guidance validation failed/i.test(errorMsg)
                   ? 'AI_GENERATION_FAILED: Generated task guidance was invalid'
+                  : mode === 'generateTaskCondition'
+                    ? language === 'en'
+                      ? 'AI_GENERATION_FAILED: The generated task did not pass consistency checks after retries.'
+                      : 'AI_GENERATION_FAILED: Згенерована задача не пройшла перевірку узгодженості після повторних спроб.'
                   : 'AI_GENERATION_FAILED: Invalid response structure',
                 error: errorMsg,
               details: {

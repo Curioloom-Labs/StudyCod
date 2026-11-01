@@ -21,6 +21,7 @@ import { TASK_AI_TRAP_START } from '../../../../shared/utils/taskAiTrap';
 import { consumeCurrentAIExecutionRetry, generatePromptJSON, generatePromptText, getActivePromptBundleVersion, runWithPromptExecutionContext } from './promptExecution';
 import { formatUntrustedData, PROMPT_SCHEMA_VERSION } from '../../../../shared/ai/prompts';
 import { formatTaskConditionDraft, TASK_CONDITION_DRAFT_JSON_SCHEMA } from './taskConditionDraft';
+import type { TaskConditionDraft } from './taskConditionDraft';
 
 export type LLMTaskLanguage = TopicLanguage;
 
@@ -2512,8 +2513,27 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
       },
     );
     const draft = AIResponseValidator.validateGenerateTaskConditionDraft(raw);
+    let verifiedDraft = draft;
     try {
-      await executeReferenceTests(draft.referenceSolution, 'PYTHON', [], draft.examples, params.signal, { allowEmptyOutput: true });
+      // Treat the Judge execution as the source of truth for example stdout.
+      // Models often produce a correct reference program but mistype an example
+      // result; reject the task only if the independent contract review finds
+      // that the executed program itself contradicts the learner-facing rules.
+      const executedOutputs = await executeReferenceTests(
+        draft.referenceSolution,
+        'PYTHON',
+        draft.examples.map(example => example.input),
+        [],
+        params.signal,
+        { allowEmptyOutput: true },
+      );
+      verifiedDraft = {
+        ...draft,
+        examples: draft.examples.map((example, index) => ({
+          input: example.input,
+          output: executedOutputs[index] ?? example.output,
+        })) as TaskConditionDraft['examples'],
+      };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       throw makeAIValidationError(
@@ -2522,15 +2542,16 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
         draft,
       );
     }
-    const description = formatTaskConditionDraft(draft, locale);
+    const description = formatTaskConditionDraft(verifiedDraft, locale);
     const validated = AIResponseValidator.validateGenerateTaskCondition({ description }, {
       requireAiTrap: generationGuidance.includes(TASK_AI_TRAP_START),
     });
-    await reviewGeneratedTaskCondition(provider, draft, {
+    await reviewGeneratedTaskCondition(provider, verifiedDraft, {
       userId: params.userId,
       topicId: params.topicId,
       signal: params.signal,
       language: locale,
+      executedReference: { language: 'python', source: draft.referenceSolution },
     });
     return validated;
   }

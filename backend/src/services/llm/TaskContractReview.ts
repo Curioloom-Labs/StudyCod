@@ -84,7 +84,7 @@ const ReviewSchema = z.object({
 }).strict();
 
 export class TaskContractReviewError extends AIValidationError {
-  constructor(mode: string, public readonly invalidSource: 'statement' | 'publicExamples' | 'candidateTests', issues: string[]) {
+  constructor(mode: string, public readonly invalidSource: 'statement' | 'publicExamples' | 'candidateTests', public readonly issues: string[]) {
     super(mode, new z.ZodError([]), `TASK_CONTRACT_REVIEW_FAILED[${invalidSource}]: ${issues.join('; ')}`);
   }
 }
@@ -157,11 +157,17 @@ async function reviewContract(
     }
     const { valid, invalidSource, issues } = parsed.data;
     if (valid && invalidSource === 'none' && issues.length === 0) return;
-    if (valid || invalidSource === 'none' || issues.length === 0 || (mode === 'generateTask' && invalidSource === 'candidateTests')) {
+    if (valid || invalidSource === 'none' || issues.length === 0) {
       formatFailure = 'inconsistent';
       continue;
     }
-    throw new TaskContractReviewError(mode, invalidSource, issues);
+    // A generated task condition has no separate candidate-test contract. If
+    // the reviewer finds a defect in its hidden oracle, that is a defect in
+    // the generated task package and should trigger condition repair.
+    const actionableSource = mode === 'generateTask' && invalidSource === 'candidateTests'
+      ? 'statement'
+      : invalidSource;
+    throw new TaskContractReviewError(mode, actionableSource, issues);
   }
   throw makeAIValidationError(
     mode,
@@ -196,7 +202,7 @@ export async function reviewGeneratedTask(
 export async function reviewGeneratedTaskCondition(
   provider: LLMProvider,
   condition: Pick<TaskConditionDraft, 'statement' | 'inputFormat' | 'outputFormat' | 'constraints' | 'examples'>,
-  options: LLMGenerateOptions = {},
+  options: LLMGenerateOptions & { executedReference?: { language: string; source: string } } = {},
 ): Promise<void> {
   try {
     await reviewContract(provider, 'generateTask', {
@@ -207,6 +213,7 @@ export async function reviewGeneratedTaskCondition(
       constraints: condition.constraints.join('\n'),
       allowEmptyOutput: true,
       publicExamples: condition.examples.map(({ input, output }) => ({ input, output })),
+      ...(options.executedReference ? { executedReference: options.executedReference } : {}),
     }, options);
   } catch (error) {
     if (error instanceof AIValidationError) error.rawResponse = condition;
