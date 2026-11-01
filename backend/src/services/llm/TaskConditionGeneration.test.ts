@@ -73,10 +73,10 @@ test('condition renderer includes learner-facing subtasks with weights when requ
 test('EDU task condition uses structured JSON generation and forwards repair feedback', async t => {
   t.mock.method(referenceExecution, 'executeReferenceTests', async (source: string, language: string, inputs: string[], examples: Array<{ input: string; output: string }>) => {
     assert.equal(language, 'PYTHON');
-    assert.equal(inputs.length, 0);
-    assert.equal(examples.length, 3);
+    assert.equal(inputs.length, 3);
+    assert.equal(examples.length, 0);
     assert.match(source, /print\(a \+ b\)/);
-    return [];
+    return ['5', '0', '3'];
   });
   const calls: Array<{ prompt: string; schema: object; systemPrompt?: string; options?: LLMGenerateOptions }> = [];
   const responses: unknown[] = [draft, { valid: true, invalidSource: 'none', issues: [] }];
