@@ -546,7 +546,7 @@ if (!baseUrl) {
     const libraryResultPanel = page.locator(".ide-runner").first();
     const originalLibraryResultHeight = await libraryResultPanel.evaluate((panel) => panel.getBoundingClientRect().height);
     const libraryEditor = page.getByRole("textbox", { name: "Editor content" });
-    await libraryEditor.evaluate((element) => element.focus());
+    await page.locator(".monaco-editor .view-lines").last().click({ position: { x: 20, y: 10 } });
     await page.keyboard.press("Control+A");
     const firstLibraryCode = "n = int(input())\ntotal = 0\nfor value in range(1, n):\n    total += value\nprint(total)\n";
     await page.keyboard.insertText(firstLibraryCode);
@@ -572,7 +572,7 @@ if (!baseUrl) {
     const firstReturnedLibraryCode = (await page.locator(".monaco-editor .view-lines").innerText()).replace(/\u00a0/g, " ");
     if (!firstReturnedLibraryCode.includes("range(1, n)")) throw new Error("returning to library code lost the learner's first attempt");
     const correctedLibraryCode = "n = int(input())\ntotal = 0\nfor value in range(1, n + 1):\n    total += value\nprint(total)\n";
-    await libraryEditor.evaluate((element) => element.focus());
+    await page.locator(".monaco-editor .view-lines").last().click({ position: { x: 20, y: 10 } });
     await page.keyboard.press("Control+A");
     await page.keyboard.insertText(correctedLibraryCode);
     await page.waitForFunction(
