@@ -35,6 +35,13 @@ function canonicalInputKey(input: string, runtimeProfile: EduPythonRuntimeProfil
   return input.trim() ? `stdin:${input}` : null;
 }
 
+function hasRunnableTkinterRoot(source: string): boolean {
+  const code = source.replace(/^\s*```(?:python)?\s*/i, '').replace(/\s*```\s*$/, '');
+  return /(?:^|\n)\s*(?:import\s+tkinter(?:\s+as\s+[A-Za-z_]\w*)?|from\s+tkinter\s+import\b)/m.test(code)
+    && /\bTk\s*\(/.test(code)
+    && /\bmainloop\s*\(/.test(code);
+}
+
 const ResponseSchema = z.object({
   referenceSolution: z.string().trim().min(1).max(32_000),
   inputs: z.array(z.string().min(1).max(16_000)).min(1).max(64),
@@ -93,7 +100,12 @@ export async function generateReferenceTestData(provider: LLMProvider, params: R
   const tkinterRuntime = params.pythonRuntimeProfile === 'TKINTER';
   const inputKind = tkinterRuntime ? 'distinct valid JSON UI-event payload strings' : 'distinct valid candidate stdin strings';
   const runtimeInstructions = tkinterRuntime
-    ? `The selected runtime is StudyCod's virtual-display Tkinter harness. The referenceSolution must be a real, complete Python Tkinter application implementing the learner-visible window and behavior; it must not read stdin, parse JSON, simulate events itself, or print expected snapshots. Create exactly one tk.Tk() root, set the title and geometry required by the statement, create its real widgets and callbacks, use the stated fixed placement for clickable widgets, and call root.mainloop(). The harness injects the events below into the running app and captures the resulting snapshot. Each candidate input must be a JSON object like {"events":[...]}; supported events are {"type":"click","x":INTEGER,"y":INTEGER} with x in [0,1279] and y in [0,799], {"type":"type","text":"..."} with at most 120 characters, and {"type":"key","key":"Return|Escape|Tab|BackSpace|Delete|space|Left|Right|Up|Down"}. Use only events supported by the task and make click coordinates land inside the intended stated target. Type/key events require the statement-defined focus behavior and a genuinely focused widget. The exact expected output is the harness JSON snapshot: root title, root geometry as WIDTHxHEIGHT, and immediate widgets recursively represented by type, children, and available text/value/state. It contains no per-widget coordinates. Keep the Python program's own stdout empty; the harness produces the snapshot.`
+    ? `The selected runtime is StudyCod's virtual-display Tkinter harness. The referenceSolution must be a real, complete Python Tkinter application implementing the learner-visible window and behavior. A command-line oracle, a print-only program, or a program that never opens a Tk root cannot produce the expected snapshot and is invalid. It must not read stdin, parse JSON, simulate events itself, or print expected snapshots. Create exactly one tk.Tk() root, set the title and geometry required by the statement, create its real widgets and callbacks, use the stated fixed placement for clickable widgets, and call root.mainloop(). Its structure must include an actual Tk constructor and a mainloop call, for example:
+import tkinter as tk
+root = tk.Tk()
+# create the task's widgets and callbacks here
+root.mainloop()
+The harness injects the events below into the running app and captures the resulting snapshot. Each candidate input must be a JSON object like {"events":[...]}; supported events are {"type":"click","x":INTEGER,"y":INTEGER} with x in [0,1279] and y in [0,799], {"type":"type","text":"..."} with at most 120 characters, and {"type":"key","key":"Return|Escape|Tab|BackSpace|Delete|space|Left|Right|Up|Down"}. Use only events supported by the task and make click coordinates land inside the intended stated target. Type/key events require the statement-defined focus behavior and a genuinely focused widget. The exact expected output is the harness JSON snapshot: root title, root geometry as WIDTHxHEIGHT, and immediate widgets recursively represented by type, children, and available text/value/state. It contains no per-widget coordinates. Keep the Python program's own stdout empty; the harness produces the snapshot.`
     : params.pythonRuntimeProfile === 'SCIENTIFIC'
       ? 'The selected reference runtime has NumPy, OpenCV (cv2), SciPy, pandas, matplotlib, scikit-learn and SymPy. You may use these libraries only when needed by the statement. Do not assume image fixtures unless they are explicitly included in existingExamples.'
       : 'The selected reference runtime is standard Python 3. Use only the Python standard library.';
@@ -157,6 +169,12 @@ If authoritativeExamples is true, existingExamples are authored tests: repair th
     );
   }
   try {
+    if (tkinterRuntime && !hasRunnableTkinterRoot(referenceSolution)) {
+      throw makeAIValidationError(
+        'generateTestData',
+        'Tkinter reference validation failed: referenceSolution must import tkinter, create a Tk() root window, and call mainloop() so the Judge can execute UI events.',
+      );
+    }
     const execution = await executeReferenceWithMainGuardRepair(
       referenceSolution,
       selectedInputs,
@@ -177,7 +195,11 @@ If authoritativeExamples is true, existingExamples are authored tests: repair th
     });
     return tests;
   } catch (error) {
-    if (error instanceof AIValidationError) error.rawResponse = { referenceSolution, inputs };
+    if (error instanceof AIValidationError) error.rawResponse = {
+      referenceSolution,
+      inputs,
+      ...(tkinterRuntime ? { _pythonRuntimeProfile: 'TKINTER' } : {}),
+    };
     throw error;
   }
 }

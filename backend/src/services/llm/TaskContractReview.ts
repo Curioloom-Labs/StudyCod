@@ -47,9 +47,12 @@ export function buildTaskValidationFeedback(message: string, rejectedCandidate?:
   if (!rejectedCandidate || typeof rejectedCandidate !== 'object' || Array.isArray(rejectedCandidate)) return correction;
   const draft = rejectedCandidate as Record<string, unknown>;
   const reference = typeof draft.referenceSolution === 'string';
+  const tkinterReference = reference && draft._pythonRuntimeProfile === 'TKINTER';
   const conditionDraft = typeof draft.statement === 'string' && Array.isArray(draft.examples);
   const fields = reference
-    ? ['referenceSolution', 'inputs']
+    ? tkinterReference
+      ? ['referenceSolution', 'inputs', '_pythonRuntimeProfile']
+      : ['referenceSolution', 'inputs']
     : conditionDraft
       ? ['statement', 'inputFormat', 'outputFormat', 'constraints', 'examples', 'referenceSolution']
       : ['title', 'topic', 'difficulty', 'theoryMarkdown', 'practicalTask', 'ioType', 'inputFormat', 'outputFormat', 'constraints', 'examples', 'codeTemplate'];
@@ -58,7 +61,9 @@ export function buildTaskValidationFeedback(message: string, rejectedCandidate?:
     // Never truncate JSON halfway through a parsing or output rule.
     if (serialized.length > MAX_TASK_DESCRIPTION_CHARS || serialized === '{}') return correction;
     const repair = reference
-      ? 'REPAIR THE REJECTED REFERENCE PROGRAM below using the compiler/runtime finding. Return syntactically valid Python 3 with matching quotes and indentation, plus valid candidate inputs. Preserve the supplied statement and public examples; never change expected answers to fit broken code.'
+      ? tkinterReference
+        ? 'REPAIR THE REJECTED TKINTER REFERENCE APPLICATION below using the Judge/runtime finding. Return a complete runnable Python 3 Tkinter application that imports tkinter, constructs exactly one Tk() root, creates the widgets and callbacks required by the supplied statement, and calls root.mainloop(). The Judge injects UI events; do not read stdin, parse JSON, simulate events yourself, or print the snapshot. Return valid JSON event-payload inputs. Preserve the supplied statement and public examples; never change expected answers to fit broken code.'
+        : 'REPAIR THE REJECTED REFERENCE PROGRAM below using the compiler/runtime finding. Return syntactically valid Python 3 with matching quotes and indentation, plus valid candidate inputs. Preserve the supplied statement and public examples; never change expected answers to fit broken code.'
       : conditionDraft
         ? 'REPAIR THE REJECTED CONDITION below instead of generating an unrelated exercise. Preserve its title/topic and teacher intent. Make statement, inputFormat, outputFormat, each separate constraint, and ALL three examples agree under one exact input grammar. Recalculate each example and state all boundary, ordering, and no-result rules that affect the output. The hidden referenceSolution must be a complete, general Python 3 implementation of the corrected statement; do not hardcode examples. Keep inline Markdown/LaTeX where helpful, but leave examples as raw stdin/stdout. Return the complete corrected condition-draft JSON.'
         : 'REPAIR THE REJECTED TASK below instead of blindly generating another exercise. Preserve its lesson objective and allowed IO type. Reconcile practicalTask, inputFormat, constraints and ALL examples using one explicit line/token grammar; count fields per record and total records, then verify every example against it. Return the complete corrected task JSON.';

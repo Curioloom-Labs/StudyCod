@@ -108,6 +108,33 @@ test('Tkinter reference generation uses validated JSON events and reviews UI sna
   assert.equal(calls, 2);
 });
 
+test('Tkinter rejects a console-only oracle before Judge and gives runtime-specific repair feedback', async () => {
+  const provider: LLMProvider = {
+    async generateJSON<T>() {
+      return {
+        referenceSolution: 'print("not a Tkinter app")',
+        inputs: ['{"events":[]}', '{"events":[{"type":"click","x":40,"y":30}]}', '{"events":[{"type":"click","x":80,"y":40}]}'],
+      } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+  let judgeCalls = 0;
+  await assert.rejects(generateReferenceTestData(provider, {
+    taskDescription: 'Create a Tkinter window and react to button clicks.',
+    lang: 'PYTHON', count: 1, pythonRuntimeProfile: 'TKINTER',
+    executeReference: async () => { judgeCalls++; return ['{}']; },
+  }), error => {
+    assert.ok(error instanceof AIValidationError);
+    assert.match(error.message, /Tkinter reference validation failed:.*Tk\(\).*mainloop\(\)/);
+    const feedback = buildTaskValidationFeedback(error.message, error.rawResponse);
+    assert.match(feedback, /REPAIR THE REJECTED TKINTER REFERENCE APPLICATION/);
+    assert.match(feedback, /constructs exactly one Tk\(\) root/);
+    assert.match(feedback, /do not read stdin, parse JSON/);
+    return true;
+  });
+  assert.equal(judgeCalls, 0);
+});
+
 test('public example and repeated candidate inputs are discarded before execution', async () => {
   let calls = 0;
   const source = 'a,b=map(int,input().split()); print(a+b)';
