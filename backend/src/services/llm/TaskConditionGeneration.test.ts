@@ -293,6 +293,8 @@ test('Tkinter condition repairs a non-GUI reference once and injects valid event
   assert.match(calls[0].systemPrompt ?? '', /call root\.mainloop\(\)/);
   assert.match(calls[0].systemPrompt ?? '', /Do not read stdin, parse JSON/);
   assert.match(calls[0].systemPrompt ?? '', /exactly the harness snapshot object/);
+  assert.match(calls[0].systemPrompt ?? '', /fixed placement with place\(x, y, width, height\)/);
+  assert.match(calls[0].systemPrompt ?? '', /coordinates inside the center of its named widget/);
   assert.doesNotMatch(calls[0].systemPrompt ?? '', /Each output must be exact stdout/);
   assert.match(calls[1].prompt, /Tkinter program did not create a Tk window/);
   assert.match(calls[2].prompt, /executedReference/);

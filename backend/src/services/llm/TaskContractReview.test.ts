@@ -69,6 +69,26 @@ test('generated EDU condition review receives separate constraints and all three
   assert.match(systemPrompts[0], /floor\(n\s*\/\s*2\) equals n\s*\/\s*2 exactly/i);
 });
 
+test('Tkinter condition review uses the event object contract and checks click targets', async () => {
+  const calls: string[] = [];
+  const systemPrompts: string[] = [];
+  await reviewGeneratedTaskCondition(fakeProvider([{ valid: true, invalidSource: 'none', issues: [], clarificationQuestion: null }], calls, systemPrompts), {
+    statement: 'The button is at x=20, y=40 with size 80x30.',
+    inputFormat: 'A JSON object with an events array.',
+    outputFormat: 'The exact Tk widget snapshot.',
+    constraints: [],
+    examples: [
+      { input: '{"events":[]}', output: '{"widgets":[]}' },
+      { input: '{"events":[{"type":"click","x":60,"y":55}]}', output: '{"widgets":[]}' },
+      { input: '{"events":[{"type":"click","x":60,"y":55},{"type":"click","x":60,"y":55}]}', output: '{"widgets":[]}' },
+    ],
+  }, { pythonRuntimeProfile: 'TKINTER' });
+  assert.equal(JSON.parse(calls[0]).ioType, 'TKINTER');
+  assert.match(systemPrompts[0], /JSON object with an events array/);
+  assert.match(systemPrompts[0], /define tested widget placement\/click regions/);
+  assert.doesNotMatch(systemPrompts[0], /each input is a JSON list/);
+});
+
 test('condition review ignores the provably false even-length half-rounding contradiction', async () => {
   await reviewGeneratedTaskCondition(fakeProvider([{
     valid: false,

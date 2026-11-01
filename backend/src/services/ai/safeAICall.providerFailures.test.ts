@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getLLMOrchestrator } from "../llm/LLMOrchestrator";
 import { TaskContractReviewError } from "../llm/TaskContractReview";
+import { consumeCurrentAIExecutionRetry } from "../llm/promptExecution";
 import { buildTaskConditionFailureMessage, safeAICall } from "./safeAICall";
 
 test("task-condition errors expose a concise actionable validation finding in the UI locale", () => {
@@ -30,6 +31,33 @@ test("safeAICall returns an actionable clarification instead of retrying it as a
     assert.deepEqual(result.error.clarification, { question: "Should the sum be greater than or equal to 10*n?" });
   }
   assert.equal(attempts, 1, "a teacher decision must be requested before another repair attempt");
+});
+
+test("safeAICall preserves the last task validation error when inner layers exhausted the shared retry budget", async (t) => {
+  let attempts = 0;
+  t.mock.method(getLLMOrchestrator(), "generateTaskCondition", async () => {
+    attempts += 1;
+    consumeCurrentAIExecutionRetry();
+    consumeCurrentAIExecutionRetry();
+    throw new TaskContractReviewError("generateTask", "statement", ["Example click at (200, 150) does not target a specified widget."]);
+  });
+
+  const result = await safeAICall("generateTaskCondition", {
+    topicTitle: "Tkinter",
+    taskTitle: "Intro to Tkinter",
+    taskType: "PRACTICE",
+    language: "PYTHON",
+    pythonRuntimeProfile: "TKINTER",
+  }, { maxAttempts: 3 });
+
+  assert.equal(result.success, false);
+  if (!result.success) {
+    assert.equal(result.error.statusCode, 502);
+    assert.match(result.error.message, /Перевірка умови знайшла проблему/);
+    assert.match(result.error.error ?? "", /does not target a specified widget/);
+    assert.notEqual(result.error.error, "No result");
+  }
+  assert.equal(attempts, 1, "do not schedule an outer retry after inner calls consumed the shared budget");
 });
 
 for (const scenario of [
