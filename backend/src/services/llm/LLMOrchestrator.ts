@@ -53,7 +53,7 @@ export interface AiQuizResult {
   quizJson: string;
 }
 
-const MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL = 12;
+const MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL = 15;
 
 function quizAvoidanceGuidance(stems: string[] | undefined, language: "uk" | "en" = "uk"): string {
   if (!stems?.length) return "";
@@ -65,6 +65,25 @@ function quizAvoidanceGuidance(stems: string[] | undefined, language: "uk" | "en
 
 function quizQuestionStem(question: { q: string }): string {
   return question.q.replace(/```[\s\S]*?```/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizedQuizQuestionStem(question: { q: string }): string {
+  return quizQuestionStem(question)
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+function duplicateQuizQuestionIndexes(questions: Array<{ q: string }>): number[] {
+  const seen = new Set<string>();
+  const duplicates: number[] = [];
+  for (const [index, question] of questions.entries()) {
+    const stem = normalizedQuizQuestionStem(question);
+    if (seen.has(stem)) duplicates.push(index);
+    else seen.add(stem);
+  }
+  return duplicates;
 }
 
 type QuizGenerationParams = {
@@ -1890,15 +1909,33 @@ REQUIREMENTS (mandatory):
       questions.push(...JSON.parse(validatedBatch.quizJson) as Array<{ q: string }>);
     }
 
-    const validated = AIResponseValidator.validateGenerateQuiz(questions, expectedCount);
-    const normalizedStems = questions.map(({ q }) => quizQuestionStem({ q })
-      .normalize("NFKC")
-      .toLocaleLowerCase()
-      .replace(/[^\p{L}\p{N}]+/gu, " ")
-      .trim());
-    if (new Set(normalizedStems).size !== normalizedStems.length) {
+    const duplicateIndexes = duplicateQuizQuestionIndexes(questions);
+    if (duplicateIndexes.length > 0) {
+      if (duplicateIndexes.length > MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL - 3) {
+        throw makeAIValidationError("generateQuiz", "Quiz validation failed: too many duplicate question stems to repair safely");
+      }
+      consumeRetryOrThrow('quiz duplicate repair');
+      const uniqueQuestions = questions.filter((_, index) => !duplicateIndexes.includes(index));
+      const repairGuidance = params.language === "en"
+        ? "DUPLICATE REPAIR: replace only the missing question slots with genuinely different concepts or behaviors. Do not paraphrase, change only numbers, or reuse the same reasoning as any reference stem."
+        : "ВИПРАВЛЕННЯ ДУБЛІКАТІВ: заповни лише відсутні позиції справді іншими поняттями або варіантами поведінки. Не перефразовуй, не змінюй лише числа й не повторюй міркування жодного з довідкових запитань.";
+      const replacementResponse = await generateBatch({
+        ...params,
+        count: duplicateIndexes.length,
+        avoidQuestionStems: uniqueQuestions.map(quizQuestionStem),
+        generationGuidance: [params.generationGuidance, repairGuidance].filter(Boolean).join("\n"),
+      });
+      const replacements = AIResponseValidator.validateGenerateQuiz(replacementResponse, duplicateIndexes.length);
+      const replacementQuestions = JSON.parse(replacements.quizJson) as Array<{ q: string }>;
+      duplicateIndexes.forEach((index, replacementIndex) => {
+        questions[index] = replacementQuestions[replacementIndex];
+      });
+    }
+
+    if (duplicateQuizQuestionIndexes(questions).length > 0) {
       throw makeAIValidationError("generateQuiz", "Quiz validation failed: duplicate question stems were generated across batches");
     }
+    const validated = AIResponseValidator.validateGenerateQuiz(questions, expectedCount);
     return enforceQuizCodeCompleteness(validated, params.questionStyle);
   }
 
