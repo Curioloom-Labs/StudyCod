@@ -66,9 +66,9 @@ export async function generateReferenceTestData(provider: LLMProvider, params: R
   const statement = requireCompleteTaskDescription(params.taskDescription);
   const count = Math.max(1, Math.floor(params.count));
   if (count > 64) throw makeAIValidationError('generateTestData', 'Reference test generation validation failed: at most 64 tests can be requested');
-  // Ask for spare candidates so exact collisions with public examples or each
-  // other can be discarded without failing the learner's task generation.
-  const candidateCount = Math.min(64, count + Math.max(2, count));
+  // Ask for a small reserve of candidates: enough to replace occasional
+  // collisions without doubling a large JSON response and risking truncation.
+  const candidateCount = Math.min(64, count + Math.max(2, Math.ceil(count * 0.25)));
   const schema = {
     type: 'object', additionalProperties: false,
     properties: {

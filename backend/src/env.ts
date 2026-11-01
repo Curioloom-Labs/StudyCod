@@ -99,7 +99,6 @@ const EnvSchema = z.object({
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_BACKUP_API_KEYS: z.string().optional(),
   OPENROUTER_MODEL: z.string().optional(),
-  OPENROUTER_IMAGE_MODEL: z.string().optional(),
   OPENROUTER_TEXT_MODEL: z.string().optional(),
   OPENROUTER_JSON_MODEL: z.string().optional(),
   OPENROUTER_REASONING_ENABLED: z.string().optional(),

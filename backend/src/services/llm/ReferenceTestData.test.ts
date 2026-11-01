@@ -85,6 +85,36 @@ test('public example and repeated candidate inputs are discarded before executio
   assert.deepEqual(tests.map(test => test.output), ['9', '13']);
 });
 
+test('large reference suites request a small candidate reserve instead of doubling the response', async () => {
+  let calls = 0;
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string, schema: object): Promise<T> {
+      calls++;
+      if (calls === 1) {
+        const inputSchema = (schema as { properties: { inputs: { minItems: number; maxItems: number } } }).properties.inputs;
+        assert.equal(inputSchema.minItems, 25);
+        assert.equal(inputSchema.maxItems, 25);
+        return {
+          referenceSolution: 'print(input())',
+          inputs: Array.from({ length: 25 }, (_, index) => String(index + 1)),
+        } as T;
+      }
+      assert.equal(JSON.parse(prompt).candidateTests.length, 20);
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+
+  const result = await generateReferenceTestData(provider, {
+    taskDescription: 'Read one integer and print it.',
+    lang: 'PYTHON', count: 20,
+    executeReference: async (_source, inputs) => inputs.map(input => input.trim()),
+  });
+
+  assert.equal(result.length, 20);
+  assert.equal(calls, 2);
+});
+
 test('insufficient distinct non-public reference inputs cannot reach code execution', async () => {
   for (const inputs of [['2 3', '2 3', '2 3', '2 3'], ['2 3'], ['2 3', ' ', '2 3', '2 3']]) {
     let executions = 0;

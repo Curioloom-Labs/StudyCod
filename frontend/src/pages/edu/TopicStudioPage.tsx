@@ -234,7 +234,6 @@ export const TopicStudioPage: React.FC = () => {
   const [busy, setBusy] = React.useState(false);
   const [aiBusy, setAiBusy] = React.useState<"condition" | "template" | "theory" | null>(null);
   const [clarificationQuestion, setClarificationQuestion] = React.useState<string | null>(null);
-  const [generateIllustration, setGenerateIllustration] = React.useState(false);
   const [taskForm, setTaskForm] = React.useState({
     title: "",
     description: "",
@@ -340,23 +339,7 @@ export const TopicStudioPage: React.FC = () => {
         language: isEn ? "en" : "uk",
       });
       const description = String(response.data?.description ?? taskForm.description);
-      if (generateIllustration) {
-        try {
-          const image = await api.post(`/topics/${id}/tasks/generate-illustration`, {
-            taskTitle: taskForm.title.trim(),
-            description,
-            language: isEn ? "en" : "uk",
-          });
-          const markdown = String(image.data?.markdown ?? "").trim();
-          setTaskForm(old => ({ ...old, description: markdown ? `${description}\n\n${markdown}` : description }));
-        } catch {
-          setTaskForm(old => ({ ...old, description }));
-          setError(tr("Умову створено, але ілюстрацію не вдалося згенерувати. Перевірте доступність сервісу зображень.", "The statement was generated, but its illustration could not be created. Check the image service availability."));
-          return;
-        }
-      } else {
-        setTaskForm((old) => ({ ...old, description }));
-      }
+      setTaskForm(old => ({ ...old, description }));
       setClarificationQuestion(null);
     } catch (caught) {
       const question = getClarificationQuestionFromUnknown(caught);
@@ -872,7 +855,7 @@ export const TopicStudioPage: React.FC = () => {
         {mode === "task" && (
           <Modal error={error} title={editingTaskId ? tr("Редагувати завдання", "Edit task") : tr("Нове завдання", "New task")} caption={editingTaskId ? tr("Змініть умову або необов’язкові матеріали. Чернетку можна редагувати до відкриття учням.", "Edit the statement or optional materials. You can edit the draft until it is assigned to students.") : tr("Додайте назву, опишіть задум або одразу створіть умову з AI. Тести налаштуються на наступному кроці.", "Add a title, describe the idea, or draft the statement with AI. Test setup comes next.")} onClose={() => { setMode(null); setEditingTaskId(null); }} wide>
             <form className="task-authoring" onSubmit={event => { event.preventDefault(); void createTask(); }}>
-              <TaskAuthoringFields idPrefix="topic-task" value={taskForm} onChange={patch => setTaskForm(old => ({ ...old, ...patch }))} generationGuidance={generationInstructions} onGenerationGuidanceChange={setGenerationInstructions} generationProfile={generationProfile} onGenerationProfileChange={setGenerationProfile} includeSubtasks={includeSubtasks} onIncludeSubtasksChange={setIncludeSubtasks} generateIllustration={generateIllustration} onGenerateIllustrationChange={setGenerateIllustration} guidanceEnabled={!editingTaskId && !preview()} selectedTab={editorTab} onSelectedTabChange={setEditorTab} aiBusy={aiBusy} busy={busy} onGenerateCondition={() => void generateCondition()} onGenerateTemplate={() => void generateTemplate()} onGenerateTheory={() => void generateTheory()} />
+              <TaskAuthoringFields idPrefix="topic-task" value={taskForm} onChange={patch => setTaskForm(old => ({ ...old, ...patch }))} generationGuidance={generationInstructions} onGenerationGuidanceChange={setGenerationInstructions} generationProfile={generationProfile} onGenerationProfileChange={setGenerationProfile} includeSubtasks={includeSubtasks} onIncludeSubtasksChange={setIncludeSubtasks} guidanceEnabled={!editingTaskId && !preview()} selectedTab={editorTab} onSelectedTabChange={setEditorTab} aiBusy={aiBusy} busy={busy} onGenerateCondition={() => void generateCondition()} onGenerateTemplate={() => void generateTemplate()} onGenerateTheory={() => void generateTheory()} />
               {clarificationQuestion && <TaskGenerationClarification question={clarificationQuestion} busy={aiBusy === "condition"} onSubmit={answer => void generateCondition(answer)} />}
               <div className="task-authoring__footer"><button type="button" className="classroom-button" disabled={busy} onClick={() => { setMode(null); setEditingTaskId(null); }}>{tr("Скасувати", "Cancel")}</button><button type="submit" className="classroom-button classroom-button--primary" disabled={busy || !!aiBusy || !taskForm.title.trim()}>{busy ? tr("Зберігаємо…", "Saving…") : editingTaskId ? tr("Зберегти зміни", "Save changes") : tr("Створити завдання", "Create task")}<ArrowRight className="size-4" aria-hidden="true" /></button></div>
             </form>

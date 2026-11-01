@@ -154,7 +154,6 @@ export const ControlStudioPage: React.FC = () => {
   const [editingTaskId, setEditingTaskId] = React.useState<number | null>(null);
   const [taskAiBusy, setTaskAiBusy] = React.useState<"condition" | "template" | "theory" | null>(null);
   const [clarificationQuestion, setClarificationQuestion] = React.useState<string | null>(null);
-  const [generateIllustration, setGenerateIllustration] = React.useState(false);
   const [testSettings, setTestSettings] = React.useState({ count: "5", requiredCases: "", replaceGenerated: true, groupByTaskSubtasks: true, points: "1", isHidden: false, subtask: "", subtaskScoringMode: "ABSOLUTE" as "ABSOLUTE" | "PARTIAL" });
   const [testCounts, setTestCounts] = React.useState<Record<number, number>>({});
   const [generatingTestsFor, setGeneratingTestsFor] = React.useState<number | null>(null);
@@ -574,23 +573,7 @@ export const ControlStudioPage: React.FC = () => {
           language: isEn ? "en" : "uk",
         });
         const description = String(response.data?.description ?? newTask.description);
-        if (generateIllustration) {
-          try {
-            const image = await api.post(`/topics/${control.topic.id}/tasks/generate-illustration`, {
-              taskTitle: newTask.title.trim(),
-              description,
-              language: isEn ? "en" : "uk",
-            });
-            const markdown = String(image.data?.markdown ?? "").trim();
-            setNewTask(old => ({ ...old, description: markdown ? `${description}\n\n${markdown}` : description }));
-          } catch {
-            setNewTask(old => ({ ...old, description }));
-            setError(tr("Умову створено, але ілюстрацію не вдалося згенерувати. Перевірте доступність сервісу зображень.", "The statement was generated, but its illustration could not be created. Check the image service availability."));
-            return;
-          }
-        } else {
-          setNewTask(old => ({ ...old, description }));
-        }
+        setNewTask(old => ({ ...old, description }));
       }
       setClarificationQuestion(null);
     } catch (caught) {
@@ -833,8 +816,6 @@ export const ControlStudioPage: React.FC = () => {
                     onGenerationProfileChange={setTaskGenerationProfile}
                     includeSubtasks={includeSubtasks}
                     onIncludeSubtasksChange={setIncludeSubtasks}
-                    generateIllustration={generateIllustration}
-                    onGenerateIllustrationChange={setGenerateIllustration}
                     guidanceEnabled={!editingTaskId && !preview()}
                     selectedTab={taskEditorTab}
                     onSelectedTabChange={setTaskEditorTab}

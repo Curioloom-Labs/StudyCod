@@ -1,11 +1,7 @@
 import { HttpError } from "../utils/httpError";
 import { Router, Response } from "express";
-import fs from "fs";
-import path from "path";
-import crypto from "crypto";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
-import { UPLOADS_ROOT } from "../config/storagePaths";
 import { AppDataSource } from "../data-source";
 import { IsNull } from "typeorm";
 import { TopicNew } from "../entities/TopicNew";
@@ -36,8 +32,6 @@ import type { LibraryTaskProjectSpec } from "../entities/LibraryTask";
 import { env } from "../env";
 import { normalizeTopicLanguage } from "../utils/topicLanguage";
 import { writeAudit } from "../services/audit/auditLog";
-import { generateTaskIllustration } from "../services/ai/OpenRouterImageGeneration";
-import { stripTaskAiTrapSegments } from "../../../shared/utils/taskAiTrap";
 import {
   assignmentSchema,
   createControlWorkSchema,
@@ -52,7 +46,6 @@ import {
   updateTaskSchema,
 } from "./topicContracts";
 const topicsRouter = Router();
-const taskIllustrationLimiter = createRouteLimiter({ windowMs: 60 * 60 * 1000, limit: 10, message: "RATE_LIMIT", namespace: "edu-task-illustration" });
 const topicRepo = () => AppDataSource.getRepository(TopicNew);
 const theoryBlockRepo = () => AppDataSource.getRepository(TheoryBlock);
 const taskRepo = () => AppDataSource.getRepository(TopicTask);
@@ -1086,47 +1079,6 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
   }
 });
 
-topicsRouter.post("/:topicId/tasks/generate-illustration", authRequired, taskIllustrationLimiter, async (req: AuthRequest, res: Response) => {
-  try {
-    const topicId = Number(req.params.topicId);
-    if (!Number.isInteger(topicId)) return res.status(400).json({ message: "INVALID_TOPIC_ID" });
-
-    const user = await userRepo().findOne({ where: { id: req.userId } });
-    if (!user || user.userMode !== "EDUCATIONAL" || req.studentId) {
-      return res.status(403).json({ message: "ONLY_TEACHERS_CAN_GENERATE" });
-    }
-    const topic = await topicRepo().findOne({ where: { id: topicId } });
-    if (!topic) return res.status(404).json({ message: "TOPIC_NOT_FOUND" });
-
-    const taskTitle = typeof req.body?.taskTitle === "string" ? req.body.taskTitle.trim().slice(0, 200) : "";
-    const description = typeof req.body?.description === "string"
-      ? stripTaskAiTrapSegments(req.body.description).trim().slice(0, 2400)
-      : "";
-    if (!taskTitle || !description) return res.status(400).json({ message: "TASK_TITLE_AND_STATEMENT_REQUIRED" });
-
-    const locale = req.body?.language === "en" ? "en" : "uk";
-    const safeTopic = topic.title.trim().slice(0, 200);
-    const prompt = [
-      "Create one original, polished educational illustration for a programming task. Make a clear visual metaphor or simple scene related to the task. Use a clean, friendly editorial style, strong composition, and accessible colors. Do not render any words, letters, numbers, code, UI, answers, or instructions in the image. Do not change the task's rules; the image is decorative context only.",
-      `Requested language context: ${locale === "en" ? "English" : "Ukrainian"}.`,
-      `Topic: ${JSON.stringify(safeTopic)}.`,
-      `Task title: ${JSON.stringify(taskTitle)}.`,
-      `Learner-visible task context: ${JSON.stringify(description)}`,
-    ].join("\n");
-    const generated = await generateTaskIllustration(prompt);
-    const directory = path.join(UPLOADS_ROOT, "statement-images");
-    await fs.promises.mkdir(directory, { recursive: true });
-    const fileName = `ai_${Date.now()}_${crypto.randomBytes(12).toString("hex")}${generated.extension}`;
-    await fs.promises.writeFile(path.join(directory, fileName), generated.buffer, { flag: "wx" });
-    const url = `/api/edu/statement-images/${encodeURIComponent(fileName)}`;
-    const alt = locale === "en" ? "Task illustration" : "Ілюстрація до задачі";
-    return res.status(201).json({ url, markdown: `![${alt}](${url})` });
-  } catch (error: unknown) {
-    logger.warn("[topics] failed to generate task illustration", { requestId: req.requestId, topicId: req.params.topicId, err: errorMessage(error) });
-    return res.status(502).json({ message: "IMAGE_GENERATION_FAILED" });
-  }
-});
-
 topicsRouter.post("/:topicId/tasks/generate-template", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     const topicId = parseInt(req.params.topicId, 10);
@@ -1386,6 +1338,7 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
     const language = controlWork.topic.language;
     const userLanguage: "uk" | "en" = requestedLanguage || (req.headers['accept-language']?.includes('en') ? "en" : "uk");
     const aiStartedAt = Date.now();
+    const quizBudgetMs = Math.min(110_000, Math.max(TOPICS_AI_QUIZ_BUDGET_MS, quizCount * 2_500));
     const result = await safeAICall('generateQuiz', {
       lang: language,
       prevTopics: quizTopicTitle.trim(),
@@ -1402,7 +1355,7 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
       language: userLanguage,
       requestId: req.requestId,
       maxAttempts: 2,
-      ...(TOPICS_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: TOPICS_AI_QUIZ_BUDGET_MS })
+      ...(TOPICS_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: quizBudgetMs })
     });
     const aiElapsedMs = Date.now() - aiStartedAt;
     logger.info("[topics] generate-quiz AI completed", {
@@ -1411,7 +1364,7 @@ topicsRouter.post("/control-works/:controlWorkId/generate-quiz", authRequired, a
       userId: user.id,
       success: result.success,
       elapsedMs: aiElapsedMs,
-      budgetMs: TOPICS_AI_DISABLE_DEADLINE ? null : TOPICS_AI_QUIZ_BUDGET_MS,
+      budgetMs: TOPICS_AI_DISABLE_DEADLINE ? null : quizBudgetMs,
       quizCount
     });
     if (!result.success) {
