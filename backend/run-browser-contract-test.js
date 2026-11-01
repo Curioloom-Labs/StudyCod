@@ -575,8 +575,16 @@ if (!baseUrl) {
     await libraryEditor.evaluate((element) => element.focus());
     await page.keyboard.press("Control+A");
     await page.keyboard.insertText(correctedLibraryCode);
+    await page.waitForFunction(
+      () => Array.from(document.querySelectorAll(".monaco-editor .view-lines"))
+        .some((lines) => lines.textContent?.includes("range(1, n + 1)")),
+      null,
+      { timeout: 5_000 },
+    );
     const correctedLibraryEditorText = (await page.locator(".monaco-editor .view-lines").innerText()).replace(/\u00a0/g, " ");
-    if (!correctedLibraryEditorText.includes("range(1, n + 1)")) throw new Error("the library editor did not accept the corrected boundary");
+    if (!correctedLibraryEditorText.includes("range(1, n + 1)")) {
+      throw new Error(`the library editor did not accept the corrected boundary: ${correctedLibraryEditorText.slice(0, 500)}`);
+    }
     await page.getByRole("button", { name: /^check$|^перевірити$/i }).click();
     await page.getByText(/Solution verified|Рішення перевірено/i).waitFor({ state: "visible", timeout: 10_000 });
     if (libraryCheckCount !== 2 || !librarySubmittedCode[0].includes("range(1, n)") || !librarySubmittedCode[1].includes("range(1, n + 1)") || librarySubmittedLanguages.some((language) => language !== "python")) {
