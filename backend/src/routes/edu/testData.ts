@@ -16,6 +16,7 @@ import { resolveTestDataIoType } from "../../services/llm/TaskContractReview";
 import { randomUUID } from "crypto";
 import { createExecutionContext } from "../../../../shared/ai/prompts";
 import { getActivePromptBundleVersion, runWithAIExecutionContext } from "../../services/llm/promptExecution";
+import { normalizePythonTaskAssets, parseTkinterEvents } from "../../services/edu/pythonTaskRuntime";
 
 const router = Router();
 
@@ -161,10 +162,18 @@ const testDataItemSchema = z.object({
   subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).optional(),
   subtaskWeightPercent: z.number().int().min(1).max(100).nullable().optional(),
   imageUrls: testImageUrlsSchema,
+  assets: z.array(z.object({ path: z.string().min(1).max(180), dataBase64: z.string().min(4).max(1_400_000) }).strict()).max(8).optional(),
+}).superRefine((test, context) => {
+  if (!test.assets?.length) return;
+  try { normalizePythonTaskAssets(test.assets); }
+  catch (error) { context.addIssue({ code: z.ZodIssueCode.custom, message: error instanceof Error ? error.message : "INVALID_ASSETS", path: ["assets"] }); }
 });
 
 const addTestDataSchema = z.object({
   testData: z.array(testDataItemSchema).min(1).max(5000)
+}).superRefine((body, context) => {
+  const encodedBytes = body.testData.reduce((sum, test) => sum + (test.assets ?? []).reduce((assetSum, asset) => assetSum + asset.dataBase64.length, 0), 0);
+  if (encodedBytes > 12_000_000) context.addIssue({ code: z.ZodIssueCode.custom, message: "ASSETS_TOO_LARGE", path: ["testData"] });
 });
 
 const generateSchema = z.object({
@@ -189,8 +198,24 @@ const updateSchema = z
     subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).optional(),
     subtaskWeightPercent: z.number().int().min(1).max(100).nullable().optional(),
     imageUrls: testImageUrlsSchema,
+    assets: z.array(z.object({ path: z.string().min(1).max(180), dataBase64: z.string().min(4).max(1_400_000) }).strict()).max(8).optional(),
   })
-  .strict();
+  .strict().superRefine((update, context) => {
+    if (!update.assets?.length) return;
+    try { normalizePythonTaskAssets(update.assets); }
+    catch (error) { context.addIssue({ code: z.ZodIssueCode.custom, message: error instanceof Error ? error.message : "INVALID_ASSETS", path: ["assets"] }); }
+  });
+
+function parseStoredAssets(raw: unknown): Array<{ path: string; dataBase64: string }> {
+  if (Array.isArray(raw)) {
+    try { return normalizePythonTaskAssets(raw); } catch { return []; }
+  }
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? normalizePythonTaskAssets(parsed) : [];
+  } catch { return []; }
+}
 
 function messageForZodIssue(err: z.ZodError): string {
   // Preserve existing message codes where they exist.
@@ -299,6 +324,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
            subtask_scoring_mode AS subtaskScoringMode,
            subtask_weight_percent AS subtaskWeightPercent,
            image_urls AS imageUrls,
+           assets,
            CHAR_LENGTH(input) AS inputFullLength,
            CHAR_LENGTH(expected_output) AS expectedOutputFullLength
          FROM test_data
@@ -318,6 +344,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
         subtaskScoringMode: string | null;
         subtaskWeightPercent: number | null;
         imageUrls: string[] | string | null;
+        assets: string | null;
         inputFullLength: number;
         expectedOutputFullLength: number;
       }>;
@@ -338,6 +365,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
           subtaskScoringMode: normalizeSubtaskScoringMode(row.subtaskScoringMode),
           subtaskWeightPercent: normalizeSubtaskWeightPercent(row.subtaskWeightPercent),
           imageUrls: normalizeTestImageUrls(row.imageUrls),
+          assetPaths: parseStoredAssets(row.assets).map(asset => asset.path),
           isInputTruncated: inputFullLength > input.length,
           inputFullLength,
           isExpectedOutputTruncated: expectedOutputFullLength > expectedOutput.length,
@@ -375,7 +403,8 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
          subtask,
          subtask_scoring_mode AS subtaskScoringMode,
          subtask_weight_percent AS subtaskWeightPercent,
-         image_urls AS imageUrls
+         image_urls AS imageUrls,
+         assets
        FROM test_data
        WHERE ${whereSql}
        ORDER BY created_at ASC, id ASC${paginationSql}`,
@@ -393,6 +422,7 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
       subtaskScoringMode: string | null;
       subtaskWeightPercent: number | null;
       imageUrls: string[] | string | null;
+      assets: string | null;
     }>;
 
     const mapped = rows.map(td => ({
@@ -405,7 +435,8 @@ router.get("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, re
       subtask: normalizeSubtaskValue(td.subtask),
       subtaskScoringMode: normalizeSubtaskScoringMode(td.subtaskScoringMode),
       subtaskWeightPercent: normalizeSubtaskWeightPercent(td.subtaskWeightPercent),
-      imageUrls: normalizeTestImageUrls(td.imageUrls)
+      imageUrls: normalizeTestImageUrls(td.imageUrls),
+      assetPaths: parseStoredAssets(td.assets).map(asset => asset.path)
     }));
 
     res.json({
@@ -479,7 +510,8 @@ router.get("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
         subtask: normalizeSubtaskValue(testData.subtask),
         subtaskScoringMode: normalizeSubtaskScoringMode(testData.subtaskScoringMode),
         subtaskWeightPercent: normalizeSubtaskWeightPercent(testData.subtaskWeightPercent),
-        imageUrls: normalizeTestImageUrls(testData.imageUrls)
+        imageUrls: normalizeTestImageUrls(testData.imageUrls),
+        assets: testData.assets ?? []
       }
     });
   } catch (error: unknown) {
@@ -524,6 +556,13 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
       return res.status(400).json({ message: messageForZodIssue(parsed.error) });
     }
     const { testData } = parsed.data;
+    if (topicTask.pythonRuntimeProfile === "STANDARD" && testData.some(test => test.assets?.length)) {
+      return res.status(400).json({ message: "IMAGE_FIXTURES_REQUIRE_PYTHON_LIBRARIES" });
+    }
+    if (topicTask.pythonRuntimeProfile === "TKINTER") {
+      try { testData.forEach(test => parseTkinterEvents(test.input)); }
+      catch (error) { const record = error as { statusCode?: number; message?: string }; return res.status(record.statusCode || 400).json({ message: record.message || "INVALID_TKINTER_EVENTS" }); }
+    }
 
     const createdTests = testData.map(td =>
       testDataRepo().create({
@@ -537,7 +576,8 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
         subtask: normalizeSubtaskValue(td.subtask),
         subtaskScoringMode: normalizeSubtaskScoringMode(td.subtaskScoringMode),
         subtaskWeightPercent: normalizeSubtaskWeightPercent(td.subtaskWeightPercent),
-        imageUrls: normalizeTestImageUrls(td.imageUrls)
+        imageUrls: normalizeTestImageUrls(td.imageUrls),
+        assets: td.assets?.length ? normalizePythonTaskAssets(td.assets) : null
       })
     );
 
@@ -556,7 +596,8 @@ router.post("/tasks/:taskId/test-data", authRequired, async (req: AuthRequest, r
         subtask: normalizeSubtaskValue(td.subtask),
         subtaskScoringMode: normalizeSubtaskScoringMode(td.subtaskScoringMode),
         subtaskWeightPercent: normalizeSubtaskWeightPercent(td.subtaskWeightPercent),
-        imageUrls: normalizeTestImageUrls(td.imageUrls)
+        imageUrls: normalizeTestImageUrls(td.imageUrls),
+        assetPaths: td.assets?.map(asset => asset.path) ?? []
       }))
     });
   } catch (error: unknown) {
@@ -590,6 +631,9 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
 
     if (!topicTask || !topicTask.topic?.class?.teacher) {
       return res.status(404).json({ message: "TASK_NOT_FOUND", taskId });
+    }
+    if (topicTask.pythonRuntimeProfile === "TKINTER") {
+      return res.status(409).json({ message: "TKINTER_TESTS_MUST_BE_CONFIGURED_MANUALLY" });
     }
 
     if (!(await canActOnTopicTaskClass(req, topicTask, "CONTENT_AUTHOR"))) {
@@ -932,7 +976,12 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
       return res.status(400).json({ message: messageForZodIssue(parsed.error) });
     }
 
-    const { input, expectedOutput, points, isHidden, subtask, subtaskScoringMode, subtaskWeightPercent, imageUrls } = parsed.data;
+    const { input, expectedOutput, points, isHidden, subtask, subtaskScoringMode, subtaskWeightPercent, imageUrls, assets } = parsed.data;
+
+    if (topicTask.pythonRuntimeProfile === "TKINTER" && input !== undefined) {
+      try { parseTkinterEvents(input); }
+      catch (error) { const record = error as { statusCode?: number; message?: string }; return res.status(record.statusCode || 400).json({ message: record.message || "INVALID_TKINTER_EVENTS" }); }
+    }
 
     if (input !== undefined) testData.input = input;
     if (expectedOutput !== undefined) testData.expectedOutput = expectedOutput;
@@ -942,6 +991,10 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
     if (subtaskScoringMode !== undefined) testData.subtaskScoringMode = subtaskScoringMode;
     if (subtaskWeightPercent !== undefined) testData.subtaskWeightPercent = normalizeSubtaskWeightPercent(subtaskWeightPercent);
     if (imageUrls !== undefined) testData.imageUrls = normalizeTestImageUrls(imageUrls);
+    if (assets !== undefined) {
+      if (assets.length && topicTask.pythonRuntimeProfile === "STANDARD") return res.status(400).json({ message: "IMAGE_FIXTURES_REQUIRE_PYTHON_LIBRARIES" });
+      testData.assets = assets.length ? normalizePythonTaskAssets(assets) : null;
+    }
 
     await testDataRepo().save(testData);
     if (subtaskScoringMode !== undefined || subtaskWeightPercent !== undefined) {
@@ -960,7 +1013,8 @@ router.put("/tasks/:taskId/test-data/:testDataId", authRequired, async (req: Aut
         subtask: normalizeSubtaskValue(testData.subtask),
         subtaskScoringMode: normalizeSubtaskScoringMode(testData.subtaskScoringMode),
         subtaskWeightPercent: normalizeSubtaskWeightPercent(testData.subtaskWeightPercent),
-        imageUrls: normalizeTestImageUrls(testData.imageUrls)
+        imageUrls: normalizeTestImageUrls(testData.imageUrls),
+        assets: testData.assets ?? []
       }
     });
   } catch (error: unknown) {

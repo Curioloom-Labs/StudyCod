@@ -19,6 +19,18 @@ test("course test definitions accept zero text and preserve whitespace, but reje
     { ...valid, expectedOutput: "x".repeat(65537) }, { ...valid, secret: true }]) assert.equal(courseTestsSchema.safeParse([invalid]).success, false);
   assert.equal(courseTestsSchema.safeParse(Array(51).fill(valid)).success, false);
 });
+test("course image fixtures enforce safe paths and the per-test decoded-byte limit", () => {
+  const oneMegabyte = Buffer.alloc(1_000_000).toString("base64");
+  const withinLimit = { input: "", expectedOutput: "", points: 1, isHidden: false, assets: [
+    { path: "fixtures/one.png", dataBase64: oneMegabyte },
+    { path: "fixtures/two.png", dataBase64: oneMegabyte },
+    { path: "fixtures/three.png", dataBase64: oneMegabyte },
+    { path: "fixtures/four.png", dataBase64: oneMegabyte },
+  ] };
+  assert.equal(courseTestsSchema.safeParse([withinLimit]).success, true);
+  assert.equal(courseTestsSchema.safeParse([{ ...withinLimit, assets: [...withinLimit.assets, { path: "fixtures/extra.png", dataBase64: "AA==" }] }]).success, false);
+  assert.equal(courseTestsSchema.safeParse([{ ...withinLimit, assets: [{ path: "student/overwrite.png", dataBase64: "AA==" }] }]).success, false);
+});
 test("course weighted grading uses authored points and stores only public diagnostics", () => {
   const grade = courseJudgeGrade(tests, response(["AC", "WA"]));
   assert.equal(grade.total, 20); assert.equal(grade.score, 2); assert.equal(grade.maxScore, 10);

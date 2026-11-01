@@ -8,6 +8,12 @@ import { EduGrade } from "../../entities/EduGrade";
 import { TestData } from "../../entities/TestData";
 import { LessonAttempt } from "../../entities/LessonAttempt";
 import type { JudgeResponse } from "../judgeWorker/types";
+import { normalizePythonTaskAssets } from "./pythonTaskRuntime";
+
+const pythonAssetSchema = z.object({
+  path: z.string().min(1).max(180),
+  dataBase64: z.string().min(4).max(1_400_000),
+}).strict();
 
 export const courseTestSchema = z.object({
   input: z.string().max(65536), expectedOutput: z.string().max(65536),
@@ -16,14 +22,24 @@ export const courseTestSchema = z.object({
   subtask: z.string().trim().max(64).nullable().optional(),
   subtaskScoringMode: z.enum(["ABSOLUTE", "PARTIAL"]).optional(),
   subtaskWeightPercent: z.number().int().min(1).max(100).nullable().optional(),
-}).strict().refine(test => Boolean(test.input.trim() || test.expectedOutput.trim()), "EMPTY_TEST");
-export const courseTestsSchema = z.array(courseTestSchema).max(50);
+  assets: z.array(pythonAssetSchema).max(8).optional(),
+}).strict().refine(test => Boolean(test.input.trim() || test.expectedOutput.trim() || test.assets?.length), "EMPTY_TEST")
+  .superRefine((test, context) => {
+    if (!test.assets?.length) return;
+    try { normalizePythonTaskAssets(test.assets); }
+    catch (error) { context.addIssue({ code: z.ZodIssueCode.custom, message: error instanceof Error ? error.message : "INVALID_ASSETS", path: ["assets"] }); }
+  });
+export const courseTestsSchema = z.array(courseTestSchema).max(50).superRefine((tests, context) => {
+  const encodedBytes = tests.reduce((sum, test) => sum + (test.assets ?? []).reduce((assetSum, asset) => assetSum + asset.dataBase64.length, 0), 0);
+  if (encodedBytes > 12_000_000) context.addIssue({ code: z.ZodIssueCode.custom, message: "ASSETS_TOO_LARGE" });
+});
 export type CourseTestInput = z.infer<typeof courseTestSchema>;
 export function courseTestsRevision(tests: Array<Partial<TestData>>, maxAttempts: number) {
   return createHash("sha256").update(JSON.stringify({ maxAttempts, tests: tests.map(test => ({
     input: test.input ?? "", expectedOutput: test.expectedOutput ?? "", points: test.points || 1,
     isHidden: test.isHidden === true, imageUrls: Array.isArray(test.imageUrls) ? test.imageUrls : [], subtask: test.subtask || null,
     subtaskScoringMode: test.subtaskScoringMode || "ABSOLUTE", subtaskWeightPercent: test.subtaskWeightPercent ?? null,
+    assets: test.assets ?? [],
   })) })).digest("hex");
 }
 export async function courseTaskTestCounts(taskIds: number[]) {
@@ -40,8 +56,8 @@ async function hasStarted(task: EduTask, manager: EntityManager) {
 }
 export async function courseTaskTestConfig(task: EduTask, manager = AppDataSource.manager) {
   const tests = await manager.getRepository(TestData).find({ where: { task: { id: task.id } }, order: { id: "ASC" } });
-  return { task: { id: task.id, title: task.title, lessonId: task.lesson.id },
-    testData: tests.map(test => ({ input: test.input, expectedOutput: test.expectedOutput, points: test.points, isHidden: test.isHidden, imageUrls: Array.isArray(test.imageUrls) ? test.imageUrls : [], subtask: test.subtask || null, subtaskScoringMode: test.subtaskScoringMode || "ABSOLUTE", subtaskWeightPercent: test.subtaskWeightPercent ?? null })),
+  return { task: { id: task.id, title: task.title, lessonId: task.lesson.id, pythonRuntimeProfile: task.pythonRuntimeProfile || "STANDARD" },
+    testData: tests.map(test => ({ input: test.input, expectedOutput: test.expectedOutput, points: test.points, isHidden: test.isHidden, imageUrls: Array.isArray(test.imageUrls) ? test.imageUrls : [], subtask: test.subtask || null, subtaskScoringMode: test.subtaskScoringMode || "ABSOLUTE", subtaskWeightPercent: test.subtaskWeightPercent ?? null, assets: test.assets ?? [] })),
     maxAttempts: task.maxAttempts, revision: courseTestsRevision(tests, task.maxAttempts), gradingLocked: await hasStarted(task, manager) };
 }
 export async function replaceCourseTaskTests(task: EduTask, tests: CourseTestInput[], maxAttempts: number, expectedRevision: string) {
@@ -62,7 +78,9 @@ export async function replaceCourseTaskTests(task: EduTask, tests: CourseTestInp
     if (!sameTests) {
       await manager.getRepository(TestData).delete({ task: { id: current.id } });
       if (tests.length) await manager.getRepository(TestData).save(tests.map(test => manager.getRepository(TestData).create({
-        ...test, subtaskScoringMode: test.subtaskScoringMode || "ABSOLUTE", task: current, source: "MANUAL", kind: test.isHidden ? "JUDGE" : "SAMPLE",
+        ...test, subtaskScoringMode: test.subtaskScoringMode || "ABSOLUTE",
+        assets: test.assets?.length ? normalizePythonTaskAssets(test.assets) : null,
+        task: current, source: "MANUAL", kind: test.isHidden ? "JUDGE" : "SAMPLE",
       })));
     }
     current.maxAttempts = maxAttempts;

@@ -6,7 +6,7 @@ import { EduTask } from "../../entities/EduTask";
 import { EduGrade } from "../../entities/EduGrade";
 import { Student } from "../../entities/Student";
 import { TestData } from "../../entities/TestData";
-import worker = require("../../services/judgeWorker");
+import { JudgeClient } from "../../services/judgeWorker/JudgeClient";
 
 async function getTask(source: string) {
   const layer = (router as any).stack.find((entry: any) => entry.route?.path === "/tasks/:taskId" && entry.route.methods.get);
@@ -37,7 +37,7 @@ function mockSubmission(t: any, grade: unknown = null) {
     throw new Error("Unexpected repository");
   });
   t.mock.method(AppDataSource, "transaction", () => { throw new Error("Must not consume an attempt"); });
-  t.mock.method(worker, "judgeWithSemaphore", () => { throw new Error("Must not execute code"); });
+  t.mock.method(JudgeClient.prototype, "judge", () => { throw new Error("Must not execute code"); });
 }
 async function submit() {
   const layer = (router as any).stack.find((entry: any) => entry.route?.path === "/tasks/:taskId/submit" && entry.route.methods.post);

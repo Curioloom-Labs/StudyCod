@@ -29,6 +29,7 @@ export const createTaskSchema = z.object({
   webValidationRules: z.unknown().optional(),
   webValidationProfile: z.unknown().optional(),
   projectSpec: z.unknown().optional(),
+  pythonRuntimeProfile: z.enum(["STANDARD", "SCIENTIFIC", "TKINTER"]).optional(),
   type: z.enum(["PRACTICE", "CONTROL"]),
   order: optionalNonNegativeInt,
   maxAttempts: z.union([z.string(), z.number()]).optional(),

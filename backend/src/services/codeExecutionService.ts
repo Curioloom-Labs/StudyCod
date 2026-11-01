@@ -61,6 +61,7 @@ export interface CompilerProfileInfo {
 export const COMPILER_CATALOGUE: readonly CompilerProfileInfo[] = [
   { id: "python", family: "python", label: "Python 3.14" },
   { id: "python-libs", family: "python", label: "Python 3.14 (with extra libs)" },
+  { id: "python-gui", family: "python", label: "Python (scientific libraries + Tkinter)" },
   { id: "pypy3", family: "python", label: "Python 3.11 (PyPy)" },
   { id: "pypy3-libs", family: "python", label: "Python 3.11 (PyPy with libs)" },
   { id: "c", family: "c", label: "C (gnu 11)" },

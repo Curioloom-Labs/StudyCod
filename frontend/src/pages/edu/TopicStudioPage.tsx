@@ -28,6 +28,7 @@ import {
   unassignTask,
   updateControlWorkFormula,
   type TestData,
+  type PythonTaskAssetInput,
 } from "../../lib/api/edu";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { getClarificationQuestionFromUnknown } from "../../lib/safeError";
@@ -53,6 +54,7 @@ type TopicTask = {
   webTemplateFiles?: unknown;
   webValidationRules?: unknown;
   webValidationProfile?: unknown;
+  pythonRuntimeProfile?: "STANDARD" | "SCIENTIFIC" | "TKINTER";
   type: "PRACTICE" | "CONTROL" | string;
   maxAttempts?: number;
   isAssigned?: boolean;
@@ -241,6 +243,7 @@ export const TopicStudioPage: React.FC = () => {
     maxAttempts: "3",
     theory: "",
     projectSpecJson: "",
+    pythonRuntimeProfile: "STANDARD" as "STANDARD" | "SCIENTIFIC" | "TKINTER",
   });
   const [generationInstructions, setGenerationInstructions] = React.useState("");
   const [generationProfile, setGenerationProfile] = React.useState<TaskGenerationProfile>(defaultTaskGenerationProfile);
@@ -254,7 +257,8 @@ export const TopicStudioPage: React.FC = () => {
     practiceCount: "2",
     formula: defaultControlFormula,
   });
-  const [testForm, setTestForm] = React.useState({ input: "", expectedOutput: "", points: "1", isHidden: true, imageUrls: [] as string[] });
+  const [testForm, setTestForm] = React.useState<{ input: string; expectedOutput: string; points: string; isHidden: boolean; imageUrls: string[]; assets: PythonTaskAssetInput[] }>({ input: "", expectedOutput: "", points: "1", isHidden: true, imageUrls: [], assets: [] });
+  const [testAssetError, setTestAssetError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -283,7 +287,7 @@ export const TopicStudioPage: React.FC = () => {
     setError(null);
     setEditorTab("statement");
     setEditingTaskId(null);
-    setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "" });
+    setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "", pythonRuntimeProfile: "STANDARD" });
     setGenerationInstructions("");
     setGenerationProfile(defaultTaskGenerationProfile);
     setMode("task");
@@ -301,6 +305,7 @@ export const TopicStudioPage: React.FC = () => {
       maxAttempts: String(task.maxAttempts || 3),
       theory: task.theory?.content || "",
       projectSpecJson: task.projectSpec ? JSON.stringify(task.projectSpec, null, 2) : "",
+      pythonRuntimeProfile: task.pythonRuntimeProfile || "STANDARD",
     });
     setGenerationInstructions("");
     setGenerationProfile(defaultTaskGenerationProfile);
@@ -542,6 +547,7 @@ export const TopicStudioPage: React.FC = () => {
           } : {}),
           maxAttempts: Number(taskForm.maxAttempts) || 3,
           projectSpec,
+          pythonRuntimeProfile: taskForm.pythonRuntimeProfile,
         };
         const response = editingTaskId
           ? await api.put(`/topics/${id}/tasks/${editingTaskId}`, payload)
@@ -561,6 +567,7 @@ export const TopicStudioPage: React.FC = () => {
             title: taskForm.title.trim(),
             description: taskForm.description.trim(),
             template: taskForm.template,
+            pythonRuntimeProfile: taskForm.pythonRuntimeProfile,
             maxAttempts: Number(taskForm.maxAttempts) || 3,
             theory: taskForm.theory.trim() ? { content: taskForm.theory.trim() } : null,
           } as TopicTask;
@@ -571,6 +578,7 @@ export const TopicStudioPage: React.FC = () => {
             title: taskForm.title.trim(),
             description: taskForm.description.trim(),
             template: taskForm.template,
+            pythonRuntimeProfile: taskForm.pythonRuntimeProfile,
             type: "PRACTICE",
             maxAttempts: Number(taskForm.maxAttempts) || 3,
             isAssigned: false,
@@ -581,7 +589,7 @@ export const TopicStudioPage: React.FC = () => {
       }
       const savedTaskId = created?.id;
       setEditingTaskId(null);
-      setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "" });
+      setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "", pythonRuntimeProfile: "STANDARD" });
       if (!preview()) await load();
       if (savedTaskId) {
         setSelectedTask(created);
@@ -742,6 +750,7 @@ export const TopicStudioPage: React.FC = () => {
           webValidationRules: task.webValidationRules,
           webValidationProfile: task.webValidationProfile,
           projectSpec: task.projectSpec ?? null,
+          pythonRuntimeProfile: task.pythonRuntimeProfile || "STANDARD",
           maxAttempts: task.maxAttempts,
           deadline,
         });
@@ -778,17 +787,62 @@ export const TopicStudioPage: React.FC = () => {
     setBusy(true);
     try {
       if (preview()) {
-        setTests((old) => [...old, { id: Date.now(), input: testForm.input, expectedOutput: testForm.expectedOutput, points: Number(testForm.points) || 1, isHidden: testForm.isHidden, imageUrls: testForm.imageUrls, source: "MANUAL" } as TestData]);
+        setTests((old) => [...old, { id: Date.now(), input: testForm.input, expectedOutput: testForm.expectedOutput, points: Number(testForm.points) || 1, isHidden: testForm.isHidden, imageUrls: testForm.imageUrls, assets: testForm.assets, assetPaths: testForm.assets.map(asset => asset.path), source: "MANUAL" } as TestData]);
       } else {
-        await addTestData(selectedTask.id, [{ input: testForm.input, expectedOutput: testForm.expectedOutput, points: Number(testForm.points) || 1, isHidden: testForm.isHidden, imageUrls: testForm.imageUrls }]);
+        await addTestData(selectedTask.id, [{ input: testForm.input, expectedOutput: testForm.expectedOutput, points: Number(testForm.points) || 1, isHidden: testForm.isHidden, imageUrls: testForm.imageUrls, assets: testForm.assets }]);
         const data = await getTestData(selectedTask.id, { limit: 100, offset: 0 });
         setTests(data.testData || []);
       }
-      setTestForm({ input: "", expectedOutput: "", points: "1", isHidden: true, imageUrls: [] });
+      setTestForm({ input: "", expectedOutput: "", points: "1", isHidden: true, imageUrls: [], assets: [] });
+      setTestAssetError(null);
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, tr("Не вдалося додати тест.", "Could not add the test.")));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const addTestImages = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const selected = Array.from(input.files || []);
+    input.value = "";
+    setTestAssetError(null);
+    if (!selected.length) return;
+    if (testForm.assets.length + selected.length > 8) {
+      setTestAssetError(tr("Можна додати не більше 8 зображень до одного тесту.", "A test can include up to 8 images."));
+      return;
+    }
+    const totalCurrentBytes = testForm.assets.reduce((sum, asset) => sum + Math.floor(asset.dataBase64.length * 3 / 4), 0);
+    const allowedExtensions = new Set(["png", "jpg", "jpeg", "bmp", "webp", "tif", "tiff"]);
+    try {
+      const additions: PythonTaskAssetInput[] = [];
+      for (const file of selected) {
+        const extension = file.name.split(".").pop()?.toLowerCase() || "";
+        if (!allowedExtensions.has(extension) || file.size < 1 || file.size > 1_000_000) {
+          throw new Error(tr("Підтримуються PNG, JPG, BMP, WebP і TIFF до 1 МБ кожен.", "Use PNG, JPG, BMP, WebP or TIFF images up to 1 MB each."));
+        }
+        const safeName = file.name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^\.+/, "").slice(0, 120);
+        if (!safeName || !/\.[A-Za-z0-9]+$/.test(safeName)) throw new Error(tr("Не вдалося створити безпечну назву файлу.", "Could not create a safe filename."));
+        const path = "fixtures/" + safeName;
+        if (testForm.assets.some(asset => asset.path === path) || additions.some(asset => asset.path === path)) throw new Error(tr("Назви файлів у тесті мають бути унікальними.", "Filenames in a test must be unique."));
+        const dataBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = String(reader.result || "");
+            const marker = result.indexOf(",");
+            if (marker < 0) reject(new Error(tr("Не вдалося прочитати зображення.", "Could not read the image.")));
+            else resolve(result.slice(marker + 1));
+          };
+          reader.onerror = () => reject(new Error(tr("Не вдалося прочитати зображення.", "Could not read the image.")));
+          reader.readAsDataURL(file);
+        });
+        additions.push({ path, dataBase64 });
+      }
+      const totalAddedBytes = additions.reduce((sum, asset) => sum + Math.floor(asset.dataBase64.length * 3 / 4), 0);
+      if (totalCurrentBytes + totalAddedBytes > 4_000_000) throw new Error(tr("Загальний розмір зображень тесту має бути до 4 МБ.", "The test's images must total no more than 4 MB."));
+      setTestForm(old => ({ ...old, assets: [...old.assets, ...additions] }));
+    } catch (caught) {
+      setTestAssetError(caught instanceof Error ? caught.message : tr("Не вдалося додати зображення.", "Could not add the images."));
     }
   };
 
@@ -855,6 +909,7 @@ export const TopicStudioPage: React.FC = () => {
         {mode === "task" && (
           <Modal error={error} title={editingTaskId ? tr("Редагувати завдання", "Edit task") : tr("Нове завдання", "New task")} caption={editingTaskId ? tr("Змініть умову або необов’язкові матеріали. Чернетку можна редагувати до відкриття учням.", "Edit the statement or optional materials. You can edit the draft until it is assigned to students.") : tr("Додайте назву, опишіть задум або одразу створіть умову з AI. Тести налаштуються на наступному кроці.", "Add a title, describe the idea, or draft the statement with AI. Test setup comes next.")} onClose={() => { setMode(null); setEditingTaskId(null); }} wide>
             <form className="task-authoring" onSubmit={event => { event.preventDefault(); void createTask(); }}>
+              {topic.language === "PYTHON" && <label className="task-authoring__label" htmlFor="topic-task-python-runtime">{tr("Середовище Python", "Python runtime")}<select id="topic-task-python-runtime" value={taskForm.pythonRuntimeProfile} onChange={event => setTaskForm({ ...taskForm, pythonRuntimeProfile: event.target.value as typeof taskForm.pythonRuntimeProfile })} disabled={busy} className="task-authoring__title mt-2"><option value="STANDARD">{tr("Консольне · стандартні тести stdin/stdout", "Console · standard stdin/stdout tests")}</option><option value="SCIENTIFIC">{tr("Наукове · NumPy, OpenCV, SciPy та графіки", "Scientific · NumPy, OpenCV, SciPy and plots")}</option><option value="TKINTER">{tr("Tkinter · віконний інтерфейс", "Tkinter · desktop-style window")}</option></select><span className="classroom-caption mt-2 block">{tr("Учень надсилає звичайне рішення на ті самі автоматичні тести. Tkinter запускається у віртуальному дисплеї; у превʼю можна відтворювати кліки й клавіші.", "Students submit an ordinary solution for the same automatic tests. Tkinter runs in a virtual display; clicks and keys can be replayed in the preview.")}</span></label>}
               <TaskAuthoringFields idPrefix="topic-task" value={taskForm} onChange={patch => setTaskForm(old => ({ ...old, ...patch }))} generationGuidance={generationInstructions} onGenerationGuidanceChange={setGenerationInstructions} generationProfile={generationProfile} onGenerationProfileChange={setGenerationProfile} includeSubtasks={includeSubtasks} onIncludeSubtasksChange={setIncludeSubtasks} guidanceEnabled={!editingTaskId && !preview()} selectedTab={editorTab} onSelectedTabChange={setEditorTab} aiBusy={aiBusy} busy={busy} onGenerateCondition={() => void generateCondition()} onGenerateTemplate={() => void generateTemplate()} onGenerateTheory={() => void generateTheory()} />
               {clarificationQuestion && <TaskGenerationClarification question={clarificationQuestion} busy={aiBusy === "condition"} onSubmit={answer => void generateCondition(answer)} />}
               <div className="task-authoring__footer"><button type="button" className="classroom-button" disabled={busy} onClick={() => { setMode(null); setEditingTaskId(null); }}>{tr("Скасувати", "Cancel")}</button><button type="submit" className="classroom-button classroom-button--primary" disabled={busy || !!aiBusy || !taskForm.title.trim()}>{busy ? tr("Зберігаємо…", "Saving…") : editingTaskId ? tr("Зберегти зміни", "Save changes") : tr("Створити завдання", "Create task")}<ArrowRight className="size-4" aria-hidden="true" /></button></div>
@@ -932,6 +987,7 @@ export const TopicStudioPage: React.FC = () => {
                       <p className="mt-1 truncate font-mono text-xs text-text-primary dark:text-text-primary">out: {test.expectedOutput}</p>
                       {test.subtask && <p className="mt-1 text-[10px] font-semibold text-text-muted dark:text-text-secondary">{test.subtask}{test.subtaskWeightPercent ? ` · ${test.subtaskWeightPercent}% ${tr("максимуму", "of max")}` : ""}</p>}
                       {!!test.imageUrls?.length && <div className="mt-2 flex gap-1">{test.imageUrls.map((url, imageIndex) => <img key={`${url}-${imageIndex}`} src={url} alt={tr(`Зображення тесту ${index + 1}`, `Test ${index + 1} image`)} className="h-10 w-12 rounded-md border border-border object-cover" loading="lazy" />)}</div>}
+                      {test.assetPaths?.length ? <p className="mt-1 truncate font-mono text-[10px] text-text-muted dark:text-text-secondary">{tr("Зображення", "Images")}: {test.assetPaths.join(", ")}</p> : null}
                     </div>
                     <button type="button" onClick={() => void removeTest(test)} aria-label={tr(`Видалити тест ${index + 1}`, `Delete test ${index + 1}`)} className="text-accent-error dark:text-accent-error"><Trash2 className="size-4" aria-hidden="true" /></button>
                   </div>
@@ -998,6 +1054,13 @@ export const TopicStudioPage: React.FC = () => {
                 </div>
                 <div className="border-t border-border/10 pt-3 dark:border-white/10">
                   <h3 className="font-black">{tr("Додати тест вручну", "Add a test manually")}</h3>
+                  {selectedTask.pythonRuntimeProfile === "TKINTER" && <p className="mt-2 text-xs leading-5 text-text-secondary">{tr("Вхід — JSON зі списком дій, наприклад {\"events\":[{\"type\":\"click\",\"x\":120,\"y\":80}]}. Очікуваний результат — JSON-знімок віджетів після цих дій.", "Input is JSON UI events, for example {\"events\":[{\"type\":\"click\",\"x\":120,\"y\":80}]}. Expected output is the widget snapshot after those actions.")}</p>}
+                  {selectedTask.pythonRuntimeProfile !== "STANDARD" && <div className="mt-3 rounded-xl border border-border/10 p-3 dark:border-white/10">
+                    <label htmlFor="topic-test-image-assets" className="block text-xs font-bold text-text-primary dark:text-text-primary">{tr("Файли-зображення для цього тесту", "Image fixtures for this test")}</label>
+                    <input id="topic-test-image-assets" type="file" accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,image/*" multiple onChange={event => void addTestImages(event)} className="mt-2 block w-full text-xs" />
+                    {testForm.assets.map(asset => <div key={asset.path} className="mt-2 flex items-center justify-between gap-3 text-xs"><span className="truncate font-mono">{asset.path}</span><button type="button" onClick={() => setTestForm(old => ({ ...old, assets: old.assets.filter(item => item.path !== asset.path) }))} className="text-accent-error">{tr("Видалити", "Remove")}</button></div>)}
+                    {testAssetError && <p role="alert" className="mt-2 text-xs text-accent-error">{testAssetError}</p>}
+                  </div>}
                   <textarea id="topic-test-input" name="testInput" aria-label={tr("Вхідні дані тесту", "Test input")} value={testForm.input} onChange={(event) => setTestForm({ ...testForm, input: event.target.value })} placeholder={tr("Вхідні дані", "Input")} rows={4} spellCheck={false} className="mt-3 w-full resize-none rounded-xl border border-border/10 bg-bg-hover px-3 py-2 font-mono text-xs outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-bg-code" />
                   <textarea id="topic-test-output" name="expectedOutput" aria-label={tr("Очікуваний результат тесту", "Expected test output")} value={testForm.expectedOutput} onChange={(event) => setTestForm({ ...testForm, expectedOutput: event.target.value })} placeholder={tr("Очікуваний результат", "Expected output")} rows={4} spellCheck={false} className="mt-3 w-full resize-none rounded-xl border border-border/10 bg-bg-hover px-3 py-2 font-mono text-xs outline-none focus-visible:ring-4 focus-visible:ring-primary/20 dark:border-white/10 dark:bg-bg-code" />
                   <div className="mt-3"><TestImageAttachments value={testForm.imageUrls} onChange={imageUrls => setTestForm(old => ({ ...old, imageUrls }))} disabled={busy} /></div>

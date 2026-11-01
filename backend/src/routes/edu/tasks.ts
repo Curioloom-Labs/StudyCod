@@ -39,6 +39,15 @@ import { recordLearningOutcome } from "../../services/learning/failureToSkillEng
 import { EduHintFeedback, EDU_HINT_FEEDBACK_REASON_CODES, type EduHintFeedbackReasonCode } from "../../entities/EduHintFeedback";
 import { env } from "../../env";
 import {
+  buildPythonTaskJudgeFiles,
+  encodePythonTaskInput,
+  normalizePythonTaskAssets,
+  normalizePythonTaskFiles,
+  parsePythonTaskRunResult,
+  parseTkinterEvents,
+  pythonCompilerForRuntime,
+} from "../../services/edu/pythonTaskRuntime";
+import {
   normalizeWebTaskFiles,
   normalizeWebValidationProfile,
   normalizeWebValidationRules,
@@ -269,6 +278,8 @@ const runBodySchema = z
       .max(64)
       .optional(),
     input: z.string().max(64 * 1024).optional(),
+    assets: z.array(z.object({ path: z.string().min(1).max(180), dataBase64: z.string().max(1_400_000) }).strict()).max(8).optional(),
+    events: z.array(z.unknown()).max(32).optional(),
   })
   .refine(v => (typeof v.code === "string" && v.code.length > 0) || (Array.isArray(v.files) && v.files.length > 0), {
     message: "code or files required",
@@ -650,6 +661,12 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       order: { id: "ASC" },
       take: 20,
     });
+    const publicAssetRows = topicTask.pythonRuntimeProfile !== "STANDARD"
+      ? await testDataRepo().createQueryBuilder("test").select(["test.id", "test.assets"])
+        .where("test.topic_task_id = :taskId", { taskId }).andWhere("test.is_hidden = :hidden", { hidden: false })
+        .orderBy("test.id", "ASC").getMany()
+      : [];
+    const publicAssets = [...new Map(publicAssetRows.flatMap(test => test.assets ?? []).map(asset => [asset.path, asset])).values()];
 
     let lessonType: "TOPIC" | "CONTROL" = "TOPIC";
     let lessonId = topicTask.topic.id;
@@ -774,6 +791,8 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
         template: topicTask.template,
         taskMode: topicTask.taskMode ?? "CODE",
         projectSpec: topicTask.projectSpec ?? null,
+        pythonRuntimeProfile: topicTask.pythonRuntimeProfile || "STANDARD",
+        publicAssets,
         webTemplateFiles: topicTask.webTemplateFiles ?? null,
         webValidationRules: topicTask.webValidationRules ?? null,
         maxAttempts: resolveTaskMaxAttempts(topicTask),
@@ -1213,7 +1232,44 @@ router.post("/tasks/:taskId/run", authRequired, submissionRateLimitMiddleware, r
 
     await assertControlTaskUnlockedForStudent(studentId, topicTask, { requireActiveAttempt: true });
 
-    // For single-file we can run locally; for multi-file route through judge worker.
+    const runtimeProfile = topicTask.pythonRuntimeProfile || "STANDARD";
+    if (runtimeProfile === "STANDARD" && validated.data.assets?.length) return res.status(400).json({ message: "IMAGE_FIXTURES_REQUIRE_PYTHON_LIBRARIES" });
+    if (runtimeProfile !== "STANDARD") {
+      if (topicTask.topic.language !== "PYTHON") return res.status(400).json({ message: "PYTHON_RUNTIME_REQUIRES_PYTHON" });
+      const pythonFiles = normalizePythonTaskFiles(effectiveFiles, sourceText);
+      const assets = normalizePythonTaskAssets(validated.data.assets);
+      if (validated.data.events?.length && runtimeProfile !== "TKINTER") return res.status(400).json({ message: "TKINTER_EVENTS_REQUIRE_TKINTER_PROFILE" });
+      const events = runtimeProfile === "TKINTER" ? parseTkinterEvents(JSON.stringify({ events: validated.data.events ?? [] })) : [];
+      const judgeFiles = buildPythonTaskJudgeFiles(pythonFiles, runtimeProfile) as NonNullable<WorkerJudgeRequest["files"]>;
+      const workerRes = await judgeWithSemaphore({
+        submission_id: ["edu_run_", studentId, "_", taskId, "_", Date.now()].join(""),
+        language: "python",
+        compiler: pythonCompilerForRuntime(runtimeProfile),
+        source: "",
+        files: judgeFiles,
+        entry: "main.py",
+        tests: [{ id: "custom", input: encodePythonTaskInput({ stdin: runtimeProfile === "SCIENTIFIC" ? input : "", assets, events, mode: "preview" }), output: "", hidden: false, group: "custom", weight: 1 }],
+        limits: { time_limit_ms: 8_000, memory_limit_mb: 512, output_limit_kb: 4_096 },
+        debug: true,
+        rerun_failed_once: false,
+        run_all: true
+      });
+      const result = workerRes.tests[0];
+      const parsed = parsePythonTaskRunResult(String(result?.actual ?? ""), runtimeProfile);
+      const compileError = workerRes.verdict === "CE" ? [workerRes.compile?.stderr, workerRes.compile?.stdout].filter(Boolean).join("\n").trim() : "";
+      return res.json({
+        output: parsed.stdout || (runtimeProfile === "TKINTER" ? "Tkinter preview updated." : ""),
+        stderr: result?.stderr ?? compileError,
+        success: workerRes.verdict !== "CE" && !["RE", "TLE", "MLE"].includes(String(result?.verdict)),
+        exitCode: result?.exit_code ?? (workerRes.verdict === "CE" ? 1 : 0),
+        timeMs: result?.time_ms ?? workerRes.time_ms ?? null,
+        previewImages: parsed.previewImages.map(image => ({ name: image.name, dataUrl: "data:image/jpeg;base64," + image.dataBase64 })),
+        uiSnapshot: parsed.uiSnapshot ?? null,
+        previewImage: parsed.previewImageBase64 ? "data:image/jpeg;base64," + parsed.previewImageBase64 : null,
+      });
+    }
+
+    // For single-file standard Python we can run locally; multi-file submissions use the worker.
     if (!isMultiFile) {
       const result = await executeCodeWithInput(sourceText, judgeLang, input || "", 5000);
       return res.json({ output: result.stdout, stderr: result.stderr, success: result.success });
@@ -1411,14 +1467,45 @@ router.post("/tasks/:taskId/submit", authRequired, submissionRateLimitMiddleware
       judgeTests
     } = await buildEduJudgeTests(tests);
 
+    const runtimeProfile = topicTask.pythonRuntimeProfile || "STANDARD";
+    let executionLanguage = judgeLang;
+    let executionSource = sourceText;
+    let executionFiles: WorkerJudgeRequest["files"] = isMultiFile ? effectiveFiles : undefined;
+    let executionEntry = entryFile;
+    let executionCompiler: string | undefined;
+    let executionTests = judgeTests;
+    if (runtimeProfile !== "STANDARD") {
+      if (eduLang !== "PYTHON") throw Object.assign(new Error("PYTHON_RUNTIME_REQUIRES_PYTHON"), { statusCode: 400 });
+      const pythonFiles = normalizePythonTaskFiles(effectiveFiles, sourceText);
+      const testsById = new Map(tests.map(test => [String(test.id), test] as const));
+      executionTests = judgeTests.map(judgeTest => {
+        const test = testsById.get(String(judgeTest.id));
+        if (!test) throw Object.assign(new Error("TEST_DATA_MISMATCH"), { statusCode: 500 });
+        const assets = normalizePythonTaskAssets(test.assets);
+        const events = runtimeProfile === "TKINTER" ? parseTkinterEvents(test.input) : [];
+        return {
+          ...judgeTest,
+          input: encodePythonTaskInput({ stdin: runtimeProfile === "SCIENTIFIC" ? test.input : "", assets, events, mode: "check" }),
+        };
+      });
+      executionLanguage = "python";
+      executionSource = "";
+      executionFiles = buildPythonTaskJudgeFiles(pythonFiles, runtimeProfile) as NonNullable<WorkerJudgeRequest["files"]>;
+      executionEntry = "main.py";
+      executionCompiler = pythonCompilerForRuntime(runtimeProfile);
+    } else if (tests.some(test => test.assets?.length)) {
+      throw Object.assign(new Error("IMAGE_FIXTURES_REQUIRE_PYTHON_LIBRARIES"), { statusCode: 409 });
+    }
+
     const workerReq: WorkerJudgeRequest = {
       submission_id: `edu_${studentId}_${taskId}_${Date.now()}`,
-      language: judgeLang,
-      source: sourceText,
-      ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
+      language: executionLanguage,
+      ...(executionCompiler ? { compiler: executionCompiler } : {}),
+      source: executionSource,
+      ...(executionFiles ? { files: executionFiles, entry: executionEntry } : {}),
       group_scoring_mode: hasSubtasks ? "SUM" : undefined,
-      tests: judgeTests,
-      limits: defaultLimitsByLang[judgeLang],
+      tests: executionTests,
+      limits: runtimeProfile === "STANDARD" ? defaultLimitsByLang[judgeLang] : { time_limit_ms: 8_000, memory_limit_mb: 512, output_limit_kb: 1_024 },
       checker: chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || "")),
       debug: false,
       rerun_failed_once: true,
@@ -1974,14 +2061,45 @@ router.post("/tasks/:taskId/complete", authRequired, submissionRateLimitMiddlewa
       judgeTests
     } = await buildEduJudgeTests(tests);
 
+    const runtimeProfile = topicTask.pythonRuntimeProfile || "STANDARD";
+    let executionLanguage = judgeLang;
+    let executionSource = sourceText;
+    let executionFiles: WorkerJudgeRequest["files"] = isMultiFile ? effectiveFiles : undefined;
+    let executionEntry = entryFile;
+    let executionCompiler: string | undefined;
+    let executionTests = judgeTests;
+    if (runtimeProfile !== "STANDARD") {
+      if (eduLang !== "PYTHON") throw Object.assign(new Error("PYTHON_RUNTIME_REQUIRES_PYTHON"), { statusCode: 400 });
+      const pythonFiles = normalizePythonTaskFiles(effectiveFiles, sourceText);
+      const testsById = new Map(tests.map(test => [String(test.id), test] as const));
+      executionTests = judgeTests.map(judgeTest => {
+        const test = testsById.get(String(judgeTest.id));
+        if (!test) throw Object.assign(new Error("TEST_DATA_MISMATCH"), { statusCode: 500 });
+        const assets = normalizePythonTaskAssets(test.assets);
+        const events = runtimeProfile === "TKINTER" ? parseTkinterEvents(test.input) : [];
+        return {
+          ...judgeTest,
+          input: encodePythonTaskInput({ stdin: runtimeProfile === "SCIENTIFIC" ? test.input : "", assets, events, mode: "check" }),
+        };
+      });
+      executionLanguage = "python";
+      executionSource = "";
+      executionFiles = buildPythonTaskJudgeFiles(pythonFiles, runtimeProfile) as NonNullable<WorkerJudgeRequest["files"]>;
+      executionEntry = "main.py";
+      executionCompiler = pythonCompilerForRuntime(runtimeProfile);
+    } else if (tests.some(test => test.assets?.length)) {
+      throw Object.assign(new Error("IMAGE_FIXTURES_REQUIRE_PYTHON_LIBRARIES"), { statusCode: 409 });
+    }
+
     const workerReq: WorkerJudgeRequest = {
       submission_id: `edu_complete_${studentId}_${taskId}_${Date.now()}`,
-      language: judgeLang,
-      source: sourceText,
-      ...(isMultiFile ? { files: effectiveFiles, entry: entryFile } : {}),
+      language: executionLanguage,
+      ...(executionCompiler ? { compiler: executionCompiler } : {}),
+      source: executionSource,
+      ...(executionFiles ? { files: executionFiles, entry: executionEntry } : {}),
       group_scoring_mode: hasSubtasks ? "SUM" : undefined,
-      tests: judgeTests,
-      limits: defaultLimitsByLang[judgeLang],
+      tests: executionTests,
+      limits: runtimeProfile === "STANDARD" ? defaultLimitsByLang[judgeLang] : { time_limit_ms: 8_000, memory_limit_mb: 512, output_limit_kb: 1_024 },
       checker: chooseDefaultCheckerFromExpectedOutputs(tests.map(t => t.expectedOutput || "")),
       debug: false,
       rerun_failed_once: true,

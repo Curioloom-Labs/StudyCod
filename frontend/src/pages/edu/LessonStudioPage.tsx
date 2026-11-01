@@ -201,7 +201,8 @@ const LessonTeacherStudio: React.FC = () => {
     description: string;
     template: string;
     projectSpecJson?: string;
-  }>({ title: "", description: "", template: "", projectSpecJson: "" });
+    pythonRuntimeProfile: "STANDARD" | "SCIENTIFIC" | "TKINTER";
+  }>({ title: "", description: "", template: "", projectSpecJson: "", pythonRuntimeProfile: "STANDARD" });
   const [taskTests, setTaskTests] = React.useState<CourseTestInput[]>([emptyCourseTest()]);
   const [taskMaxAttempts, setTaskMaxAttempts] = React.useState(3);
   const taskDescriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
@@ -278,7 +279,7 @@ const LessonTeacherStudio: React.FC = () => {
     }
   }, [lesson?.quizJson]);
   const create = async () => {
-    if (createPending.current || !task.title.trim() || !task.description.trim() || lesson?.source === "course" && (!taskTests.length || !validCourseTests(taskTests))) return;
+    if (createPending.current || !task.title.trim() || !task.description.trim() || lesson?.source === "course" && (!taskTests.length || !validCourseTests(taskTests, task.pythonRuntimeProfile))) return;
     createPending.current = true;
     setBusy(true); setError(null);
     try {
@@ -286,9 +287,9 @@ const LessonTeacherStudio: React.FC = () => {
         title: task.title.trim(),
         description: task.description.trim(),
         template: task.template,
-        ...(lesson?.source === "course" ? { testData: taskTests, maxAttempts: taskMaxAttempts } : {}),
+        ...(lesson?.source === "course" ? { testData: taskTests, maxAttempts: taskMaxAttempts, pythonRuntimeProfile: task.pythonRuntimeProfile } : {}),
       });
-      setTask({ title: "", description: "", template: "" });
+      setTask({ title: "", description: "", template: "", pythonRuntimeProfile: "STANDARD" });
       setTaskTests([emptyCourseTest()]); setTaskMaxAttempts(3);
       setModal(null);
       await load();
@@ -677,9 +678,20 @@ const LessonTeacherStudio: React.FC = () => {
               spellCheck={false}
               className="w-full resize-none rounded-xl border border-primary-strong/25 bg-bg-hover px-4 py-3 font-mono text-xs dark:border-primary/25 dark:bg-bg-code"
             />
-            {lesson.source === "course" && <><CourseTaskTestFields tests={taskTests} onChange={setTaskTests} disabled={busy} /><label className="block max-w-xs text-sm font-semibold">{tr("Спроб на учня", "Attempts per student")}<input type="number" min={1} max={100} step={1} value={taskMaxAttempts} onChange={event => setTaskMaxAttempts(Number(event.target.value))} className="mt-2 min-h-11 w-full rounded-xl border border-border bg-bg-base px-4 py-3" /></label></>}
+            {lesson.source === "course" && <>
+              <label className="block max-w-xl text-sm font-semibold">{tr("Середовище Python", "Python runtime")}
+                <select value={task.pythonRuntimeProfile} onChange={event => setTask({ ...task, pythonRuntimeProfile: event.target.value as typeof task.pythonRuntimeProfile })} className="mt-2 min-h-11 w-full rounded-xl border border-border bg-bg-base px-4 py-3">
+                  <option value="STANDARD">Python — стандартна бібліотека</option>
+                  <option value="SCIENTIFIC">Python — NumPy, OpenCV, SciPy, Pandas, Matplotlib, scikit-learn</option>
+                  <option value="TKINTER">Python — наукові бібліотеки й Tkinter</option>
+                </select>
+                <span className="mt-2 block font-normal leading-6 text-text-secondary">{task.pythonRuntimeProfile === "TKINTER" ? tr("Учень побачить знімок вікна після запуску. Натискання та введений текст можна повторити у превʼю.", "The learner will see a window snapshot after running. Clicks and typed text can be replayed in the preview.") : task.pythonRuntimeProfile === "SCIENTIFIC" ? tr("Дозволяє імпортувати наукові пакети й додавати зображення як файли запуску та тестів.", "Enables scientific packages and image fixtures for runs and grading tests.") : tr("Консольна програма працює зі звичайними тестами stdin/stdout.", "Console programs use regular stdin/stdout tests.")}</span>
+              </label>
+              <CourseTaskTestFields tests={taskTests} onChange={setTaskTests} disabled={busy} runtimeProfile={task.pythonRuntimeProfile} />
+              <label className="block max-w-xs text-sm font-semibold">{tr("Спроб на учня", "Attempts per student")}<input type="number" min={1} max={100} step={1} value={taskMaxAttempts} onChange={event => setTaskMaxAttempts(Number(event.target.value))} className="mt-2 min-h-11 w-full rounded-xl border border-border bg-bg-base px-4 py-3" /></label>
+            </>}
             <button type="button"
-              disabled={busy || !task.title.trim() || !task.description.trim() || lesson.source === "course" && (!taskTests.length || !validCourseTests(taskTests) || !Number.isSafeInteger(taskMaxAttempts) || taskMaxAttempts < 1 || taskMaxAttempts > 100)}
+              disabled={busy || !task.title.trim() || !task.description.trim() || lesson.source === "course" && (!taskTests.length || !validCourseTests(taskTests, task.pythonRuntimeProfile) || !Number.isSafeInteger(taskMaxAttempts) || taskMaxAttempts < 1 || taskMaxAttempts > 100)}
               onClick={() => void create()}
               className="w-full rounded-xl bg-primary px-4 py-3 font-bold text-primary-foreground disabled:opacity-40 dark:bg-primary dark:text-primary-foreground"
             >

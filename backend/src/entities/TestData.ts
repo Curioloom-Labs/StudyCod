@@ -6,6 +6,20 @@ import { LibraryTask } from "./LibraryTask";
 export type TestKind = "SAMPLE" | "JUDGE";
 export type TestSource = "MANUAL" | "AI_GENERATED" | "LIBRARY_IMPORTED";
 export type SubtaskScoringMode = "ABSOLUTE" | "PARTIAL";
+const jsonLongTextTransformer = {
+  to(value: Array<{ path: string; dataBase64: string }> | null | undefined): string | null {
+    return value == null ? null : JSON.stringify(value);
+  },
+  from(value: string | null | undefined): Array<{ path: string; dataBase64: string }> | null {
+    if (!value) return null;
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  },
+};
 @Index("idx_test_data_personal_task", ["personalTask"])
 @Index("idx_test_data_input_sha256", ["inputSha256"])
 @Index("idx_test_data_output_sha256", ["outputSha256"])
@@ -55,6 +69,9 @@ export class TestData {
     name: "expected_output"
   })
   expectedOutput!: string;
+  /** Optional binary fixtures for ordinary Python EDU tests (base64, safe relative paths). */
+  @Column({ type: "longtext", nullable: true, transformer: jsonLongTextTransformer })
+  assets?: Array<{ path: string; dataBase64: string }> | null;
   @Column({
     type: "boolean",
     default: false,

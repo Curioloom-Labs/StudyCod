@@ -20,6 +20,17 @@ import {
 import { encodeWebTaskPayload } from "../../utils/webTaskPayload";
 import { generateAlgorithmicHints } from "../../services/ai/failureHints";
 import { assertCoursePracticeActive } from "../../services/edu/courseLessonAttempt";
+import {
+  buildPythonTaskJudgeFiles,
+  encodePythonTaskInput,
+  normalizePythonTaskAssets,
+  normalizePythonTaskFiles,
+  parsePythonTaskRunResult,
+  parseTkinterEvents,
+  pythonCompilerForRuntime,
+} from "../../services/edu/pythonTaskRuntime";
+import type { JudgeFile } from "../../services/judgeWorker/types";
+import { encodeMultiFileSubmissionV1 } from "../../utils/multiFileSubmission";
 
 /** Student-facing handlers for materialised course EduTasks.
  * The legacy router below serves TopicTask. Keeping this router first makes the
@@ -137,6 +148,11 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
     const attemptsUsed = await gradeRepo().count({ where: { task: { id: task.id }, student: { id: student.id } } });
     const tests = await testRepo().find({ where: { task: { id: task.id } }, order: { id: "ASC" }, take: 50 });
     const testsCount = await testRepo().count({ where: { task: { id: task.id } } });
+    const publicAssetRows = task.pythonRuntimeProfile === "SCIENTIFIC" || task.pythonRuntimeProfile === "TKINTER"
+      ? await testRepo().createQueryBuilder("test").select(["test.id", "test.assets"])
+        .where("test.task_id = :taskId", { taskId: task.id }).andWhere("test.is_hidden = :hidden", { hidden: false }).orderBy("test.id", "ASC").getMany()
+      : [];
+    const publicAssets = [...new Map(publicAssetRows.flatMap(test => test.assets ?? []).map(asset => [asset.path, asset])).values()];
     return res.json({ task: {
       id: task.id,
       title: task.title,
@@ -144,6 +160,8 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
       template: task.template,
       taskMode: task.taskMode,
       projectSpec: task.projectSpec ?? null,
+      pythonRuntimeProfile: task.pythonRuntimeProfile || "STANDARD",
+      publicAssets,
       webTemplateFiles: task.webTemplateFiles ?? null,
       webValidationRules: task.webValidationRules ?? null,
       language: languageFor(task),
@@ -171,10 +189,58 @@ router.get("/tasks/:taskId", authRequired, async (req: AuthRequest, res: Respons
 router.post("/tasks/:taskId/run", authRequired, async (req: AuthRequest, res: Response, next: NextFunction) => {
   await handleIfCourseTask(req, res, next, async ({ task }) => {
     if (task.taskMode !== "CODE") return res.status(400).json({ message: "TASK_IS_NOT_CODE" });
-    const code = z.string().min(1).max(200_000).safeParse(req.body?.code);
-    if (!code.success) return res.status(400).json({ message: "CODE_REQUIRED" });
-    const result = await executeCodeWithInput(code.data, languageFor(task), String(req.body?.input ?? ""), 5000);
-    return res.json({ output: result.stdout, stderr: result.stderr, success: result.success });
+    const parsed = z.object({
+      code: z.string().max(200_000).optional(),
+      files: z.array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) }).strict()).max(64).optional(),
+      input: z.string().max(100_000).optional(),
+      assets: z.array(z.object({ path: z.string().min(1).max(180), dataBase64: z.string().max(1_400_000) }).strict()).max(8).optional(),
+      events: z.array(z.unknown()).max(32).optional(),
+    }).strict().safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+    const profile = task.pythonRuntimeProfile || "STANDARD";
+    const studentFiles = normalizePythonTaskFiles(parsed.data.files, parsed.data.code);
+    const assets = normalizePythonTaskAssets(parsed.data.assets);
+    if (assets.length && profile === "STANDARD") return res.status(400).json({ message: "IMAGE_FIXTURES_REQUIRE_PYTHON_LIBRARIES" });
+    if (parsed.data.events?.length && profile !== "TKINTER") return res.status(400).json({ message: "TKINTER_EVENTS_REQUIRE_TKINTER_PROFILE" });
+    const source = studentFiles.find(file => file.path === "main.py")!.content;
+    const isMultiFile = Array.isArray(parsed.data.files) && parsed.data.files.length > 0;
+    if (profile === "SCIENTIFIC" || profile === "TKINTER") {
+      const events = profile === "TKINTER" ? parseTkinterEvents(JSON.stringify({ events: parsed.data.events ?? [] })) : [];
+      const files = buildPythonTaskJudgeFiles(studentFiles, profile) as JudgeFile[];
+      const input = encodePythonTaskInput({ stdin: parsed.data.input, assets, events, mode: "preview" });
+      const response = await judgeWithSemaphore({
+        submission_id: `edu_course_run_${task.id}_${randomUUID()}`, cache_owner: `edu-course:${task.id}`,
+        language: "python", compiler: pythonCompilerForRuntime(profile), source: "", files, entry: "main.py",
+        tests: [{ id: "run", input, output: "", hidden: false }], checker: { type: "exact" },
+        limits: { time_limit_ms: 8_000, memory_limit_mb: 512, output_limit_kb: 4_096 },
+        run_all: true, debug: true,
+      }, { timeoutMs: 15_000 });
+      const test = response.tests[0];
+      const compileError = response.verdict === "CE" ? [response.compile?.stderr, response.compile?.stdout].filter(Boolean).join("\n").trim() : "";
+      const parsedOutput = parsePythonTaskRunResult(String(test?.actual ?? ""), profile);
+      return res.json({
+        output: parsedOutput.stdout || (profile === "TKINTER" ? "Tkinter preview updated." : ""),
+        stderr: test?.stderr || compileError || "",
+        success: response.verdict !== "CE" && !["RE", "TLE", "MLE"].includes(String(test?.verdict)),
+        exitCode: test?.exit_code ?? (response.verdict === "CE" ? 1 : 0),
+        timeMs: test?.time_ms ?? response.time_ms ?? null,
+        previewImages: parsedOutput.previewImages.map(image => ({ name: image.name, dataUrl: `data:image/jpeg;base64,${image.dataBase64}` })),
+        uiSnapshot: parsedOutput.uiSnapshot ?? null,
+        previewImage: parsedOutput.previewImageBase64 ? `data:image/jpeg;base64,${parsedOutput.previewImageBase64}` : null,
+      });
+    }
+    if (!isMultiFile) {
+      const result = await executeCodeWithInput(source, languageFor(task), String(parsed.data.input ?? ""), 5000);
+      return res.json({ output: result.stdout, stderr: result.stderr, success: result.success, exitCode: result.exitCode, timeMs: result.timeMs ?? null });
+    }
+    const response = await judgeWithSemaphore({
+      submission_id: `edu_course_run_${task.id}_${randomUUID()}`, cache_owner: `edu-course:${task.id}`,
+      language: "python", source, files: studentFiles as JudgeFile[], entry: "main.py",
+      tests: [{ id: "run", input: String(parsed.data.input ?? ""), output: "", hidden: false }], checker: { type: "exact" },
+      limits: { time_limit_ms: 5_000, memory_limit_mb: 256, output_limit_kb: 256 }, run_all: true, debug: true,
+    }, { timeoutMs: 10_000 });
+    const result = response.tests[0];
+    return res.json({ output: result?.actual ?? "", stderr: result?.stderr ?? response.compile?.stderr ?? "", success: ["AC", "WA"].includes(String(result?.verdict)), exitCode: result?.exit_code ?? 0, timeMs: result?.time_ms ?? response.time_ms ?? null });
   });
 });
 
@@ -183,8 +249,16 @@ router.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, res:
     if (task.taskMode !== "CODE") return res.status(400).json({ message: "TASK_IS_NOT_CODE" });
     if (task.isClosed) return res.status(403).json({ message: "TASK_IS_CLOSED" });
     if (task.deadline && new Date() > new Date(task.deadline)) return res.status(403).json({ message: "DEADLINE_PASSED" });
-    const code = z.string().min(1).max(200_000).safeParse(req.body?.code);
-    if (!code.success) return res.status(400).json({ message: "CODE_REQUIRED" });
+    const code = z.string().max(200_000).optional().safeParse(req.body?.code);
+    if (!code.success) return res.status(400).json({ message: "CODE_TOO_LARGE" });
+    const rawFiles = z.array(z.object({ path: z.string().min(1).max(180), content: z.string().max(200_000) }).strict()).max(64).optional().safeParse(req.body?.files);
+    if (!rawFiles.success) return res.status(400).json({ message: "INVALID_FILES" });
+    let studentFiles: ReturnType<typeof normalizePythonTaskFiles>;
+    try { studentFiles = normalizePythonTaskFiles(rawFiles.data, code.data); }
+    catch (error) { const record = error as { statusCode?: number; message?: string }; return res.status(record.statusCode || 400).json({ message: record.message || "INVALID_FILES" }); }
+    const source = studentFiles.find(file => file.path === "main.py")!.content;
+    const multiFileSubmission = Array.isArray(rawFiles.data) && rawFiles.data.length > 0;
+    const persistedCode = multiFileSubmission ? encodeMultiFileSubmissionV1({ entry: "main.py", files: studentFiles }) : source;
     const prior = await latestGrade(task.id, student.id);
     if (prior?.isCompleted || prior?.isManuallyGraded) return res.status(409).json({ message: "TASK_ALREADY_COMPLETED" });
     const used = await gradeRepo().count({ where: { task: { id: task.id }, student: { id: student.id } } });
@@ -192,23 +266,41 @@ router.post("/tasks/:taskId/submit", authRequired, async (req: AuthRequest, res:
     const tests = await testRepo().find({ where: { task: { id: task.id } }, order: { id: "ASC" } });
     if (!tests.length) return res.status(409).json({ message: "NO_TESTS_CONFIGURED" });
     const hasSubtasks = tests.some(test => String(test.subtask ?? "").trim().length > 0);
+    const profile = task.pythonRuntimeProfile || "STANDARD";
+    const workerTests = tests.map(test => {
+      const group = hasSubtasks ? String(test.subtask ?? "").trim() || `unassigned_${test.id}` : test.isHidden ? "hidden" : "public";
+      if (profile === "STANDARD") {
+        if (test.assets?.length) throw Object.assign(new Error("IMAGE_FIXTURES_REQUIRE_PYTHON_LIBRARIES"), { statusCode: 409 });
+        return { id: test.id, input: test.input, output: test.expectedOutput, hidden: test.isHidden,
+          weight: test.points || 1, group };
+      }
+      const assets = normalizePythonTaskAssets(test.assets);
+      const events = profile === "TKINTER" ? parseTkinterEvents(test.input) : [];
+      const input = encodePythonTaskInput({ stdin: profile === "SCIENTIFIC" ? test.input : "", assets, events, mode: "check" });
+      return { id: test.id, input, output: test.expectedOutput, hidden: test.isHidden,
+        weight: test.points || 1, group };
+    });
+    const judgeFiles = profile === "SCIENTIFIC" || profile === "TKINTER"
+      ? buildPythonTaskJudgeFiles(studentFiles, profile) as JudgeFile[]
+      : multiFileSubmission ? studentFiles as JudgeFile[] : undefined;
     const workerResult = await judgeWithSemaphore({
       submission_id: `edu_course_${student.id}_${task.id}_${randomUUID()}`, cache_owner: `edu-student:${student.id}`,
-      language: "python", source: code.data, run_all: true, debug: false,
-      group_scoring_mode: "SUM",
-      tests: tests.map(test => ({ id: test.id, input: test.input, output: test.expectedOutput, hidden: test.isHidden,
-        weight: test.points || 1, group: hasSubtasks ? String(test.subtask ?? "").trim() || `unassigned_${test.id}` : test.isHidden ? "hidden" : "public" })),
-      checker: { type: "whitespace" }, limits: { time_limit_ms: 2000, memory_limit_mb: 256, output_limit_kb: 256 },
+      language: "python", compiler: pythonCompilerForRuntime(profile), source, ...(judgeFiles ? { files: judgeFiles, entry: "main.py" } : {}), run_all: true, debug: false,
+      group_scoring_mode: hasSubtasks ? "SUM" : undefined,
+      tests: workerTests,
+      checker: { type: "whitespace" }, limits: profile === "STANDARD"
+        ? { time_limit_ms: 2_000, memory_limit_mb: 256, output_limit_kb: 256 }
+        : { time_limit_ms: 8_000, memory_limit_mb: 512, output_limit_kb: 256 },
     });
     const result = courseJudgeGrade(tests, workerResult);
     const saved = await saveCourseGradeWithinAttemptLimit(task, student, { total: result.total, score: result.score,
-      maxScore: result.maxScore, testsPassed: result.testsPassed, testsTotal: result.testsTotal, submittedCode: code.data,
+      maxScore: result.maxScore, testsPassed: result.testsPassed, testsTotal: result.testsTotal, submittedCode: persistedCode,
       testResults: JSON.stringify(result.testResults), groupScores: JSON.stringify(result.groupScores),
       isCompleted: result.isCompleted, isManuallyGraded: false, feedback: null }, courseTestsRevision(tests, 0));
     // Hidden inputs and expected outputs never leave the judge boundary through AI hints.
     const failures = result.testResults.filter(test => !test.passed);
     const hints = failures.length ? await generateAlgorithmicHints({ taskTitle: task.title, taskText: task.description,
-      language: languageFor(task), code: code.data, failures, maxHints: 4, uiLanguage: uiLanguageFor(req) }).catch(() => [])
+      language: languageFor(task), code: source, failures, maxHints: 4, uiLanguage: uiLanguageFor(req) }).catch(() => [])
       : result.testsPassed < result.testsTotal ? [uiLanguageFor(req) === "en" ? "Public examples passed. Check boundary cases and input constraints." : "Відкриті приклади пройдено. Перевірте граничні випадки й обмеження вхідних даних."] : [];
     return res.json({ grade: { id: saved.id, total: saved.total, testsPassed: saved.testsPassed, testsTotal: saved.testsTotal,
       isManuallyGraded: false, isCompleted: saved.isCompleted }, testResults: result.testResults, hints,

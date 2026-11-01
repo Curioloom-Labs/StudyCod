@@ -498,8 +498,14 @@ function isLargeBodyPath(path: string): boolean {
   return false;
 }
 
+function isEduRuntimeBodyPath(method: string, path: string): boolean {
+  if (method !== "POST" && method !== "PUT") return false;
+  return /^\/(?:api\/)?edu\/(?:lessons\/\d+\/tasks|course-tasks\/\d+\/(?:tests|run|submit)|tasks\/\d+\/(?:run|submit|complete|test-data(?:\/\d+)?))\/?$/.test(path);
+}
+
 const jsonParserDefault = express.json({ limit: defaultBodyLimit });
 const jsonParserLarge = express.json({ limit: largeBodyLimit });
+const jsonParserEduRuntime = express.json({ limit: "16mb" });
 const jsonParserCourseDiagnosticSubmit = express.json({ limit: COURSE_DIAGNOSTIC_SUBMIT_BODY_LIMIT });
 const jsonParserCertificateTemplate = express.json({ limit: CERTIFICATE_TEMPLATE_BODY_LIMIT });
 const urlencodedParserDefault = express.urlencoded({ extended: false, limit: defaultBodyLimit });
@@ -512,6 +518,7 @@ app.use((req, res, next) => {
   (isCertificateTemplateWrite
     ? jsonParserCertificateTemplate
     : isCourseDiagnosticSubmit ? jsonParserCourseDiagnosticSubmit
+    : isEduRuntimeBodyPath(req.method, req.path) ? jsonParserEduRuntime
     : isLargeBodyPath(req.path) ? jsonParserLarge : jsonParserDefault)(req, res, next);
 });
 app.use((req, res, next) => {

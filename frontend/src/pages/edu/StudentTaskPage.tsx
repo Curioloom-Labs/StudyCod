@@ -37,6 +37,7 @@ import {
   type WebTaskFile,
   type SubmissionMeta,
   type TaskWithGrade,
+  type PythonTaskAssetInput,
   type TestResult
 } from "../../lib/api/edu";
 import { recordSuccessfulStudySession } from "../../lib/studySessions";
@@ -67,6 +68,21 @@ const extensionForTaskLanguage = (language: string | null | undefined): string =
   const extension = file.slice(file.lastIndexOf("."));
   return extension || ".txt";
 };
+
+const runtimeImagePath = (name: string, index: number) => {
+  const extension = name.toLowerCase().match(/\.(png|jpe?g|bmp|webp|tiff?)$/)?.[0] || "";
+  const base = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 64);
+  return `${base || `image_${index + 1}`}${extension}`;
+};
+
+const fileToBase64 = async (file: File) => {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  return btoa(binary);
+};
+
+type TkinterEvent = { type: "click"; x: number; y: number } | { type: "type"; text: string } | { type: "key"; key: string };
 
 const textEncoder = new TextEncoder();
 type QuizOption = "А" | "Б" | "В" | "Г" | "Д";
@@ -196,6 +212,12 @@ export const StudentTaskPage: React.FC = () => {
   const [running, setRunning] = useState(false);
   const [consoleOutput, setConsoleOutput] = useState("");
   const [testInput, setTestInput] = useState("");
+  const [runtimeAssets, setRuntimeAssets] = useState<PythonTaskAssetInput[]>([]);
+  const [runtimeAssetError, setRuntimeAssetError] = useState("");
+  const [tkinterEvents, setTkinterEvents] = useState<TkinterEvent[]>([]);
+  const [runPreviewImage, setRunPreviewImage] = useState<string | null>(null);
+  const [runPreviewImages, setRunPreviewImages] = useState<Array<{ name: string; dataUrl: string }>>([]);
+  const [runSucceeded, setRunSucceeded] = useState(true);
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [ideTrace, setIdeTrace] = useState<StudyCodIdeTrace | null>(null);
   const [ideTracing, setIdeTracing] = useState(false);
@@ -795,6 +817,10 @@ export const StudentTaskPage: React.FC = () => {
     try {
       const data = await getTask(parseInt(taskId, 10));
       setTask(data);
+      setRuntimeAssets(data.publicAssets ?? []);
+      setTkinterEvents([]);
+      setRunPreviewImage(null);
+      setRunPreviewImages([]);
       setLoadError(null);
       setLearningFeedback(null);
       setLearningAttempt(null);
@@ -973,7 +999,8 @@ export const StudentTaskPage: React.FC = () => {
       setLoading(false);
     }
   };
-  const handleRun = async () => {
+  const handleRun = async (eventsOverride?: TkinterEvent[]) => {
+    if (running) return;
     if (!taskId || (!currentCodeText.trim() && !isWebTask)) {
       setConsoleOutput(t("enterCodeToRun"));
       return;
@@ -984,14 +1011,26 @@ export const StudentTaskPage: React.FC = () => {
     }
     setRunning(true);
     setConsoleOutput(t("runningCode"));
+    setRunPreviewImage(null);
+    setRunPreviewImages([]);
     try {
-      const result = useFiles
-        ? await runCodeFiles(parseInt(taskId, 10), files, testInput || undefined)
+      const profile = task?.pythonRuntimeProfile ?? "STANDARD";
+      const runtimeMode = profile === "SCIENTIFIC" || profile === "TKINTER";
+      const payloadFiles = useFiles ? files : [{ path: entryFile, content: code }];
+      const runOptions = runtimeMode ? {
+        assets: runtimeAssets,
+        ...(profile === "TKINTER" ? { events: eventsOverride ?? tkinterEvents } : {}),
+      } : undefined;
+      const result = runtimeMode || useFiles
+        ? await runCodeFiles(parseInt(taskId, 10), payloadFiles, testInput || undefined, runOptions)
         : await runCode(parseInt(taskId, 10), code, testInput || undefined);
       let output = "";
       let filteredStderr = result.stderr || "";
       filteredStderr = filteredStderr.split('\n').filter(line => !line.includes('Picked up JAVA_TOOL_OPTIONS')).filter(line => !line.includes('Picked up _JAVA_OPTIONS')).join('\n').trim();
       output += result.output || filteredStderr || t("noOutput");
+      setRunSucceeded(result.success !== false);
+      setRunPreviewImage(result.previewImage ?? null);
+      setRunPreviewImages(result.previewImages ?? []);
       if (filteredStderr && result.output) {
         output += `\n\n${t("errors")}:\n${filteredStderr}`;
       }
@@ -1001,9 +1040,62 @@ export const StudentTaskPage: React.FC = () => {
         console.error("Failed to run:", error);
       }
       setConsoleOutput(getErrorMessage(error, t("runError")));
+      setRunSucceeded(false);
     } finally {
       setRunning(false);
     }
+  };
+
+  const replayTkinterEvent = (event: TkinterEvent) => {
+    if (running || task?.pythonRuntimeProfile !== "TKINTER") return;
+    if (tkinterEvents.length >= 32) {
+      showToast({ type: "info", message: tr("У сесії максимум 32 дії. Очистіть їх і почніть знову.", "A session can replay up to 32 actions. Clear the actions to start over.") });
+      return;
+    }
+    const next = [...tkinterEvents, event];
+    setTkinterEvents(next);
+    void handleRun(next);
+  };
+
+  const addRuntimeAssets = async (rawFiles: FileList | null) => {
+    setRuntimeAssetError("");
+    if (!rawFiles?.length) return;
+    if (runtimeAssets.length + rawFiles.length > 8) {
+      setRuntimeAssetError(tr("Можна додати не більше 8 зображень.", "You can add up to 8 images."));
+      return;
+    }
+    try {
+      const next = [...runtimeAssets];
+      for (const file of Array.from(rawFiles)) {
+        if (file.size <= 0 || file.size > 1_000_000 || !/\.(png|jpe?g|bmp|webp|tiff?)$/i.test(file.name)) {
+          throw new Error(tr("Дозволені PNG, JPEG, BMP, WebP або TIFF до 1 МБ кожне.", "Use PNG, JPEG, BMP, WebP, or TIFF images up to 1 MB each."));
+        }
+        let path = runtimeImagePath(file.name, next.length);
+        const stem = path.slice(0, path.lastIndexOf("."));
+        const extension = path.slice(path.lastIndexOf("."));
+        let suffix = 2;
+        while (next.some(asset => asset.path === path)) path = `${stem}_${suffix++}${extension}`;
+        next.push({ path, dataBase64: await fileToBase64(file) });
+      }
+      setRuntimeAssets(next);
+    } catch (error) {
+      setRuntimeAssetError(error instanceof Error ? error.message : tr("Не вдалося додати зображення.", "Could not add image."));
+    }
+  };
+
+  const clearTkinterSession = () => {
+    setTkinterEvents([]);
+    setRunPreviewImage(null);
+    setRunPreviewImages([]);
+    setConsoleOutput("");
+  };
+  const changeStudentCode = (next: string) => {
+    setCode(next);
+    if (task?.pythonRuntimeProfile === "TKINTER") clearTkinterSession();
+  };
+  const changeStudentFiles = (next: CodeFile[]) => {
+    setFiles(next);
+    if (task?.pythonRuntimeProfile === "TKINTER") clearTkinterSession();
   };
 
   const handleTrace = async () => {
@@ -1555,6 +1647,17 @@ export const StudentTaskPage: React.FC = () => {
   })();
   const showScoringLegend = Array.isArray(scoringSegments) && scoringSegments.some(s => s.key === "public" || s.key === "hidden");
   const isControlTask = task.lesson.type === "CONTROL";
+  const usesPythonImages = task.pythonRuntimeProfile === "SCIENTIFIC" || task.pythonRuntimeProfile === "TKINTER";
+  const runtimeTools = usesPythonImages ? <div className="flex max-w-[min(72vw,720px)] flex-wrap items-center gap-2">
+    <label className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-xs font-semibold text-text-secondary">
+      <Upload className="size-3.5" aria-hidden="true" /> {tr("Додати зображення", "Add image")}
+      <input type="file" multiple accept=".png,.jpg,.jpeg,.bmp,.webp,.tif,.tiff,image/*" className="sr-only" onChange={event => { void addRuntimeAssets(event.currentTarget.files); event.currentTarget.value = ""; }} />
+    </label>
+    {runtimeAssets.map((asset, index) => <button key={`${asset.path}-${index}`} type="button" onClick={() => setRuntimeAssets(current => current.filter((_, itemIndex) => itemIndex !== index))} title={tr("Видалити зображення", "Remove image")} className="max-w-36 truncate rounded-lg bg-bg-hover px-2 py-2 font-mono text-[10px] text-text-secondary">{asset.path} ×</button>)}
+    {task.pythonRuntimeProfile === "TKINTER" && <span className="text-[10px] text-text-secondary">{tr("Дій у превʼю", "Preview actions")}: {tkinterEvents.length}/32</span>}
+    {task.pythonRuntimeProfile === "TKINTER" && tkinterEvents.length > 0 && <button type="button" onClick={clearTkinterSession} className="rounded-lg px-2 py-2 text-[10px] font-semibold text-primary-strong dark:text-primary-soft">{tr("Очистити дії", "Clear actions")}</button>}
+    {runtimeAssetError && <span role="alert" className="basis-full text-xs text-accent-error">{runtimeAssetError}</span>}
+  </div> : undefined;
   if (!isControlTask || task.taskMode !== "MANUAL") {
     const ideLanguage = String(task.language).toLowerCase() as JudgeLanguage;
     const ideTestsPassed = testResults.filter((result) => result.passed).length || task.grade?.testsPassed || 0;
@@ -1579,7 +1682,7 @@ export const StudentTaskPage: React.FC = () => {
         }
       : null;
     const ideRunResult = consoleOutput
-      ? { stdout: consoleOutput, stderr: "", exitCode: 0, success: true }
+      ? { stdout: consoleOutput, stderr: "", exitCode: runSucceeded ? 0 : 1, success: runSucceeded, previewImage: runPreviewImage, previewImages: runPreviewImages }
       : null;
     const ideTask = {
       id: task.id,
@@ -1588,6 +1691,7 @@ export const StudentTaskPage: React.FC = () => {
       section: task.lesson.title,
       taskMode: (task.taskMode === "WEB" ? "WEB" : "CODE") as "CODE" | "WEB",
       projectSpec: task.projectSpec ?? null,
+      pythonRuntimeProfile: task.pythonRuntimeProfile ?? "STANDARD",
     };
     return <div className="min-h-full bg-bg-base px-3 py-4 text-text-primary dark:bg-bg-base dark:text-text-primary sm:px-5 lg:px-8">
       <div className="mx-auto max-w-[1800px]">
@@ -1605,11 +1709,11 @@ export const StudentTaskPage: React.FC = () => {
           compiler=""
           onCompilerChange={() => undefined}
           code={code}
-          onCodeChange={setCode}
+          onCodeChange={changeStudentCode}
           files={files}
-          onFilesChange={(next) => setFiles(ensureEntryFile(entryFile, next, currentCodeText))}
+          onFilesChange={(next) => changeStudentFiles(ensureEntryFile(entryFile, next, currentCodeText))}
           useFiles={useFiles}
-          onEnableFiles={() => { setUseFiles(true); setFiles(ensureEntryFile(entryFile, [{ path: entryFile, content: currentCodeText }], currentCodeText)); }}
+          onEnableFiles={() => { setUseFiles(true); changeStudentFiles(ensureEntryFile(entryFile, [{ path: entryFile, content: currentCodeText }], currentCodeText)); }}
           entryFile={isWebTask ? "index.html" : entryFile}
           stdin={testInput}
           onStdinChange={setTestInput}
@@ -1618,9 +1722,11 @@ export const StudentTaskPage: React.FC = () => {
           running={running}
           checking={submitting}
           onRun={handleRun}
+          onPreviewClick={replayTkinterEvent}
+          toolbar={runtimeTools}
           onCheck={handleSubmit}
           onSave={() => showToast({ type: "success", message: tr("Автозбереження активне", "Autosave is active") })}
-          onReset={() => { setCode(task.template); setFiles(ensureEntryFile(entryFile, [{ path: entryFile, content: task.template }], task.template)); }}
+          onReset={() => { changeStudentCode(task.template); changeStudentFiles(ensureEntryFile(entryFile, [{ path: entryFile, content: task.template }], task.template)); }}
           readOnly={!canEdit}
           submitMode
           assessmentMode={isControlTask}
@@ -1733,7 +1839,7 @@ export const StudentTaskPage: React.FC = () => {
 
             {}
             {theoryAcknowledged && <div className="flex-shrink-0 flex items-center gap-1.5">
-                {!hideControlResults && <Button variant="ghost" size="sm" onClick={handleRun} disabled={!canEdit || running} className="px-2.5" title={tr("Запустити", "Run")} aria-label={tr("Запустити", "Run")}>
+                {!hideControlResults && <Button variant="ghost" size="sm" onClick={() => void handleRun()} disabled={!canEdit || running} className="px-2.5" title={tr("Запустити", "Run")} aria-label={tr("Запустити", "Run")}>
                     <Play className="w-4 h-4 sm:mr-1.5" /> <span className="hidden sm:inline">{tr("Запустити", "Run")}</span>
                   </Button>}
 
@@ -1997,11 +2103,11 @@ export const StudentTaskPage: React.FC = () => {
                   language={task.language}
                   entryFile={entryFile}
                   files={files}
-                  onChange={(next) => setFiles(ensureEntryFile(entryFile, next, currentCodeText))}
+                  onChange={(next) => changeStudentFiles(ensureEntryFile(entryFile, next, currentCodeText))}
                   readOnly={!canEdit}
                 />
               ) : (
-                <CodeEditor value={code} onChange={canEdit ? setCode : undefined} language={task.language} readOnly={!canEdit} />
+                <CodeEditor value={code} onChange={canEdit ? changeStudentCode : undefined} language={task.language} readOnly={!canEdit} />
               )}
             </Panel>
 
@@ -2027,8 +2133,9 @@ export const StudentTaskPage: React.FC = () => {
                   <div className="flex-1 flex flex-col overflow-hidden">
                     {}
                     <div className="border-b border-border p-3 flex-shrink-0">
-                      <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-2">{tr("Вхідні дані", "Input")}</div>
-                      <label htmlFor="student-task-test-input" className="sr-only">{tr("Вхідні тестові дані", "Test input")}</label><textarea id="student-task-test-input" name="testInput" value={testInput} onChange={e => setTestInput(e.target.value)} placeholder={tr("Введіть тестові дані…", "Enter test input…")} className="w-full h-24 bg-bg-base border border-border rounded-lg p-2 font-mono text-xs text-text-primary resize-none focus:outline-none focus:border-primary" spellCheck={false} />
+                      <div className="text-[10px] font-mono uppercase tracking-[0.06em] text-text-muted mb-2">{task.pythonRuntimeProfile === "TKINTER" ? tr("Події GUI та файли запуску", "GUI actions and run files") : tr("Вхідні дані", "Input")}</div>
+                      {task.pythonRuntimeProfile === "TKINTER" ? <p className="mb-3 text-xs leading-5 text-text-secondary">{tr("Після запуску натискайте на вікно нижче. Дії відтворюються під час кожного запуску програми.", "After running, click the window below. Actions replay on each program run.")}</p> : <><label htmlFor="student-task-test-input" className="sr-only">{tr("Вхідні тестові дані", "Test input")}</label><textarea id="student-task-test-input" name="testInput" value={testInput} onChange={e => setTestInput(e.target.value)} placeholder={tr("Введіть тестові дані…", "Enter test data…")} className="w-full h-24 bg-bg-base border border-border rounded-lg p-2 font-mono text-xs text-text-primary resize-none focus:outline-none focus:border-primary" spellCheck={false} /></>}
+                      {runtimeTools}
                     </div>
                     {}
                     <div className="flex-1 overflow-y-auto p-4">
@@ -2060,6 +2167,23 @@ export const StudentTaskPage: React.FC = () => {
                         </pre> : <span className="text-text-muted italic">
                           {tr("// Результат виконання з'явиться тут…", "// Program output will appear here…")}
                         </span>}
+                      {runPreviewImage && task.pythonRuntimeProfile === "TKINTER" && <img src={runPreviewImage} alt={tr("Знімок вікна Tkinter. Натисніть для взаємодії.", "Tkinter window snapshot. Click to interact.")} role="button" tabIndex={0} className="mt-4 block h-auto max-h-[60vh] w-full cursor-crosshair rounded-xl border border-border object-contain"
+                        onClick={event => {
+                          const bounds = event.currentTarget.getBoundingClientRect();
+                          const x = Math.max(0, Math.min(event.currentTarget.naturalWidth - 1, Math.round((event.clientX - bounds.left) * event.currentTarget.naturalWidth / Math.max(1, bounds.width))));
+                          const y = Math.max(0, Math.min(event.currentTarget.naturalHeight - 1, Math.round((event.clientY - bounds.top) * event.currentTarget.naturalHeight / Math.max(1, bounds.height))));
+                          replayTkinterEvent({ type: "click", x, y });
+                        }}
+                        onKeyDown={event => {
+                          if (event.ctrlKey || event.metaKey || event.altKey) return;
+                          if (event.key.length === 1) { event.preventDefault(); replayTkinterEvent({ type: "type", text: event.key }); }
+                          else if (["Enter", "Escape", "Tab", "Backspace", "Delete", " ", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+                            event.preventDefault();
+                            const key = ({ Enter: "Return", " ": "space", ArrowLeft: "Left", ArrowRight: "Right", ArrowUp: "Up", ArrowDown: "Down" } as Record<string, string>)[event.key] ?? event.key;
+                            replayTkinterEvent({ type: "key", key });
+                          }
+                        }} />}
+                      {runPreviewImages.length > 0 && <div className="mt-4 grid gap-3">{runPreviewImages.map(image => <figure key={image.name} className="overflow-hidden rounded-xl border border-border bg-bg-base"><img src={image.dataUrl} alt={image.name} className="block max-h-72 w-full object-contain" /><figcaption className="border-t border-border px-3 py-2 font-mono text-xs text-text-secondary">{image.name}</figcaption></figure>)}</div>}
                     </div>
                   </div>
                 </Panel>

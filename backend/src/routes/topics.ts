@@ -32,6 +32,8 @@ import type { LibraryTaskProjectSpec } from "../entities/LibraryTask";
 import { env } from "../env";
 import { normalizeTopicLanguage } from "../utils/topicLanguage";
 import { writeAudit } from "../services/audit/auditLog";
+import { normalizePythonTaskAssets, parseTkinterEvents, type EduPythonRuntimeProfile, type PythonTaskAsset } from "../services/edu/pythonTaskRuntime";
+import { regularTopicPracticeTasks } from "../services/edu/topicTaskCategories";
 import {
   assignmentSchema,
   createControlWorkSchema,
@@ -283,7 +285,12 @@ topicsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
         relations: ["tasks", "controlWorks"]
       });
       return res.json({
-        topics
+        topics: topics.map(topic => ({
+          ...topic,
+          // Control-work exercises share the TopicTask relation but belong to
+          // the assessment column, not the topic's regular practice count.
+          tasks: regularTopicPracticeTasks(topic.tasks)
+        }))
       });
     }
     const normalizedLanguage = normalizeTopicLanguage(language);
@@ -486,6 +493,7 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       webValidationRules,
       webValidationProfile,
       projectSpec,
+      pythonRuntimeProfile,
       type,
       order,
       maxAttempts,
@@ -534,6 +542,10 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       webValidationRules,
       webValidationProfile,
     });
+    const runtimeProfile = pythonRuntimeProfile ?? "STANDARD";
+    if (runtimeProfile !== "STANDARD" && (topic.language !== "PYTHON" || normalizedTaskInput.taskMode !== "CODE" || type === "CONTROL")) {
+      return res.status(400).json({ message: "PYTHON_RUNTIME_REQUIRES_PYTHON_PRACTICE_TASK" });
+    }
     const normalizedProjectSpec = normalizeProjectSpec(projectSpec);
     if (type !== "CONTROL" && normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
       return res.status(400).json({
@@ -577,6 +589,7 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       webTemplateFiles: normalizedTaskInput.webTemplateFiles,
       webValidationRules: normalizedTaskInput.webValidationRules,
       webValidationProfile: normalizedTaskInput.webValidationProfile,
+      pythonRuntimeProfile: runtimeProfile,
       projectSpec: normalizedProjectSpec,
       type: type as "PRACTICE" | "CONTROL",
       order: order || 0,
@@ -602,8 +615,8 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
  * Import/export educational tasks as archives (zip)
  * Format:
  * - manifest.json (optional)
- * - task.json: { title, description, template, taskMode?, webTemplateFiles?, webValidationRules?, type?, order?, maxAttempts? }
- * - tests.json (optional): [{ input, expectedOutput, isHidden?, points? }]
+ * - task.json: { title, description, template, taskMode?, pythonRuntimeProfile?, webTemplateFiles?, webValidationRules?, type?, order?, maxAttempts? }
+ * - tests.json (optional): [{ input, expectedOutput, isHidden?, points?, assets? }]
  * - theory.md (optional)
  */
 topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.single("archive"), async (req: AuthRequest, res: Response) => {
@@ -665,6 +678,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
         property?: string;
       }>;
       projectSpec?: unknown;
+      pythonRuntimeProfile?: EduPythonRuntimeProfile;
       type?: "PRACTICE" | "CONTROL";
       order?: number;
       maxAttempts?: number;
@@ -675,11 +689,66 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
     const description = String(taskJson.description ?? "").trim();
     const normalizedTaskInput = normalizeWebTaskInput(taskJson);
     const type: "PRACTICE" | "CONTROL" = taskJson.type === "CONTROL" ? "CONTROL" : "PRACTICE";
+    const pythonRuntimeProfile = taskJson.pythonRuntimeProfile ?? "STANDARD";
     const order = Number.isFinite(Number(taskJson.order)) ? Number(taskJson.order) : 0;
     const maxAttempts = normalizeTaskMaxAttempts(type, taskJson.maxAttempts);
 
-    if (!title || !description || !normalizedTaskInput.template.trim()) {
+    if (!title || !description || !normalizedTaskInput.template.trim() ||
+      !["STANDARD", "SCIENTIFIC", "TKINTER"].includes(pythonRuntimeProfile)) {
       return res.status(400).json({ message: "INVALID_TASK_JSON" });
+    }
+    if (pythonRuntimeProfile !== "STANDARD" &&
+      (topic.language !== "PYTHON" || normalizedTaskInput.taskMode !== "CODE" || type !== "PRACTICE")) {
+      return res.status(400).json({ message: "PYTHON_RUNTIME_REQUIRES_PYTHON_PRACTICE_TASK" });
+    }
+
+    type ImportedTest = {
+      input: string;
+      expectedOutput: string;
+      isHidden: boolean;
+      points: number;
+      subtask: string | null;
+      assets: PythonTaskAsset[];
+    };
+    let importedTests: ImportedTest[] = [];
+    const testsEntry = zip.getEntry("tests.json");
+    if (testsEntry) {
+      const rawTests = readZipJson<unknown>(zip, "tests.json", zipBudget);
+      if (!Array.isArray(rawTests) || rawTests.length > 5000) {
+        return res.status(400).json({ message: "INVALID_TEST_DATA" });
+      }
+      let totalAssetDataLength = 0;
+      for (const rawTest of rawTests) {
+        if (!isRecord(rawTest) || typeof rawTest.input !== "string" || typeof rawTest.expectedOutput !== "string" ||
+          rawTest.input.length > 64 * 1024 || rawTest.expectedOutput.length > 64 * 1024 ||
+          (rawTest.isHidden !== undefined && typeof rawTest.isHidden !== "boolean")) {
+          return res.status(400).json({ message: "INVALID_TEST_DATA" });
+        }
+        const points = rawTest.points === undefined ? 1 : Number(rawTest.points);
+        if (!Number.isInteger(points) || points < 1 || points > 1000) {
+          return res.status(400).json({ message: "INVALID_TEST_DATA" });
+        }
+        let assets: PythonTaskAsset[];
+        try {
+          assets = normalizePythonTaskAssets(rawTest.assets);
+          if (assets.length && pythonRuntimeProfile === "STANDARD") {
+            return res.status(400).json({ message: "IMAGE_FIXTURES_REQUIRE_PYTHON_LIBRARIES" });
+          }
+          if (pythonRuntimeProfile === "TKINTER") parseTkinterEvents(rawTest.input);
+        } catch (error) {
+          return res.status(400).json({ message: error instanceof Error ? error.message : "INVALID_TEST_DATA" });
+        }
+        totalAssetDataLength += assets.reduce((sum, asset) => sum + asset.dataBase64.length, 0);
+        if (totalAssetDataLength > 12_000_000) return res.status(413).json({ message: "ASSETS_TOO_LARGE" });
+        importedTests.push({
+          input: rawTest.input,
+          expectedOutput: rawTest.expectedOutput,
+          isHidden: rawTest.isHidden === true,
+          points,
+          subtask: rawTest.subtask == null ? null : String(rawTest.subtask).slice(0, 64),
+          assets,
+        });
+      }
     }
 
     const task = taskRepo().create({
@@ -692,6 +761,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       webValidationRules: normalizedTaskInput.webValidationRules,
       webValidationProfile: normalizedTaskInput.webValidationProfile,
       projectSpec: normalizeProjectSpec(taskJson.projectSpec),
+      pythonRuntimeProfile,
       type,
       order,
       maxAttempts,
@@ -712,22 +782,19 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       }
     }
 
-    // Optional tests
-    const testsEntry = zip.getEntry("tests.json");
-    if (testsEntry) {
-      const tests = readZipJson<Array<{ input: string; expectedOutput: string; isHidden?: boolean; points?: number; subtask?: number | string }>>(zip, "tests.json", zipBudget);
-      if (Array.isArray(tests) && tests.length > 0) {
-        const rows = tests.map(t => testDataRepo().create({
-          topicTask: { id: task.id },
-          input: String(t.input ?? ""),
-          expectedOutput: String(t.expectedOutput ?? ""),
-          isHidden: !!t.isHidden,
-          source: "MANUAL",
-          points: Number.isFinite(Number(t.points)) ? Math.max(1, Math.floor(Number(t.points))) : 1,
-          subtask: t.subtask == null ? null : String(t.subtask),
-        }));
-        await testDataRepo().save(rows);
-      }
+    // Optional tests; fixtures stay private unless the test itself is public.
+    if (importedTests.length > 0) {
+      const rows = importedTests.map(t => testDataRepo().create({
+        topicTask: { id: task.id },
+        input: t.input,
+        expectedOutput: t.expectedOutput,
+        isHidden: t.isHidden,
+        source: "MANUAL",
+        points: t.points,
+        subtask: t.subtask,
+        assets: t.assets.length ? t.assets : null,
+      }));
+      await testDataRepo().save(rows);
     }
 
     return res.status(201).json({
@@ -799,6 +866,7 @@ topicsRouter.get("/:topicId/tasks/:taskId/export-archive", authRequired, async (
         webValidationRules: (task).webValidationRules ?? undefined,
         webValidationProfile: (task).webValidationProfile ?? undefined,
         projectSpec: (task).projectSpec ?? undefined,
+        pythonRuntimeProfile: task.pythonRuntimeProfile || "STANDARD",
         type: task.type,
         order: task.order,
         maxAttempts: task.maxAttempts
@@ -811,7 +879,8 @@ topicsRouter.get("/:topicId/tasks/:taskId/export-archive", authRequired, async (
         expectedOutput: t.expectedOutput,
         isHidden: t.isHidden,
         points: t.points,
-        subtask: (t).subtask ?? null
+        subtask: (t).subtask ?? null,
+        assets: t.assets ?? undefined,
       })), null, 2), "utf-8")
     );
     if (theory?.content) {
@@ -846,6 +915,7 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
       webValidationRules,
       webValidationProfile,
       projectSpec,
+      pythonRuntimeProfile,
       maxAttempts,
       deadline,
     } = validated.data;
@@ -889,6 +959,19 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
       webValidationRules,
       webValidationProfile,
     });
+    if (pythonRuntimeProfile !== undefined && pythonRuntimeProfile !== "STANDARD" &&
+      (normalizedTaskInput.taskMode !== "CODE" || task.type === "CONTROL")) {
+      return res.status(400).json({ message: "PYTHON_RUNTIME_REQUIRES_PYTHON_PRACTICE_TASK" });
+    }
+    if (pythonRuntimeProfile !== undefined && pythonRuntimeProfile !== "STANDARD") {
+      const topic = await topicRepo().findOne({ where: { id: topicId }, select: { id: true, language: true } });
+      if (topic?.language !== "PYTHON") return res.status(400).json({ message: "PYTHON_RUNTIME_REQUIRES_PYTHON_PRACTICE_TASK" });
+    }
+    if (pythonRuntimeProfile === "STANDARD") {
+      const testsWithAssets = await testDataRepo().createQueryBuilder("test").select(["test.id", "test.assets"])
+        .where("test.topic_task_id = :taskId", { taskId }).getMany();
+      if (testsWithAssets.some(test => test.assets?.length)) return res.status(409).json({ message: "REMOVE_IMAGE_FIXTURES_BEFORE_USING_STANDARD_RUNTIME" });
+    }
     const normalizedProjectSpec = normalizeProjectSpec(projectSpec);
     if (task.type !== "CONTROL" && normalizedTaskInput.taskMode === "CODE" && !normalizedTaskInput.template.trim()) {
       return res.status(400).json({
@@ -902,6 +985,7 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
     task.webTemplateFiles = normalizedTaskInput.webTemplateFiles;
     task.webValidationRules = normalizedTaskInput.webValidationRules;
     (task).webValidationProfile = normalizedTaskInput.webValidationProfile;
+    if (pythonRuntimeProfile !== undefined) task.pythonRuntimeProfile = pythonRuntimeProfile;
     task.projectSpec = normalizedProjectSpec;
     if (maxAttempts !== undefined) {
       task.maxAttempts = normalizeTaskMaxAttempts(task.type, maxAttempts);

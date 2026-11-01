@@ -5,6 +5,7 @@ import { EduGrade } from "./EduGrade";
 import { TaskTheory } from "./TaskTheory";
 import type { LibraryTaskProjectSpec } from "./LibraryTask";
 export type EduTaskMode = "CODE" | "WEB" | "MANUAL";
+export type EduPythonRuntimeProfile = "STANDARD" | "SCIENTIFIC" | "TKINTER";
 export type WebValidationProfileId = "FREE_WEB" | "HTML_ONLY" | "HTML_CSS_NO_JS" | "HTML_JS_NO_CSS" | "JS_ONLY_DOM" | "CSS_ONLY" | "HTML_AND_INLINE_ONLY";
 @Entity("edu_tasks")
 export class EduTask {
@@ -40,6 +41,13 @@ export class EduTask {
     name: "project_spec"
   })
   projectSpec?: LibraryTaskProjectSpec | null;
+  @Column({
+    type: "varchar",
+    length: 24,
+    default: "STANDARD",
+    name: "python_runtime_profile"
+  })
+  pythonRuntimeProfile!: EduPythonRuntimeProfile;
   @Column({
     type: "simple-json",
     nullable: true,

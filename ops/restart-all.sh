@@ -31,6 +31,20 @@ check_node() {
   fi
 }
 
+install_python_task_runtime() {
+  [[ "${EUID}" -eq 0 ]] || return 0
+  local rootfs=/sandbox/rootfs
+  local installer="$ROOT/judge/scripts/install-python-libs-rootfs.sh"
+  [[ -x "$rootfs/usr/bin/python3" ]] || { echo "Judge Python rootfs is missing: $rootfs" >&2; exit 2; }
+  [[ -f "$installer" ]] || { echo "Python EDU runtime installer is missing: $installer" >&2; exit 2; }
+  if chroot "$rootfs" /usr/bin/python3 -c 'import cv2, matplotlib, numpy, pandas, PIL, scipy, seaborn, sklearn, sympy, tkinter; from PIL import ImageGrab' \
+    && chroot "$rootfs" /usr/bin/xvfb-run -a /usr/bin/python3 -c 'import tkinter as tk; r=tk.Tk(); r.withdraw(); r.update(); r.destroy()' >/dev/null 2>&1; then
+    return 0
+  fi
+  log "Preparing the isolated scientific and Tkinter Python runtimes"
+  bash "$installer"
+}
+
 update_repo() {
   [[ -d "$ROOT/.git" ]] || { echo "Git repository not found in ROOT: $ROOT" >&2; exit 2; }
   log "Updating repository in: $ROOT"
@@ -69,6 +83,7 @@ install_judge_root_helper() {
     echo "Built judge distribution is missing: $ROOT/judge/dist" >&2
     exit 2
   }
+  install_python_task_runtime
   local root_judge_dir=/usr/local/lib/studycod-judge
   # Generate trusted compiler class data before installing the new cache fingerprint.
   # Warmup acquires the same host gate; invoke it before acquiring our own lock.
@@ -93,6 +108,7 @@ install_judge_root_helper() {
   # Invalidate artifact cache when either the judge or installed rootfs packages change.
   { find "$root_judge_dir/dist" -type f -exec sha256sum {} +;
     chroot /sandbox/rootfs dpkg-query -W 2>/dev/null || true;
+    chroot /sandbox/rootfs /usr/bin/python3 -c 'import importlib.metadata as m; print(*(f"{name}=={m.version(name)}" for name in ("numpy", "opencv-python-headless", "Pillow", "pandas", "scipy", "matplotlib", "scikit-learn", "seaborn", "sympy")), sep="\n")';
     for tool in /sandbox/rootfs/usr/local/bin/node-contest /sandbox/rootfs/usr/local/lib/studycod/kotlin-compiler.jsa /sandbox/rootfs/opt/kotlinc/kotlinc/lib/kotlin-compiler.jar /sandbox/rootfs/usr/lib/sbcl/sbcl.core; do
       [[ ! -f "$tool" ]] || sha256sum "$tool";
     done;

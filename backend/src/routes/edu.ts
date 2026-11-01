@@ -26,6 +26,7 @@ import { TOPIC_LANGUAGES } from "../utils/topicLanguage";
 import { validateFormula } from "../utils/safeFormulaEvaluator";
 import { DEFAULT_GRADING_SYSTEM, GRADING_SYSTEMS, GradingSystem } from "../types/GradingSystem";
 import { saveControlSummaryGradeForNewSystemWithManager } from "../services/edu/controlWorkGrading";
+import { regularTopicPracticeTasks } from "../services/edu/topicTaskCategories";
 import { authorizeClassAction } from "../services/edu/classAccess";
 import { createClassForActor } from "../services/edu/classStaff";
 import { updateClassGradingSettings } from "../services/edu/classGradingSettings";
@@ -210,6 +211,7 @@ const createLessonTaskBodySchema = z.object({
   description: z.string().trim().min(1).max(50_000),
   template: z.string().max(200_000).optional(),
   taskMode: z.enum(["CODE", "WEB"]).optional(),
+  pythonRuntimeProfile: z.enum(["STANDARD", "SCIENTIFIC", "TKINTER"]).optional(),
   projectSpec: z.object({
     version: z.literal(1),
     kind: z.literal("MINI_PROJECT"),
@@ -562,9 +564,9 @@ eduRouter.get("/classes/:classId/lessons", authRequired, requireClassCapability(
         description: topic.description || null,
         order: topic.order,
         language: topic.language,
-        tasksCount: topic.tasks?.length || 0,
+        tasksCount: regularTopicPracticeTasks(topic.tasks).length,
         createdAt: topic.createdAt.toISOString(),
-        tasks: (topic.tasks || []).map(task => ({
+        tasks: regularTopicPracticeTasks(topic.tasks).map(task => ({
           id: task.id,
           title: task.title,
           description: task.description || null,
@@ -715,6 +717,9 @@ eduRouter.post("/lessons/:lessonId/tasks", authRequired, async (req: AuthRequest
   const { title, description } = parsedBody.data;
   const normalizedTaskInput = normalizeWebTaskInput(parsedBody.data);
   if (normalizedTaskInput.taskMode !== "CODE" && parsedBody.data.testData?.length) return res.status(400).json({ message: "INVALID_TEST_DATA" });
+  const pythonRuntimeProfile = parsedBody.data.pythonRuntimeProfile ?? "STANDARD";
+  if (normalizedTaskInput.taskMode !== "CODE" && pythonRuntimeProfile !== "STANDARD") return res.status(400).json({ message: "PYTHON_RUNTIME_REQUIRES_CODE_TASK" });
+  if (pythonRuntimeProfile === "STANDARD" && parsedBody.data.testData?.some(test => test.assets?.length)) return res.status(400).json({ message: "IMAGE_FIXTURES_REQUIRE_PYTHON_LIBRARIES" });
   const task = taskRepo().create({
     lesson,
     title,
@@ -725,6 +730,7 @@ eduRouter.post("/lessons/:lessonId/tasks", authRequired, async (req: AuthRequest
     webValidationRules: normalizedTaskInput.webValidationRules,
     webValidationProfile: normalizedTaskInput.webValidationProfile,
     projectSpec: parsedBody.data.projectSpec ?? null,
+    pythonRuntimeProfile,
     maxAttempts: parsedBody.data.maxAttempts ?? 3,
     isClosed: false
   });

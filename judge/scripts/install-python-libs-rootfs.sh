@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Installs only the libraries used by the isolated curriculum project checker.
-# The judge keeps execution inside nsjail; this script prepares its shared
-# rootfs instead of making the backend import application dependencies.
+# Installs the scientific Python and Tkinter runtimes used by EDU CODE tasks.
+# Student programs still run as ordinary submissions inside nsjail; this script
+# prepares the judge rootfs without adding application dependencies to backend.
 ROOTFS="${JUDGE_ROOTFS:-/sandbox/rootfs}"
 PIP_BIN="${PIP_BIN:-/usr/bin/pip3}"
+PYTHON_BIN="${ROOTFS}/usr/bin/python3"
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run as root so the rootfs can be updated." >&2
   exit 1
 fi
-if [[ ! -x "${ROOTFS}/usr/bin/python3" ]]; then
+if [[ ! -x "${PYTHON_BIN}" ]]; then
   echo "Python runtime is missing from ${ROOTFS}." >&2
   exit 1
 fi
@@ -20,16 +21,66 @@ if [[ ! -x "${PIP_BIN}" ]]; then
   exit 1
 fi
 
-SITE_PACKAGES="$(${ROOTFS}/usr/bin/python3 -c 'import site; print(site.getsitepackages()[0])')"
+# Real Tk widgets are drawn by Tk, so the GUI profile needs the system Tk
+# bindings and a private virtual display. Install them inside the same chroot
+# used by nsjail; submitted programs still get no network or host display.
+if [[ ! -x "${ROOTFS}/usr/bin/apt-get" ]]; then
+  echo "apt-get is missing from ${ROOTFS}; cannot install Tkinter/Xvfb." >&2
+  exit 1
+fi
+DEBIAN_FRONTEND=noninteractive chroot "${ROOTFS}" /usr/bin/apt-get update
+DEBIAN_FRONTEND=noninteractive chroot "${ROOTFS}" /usr/bin/apt-get install -y --no-install-recommends python3-tk xvfb xauth
+
+# pip may be a different Python from the jail interpreter. Target the exact
+# Python ABI installed in the rootfs, and fail clearly for an unsupported ABI.
+TARGET_PYTHON="$(chroot "${ROOTFS}" /usr/bin/python3 -c 'import sys; print(str(sys.version_info.major) + str(sys.version_info.minor))')"
+case "${TARGET_PYTHON}" in
+  310)
+    NUMPY_VERSION="2.2.6"
+    OPENCV_VERSION="4.12.0.88"
+    PILLOW_VERSION="12.1.1"
+    PANDAS_VERSION="2.3.3"
+    SCIPY_VERSION="1.15.3"
+    MATPLOTLIB_VERSION="3.10.8"
+    SKLEARN_VERSION="1.7.2"
+    ;;
+  311|312|313)
+    NUMPY_VERSION="2.4.6"
+    OPENCV_VERSION="4.12.0.88"
+    PILLOW_VERSION="12.1.1"
+    PANDAS_VERSION="3.0.6"
+    SCIPY_VERSION="1.18.1"
+    MATPLOTLIB_VERSION="3.11.2"
+    SKLEARN_VERSION="1.9.1"
+    ;;
+  314)
+    NUMPY_VERSION="2.5.4"
+    OPENCV_VERSION="4.12.0.88"
+    PILLOW_VERSION="13.0.0"
+    PANDAS_VERSION="3.0.6"
+    SCIPY_VERSION="1.18.1"
+    MATPLOTLIB_VERSION="3.11.2"
+    SKLEARN_VERSION="1.9.1"
+    ;;
+  *)
+    echo "Unsupported Python ABI in ${ROOTFS}: ${TARGET_PYTHON}; expected CPython 3.10–3.14." >&2
+    exit 1
+    ;;
+esac
+PIP_PLATFORMS=(--platform manylinux_2_17_x86_64 --platform manylinux_2_28_x86_64)
+
+SITE_PACKAGES="$(chroot "${ROOTFS}" /usr/bin/python3 -c 'import site; print(site.getsitepackages()[0])')"
 mkdir -p "${SITE_PACKAGES}"
 
-# pip is usually the host Python (currently 3.12), while the jail runtime is
-# Python 3.10. Remove only packages owned by this installer before the staged
-# replacement so an incompatible host wheel cannot remain in the rootfs.
+# Remove packages owned by this installer before the staged replacement.
 for pattern in \
   "flask" "Flask-*.dist-info" "fastapi" "fastapi-*.dist-info" \
   "httpx" "httpx-*.dist-info" "numpy" "numpy-*.dist-info" \
-  "cv2" "opencv_python*.dist-info" "pydantic" "pydantic-*.dist-info" \
+  "cv2" "opencv_python*.dist-info" "PIL" "pillow-*.dist-info" \
+  "pandas" "pandas-*.dist-info" "scipy" "scipy-*.dist-info" \
+  "matplotlib" "matplotlib-*.dist-info" "sklearn" "scikit_learn-*.dist-info" \
+  "seaborn" "seaborn-*.dist-info" "sympy" "sympy-*.dist-info" \
+  "pydantic" "pydantic-*.dist-info" \
   "pydantic_core" "pydantic_core-*.dist-info" "starlette" "starlette-*.dist-info" \
   "anyio" "anyio-*.dist-info" "typing_extensions.py" "typing_extensions-*.dist-info" \
   "exceptiongroup" "exceptiongroup-*.dist-info" "sniffio" "sniffio-*.dist-info" \
@@ -41,25 +92,34 @@ for pattern in \
   rm -rf "${SITE_PACKAGES}"/${pattern}
 done
 
-# These versions support the Python 3.10 runtime currently shipped in the
-# rootfs. --target keeps the host Python environment untouched.
+# --target keeps the host Python environment untouched.
 "${PIP_BIN}" install \
   --disable-pip-version-check \
   --no-cache-dir \
   --upgrade \
   --target "${SITE_PACKAGES}" \
-  --platform manylinux_2_17_x86_64 \
+  "${PIP_PLATFORMS[@]}" \
   --implementation cp \
-  --python-version 310 \
-  --abi cp310 \
+  --python-version "${TARGET_PYTHON}" \
+  --abi "cp${TARGET_PYTHON}" \
+  --abi abi3 \
   --only-binary :all: \
   "Flask==3.1.2" \
   "fastapi==0.116.1" \
   "httpx==0.28.1" \
   "exceptiongroup==1.3.1" \
   "sniffio==1.3.1" \
-  "numpy==2.2.6" \
-  "opencv-python-headless==4.12.0.88"
+  "numpy==${NUMPY_VERSION}" \
+  "opencv-python-headless==${OPENCV_VERSION}" \
+  "Pillow==${PILLOW_VERSION}" \
+  "pandas==${PANDAS_VERSION}" \
+  "scipy==${SCIPY_VERSION}" \
+  "matplotlib==${MATPLOTLIB_VERSION}" \
+  "scikit-learn==${SKLEARN_VERSION}" \
+  "seaborn==0.13.2" \
+  "sympy==1.14.0"
 
 chroot "${ROOTFS}" /usr/bin/python3 -c \
-  'import cv2, fastapi, flask, numpy; print("python-libs rootfs: OK")'
+  'import cv2, fastapi, flask, matplotlib, numpy, pandas, PIL, scipy, seaborn, sklearn, sympy, tkinter; from PIL import ImageGrab; print("python-libs rootfs: OK")'
+chroot "${ROOTFS}" /usr/bin/xvfb-run -a /usr/bin/python3 -c \
+  'import tkinter as tk; root = tk.Tk(); root.withdraw(); root.update(); root.destroy(); print("Tk virtual display: OK")'

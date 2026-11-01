@@ -5,6 +5,7 @@ import { EduTask } from "../../entities/EduTask";
 import { authRequired, type AuthRequest } from "../../middleware/authMiddleware";
 import { authorizeClassForReq } from "../../middleware/orgContext";
 import { courseTestsSchema, courseTaskTestConfig, replaceCourseTaskTests } from "../../services/edu/courseTaskTests";
+import { parseTkinterEvents } from "../../services/edu/pythonTaskRuntime";
 import { logger } from "../../utils/logger";
 const router = Router();
 router.param("taskId", (_req, res, next, value) => { if (!Number.isSafeInteger(Number(value)) || Number(value) <= 0) { res.status(400).json({ message: "INVALID_ID" }); return; } next(); });
@@ -27,6 +28,12 @@ router.put("/course-tasks/:taskId/tests", authRequired, async (req: AuthRequest,
   try { const task = await authorizedTask(req, res); if (!task) return;
     const body = z.object({ testData: courseTestsSchema, maxAttempts: z.number().int().min(1).max(100), expectedRevision: z.string().regex(/^[a-f0-9]{64}$/) }).strict().safeParse(req.body);
     if (!body.success) return res.status(400).json({ message: "INVALID_TEST_DATA" });
+    const runtimeProfile = task.pythonRuntimeProfile || "STANDARD";
+    if (runtimeProfile === "STANDARD" && body.data.testData.some(test => test.assets?.length)) return res.status(400).json({ message: "IMAGE_FIXTURES_REQUIRE_PYTHON_LIBRARIES" });
+    if (runtimeProfile === "TKINTER") {
+      try { body.data.testData.forEach(test => parseTkinterEvents(test.input)); }
+      catch (error) { const issue = error as { statusCode?: number; message?: string }; return res.status(issue.statusCode || 400).json({ message: issue.message || "INVALID_TKINTER_EVENTS" }); }
+    }
     return res.json(await replaceCourseTaskTests(task, body.data.testData, body.data.maxAttempts, body.data.expectedRevision));
   } catch (error) { return failure(req, res, error); }
 });

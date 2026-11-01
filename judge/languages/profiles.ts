@@ -138,6 +138,15 @@ export const COMPILER_PROFILES: CompilerProfile[] = [
   // Python
   { id: "python", family: "python", label: "Python 3.14" },
   { id: "python-libs", family: "python", label: "Python 3.14 (with extra libs)" },
+  {
+    id: "python-gui",
+    family: "python",
+    label: "Python (scientific libraries + Tkinter)",
+    run: () => ({
+      display: "xvfb-run -a -s '-screen 0 1280x800x24' python3 main.py",
+      argv: ["/usr/bin/xvfb-run", "-a", "-s", "-screen 0 1280x800x24", "/usr/bin/python3", "-B", "-u", "main.py"]
+    })
+  },
   pypyProfile("pypy3", "Python 3.11 (PyPy)"),
   pypyProfile("pypy3-libs", "Python 3.11 (PyPy with libs)"),
 

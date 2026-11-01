@@ -80,6 +80,7 @@ export type StudyCodIdeTask = {
   difficulty?: string | null;
   tags?: string[] | null;
   taskMode?: "CODE" | "WEB";
+  pythonRuntimeProfile?: "STANDARD" | "SCIENTIFIC" | "TKINTER";
   projectSpec?: LibraryTaskProjectSpec | null;
 };
 
@@ -90,6 +91,8 @@ export type StudyCodIdeRunResult = {
   success: boolean;
   timeMs?: number | null;
   memoryKb?: number | null;
+  previewImage?: string | null;
+  previewImages?: Array<{ name: string; dataUrl: string }>;
 };
 
 export type StudyCodIdeCheckResult = {
@@ -165,6 +168,7 @@ type Props = {
   checkProgress?: JudgeProgress | null;
   checkStatus?: "queued" | "running" | "completed" | "system_error";
   onRun: () => void;
+  onPreviewClick?: (event: { type: "click"; x: number; y: number } | { type: "type"; text: string } | { type: "key"; key: string }) => void;
   onCheck: () => void;
   onSave: () => void;
   onReset: () => void;
@@ -1327,6 +1331,37 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
                   <pre>{props.runResult.stderr}</pre>
                 </div>
               ) : null}
+              {props.runResult?.previewImage ? <div className="mt-4 overflow-hidden rounded-xl border border-border bg-bg-base">
+                <p className="px-3 py-2 text-xs font-semibold text-text-secondary">{tr("Вікно Tkinter · натискай і вводь текст у превʼю", "Tkinter window · click and type in the preview")}</p>
+                <img
+                  src={props.runResult.previewImage}
+                  alt={tr("Знімок вікна Tkinter. Натисніть для взаємодії.", "Tkinter window snapshot. Click to interact.")}
+                  role="button"
+                  tabIndex={0}
+                  className="block h-auto max-h-[60vh] w-full cursor-crosshair object-contain"
+                  onClick={event => {
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    const x = Math.max(0, Math.min(event.currentTarget.naturalWidth - 1, Math.round((event.clientX - bounds.left) * event.currentTarget.naturalWidth / Math.max(1, bounds.width))));
+                    const y = Math.max(0, Math.min(event.currentTarget.naturalHeight - 1, Math.round((event.clientY - bounds.top) * event.currentTarget.naturalHeight / Math.max(1, bounds.height))));
+                    props.onPreviewClick?.({ type: "click", x, y });
+                  }}
+                  onKeyDown={event => {
+                    if (event.ctrlKey || event.metaKey || event.altKey) return;
+                    if (event.key.length === 1) {
+                      event.preventDefault();
+                      props.onPreviewClick?.({ type: "type", text: event.key });
+                    } else if (["Enter", "Escape", "Tab", "Backspace", "Delete", " ", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+                      event.preventDefault();
+                      const key = ({ Enter: "Return", " ": "space", ArrowLeft: "Left", ArrowRight: "Right", ArrowUp: "Up", ArrowDown: "Down" } as Record<string, string>)[event.key] ?? event.key;
+                      props.onPreviewClick?.({ type: "key", key });
+                    }
+                  }}
+                />
+              </div> : null}
+              {props.runResult?.previewImages?.length ? <div className="mt-4 grid gap-3 sm:grid-cols-2">{props.runResult.previewImages.map(image => <figure key={image.name} className="overflow-hidden rounded-xl border border-border bg-bg-base">
+                <img src={image.dataUrl} alt={image.name} className="block max-h-72 w-full object-contain" />
+                <figcaption className="truncate border-t border-border px-3 py-2 font-mono text-xs text-text-secondary">{image.name}</figcaption>
+              </figure>)}</div> : null}
               <p className="ide-input-note mt-3">
                 {tr(
                   "Це запуск на вибраних даних. Щоб перевірити всі тести, надішли розв’язок.",
@@ -2210,7 +2245,15 @@ export const StudyCodIDEWorkspace: React.FC<Props> = React.memo((props) => {
     </div>
   ) : null;
   const renderInput = () =>
-    props.isWebTask ? (
+    props.task.pythonRuntimeProfile === "TKINTER" ? (
+      <div className="ide-runner-empty">
+        <span className="ide-runner-empty-icon"><SquareTerminal /></span>
+        <div>
+          <h3>{tr("Керування вікном", "Window controls")}</h3>
+          <p>{tr("Запусти Tkinter-програму, потім клацай у знімку вікна або сфокусуй його й вводь текст. Дії відтворюються під час кожного запуску.", "Run your Tkinter program, then click the window snapshot or focus it and type. Actions replay on each run.")}</p>
+        </div>
+      </div>
+    ) : props.isWebTask ? (
       <div className="ide-runner-empty">
         <span className="ide-runner-empty-icon">
           <Code2 />

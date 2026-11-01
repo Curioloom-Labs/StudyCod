@@ -203,6 +203,7 @@ export interface Lesson {
       milestones: Array<{ id: string; title: string; description: string; required?: boolean }>;
       extensions?: string[];
     } | null;
+    pythonRuntimeProfile?: "STANDARD" | "SCIENTIFIC" | "TKINTER";
     webTemplateFiles?: WebTaskFile[] | null;
     webValidationRules?: WebTaskRule[] | null;
     deadline?: string | null;
@@ -260,6 +261,8 @@ export interface TaskWithGrade {
     milestones: Array<{ id: string; title: string; description: string; required?: boolean }>;
     extensions?: string[];
   } | null;
+  pythonRuntimeProfile?: "STANDARD" | "SCIENTIFIC" | "TKINTER";
+  publicAssets?: Array<{ path: string; dataBase64: string }>;
   webTemplateFiles?: WebTaskFile[] | null;
   webValidationRules?: WebTaskRule[] | null;
   language: EduLanguage;
@@ -716,8 +719,9 @@ export async function saveQuiz(lessonId: number, quiz: QuizItem[]): Promise<void
     quiz
   });
 }
-export type CourseTestInput = { input: string; expectedOutput: string; points: number; isHidden: boolean; imageUrls?: string[]; subtask?: string | null; subtaskScoringMode?: "ABSOLUTE" | "PARTIAL"; subtaskWeightPercent?: number | null };
-export type CourseTestConfig = { task: { id: number; title: string; lessonId: number }; testData: CourseTestInput[]; maxAttempts: number; revision: string; gradingLocked: boolean };
+export type PythonTaskAssetInput = { path: string; dataBase64: string };
+export type CourseTestInput = { input: string; expectedOutput: string; points: number; isHidden: boolean; imageUrls?: string[]; subtask?: string | null; subtaskScoringMode?: "ABSOLUTE" | "PARTIAL"; subtaskWeightPercent?: number | null; assets?: PythonTaskAssetInput[] };
+export type CourseTestConfig = { task: { id: number; title: string; lessonId: number; pythonRuntimeProfile?: "STANDARD" | "SCIENTIFIC" | "TKINTER" }; testData: CourseTestInput[]; maxAttempts: number; revision: string; gradingLocked: boolean };
 export async function getCourseTaskTests(taskId: number): Promise<CourseTestConfig> { return (await api.get(`/edu/course-tasks/${taskId}/tests`)).data; }
 export async function saveCourseTaskTests(taskId: number, input: { testData: CourseTestInput[]; maxAttempts: number; expectedRevision: string }): Promise<CourseTestConfig> { return (await api.put(`/edu/course-tasks/${taskId}/tests`, input)).data; }
 
@@ -728,6 +732,7 @@ export interface CreateTaskRequest {
   description: string;
   template: string;
   taskMode?: "CODE" | "WEB" | "MANUAL";
+  pythonRuntimeProfile?: "STANDARD" | "SCIENTIFIC" | "TKINTER";
   webTemplateFiles?: WebTaskFile[];
   webValidationRules?: WebTaskRule[];
   projectSpec?: {
@@ -770,16 +775,24 @@ export async function getTask(taskId: number): Promise<TaskWithGrade> {
   const res = await api.get(eduTaskUrl(taskId));
   return res.data.task;
 }
-export async function runCode(taskId: number, code: string, input?: string): Promise<{
+export type PythonTaskRunOptions = { assets?: PythonTaskAssetInput[]; events?: Array<{ type: "click"; x: number; y: number } | { type: "type"; text: string } | { type: "key"; key: string }> };
+export type PythonTaskRunResponse = {
   output: string;
   stderr?: string;
-}> {
-  const res = await api.post(eduTaskUrl(taskId, "/run"), { code, input });
+  success?: boolean;
+  exitCode?: number;
+  timeMs?: number | null;
+  previewImages?: Array<{ name: string; dataUrl: string }>;
+  uiSnapshot?: unknown;
+  previewImage?: string | null;
+};
+export async function runCode(taskId: number, code: string, input?: string, options?: PythonTaskRunOptions): Promise<PythonTaskRunResponse> {
+  const res = await api.post(eduTaskUrl(taskId, "/run"), { code, input, ...(options ?? {}) });
   return res.data;
 }
-export async function runCodeFiles(taskId: number, files: CodeFile[], input?: string): Promise<{ output: string; stderr?: string }>
+export async function runCodeFiles(taskId: number, files: CodeFile[], input?: string, options?: PythonTaskRunOptions): Promise<PythonTaskRunResponse>
 {
-  const res = await api.post(eduTaskUrl(taskId, "/run"), { files, input });
+  const res = await api.post(eduTaskUrl(taskId, "/run"), { files, input, ...(options ?? {}) });
   return res.data;
 }
 export async function getWebTaskTemplate(taskId: number): Promise<{ taskId: number; taskMode: "WEB"; files: WebTaskFile[]; rules: WebTaskRule[] }> {
@@ -977,6 +990,7 @@ export interface TestDataItem {
   subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
   subtaskWeightPercent?: number | null;
   imageUrls?: string[];
+  assets?: PythonTaskAssetInput[];
 }
 export async function addTestData(taskId: number, testData: TestDataItem[]): Promise<{
   count: number;
@@ -997,6 +1011,8 @@ export interface TestData {
   subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
   subtaskWeightPercent?: number | null;
   imageUrls?: string[];
+  assetPaths?: string[];
+  assets?: PythonTaskAssetInput[];
   isInputTruncated?: boolean;
   inputFullLength?: number;
   isExpectedOutputTruncated?: boolean;
@@ -1062,6 +1078,7 @@ export async function updateTestData(taskId: number, testDataId: number, update:
   subtaskScoringMode?: "ABSOLUTE" | "PARTIAL";
   subtaskWeightPercent?: number | null;
   imageUrls?: string[];
+  assets?: PythonTaskAssetInput[];
 }): Promise<{
   message: string;
   testData: TestData;
