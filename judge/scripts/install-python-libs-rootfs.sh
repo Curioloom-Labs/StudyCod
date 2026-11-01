@@ -29,7 +29,12 @@ if [[ ! -x "${ROOTFS}/usr/bin/apt-get" ]]; then
   exit 1
 fi
 DEBIAN_FRONTEND=noninteractive chroot "${ROOTFS}" /usr/bin/apt-get update
-DEBIAN_FRONTEND=noninteractive chroot "${ROOTFS}" /usr/bin/apt-get install -y --no-install-recommends python3-tk xvfb xauth libxft2
+# Reinstall the small GUI runtime set because minimal judge images can retain
+# dpkg's "installed" metadata while a shared-library payload is absent. This
+# includes Xvfb's runtime libraries and xauth's libXmuu dependency so the
+# validation below exercises a real isolated window, not only a Tk import.
+DEBIAN_FRONTEND=noninteractive chroot "${ROOTFS}" /usr/bin/apt-get install -y --reinstall --no-install-recommends \
+  python3-tk xvfb xauth xkb-data libxft2 libxmuu1 libxkbfile1 libgl1 libglvnd0 libglx0 libpixman-1-0 libfontenc1
 
 # pip may be a different Python from the jail interpreter. Target the exact
 # Python ABI installed in the rootfs, and fail clearly for an unsupported ABI.
