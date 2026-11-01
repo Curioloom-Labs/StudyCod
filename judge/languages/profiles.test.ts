@@ -10,8 +10,12 @@ test("Python scientific and Tkinter compiler profiles are registered for referen
   const tkinter = resolveProfile("python", "python-gui");
   assert.equal(tkinter.id, "python-gui");
   assert.ok(tkinter.run);
-  assert.deepEqual(tkinter.run().argv.slice(0, 3), ["/usr/bin/xvfb-run", "-a", "-s"]);
-  assert.ok(tkinter.run().argv.includes("-B"), "Tkinter execution must not write bytecode into the sandbox");
+  const tkinterArgv = tkinter.run().argv;
+  assert.equal(tkinterArgv[0], "/bin/sh");
+  assert.match(tkinterArgv[2], /Xvfb :99 .* -nolisten tcp -ac/);
+  assert.match(tkinterArgv[2], /\/tmp\/\.X11-unix\/X99/);
+  assert.ok(tkinterArgv.includes("-B"), "Tkinter execution must not write bytecode into the sandbox");
+  assert.ok(!tkinterArgv.includes("/usr/bin/xvfb-run"), "nsjail-compatible launcher must not use xvfb-run's signal handshake");
 });
 
 test("runtime profiles cannot be selected for a different language family", () => {

@@ -244,13 +244,17 @@ build_frontend_release() {
 }
 
 wait_ready() {
+  local ready_body
+  ready_body="$(mktemp /tmp/studycod-ready-deploy.XXXXXX)"
   for attempt in $(seq 1 30); do
-    if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:4000/ready >/tmp/studycod-ready-deploy.json; then
-      cat /tmp/studycod-ready-deploy.json
+    if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:4000/ready >"$ready_body"; then
+      cat "$ready_body"
+      rm -f "$ready_body"
       return 0
     fi
     sleep 2
   done
+  rm -f "$ready_body"
   echo "Backend readiness failed after PM2 reload" >&2
   pm2 status || true
   pm2 logs studycod-backend --err --lines 80 --nostream || true

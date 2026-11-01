@@ -29,6 +29,22 @@ function envPath(name: string, fallback: string): string {
   return readToolPath(name, fallback);
 }
 
+// xvfb-run waits for Xvfb to signal readiness through its parent process. That
+// handshake can stall under nsjail, so launch the isolated server and wait for
+// its private Unix socket instead. Each submission has its own mount namespace
+// and /tmp, so a fixed display number is safe and cannot collide across runs.
+const pythonGuiLauncher = [
+  "set -eu",
+  "/usr/bin/Xvfb :99 -screen 0 1280x800x24 -nolisten tcp -ac >/dev/null 2>&1 &",
+  "xvfb_pid=$!",
+  "trap 'kill \"$xvfb_pid\" 2>/dev/null || true; wait \"$xvfb_pid\" 2>/dev/null || true' EXIT HUP INT TERM",
+  "export DISPLAY=:99",
+  "attempt=0",
+  "while [ ! -S /tmp/.X11-unix/X99 ]; do attempt=$((attempt + 1)); [ \"$attempt\" -lt 100 ] || { echo 'Xvfb did not become ready' >&2; exit 125; }; sleep 0.05; done",
+  "sleep 0.05",
+  "\"$@\"",
+].join("; ");
+
 // ---- Java -------------------------------------------------------------------
 function javaProfile(id: string, label: string, homeEnv: string, defaultHome: string): CompilerProfile {
   const home = () => envPath(homeEnv, defaultHome);
@@ -151,8 +167,8 @@ export const COMPILER_PROFILES: CompilerProfile[] = [
     family: "python",
     label: "Python (scientific libraries + Tkinter)",
     run: () => ({
-      display: "xvfb-run -a -s '-screen 0 1280x800x24' python3 main.py",
-      argv: ["/usr/bin/xvfb-run", "-a", "-s", "-screen 0 1280x800x24", "/usr/bin/python3", "-B", "-u", "main.py"]
+      display: "Xvfb :99 -screen 0 1280x800x24 -nolisten tcp; python3 main.py",
+      argv: ["/bin/sh", "-c", pythonGuiLauncher, "studycod-python-gui", "/usr/bin/python3", "-B", "-u", "main.py"]
     })
   },
   pypyProfile("pypy3", "Python 3.11 (PyPy)"),

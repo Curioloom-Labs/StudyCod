@@ -8,6 +8,14 @@ export interface ResolvedLimits {
   outputLimitBytes: number;
 }
 
+/** The isolated X server and bounded Tk event loop need startup headroom. */
+export const PYTHON_GUI_MIN_TIME_LIMIT_MS = 5_000;
+
+export function applyProfileRuntimeLimits(profileId: string, limits: ResolvedLimits): ResolvedLimits {
+  if (profileId !== "python-gui" || limits.timeLimitMs >= PYTHON_GUI_MIN_TIME_LIMIT_MS) return limits;
+  return { ...limits, timeLimitMs: PYTHON_GUI_MIN_TIME_LIMIT_MS };
+}
+
 // Per-language defaults, derived from the language registry (single source of truth).
 export const DEFAULT_LIMITS: Record<LanguageId, JudgeLimits> = Object.fromEntries(
   (Object.keys(LANGUAGES) as LanguageId[]).map(id => [id, { ...LANGUAGES[id].defaultLimits }])

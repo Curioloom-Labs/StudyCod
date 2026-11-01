@@ -4,7 +4,7 @@ import * as path from "path";
 import { NsJailExecutor } from "./executor";
 import { compilationCacheKey, restoreCompilation, storeCompilation } from "./compilationCache";
 import { Compiler, mapRuntimeToVerdict } from "./compiler";
-import { validateAndResolveLimits } from "./limits";
+import { applyProfileRuntimeLimits, validateAndResolveLimits } from "./limits";
 import { CheckerSpec, CompileResult, GroupScore, JudgeProgress, JudgeRequest, JudgeResponse, TestRunResult, Verdict } from "./result";
 import { cleanPythonRuntimeError, filterNsJailStderr } from "./stderr";
 import { buildUserFacingStderr } from "./userFacingErrors";
@@ -463,7 +463,7 @@ export class Runner {
     const adapter = getLanguage(req.language);
     // Optional compiler/version selection. Falls back to the family default.
     const profile = resolveProfile(req.language, Reflect.get(req, "compiler"));
-    const limits = validateAndResolveLimits(req.language, req.limits);
+    const limits = applyProfileRuntimeLimits(profile.id, validateAndResolveLimits(req.language, req.limits));
     const checker = normalizeChecker(req.checker);
     const chroot = this.resolveChroot(req.language);
     await this.assertChrootAvailable(req.language, chroot);
