@@ -2519,8 +2519,8 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
         : "Вибране середовище Python містить NumPy, OpenCV (cv2), SciPy, pandas, matplotlib, scikit-learn і SymPy. Учнівська програма та прихований еталон можуть використовувати ці бібліотеки. Залиш задачу детермінованою консольною задачею stdin/stdout; приклади містять лише звичайний ввід/вивід. Не вимагай зовнішніх файлів зображень, бо згенеровані приклади не можуть прикріплювати бінарні файли."
       : runtimeProfile === "TKINTER"
         ? isEnglish
-          ? 'This task uses the supported Python Tkinter runtime. Ask the learner to build one deterministic GUI window. Input examples must be valid JSON UI-event payloads such as {"events":[{"type":"click","x":120,"y":80}]} using only click, type, and supported key events. Output examples must be exact compact JSON widget snapshots produced after those events; do not describe stdout. The hidden Python 3 referenceSolution must create the window and widgets and must not import another GUI framework or depend on wall-clock timing, network, or external image files.'
-          : 'Завдання використовує підтримуване середовище Python Tkinter. Попроси учня створити одне детерміноване графічне вікно. Приклади вводу мають бути коректними JSON-даними подій інтерфейсу, наприклад {"events":[{"type":"click","x":120,"y":80}]}, лише з підтримуваними подіями click, type і key. Приклади виводу мають бути точним компактним JSON-знімком віджетів після цих подій; не описуй stdout. Прихований Python 3 referenceSolution має створювати вікно й віджети та не повинен імпортувати інший GUI-фреймворк або залежати від часу, мережі чи зовнішніх файлів зображень.'
+          ? 'This task uses the supported Python Tkinter runtime. Ask the learner to build one deterministic GUI window. Inputs are JSON event payloads consumed by the StudyCod harness, not stdin for the learner program: use an object such as {"events":[{"type":"click","x":120,"y":80}]}, with at most 32 events. A click uses integer window-relative coordinates x=0..1279 and y=0..799 and affects only the widget under that point; type inserts at the focused text widget (maximum 120 characters); key is one of Return, Escape, Tab, BackSpace, Delete, space, Left, Right, Up, or Down and acts on the focused widget. Output is exactly the harness snapshot object {"title":string,"geometry":"WIDTHxHEIGHT","widgets":[...]}, recursively describing widget type, children and available text/value/state; it is not stdout. Both the learner program and hidden Python 3 referenceSolution must create one real tk.Tk() window, build its widgets and callbacks, and call root.mainloop(). The harness supplies the display, injects events, bounds the event loop, and captures the snapshot. Do not read stdin, parse JSON, simulate events in Python, print a snapshot, or create a second window. The reference must not import another GUI framework or depend on wall-clock timing, network, or external image files.'
+          : 'Завдання використовує підтримуване середовище Python Tkinter. Попроси учня створити одне детерміноване графічне вікно. Ввід — це JSON-пакет подій, який обробляє StudyCod harness, а не stdin учнівської програми: використовуй об’єкт на зразок {"events":[{"type":"click","x":120,"y":80}]}, не більш як 32 події. click використовує цілі координати відносно вікна: x=0..1279, y=0..799; дію отримує лише віджет у цій точці. type вводить до 120 символів у сфокусований текстовий віджет. key — одне зі значень Return, Escape, Tab, BackSpace, Delete, space, Left, Right, Up, Down і діє на сфокусований віджет. Вивід — точно об’єкт знімка harness формату {"title":рядок,"geometry":"ШИРИНАxВИСОТА","widgets":[...]}, який рекурсивно описує тип віджета, дочірні віджети й наявні text/value/state; це не stdout. І учнівська програма, і прихований Python 3 referenceSolution мають створити одне справжнє вікно tk.Tk(), побудувати віджети й обробники та викликати root.mainloop(). Harness надає дисплей, вводить події, обмежує цикл подій і знімає стан. Не читай stdin, не розбирай JSON, не імітуй події у Python, не друкуй знімок і не створюй друге вікно. Еталон не повинен імпортувати інший GUI-фреймворк, залежати від часу, мережі чи зовнішніх файлів зображень.'
         : isEnglish
           ? "The selected Python runtime is standard Python 3. This is a console task using stdin/stdout and only the Python standard library. Do not use Tkinter, GUI frameworks, OpenCV, third-party packages, image files, network access or a graphical interface."
           : "Вибране середовище — стандартний Python 3. Це консольна задача зі stdin/stdout і лише стандартною бібліотекою Python. Не використовуй Tkinter, GUI-фреймворки, OpenCV, сторонні пакети, файли зображень, мережу чи графічний інтерфейс.";
@@ -2536,7 +2536,9 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
           params.includeSubtasks === false
             ? "Return an empty subtasks array."
             : "When the task has naturally progressive, independently testable requirements, split them into 2–5 learner-facing subtasks. Allocate integer percentages of the total maximum score; weights must sum to exactly 100. Use the simplest first tier and progressively harder tiers. For a truly single-skill task, use an empty subtasks array. Do not invent tiers just to fill the list.",
-          "Provide exactly three distinct valid input/output examples and manually verify every output against the statement. Each output must be exact stdout; empty stdout is allowed only when outputFormat explicitly defines an empty line. An empty input string is allowed only when the statement explicitly requires no input.",
+          runtimeProfile === "TKINTER"
+            ? "Provide exactly three distinct valid JSON UI-event inputs and expected widget-tree snapshots. The Tk harness injects events into the real window and supplies the snapshot; these expected outputs are not stdout. Keep each input within the supported event schema and make each example distinct."
+            : "Provide exactly three distinct valid input/output examples and manually verify every output against the statement. Each output must be exact stdout; empty stdout is allowed only when outputFormat explicitly defines an empty line. An empty input string is allowed only when the statement explicitly requires no input.",
           "Keep statement, inputFormat, outputFormat, constraints, and examples consistent. Put only raw input data in each example input and only the exact expected result in each example output.",
           ...(runtimeInstructions ? [runtimeInstructions] : []),
           "Write numeric bounds as readable math, for example `$1 ≤ n ≤ 1000$`, and put separate rules in separate constraint items. Do not concatenate unrelated bounds on one line. When a LaTeX command is needed inside a JSON string, escape every backslash according to JSON (write `\\\\` in the JSON source so the parsed text contains one backslash).",
@@ -2559,7 +2561,9 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
           params.includeSubtasks === false
             ? "Поверни порожній масив subtasks."
             : "Якщо задача має природні поступові й незалежно перевірювані вимоги, розбий їх на 2–5 підзадач для учня. Розподіли цілі відсотки від максимальної оцінки; сума ваг має дорівнювати рівно 100. Перша підзадача має бути найпростішою, наступні — поступово складнішими. Для справді одноетапної задачі поверни порожній масив subtasks. Не вигадуй етапи лише заради списку.",
-          "Поверни рівно три різні коректні приклади вводу/виводу та вручну перевір кожен результат за умовою. Кожен output має точно відповідати stdout; порожній stdout дозволений лише коли outputFormat прямо визначає порожній рядок. Порожній input дозволений лише коли умова прямо вказує, що вводу немає.",
+          runtimeProfile === "TKINTER"
+            ? "Поверни рівно три різні коректні JSON-приклади UI-подій і очікуваних знімків дерева віджетів. Tk harness вводить події у справжнє вікно й формує знімок; ці очікувані результати не є stdout. Дотримуйся підтримуваної схеми подій."
+            : "Поверни рівно три різні коректні приклади вводу/виводу та вручну перевір кожен результат за умовою. Кожен output має точно відповідати stdout; порожній stdout дозволений лише коли outputFormat прямо визначає порожній рядок. Порожній input дозволений лише коли умова прямо вказує, що вводу немає.",
           "Узгодь statement, inputFormat, outputFormat, constraints та examples. У кожному input подавай лише сирі дані, а в output — лише точний очікуваний результат.",
           ...(runtimeInstructions ? [runtimeInstructions] : []),
           "Записуй числові межі зрозумілою математичною нотацією, наприклад `$1 ≤ n ≤ 1000$`, а різні правила подавай окремими елементами обмежень. Не склеюй не пов’язані межі в один рядок. Якщо в JSON-рядку потрібна команда LaTeX, екрануй кожен зворотний слеш за правилами JSON (у тексті JSON пиши `\\\\`, щоб після розбору залишився один слеш).",
@@ -2596,63 +2600,82 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
       ] : []),
       isEnglish
         ? runtimeProfile === "TKINTER"
-          ? "Write a self-contained deterministic Tkinter GUI task about the supplied topic and title. Define the window behavior, supported UI events, and observable widget snapshot. Keep the three valid JSON event examples distinct and calculate each exact snapshot by executing the hidden reference program."
+          ? "Write a self-contained deterministic Tkinter GUI task about the supplied topic and title. Define the window behavior, supported UI events, and observable widget snapshot. Keep the three valid JSON event examples distinct and calculate each exact snapshot by executing the hidden reference program. The reference is executable by a Tk harness: it must create one real Tk root, build the UI and callbacks, and call root.mainloop(); the harness injects example events and captures the widget tree. It must not read stdin, parse event JSON, simulate clicks itself, or print the snapshot."
           : "Write a self-contained task about the supplied topic and title. State input and output contracts. Use only concepts appropriate for the specified difficulty. Ensure the three examples cover meaningful valid cases, and calculate each expected output correctly."
         : runtimeProfile === "TKINTER"
-          ? "Створи самодостатню детерміновану задачу з Tkinter за вказаною темою та назвою. Визнач поведінку вікна, підтримувані події та спостережуваний знімок віджетів. Три коректні JSON-приклади подій мають бути різними; обчисли кожен точний знімок виконанням прихованої еталонної програми."
+          ? "Створи самодостатню детерміновану задачу з Tkinter за вказаною темою та назвою. Визнач поведінку вікна, підтримувані події та спостережуваний знімок віджетів. Три коректні JSON-приклади подій мають бути різними; обчисли кожен точний знімок виконанням прихованої еталонної програми. Еталон виконує Tk harness: він має створити справжній корінь Tk, побудувати інтерфейс і обробники та викликати root.mainloop(); harness сам вводить події прикладів і знімає дерево віджетів. Еталон не читає stdin, не розбирає JSON подій, сам не імітує кліки й не друкує знімок."
           : "Створи самодостатню задачу за вказаною темою та назвою. Опиши формати вводу й виводу. Використовуй лише поняття, доречні для заданої складності. Три приклади мають показувати змістовні коректні випадки; правильно обчисли кожен очікуваний результат.",
     ];
-    const validationRetry = Boolean(validationFeedback);
-
-    const raw = await generatePromptJSON<unknown>(
-      provider,
-      "task.condition-draft",
-      promptParts.join("\n\n"),
-      TASK_CONDITION_DRAFT_JSON_SCHEMA,
-      systemPrompt,
-      {
-        timeout: 35_000,
-        userId: params.userId,
-        topicId: params.topicId,
-        signal: params.signal,
-        temperature: validationRetry ? 0.15 : 0.2,
-        maxTokens: 5000,
-        validationRetry,
-        language: locale,
-      },
-    );
-    const draft = AIResponseValidator.validateGenerateTaskConditionDraft(raw);
-    let verifiedDraft = draft;
-    try {
-      // Treat the Judge execution as the source of truth for example stdout.
-      // Models often produce a correct reference program but mistype an example
-      // result, so only executed values are sent to the independent review and
-      // shown to teachers. The stale model-authored values are discarded.
-      const executedOutputs = await executeReferenceTests(
-        draft.referenceSolution,
-        'PYTHON',
-        draft.examples.map(example => example.input),
-        [],
-        params.signal,
-        { allowEmptyOutput: true, pythonRuntimeProfile: runtimeProfile },
+    let referenceRepairFeedback = "";
+    let draft: TaskConditionDraft | undefined;
+    let verifiedDraft: TaskConditionDraft | undefined;
+    for (let attempt = 0; attempt < (runtimeProfile === "TKINTER" ? 2 : 1); attempt++) {
+      if (attempt > 0) consumeRetryOrThrow("Tkinter reference repair");
+      const validationRetry = Boolean(validationFeedback || referenceRepairFeedback);
+      const prompt = [
+        ...promptParts,
+        ...(referenceRepairFeedback ? [
+          (isEnglish ? "REFERENCE RUNTIME FAILURE TO REPAIR:\n" : "ПОМИЛКА ЗАПУСКУ ЕТАЛОНУ, ЯКУ ПОТРІБНО ВИПРАВИТИ:\n")
+            + formatUntrustedData("reference_runtime_feedback", referenceRepairFeedback),
+        ] : []),
+      ].join("\n\n");
+      const raw = await generatePromptJSON<unknown>(
+        provider,
+        "task.condition-draft",
+        prompt,
+        TASK_CONDITION_DRAFT_JSON_SCHEMA,
+        systemPrompt,
+        {
+          timeout: 35_000,
+          userId: params.userId,
+          topicId: params.topicId,
+          signal: params.signal,
+          temperature: validationRetry ? 0.15 : 0.2,
+          maxTokens: 5000,
+          validationRetry,
+          language: locale,
+        },
       );
-      if (executedOutputs.some(output => normalizeTaskExampleOutput(output).length > 4000)) {
-        throw makeAIValidationError('generateTaskCondition', 'Reference output for a public example exceeds the 4000-character condition-draft limit', draft);
+      draft = AIResponseValidator.validateGenerateTaskConditionDraft(raw);
+      try {
+        // Judge execution is the source of truth for public-example output.
+        const executedOutputs = await executeReferenceTests(
+          draft.referenceSolution,
+          'PYTHON',
+          draft.examples.map(example => example.input),
+          [],
+          params.signal,
+          { allowEmptyOutput: true, pythonRuntimeProfile: runtimeProfile },
+        );
+        if (executedOutputs.some(output => normalizeTaskExampleOutput(output).length > 4000)) {
+          throw makeAIValidationError('generateTaskCondition', 'Reference output for a public example exceeds the 4000-character condition-draft limit', draft);
+        }
+        verifiedDraft = {
+          ...draft,
+          examples: draft.examples.map((example, index) => ({
+            input: example.input,
+            output: normalizeTaskExampleOutput(executedOutputs[index] ?? example.output),
+          })) as TaskConditionDraft['examples'],
+        };
+        break;
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        if (runtimeProfile === "TKINTER" && attempt === 0) {
+          referenceRepairFeedback = [
+            `The previous hidden reference program failed in the isolated Tkinter runner: ${detail}`,
+            "Repair only the task draft as needed and replace referenceSolution with a real Tkinter application: create exactly one tk.Tk() root, create the required widgets and callback behavior, then call root.mainloop(). The harness provides DISPLAY, injects the JSON example events into the real widgets, and captures the widget snapshot. Do not read stdin, parse JSON, simulate UI events yourself, print a snapshot, or create a second root. Ensure each example input is a valid supported event payload.",
+          ].join("\n");
+          continue;
+        }
+        throw makeAIValidationError(
+          'generateTaskCondition',
+          `Task condition reference validation failed: ${detail}`,
+          draft,
+        );
       }
-      verifiedDraft = {
-        ...draft,
-        examples: draft.examples.map((example, index) => ({
-          input: example.input,
-          output: normalizeTaskExampleOutput(executedOutputs[index] ?? example.output),
-        })) as TaskConditionDraft['examples'],
-      };
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      throw makeAIValidationError(
-        'generateTaskCondition',
-        `Task condition reference validation failed: ${detail}`,
-        draft,
-      );
+    }
+    if (!draft || !verifiedDraft) {
+      throw makeAIValidationError('generateTaskCondition', 'Task condition reference validation failed after the permitted repair attempt', draft);
     }
     const description = formatTaskConditionDraft(verifiedDraft, locale);
     const validated = AIResponseValidator.validateGenerateTaskCondition({ description }, {

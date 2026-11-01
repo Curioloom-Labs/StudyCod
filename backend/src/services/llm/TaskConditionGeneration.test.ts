@@ -6,6 +6,7 @@ import type { LLMGenerateOptions, LLMProvider } from './LLMProvider';
 import { PROMPT_CATALOG } from '../../../../shared/ai/prompts';
 import { formatTaskConditionDraft, normalizeTaskExampleOutput, type TaskConditionDraft } from './taskConditionDraft';
 import { reviewGeneratedTaskCondition } from './TaskContractReview';
+import { runWithPromptExecutionContext } from './promptExecution';
 import * as referenceExecution from '../executeReferenceTests';
 
 const draft: TaskConditionDraft = {
@@ -227,4 +228,73 @@ test('condition generation preserves the selected scientific and Tkinter runtime
       { input: '5 1 2 3 4 5', output: '15' },
     ] as TaskConditionDraft['examples'],
   }));
+});
+
+test('Tkinter condition repairs a non-GUI reference once and injects valid event inputs through the harness', async t => {
+  const tkDraft: TaskConditionDraft = {
+    statement: 'Create a counter window with an Add button. Each click increments the displayed count.',
+    inputFormat: 'A JSON object with an events array. Each event is a supported UI event.',
+    outputFormat: 'The exact JSON snapshot of the window widgets after all events.',
+    constraints: ['The initial count is 0.', 'Only supported click events are used.'],
+    subtasks: [],
+    referenceSolution: 'import tkinter as tk\nroot = tk.Tk()\nroot.mainloop()',
+    examples: [
+      { input: '{"events":[]}', output: '{}' },
+      { input: '{"events":[{"type":"click","x":10,"y":10}]}', output: '{}' },
+      { input: '{"events":[{"type":"click","x":10,"y":10},{"type":"click","x":10,"y":10}]}', output: '{}' },
+    ],
+  };
+  const calls: Array<{ prompt: string; systemPrompt?: string; options?: LLMGenerateOptions }> = [];
+  const responses: unknown[] = [
+    { ...tkDraft, referenceSolution: 'import json, sys\nprint(json.dumps({"widgets": []}))' },
+    tkDraft,
+    { valid: true, invalidSource: 'none', issues: [], clarificationQuestion: null },
+  ];
+  let referenceAttempts = 0;
+  t.mock.method(referenceExecution, 'executeReferenceTests', async (_source: string, language: string, inputs: string[], _examples: Array<{ input: string; output: string }>, _signal: AbortSignal, options?: { pythonRuntimeProfile?: string }) => {
+    referenceAttempts++;
+    assert.equal(language, 'PYTHON');
+    assert.equal(options?.pythonRuntimeProfile, 'TKINTER');
+    assert.equal(inputs.length, 3);
+    if (referenceAttempts === 1) throw new Error('Reference program failed on input 1: RE; Tkinter program did not create a Tk window');
+    return [
+      '{"title":"Counter","geometry":"58x52","widgets":[]}',
+      '{"title":"Counter","geometry":"58x52","widgets":[]}',
+      '{"title":"Counter","geometry":"58x52","widgets":[]}',
+    ];
+  });
+  const provider: LLMProvider = {
+    generateText: async () => { throw new Error('Expected structured JSON'); },
+    generateJSON: async <T>(prompt: string, _schema: object, systemPrompt?: string, options?: LLMGenerateOptions): Promise<T> => {
+      calls.push({ prompt, systemPrompt, options });
+      return responses.shift() as T;
+    },
+  };
+  const orchestrator = new LLMOrchestrator();
+  const generate = (orchestrator as unknown as {
+    generateTaskCondition_OpenRouter: (params: {
+      topicTitle: string; taskTitle: string; taskType: 'PRACTICE'; language: 'PYTHON'; userLanguage: 'en';
+      pythonRuntimeProfile: 'TKINTER';
+    }, provider: LLMProvider) => Promise<{ description: string }>;
+  }).generateTaskCondition_OpenRouter;
+
+  const result = await runWithPromptExecutionContext('task.condition-draft', {}, () => generate.call(orchestrator, {
+    topicTitle: 'Python Tkinter events',
+    taskTitle: 'Counter button snapshot',
+    taskType: 'PRACTICE',
+    language: 'PYTHON',
+    userLanguage: 'en',
+    pythonRuntimeProfile: 'TKINTER',
+  }, provider));
+
+  assert.equal(referenceAttempts, 2);
+  assert.equal(calls.length, 3, 'one draft repair plus one required contract review');
+  assert.equal(calls[1].options?.temperature, 0.15);
+  assert.match(calls[0].systemPrompt ?? '', /call root\.mainloop\(\)/);
+  assert.match(calls[0].systemPrompt ?? '', /Do not read stdin, parse JSON/);
+  assert.match(calls[0].systemPrompt ?? '', /exactly the harness snapshot object/);
+  assert.doesNotMatch(calls[0].systemPrompt ?? '', /Each output must be exact stdout/);
+  assert.match(calls[1].prompt, /Tkinter program did not create a Tk window/);
+  assert.match(calls[2].prompt, /executedReference/);
+  assert.match(result.description, /\{"title":"Counter","geometry":"58x52","widgets":\[\]\}/);
 });
