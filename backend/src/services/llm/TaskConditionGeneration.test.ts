@@ -131,8 +131,14 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
   assert.match(result.description, /### Приклад 3/);
   assert.match(result.description, /Вихідні дані:\n```\n5\n```/);
   assert.doesNotMatch(result.description, /\n```\n55\n```/);
-  const reviewPayload = JSON.parse(calls[1].prompt) as { exampleOutputMismatches?: Array<{ exampleNumber: number; generatedOutput: string; executedOutput: string }> };
-  assert.deepEqual(reviewPayload.exampleOutputMismatches, [{ exampleNumber: 1, generatedOutput: '55', executedOutput: '5' }]);
+  const reviewPayload = JSON.parse(calls[1].prompt) as {
+    publicExamples: Array<{ input: string; output: string }>;
+    executedReference?: { language: string; source: string };
+    exampleOutputMismatches?: unknown;
+  };
+  assert.equal(reviewPayload.publicExamples[0].output, '5', 'review sees the value that will be shown after judge correction');
+  assert.equal(reviewPayload.executedReference?.language, 'python');
+  assert.equal('exampleOutputMismatches' in reviewPayload, false, 'discarded model outputs do not create contradictory review context');
   assert.doesNotMatch(result.description, /referenceSolution/);
   assert.match(call.systemPrompt ?? '', /прихований Python 3 оракул/);
   assert.equal((call.schema as { required?: string[] }).required?.includes('referenceSolution'), true);

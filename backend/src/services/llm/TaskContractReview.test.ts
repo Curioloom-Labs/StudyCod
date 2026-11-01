@@ -105,7 +105,7 @@ test('condition review still rejects a real rounding conflict on an odd domain',
   }), /TASK_CONTRACT_REVIEW_FAILED\[statement\]/);
 });
 
-test('generated EDU condition review receives original versus executed example-output discrepancies', async () => {
+test('generated EDU condition review receives only corrected learner-visible examples and the executed oracle', async () => {
   const calls: string[] = [];
   await reviewGeneratedTaskCondition(fakeProvider([{ valid: true, invalidSource: 'none', issues: [] }], calls), {
     statement: 'Read two integers and print their sum.',
@@ -118,11 +118,13 @@ test('generated EDU condition review receives original versus executed example-o
       { input: '-4 7', output: '3' },
     ],
   }, {
-    exampleOutputMismatches: [{ exampleNumber: 1, generatedOutput: '55', executedOutput: '5' }],
+    executedReference: { language: 'python', source: 'a, b = map(int, input().split())\nprint(a + b)' },
   });
-  assert.deepEqual(JSON.parse(calls[0]).exampleOutputMismatches, [
-    { exampleNumber: 1, generatedOutput: '55', executedOutput: '5' },
-  ]);
+  const payload = JSON.parse(calls[0]) as { publicExamples: Array<{ input: string; output: string }>; executedReference?: { language: string; source: string } };
+  assert.deepEqual(payload.publicExamples[0], { input: '2 3', output: '5' });
+  assert.equal(payload.executedReference?.language, 'python');
+  assert.match(payload.executedReference?.source ?? '', /print\(a \+ b\)/);
+  assert.equal('exampleOutputMismatches' in payload, false);
 });
 
 test('task-condition review selects a configured provider distinct from the generator', () => {

@@ -2516,12 +2516,11 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
     );
     const draft = AIResponseValidator.validateGenerateTaskConditionDraft(raw);
     let verifiedDraft = draft;
-    let exampleOutputMismatches: Array<{ exampleNumber: number; generatedOutput: string; executedOutput: string }> = [];
     try {
       // Treat the Judge execution as the source of truth for example stdout.
       // Models often produce a correct reference program but mistype an example
-      // result; reject the task only if the independent contract review finds
-      // that the executed program itself contradicts the learner-facing rules.
+      // result, so only executed values are sent to the independent review and
+      // shown to teachers. The stale model-authored values are discarded.
       const executedOutputs = await executeReferenceTests(
         draft.referenceSolution,
         'PYTHON',
@@ -2533,15 +2532,6 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
       if (executedOutputs.some(output => normalizeTaskExampleOutput(output).length > 4000)) {
         throw makeAIValidationError('generateTaskCondition', 'Reference output for a public example exceeds the 4000-character condition-draft limit', draft);
       }
-      exampleOutputMismatches = draft.examples.flatMap((example, index) => {
-        const executedOutput = normalizeTaskExampleOutput(executedOutputs[index] ?? example.output);
-        const generatedOutput = normalizeTaskExampleOutput(example.output);
-        return generatedOutput === executedOutput ? [] : [{
-          exampleNumber: index + 1,
-          generatedOutput,
-          executedOutput,
-        }];
-      });
       verifiedDraft = {
         ...draft,
         examples: draft.examples.map((example, index) => ({
@@ -2576,7 +2566,6 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
       signal: params.signal,
       language: locale,
       executedReference: { language: 'python', source: draft.referenceSolution },
-      exampleOutputMismatches,
     });
     return validated;
   }
