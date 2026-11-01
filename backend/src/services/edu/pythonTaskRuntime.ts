@@ -280,6 +280,12 @@ def _apply(root, event):
         y = root.winfo_rooty() + int(event["y"])
         target = root.winfo_containing(x, y)
         if target is not None:
+            try:
+                if target.winfo_class() in ("Button", "TButton", "Checkbutton", "TCheckbutton", "Radiobutton", "TRadiobutton"):
+                    target.invoke()
+                    return
+            except Exception:
+                pass
             local_x = x - target.winfo_rootx()
             local_y = y - target.winfo_rooty()
             target.event_generate("<ButtonPress-1>", x=local_x, y=local_y, button=1)

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildPythonTaskJudgeFiles,
   encodePythonTaskInput,
   normalizePythonTaskAssets,
   normalizePythonTaskFiles,
@@ -50,6 +51,13 @@ test("Tkinter input accepts bounded UI events and rejects unsupported keys and c
   assert.throws(() => parseTkinterEvents("{"), /TKINTER_INPUT_MUST_BE_JSON/);
   assert.throws(() => parseTkinterEvents(JSON.stringify([{ type: "click", x: 1280, y: 0 }])), /INVALID_TKINTER_EVENTS/);
   assert.throws(() => parseTkinterEvents(JSON.stringify([{ type: "key", key: "F1" }])), /INVALID_TKINTER_EVENTS/);
+});
+
+test("Tkinter click events invoke standard Tk and ttk controls deterministically", () => {
+  const bootstrap = buildPythonTaskJudgeFiles([{ path: "main.py", content: "" }], "TKINTER")[0].content;
+  assert.match(bootstrap, /target\.invoke\(\)/);
+  assert.match(bootstrap, /"TButton"/);
+  assert.match(bootstrap, /"TRadiobutton"/);
 });
 
 test("runtime input envelopes preserve stdin, fixtures, and UI events", () => {
