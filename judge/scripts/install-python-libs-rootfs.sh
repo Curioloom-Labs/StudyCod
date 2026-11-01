@@ -67,37 +67,31 @@ case "${TARGET_PYTHON}" in
     exit 1
     ;;
 esac
-PIP_PLATFORMS=(--platform manylinux_2_17_x86_64 --platform manylinux_2_28_x86_64)
+# The target rootfs is Ubuntu 22.04 (glibc 2.35), so it can run wheels built
+# against older manylinux baselines too. Some Python 3.10 wheels (notably
+# kiwisolver) are tagged manylinux2010 / manylinux_2_12 and are otherwise
+# invisible to pip's cross-platform resolver.
+PIP_PLATFORMS=(
+  --platform manylinux_2_12_x86_64
+  --platform manylinux2010_x86_64
+  --platform manylinux2014_x86_64
+  --platform manylinux_2_17_x86_64
+  --platform manylinux_2_28_x86_64
+)
 
 SITE_PACKAGES="$(chroot "${ROOTFS}" /usr/bin/python3 -c 'import site; print(site.getsitepackages()[0])')"
-mkdir -p "${SITE_PACKAGES}"
+STAGING_ROOT="$(mktemp -d /tmp/studycod-python-libs.XXXXXX)"
+trap 'rm -rf "${STAGING_ROOT}"' EXIT
+STAGING_SITE_PACKAGES="${STAGING_ROOT}/site-packages"
+mkdir -p "${SITE_PACKAGES}" "${STAGING_SITE_PACKAGES}"
 
-# Remove packages owned by this installer before the staged replacement.
-for pattern in \
-  "flask" "Flask-*.dist-info" "fastapi" "fastapi-*.dist-info" \
-  "httpx" "httpx-*.dist-info" "numpy" "numpy-*.dist-info" \
-  "cv2" "opencv_python*.dist-info" "PIL" "pillow-*.dist-info" \
-  "pandas" "pandas-*.dist-info" "scipy" "scipy-*.dist-info" \
-  "matplotlib" "matplotlib-*.dist-info" "sklearn" "scikit_learn-*.dist-info" \
-  "seaborn" "seaborn-*.dist-info" "sympy" "sympy-*.dist-info" \
-  "pydantic" "pydantic-*.dist-info" \
-  "pydantic_core" "pydantic_core-*.dist-info" "starlette" "starlette-*.dist-info" \
-  "anyio" "anyio-*.dist-info" "typing_extensions.py" "typing_extensions-*.dist-info" \
-  "exceptiongroup" "exceptiongroup-*.dist-info" "sniffio" "sniffio-*.dist-info" \
-  "typing_inspection" "typing_inspection-*.dist-info" "annotated_types" "annotated_types-*.dist-info" \
-  "blinker" "blinker-*.dist-info" "click" "click-*.dist-info" "certifi" "certifi-*.dist-info" \
-  "h11" "h11-*.dist-info" "httpcore" "httpcore-*.dist-info" "idna" "idna-*.dist-info" \
-  "itsdangerous" "itsdangerous-*.dist-info" "jinja2" "Jinja2-*.dist-info" \
-  "markupsafe" "MarkupSafe-*.dist-info" "werkzeug" "Werkzeug-*.dist-info"; do
-  rm -rf "${SITE_PACKAGES}"/${pattern}
-done
-
-# --target keeps the host Python environment untouched.
+# Resolve and stage the whole runtime before replacing installed packages. If
+# PyPI/index resolution fails, the rootfs keeps its previous working set.
 "${PIP_BIN}" install \
   --disable-pip-version-check \
   --no-cache-dir \
   --upgrade \
-  --target "${SITE_PACKAGES}" \
+  --target "${STAGING_SITE_PACKAGES}" \
   "${PIP_PLATFORMS[@]}" \
   --implementation cp \
   --python-version "${TARGET_PYTHON}" \
@@ -118,6 +112,28 @@ done
   "scikit-learn==${SKLEARN_VERSION}" \
   "seaborn==0.13.2" \
   "sympy==1.14.0"
+
+# Replace only after pip resolved and installed every pinned package. Keep the
+# host Python environment untouched and preserve unrelated rootfs packages.
+for pattern in \
+  "flask" "Flask-*.dist-info" "fastapi" "fastapi-*.dist-info" \
+  "httpx" "httpx-*.dist-info" "numpy" "numpy-*.dist-info" \
+  "cv2" "opencv_python*.dist-info" "PIL" "pillow-*.dist-info" \
+  "pandas" "pandas-*.dist-info" "scipy" "scipy-*.dist-info" \
+  "matplotlib" "matplotlib-*.dist-info" "sklearn" "scikit_learn-*.dist-info" \
+  "seaborn" "seaborn-*.dist-info" "sympy" "sympy-*.dist-info" \
+  "pydantic" "pydantic-*.dist-info" \
+  "pydantic_core" "pydantic_core-*.dist-info" "starlette" "starlette-*.dist-info" \
+  "anyio" "anyio-*.dist-info" "typing_extensions.py" "typing_extensions-*.dist-info" \
+  "exceptiongroup" "exceptiongroup-*.dist-info" "sniffio" "sniffio-*.dist-info" \
+  "typing_inspection" "typing_inspection-*.dist-info" "annotated_types" "annotated_types-*.dist-info" \
+  "blinker" "blinker-*.dist-info" "click" "click-*.dist-info" "certifi" "certifi-*.dist-info" \
+  "h11" "h11-*.dist-info" "httpcore" "httpcore-*.dist-info" "idna" "idna-*.dist-info" \
+  "itsdangerous" "itsdangerous-*.dist-info" "jinja2" "Jinja2-*.dist-info" \
+  "markupsafe" "MarkupSafe-*.dist-info" "werkzeug" "Werkzeug-*.dist-info"; do
+  rm -rf "${SITE_PACKAGES}"/${pattern}
+done
+cp -a "${STAGING_SITE_PACKAGES}/." "${SITE_PACKAGES}/"
 
 chroot "${ROOTFS}" /usr/bin/python3 -c \
   'import cv2, fastapi, flask, matplotlib, numpy, pandas, PIL, scipy, seaborn, sklearn, sympy, tkinter; from PIL import ImageGrab; print("python-libs rootfs: OK")'
