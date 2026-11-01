@@ -2339,8 +2339,9 @@ topicsRouter.post("/control-works/:controlWorkId/unassign", authRequired, async 
           id: controlWorkId
         }
       });
-      const controlTasks = (lockedControlWork.topic.tasks || []).filter(t => t.type === "CONTROL");
-      const taskIds = controlTasks.map(t => t.id);
+      // Only clear submissions belonging to this control work. A topic can
+      // contain several control works, so topic.tasks is too broad here.
+      const taskIds = controlTasksRows.map(t => t.id);
       if (taskIds.length > 0) {
         for (const taskId of taskIds) {
           await gradeRepoManager.delete({
