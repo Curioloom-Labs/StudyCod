@@ -7,6 +7,8 @@ import { useTranslation } from "react-i18next";
 import { tr } from "../../i18n";
 import { withDevPreview } from "../../lib/devPreview";
 import { isEduQuizAnswered, type EduQuizAnswer, type EduQuizQuestion } from "../../lib/eduQuiz";
+import { QuizRichText } from "../../components/edu/QuizRichText";
+import { NoCopyContent } from "../../components/edu/NoCopyContent";
 import "./eduWorkspace.css";
 
 type Outcome = { status?: string; autoPercent?: number; finalPercent?: number | null; needsManual?: boolean };
@@ -33,7 +35,7 @@ const QuestionInput: React.FC<{ q: EduQuizQuestion; value?: EduQuizAnswer; onCha
         <input type={multiple ? "checkbox" : "radio"} name={`quiz-${q.id}`} checked={checked} onChange={() => {
           const selected = Array.isArray(value) ? value : [];
           onChange(multiple ? checked ? selected.filter(item => item !== index) : [...selected, index] : choice);
-        }} className="size-4 shrink-0 accent-primary" /><span>{option}</span>
+        }} className="size-4 shrink-0 accent-primary" /><div className="min-w-0"><NoCopyContent label={tr("Варіант відповіді, копіювання вимкнено", "Answer option, copying disabled")}><QuizRichText content={option} /></NoCopyContent></div>
       </label>;
     })}</div>;
   }
@@ -149,14 +151,14 @@ export const QuizCanvasPage: React.FC<{ user: { id: number; studentId?: number |
     {loading ? <div role="status" aria-label={tr("Завантаження квізу", "Loading quiz")} className="edu-quiz__skeleton">{[1, 2, 3].map(item => <div key={item} />)}</div>
       : outcome ? <section role="status" className="edu-quiz__outcome edu-result"><div className="edu-quiz__outcome-icon"><CheckCircle2 className="size-6" aria-hidden="true" /></div><p className="edu-quiz__eyebrow">{tr("Результат спроби", "Attempt result")}</p><h2>{tr("Відповіді збережено", "Answers saved")}</h2><p className="edu-quiz__score">{percent == null ? "—" : `${percent}%`}</p><p className="edu-quiz__outcome-note">{outcome.finalPercent != null ? tr("Підсумкова оцінка після перевірки викладача", "Final grade after teacher review") : tr("Результат автоматично перевірених питань", "Result for automatically graded questions")}</p>
         {(outcome.needsManual || outcome.status === "NEEDS_MANUAL") && <p className="edu-quiz__review-note">{tr("Відкриті відповіді очікують перевірки викладача. Підсумкова оцінка з’явиться після перевірки.", "Written answers await teacher review. Your final grade will appear after review.")}</p>}
-        {savedAnswers && questions?.length && <details className="edu-quiz__submitted"><summary>{tr("Переглянути надіслані відповіді", "Review submitted answers")}</summary><fieldset disabled>{questions.map((question, index) => <fieldset key={question.id}><legend>{index + 1}. {question.prompt || question.id}</legend><QuestionInput q={question} value={savedAnswers[question.id]} onChange={() => {}} /></fieldset>)}</fieldset></details>}
+        {savedAnswers && questions?.length && <details className="edu-quiz__submitted"><summary>{tr("Переглянути надіслані відповіді", "Review submitted answers")}</summary><fieldset disabled>{questions.map((question, index) => <fieldset key={question.id}><legend>{index + 1}.</legend><NoCopyContent label={tr("Текст тестового запитання, копіювання вимкнено", "Quiz question text, copying disabled")}><QuizRichText content={question.prompt || question.id} /></NoCopyContent><QuestionInput q={question} value={savedAnswers[question.id]} onChange={() => {}} /></fieldset>)}</fieldset></details>}
         <button type="button" onClick={back} className="edu-quiz__primary">{tr("Повернутися до уроку", "Return to lesson")}</button></section>
       : questions?.length ? <form onSubmit={submit} className="edu-quiz__layout">
         <section className="edu-quiz__questions" aria-label={tr("Питання квізу", "Quiz questions")}>
           <div className="edu-quiz__progress-mobile"><span>{tr("Відповіді", "Answers")}</span><strong>{completed}<small> / {questions.length}</small></strong><i><span style={{ width: `${Math.round((completed / questions.length) * 100)}%` }} /></i></div>
           <fieldset disabled={busy || !submissionAllowed} className="edu-quiz__question-list">{questions.map((q, index) => {
             const answered = isEduQuizAnswered(q, answers[q.id]);
-            return <fieldset id={`edu-quiz-question-${q.id}`} key={q.id} className="edu-quiz__question"><legend><span className="edu-quiz__question-number">{String(index + 1).padStart(2, "0")}</span><span className="edu-quiz__question-title">{q.prompt || q.id}</span><span className="edu-quiz__points">{q.points ?? 1} {tr("бал", "pt")}</span></legend><QuestionInput q={q} value={answers[q.id]} onChange={value => answer(q.id, value)} /><span className="edu-quiz__answered" aria-live="polite">{answered ? tr("Відповідь записано", "Answer recorded") : tr("Ще без відповіді", "Not answered yet")}</span></fieldset>;
+            return <fieldset id={`edu-quiz-question-${q.id}`} key={q.id} className="edu-quiz__question"><legend><span className="edu-quiz__question-number">{String(index + 1).padStart(2, "0")}</span><span className="edu-quiz__points">{q.points ?? 1} {tr("бал", "pt")}</span></legend><NoCopyContent className="edu-quiz__question-title" label={tr("Текст тестового запитання, копіювання вимкнено", "Quiz question text, copying disabled")}><QuizRichText content={q.prompt || q.id} /></NoCopyContent><QuestionInput q={q} value={answers[q.id]} onChange={value => answer(q.id, value)} /><span className="edu-quiz__answered" aria-live="polite">{answered ? tr("Відповідь записано", "Answer recorded") : tr("Ще без відповіді", "Not answered yet")}</span></fieldset>;
           })}</fieldset>
         </section>
         <aside className="edu-quiz__aside" aria-label={tr("Прогрес квізу", "Quiz progress")}>

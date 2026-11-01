@@ -59,7 +59,17 @@ function ensureKatexCssLoaded(): Promise<unknown> {
 
 interface MarkdownViewProps {
   content: string;
-  variant?: "default" | "handbook" | "task";
+  variant?: "default" | "handbook" | "task" | "quiz";
+}
+
+function normalizeSyntaxLanguage(raw: string): string {
+  const language = raw.trim().toLowerCase();
+  if (["c++", "cpp", "cxx"].includes(language)) return "cpp";
+  if (["js", "javascript"].includes(language)) return "javascript";
+  if (["ts", "typescript"].includes(language)) return "typescript";
+  if (["py", "python"].includes(language)) return "python";
+  if (["sh", "bash", "shell"].includes(language)) return "bash";
+  return language;
 }
 
 const HTTP_PROTOCOLS = new Set(["http:", "https:"]);
@@ -717,8 +727,8 @@ export const MarkdownView: React.FC<MarkdownViewProps> = memo(({
       node?: unknown;
       inline?: boolean;
     }) {
-      const match = /language-(\w+)/.exec(className || "");
-      const language = match ? match[1] : "";
+      const match = /language-([a-zA-Z0-9+#.-]+)/.exec(className || "");
+      const language = match ? normalizeSyntaxLanguage(match[1]) : "";
       // react-markdown 10 no longer reliably provides the old `inline` prop.
       // Fenced blocks are normalized to a language below, so an unclassified
       // code node is an inline snippet when the prop is absent.

@@ -7,6 +7,7 @@ import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { useTranslation } from "react-i18next";
+import { QuizRichText } from "../../components/edu/QuizRichText";
 import "./eduWorkspace.css";
 
 interface Attempt {
@@ -18,7 +19,11 @@ interface Attempt {
   finalPercent?: number | null;
   status: "AUTO_GRADED" | "NEEDS_MANUAL" | "MANUAL_GRADED";
 }
-interface OpenQuestion { id: string; prompt: string | null; points: number; answer: string; }
+interface ReviewQuestion {
+  id: string; type: string; prompt: string | null; points: number; answer: string;
+  options: string[]; correctAnswer: string | null;
+  result: { earned: number; points: number; correct: boolean | null; needsManual: boolean } | null;
+}
 
 export const TeacherQuizReviewPage: React.FC = () => {
   useTranslation();
@@ -27,7 +32,7 @@ export const TeacherQuizReviewPage: React.FC = () => {
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
   const [openFor, setOpenFor] = useState<number | null>(null);
-  const [questions, setQuestions] = useState<OpenQuestion[]>([]);
+  const [questions, setQuestions] = useState<ReviewQuestion[]>([]);
   const [scores, setScores] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +85,9 @@ export const TeacherQuizReviewPage: React.FC = () => {
       setError(null);
       const { data } = await api.get(`/edu/lessons/${lessonId}/quiz/attempts/${studentId}`);
       if (generation !== detailGeneration.current) return;
-      setQuestions(data?.openQuestions ?? []);
+      setQuestions(data?.questions ?? (data?.openQuestions ?? []).map((q: { id: string; prompt: string | null; points: number; answer: string }) => ({
+        ...q, type: "OPEN_TEXT", options: [], correctAnswer: null, result: null
+      })));
       setScores({});
       setOpenFor(studentId);
     } catch (error) {
@@ -91,11 +98,12 @@ export const TeacherQuizReviewPage: React.FC = () => {
   };
 
   const grade = async (studentId: number) => {
-    if (busy || questions.some(q => scores[q.id] == null || !scores[q.id].trim() || !Number.isFinite(Number(scores[q.id])) || Number(scores[q.id]) < 0 || Number(scores[q.id]) > q.points)) return;
+    const manualQuestions = questions.filter(q => q.type === "OPEN_TEXT");
+    if (busy || manualQuestions.some(q => scores[q.id] == null || !scores[q.id].trim() || !Number.isFinite(Number(scores[q.id])) || Number(scores[q.id]) < 0 || Number(scores[q.id]) > q.points)) return;
     setBusy(true);
     try {
       const manualScores: Record<string, number> = {};
-      for (const q of questions) {
+      for (const q of manualQuestions) {
         const v = Number(scores[q.id]);
         if (Number.isFinite(v)) manualScores[q.id] = v;
       }
@@ -143,38 +151,29 @@ export const TeacherQuizReviewPage: React.FC = () => {
                   ? tr("Перевірено", "Graded")
                   : tr("Авто", "Auto")}
               </span>
-              {a.status !== "AUTO_GRADED" && (
-                <Button variant="ghost" disabled={busy || loadingAnswers} aria-expanded={openFor === a.studentId} className="edu-quiz-review__grade" onClick={() => expand(a.studentId)}>
-                  {openFor === a.studentId ? tr("Сховати", "Hide") : tr("Оцінити", "Grade")}
-                </Button>
-              )}
+              <Button variant="ghost" disabled={busy || loadingAnswers} aria-expanded={openFor === a.studentId} className="edu-quiz-review__grade" onClick={() => expand(a.studentId)}>
+                {openFor === a.studentId ? tr("Сховати", "Hide") : a.status === "NEEDS_MANUAL" ? tr("Переглянути й оцінити", "Review and grade") : tr("Переглянути відповіді", "Review answers")}
+              </Button>
             </div>
 
             {openFor === a.studentId && (
               <div className="edu-quiz-review__answers">
-                {questions.length === 0 && <p className="edu-quiz-review__empty">{tr("Немає відкритих питань.", "No open questions.")}</p>}
+                {questions.length === 0 && <p className="edu-quiz-review__empty">{tr("У цій спробі не знайдено запитань.", "No questions were found for this attempt.")}</p>}
                 {questions.map(q => (
                   <div key={q.id} className="edu-quiz-review__answer">
-                    <div className="edu-quiz-review__prompt">{q.prompt ?? q.id}</div>
-                    <div className="edu-quiz-review__response">{q.answer || tr("(порожньо)", "(empty)")}</div>
-                    <label className="edu-quiz-review__points">
+                    <div className="edu-quiz-review__prompt"><QuizRichText content={q.prompt ?? q.id} /></div>
+                    <div className="edu-quiz-review__response"><strong>{tr("Відповідь учня:", "Student answer:")}</strong> <QuizRichText content={q.answer || tr("(порожньо)", "(empty)")} /></div>
+                    {q.type !== "OPEN_TEXT" && <p className="text-sm text-text-secondary">{q.result?.correct ? tr("Правильно", "Correct") : tr("Неправильно", "Incorrect")} · {q.result?.earned ?? 0}/{q.result?.points ?? q.points} {tr("балів", "points")}</p>}
+                    {q.correctAnswer && <div className="edu-quiz-review__response"><strong>{tr("Правильна відповідь:", "Correct answer:")}</strong> <QuizRichText content={q.correctAnswer} /></div>}
+                    {q.type === "OPEN_TEXT" && <label className="edu-quiz-review__points">
                       {tr("Бали", "Points")} (0–{q.points}):{" "}
-                      <input
-                        type="number"
-                        min={0}
-                        max={q.points}
-                        step="0.01"
-                        disabled={busy}
-                        value={scores[q.id] ?? ""}
-                        onChange={e => setScores(prev => ({ ...prev, [q.id]: e.target.value }))}
-                        className="edu-quiz-review__points-input"
-                      />
-                    </label>
+                      <input type="number" min={0} max={q.points} step="0.01" disabled={busy} value={scores[q.id] ?? ""} onChange={e => setScores(prev => ({ ...prev, [q.id]: e.target.value }))} className="edu-quiz-review__points-input" />
+                    </label>}
                   </div>
                 ))}
-                <Button onClick={() => grade(a.studentId)} disabled={busy || !questions.length || questions.some(q => scores[q.id] == null || !scores[q.id].trim() || !Number.isFinite(Number(scores[q.id])) || Number(scores[q.id]) < 0 || Number(scores[q.id]) > q.points)}>
+                {questions.some(q => q.type === "OPEN_TEXT") && <Button onClick={() => grade(a.studentId)} disabled={busy || questions.filter(q => q.type === "OPEN_TEXT").some(q => scores[q.id] == null || !scores[q.id].trim() || !Number.isFinite(Number(scores[q.id])) || Number(scores[q.id]) < 0 || Number(scores[q.id]) > q.points)}>
                   <Check size={16} /> {tr("Зберегти оцінку", "Save grade")}
-                </Button>
+                </Button>}
               </div>
             )}
           </article>

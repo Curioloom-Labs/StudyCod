@@ -29,6 +29,7 @@ import { withGradeWrite, withStudentGradeWrite, requireGradebookId, requireRawGr
 import { lockClassActor } from "../../services/edu/lifecycleAccess";
 import { ManualSubmission } from "../../entities/ManualSubmission";
 import { LessonAttempt } from "../../entities/LessonAttempt";
+import { normalizeLegacyAnswer } from "../../../../shared/utils/legacyQuiz";
 
 const router = Router();
 
@@ -52,6 +53,36 @@ function readProperty(value: unknown, key: string): unknown {
 
 function errorMessage(error: unknown): string {
   return String(readProperty(error, "message") ?? "");
+}
+
+function recoverLegacyQuizReview(quizJson: string | null | undefined, answersJson: string | null | undefined) {
+  if (!quizJson || !answersJson) return null;
+  try {
+    const rawQuiz: unknown = JSON.parse(quizJson);
+    const rawAnswers: unknown = JSON.parse(answersJson);
+    const questions = Array.isArray(rawQuiz)
+      ? rawQuiz
+      : isRecord(rawQuiz) && Array.isArray(rawQuiz.questions) ? rawQuiz.questions : [];
+    if (!questions.length || (!Array.isArray(rawAnswers) && !isRecord(rawAnswers))) return null;
+    const labels = ["А", "Б", "В", "Г", "Д"];
+    let correctAnswers = 0;
+    const reviewed = questions.map((raw, index) => {
+      if (!isRecord(raw)) return null;
+      const answer = Array.isArray(rawAnswers) ? rawAnswers[index] : rawAnswers[String(index)];
+      const options: Record<string, string> = {};
+      if (Array.isArray(raw.options)) raw.options.forEach((value, optionIndex) => { options[labels[optionIndex] ?? String(optionIndex)] = String(value ?? ""); });
+      else if (isRecord(raw.options)) for (const [key, value] of Object.entries(raw.options)) options[normalizeLegacyAnswer(key)] = String(value ?? "");
+      const correctRaw = raw.correct ?? raw.correctIndex;
+      const correct = normalizeLegacyAnswer(correctRaw);
+      const student = normalizeLegacyAnswer(answer);
+      const isCorrect = Boolean(correct) && student === correct;
+      if (isCorrect) correctAnswers++;
+      return { index, question: String(raw.question ?? raw.q ?? ""), options, correct, student: student || null, isCorrect };
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
+    return reviewed.length ? { version: 1, correctAnswers, totalQuestions: reviewed.length, questions: reviewed } : null;
+  } catch {
+    return null;
+  }
 }
 
 // AI-heavy endpoint: protect against bursts.
@@ -716,9 +747,11 @@ router.get("/control-works/:controlWorkId/students/:studentId/work", authRequire
       return res.status(403).json({ message: "ACCESS_DENIED" });
     }
 
-    const summaryGrade = await summaryGradeRepo().findOne({
-      where: { student: { id: studentId }, controlWork: { id: controlWorkId } }
+    const summaryGrades = await summaryGradeRepo().find({
+      where: { student: { id: studentId }, controlWork: { id: controlWorkId } },
+      order: { createdAt: "DESC", id: "DESC" }
     });
+    const summaryGrade = summaryGrades.find(item => Boolean(item.quizResultsJson || item.quizAnswersJson)) ?? summaryGrades[0] ?? null;
 
     let quizReview: unknown = null;
     if ((summaryGrade)?.quizResultsJson) {
@@ -728,6 +761,15 @@ router.get("/control-works/:controlWorkId/students/:studentId/work", authRequire
         quizReview = null;
       }
     }
+    if ((!isRecord(quizReview) || !Array.isArray(quizReview.questions)) && summaryGrade?.quizAnswersJson) {
+      quizReview = recoverLegacyQuizReview(controlWork.quizJson, summaryGrade.quizAnswersJson);
+    }
+    const reviewRecord = isRecord(quizReview) ? quizReview : null;
+    const quizCorrectAnswers = Number(reviewRecord?.correctAnswers);
+    const quizTotalQuestions = Number(reviewRecord?.totalQuestions);
+    const reviewedTheoryGrade = Number.isFinite(quizCorrectAnswers) && Number.isFinite(quizTotalQuestions) && quizTotalQuestions > 0
+      ? Math.round(quizCorrectAnswers / quizTotalQuestions * 100)
+      : summaryGrade?.theoryGrade ?? null;
 
     const practiceTasks = await topicTaskRepo().find({
       where: {
@@ -775,7 +817,10 @@ router.get("/control-works/:controlWorkId/students/:studentId/work", authRequire
         ? {
             id: summaryGrade.id,
             grade: (summaryGrade).grade,
-            theoryGrade: (summaryGrade).theoryGrade,
+            theoryGrade: reviewedTheoryGrade,
+            calculatedGrade: summaryGrade.calculatedGrade,
+            manualOverrideGrade: summaryGrade.manualOverrideGrade,
+            formulaSnapshot: summaryGrade.formulaSnapshot,
             createdAt: summaryGrade.createdAt ? summaryGrade.createdAt.toISOString() : null
           }
         : null,

@@ -1,0 +1,23 @@
+.edu-quiz-rich-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.edu-quiz-rich-text__code-label {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  margin: .4rem 0 -.35rem;
+  padding: .3rem .55rem;
+  border: 1px solid var(--border);
+  border-radius: .55rem .55rem 0 0;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font: 600 .68rem/1.25 var(--font-mono, ui-monospace, monospace);
+}
+
+.edu-quiz-rich-text__code-label + div > .markdown-code-block,
+.edu-quiz-rich-text__code-label + div > div > .my-4 {
+  margin-top: .35rem;
+}
+

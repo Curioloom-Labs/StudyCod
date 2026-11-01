@@ -10,6 +10,8 @@ import { Modal } from "../../components/ui/Modal";
 import { CodeEditor } from "../../components/CodeEditor";
 import { MultiFileEditor } from "../../components/MultiFileEditor";
 import { MarkdownView } from "../../components/MarkdownView";
+import { QuizRichText } from "../../components/edu/QuizRichText";
+import { NoCopyContent } from "../../components/edu/NoCopyContent";
 import { LessonTheoryView } from "../../components/lesson/LessonTheoryView";
 import { WebPreviewPane } from "../../components/WebPreviewPane";
 import {
@@ -1642,7 +1644,8 @@ export const StudentTaskPage: React.FC = () => {
             <p className="text-sm text-text-secondary">{quizSubmitted ? tr("Відповіді вже зафіксовані.", "Your answers have been submitted.") : tr("Оберіть відповідь для кожного питання, потім надішліть тест.", "Choose an answer for each question, then submit the quiz.")}</p>
             {quizQuestions.map((question, questionIndex) => <fieldset key={questionIndex} className="rounded-xl border border-border p-4">
               <legend className="px-1 text-xs font-semibold text-text-muted">{tr("Питання", "Question")} {questionIndex + 1}/{quizQuestions.length}</legend>
-              <div className="mb-3 text-sm text-text-primary"><MarkdownView content={question.question} /></div>
+              <NoCopyContent className="space-y-3" label={tr("Текст тестового запитання, копіювання вимкнено", "Quiz question text, copying disabled")}>
+              <div className="mb-3 text-sm text-text-primary"><QuizRichText content={question.question} /></div>
               <div className="space-y-2">{(["А", "Б", "В", "Г", "Д"] as QuizOption[]).filter(option => question.options[option]).map(option => <label key={option} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 text-sm ${quizSubmitted && question.correct === option ? "border-accent-success bg-accent-success/10" : quizAnswers[questionIndex] === option ? "border-primary bg-primary/10" : "border-border"}`}>
                 <input type="radio" name={`control-quiz-${questionIndex}`} value={option} checked={quizAnswers[questionIndex] === option} disabled={quizSubmitted} onChange={() => {
                   const next = { ...quizAnswers, [questionIndex]: option };
@@ -1652,8 +1655,9 @@ export const StudentTaskPage: React.FC = () => {
                   resumeExtrasRef.current.anchorId = `quiz-q-${questionIndex}`;
                   saveResume(viewportEl?.scrollTop);
                 }} />
-                <span><strong className="mr-1">{option})</strong><MarkdownView content={question.options[option]} /></span>
+                <div className="flex min-w-0 items-start gap-1"><strong className="mr-1">{option})</strong><QuizRichText content={question.options[option]} /></div>
               </label>)}</div>
+              </NoCopyContent>
             </fieldset>)}
             {!quizSubmitted ? <Button variant="primary" className="w-full" disabled={submitting || Object.keys(quizAnswers).length < quizQuestions.length} onClick={() => void handleSubmitQuiz()}><Send className="mr-2 h-4 w-4" />{tr("Надіслати тест", "Submit quiz")}</Button> : <div className="rounded-xl border border-primary/30 bg-primary/10 p-4 text-center"><div className="text-2xl font-bold">{quizGrade ?? "—"}/100</div><p className="text-sm text-text-secondary">{tr("Оцінка за теоретичну частину", "Theory score")}</p></div>}
           </div>
@@ -1889,9 +1893,9 @@ export const StudentTaskPage: React.FC = () => {
                             </span>
                             {quizAnswers[index] && !quizSubmitted && <span className="text-xs text-primary">{tr("✓ Відповідь вибрано", "✓ Answer selected")}</span>}
                           </div>
-                          <div className="text-sm font-mono text-text-primary">
-                            <MarkdownView content={q.question} />
-                          </div>
+                          <NoCopyContent className="text-sm font-mono text-text-primary" label={tr("Текст тестового запитання, копіювання вимкнено", "Quiz question text, copying disabled")}>
+                            <QuizRichText content={q.question} />
+                          </NoCopyContent>
                         </div>
                         <div className="space-y-2">
                           {(["А", "Б", "В", "Г", "Д"] as const).map(option => {
@@ -1916,9 +1920,7 @@ export const StudentTaskPage: React.FC = () => {
                     }} disabled={quizSubmitted} className="mt-1 mr-3 flex-shrink-0" />
                                 <div className="flex-1">
                                   <span className="font-semibold text-text-primary mr-2">{option})</span>
-                                  <span className="text-sm font-mono text-text-primary">
-                                    <MarkdownView content={q.options[option]} />
-                                  </span>
+                                <div className="text-sm font-mono text-text-primary"><NoCopyContent label={tr("Варіант відповіді, копіювання вимкнено", "Answer option, copying disabled")}><QuizRichText content={q.options[option]} /></NoCopyContent></div>
                                 </div>
                                 {quizSubmitted && isCorrect && <span className="ml-2 text-accent-success flex-shrink-0">✓</span>}
                                 {quizSubmitted && isWrong && <span className="ml-2 text-accent-error flex-shrink-0">✗</span>}
@@ -1957,7 +1959,7 @@ export const StudentTaskPage: React.FC = () => {
                         </div>
                       </Card>}
                   </div> : <div className="prose prose-invert max-w-none text-text-secondary font-mono text-sm">
-                    <MarkdownView content={getPracticeText() || task.description || ""} />
+                    {isControlTask ? <NoCopyContent label={tr("Умова контрольного завдання, копіювання вимкнено", "Assessment task statement, copying disabled")}><MarkdownView content={getPracticeText() || task.description || ""} /></NoCopyContent> : <MarkdownView content={getPracticeText() || task.description || ""} />}
                   </div>}
               </div>
             </Panel>

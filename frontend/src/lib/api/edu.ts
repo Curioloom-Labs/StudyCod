@@ -1802,6 +1802,9 @@ export interface ControlWorkStudentWork {
     id: number;
     grade: number;
     theoryGrade: number | null;
+    calculatedGrade?: number | null;
+    manualOverrideGrade?: number | null;
+    formulaSnapshot?: string | null;
     createdAt: string | null;
   } | null;
   quizReview: {

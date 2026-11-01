@@ -54,6 +54,26 @@ function normalizeOptions(raw: unknown): Record<string, string> {
   return Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, String(value ?? "")]));
 }
 
+function answerText(question: Quiz["questions"][number], value: unknown): string {
+  if (value == null) return "";
+  if (question.type === "SINGLE_CHOICE" && typeof value === "number") return question.options?.[value] ?? String(value);
+  if (question.type === "MULTIPLE_CHOICE" && Array.isArray(value)) return value.map(index => Number.isInteger(index) ? question.options?.[Number(index)] ?? String(index) : String(index)).join(", ");
+  if (question.type === "TRUE_FALSE" && typeof value === "boolean") return value ? "True" : "False";
+  if (question.type === "MATCHING" && Array.isArray(value)) return value.map((match, index) => `${index + 1} → ${Number(match) + 1}`).join("; ");
+  if (Array.isArray(value)) return value.map(item => String(item ?? "")).join("; ");
+  return String(value);
+}
+
+function correctAnswerText(question: Quiz["questions"][number]): string | null {
+  if (question.type === "SINGLE_CHOICE") return question.options?.[question.correctIndex ?? -1] ?? null;
+  if (question.type === "MULTIPLE_CHOICE") return (question.correctIndexes ?? []).map(index => question.options?.[index] ?? String(index)).join(", ");
+  if (question.type === "TRUE_FALSE") return typeof question.correct === "boolean" ? String(question.correct) : null;
+  if (question.type === "SHORT_ANSWER") return question.accept?.join(" / ") ?? question.pattern ?? null;
+  if (question.type === "FILL_BLANK") return question.blanks?.map(blank => blank.accept.join(" / ")).join("; ") ?? null;
+  if (question.type === "MATCHING") return question.correctMatches?.map((match, index) => `${index + 1} → ${match + 1}`).join("; ") ?? null;
+  return null;
+}
+
 function isQuizAttemptDuplicateError(error: unknown): boolean {
   const code = String(isRecord(error) ? error.code ?? "" : "").toUpperCase();
   if (code === "ER_DUP_ENTRY" || code === "23505") return true;
@@ -319,7 +339,8 @@ router.get("/lessons/:lessonId/quiz/attempts", authRequired, async (req: AuthReq
   }
 });
 
-// Teacher views one attempt's answers + the quiz's OPEN_TEXT questions to grade.
+// Teacher views the complete attempt, including auto-graded answers and the
+// OPEN_TEXT subset that still needs a manual score.
 router.get("/lessons/:lessonId/quiz/attempts/:studentId", authRequired, async (req: AuthRequest, res: Response) => {
   try {
     if (req.userType === "STUDENT" || req.studentId || !req.userId) {
@@ -345,7 +366,19 @@ router.get("/lessons/:lessonId/quiz/attempts/:studentId", authRequired, async (r
     } catch {
       answers = {};
     }
-    const openQuestions = (quiz?.questions ?? [])
+    const questions = quiz?.questions ?? [];
+    const resultsById = new Map(gradeQuiz(quiz, answers).results.map(result => [result.id, result]));
+    const reviewQuestions = questions.map(question => ({
+      id: question.id,
+      type: question.type,
+      prompt: question.prompt ?? null,
+      points: question.points ?? 1,
+      answer: answerText(question, answers[question.id]),
+      options: question.options ?? [],
+      correctAnswer: correctAnswerText(question),
+      result: resultsById.get(question.id) ?? null
+    }));
+    const openQuestions = questions
       .filter(q => q.type === "OPEN_TEXT")
       .map(q => ({ id: q.id, prompt: q.prompt ?? null, points: q.points ?? 1, answer: String(answers[q.id] ?? "") }));
 
@@ -358,6 +391,7 @@ router.get("/lessons/:lessonId/quiz/attempts/:studentId", authRequired, async (r
         autoPercent: attempt.autoPercent,
         finalPercent: attempt.finalPercent ?? null
       },
+      questions: reviewQuestions,
       openQuestions
     });
   } catch (error: unknown) {
