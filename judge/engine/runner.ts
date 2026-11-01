@@ -16,6 +16,7 @@ import { getLanguage, isLanguageId } from "../languages/registry";
 import { resolveProfile } from "../languages/profiles";
 import { kotlinCompileArgv } from "../languages/kotlin";
 import { csharpMsBuildPlan } from "../languages/csharp";
+import { pythonCompilePlanForFiles } from "../languages/python";
 import { buildGdbDriver } from "./gdbTracer";
 import type { LanguageId } from "../languages/types";
 import {
@@ -309,13 +310,7 @@ function displayCommand(argv: string[]): string {
 function buildCompilePlanForFiles(language: LanguageId, files: JudgeFile[]): { argv: string[]; display: string } | null {
   const paths = files.map(f => f.path);
   if (language === "python") {
-    const pyFiles = paths.filter(p => /\.py$/i.test(p));
-    if (pyFiles.length === 0) return null;
-    const argv = ["/usr/bin/python3", "-B", "-m", "py_compile", ...pyFiles];
-    return {
-      display: displayCommand(["python3", "-m", "py_compile", ...pyFiles]),
-      argv
-    };
+    return pythonCompilePlanForFiles(paths);
   }
   if (language === "java") {
     const javaFiles = paths.filter(p => p.toLowerCase().endsWith(".java"));
