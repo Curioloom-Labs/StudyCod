@@ -7,6 +7,7 @@ import { isAiCircuitOpen, recordAiCircuitSuccess, recordAiCircuitFailure } from 
 import { normalizeTopicLanguage, TOPIC_LANGUAGES } from '../../utils/topicLanguage';
 import { buildTaskValidationFeedback, cannotRepairByRegeneratingTests, requireCompleteTaskDescription, resolveTestDataIoType, TaskContractReviewError } from '../llm/TaskContractReview';
 import { executeReferenceTests } from '../executeReferenceTests';
+import type { EduPythonRuntimeProfile } from '../edu/pythonTaskRuntime';
 import { REFERENCE_LANGUAGE } from '../llm/ReferenceTestData';
 import { TASK_AI_TRAP_START } from '../../../../shared/utils/taskAiTrap';
 import { randomUUID } from 'crypto';
@@ -64,6 +65,10 @@ function optionalNumber(value: unknown): number | undefined {
 
 function optionalBoolean(value: unknown): boolean | undefined {
   return typeof value === "boolean" ? value : undefined;
+}
+
+function optionalPythonRuntimeProfile(value: unknown): EduPythonRuntimeProfile | undefined {
+  return value === "STANDARD" || value === "SCIENTIFIC" || value === "TKINTER" ? value : undefined;
 }
 
 function optionalTaskIoTypes(value: unknown): TaskIoType[] | undefined {
@@ -785,6 +790,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
               validationFeedback: optionalString(sanitizedParams.validationFeedback),
               existingDescription: optionalString(sanitizedParams.existingDescription),
               includeSubtasks: sanitizedParams.includeSubtasks !== false,
+              pythonRuntimeProfile: optionalPythonRuntimeProfile(sanitizedParams.pythonRuntimeProfile),
               language: requiredTaskLanguage(sanitizedParams.language),
               responseLanguage: optionalString(sanitizedParams.responseLanguage),
               userId: optionalNumber(sanitizedParams.userId),
@@ -851,6 +857,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
                 executeReference: (source: string, inputs: string[], examples: Array<{ input: string; output: string }>, signal?: AbortSignal) => executeReferenceTests(source, REFERENCE_LANGUAGE, inputs, examples, signal, {
                   allowEmptyOutput: sanitizedParams.allowEmptyOutput === true,
                   referenceExamplesAreAuthoritative: sanitizedParams.referenceExamplesAreAuthoritative === true,
+                  pythonRuntimeProfile: optionalPythonRuntimeProfile(sanitizedParams.pythonRuntimeProfile),
                 }),
               } : {}),
               userId: optionalNumber(sanitizedParams.userId),

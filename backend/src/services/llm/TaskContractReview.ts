@@ -5,6 +5,7 @@ import type { LLMGenerateOptions, LLMProvider } from './LLMProvider';
 import { consumeCurrentAIExecutionRetry, generatePromptJSON } from './promptExecution';
 import { AIValidationError, makeAIValidationError } from './AIResponseValidator';
 import { stripTaskAiTrapSegments } from '../../../../shared/utils/taskAiTrap';
+import type { EduPythonRuntimeProfile } from '../edu/pythonTaskRuntime';
 
 // Reject oversized contracts rather than silently discarding their last rules.
 export const MAX_TASK_DESCRIPTION_CHARS = 64_000;
@@ -136,6 +137,7 @@ Check narrative consistency against the complete valid domain: when the story as
 Then independently parse and recalculate EVERY public example and EVERY candidate test from the statement. Check that declared counts (such as n and q) match the exact supplied values and rows, that each input is allowed, and that each output obeys all rules, including every line and literal. Reject missing or extra tokens, arithmetic errors, and invalid test inputs even if all examples agree with one another. An example must not silently supply a missing rule.
 When candidateTests are present, review the whole suite as a coverage set. Use the statement's explicit constraints to check whether requested endpoint/threshold cases are represented, and when multiple meaningful branches or input classes are allowed, reject a suite that spends most of its cases on the same branch or near-identical shape while omitting available classes. Do not demand impossible or out-of-domain cases; for a one-path formula task, require useful variation across allowed boundaries and values, not invented branches. Only report diversity gaps that can be identified from the statement and supplied cases.
 For NO_INPUT_FIXED_OUTPUT there is exactly one fixed stdout and empty stdin. For NO_INPUT_FREE_OUTPUT any non-empty stdout must be permitted, with no extra content restrictions. For STDIN_STDOUT each allowed input has a deterministic answer, with numeric tolerance only when explicitly specified.
+For the EDU-specific ioType TKINTER, each input is a JSON list of supported UI events and each output is the exact JSON widget snapshot produced by the Tkinter virtual-display runner. Validate event JSON and snapshot consistency; do not apply stdin/stdout or console-only assumptions.
 For NO_INPUT_FIXED_OUTPUT, outputFormat may describe the output in natural language or contain literal stdout. A description need not textually equal the public example: independently derive the exact stdout from all stated rules and verify every example. Reject an incorrect result, an ambiguous format, or a conflicting literal stdout; never accept an example merely because it is supplied as expected output.
 When executedReference is supplied, candidate outputs were obtained by running that source in the judge sandbox. Verify that the reference program implements every observable stdin/stdout rule for the complete valid input domain, and that candidate inputs are valid. An internal oracle may use a different language from the student's task: do not require Java overloads or other student implementation constructs in a Python oracle. Use the executed outputs as arithmetic evidence; do not replace them with guessed mental floating-point calculations. Reject incorrect reference logic as candidateTests.
 Do not report a contradiction unless you can cite both exact rules and exhibit a valid input on which they require different behavior. Equivalent or redundant wording is not a conflict. If the first input token is a count n followed by n values, the total is n+1 tokens; do not count the header n as one of the values. For example, '4 1 2 3 4' has 5 total tokens and exactly 4 values after N=4, so its list length is correct. Never call this a token-count mismatch. If n is constrained to be even, floor(n/2) equals n/2 exactly, so saying that half the array length is rounded down is redundant and consistent, not a contradiction. More generally, evaluate rounding and parsing rules over the stated domain before reporting an issue.
@@ -250,11 +252,12 @@ export async function reviewGeneratedTaskCondition(
   condition: Pick<TaskConditionDraft, 'statement' | 'inputFormat' | 'outputFormat' | 'constraints' | 'examples'>,
   options: LLMGenerateOptions & {
     executedReference?: { language: string; source: string };
+    pythonRuntimeProfile?: EduPythonRuntimeProfile;
   } = {},
 ): Promise<void> {
   try {
     await reviewContract(provider, 'generateTask', {
-      ioType: 'STDIN_STDOUT',
+      ioType: options.pythonRuntimeProfile === 'TKINTER' ? 'TKINTER' : 'STDIN_STDOUT',
       practicalTask: condition.statement,
       inputFormat: condition.inputFormat,
       outputFormat: condition.outputFormat,

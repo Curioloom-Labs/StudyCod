@@ -5,6 +5,7 @@ import { LLMOrchestrator } from './LLMOrchestrator';
 import type { LLMGenerateOptions, LLMProvider } from './LLMProvider';
 import { PROMPT_CATALOG } from '../../../../shared/ai/prompts';
 import { formatTaskConditionDraft, normalizeTaskExampleOutput, type TaskConditionDraft } from './taskConditionDraft';
+import { reviewGeneratedTaskCondition } from './TaskContractReview';
 import * as referenceExecution from '../executeReferenceTests';
 
 const draft: TaskConditionDraft = {
@@ -167,4 +168,63 @@ test('reference stdout normalization removes only one conventional trailing newl
   assert.equal(normalizeTaskExampleOutput('5\r\n'), '5');
   assert.equal(normalizeTaskExampleOutput('a\n\n'), 'a\n');
   assert.equal(normalizeTaskExampleOutput(''), '');
+});
+
+test('condition generation preserves the selected scientific and Tkinter runtime in validation', async t => {
+  const calls: Array<{ prompt: string; systemPrompt?: string }> = [];
+  const responses: unknown[] = [
+    { ...draft, referenceSolution: 'import cv2\nprint(5)' },
+    { valid: true, invalidSource: 'none', issues: [], clarificationQuestion: null },
+  ];
+  t.mock.method(referenceExecution, 'executeReferenceTests', async (_source: string, _language: string, inputs: string[], _examples: Array<{ input: string; output: string }>, _signal: AbortSignal, options?: { pythonRuntimeProfile?: string }) => {
+    assert.equal(options?.pythonRuntimeProfile, 'SCIENTIFIC');
+    assert.equal(inputs.length, 3);
+    return ['5', '0', '3'];
+  });
+  const provider: LLMProvider = {
+    generateText: async () => { throw new Error('Expected structured JSON'); },
+    generateJSON: async <T>(prompt: string, _schema: object, systemPrompt?: string): Promise<T> => {
+      calls.push({ prompt, systemPrompt });
+      return responses.shift() as T;
+    },
+  };
+  const orchestrator = new LLMOrchestrator();
+  const generate = (orchestrator as unknown as {
+    generateTaskCondition_OpenRouter: (params: {
+      topicTitle: string; taskType: 'PRACTICE'; language: 'PYTHON'; userLanguage: 'en';
+      pythonRuntimeProfile: 'SCIENTIFIC';
+    }, provider: LLMProvider) => Promise<{ description: string }>;
+  }).generateTaskCondition_OpenRouter;
+  await generate.call(orchestrator, {
+    topicTitle: 'Scientific Python', taskType: 'PRACTICE', language: 'PYTHON', userLanguage: 'en', pythonRuntimeProfile: 'SCIENTIFIC',
+  }, provider);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].systemPrompt ?? '', /OpenCV \(cv2\)/);
+  assert.match(calls[1].prompt, /publicExamples/);
+
+  const reviewResponses = [{
+    valid: false,
+    invalidSource: 'publicExamples',
+    issues: [
+      "Example 1: input '4 1 2 3 4' has 5 tokens, but N=4 implies 4 elements. Expected 4 elements after N.",
+      "Example 2: input '8 5 5 5 5 5 5 5 5' has 9 tokens, but N=8 implies 8 elements. Expected 8 elements after N.",
+      "Example 3: input '5 1 2 3 4 5' has 6 tokens, but N=5 implies 5 elements. Expected 5 elements after N.",
+    ],
+    clarificationQuestion: null,
+  }];
+  const falsePositiveReviewer: LLMProvider = {
+    generateText: async () => { throw new Error('Expected JSON'); },
+    generateJSON: async <T>(): Promise<T> => reviewResponses.shift() as T,
+  };
+  await assert.doesNotReject(reviewGeneratedTaskCondition(falsePositiveReviewer, {
+    statement: 'Read n and exactly n integers.',
+    inputFormat: 'One line contains n followed by n integers.',
+    outputFormat: 'Print the sum.',
+    constraints: ['1 ≤ n ≤ 10'],
+    examples: [
+      { input: '4 1 2 3 4', output: '10' },
+      { input: '8 5 5 5 5 5 5 5 5', output: '40' },
+      { input: '5 1 2 3 4 5', output: '15' },
+    ] as TaskConditionDraft['examples'],
+  }));
 });

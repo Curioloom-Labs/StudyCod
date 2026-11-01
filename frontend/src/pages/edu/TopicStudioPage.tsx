@@ -341,6 +341,7 @@ export const TopicStudioPage: React.FC = () => {
         generationGuidance: buildTaskGenerationGuidance(generationProfile, generationInstructions, isEn, true),
         ...(clarificationAnswer ? { clarificationAnswer } : {}),
         includeSubtasks,
+        pythonRuntimeProfile: taskForm.pythonRuntimeProfile,
         language: isEn ? "en" : "uk",
       });
       const description = String(response.data?.description ?? taskForm.description);

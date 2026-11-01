@@ -1100,7 +1100,8 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       responseLanguage,
       generationGuidance,
       clarificationAnswer,
-      includeSubtasks
+      includeSubtasks,
+      pythonRuntimeProfile: requestedPythonRuntimeProfile
     } = req.body || {};
     if (!taskType || taskType !== "PRACTICE" && taskType !== "CONTROL") {
       return res.status(400).json({
@@ -1109,6 +1110,12 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
     }
     if (clarificationAnswer !== undefined && (typeof clarificationAnswer !== "string" || clarificationAnswer.length > 1200)) {
       return res.status(400).json({ message: "INVALID_CLARIFICATION_ANSWER" });
+    }
+    const pythonRuntimeProfile: EduPythonRuntimeProfile = requestedPythonRuntimeProfile === "SCIENTIFIC" || requestedPythonRuntimeProfile === "TKINTER"
+      ? requestedPythonRuntimeProfile
+      : "STANDARD";
+    if (pythonRuntimeProfile !== "STANDARD" && (taskType !== "PRACTICE" || topic.language !== "PYTHON")) {
+      return res.status(400).json({ message: "PYTHON_RUNTIME_REQUIRES_PYTHON_PRACTICE_TASK" });
     }
     const userLanguage: "uk" | "en" = language === 'en' ? "en" : "uk";
     const topicTitleForAi = userLanguage === "en"
@@ -1123,6 +1130,7 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       generationGuidance,
       clarificationAnswer: typeof clarificationAnswer === "string" ? clarificationAnswer.trim() : undefined,
       includeSubtasks: includeSubtasks !== false,
+      pythonRuntimeProfile,
       language: topic.language,
       responseLanguage: normalizeResponseLanguage(responseLanguage),
       userId: user.id,

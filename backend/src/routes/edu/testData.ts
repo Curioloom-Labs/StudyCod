@@ -709,6 +709,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         count: testCount,
         allowEmptyOutput: true,
         referenceExamplesAreAuthoritative: true,
+        pythonRuntimeProfile: topicTask.pythonRuntimeProfile || "STANDARD",
         publicExamples: authoredTests.map(test => ({ input: String(test.input), output: String(test.output) })),
         requiredCases,
         userId: req.userId
@@ -750,6 +751,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         existingDescription: activeDescription,
         validationFeedback: issue,
         includeSubtasks: parseTaskSubtasks(activeDescription).length > 0,
+        pythonRuntimeProfile: topicTask.pythonRuntimeProfile || "STANDARD",
         userId: req.userId,
         topicId: topicTask.topic.id,
       }, {

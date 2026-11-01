@@ -1,11 +1,18 @@
 import { randomUUID } from 'crypto';
 import { judgeWithSemaphore } from './judgeWorker';
 import type { LLMTaskLanguage, TestDataExample } from './llm/LLMOrchestrator';
-import type { JudgeLanguage } from './judgeWorker/types';
+import type { JudgeLanguage, JudgeRequest } from './judgeWorker/types';
 import { makeAIValidationError } from './llm/AIResponseValidator';
 import { TaskContractReviewError } from './llm/TaskContractReview';
 import { compareOutputWithChecker } from './codeExecutionService';
 import { chooseDefaultCheckerFromExpectedOutputs } from '../utils/checkerSpec';
+import {
+  buildPythonTaskJudgeFiles,
+  encodePythonTaskInput,
+  parseTkinterEvents,
+  pythonCompilerForRuntime,
+  type EduPythonRuntimeProfile,
+} from './edu/pythonTaskRuntime';
 
 /** Generated reference code only runs inside the same sandbox as student code. */
 export async function executeReferenceTests(
@@ -14,14 +21,35 @@ export async function executeReferenceTests(
   inputs: string[],
   publicExamples: TestDataExample[],
   signal?: AbortSignal,
-  options: { allowEmptyOutput?: boolean; referenceExamplesAreAuthoritative?: boolean } = {},
+  options: {
+    allowEmptyOutput?: boolean;
+    referenceExamplesAreAuthoritative?: boolean;
+    pythonRuntimeProfile?: EduPythonRuntimeProfile;
+  } = {},
 ): Promise<string[]> {
   const allInputs = [...publicExamples.map(example => example.input), ...inputs];
+  const runtimeProfile = options.pythonRuntimeProfile ?? 'STANDARD';
+  if (runtimeProfile !== 'STANDARD' && language !== 'PYTHON') {
+    throw makeAIValidationError('generateTestData', `${runtimeProfile} reference execution requires Python`);
+  }
+  const judgeFiles = runtimeProfile === 'STANDARD'
+    ? undefined
+    : buildPythonTaskJudgeFiles([{ path: 'main.py', content: source }], runtimeProfile);
+  const judgeInputs = runtimeProfile === 'TKINTER'
+    ? allInputs.map(input => encodePythonTaskInput({
+      mode: 'check',
+      events: parseTkinterEvents(input),
+    }))
+    : runtimeProfile === 'SCIENTIFIC'
+      ? allInputs.map(input => encodePythonTaskInput({ mode: 'check', stdin: input }))
+      : allInputs;
   const response = await judgeWithSemaphore({
     submission_id: `task_reference_${randomUUID()}`,
     language: language.toLowerCase() as JudgeLanguage,
-    source,
-    tests: allInputs.map((input, index) => ({ id: index, input, output: '', hidden: false })),
+    source: judgeFiles?.[0].content ?? source,
+    ...(judgeFiles ? { files: judgeFiles as NonNullable<JudgeRequest['files']> } : {}),
+    ...(runtimeProfile !== 'STANDARD' ? { compiler: pythonCompilerForRuntime(runtimeProfile) } : {}),
+    tests: judgeInputs.map((input, index) => ({ id: index, input, output: '', hidden: false })),
     limits: { time_limit_ms: 5000, memory_limit_mb: language === 'PYTHON' ? 256 : 384, output_limit_kb: 64 },
     checker: { type: 'nonempty' },
     debug: true, run_all: true, rerun_failed_once: false,
@@ -41,7 +69,14 @@ export async function executeReferenceTests(
       || (!options.allowEmptyOutput && !test.actual.trim())) {
       throw makeAIValidationError('generateTestData', `Reference program failed on input ${index + 1}: ${test?.verdict ?? 'missing result'}; ${(test?.stderr || test?.message || '').slice(0, 800)}`);
     }
-    const output = test.actual.replace(/\r\n/g, '\n');
+    let output = test.actual.replace(/\r\n/g, '\n');
+    if (runtimeProfile === 'TKINTER') {
+      try {
+        output = JSON.stringify(JSON.parse(output));
+      } catch {
+        throw makeAIValidationError('generateTaskCondition', `Tkinter reference output on input ${index + 1} was not a valid UI snapshot`);
+      }
+    }
     return options.allowEmptyOutput ? output : output.trim();
   });
   for (let index = 0; index < publicExamples.length; index++) {

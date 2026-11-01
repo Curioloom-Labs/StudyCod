@@ -26,6 +26,33 @@ test('reference code is compiled once in the judge and public examples run along
   assert.equal(calls, 1);
 });
 
+test('scientific reference execution uses the Python libraries runtime and its task bootstrap', async (t) => {
+  t.mock.method(sandbox, 'judgeWithSemaphore', async (request: JudgeRequest) => {
+    assert.equal(request.compiler, 'python-libs');
+    assert.deepEqual(request.files?.map(file => file.path), ['main.py', 'student/main.py']);
+    assert.match(request.files?.[0].content ?? '', /import cv2/);
+    assert.equal(request.tests[0].input, JSON.stringify({ stdin: '3\n', assets: [], events: [], mode: 'check' }));
+    return results(request, ['3\n']);
+  });
+  assert.deepEqual(await executeReferenceTests('import cv2\nprint(3)', 'PYTHON', ['3\n'], [], undefined, {
+    pythonRuntimeProfile: 'SCIENTIFIC',
+  }), ['3']);
+});
+
+test('Tkinter reference execution replays UI events and returns the exact compact widget snapshot', async (t) => {
+  const snapshot = { title: 'Counter', geometry: '320x120', widgets: [{ type: 'Button', text: 'Add', children: [] }] };
+  t.mock.method(sandbox, 'judgeWithSemaphore', async (request: JudgeRequest) => {
+    assert.equal(request.compiler, 'python-gui');
+    assert.deepEqual(request.files?.map(file => file.path), ['main.py', 'student/main.py']);
+    assert.match(request.files?.[0].content ?? '', /import tkinter as tk/);
+    assert.equal(request.tests[0].input, JSON.stringify({ stdin: '', assets: [], events: [{ type: 'click', x: 20, y: 30 }], mode: 'check' }));
+    return results(request, [JSON.stringify(snapshot) + '\n']);
+  });
+  assert.deepEqual(await executeReferenceTests('import tkinter as tk', 'PYTHON', ['{"events":[{"type":"click","x":20,"y":30}]}'], [], undefined, {
+    pythonRuntimeProfile: 'TKINTER',
+  }), [JSON.stringify(snapshot)]);
+});
+
 test('an executed public-example mismatch never becomes a fallback test', async (t) => {
   t.mock.method(sandbox, 'judgeWithSemaphore', async (request: JudgeRequest) => results(request, ['10.0', '12.5']));
   await assert.rejects(executeReferenceTests('reference', 'JAVA', ['2.5 5.0 5.0'], [{ input: '1.0 10.5 2.5', output: '12.0' }]),
