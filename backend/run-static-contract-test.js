@@ -162,13 +162,18 @@ assert(portfolioDataInventory.includes("selected_competency_references") && port
 assert(legacyDataInventory.includes("JSON_VALID(ci.content)"), "legacy data inventory must safely skip malformed course-item JSON before extracting projectSpec");
 const bootstrapGradeColumns = dbContractBootstrap.indexOf("ALTER TABLE grades");
 const bootstrapBirthYear = dbContractBootstrap.indexOf("ALTER TABLE users DROP COLUMN birth_year");
+const bootstrapEduRuntimeProfile = dbContractBootstrap.indexOf("ALTER TABLE edu_tasks DROP COLUMN python_runtime_profile");
+const bootstrapTopicRuntimeProfile = dbContractBootstrap.indexOf("ALTER TABLE topic_tasks DROP COLUMN python_runtime_profile");
+const bootstrapTestAssets = dbContractBootstrap.indexOf("ALTER TABLE test_data DROP COLUMN assets");
 const bootstrapMigrationRun = dbContractBootstrap.indexOf("runMigrations(");
 const contractSchemaGuard = dbContractBootstrap.indexOf('contractDatabaseName.includes("contract")');
 const emptySchemaGuard = dbContractBootstrap.indexOf("if (Number(tableCounts[0]?.table_count ?? -1) !== 0)");
 const bootstrapSynchronize = dbContractBootstrap.indexOf("await AppDataSource.synchronize()");
 assert(
   contractSchemaGuard >= 0 && emptySchemaGuard >= 0 && bootstrapSynchronize > emptySchemaGuard &&
-    bootstrapGradeColumns > bootstrapSynchronize && bootstrapBirthYear > bootstrapGradeColumns && bootstrapMigrationRun > bootstrapBirthYear,
+    bootstrapGradeColumns > bootstrapSynchronize && bootstrapBirthYear > bootstrapGradeColumns &&
+    bootstrapEduRuntimeProfile > bootstrapBirthYear && bootstrapTopicRuntimeProfile > bootstrapEduRuntimeProfile &&
+    bootstrapTestAssets > bootstrapTopicRuntimeProfile && bootstrapMigrationRun > bootstrapTestAssets,
   "the MySQL bootstrap must refuse non-contract/nonempty schemas and remove entity-synchronized migration-owned columns before migration replay",
 );
 const legacyMigrationRun = dbContractBootstrap.indexOf("legacyDataSource.runMigrations(");

@@ -486,6 +486,9 @@ async function main() {
       DROP COLUMN tests_passed,
       DROP COLUMN tests_total`);
     await AppDataSource.query("ALTER TABLE users DROP COLUMN birth_year");
+    await AppDataSource.query("ALTER TABLE edu_tasks DROP COLUMN python_runtime_profile");
+    await AppDataSource.query("ALTER TABLE topic_tasks DROP COLUMN python_runtime_profile");
+    await AppDataSource.query("ALTER TABLE test_data DROP COLUMN assets");
   } finally {
     await AppDataSource.destroy();
   }
