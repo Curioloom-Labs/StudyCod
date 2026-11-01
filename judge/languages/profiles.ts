@@ -43,7 +43,7 @@ const pythonGuiLauncher = [
   "while [ ! -S /tmp/.X11-unix/X99 ]; do attempt=$((attempt + 1)); [ \"$attempt\" -lt 100 ] || { echo 'Xvfb did not become ready' >&2; exit 125; }; sleep 0.05; done",
   "sleep 0.05",
   "\"$@\"",
-].join("; ");
+].join("\n");
 
 // ---- Java -------------------------------------------------------------------
 function javaProfile(id: string, label: string, homeEnv: string, defaultHome: string): CompilerProfile {
