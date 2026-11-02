@@ -1080,6 +1080,7 @@ const StudentLessonWorkspace: React.FC = () => {
                 <h3 className="font-bold group-hover:text-primary-strong dark:group-hover:text-primary-soft">
                   {task.title}
                 </h3>
+                {task.type === "CLASSWORK" && <small className="mt-1 block font-semibold text-accent-warn">{tr("Робота в класі", "Classwork")}</small>}
                 <p className="line-clamp-2 text-sm leading-6 text-text-muted dark:text-text-secondary">
                   {task.description}
                 </p>

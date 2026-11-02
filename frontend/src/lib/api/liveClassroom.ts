@@ -6,6 +6,7 @@ export interface LiveSession {
   id: number;
   classId: number | null;
   lessonId: number | null;
+  topicTaskId?: number | null;
   title: string | null;
   status: string;
   roomName: string;
@@ -32,8 +33,10 @@ export async function getActiveLiveSession(classId: number): Promise<ActiveLiveS
   return res.data;
 }
 
-export async function startLiveSession(classId: number, lessonId?: number): Promise<LiveJoinInfo> {
-  const res = await api.post(`/edu/classes/${classId}/live-sessions`, lessonId ? { lessonId } : {});
+export type LiveMaterialSelection = { lessonId: number } | { topicTaskId: number };
+
+export async function startLiveSession(classId: number, selection?: LiveMaterialSelection): Promise<LiveJoinInfo> {
+  const res = await api.post(`/edu/classes/${classId}/live-sessions`, selection ?? {});
   return res.data;
 }
 
@@ -168,17 +171,20 @@ export interface LessonBrief {
   id: number;
   title: string;
   type: string;
+  kind?: "LESSON" | "CLASSWORK";
   parentTopicId?: number;
   parentTopicTitle?: string | null;
 }
 
 export interface SessionMaterials {
   lessonId: number | null;
+  topicTaskId?: number | null;
+  materialType?: "LESSON" | "CLASSWORK" | null;
   title: string | null;
   parentTopicTitle?: string | null;
   theory: string | null;
   hasTheory: boolean;
-  tasks: Array<{ id: number; title: string; taskMode?: "MANUAL" | "CODE" | "WEB" }>;
+  tasks: Array<{ id: number; title: string; taskMode?: "MANUAL" | "CODE" | "WEB"; type?: "PRACTICE" | "CLASSWORK" | "CONTROL"; source?: "course" | "legacy" }>;
 }
 
 export async function getClassLessonsList(classId: number): Promise<LessonBrief[]> {
@@ -186,8 +192,8 @@ export async function getClassLessonsList(classId: number): Promise<LessonBrief[
   return res.data?.lessons ?? [];
 }
 
-export async function setSessionLesson(sessionId: number, lessonId: number | null): Promise<LiveSession> {
-  const res = await api.put(`/edu/live-sessions/${sessionId}/lesson`, { lessonId });
+export async function setSessionMaterial(sessionId: number, selection: LiveMaterialSelection | null): Promise<LiveSession> {
+  const res = await api.put(`/edu/live-sessions/${sessionId}/lesson`, selection ?? { lessonId: null });
   return res.data.session;
 }
 

@@ -120,6 +120,8 @@ export const StudentLessonsWorkspace: React.FC = () => {
   const completedTrackedTasks = trackedTasks.filter((task) => task.progressCompleted || task.grade?.isCompleted).length;
   const plannedTaskCount = topics.reduce((total, topic) => total + (topic.tasksCount || topic.tasks?.length || 0), 0);
   const liveLesson = liveSession?.lessonId == null ? null : lessons.find((lesson) => lesson.id === liveSession.lessonId);
+  const liveClassworkTopic = liveSession?.topicTaskId == null ? null : topics.find((topic) => topic.tasks?.some((task) => task.id === liveSession.topicTaskId)) || null;
+  const liveClasswork = liveSession?.topicTaskId == null ? null : liveClassworkTopic?.tasks?.find((task) => task.id === liveSession.topicTaskId) || null;
   const livePath = classId ? withDevPreview(`/edu/classes/${classId}/live`) : null;
   return <div className={`${container} edu-lessons-page`}>
     <header className="edu-student-page-heading">
@@ -150,7 +152,7 @@ export const StudentLessonsWorkspace: React.FC = () => {
       <div className="min-w-0 flex-1">
         <div className="edu-live-invite__eyebrow"><span className="edu-live-invite__dot" />{preview() ? tr("ДЕМО · онлайн-урок", "DEMO · live lesson") : tr("Урок триває зараз", "Lesson in progress now")}</div>
         <h2>{liveSession.title || liveLesson?.title || tr("Зустріч із класом", "Classroom session")}</h2>
-        <p>{liveLesson?.parentTopicTitle ? `${tr("Тема", "Topic")}: ${liveLesson.parentTopicTitle} · ${tr("Робота", "Classwork")}: ${liveLesson.title}` : liveLesson?.title ? `${tr("Матеріал", "Material")}: ${liveLesson.title}` : tr("Викладач відкрив кімнату класу. Можна приєднатися в будь-який момент.", "Your teacher opened the class room. Join whenever you are ready.")}</p>
+        <p>{liveClasswork ? `${tr("Тема", "Topic")}: ${liveClassworkTopic?.title} · ${tr("Робота в класі", "Classwork")}: ${liveClasswork.title}` : liveLesson?.parentTopicTitle ? `${tr("Тема", "Topic")}: ${liveLesson.parentTopicTitle} · ${tr("Робота", "Classwork")}: ${liveLesson.title}` : liveLesson?.title ? `${tr("Матеріал", "Material")}: ${liveLesson.title}` : tr("Викладач відкрив кімнату класу. Можна приєднатися в будь-який момент.", "Your teacher opened the class room. Join whenever you are ready.")}</p>
       </div>
       <button type="button" onClick={() => navigate(livePath)} className="edu-live-invite__action"><Play className="size-4 fill-current" />{tr("Увійти в урок", "Join lesson")}<ArrowRight className="size-4" /></button>
     </section>}

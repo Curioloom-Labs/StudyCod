@@ -149,7 +149,7 @@ router.get("/classes/:classId/gradebook", authRequired, async (req: AuthRequest,
     );
 
     for (const topic of topics) {
-      const practiceTasks = (topic.tasks || []).filter(t => t.type === "PRACTICE" && t.isAssigned);
+      const practiceTasks = (topic.tasks || []).filter(t => (t.type === "PRACTICE" || t.type === "CLASSWORK") && t.isAssigned);
       if (practiceTasks.length > 0) {
         lessons.push({
           id: topic.id,
@@ -562,7 +562,7 @@ router.post("/classes/:classId/summary-grades", authRequired, async (req: AuthRe
           // resurrect an older score, so only its latest row can contribute.
           const latestPracticeGrades = new Map<string, EduGrade>();
           for (const gradeRow of [...classGrades].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())) {
-            if (!gradeRow.topicTask || gradeRow.topicTask.type !== "PRACTICE") continue;
+            if (!gradeRow.topicTask || gradeRow.topicTask.type !== "PRACTICE" && gradeRow.topicTask.type !== "CLASSWORK") continue;
             const taskKey = `topicTask:${gradeRow.topicTask.id}`;
             if (!latestPracticeGrades.has(taskKey)) latestPracticeGrades.set(taskKey, gradeRow);
           }
@@ -1077,7 +1077,7 @@ async function computePracticeMasteryByTopic(
 ): Promise<Map<number, { practiceAverage: number | null; started: boolean; closed: boolean }>> {
   const topics = await topicRepo()
     .createQueryBuilder("topic")
-    .leftJoinAndSelect("topic.tasks", "task", "task.type = :practiceType", { practiceType: "PRACTICE" })
+    .leftJoinAndSelect("topic.tasks", "task", "task.type IN (:...taskTypes)", { taskTypes: ["PRACTICE", "CLASSWORK"] })
     .where("topic.class_id = :classId", { classId })
     .getMany();
 

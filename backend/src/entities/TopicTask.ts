@@ -5,7 +5,7 @@ import { TaskTheory } from "./TaskTheory";
 import { TestData } from "./TestData";
 import { EduGrade } from "./EduGrade";
 import type { LibraryTaskProjectSpec } from "./LibraryTask";
-export type TaskType = "PRACTICE" | "CONTROL";
+export type TaskType = "PRACTICE" | "CLASSWORK" | "CONTROL";
 export type TopicTaskMode = "CODE" | "WEB";
 export type EduPythonRuntimeProfile = "STANDARD" | "SCIENTIFIC" | "TKINTER";
 export type WebValidationProfileId = "FREE_WEB" | "HTML_ONLY" | "HTML_CSS_NO_JS" | "HTML_JS_NO_CSS" | "JS_ONLY_DOM" | "CSS_ONLY" | "HTML_AND_INLINE_ONLY";
@@ -30,7 +30,7 @@ export class TopicTask {
   controlWork?: ControlWork | null;
   @Column({
     type: "enum",
-    enum: ["PRACTICE", "CONTROL"],
+    enum: ["PRACTICE", "CLASSWORK", "CONTROL"],
     default: "PRACTICE"
   })
   type!: TaskType;

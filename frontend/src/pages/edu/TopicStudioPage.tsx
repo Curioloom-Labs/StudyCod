@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
   BookOpen,
@@ -23,14 +23,11 @@ import {
   deleteGeneratedTestData,
   deleteTestData,
   generateTestData,
-  getLessons,
   getTestData,
-  setEduLessonTopic,
   unassignControlWork,
   unassignTask,
   updateControlWorkFormula,
   type TestData,
-  type Lesson,
   type PythonTaskAssetInput,
 } from "../../lib/api/edu";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
@@ -58,7 +55,7 @@ type TopicTask = {
   webValidationRules?: unknown;
   webValidationProfile?: unknown;
   pythonRuntimeProfile?: "STANDARD" | "SCIENTIFIC" | "TKINTER";
-  type: "PRACTICE" | "CONTROL" | string;
+  type: "PRACTICE" | "CLASSWORK" | "CONTROL" | string;
   maxAttempts?: number;
   isAssigned?: boolean;
   deadline?: string | null;
@@ -84,7 +81,6 @@ type Topic = {
   class?: { id: number; name?: string } | null;
   tasks?: TopicTask[];
   controlWorks?: Control[];
-  classworkLessons?: Array<{ id: number; title: string; tasks?: Array<{ id: number }>; createdAt?: string }>;
 };
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
@@ -212,10 +208,10 @@ export const TopicStudioPage: React.FC = () => {
   const { i18n } = useTranslation();
   const isEn = i18n.language.startsWith("en");
   const { topicId } = useParams<{ topicId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const id = Number(topicId);
   const [topic, setTopic] = React.useState<Topic | null>(null);
-  const [unattachedClasswork, setUnattachedClasswork] = React.useState<Lesson[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [mode, setMode] = React.useState<"task" | "control" | "tests" | null>(null);
@@ -242,6 +238,7 @@ export const TopicStudioPage: React.FC = () => {
   const [aiBusy, setAiBusy] = React.useState<"condition" | "template" | "theory" | null>(null);
   const [clarificationQuestion, setClarificationQuestion] = React.useState<string | null>(null);
   const [taskForm, setTaskForm] = React.useState({
+    type: "PRACTICE" as "PRACTICE" | "CLASSWORK",
     title: "",
     description: "",
     template: "",
@@ -286,47 +283,17 @@ export const TopicStudioPage: React.FC = () => {
 
   React.useEffect(() => { void load(); }, [load]);
 
-  React.useEffect(() => {
-    const classId = topic?.class?.id;
-    if (!classId || preview()) {
-      setUnattachedClasswork([]);
-      return;
-    }
-    let active = true;
-    void getLessons(classId).then((lessons) => {
-      if (active) setUnattachedClasswork(lessons.filter((lesson) => lesson.type === "LESSON" && !lesson.parentTopicId));
-    }).catch(() => {
-      if (active) setUnattachedClasswork([]);
-    });
-    return () => { active = false; };
-  }, [topic?.class?.id]);
-
-  const attachExistingClasswork = async (lesson: Lesson) => {
-    if (!topic) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await setEduLessonTopic(lesson.id, topic.id);
-      setUnattachedClasswork((current) => current.filter((item) => item.id !== lesson.id));
-      await load();
-    } catch (caught) {
-      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося додати роботу до теми.", "Could not add the classwork to this topic.")));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const backPath = topic?.class?.id ? `/edu/classes/${topic.class.id}${preview() ? "?preview=true" : ""}` : `/edu${preview() ? "?preview=true" : ""}`;
 
-  const openTaskBuilder = () => {
+  const openTaskBuilder = React.useCallback((type: "PRACTICE" | "CLASSWORK" = "PRACTICE") => {
     setError(null);
     setEditorTab("statement");
     setEditingTaskId(null);
-    setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "", pythonRuntimeProfile: "STANDARD" });
+    setTaskForm({ type, title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "", pythonRuntimeProfile: "STANDARD" });
     setGenerationInstructions("");
     setGenerationProfile(defaultTaskGenerationProfile);
     setMode("task");
-  };
+  }, []);
 
   const openTaskEditor = (task: TopicTask) => {
     setError(null);
@@ -334,6 +301,7 @@ export const TopicStudioPage: React.FC = () => {
     setSelectedTask(task);
     setEditingTaskId(task.id);
     setTaskForm({
+      type: task.type === "CLASSWORK" ? "CLASSWORK" : "PRACTICE",
       title: task.title || "",
       description: task.description || "",
       template: task.template || "",
@@ -346,6 +314,14 @@ export const TopicStudioPage: React.FC = () => {
     setGenerationProfile(defaultTaskGenerationProfile);
     setMode("task");
   };
+
+  React.useEffect(() => {
+    if (!topic || searchParams.get("createClasswork") !== "1") return;
+    openTaskBuilder("CLASSWORK");
+    const next = new URLSearchParams(searchParams);
+    next.delete("createClasswork");
+    setSearchParams(next, { replace: true });
+  }, [topic?.id, searchParams, setSearchParams, openTaskBuilder]);
 
   const openControlBuilder = () => {
     setError(null);
@@ -371,7 +347,7 @@ export const TopicStudioPage: React.FC = () => {
       }
       const response = await api.post(`/topics/${id}/tasks/generate-condition`, {
         taskTitle: taskForm.title.trim(),
-        taskType: "PRACTICE",
+        taskType: taskForm.type,
         difficulty: generationProfile.difficulty,
         generationGuidance: buildTaskGenerationGuidance(generationProfile, generationInstructions, isEn, true),
         ...(clarificationAnswer ? { clarificationAnswer } : {}),
@@ -435,7 +411,7 @@ export const TopicStudioPage: React.FC = () => {
       const response = await api.post(`/topics/${id}/tasks/generate-theory`, {
         taskTitle: taskForm.title.trim(),
         taskDescription: taskForm.description,
-        taskType: "PRACTICE",
+        taskType: taskForm.type,
         difficulty: generationProfile.difficulty,
         generationGuidance: buildTaskGenerationGuidance(generationProfile, generationInstructions, isEn),
         language: isEn ? "en" : "uk",
@@ -575,6 +551,7 @@ export const TopicStudioPage: React.FC = () => {
           title: taskForm.title.trim(),
           description: taskForm.description.trim(),
           template: taskForm.template,
+          type: taskForm.type,
           taskMode: editingTaskId ? (selectedTask?.taskMode || "CODE") : "CODE",
           ...(editingTaskId ? {
             webTemplateFiles: selectedTask?.webTemplateFiles,
@@ -587,7 +564,7 @@ export const TopicStudioPage: React.FC = () => {
         };
         const response = editingTaskId
           ? await api.put(`/topics/${id}/tasks/${editingTaskId}`, payload)
-          : await api.post(`/topics/${id}/tasks`, { ...payload, type: "PRACTICE" });
+          : await api.post(`/topics/${id}/tasks`, payload);
         created = response.data.task ?? response.data.topicTask ?? response.data;
         if ((!created?.id || !created?.title) && response.data.id) created = response.data as TopicTask;
         if (created?.id && taskForm.theory.trim()) {
@@ -603,6 +580,7 @@ export const TopicStudioPage: React.FC = () => {
             title: taskForm.title.trim(),
             description: taskForm.description.trim(),
             template: taskForm.template,
+            type: taskForm.type,
             pythonRuntimeProfile: taskForm.pythonRuntimeProfile,
             maxAttempts: Number(taskForm.maxAttempts) || 3,
             theory: taskForm.theory.trim() ? { content: taskForm.theory.trim() } : null,
@@ -615,7 +593,7 @@ export const TopicStudioPage: React.FC = () => {
             description: taskForm.description.trim(),
             template: taskForm.template,
             pythonRuntimeProfile: taskForm.pythonRuntimeProfile,
-            type: "PRACTICE",
+            type: taskForm.type,
             maxAttempts: Number(taskForm.maxAttempts) || 3,
             isAssigned: false,
             theory: taskForm.theory.trim() ? { content: taskForm.theory.trim() } : null,
@@ -625,7 +603,7 @@ export const TopicStudioPage: React.FC = () => {
       }
       const savedTaskId = created?.id;
       setEditingTaskId(null);
-      setTaskForm({ title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "", pythonRuntimeProfile: "STANDARD" });
+      setTaskForm({ type: "PRACTICE", title: "", description: "", template: "", maxAttempts: "3", theory: "", projectSpecJson: "", pythonRuntimeProfile: "STANDARD" });
       if (!preview()) await load();
       if (savedTaskId) {
         setSelectedTask(created);
@@ -921,18 +899,10 @@ export const TopicStudioPage: React.FC = () => {
       <ClassWorkspaceFrame classId={topic.class?.id || "0"} className={topic.class?.name || tr("Клас", "Class")} active="learning">
         <header className="classroom-heading">
           <div><p>{tr("Теми та завдання", "Topics and tasks")} / {tr("Тема", "Topic")}</p><h1>{topic.title}</h1><span>{topic.description || tr("Матеріали та завдання для учнів класу.", "Materials and tasks for your class.")}</span></div>
-          <div className="classroom-actions">{topic.class?.id && <button type="button" className="classroom-button classroom-button--danger" disabled={busy} onClick={() => void deleteTopic()}><Trash2 className="size-4" aria-hidden="true" />{tr("Видалити тему", "Delete topic")}</button>}<button type="button" className="classroom-button" onClick={openControlBuilder}><ClipboardCheck className="size-4" aria-hidden="true" />{tr("Контрольна", "Assessment")}</button><button type="button" className="classroom-button classroom-button--primary" onClick={openTaskBuilder}><Plus className="size-4" aria-hidden="true" />{tr("Додати завдання", "Add task")}</button></div>
+          <div className="classroom-actions">{topic.class?.id && <button type="button" className="classroom-button classroom-button--danger" disabled={busy} onClick={() => void deleteTopic()}><Trash2 className="size-4" aria-hidden="true" />{tr("Видалити тему", "Delete topic")}</button>}<button type="button" className="classroom-button" onClick={openControlBuilder}><ClipboardCheck className="size-4" aria-hidden="true" />{tr("Контрольна", "Assessment")}</button><button type="button" className="classroom-button classroom-button--primary" onClick={() => openTaskBuilder()}><Plus className="size-4" aria-hidden="true" />{tr("Додати завдання", "Add task")}</button></div>
         </header>
         <div className="classroom-facts"><span className="classroom-language">{topic.language}</span><span>{tr("Завдання", "Tasks")}: {tasks.length}</span><span><span className="classroom-status-dot" />{tr("Відкрито учням", "Open to students")}: {assignedTasks}</span></div>
         {error && <div className="classroom-notice classroom-notice--error" role="alert">{error}</div>}
-        <section className="mt-6 rounded-3xl border border-border bg-bg-surface p-5 sm:p-6" aria-labelledby="topic-classwork-title">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">{tr("У цій темі", "Inside this topic")}</p><h2 id="topic-classwork-title" className="mt-1 text-xl font-bold">{tr("Робота в класі", "Classwork")} <span className="text-sm font-medium text-text-muted">{topic.classworkLessons?.length ?? 0}</span></h2></div>
-            {topic.class?.id && <button type="button" className="classroom-button classroom-button--primary" onClick={() => navigate(withDevPreview(`/edu/classes/${topic.class!.id}/lessons/new?topicId=${topic.id}`))}><Plus className="size-4" aria-hidden="true" />{tr("Додати роботу в класі", "Add classwork")}</button>}
-          </div>
-          {topic.classworkLessons?.length ? <div className="mt-4 grid gap-2">{topic.classworkLessons.map((work) => <button type="button" key={work.id} onClick={() => navigate(withDevPreview(`/edu/lessons/${work.id}?type=LESSON&source=course`))} className="flex min-h-14 items-center justify-between gap-4 rounded-2xl border border-border px-4 py-3 text-left transition-colors hover:bg-bg-hover"><span><strong className="block">{work.title}</strong><small className="text-text-muted">{work.tasks?.length || 0} {tr("робіт для виконання", "classwork tasks")}</small></span><ArrowRight className="size-4 shrink-0" aria-hidden="true" /></button>)}</div> : <p className="mt-4 rounded-2xl bg-bg-hover px-4 py-3 text-sm leading-6 text-text-muted">{tr("Робота в класі буде тут разом із темою та її практикою.", "Classwork will appear here with this topic and its practice.")}</p>}
-          {!!unattachedClasswork.length && <div className="mt-5 border-t border-border pt-4"><p className="text-sm font-semibold">{tr("Додати наявну роботу до цієї теми", "Attach existing classwork to this topic")}</p><div className="mt-2 grid gap-2">{unattachedClasswork.map((lesson) => <div key={lesson.id} className="flex items-center justify-between gap-3 rounded-xl bg-bg-hover px-4 py-3"><span className="truncate text-sm">{lesson.title}</span><button type="button" disabled={busy} className="classroom-text-button shrink-0" onClick={() => void attachExistingClasswork(lesson)}>{tr("Додати до теми", "Attach to topic")}</button></div>)}</div></div>}
-        </section>
         <div className="classroom-tabs" role="tablist" aria-label={tr("Матеріали теми", "Topic materials")}>
           <button type="button" role="tab" id="topic-tab-tasks" aria-selected={topicTab === "tasks"} aria-controls="topic-panel-tasks" onClick={() => setTopicTab("tasks")}>{tr("Завдання", "Tasks")}<span>{tasks.length}</span></button>
           <button type="button" role="tab" id="topic-tab-controls" aria-selected={topicTab === "controls"} aria-controls="topic-panel-controls" onClick={() => setTopicTab("controls")}>{tr("Контрольні роботи", "Assessments")}<span>{controls.length}</span></button>
@@ -941,11 +911,11 @@ export const TopicStudioPage: React.FC = () => {
           <div className="classroom-toolbar"><label className="classroom-search"><Search className="size-4" aria-hidden="true" /><input type="search" aria-label={tr("Знайти завдання", "Search tasks")} placeholder={tr("Знайти завдання…", "Search tasks…")} value={taskQuery} onChange={event => setTaskQuery(event.target.value)} /></label><select className="classroom-filter" aria-label={tr("Фільтр доступності", "Access filter")} value={taskFilter} onChange={event => setTaskFilter(event.target.value as typeof taskFilter)}><option value="all">{tr("Усі завдання", "All tasks")}</option><option value="assigned">{tr("Відкриті учням", "Open to students")}</option><option value="draft">{tr("Чернетки", "Drafts")}</option></select></div>
           <div className="classroom-task-columns" aria-hidden="true"><span>{tr("Завдання", "Task")}</span><span>{tr("Доступ", "Access")}</span><span>{tr("Дії", "Actions")}</span></div>
           <div className="classroom-task-list">{tasks.filter(task => task.title.toLocaleLowerCase().includes(taskQuery.toLocaleLowerCase()) && (taskFilter === "all" || (taskFilter === "assigned" ? task.isAssigned : !task.isAssigned))).map((task, index) => <article className={`classroom-task ${expandedTaskId === task.id ? "is-expanded" : ""}`} key={task.id}>
-            <div className="classroom-task__row"><div className="classroom-task__identity"><span className="classroom-task__number">{String(index + 1).padStart(2, "0")}</span><div><button type="button" className="classroom-task__title" onClick={() => openTaskEditor(task)}>{task.title}</button><p>{task.theory?.content ? tr("Теорія та практика", "Theory and practice") : tr("Практичне завдання", "Practice task")}{task.maxAttempts ? ` · ${tr("Спроби", "Attempts")}: ${task.maxAttempts}` : ""}</p></div></div><span className={`classroom-status ${task.isAssigned ? "is-open" : ""}`}><i aria-hidden="true" />{task.isAssigned ? tr("Відкрито", "Open") : tr("Чернетка", "Draft")}</span><div className="classroom-task__actions"><button type="button" className="classroom-text-button" aria-label={tr(`Редагувати задачу ${task.title}`, `Edit task ${task.title}`)} onClick={() => openTaskEditor(task)}><Pencil className="size-3.5" aria-hidden="true" />{tr("Редагувати", "Edit")}</button><button type="button" className="classroom-icon-button" aria-expanded={expandedTaskId === task.id} aria-controls={`task-details-${task.id}`} aria-label={tr(`Доступ і тести: ${task.title}`, `Access and tests: ${task.title}`)} onClick={() => setExpandedTaskId(current => current === task.id ? null : task.id)}><ChevronDown className="size-4" aria-hidden="true" /></button></div></div>
+            <div className="classroom-task__row"><div className="classroom-task__identity"><span className="classroom-task__number">{String(index + 1).padStart(2, "0")}</span><div><button type="button" className="classroom-task__title" onClick={() => openTaskEditor(task)}>{task.title}</button><p>{task.type === "CLASSWORK" ? tr("Робота в класі", "Classwork") : task.theory?.content ? tr("Теорія та практика", "Theory and practice") : tr("Практичне завдання", "Practice task")}{task.maxAttempts ? ` · ${tr("Спроби", "Attempts")}: ${task.maxAttempts}` : ""}</p></div></div><span className={`classroom-status ${task.isAssigned ? "is-open" : ""}`}><i aria-hidden="true" />{task.isAssigned ? tr("Відкрито", "Open") : tr("Чернетка", "Draft")}</span><div className="classroom-task__actions"><button type="button" className="classroom-text-button" aria-label={tr(`Редагувати задачу ${task.title}`, `Edit task ${task.title}`)} onClick={() => openTaskEditor(task)}><Pencil className="size-3.5" aria-hidden="true" />{tr("Редагувати", "Edit")}</button><button type="button" className="classroom-icon-button" aria-expanded={expandedTaskId === task.id} aria-controls={`task-details-${task.id}`} aria-label={tr(`Доступ і тести: ${task.title}`, `Access and tests: ${task.title}`)} onClick={() => setExpandedTaskId(current => current === task.id ? null : task.id)}><ChevronDown className="size-4" aria-hidden="true" /></button></div></div>
             {expandedTaskId === task.id && <div id={`task-details-${task.id}`} className="classroom-task__details"><div className="classroom-task__description">{task.description ? <MarkdownView content={task.description} /> : <p>{tr("Умова ще готується.", "The problem statement is being prepared.")}</p>}</div><div className="classroom-task__access"><label htmlFor={`topic-task-deadline-${task.id}`}>{tr("Доступ до", "Access until")}<input id={`topic-task-deadline-${task.id}`} type="datetime-local" value={deadlineDrafts[task.id] ?? toDateTimeLocalValue(task.deadline)} onChange={event => setDeadlineDrafts(old => ({ ...old, [task.id]: event.target.value }))} disabled={assignmentBusyId === task.id} /></label>{task.isAssigned && <button type="button" className="classroom-button" disabled={assignmentBusyId === task.id} onClick={() => void saveTaskDeadline(task)}>{tr("Зберегти дедлайн", "Save deadline")}</button>}<button type="button" className="classroom-button" disabled={assignmentBusyId === task.id} aria-pressed={!!task.isAssigned} onClick={() => void toggleTask(task)}>{assignmentBusyId === task.id ? tr("Зберігаємо…", "Saving…") : task.isAssigned ? tr("Закрити доступ", "Close access") : tr("Відкрити учням", "Open to students")}</button></div><div className="classroom-task__utilities"><button type="button" className="classroom-text-button" onClick={() => void openTests(task)}><FlaskConical className="size-4" aria-hidden="true" />{tr("Налаштувати тести", "Configure tests")}</button>{task.type !== "CONTROL" && <button type="button" className="classroom-text-button classroom-text-button--danger" onClick={() => void deleteTask(task)} aria-label={tr(`Видалити задачу ${task.title}`, `Delete task ${task.title}`)}><Trash2 className="size-4" aria-hidden="true" />{tr("Видалити завдання", "Delete task")}</button>}</div></div>}
           </article>)}</div>
           {!tasks.filter(task => task.title.toLocaleLowerCase().includes(taskQuery.toLocaleLowerCase()) && (taskFilter === "all" || (taskFilter === "assigned" ? task.isAssigned : !task.isAssigned))).length && <div className="classroom-empty"><TerminalSquare className="size-6" aria-hidden="true" /><strong>{tasks.length ? tr("Завдань не знайдено", "No matching tasks") : tr("Почніть із першого завдання", "Start with your first task")}</strong><p>{tasks.length ? tr("Змініть пошук або фільтр.", "Change the search or filter.") : tr("Додайте умову, теорію та тести для перевірки.", "Add a problem statement, theory, and test cases.")}</p></div>}
-          <button type="button" className="classroom-add-row" onClick={openTaskBuilder}><Plus className="size-4" aria-hidden="true" />{tr("Додати завдання", "Add task")}</button>
+          <button type="button" className="classroom-add-row" onClick={() => openTaskBuilder()}><Plus className="size-4" aria-hidden="true" />{tr("Додати завдання", "Add task")}</button>
           <p className="classroom-list-hint">{tr("Натисніть назву, щоб редагувати. Стрілка праворуч відкриває доступ, дедлайн і тести.", "Select a title to edit. The arrow on the right opens access, deadline, and test settings.")}</p>
         </section> : <section role="tabpanel" id="topic-panel-controls" aria-labelledby="topic-tab-controls" className="classroom-task-workspace"><div className="classroom-toolbar"><p className="classroom-caption">{tr("Перевірка знань із теми", "Assess knowledge of this topic")}</p></div>{controls.map(control => <article key={control.id} className="classroom-assessment"><span className="classroom-assessment__icon"><ClipboardCheck className="size-5" aria-hidden="true" /></span><div><h2>{control.title || tr("Контрольна робота", "Assessment")}</h2><p>{control.timeLimitMinutes ? `${control.timeLimitMinutes} ${tr("хвилин", "minutes")}` : tr("Без обмеження часу", "No time limit")}</p></div><span className={`classroom-status ${control.isAssigned ? "is-open" : ""}`}><i aria-hidden="true" />{control.isAssigned ? tr("Відкрито", "Open") : tr("Чернетка", "Draft")}</span><div className="classroom-actions"><button type="button" className="classroom-button" disabled={assignmentBusyId === control.id} onClick={() => void toggleControl(control)}>{control.isAssigned ? tr("Закрити доступ", "Close access") : tr("Відкрити учням", "Open to students")}</button><button type="button" className="classroom-text-button" onClick={() => navigate(withDevPreview(`/edu/control-works/${control.id}`))}>{tr("Налаштувати", "Configure")}<ArrowRight className="size-4" aria-hidden="true" /></button><button type="button" className="classroom-text-button classroom-text-button--danger" disabled={assignmentBusyId === control.id} onClick={() => void deleteControl(control)} aria-label={tr(`Видалити контрольну ${control.title || ""}`, `Delete assessment ${control.title || ""}`)}><Trash2 className="size-4" aria-hidden="true" />{tr("Видалити", "Delete")}</button></div></article>)}{!controls.length && <div className="classroom-empty"><ClipboardCheck className="size-6" aria-hidden="true" /><strong>{tr("Контрольних ще немає", "No assessments yet")}</strong><p>{tr("Створіть контрольну, коли матеріали теми будуть готові.", "Create an assessment when the topic materials are ready.")}</p></div>}<button type="button" className="classroom-add-row" onClick={openControlBuilder}><Plus className="size-4" aria-hidden="true" />{tr("Створити контрольну", "Create assessment")}</button></section>}
 
@@ -953,6 +923,7 @@ export const TopicStudioPage: React.FC = () => {
         {mode === "task" && (
           <Modal error={error} title={editingTaskId ? tr("Редагувати завдання", "Edit task") : tr("Нове завдання", "New task")} caption={editingTaskId ? tr("Змініть умову або необов’язкові матеріали. Чернетку можна редагувати до відкриття учням.", "Edit the statement or optional materials. You can edit the draft until it is assigned to students.") : tr("Додайте назву, опишіть задум або одразу створіть умову з AI. Тести налаштуються на наступному кроці.", "Add a title, describe the idea, or draft the statement with AI. Test setup comes next.")} onClose={() => { setMode(null); setEditingTaskId(null); }} wide>
             <form className="task-authoring" onSubmit={event => { event.preventDefault(); void createTask(); }}>
+              {topic.class?.id && <label className="task-authoring__label" htmlFor="topic-task-type">{tr("Тип завдання", "Task type")}<select id="topic-task-type" value={taskForm.type} onChange={event => setTaskForm(old => ({ ...old, type: event.target.value as typeof old.type }))} disabled={busy || Boolean(editingTaskId && selectedTask?.type === "CONTROL")} className="task-authoring__title mt-2"><option value="PRACTICE">{tr("Практика", "Practice")}</option><option value="CLASSWORK">{tr("Робота в класі", "Classwork")}</option></select>{taskForm.type === "CLASSWORK" && <span className="classroom-caption mt-2 block">{tr("Це звичайне завдання теми. Учитель може вибрати його в матеріалах онлайн-уроку.", "This is a regular task in the topic. The teacher can select it in the live lesson materials.")}</span>}</label>}
               {topic.language === "PYTHON" && <label className="task-authoring__label" htmlFor="topic-task-python-runtime">{tr("Середовище Python", "Python runtime")}<select id="topic-task-python-runtime" value={taskForm.pythonRuntimeProfile} onChange={event => setTaskForm({ ...taskForm, pythonRuntimeProfile: event.target.value as typeof taskForm.pythonRuntimeProfile })} disabled={busy} className="task-authoring__title mt-2"><option value="STANDARD">{tr("Консольне · стандартні тести stdin/stdout", "Console · standard stdin/stdout tests")}</option><option value="SCIENTIFIC">{tr("Наукове · NumPy, OpenCV, SciPy та графіки", "Scientific · NumPy, OpenCV, SciPy and plots")}</option><option value="TKINTER">{tr("Tkinter · віконний інтерфейс", "Tkinter · desktop-style window")}</option></select><span className="classroom-caption mt-2 block">{tr("Учень надсилає звичайне рішення на ті самі автоматичні тести. Tkinter запускається у віртуальному дисплеї; у превʼю можна відтворювати кліки й клавіші.", "Students submit an ordinary solution for the same automatic tests. Tkinter runs in a virtual display; clicks and keys can be replayed in the preview.")}</span></label>}
               <TaskAuthoringFields idPrefix="topic-task" value={taskForm} onChange={patch => setTaskForm(old => ({ ...old, ...patch }))} generationGuidance={generationInstructions} onGenerationGuidanceChange={setGenerationInstructions} generationProfile={generationProfile} onGenerationProfileChange={setGenerationProfile} includeSubtasks={includeSubtasks} onIncludeSubtasksChange={setIncludeSubtasks} guidanceEnabled={!editingTaskId && !preview()} selectedTab={editorTab} onSelectedTabChange={setEditorTab} aiBusy={aiBusy} busy={busy} onGenerateCondition={() => void generateCondition()} onGenerateTemplate={() => void generateTemplate()} onGenerateTheory={() => void generateTheory()} />
               {clarificationQuestion && <TaskGenerationClarification question={clarificationQuestion} busy={aiBusy === "condition"} onSubmit={answer => void generateCondition(answer)} />}

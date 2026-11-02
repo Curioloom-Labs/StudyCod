@@ -30,7 +30,7 @@ export const createTaskSchema = z.object({
   webValidationProfile: z.unknown().optional(),
   projectSpec: z.unknown().optional(),
   pythonRuntimeProfile: z.enum(["STANDARD", "SCIENTIFIC", "TKINTER"]).optional(),
-  type: z.enum(["PRACTICE", "CONTROL"]),
+  type: z.enum(["PRACTICE", "CLASSWORK", "CONTROL"]),
   order: optionalNonNegativeInt,
   maxAttempts: z.union([z.string(), z.number()]).optional(),
   deadline: dateInput.nullable().optional(),
@@ -39,7 +39,7 @@ export const createTaskSchema = z.object({
 
 export const updateTaskSchema = createTaskSchema
   .omit({ controlWorkId: true, type: true })
-  .extend({ type: z.enum(["PRACTICE", "CONTROL"]).optional() });
+  .extend({ type: z.enum(["PRACTICE", "CLASSWORK", "CONTROL"]).optional() });
 
 export const updateControlWorkSchema = z.object({
   title: z.string().nullable().optional(),
@@ -78,7 +78,7 @@ export const theoryBlockSchema = z.object({
 
 export const generateTheorySchema = z.object({
   taskDescription: z.string().min(1),
-  taskType: z.enum(["PRACTICE", "CONTROL"]),
+  taskType: z.enum(["PRACTICE", "CLASSWORK", "CONTROL"]),
   difficulty: optionalPositiveInt,
   taskTitle: z.string().optional(),
   generationGuidance: z.string().max(4000).optional(),
@@ -88,7 +88,7 @@ export const generateTheorySchema = z.object({
 
 export const generateTaskGuidanceSchema = z.object({
   taskTitle: z.string().trim().min(1).max(512),
-  taskType: z.enum(["PRACTICE", "CONTROL"]),
+  taskType: z.enum(["PRACTICE", "CLASSWORK", "CONTROL"]),
   responseLanguage: z.enum(["uk", "en"]).optional(),
 });
 

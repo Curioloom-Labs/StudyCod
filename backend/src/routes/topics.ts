@@ -6,7 +6,7 @@ import { AppDataSource } from "../data-source";
 import { IsNull } from "typeorm";
 import { TopicNew } from "../entities/TopicNew";
 import { TheoryBlock } from "../entities/TheoryBlock";
-import { TopicTask } from "../entities/TopicTask";
+import { TopicTask, type TaskType } from "../entities/TopicTask";
 import { TaskTheory } from "../entities/TaskTheory";
 import { ControlWork } from "../entities/ControlWork";
 import { TopicProgress } from "../entities/TopicProgress";
@@ -109,7 +109,7 @@ function normalizeProjectSpec(raw: unknown): LibraryTaskProjectSpec | null {
   };
 }
 
-function normalizeTaskMaxAttempts(_type: "PRACTICE" | "CONTROL", raw: unknown): number {
+function normalizeTaskMaxAttempts(_type: TaskType, raw: unknown): number {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) {
     return 3;
@@ -289,7 +289,7 @@ topicsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
           const { classworkLessons, ...topicData } = topic;
           return {
           ...topicData,
-          classworkCount: classworkLessons?.length ?? 0,
+          classworkCount: (classworkLessons?.length ?? 0) + (topic.tasks ?? []).filter(task => task.type === "CLASSWORK").length,
           // Control-work exercises share the TopicTask relation but belong to
           // the assessment column, not the topic's regular practice count.
           tasks: regularTopicPracticeTasks(topic.tasks)
@@ -534,6 +534,9 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
         message: "TOPIC_NOT_FOUND"
       });
     }
+    if (type === "CLASSWORK" && !topic.class) {
+      return res.status(400).json({ message: "CLASSWORK_REQUIRES_CLASS_TOPIC" });
+    }
     if (topic.class) {
       const access = await authorizeClassForReq(req, topic.class.id, "CONTENT_AUTHOR");
       if (!access) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
@@ -595,9 +598,9 @@ topicsRouter.post("/:topicId/tasks", authRequired, async (req: AuthRequest, res:
       webValidationProfile: normalizedTaskInput.webValidationProfile,
       pythonRuntimeProfile: runtimeProfile,
       projectSpec: normalizedProjectSpec,
-      type: type as "PRACTICE" | "CONTROL",
+      type: type as TaskType,
       order: order || 0,
-      maxAttempts: normalizeTaskMaxAttempts(type as "PRACTICE" | "CONTROL", maxAttempts),
+      maxAttempts: normalizeTaskMaxAttempts(type as TaskType, maxAttempts),
       deadline: deadline ? new Date(deadline) : null
     });
     await taskRepo().save(task);
@@ -683,7 +686,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       }>;
       projectSpec?: unknown;
       pythonRuntimeProfile?: EduPythonRuntimeProfile;
-      type?: "PRACTICE" | "CONTROL";
+      type?: TaskType;
       order?: number;
       maxAttempts?: number;
     };
@@ -692,7 +695,9 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
     const title = String(taskJson.title ?? "").trim();
     const description = String(taskJson.description ?? "").trim();
     const normalizedTaskInput = normalizeWebTaskInput(taskJson);
-    const type: "PRACTICE" | "CONTROL" = taskJson.type === "CONTROL" ? "CONTROL" : "PRACTICE";
+    const type: TaskType = taskJson.type === "CLASSWORK" && topic.class
+      ? "CLASSWORK"
+      : taskJson.type === "CONTROL" ? "CONTROL" : "PRACTICE";
     const pythonRuntimeProfile = taskJson.pythonRuntimeProfile ?? "STANDARD";
     const order = Number.isFinite(Number(taskJson.order)) ? Number(taskJson.order) : 0;
     const maxAttempts = normalizeTaskMaxAttempts(type, taskJson.maxAttempts);
@@ -702,7 +707,7 @@ topicsRouter.post("/:topicId/tasks/import-archive", authRequired, archiveUpload.
       return res.status(400).json({ message: "INVALID_TASK_JSON" });
     }
     if (pythonRuntimeProfile !== "STANDARD" &&
-      (topic.language !== "PYTHON" || normalizedTaskInput.taskMode !== "CODE" || type !== "PRACTICE")) {
+      (topic.language !== "PYTHON" || normalizedTaskInput.taskMode !== "CODE" || type === "CONTROL")) {
       return res.status(400).json({ message: "PYTHON_RUNTIME_REQUIRES_PYTHON_PRACTICE_TASK" });
     }
 
@@ -920,6 +925,7 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
       webValidationProfile,
       projectSpec,
       pythonRuntimeProfile,
+      type,
       maxAttempts,
       deadline,
     } = validated.data;
@@ -956,6 +962,13 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
     if (task.type !== "CONTROL" && !description.trim()) {
       return res.status(400).json({ message: "INVALID_INPUT" });
     }
+    if (type === "CONTROL" && task.type !== "CONTROL" || type !== undefined && type !== "CONTROL" && task.type === "CONTROL") {
+      return res.status(400).json({ message: "CONTROL_TASK_TYPE_CANNOT_BE_CHANGED_HERE" });
+    }
+    if (type === "CLASSWORK") {
+      const topic = await topicRepo().findOne({ where: { id: topicId }, relations: ["class"] });
+      if (!topic?.class) return res.status(400).json({ message: "CLASSWORK_REQUIRES_CLASS_TOPIC" });
+    }
     const normalizedTaskInput = normalizeWebTaskInput({
       taskMode,
       template,
@@ -991,6 +1004,7 @@ topicsRouter.put("/:topicId/tasks/:taskId", authRequired, async (req: AuthReques
     (task).webValidationProfile = normalizedTaskInput.webValidationProfile;
     if (pythonRuntimeProfile !== undefined) task.pythonRuntimeProfile = pythonRuntimeProfile;
     task.projectSpec = normalizedProjectSpec;
+    if (type !== undefined) task.type = type;
     if (maxAttempts !== undefined) {
       task.maxAttempts = normalizeTaskMaxAttempts(task.type, maxAttempts);
     }
@@ -1046,7 +1060,7 @@ topicsRouter.post("/:topicId/tasks/generate-guidance", authRequired, async (req:
     const result = await safeAICall("generateTaskGuidance", {
       topicTitle,
       taskTitle: parsed.data.taskTitle,
-      taskType: parsed.data.taskType,
+      taskType: parsed.data.taskType === "CLASSWORK" ? "PRACTICE" : parsed.data.taskType,
       language: topic.language,
       classTitle: topic.class?.name,
       responseLanguage,
@@ -1107,7 +1121,7 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
       includeSubtasks,
       pythonRuntimeProfile: requestedPythonRuntimeProfile
     } = req.body || {};
-    if (!taskType || taskType !== "PRACTICE" && taskType !== "CONTROL") {
+    if (!taskType || taskType !== "PRACTICE" && taskType !== "CLASSWORK" && taskType !== "CONTROL") {
       return res.status(400).json({
         message: "INVALID_TASK_TYPE"
       });
@@ -1118,7 +1132,7 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
     const pythonRuntimeProfile: EduPythonRuntimeProfile = requestedPythonRuntimeProfile === "SCIENTIFIC" || requestedPythonRuntimeProfile === "TKINTER"
       ? requestedPythonRuntimeProfile
       : "STANDARD";
-    if (pythonRuntimeProfile !== "STANDARD" && (taskType !== "PRACTICE" || topic.language !== "PYTHON")) {
+    if (pythonRuntimeProfile !== "STANDARD" && ((taskType !== "PRACTICE" && taskType !== "CLASSWORK") || topic.language !== "PYTHON")) {
       return res.status(400).json({ message: "PYTHON_RUNTIME_REQUIRES_PYTHON_PRACTICE_TASK" });
     }
     const userLanguage: "uk" | "en" = language === 'en' ? "en" : "uk";
@@ -1129,7 +1143,7 @@ topicsRouter.post("/:topicId/tasks/generate-condition", authRequired, async (req
     const result = await safeAICall('generateTaskCondition', {
       topicTitle: topicTitleForAi,
       taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
-      taskType: taskType as "PRACTICE" | "CONTROL",
+      taskType: taskType === "CLASSWORK" ? "PRACTICE" : taskType as "PRACTICE" | "CONTROL",
       difficulty: difficulty || 3,
       generationGuidance,
       clarificationAnswer: typeof clarificationAnswer === "string" ? clarificationAnswer.trim() : undefined,
@@ -1720,7 +1734,7 @@ topicsRouter.post("/:topicId/tasks/generate-theory", authRequired, async (req: A
       topicTitle: topic.title,
       taskTitle: typeof taskTitle === 'string' ? taskTitle.trim() : undefined,
       taskDescription: taskDescription.trim(),
-      taskType: taskType as "PRACTICE" | "CONTROL",
+      taskType: taskType === "CLASSWORK" ? "PRACTICE" : taskType as "PRACTICE" | "CONTROL",
       difficulty: difficultyNum,
       generationGuidance,
       lang: topic.language,

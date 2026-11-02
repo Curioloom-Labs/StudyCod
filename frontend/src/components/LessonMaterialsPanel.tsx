@@ -5,7 +5,7 @@ import { MarkdownView } from "./MarkdownView";
 import {
   getSessionMaterials,
   getClassLessonsList,
-  setSessionLesson,
+  setSessionMaterial,
   type SessionMaterials,
   type LessonBrief,
 } from "../lib/api/liveClassroom";
@@ -41,6 +41,8 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
     const current = materialsRef.current;
     const changed = receivedInitialRef.current && current != null && (
       current.lessonId !== next.lessonId
+      || current.topicTaskId !== next.topicTaskId
+      || current.materialType !== next.materialType
       || current.title !== next.title
       || current.hasTheory !== next.hasTheory
       || current.theory !== next.theory
@@ -131,12 +133,17 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
     };
   }, [sessionId, isTeacher, applyMaterials]);
 
-  const attach = useCallback(
-    async (lessonId: number | null) => {
+  const attachSelection = useCallback(
+    async (key: string) => {
       setBusy(true);
       setError(null);
       try {
-        await setSessionLesson(sessionId, lessonId);
+        const selection = key.startsWith("classwork:")
+          ? { topicTaskId: Number(key.slice("classwork:".length)) }
+          : key.startsWith("lesson:")
+            ? { lessonId: Number(key.slice("lesson:".length)) }
+            : null;
+        await setSessionMaterial(sessionId, selection);
         await load();
       } catch {
         setError(tr("Не вдалося змінити матеріал уроку. Спробуйте ще раз.", "Could not update lesson materials. Please try again."));
@@ -146,7 +153,7 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
     },
     [sessionId, load]
   );
-  const standaloneLessons = lessons.filter((lesson) => !lesson.parentTopicId);
+  const standaloneLessons = lessons.filter((lesson) => !lesson.parentTopicId && lesson.kind !== "CLASSWORK");
   const topicGroups = Array.from(lessons.reduce((groups, lesson) => {
     if (lesson.parentTopicId == null) return groups;
     const group = groups.get(lesson.parentTopicId) || {
@@ -164,15 +171,15 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
         <div className="min-w-0"><p><BookOpen className="size-4" />{materials?.parentTopicTitle || tr("Матеріал онлайн-уроку", "Live lesson material")}</p><h2 title={materials?.title || undefined}>{materials?.title || tr("Матеріали уроку", "Lesson materials")}</h2></div>
         {isTeacher && (
           <select
-            value={materials?.lessonId ?? ""}
+            value={materials?.topicTaskId ? `classwork:${materials.topicTaskId}` : materials?.lessonId ? `lesson:${materials.lessonId}` : ""}
             disabled={busy || loading || lessonsLoading}
-            onChange={(e) => void attach(e.target.value === "" ? null : Number(e.target.value))}
+            onChange={(e) => void attachSelection(e.target.value)}
             aria-label={tr("Вибрати матеріал уроку", "Choose lesson materials")}
             className="edu-live-materials__select"
           >
             <option value="">{lessonsLoading || loading ? tr("Завантажуємо матеріали…", "Loading materials…") : lessonsError ? tr("Не вдалося завантажити матеріали", "Could not load materials") : lessons.length ? tr("— без активного матеріалу —", "— no active material —") : tr("У класі ще немає матеріалів", "No class materials yet")}</option>
-            {standaloneLessons.length > 0 && <optgroup label={tr("Матеріали без теми", "Materials without a topic")}>{standaloneLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}</optgroup>}
-            {topicGroups.map(([topicId, group]) => <optgroup key={topicId} label={group.title}>{group.lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}</optgroup>)}
+            {standaloneLessons.length > 0 && <optgroup label={tr("Матеріали без теми", "Materials without a topic")}>{standaloneLessons.map((lesson) => <option key={`lesson:${lesson.id}`} value={`lesson:${lesson.id}`}>{lesson.title}</option>)}</optgroup>}
+            {topicGroups.map(([topicId, group]) => <optgroup key={topicId} label={group.title}>{group.lessons.map((lesson) => <option key={`${lesson.kind === "CLASSWORK" ? "classwork" : "lesson"}:${lesson.id}`} value={`${lesson.kind === "CLASSWORK" ? "classwork" : "lesson"}:${lesson.id}`}>{lesson.kind === "CLASSWORK" ? `${tr("Робота в класі", "Classwork")}: ${lesson.title}` : lesson.title}</option>)}</optgroup>)}
           </select>
         )}
       </div>
@@ -186,7 +193,7 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
           <div role="alert" className="edu-live-materials__empty"><p>{error}</p><button type="button" onClick={() => void load()}><RefreshCw className="size-4" />{tr("Повторити", "Retry")}</button></div>
         ) : !materials ? (
           <p className="text-sm text-text-secondary">{tr("Матеріали поки недоступні.", "Materials are currently unavailable.")}</p>
-        ) : materials.lessonId == null ? (
+        ) : materials.lessonId == null && materials.topicTaskId == null ? (
           <div className="edu-live-materials__empty">
             {(error || syncStale) && <p role="status" className="edu-live-materials__stale">{tr("Показано останній стан. Не вдалося перевірити оновлення.", "Showing the last available state. Could not check for updates.")} <button type="button" onClick={() => void load()}>{tr("Оновити", "Refresh")}</button></p>}
             <span><FileText className="size-5" /></span>
@@ -208,7 +215,7 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
             )}
             {materials.tasks.length > 0 && (
               <section className="edu-live-materials__tasks">
-                <div className="edu-live-materials__section-title"><ClipboardList className="size-4" />{materials.tasks.some((task) => task.taskMode === "MANUAL") ? tr("Робота в класі", "Classwork") : tr("Практика уроку", "Lesson practice")}<span>{materials.tasks.length}</span></div>
+                <div className="edu-live-materials__section-title"><ClipboardList className="size-4" />{materials.materialType === "CLASSWORK" || materials.tasks.some((task) => task.taskMode === "MANUAL") ? tr("Робота в класі", "Classwork") : tr("Практика уроку", "Lesson practice")}<span>{materials.tasks.length}</span></div>
                 <ul>
                   {materials.tasks.map((task, index) => (
                     <li key={task.id}>
@@ -216,7 +223,7 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
                         type="button"
                         onClick={() => {
                           const returnTo = `${window.location.pathname}${window.location.search}`;
-                          const taskPath = task.taskMode === "MANUAL" ? `/edu/manual-tasks/${task.id}` : `/edu/tasks/${task.id}?source=course`;
+                          const taskPath = task.taskMode === "MANUAL" ? `/edu/manual-tasks/${task.id}` : `/edu/tasks/${task.id}?source=${task.source || "course"}`;
                           const url = new URL(withDevPreview(taskPath), window.location.origin);
                           url.searchParams.set("returnTo", returnTo);
                           window.open(url.toString(), "_blank", "noopener,noreferrer");
@@ -225,7 +232,7 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
                         title={task.title}
                       >
                         <span className="edu-live-materials__task-index">{String(index + 1).padStart(2, "0")}</span>
-                        <span className="min-w-0 flex-1"><strong>{task.title}</strong><small>{task.taskMode === "MANUAL" ? tr("Робота в класі", "Classwork") : tr("Практична задача", "Practice problem")}</small></span>
+                        <span className="min-w-0 flex-1"><strong>{task.title}</strong><small>{task.type === "CLASSWORK" || task.taskMode === "MANUAL" ? tr("Робота в класі", "Classwork") : tr("Практична задача", "Practice problem")}</small></span>
                         <ArrowRight className="size-4" />
                       </button>
                     </li>

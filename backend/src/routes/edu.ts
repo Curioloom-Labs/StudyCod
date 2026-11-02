@@ -567,7 +567,7 @@ eduRouter.get("/classes/:classId/lessons", authRequired, requireClassCapability(
         order: topic.order,
         language: topic.language,
         tasksCount: regularTopicPracticeTasks(topic.tasks).length,
-        classworkCount: topic.classworkLessons?.length ?? 0,
+        classworkCount: (topic.classworkLessons?.length ?? 0) + (topic.tasks ?? []).filter(task => task.type === "CLASSWORK").length,
         createdAt: topic.createdAt.toISOString(),
         tasks: regularTopicPracticeTasks(topic.tasks).map(task => ({
           id: task.id,

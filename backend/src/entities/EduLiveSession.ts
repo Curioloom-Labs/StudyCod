@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, Index } from "typeorm";
 import { Class } from "./Class";
 import { EduLesson } from "./EduLesson";
+import { TopicTask } from "./TopicTask";
 import { User } from "./User";
 
 export type LiveSessionStatus = "LIVE" | "ENDED";
@@ -34,6 +35,15 @@ export class EduLiveSession {
     name: "lesson_id"
   })
   lesson?: EduLesson | null;
+
+  @ManyToOne(() => TopicTask, {
+    nullable: true,
+    onDelete: "SET NULL"
+  })
+  @JoinColumn({
+    name: "topic_task_id"
+  })
+  topicTask?: TopicTask | null;
 
   /**
    * Stable, unguessable LiveKit room identity. Tokens are minted against this

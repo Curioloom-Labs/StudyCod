@@ -27,6 +27,7 @@ import {
   joinLiveSession,
   startLiveSession,
   type LiveJoinInfo,
+  type LiveMaterialSelection,
   type LiveSession,
   type LessonBrief,
   type LiveOverview,
@@ -127,7 +128,7 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
   const [classLessons, setClassLessons] = useState<LessonBrief[]>([]);
   const [classLessonsLoading, setClassLessonsLoading] = useState(false);
   const [classLessonsError, setClassLessonsError] = useState(false);
-  const [selectedLessonId, setSelectedLessonId] = useState<number | "">("");
+  const [selectedMaterialKey, setSelectedMaterialKey] = useState("");
   const [joinInfo, setJoinInfo] = useState<LiveJoinInfo | null>(null);
   const [choices, setChoices] = useState<DeviceChoices | null>(null);
   const [activeRoom, setActiveRoom] = useState<ActiveRoom | null>(null);
@@ -297,7 +298,13 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
     setBusy(true);
     setError(null);
     try {
-      const info = await startLiveSession(classId, selectedLessonId === "" ? undefined : selectedLessonId);
+      let selection: LiveMaterialSelection | undefined;
+      if (selectedMaterialKey.startsWith("classwork:")) {
+        selection = { topicTaskId: Number(selectedMaterialKey.slice("classwork:".length)) };
+      } else if (selectedMaterialKey.startsWith("lesson:")) {
+        selection = { lessonId: Number(selectedMaterialKey.slice("lesson:".length)) };
+      }
+      const info = await startLiveSession(classId, selection);
       setJoinInfo(info);
       setSession(info.session);
       setPhase("prejoin");
@@ -306,7 +313,7 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
     } finally {
       setBusy(false);
     }
-  }, [classId, selectedLessonId]);
+  }, [classId, selectedMaterialKey]);
 
   const handleJoin = useCallback(async () => {
     if (!session) return;
@@ -562,10 +569,10 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
               ) : isTeacher ? (
                 <div className="edu-live-lobby__state">
                   <div><strong>{tr("Кімната готова до уроку", "Your classroom is ready")}</strong><p>{tr("Виберіть тему або роботу в темі — учні побачать вибраний матеріал поруч із відео.", "Choose a topic or classwork inside a topic to share it with students beside the video.")}</p></div>
-                  <label className="edu-live-lobby__lesson-field"><span>{tr("Тема або робота", "Topic or classwork")}</span><select value={selectedLessonId} onChange={(event) => setSelectedLessonId(event.target.value ? Number(event.target.value) : "")} disabled={busy || classLessonsLoading}>
+                  <label className="edu-live-lobby__lesson-field"><span>{tr("Тема або робота", "Topic or classwork")}</span><select value={selectedMaterialKey} onChange={(event) => setSelectedMaterialKey(event.target.value)} disabled={busy || classLessonsLoading}>
                     <option value="">{classLessonsLoading ? tr("Завантажуємо матеріали…", "Loading materials…") : classLessonsError ? tr("Не вдалося завантажити матеріали", "Could not load materials") : classLessons.length ? tr("Без активного матеріалу", "No active material") : tr("У класі ще немає матеріалів", "No class materials yet")}</option>
-                    {standaloneClassLessons.length > 0 && <optgroup label={tr("Матеріали без теми", "Materials without a topic")}>{standaloneClassLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}</optgroup>}
-                    {topicLessonGroups.map(([topicId, group]) => <optgroup key={topicId} label={group.title}>{group.lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}</optgroup>)}
+                    {standaloneClassLessons.length > 0 && <optgroup label={tr("Матеріали без теми", "Materials without a topic")}>{standaloneClassLessons.map((lesson) => <option key={`lesson:${lesson.id}`} value={`lesson:${lesson.id}`}>{lesson.title}</option>)}</optgroup>}
+                    {topicLessonGroups.map(([topicId, group]) => <optgroup key={topicId} label={group.title}>{group.lessons.map((lesson) => <option key={`${lesson.kind === "CLASSWORK" ? "classwork" : "lesson"}:${lesson.id}`} value={`${lesson.kind === "CLASSWORK" ? "classwork" : "lesson"}:${lesson.id}`}>{lesson.kind === "CLASSWORK" ? `${tr("Робота в класі", "Classwork")}: ${lesson.title}` : lesson.title}</option>)}</optgroup>)}
                   </select>{classLessonsError && <span role="status" className="edu-live-lobby__lesson-error">{tr("Можна повторити завантаження або почати без теми.", "Retry loading topics, or start without an attached lesson.")} <button type="button" onClick={() => void loadClassLessons()}>{classLessonsLoading ? tr("Завантажуємо…", "Loading…") : tr("Повторити", "Retry")}</button></span>}</label>
                   <button type="button" disabled={busy || classLessonsLoading} onClick={() => void handleStart()} className="edu-live-lobby__primary"><PlayCircle className="size-4" />{busy ? tr("Створюємо кімнату…", "Starting the room…") : tr("Почати онлайн-урок", "Start live lesson")}<ArrowLeft className="size-4 rotate-180" /></button>
                 </div>

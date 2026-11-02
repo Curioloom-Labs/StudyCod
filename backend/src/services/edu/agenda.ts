@@ -109,7 +109,7 @@ export async function getDeadlinesForClasses(classIds: number[], from: Date, to:
     .innerJoin("t.topic", "tp")
     .innerJoin("tp.class", "c")
     .where("c.id IN (:...ids)", { ids: classIds })
-    .andWhere("t.type = :type", { type: "PRACTICE" })
+    .andWhere("t.type IN (:...types)", { types: ["PRACTICE", "CLASSWORK"] })
     .andWhere("t.isAssigned = 1")
     .andWhere("t.isClosed = 0")
     .andWhere("t.deadline BETWEEN :from AND :to", { from, to })

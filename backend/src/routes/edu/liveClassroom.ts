@@ -9,6 +9,7 @@ import { EduLesson } from "../../entities/EduLesson";
 import { EduLiveSession } from "../../entities/EduLiveSession";
 import { EduGrade } from "../../entities/EduGrade";
 import { EduTask } from "../../entities/EduTask";
+import { TopicTask } from "../../entities/TopicTask";
 import { User } from "../../entities/User";
 import { logger } from "../../utils/logger";
 import {
@@ -33,6 +34,7 @@ const lessonRepo = () => AppDataSource.getRepository(EduLesson);
 const liveRepo = () => AppDataSource.getRepository(EduLiveSession);
 const gradeRepo = () => AppDataSource.getRepository(EduGrade);
 const taskRepo = () => AppDataSource.getRepository(EduTask);
+const topicTaskRepo = () => AppDataSource.getRepository(TopicTask);
 const userRepo = () => AppDataSource.getRepository(User);
 
 // Activity older than this is treated as "idle" (not part of the live session),
@@ -49,6 +51,7 @@ interface LiveSessionDto {
   id: number;
   classId: number | null;
   lessonId: number | null;
+  topicTaskId: number | null;
   title: string | null;
   status: string;
   roomName: string;
@@ -61,6 +64,7 @@ function sessionDto(s: EduLiveSession): LiveSessionDto {
     id: s.id,
     classId: s.class?.id ?? null,
     lessonId: s.lesson?.id ?? null,
+    topicTaskId: s.topicTask?.id ?? null,
     title: s.title ?? null,
     status: s.status,
     roomName: s.roomName,
@@ -161,20 +165,37 @@ router.post("/classes/:classId/live-sessions", authRequired, async (req: AuthReq
     if (!cls) return res.status(404).json({ message: "CLASS_NOT_FOUND" });
 
     const rawLessonId = (req.body && (req.body.lessonId ?? req.body.lesson_id)) as unknown;
+    const rawTopicTaskId = req.body?.topicTaskId as unknown;
+    if (rawLessonId != null && rawLessonId !== "" && rawTopicTaskId != null && rawTopicTaskId !== "") {
+      return res.status(400).json({ message: "SELECT_ONE_LIVE_MATERIAL" });
+    }
     let lesson: EduLesson | null = null;
+    let topicTask: TopicTask | null = null;
     if (rawLessonId != null && rawLessonId !== "") {
       const lessonId = parseInt(String(rawLessonId), 10);
-      if (!isNaN(lessonId)) {
-        lesson = await lessonRepo().findOne({
-          where: { id: lessonId, class: { id: classId } }
-        });
-        if (!lesson) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
-      }
+      if (isNaN(lessonId)) return res.status(400).json({ message: "INVALID_LESSON_ID" });
+      lesson = await lessonRepo().findOne({
+        where: { id: lessonId, class: { id: classId } }
+      });
+      if (!lesson) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
+    }
+    if (rawTopicTaskId != null && rawTopicTaskId !== "") {
+      const topicTaskId = parseInt(String(rawTopicTaskId), 10);
+      if (isNaN(topicTaskId)) return res.status(400).json({ message: "INVALID_TOPIC_TASK_ID" });
+      topicTask = await topicTaskRepo().findOne({
+        where: { id: topicTaskId, type: "CLASSWORK", topic: { class: { id: classId } } },
+        relations: ["topic"]
+      });
+      if (!topicTask) return res.status(404).json({ message: "CLASSWORK_NOT_FOUND" });
+      if (topicTask.isClosed) return res.status(409).json({ message: "CLASSWORK_CLOSED" });
+      topicTask.isAssigned = true;
+      topicTask.assignedStudentIds = null;
+      await topicTaskRepo().save(topicTask);
     }
 
     let session = await liveRepo().findOne({
       where: { class: { id: classId }, status: "LIVE" },
-      relations: ["class", "lesson"],
+      relations: ["class", "lesson", "topicTask"],
       order: { id: "DESC" }
     });
 
@@ -184,8 +205,9 @@ router.post("/classes/:classId/live-sessions", authRequired, async (req: AuthReq
       session = liveRepo().create({
         class: cls,
         lesson: lesson ?? null,
+        topicTask: topicTask ?? null,
         roomName: newRoomName(classId),
-        title: lesson?.title ?? null,
+        title: lesson?.title ?? topicTask?.title ?? null,
         status: "LIVE",
         startedBy: { id: req.userId } as User
       });
@@ -193,8 +215,14 @@ router.post("/classes/:classId/live-sessions", authRequired, async (req: AuthReq
       // Reload with relations for a consistent DTO.
       session = (await liveRepo().findOne({
         where: { id: session.id },
-        relations: ["class", "lesson"]
+        relations: ["class", "lesson", "topicTask"]
       }))!;
+    } else if (lesson || topicTask) {
+      session.lesson = lesson;
+      session.topicTask = topicTask;
+      session.title = lesson?.title ?? topicTask?.title ?? null;
+      session = await liveRepo().save(session);
+      session = (await liveRepo().findOne({ where: { id: session.id }, relations: ["class", "lesson", "topicTask"] }))!;
     }
 
     const teacher = await userRepo().findOne({ where: { id: req.userId }, select: ["id", "username"] });
@@ -228,7 +256,7 @@ router.get("/classes/:classId/live-sessions/active", authRequired, async (req: A
 
     const session = await liveRepo().findOne({
       where: { class: { id: classId }, status: "LIVE" },
-      relations: ["class", "lesson"],
+      relations: ["class", "lesson", "topicTask"],
       order: { id: "DESC" }
     });
 
@@ -252,7 +280,7 @@ router.post("/live-sessions/:id/join", authRequired, async (req: AuthRequest, re
 
     const session = await liveRepo().findOne({
       where: { id: sessionId },
-      relations: ["class", "lesson"]
+      relations: ["class", "lesson", "topicTask"]
     });
     if (!session || !session.class) return res.status(404).json({ message: "SESSION_NOT_FOUND" });
     if (session.status !== "LIVE") return res.status(409).json({ message: "SESSION_ENDED" });
@@ -303,7 +331,7 @@ router.post("/live-sessions/:id/end", authRequired, async (req: AuthRequest, res
 
     const session = await liveRepo().findOne({
       where: { id: sessionId },
-      relations: ["class", "lesson"]
+      relations: ["class", "lesson", "topicTask"]
     });
     if (!session || !session.class) return res.status(404).json({ message: "SESSION_NOT_FOUND" });
 
@@ -656,14 +684,31 @@ router.get("/classes/:classId/lessons-list", authRequired, async (req: AuthReque
       order: { id: "DESC" },
       take: 200
     });
+    const classworkTasks = await topicTaskRepo().find({
+      where: { type: "CLASSWORK", topic: { class: { id: classId } } },
+      relations: ["topic"],
+      order: { id: "DESC" },
+      take: 200
+    });
     disableCache(res);
-    return res.json({ lessons: lessons.map((l) => ({
+    return res.json({ lessons: [
+      ...lessons.map((l) => ({
+      kind: "LESSON" as const,
       id: l.id,
       title: l.title,
       type: l.type,
       parentTopicId: l.topic?.id,
       parentTopicTitle: l.topic?.title,
-    })) });
+      })),
+      ...classworkTasks.filter(task => !task.isClosed).map(task => ({
+        kind: "CLASSWORK" as const,
+        id: task.id,
+        title: task.title,
+        type: task.type,
+        parentTopicId: task.topic?.id,
+        parentTopicTitle: task.topic?.title,
+      }))
+    ] });
   } catch (error: unknown) {
     logger.error("[edu/live] lessons-list failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -679,26 +724,48 @@ router.put("/live-sessions/:id/lesson", authRequired, async (req: AuthRequest, r
     const sessionId = parseInt(req.params.id, 10);
     if (isNaN(sessionId)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const session = await liveRepo().findOne({ where: { id: sessionId }, relations: ["class", "lesson"] });
+    const session = await liveRepo().findOne({ where: { id: sessionId }, relations: ["class", "lesson", "topicTask"] });
     if (!session || !session.class) return res.status(404).json({ message: "SESSION_NOT_FOUND" });
 
     const cls = await loadTeacherClass(req, session.class.id);
     if (!cls) return res.status(403).json({ message: "NOT_CLASS_TEACHER" });
 
+    const hasLessonId = Object.prototype.hasOwnProperty.call(req.body ?? {}, "lessonId");
+    const hasTopicTaskId = Object.prototype.hasOwnProperty.call(req.body ?? {}, "topicTaskId");
+    if (hasLessonId === hasTopicTaskId) return res.status(400).json({ message: "SELECT_ONE_LIVE_MATERIAL" });
     const rawLessonId = req.body?.lessonId;
-    if (rawLessonId == null) {
+    const rawTopicTaskId = req.body?.topicTaskId;
+    if ((hasLessonId && rawLessonId == null) || (hasTopicTaskId && rawTopicTaskId == null)) {
       session.lesson = null;
+      session.topicTask = null;
     } else {
-      const lessonId = parseInt(String(rawLessonId), 10);
-      if (isNaN(lessonId)) return res.status(400).json({ message: "INVALID_LESSON_ID" });
-      const lesson = await lessonRepo().findOne({ where: { id: lessonId, class: { id: session.class.id } } });
-      if (!lesson) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
-      session.lesson = lesson;
+      if (hasLessonId) {
+        const lessonId = parseInt(String(rawLessonId), 10);
+        if (isNaN(lessonId)) return res.status(400).json({ message: "INVALID_LESSON_ID" });
+        const lesson = await lessonRepo().findOne({ where: { id: lessonId, class: { id: session.class.id } } });
+        if (!lesson) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
+        session.lesson = lesson;
+        session.topicTask = null;
+      } else {
+        const topicTaskId = parseInt(String(rawTopicTaskId), 10);
+        if (isNaN(topicTaskId)) return res.status(400).json({ message: "INVALID_TOPIC_TASK_ID" });
+        const topicTask = await topicTaskRepo().findOne({
+          where: { id: topicTaskId, type: "CLASSWORK", topic: { class: { id: session.class.id } } },
+          relations: ["topic"]
+        });
+        if (!topicTask) return res.status(404).json({ message: "CLASSWORK_NOT_FOUND" });
+        if (topicTask.isClosed) return res.status(409).json({ message: "CLASSWORK_CLOSED" });
+        topicTask.isAssigned = true;
+        topicTask.assignedStudentIds = null;
+        await topicTaskRepo().save(topicTask);
+        session.topicTask = topicTask;
+        session.lesson = null;
+      }
     }
-    session.title = session.lesson?.title ?? null;
+    session.title = session.lesson?.title ?? session.topicTask?.title ?? null;
     await liveRepo().save(session);
 
-    const fresh = (await liveRepo().findOne({ where: { id: sessionId }, relations: ["class", "lesson"] }))!;
+    const fresh = (await liveRepo().findOne({ where: { id: sessionId }, relations: ["class", "lesson", "topicTask"] }))!;
     disableCache(res);
     return res.json({ session: sessionDto(fresh) });
   } catch (error: unknown) {
@@ -717,26 +784,42 @@ router.get("/live-sessions/:id/materials", authRequired, async (req: AuthRequest
     const sessionId = parseInt(req.params.id, 10);
     if (isNaN(sessionId)) return res.status(400).json({ message: "INVALID_ID" });
 
-    const session = await liveRepo().findOne({ where: { id: sessionId }, relations: ["class", "lesson"] });
+    const session = await liveRepo().findOne({ where: { id: sessionId }, relations: ["class", "lesson", "topicTask", "topicTask.topic"] });
     if (!session || !session.class) return res.status(404).json({ message: "SESSION_NOT_FOUND" });
 
     const access = await resolveClassAccess(req, res, session.class.id);
     if (!access) return;
 
+    if (session.topicTask) {
+      const task = session.topicTask;
+      disableCache(res);
+      return res.json({
+        lessonId: null,
+        topicTaskId: task.id,
+        materialType: "CLASSWORK",
+        title: task.title,
+        parentTopicTitle: task.topic?.title ?? null,
+        theory: null,
+        hasTheory: false,
+        tasks: [{ id: task.id, title: task.title, taskMode: task.taskMode ?? "CODE", type: task.type, source: "legacy" }]
+      });
+    }
     if (!session.lesson) {
       disableCache(res);
-      return res.json({ lessonId: null, title: null, theory: null, hasTheory: false, tasks: [] });
+      return res.json({ lessonId: null, topicTaskId: null, materialType: null, title: null, theory: null, hasTheory: false, tasks: [] });
     }
 
     const lesson = await lessonRepo().findOne({ where: { id: session.lesson.id }, relations: ["tasks", "topic"] });
     disableCache(res);
     return res.json({
       lessonId: lesson?.id ?? null,
+      topicTaskId: null,
+      materialType: "LESSON",
       title: lesson?.title ?? null,
       parentTopicTitle: lesson?.topic?.title ?? null,
       theory: lesson?.hasTheory ? lesson?.theory ?? null : null,
       hasTheory: Boolean(lesson?.hasTheory && lesson?.theory),
-      tasks: (lesson?.tasks ?? []).map((t) => ({ id: t.id, title: t.title, taskMode: t.taskMode ?? "CODE" }))
+      tasks: (lesson?.tasks ?? []).map((t) => ({ id: t.id, title: t.title, taskMode: t.taskMode ?? "CODE", source: "course" }))
     });
   } catch (error: unknown) {
     logger.error("[edu/live] materials failed", { requestId: req.requestId, err: error });

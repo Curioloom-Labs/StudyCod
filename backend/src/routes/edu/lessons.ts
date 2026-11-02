@@ -586,7 +586,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
       }
 
       const practiceTasks = (topic.tasks || []).filter(t =>
-        t.type === "PRACTICE" &&
+        (t.type === "PRACTICE" || t.type === "CLASSWORK") &&
         t.isAssigned &&
         (!req.studentId || isAssignedToStudent(t.isAssigned, (t).assignedStudentIds, req.studentId))
       );

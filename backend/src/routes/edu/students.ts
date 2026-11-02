@@ -153,8 +153,8 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
 
     const topics = await topicRepo()
       .createQueryBuilder("topic")
-      .leftJoinAndSelect("topic.tasks", "task", "task.type = :practiceType AND task.is_assigned = :assigned", {
-        practiceType: "PRACTICE",
+      .leftJoinAndSelect("topic.tasks", "task", "task.type IN (:...taskTypes) AND task.is_assigned = :assigned", {
+        taskTypes: ["PRACTICE", "CLASSWORK"],
         assigned: true
       })
       .where("topic.class_id = :classId", {
@@ -304,7 +304,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
 
     const topicsWithGrades = await Promise.all(topics.map(async topic => {
       const tasks = (topic.tasks || []).filter(t =>
-        t.type === "PRACTICE" && isAssignedToStudent(t.isAssigned, t.assignedStudentIds, req.studentId!)
+        (t.type === "PRACTICE" || t.type === "CLASSWORK") && isAssignedToStudent(t.isAssigned, t.assignedStudentIds, req.studentId!)
       );
 
       const tasksWithGrades = await Promise.all(tasks.map(async task => {

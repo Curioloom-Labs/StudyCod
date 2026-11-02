@@ -1,8 +1,8 @@
 export type TopicTaskCategory = { type?: string | null };
 
-/** Keep Control Work tasks out of the topic's regular practice list. */
+/** Keep assessment-owned tasks out of the topic's regular task list. */
 export function regularTopicPracticeTasks<T extends TopicTaskCategory>(
   tasks: readonly T[] | null | undefined,
 ): T[] {
-  return (tasks ?? []).filter(task => task.type === "PRACTICE");
+  return (tasks ?? []).filter(task => task.type !== "CONTROL");
 }

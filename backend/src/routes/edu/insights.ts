@@ -86,7 +86,7 @@ interface StudentMasteryPayload {
 interface CohortTaskInsight {
   taskId: number;
   title: string;
-  type: "PRACTICE" | "CONTROL";
+  type: "PRACTICE" | "CLASSWORK" | "CONTROL";
   avgScore: number;
   completionRate: number;
   passRate: number;
@@ -1363,7 +1363,7 @@ async function buildRiskInterventionPlan(
 
     const weakTaskIds = new Set<number>(topicRisk.weakTasks.map(task => task.taskId));
     const candidates = (topic.tasks || [])
-      .filter(task => task.type === "PRACTICE")
+      .filter(task => task.type === "PRACTICE" || task.type === "CLASSWORK")
       .sort((a, b) => {
         const aWeak = weakTaskIds.has(a.id) ? 1 : 0;
         const bWeak = weakTaskIds.has(b.id) ? 1 : 0;

@@ -196,6 +196,7 @@ export interface Lesson {
     description?: string;
     template?: string;
     taskMode?: "CODE" | "WEB" | "MANUAL";
+    type?: "PRACTICE" | "CLASSWORK" | "CONTROL";
     projectSpec?: {
       version: 1;
       kind: "MINI_PROJECT";
@@ -1475,7 +1476,7 @@ export interface PendingReview {
       id: number;
       title: string;
     };
-    type?: "PRACTICE" | "CONTROL";
+    type?: "PRACTICE" | "CLASSWORK" | "CONTROL";
   } | null;
   submittedCode: string | null;
   submittedAt: string;
@@ -1710,7 +1711,7 @@ export interface TopicTaskStudentWork {
   task: {
     id: number;
     title: string;
-    type: "PRACTICE" | "CONTROL";
+    type: "PRACTICE" | "CLASSWORK" | "CONTROL";
     topicId: number;
     topicTitle: string;
   };
@@ -2028,7 +2029,7 @@ export interface StudentNextTaskResponse {
 export interface CohortTaskInsight {
   taskId: number;
   title: string;
-  type: "PRACTICE" | "CONTROL";
+  type: "PRACTICE" | "CLASSWORK" | "CONTROL";
   avgScore: number;
   completionRate: number;
   passRate: number;
