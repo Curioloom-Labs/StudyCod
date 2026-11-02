@@ -58,6 +58,7 @@ test("Tkinter click events invoke standard Tk and ttk controls deterministically
   assert.match(bootstrap, /target\.invoke\(\)/);
   assert.match(bootstrap, /"TButton"/);
   assert.match(bootstrap, /"TRadiobutton"/);
+  assert.match(bootstrap, /tk\.Misc\.focus_set = tk\.Misc\.focus_force/);
 });
 
 test("runtime input envelopes preserve stdin, fixtures, and UI events", () => {

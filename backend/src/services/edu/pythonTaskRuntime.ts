@@ -240,6 +240,10 @@ for asset in assets:
     target.write_bytes(data)
 
 import tkinter as tk
+# A headless Xvfb display has no window manager to activate a top-level. Honor
+# the application's normal focus_set() request as a forced focus request so
+# keyboard events reach the widget that the program deliberately focused.
+tk.Misc.focus_set = tk.Misc.focus_force
 solution = Path("student/main.py").resolve()
 sys.path.insert(0, str(solution.parent))
 sys.argv = [str(solution)]
