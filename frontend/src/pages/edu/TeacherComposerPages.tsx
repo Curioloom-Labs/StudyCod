@@ -1,9 +1,9 @@
 import React from "react";
 import "./eduWorkspace.css";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, BookOpen, ClipboardCheck, Clock3, FileText, Save } from "lucide-react";
+import { ArrowLeft, BookOpen, ClipboardCheck, FileText, Save } from "lucide-react";
 import { api } from "../../lib/api/client";
-import { createLesson, type EduLanguage } from "../../lib/api/edu";
+import { createLesson, createTask, deleteEduLesson, type EduLanguage } from "../../lib/api/edu";
 import { enabledJudgeLanguages, JUDGE_LANGUAGE_LABELS } from "../../lib/judgeLanguages";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { withDevPreview } from "../../lib/devPreview";
@@ -27,8 +27,75 @@ export const CreateTopicWorkspace: React.FC = () => {
 
 export const CreateLessonWorkspace: React.FC = () => {
   useTranslation();
-  const { classId } = useParams<{ classId: string }>(); const navigate = useNavigate();
-  const [kind, setKind] = React.useState<"LESSON" | "CONTROL">("LESSON"); const [title, setTitle] = React.useState(""); const [theory, setTheory] = React.useState(""); const [withTheory, setWithTheory] = React.useState(true); const [minutes, setMinutes] = React.useState("40"); const [busy, setBusy] = React.useState(false); const [error, setError] = React.useState<string | null>(null);
-  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (busy || !title.trim()) return; setBusy(true); try { const item = preview() ? { id: 101 } : await createLesson(Number(classId), { type: kind, title: title.trim(), theory: withTheory ? theory : undefined, hasTheory: withTheory, timeLimitMinutes: kind === "CONTROL" && minutes ? Number(minutes) : undefined, controlHasTheory: withTheory, controlHasPractice: true }); navigate(withDevPreview(`/edu/lessons/${item.id}`, window.location.search, "teacher")); } catch (caught) { setError(getErrorMessageFromUnknown(caught, tr("Не вдалося створити урок.", "Could not create the lesson."))); } finally { setBusy(false); } };
- return <div className={shell}><ComposerHeader eyebrow={tr("EDU / заняття", "EDU / lesson")} title={tr("Зібрати новий урок", "Create a new lesson")} text={tr("Спочатку визначте формат заняття, потім додайте контекст — практику можна під’єднати на наступному кроці.", "Choose the lesson format first, then add context. You can attach practice in the next step.")} classId={classId} /><form onSubmit={submit} className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]"><section className="space-y-6 rounded-[30px] border border-border/10 bg-white p-6 shadow-[0_20px_56px_rgba(12,36,20,.06)] dark:border-white/[.09] dark:bg-bg-surface sm:p-8"><div className="grid grid-cols-2 gap-2 rounded-2xl bg-bg-hover p-1.5 dark:bg-white/[.06]"><button type="button" onClick={() => setKind("LESSON")} aria-pressed={kind === "LESSON"} className={`rounded-xl py-3 text-sm font-bold ${kind === "LESSON" ? "bg-white shadow-sm dark:bg-bg-hover dark:text-text-primary" : "text-text-muted dark:text-text-secondary"}`}>{tr("Урок", "Lesson")}</button><button type="button" onClick={() => setKind("CONTROL")} aria-pressed={kind === "CONTROL"} className={`rounded-xl py-3 text-sm font-bold ${kind === "CONTROL" ? "bg-white shadow-sm dark:bg-bg-hover dark:text-text-primary" : "text-text-muted dark:text-text-secondary"}`}>{tr("Контрольна", "Test")}</button></div><Field label={tr("Назва", "Title")}><input required maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} className={input} placeholder={kind === "LESSON" ? tr("Наприклад, Рядки в Python", "For example, Strings in Python") : tr("Наприклад, Контрольна №2", "For example, Test 2")} /></Field>{kind === "CONTROL" && <Field label={tr("Ліміт часу", "Time limit")}><div className="relative"><Clock3 className="absolute left-4 top-1/2 size-4 -translate-y-1/2 text-text-muted" /><input type="number" min="1" max="1440" step="1" required value={minutes} onChange={(event) => setMinutes(event.target.value)} className={`${input} pl-11`} /></div></Field>}<label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-bg-hover p-4 text-sm font-bold dark:bg-white/[.045]"><input type="checkbox" checked={withTheory} onChange={(event) => setWithTheory(event.target.checked)} className="mt-1" /><span>{tr("Додати пояснення", "Add an explanation")} <small className="mt-1 block font-normal text-text-muted dark:text-text-secondary">{tr("Учень побачить контекст перед практикою.", "Students will see this context before practice.")}</small></span></label>{withTheory && <Field label={tr("Пояснення", "Explanation")}><textarea value={theory} onChange={(event) => setTheory(event.target.value)} className={`${input} min-h-44 resize-y`} placeholder={tr("Ключова ідея, приклади або markdown.", "Key idea, examples, or Markdown.")} /></Field>}{error && <p role="alert" className="rounded-2xl bg-accent-error/10 px-4 py-3 text-sm font-medium text-accent-error dark:text-accent-error">{error}</p>}<button type="submit" disabled={busy || !title.trim()} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-45 dark:bg-primary dark:text-primary-foreground"><ClipboardCheck className="size-4" />{busy ? tr("Створюємо…", "Creating…") : kind === "LESSON" ? tr("Створити урок", "Create lesson") : tr("Створити контрольну", "Create test")}</button></section><aside className="edu-composer-result rounded-[28px] border border-border/10 bg-bg-hover p-6 dark:border-accent-warn/20 dark:bg-accent-warn/[.07]"><span className="grid size-11 place-items-center rounded-2xl bg-accent-warn/12 text-accent-warn dark:text-accent-warn"><FileText className="size-5" /></span><h2 className="mt-6 text-xl font-bold">{tr("Результат", "Result")}</h2><p className="mt-3 text-sm leading-6 text-text-muted dark:text-accent-warn">{tr("Після створення відкриється конструктор заняття. Там додайте задачі, матеріали та опублікуйте призначення.", "After creation, the lesson builder opens. Add tasks and materials there, then publish the assignment.")}</p></aside></form></div>;
+  const { classId } = useParams<{ classId: string }>();
+  const navigate = useNavigate();
+  const [title, setTitle] = React.useState("");
+  const [instructions, setInstructions] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (busy || !title.trim() || !instructions.trim()) return;
+    const numericClassId = Number(classId);
+    if (!Number.isSafeInteger(numericClassId) || numericClassId <= 0) {
+      setError(tr("Некоректний клас.", "Invalid class."));
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    if (preview()) {
+      navigate(withDevPreview("/edu/lessons/101", window.location.search, "teacher"));
+      setBusy(false);
+      return;
+    }
+
+    let createdLessonId: number | null = null;
+    try {
+      const wrapper = await createLesson(numericClassId, {
+        type: "LESSON",
+        title: title.trim(),
+        hasTheory: false,
+      });
+      createdLessonId = wrapper.id;
+      await createTask(wrapper.id, {
+        title: title.trim(),
+        description: instructions.trim(),
+        template: "",
+        taskMode: "MANUAL",
+      });
+      navigate(withDevPreview(`/edu/lessons/${wrapper.id}`, window.location.search, "teacher"));
+    } catch (caught) {
+      if (createdLessonId !== null) {
+        try { await deleteEduLesson(createdLessonId); } catch { /* keep the original creation error visible */ }
+      }
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося створити роботу в класі.", "Could not create classwork.")));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <div className={shell}>
+    <ComposerHeader eyebrow={tr("EDU / робота в класі", "EDU / classwork")} title={tr("Нова робота в класі", "New classwork")} text={tr("Додайте умову завдання. Учні надішлють текст або файл, а ви виставите оцінку та коментар.", "Add the task instructions. Students submit text or a file, then you enter a grade and feedback.")} classId={classId} />
+    <form onSubmit={submit} className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="space-y-6 rounded-[30px] border border-border/10 bg-white p-6 shadow-[0_20px_56px_rgba(12,36,20,.06)] dark:border-white/[.09] dark:bg-bg-surface sm:p-8">
+        <Field label={tr("Назва роботи", "Work title")}>
+          <input required maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} className={input} placeholder={tr("Наприклад, Пояснити роботу циклу", "For example, Explain how the loop works")} />
+        </Field>
+        <Field label={tr("Умова", "Instructions")}>
+          <textarea required maxLength={50000} value={instructions} onChange={(event) => setInstructions(event.target.value)} className={`${input} min-h-44 resize-y`} placeholder={tr("Опишіть, що потрібно виконати в класі.", "Describe the work students should complete in class.")} />
+        </Field>
+        {error && <p role="alert" className="rounded-2xl bg-accent-error/10 px-4 py-3 text-sm font-medium text-accent-error dark:text-accent-error">{error}</p>}
+        <button type="submit" disabled={busy || !title.trim() || !instructions.trim()} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-45 dark:bg-primary dark:text-primary-foreground">
+          <ClipboardCheck className="size-4" />{busy ? tr("Створюємо…", "Creating…") : tr("Створити роботу", "Create classwork")}
+        </button>
+      </section>
+      <aside className="edu-composer-result rounded-[28px] border border-border/10 bg-bg-hover p-6 dark:border-accent-warn/20 dark:bg-accent-warn/[.07]">
+        <span className="grid size-11 place-items-center rounded-2xl bg-accent-warn/12 text-accent-warn dark:text-accent-warn"><FileText className="size-5" /></span>
+        <h2 className="mt-6 text-xl font-bold">{tr("Як це працює", "How it works")}</h2>
+        <p className="mt-3 text-sm leading-6 text-text-muted dark:text-accent-warn">{tr("Робота з’явиться в класному журналі. Учні здають відповідь або файл, а викладач перевіряє подачу й виставляє оцінку.", "The work appears in the class gradebook. Students submit an answer or file, and the teacher reviews it and enters a grade.")}</p>
+      </aside>
+    </form>
+  </div>;
 };

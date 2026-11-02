@@ -210,7 +210,7 @@ const createLessonTaskBodySchema = z.object({
   title: z.string().trim().min(1).max(255),
   description: z.string().trim().min(1).max(50_000),
   template: z.string().max(200_000).optional(),
-  taskMode: z.enum(["CODE", "WEB"]).optional(),
+  taskMode: z.enum(["CODE", "WEB", "MANUAL"]).optional(),
   pythonRuntimeProfile: z.enum(["STANDARD", "SCIENTIFIC", "TKINTER"]).optional(),
   projectSpec: z.object({
     version: z.literal(1),
@@ -716,20 +716,21 @@ eduRouter.post("/lessons/:lessonId/tasks", authRequired, async (req: AuthRequest
 
   const { title, description } = parsedBody.data;
   const normalizedTaskInput = normalizeWebTaskInput(parsedBody.data);
-  if (normalizedTaskInput.taskMode !== "CODE" && parsedBody.data.testData?.length) return res.status(400).json({ message: "INVALID_TEST_DATA" });
+  const taskMode: EduTaskMode = parsedBody.data.taskMode === "MANUAL" ? "MANUAL" : normalizedTaskInput.taskMode as EduTaskMode;
+  if (taskMode !== "CODE" && parsedBody.data.testData?.length) return res.status(400).json({ message: "INVALID_TEST_DATA" });
   const pythonRuntimeProfile = parsedBody.data.pythonRuntimeProfile ?? "STANDARD";
-  if (normalizedTaskInput.taskMode !== "CODE" && pythonRuntimeProfile !== "STANDARD") return res.status(400).json({ message: "PYTHON_RUNTIME_REQUIRES_CODE_TASK" });
+  if (taskMode !== "CODE" && pythonRuntimeProfile !== "STANDARD") return res.status(400).json({ message: "PYTHON_RUNTIME_REQUIRES_CODE_TASK" });
   if (pythonRuntimeProfile === "STANDARD" && parsedBody.data.testData?.some(test => test.assets?.length)) return res.status(400).json({ message: "IMAGE_FIXTURES_REQUIRE_PYTHON_LIBRARIES" });
   const task = taskRepo().create({
     lesson,
     title,
     description,
     template: normalizedTaskInput.template,
-    taskMode: normalizedTaskInput.taskMode as EduTaskMode,
+    taskMode,
     webTemplateFiles: normalizedTaskInput.webTemplateFiles,
     webValidationRules: normalizedTaskInput.webValidationRules,
     webValidationProfile: normalizedTaskInput.webValidationProfile,
-    projectSpec: parsedBody.data.projectSpec ?? null,
+    projectSpec: taskMode === "MANUAL" ? null : (parsedBody.data.projectSpec ?? null),
     pythonRuntimeProfile,
     maxAttempts: parsedBody.data.maxAttempts ?? 3,
     isClosed: false

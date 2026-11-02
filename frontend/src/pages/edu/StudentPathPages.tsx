@@ -106,11 +106,16 @@ export const StudentLessonsWorkspace: React.FC = () => {
     return () => { cancelled = true; window.clearInterval(id); };
   }, [classId]);
   if (loading) return <div className={container}><div className="h-[580px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" /></div>;
-  const topics = lessons.filter((lesson) => lesson.type === "TOPIC" || lesson.type === "LESSON"); const controls = lessons.filter((lesson) => lesson.type === "CONTROL");
+  const isStandaloneClasswork = (lesson: Lesson) => lesson.type === "LESSON" && lesson.source !== "course" && !lesson.parentTopicId;
+  const classworks = lessons.filter(isStandaloneClasswork);
+  const topics = lessons.filter((lesson) => lesson.type === "TOPIC" || lesson.type === "LESSON" && !isStandaloneClasswork(lesson)); const controls = lessons.filter((lesson) => lesson.type === "CONTROL");
   const nextTopic = topics.find((topic) => {
     const topicTasks = topic.tasks || [];
     return !topicTasks.length || topicTasks.some((task) => !task.progressCompleted && !task.grade?.isCompleted);
   }) || topics[0] || null;
+  const nextClasswork = classworks.find((work) => (work.tasks || []).some((task) => !task.progressCompleted && !task.grade?.isCompleted)) || classworks[0] || null;
+  const nextItem = nextTopic || nextClasswork;
+  const nextItemIsClasswork = !nextTopic && Boolean(nextClasswork);
   const trackedTasks = topics.flatMap((topic) => topic.tasks || []);
   const completedTrackedTasks = trackedTasks.filter((task) => task.progressCompleted || task.grade?.isCompleted).length;
   const plannedTaskCount = topics.reduce((total, topic) => total + (topic.tasksCount || topic.tasks?.length || 0), 0);
@@ -123,11 +128,11 @@ export const StudentLessonsWorkspace: React.FC = () => {
     </header>
     <section className="edu-lessons-hero edu-lessons-hero--path" aria-label={tr("Продовжити навчання", "Continue learning")}>
       <div className="edu-lessons-hero__main">
-        <p className="edu-lessons-kicker"><Play className="size-3.5" aria-hidden="true" />{tr("Наступний урок", "Next lesson")}</p>
-        <h2>{nextTopic?.title || tr("Навчання починається тут", "Your learning starts here")}</h2>
-        <p className="edu-lessons-intro">{nextTopic ? tr("Опрацюй матеріал і переходь до практичних задач. Усе зібрано в одному уроці.", "Review the material, then move on to practice. Everything is in one lesson.") : tr("Коли викладач опублікує тему, вона з’явиться у маршруті класу.", "When your teacher publishes a topic, it will appear in your class pathway.")}</p>
+        <p className="edu-lessons-kicker"><Play className="size-3.5" aria-hidden="true" />{tr(nextItemIsClasswork ? "Робота в класі" : "Наступний урок", nextItemIsClasswork ? "Classwork" : "Next lesson")}</p>
+        <h2>{nextItem?.title || tr("Навчання починається тут", "Your learning starts here")}</h2>
+        <p className="edu-lessons-intro">{nextItem ? nextItemIsClasswork ? tr("Відкрий роботу, надішли відповідь або файл і перевір оцінку після перевірки викладачем.", "Open the work, submit an answer or file, then check your grade after teacher review.") : tr("Опрацюй матеріал і переходь до практичних задач. Усе зібрано в одному уроці.", "Review the material, then move on to practice. Everything is in one lesson.") : tr("Коли викладач опублікує тему або роботу в класі, вона з’явиться тут.", "When your teacher publishes a topic or classwork, it will appear here.")}</p>
         <div className="edu-lessons-hero__actions">
-          {nextTopic && <button type="button" onClick={() => navigate(eduLessonPath(nextTopic))} className="edu-lessons-hero__continue"><Play className="size-4 fill-current" />{tr("Відкрити урок", "Open lesson")}<ArrowRight className="size-4" /></button>}
+          {nextItem && <button type="button" onClick={() => navigate(eduLessonPath(nextItem))} className="edu-lessons-hero__continue"><Play className="size-4 fill-current" />{tr(nextItemIsClasswork ? "Відкрити роботу" : "Відкрити урок", nextItemIsClasswork ? "Open classwork" : "Open lesson")}<ArrowRight className="size-4" /></button>}
           <button type="button" onClick={() => navigate("/edu/journal")} className="edu-lessons-journal"><CircleDot className="size-4" />{tr("Журнал", "Journal")}<ArrowRight className="size-4" /></button>
         </div>
       </div>
@@ -167,6 +172,19 @@ export const StudentLessonsWorkspace: React.FC = () => {
           })}
           {controls.filter((control) => !topics.some((topic) => topic.id === control.parentTopicId && (topic.source || "legacy") === (control.source || "legacy"))).map((control) => <button type="button" key={eduLessonKey(control)} onClick={() => navigate(eduLessonPath(control))} className="edu-topic-row edu-topic-row__standalone"><span className="edu-topic-row__number"><ClipboardList className="size-4" /></span><span className="edu-topic-row__copy"><strong>{control.title}</strong><span>{control.courseAttempt?.status === "COMPLETED" ? control.courseReport?.pendingReview ? tr("Здано · очікує перевірки", "Submitted · awaiting review") : tr("Завершено", "Completed") : control.courseAttempt?.status === "IN_PROGRESS" ? tr("Розпочато", "In progress") : tr("Контрольна робота", "Assessment")}</span></span><ArrowRight className="size-4" /></button>)}
           {!lessons.length && <div className="edu-curriculum__empty"><BookOpen className="size-5" /><strong>{tr("Тут з’являться уроки класу", "Your class lessons will appear here")}</strong><span>{tr("Коли викладач опублікує тему або практику, вона буде додана до маршруту.", "When your teacher publishes a topic or practice, it will be added to this pathway.")}</span></div>}
+        </div>
+      </section>
+
+      <section className="edu-curriculum" aria-labelledby="edu-classwork-title">
+        <div className="edu-section-heading"><div><p>{tr("Окремо від тем", "Outside the topic pathway")}</p><h2 id="edu-classwork-title">{tr("Робота в класі", "Classwork")}</h2></div><span>{classworks.length} {tr("робіт", "items")}</span></div>
+        <div className="edu-curriculum__list">
+          {classworks.map((work) => <button type="button" key={eduLessonKey(work)} onClick={() => navigate(eduLessonPath(work))} className="edu-topic-row edu-topic-row__standalone">
+            <span className="edu-topic-row__number"><ClipboardList className="size-4" aria-hidden="true" /></span>
+            <span className="edu-topic-row__copy"><strong>{work.title}</strong><span>{work.tasksCount || work.tasks?.length || 0} {tr("завдань до здачі", "tasks to submit")}</span></span>
+            <span className="edu-topic-row__completion">{work.tasks?.some((task) => task.grade?.isCompleted) ? tr("Оцінено", "Graded") : tr("Очікує здачі", "To submit")}</span>
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </button>)}
+          {!classworks.length && <div className="edu-curriculum__empty"><ClipboardList className="size-5" aria-hidden="true" /><strong>{tr("Робіт у класі поки немає", "No classwork yet")}</strong><span>{tr("Коли викладач призначить роботу, вона з’явиться тут окремо від тем.", "Classwork from your teacher will appear here, outside the topic pathway.")}</span></div>}
         </div>
       </section>
 

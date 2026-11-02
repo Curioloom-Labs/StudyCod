@@ -87,14 +87,17 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
 
   const normalizedSystem = normalizeGradingSystem(gradingSystem);
   const normalizedScale = normalizeScaleMode(scaleMode);
+  const isStandaloneClasswork = (lesson: Lesson) => lesson.type === "LESSON" && lesson.source !== "course" && !lesson.parentTopicId;
+  const classworks = lessons.filter(isStandaloneClasswork);
+  const curriculumLessons = lessons.filter((lesson) => !isStandaloneClasswork(lesson));
   const graded = useMemo(() => grades.filter((grade) => grade.total != null && Number.isFinite(Number(grade.total))), [grades]);
   const average = useMemo(() => graded.length ? graded.reduce((sum, grade) => sum + Number(grade.total), 0) / graded.length : 0, [graded]);
-  const next = lessons.find((lesson) => {
+  const next = [...classworks, ...curriculumLessons].find((lesson) => {
     if (lesson.reportOnly) return false;
     const tasks = lesson.tasks || [];
     if (tasks.length) return tasks.some((task) => !task.progressCompleted && !task.hasGrade && !task.grade?.isCompleted);
     return lesson.controlWorks?.some((work) => work.studentStatus !== "COMPLETED") ?? true;
-  }) || lessons.find((lesson) => !lesson.reportOnly);
+  }) || [...classworks, ...curriculumLessons].find((lesson) => !lesson.reportOnly);
   const displayAverage = graded.length ? formatGradeForSystem(average, normalizedSystem, normalizedScale) : "—";
   const recentGrades = [...grades].sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || ""))).slice(0, 8);
 
@@ -123,13 +126,13 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
               <button type="button" onClick={() => navigate(withDevPreview(eduLessonPath(next)))} className="mt-4 block w-full rounded-xl border border-border bg-bg-subtle p-5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 dark:border-white/10 dark:bg-white/[.035]">
                 <div className="flex justify-between gap-4">
                   <div>
-                    <div className="text-xs font-semibold text-primary-strong dark:text-primary-soft">{next.type === "CONTROL" ? tr("Контрольна", "Test") : next.type === "TOPIC" ? tr("Тема", "Topic") : tr("Урок", "Lesson")}</div>
+                    <div className="text-xs font-semibold text-primary-strong dark:text-primary-soft">{isStandaloneClasswork(next) ? tr("Робота в класі", "Classwork") : next.type === "CONTROL" ? tr("Контрольна", "Test") : next.type === "TOPIC" ? tr("Тема", "Topic") : tr("Урок", "Lesson")}</div>
                     <div className="mt-2 text-xl font-semibold">{next.title}</div>
                     <div className="mt-2 text-sm text-text-secondary">{next.tasksCount} {tr("задач", "problems")} · {next.hasTheory ? tr("є теорія", "theory included") : tr("практичний блок", "practice section")}</div>
                   </div>
                   <ArrowRight className="h-5 w-5 shrink-0 text-primary-strong dark:text-primary-soft" />
                 </div>
-                <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary-strong dark:text-primary-soft"><BookOpen className="h-4 w-4" />{tr("Відкрити урок", "Open lesson")}</div>
+                <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary-strong dark:text-primary-soft"><BookOpen className="h-4 w-4" />{isStandaloneClasswork(next) ? tr("Відкрити роботу", "Open classwork") : tr("Відкрити урок", "Open lesson")}</div>
               </button>
             ) : <div className="mt-5 rounded-2xl bg-bg-hover p-5 text-sm text-text-muted dark:bg-white/[.04] dark:text-text-secondary">{lessons.length ? tr("Усі призначені уроки завершено. Результати доступні нижче.", "All assigned lessons are complete. Your results are available below.") : tr("Поки що немає доступних уроків.", "No lessons are available yet.")}</div>}
           </section>
@@ -180,7 +183,13 @@ export const StudentJournalPage: React.FC<{ user: User }> = ({ user }) => {
             <div className="text-xs font-semibold uppercase tracking-[.16em] text-primary-strong dark:text-primary-soft">{tr("Активність", "Activity")}</div>
             {lessons.some(lesson => lesson.source === "course" && lesson.type === "CONTROL" && lesson.reportOnly) && <div className="mb-6 space-y-2"><h2 className="text-lg font-semibold">{tr("Результати контрольних", "Assessment results")}</h2>{lessons.filter(lesson => lesson.source === "course" && lesson.type === "CONTROL" && lesson.reportOnly).map(lesson => <button type="button" key={eduLessonKey(lesson)} onClick={() => navigate(eduLessonPath(lesson))} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl bg-bg-hover p-3 text-left"><span className="min-w-0"><span className="block font-semibold">{lesson.title}</span><span className="block text-xs text-text-secondary">{lesson.courseReport?.pendingReview ? tr("Очікує перевірки викладача", "Awaiting teacher review") : tr("Завершено", "Completed")}</span></span><span className="shrink-0 font-bold text-primary-strong">{lesson.courseReport?.finalPercent == null ? "—" : formatGradeForSystem(lesson.courseReport.finalPercent, normalizedSystem, normalizedScale)}</span></button>)}</div>}
             {!!quizGrades.length && <div className="mb-6 space-y-2"><h2 className="text-lg font-semibold">{tr("Результати квізів", "Quiz results")}</h2>{quizGrades.map(quiz => <button type="button" key={quiz.id} onClick={() => navigate(withDevPreview(`/edu/lessons/${quiz.lessonId}/quiz?source=course`))} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl bg-bg-hover p-3 text-left"><span className="min-w-0"><span className="block font-semibold">{quiz.title}</span><span className="block text-xs text-text-secondary">{quiz.status === "NEEDS_MANUAL" ? tr("Очікує перевірки викладача", "Awaiting teacher review") : tr("Перевірено", "Graded")}</span></span><span className="shrink-0 font-bold text-primary-strong">{quiz.finalPercent == null ? "—" : formatGradeForSystem(quiz.finalPercent, normalizedSystem, normalizedScale)}</span></button>)}</div>}
-            <div className="mt-5 space-y-3">{lessons.slice(0, 4).map((lesson) => (
+            {!!classworks.length && <div className="mb-6 space-y-2"><h2 className="text-lg font-semibold">{tr("Роботи в класі", "Classwork")}</h2>{classworks.slice(0, 4).map((lesson) => {
+              const tasks = lesson.tasks || [];
+              const gradedWork = tasks.length > 0 && tasks.every((task) => task.hasGrade || task.grade?.isCompleted);
+              const submittedWork = tasks.some((task) => task.progressCompleted || task.hasGrade || task.grade?.isCompleted);
+              return <button type="button" key={eduLessonKey(lesson)} onClick={() => navigate(withDevPreview(eduLessonPath(lesson)))} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl bg-bg-hover p-3 text-left"><span className="min-w-0"><span className="block font-semibold">{lesson.title}</span><span className="block text-xs text-text-secondary">{gradedWork ? tr("Оцінено", "Graded") : submittedWork ? tr("Очікує перевірки", "Awaiting review") : tr("Ще не виконано", "Not completed yet")}</span></span>{gradedWork ? <CheckCircle2 className="h-4 w-4 text-primary-strong" /> : <Clock3 className="h-4 w-4 text-accent-warn" />}</button>;
+            })}</div>}
+            <div className="mt-5 space-y-3">{curriculumLessons.slice(0, 4).map((lesson) => (
               <button type="button" key={eduLessonKey(lesson)} onClick={() => navigate(withDevPreview(eduLessonPath(lesson)))} className="flex w-full items-center justify-between rounded-xl bg-bg-subtle p-3 text-left dark:bg-white/[.04]">
                 <div>
                   <div className="font-semibold">{lesson.title}</div>
