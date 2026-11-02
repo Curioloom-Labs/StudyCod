@@ -74,6 +74,7 @@ test('Tkinter reference generation uses validated JSON events and reviews UI sna
         assert.match(instructions, /JSON UI-event payload strings/);
         assert.match(instructions, /WIDTHxHEIGHT/);
         assert.match(instructions, /explicitly call focus_force\(\) on the statement-defined target before mainloop rather than relying only on focus_set\(\)/);
+        assert.match(instructions, /Delete removes at the cursor and has no effect at the end/);
         assert.equal(JSON.parse(prompt).existingExamples[0].input, '{"events":[]}');
         return {
           referenceSolution: source,

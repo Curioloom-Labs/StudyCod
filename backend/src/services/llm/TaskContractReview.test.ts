@@ -621,6 +621,7 @@ test('Tkinter test review uses the UI-event contract instead of console IO assum
   assert.match(systemPrompts[0], /Do not apply stdin\/stdout or console-only assumptions/);
   assert.match(systemPrompts[0], /each candidate output as its observed JSON widget snapshot/);
   assert.match(systemPrompts[0], /do not require stdin\/stdout, interpret silent Python stdout as an empty candidate output/);
+  assert.match(systemPrompts[0], /Delete removes the character at the cursor and has no effect when the cursor is at the end/);
   assert.doesNotMatch(systemPrompts[0], /verify that the reference program implements every observable stdin\/stdout rule/);
   assert.match(systemPrompts[0], /deterministically stated focused widget/);
 });
