@@ -43,13 +43,13 @@ test("summarizeAgenda counts per bucket", () => {
   assert.deepEqual(summarizeAgenda(r), { overdue: 1, today: 1, soon: 1, later: 0 });
 });
 
-test("student agenda includes topic practices and filters targeted assignments", async t => {
+test("student agenda includes topic tasks and filters targeted assignments", async t => {
   const row = (id: number, assignedStudentIds: unknown, extra = {}) => ({ id, assignedStudentIds, title: "Work", deadline: "2026-06-25T12:00:00Z", classId: 1, className: "Class", topicId: 10, ...extra });
-  const conditions: string[] = [];
+  const conditions: Array<{ clause: string; params?: Record<string, unknown> }> = [];
   const repo = (rows: unknown[]) => {
     const qb: any = { getRawMany: async () => rows };
     for (const method of ["innerJoin", "where", "andWhere", "select", "addSelect"]) {
-      qb[method] = (...args: unknown[]) => { if (method === "andWhere") conditions.push(String(args[0])); return qb; };
+      qb[method] = (...args: unknown[]) => { if (method === "andWhere") conditions.push({ clause: String(args[0]), params: args[1] as Record<string, unknown> | undefined }); return qb; };
     }
     return { createQueryBuilder: () => qb };
   };
@@ -64,5 +64,5 @@ test("student agenda includes topic practices and filters targeted assignments",
   const teacher = await getDeadlinesForClasses([1], now, new Date("2026-07-01"));
   assert.equal(teacher.length, 6);
   assert.ok(conditions.includes("t.isAssigned = 1"));
-  assert.ok(conditions.includes("t.type = :type"));
+  assert.deepEqual(conditions.find(({ clause }) => clause === "t.type IN (:...types)")?.params?.types, ["PRACTICE", "CLASSWORK"]);
 });
