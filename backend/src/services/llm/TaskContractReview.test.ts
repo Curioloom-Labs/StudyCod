@@ -587,6 +587,31 @@ test('generated-test review receives required coverage and public examples', asy
   assert.deepEqual(review.publicExamples, [{ input: '3', output: '6' }]);
 });
 
+test('Tkinter test review uses the UI-event contract instead of console IO assumptions', async () => {
+  const calls: string[] = [];
+  const systemPrompts: string[] = [];
+  const examples = [
+    { input: '{"events":[{"type":"type","text":"Hello"}]}', output: '{"widgets":[{"type":"Entry","value":"Hello"}]}' },
+    { input: '{"events":[{"type":"type","text":"Test"},{"type":"click","x":200,"y":115}]}', output: '{"widgets":[{"type":"Entry","value":""}]}' },
+    { input: '{"events":[{"type":"type","text":"Data"},{"type":"key","key":"BackSpace"}]}', output: '{"widgets":[{"type":"Entry","value":"Dat"}]}' },
+  ];
+
+  await reviewGeneratedTests(
+    fakeProvider([{ valid: true, invalidSource: 'none', issues: [] }], calls, systemPrompts),
+    'A Tkinter window has a focused Entry and a clear button. Typing inserts text into the Entry; clicking the button clears it; BackSpace removes the final character.',
+    'STDIN_STDOUT',
+    examples,
+    { pythonRuntimeProfile: 'TKINTER', publicExamples: examples },
+  );
+
+  const payload = JSON.parse(calls[0]);
+  assert.equal(payload.ioType, 'TKINTER');
+  assert.equal(payload.pythonRuntimeProfile, 'TKINTER');
+  assert.deepEqual(payload.publicExamples, examples);
+  assert.match(systemPrompts[0], /Do not apply stdin\/stdout or console-only assumptions/);
+  assert.match(systemPrompts[0], /deterministically stated focused widget/);
+});
+
 test('review fails closed for missing, malformed, or inconsistent verdicts', async () => {
   for (const verdict of [{}, { valid: 'true', invalidSource: 'none', issues: [] }, { valid: true, invalidSource: 'statement', issues: ['Wrong answer.'] }, { valid: false, invalidSource: 'statement', issues: [] }, { valid: false, invalidSource: 'none', issues: ['Wrong answer.'] }]) {
     await assert.rejects(reviewGeneratedTask(fakeProvider([verdict, verdict]), task), /TASK_CONTRACT_REVIEW_FAILED/);
@@ -702,6 +727,35 @@ test('generated-test model prompt and reviewer both receive lesson coverage requ
   assert.match(calls[0], /maximum n/);
   assert.deepEqual(JSON.parse(calls[1]).requiredCases, ['minimum n', 'maximum n']);
   assert.deepEqual(JSON.parse(calls[1]).publicExamples, [{ input: '3', output: '6' }]);
+});
+
+test('Tkinter generation prompts and reviewer retain the UI runtime profile', async () => {
+  const calls: string[] = [];
+  const systemPrompts: string[] = [];
+  const provider = fakeProvider([
+    { tests: [{ input: '{"events":[{"type":"type","text":"Hello"}]}', output: '{"widgets":[{"type":"Entry","value":"Hello"}]}' }] },
+    { valid: true, invalidSource: 'none', issues: [] },
+  ], calls, systemPrompts);
+  const orchestrator = new LLMOrchestrator() as unknown as {
+    generateTestDataWithAI_OpenRouter(params: object, provider: LLMProvider): Promise<unknown>;
+  };
+
+  const result = await orchestrator.generateTestDataWithAI_OpenRouter({
+    taskDescription: 'A Tkinter window has a focused Entry. Typing text places it in the Entry and the Judge output is its exact widget snapshot.',
+    taskTitle: 'Type into a focused Entry', lang: 'PYTHON', count: 1, ioType: 'STDIN_STDOUT',
+    pythonRuntimeProfile: 'TKINTER',
+    publicExamples: [{ input: '{"events":[{"type":"type","text":"Hello"}]}', output: '{"widgets":[{"type":"Entry","value":"Hello"}]}' }],
+  }, provider);
+
+  assert.ok(Array.isArray(result));
+  assert.match(calls[0], /IO TYPE: TKINTER/);
+  assert.match(calls[0], /JSON event object/);
+  assert.match(calls[0], /exact widget snapshot JSON/);
+  assert.doesNotMatch(systemPrompts[0], /Output is stdout only/);
+  const reviewPayload = JSON.parse(calls[1]);
+  assert.equal(reviewPayload.ioType, 'TKINTER');
+  assert.equal(reviewPayload.pythonRuntimeProfile, 'TKINTER');
+  assert.match(systemPrompts[1], /Do not apply stdin\/stdout or console-only assumptions/);
 });
 
 test('task generation reviews public examples before returning and retries an ambiguous task', async () => {

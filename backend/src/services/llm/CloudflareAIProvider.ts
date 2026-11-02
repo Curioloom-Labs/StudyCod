@@ -7,6 +7,7 @@ import { requireCompleteTaskDescription, resolveTestDataIoType, TASK_PRECISION_I
 import { AIResponseValidator } from './AIResponseValidator';
 import { parseOlympiadPracticeContract } from '../learning/learningContract';
 import { parseTaskSubtasks } from '../edu/taskSubtasks';
+import type { EduPythonRuntimeProfile } from '../edu/pythonTaskRuntime';
 import { consumeRetryBudget, isPromptBundleVersion, isPromptId, type PromptId } from '../../../../shared/ai/prompts';
 import { getActivePromptBundleVersion, getCurrentAIExecutionContext, waitWithinAIExecutionContext } from './promptExecution';
 interface CloudflareWorkerRequest {
@@ -162,10 +163,12 @@ Return ONLY the Markdown statement.${params.generationGuidance?.trim() ? `\n\nMA
     ioType?: "STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT";
     requiredCases?: string[];
     allowEmptyOutput?: boolean;
+    pythonRuntimeProfile?: EduPythonRuntimeProfile;
   }): { prompt: string; systemPrompt: string; schema: object } {
     const langName = topicLanguageLabel(params.lang);
     const taskDesc = requireCompleteTaskDescription(String(params.taskDescription || ""));
     const ioType = resolveTestDataIoType(taskDesc, params.ioType);
+    const isTkinter = params.pythonRuntimeProfile === 'TKINTER';
     const needsInput = ioType === 'STDIN_STDOUT';
     const count = needsInput ? Math.max(1, Math.floor(params.count)) : 1;
     const hasSubtaskOrder = params.requiredCases?.some(item => /^(?:SUBTASK ORDER|ПОРЯДОК ПІДЗАДАЧ):/i.test(item.trim())) ?? false;
@@ -227,6 +230,23 @@ ${params.allowEmptyOutput ? '- output має точно зберігати по�
 ${JSON.stringify(schema, null, 2)}
 
 Поверни лише JSON.`;
+
+    if (isTkinter) {
+      const tkinterInput = 'Для кожного тесту передай валідний JSON-об’єкт подій Tkinter; не трактуй його як консольний stdin.';
+      const tkinterOutput = 'Очікуваний результат — точний JSON-знімок віджетів після цих подій у віртуальному Judge. Дотримуйся початкового фокуса, порядку подій, розміщення та координат кліків з умови.';
+      return {
+        prompt: prompt
+          .replace(`IO TYPE: ${ioType}`, 'IO TYPE: TKINTER')
+          .replace(/- output має (?:бути непорожнім фактичним stdout:[^\n]+|точно зберігати порожній stdout[^\n]+)/, `- ${tkinterInput} ${tkinterOutput}`)
+          .replace('- Виведи рівно всі рядки результату, визначені умовою, у правильному порядку; не пропускай рядок для нуля. Не округлюй і не відкидай дробову частину, якщо це явно не вимагає умова.', `- Поверни точний JSON-знімок віджетів після кожного event sequence; не додавай stdout, текстові пояснення чи поля, яких немає у Judge snapshot.`)
+          .replace('- Для кожного тесту підстав input у формулу з умови й окремо звір кожен рядок output, перш ніж повертати JSON.', '- Для кожного тесту послідовно відтвори події на реальному віртуальному Tkinter-вікні та звір snapshot з видимою умовою.'),
+        systemPrompt: systemPrompt.replace(
+          /Перед відповіддю мовчки розбери формат stdin,[^`]*?значення дорівнює нулю\./,
+          'Для Tkinter кожен input — JSON-об’єкт подій для реального вікна, а output — точний JSON-знімок віджетів із віртуального Judge. Не трактуй їх як stdin/stdout; дотримуйся описаного фокуса, порядку подій, розміщення та координат кліків.',
+        ),
+        schema,
+      };
+    }
 
     return { prompt, systemPrompt, schema };
   }
@@ -713,6 +733,7 @@ ${JSON.stringify(schema, null, 2)}
     validationFeedback?: string;
     requiredCases?: string[];
     allowEmptyOutput?: boolean;
+    pythonRuntimeProfile?: EduPythonRuntimeProfile;
   }, options?: LLMGenerateOptions): Promise<Array<{
     input: string;
     output: string;
@@ -727,10 +748,11 @@ ${JSON.stringify(schema, null, 2)}
       ioType: params.ioType,
       requiredCases: params.requiredCases,
       allowEmptyOutput: params.allowEmptyOutput,
+      pythonRuntimeProfile: params.pythonRuntimeProfile,
     });
     const response = await this.callCloudflareWorker('generate-test-data', {
       prompt: built.prompt + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nReturn corrected tests and resolve every reported issue.` : ''),
-      systemPrompt: built.systemPrompt + (params.allowEmptyOutput ? '\nFor this authored EDU task, preserve empty stdout or blank lines exactly when explicitly required by its statement. Never replace them with a sentinel.' : ''),
+      systemPrompt: built.systemPrompt + (params.allowEmptyOutput && params.pythonRuntimeProfile !== 'TKINTER' ? '\nFor this authored EDU task, preserve empty stdout or blank lines exactly when explicitly required by its statement. Never replace them with a sentinel.' : ''),
       schema: built.schema
     }, {
       userId: params.userId,

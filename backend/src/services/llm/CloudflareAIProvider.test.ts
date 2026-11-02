@@ -52,6 +52,33 @@ describe("CloudflareAIProvider prompt shaping", () => {
     assert.ok(built.prompt.includes('IO TYPE: STDIN_STDOUT'));
     assert.equal(built.schema.properties.tests.minItems, 1);
   });
+  test("Tkinter fallback prompt uses JSON events and Judge snapshots", async () => {
+    const p = new CloudflareAIProvider() as any;
+    const statement = 'A Tkinter window contains a focused Entry. The Judge output is the exact widget snapshot.';
+    const built = p.buildTestDataPrompt({
+      taskDescription: statement, taskTitle: 'Focused Entry', lang: 'PYTHON', count: 2,
+      ioType: 'STDIN_STDOUT', pythonRuntimeProfile: 'TKINTER', allowEmptyOutput: true,
+    });
+    assert.match(built.prompt, /IO TYPE: TKINTER/);
+    assert.match(built.prompt, /JSON-об’єкт подій Tkinter/);
+    assert.match(built.prompt, /точний JSON-знімок віджетів/);
+    assert.doesNotMatch(built.prompt, /непорожнім фактичним stdout/);
+    assert.match(built.systemPrompt, /Для Tkinter кожен input/);
+    assert.doesNotMatch(built.systemPrompt, /Перед відповіддю мовчки розбери формат stdin/);
+
+    let sent: { prompt?: string; systemPrompt?: string } | undefined;
+    p.callCloudflareWorker = async (_mode: string, params: { prompt?: string; systemPrompt?: string }) => {
+      sent = params;
+      return { content: JSON.stringify({ tests: [{ input: '{"events":[]}', output: '{"widgets":[]}' }] }) };
+    };
+    const tests = await p.generateTestDataWithAI({
+      taskDescription: statement, taskTitle: 'Focused Entry', lang: 'PYTHON', count: 1,
+      ioType: 'STDIN_STDOUT', pythonRuntimeProfile: 'TKINTER', allowEmptyOutput: true,
+    });
+    assert.equal(tests.length, 1);
+    assert.match(sent?.prompt ?? '', /IO TYPE: TKINTER/);
+    assert.match(sent?.systemPrompt ?? '', /Для Tkinter кожен input/);
+  });
   test("buildTestDataPrompt produces schema with exact count", () => {
     const p = new CloudflareAIProvider() as any;
     const built = p.buildTestDataPrompt({

@@ -308,7 +308,8 @@ export async function reviewGeneratedTests(
 ): Promise<void> {
   await reviewContract(provider, 'generateTestData', {
     statement: requireCompleteTaskDescription(statement),
-    ioType,
+    ioType: options.pythonRuntimeProfile === 'TKINTER' ? 'TKINTER' : ioType,
+    ...(options.pythonRuntimeProfile ? { pythonRuntimeProfile: options.pythonRuntimeProfile } : {}),
     candidateTests: tests.map(({ input, output }) => ({ input, output })),
     ...(options.allowEmptyOutput ? { allowEmptyOutput: true } : {}),
     ...(options.publicExamples?.length ? { publicExamples: options.publicExamples.map(({ input, output }) => ({ input, output })) } : {}),

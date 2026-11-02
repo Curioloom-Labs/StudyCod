@@ -721,7 +721,7 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
     const aiStartedAt = Date.now();
     let activeDescription = safeTaskDescription;
     let conditionRepaired = false;
-    let repairFailure: string | null = null;
+    const repairFailure: { value: { kind: "contract" | "provider"; statusCode?: number } | null } = { value: null };
     let testDataResult = await runWithAIExecutionContext(createExecutionContext('task.generated-tests', {
       traceId: req.requestId || `trace-${randomUUID()}`,
       deadlineAt: Date.now() + (EDU_TESTDATA_AI_DISABLE_DEADLINE ? 120_000 : EDU_TESTDATA_AI_BUDGET_MS),
@@ -758,7 +758,11 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
         ...(EDU_TESTDATA_AI_DISABLE_DEADLINE ? {} : { totalTimeoutMs: EDU_TESTDATA_AI_BUDGET_MS }),
       });
       if (!repair.success || typeof repair.data?.description !== "string" || !repair.data.description.trim()) {
-        repairFailure = repair.success ? "AI returned an empty repaired condition." : repair.error.error || repair.error.message;
+        const validationError = String(repair.success ? "" : repair.error.details?.validationError ?? "");
+        repairFailure.value = {
+          kind: /TASK_CONTRACT_REVIEW_FAILED\[(statement|publicExamples)\]/.test(validationError) ? "contract" : "provider",
+          ...(!repair.success ? { statusCode: repair.error.statusCode } : {}),
+        };
         return result;
       }
 
@@ -766,14 +770,20 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
       const repairedPlan = buildGenerationPlan(repairedDescription);
       if (repairedPlan.tooFewTests) {
         generationPlan = repairedPlan;
-        repairFailure = "The repaired condition has more subtasks than the selected test count can cover.";
+        repairFailure.value = { kind: "contract" };
         return result;
       }
       activeDescription = repairedDescription;
       generationPlan = repairedPlan;
       result = await runTestGeneration(activeDescription, generationPlan.requiredCases);
       if (result.success) conditionRepaired = true;
-      else repairFailure = String(result.error.details?.validationError ?? result.error.error ?? result.error.message);
+      else {
+        const verificationError = String(result.error.details?.validationError ?? "");
+        repairFailure.value = {
+          kind: /TASK_CONTRACT_REVIEW_FAILED\[(statement|publicExamples)\]/.test(verificationError) ? "contract" : "provider",
+          statusCode: result.error.statusCode,
+        };
+      }
       return result;
     });
     const aiElapsedMs = Date.now() - aiStartedAt;
@@ -789,7 +799,18 @@ router.post("/tasks/:taskId/test-data/generate", authRequired, generateTestDataL
     });
 
     if (generationPlan.tooFewTests) return subtaskCountError(generationPlan.automaticSubtasks.length);
-    if (repairFailure) {
+    if (repairFailure.value?.kind === "provider") {
+      const statusCode = repairFailure.value.statusCode === 429 || repairFailure.value.statusCode === 504
+        ? repairFailure.value.statusCode
+        : 503;
+      return res.status(statusCode).json({
+        code: "EDU_TEST_GENERATION_FAILED",
+        message: english
+          ? "AI could not finish verifying and preparing the tests. No condition changes or tests were saved. Please try again."
+          : "ШІ не зміг завершити перевірку й підготовку тестів. Зміни умови та тести не збережено. Спробуй ще раз.",
+      });
+    }
+    if (repairFailure.value?.kind === "contract") {
       return res.status(422).json({
         code: "EDU_TASK_CONDITION_REPAIR_FAILED",
         message: english

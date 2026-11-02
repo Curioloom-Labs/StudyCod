@@ -5,7 +5,7 @@ import { AppDataSource } from '../../data-source';
 import { TopicTask } from '../../entities/TopicTask';
 import { TestData } from '../../entities/TestData';
 
-for (const scenario of ['empty-success', 'oracle-failure', 'statement-conflict-repaired', 'statement-conflict-unrepairable', 'tkinter-success'] as const) {
+for (const scenario of ['empty-success', 'oracle-failure', 'statement-conflict-repaired', 'statement-conflict-unrepairable', 'statement-repair-then-timeout', 'tkinter-success'] as const) {
   test(`EDU test generation: ${scenario}`, async t => {
     const authored = [{ input: '3\n1 2 3\n', output: '6\n' }];
     const queries: string[] = [];
@@ -52,7 +52,7 @@ for (const scenario of ['empty-success', 'oracle-failure', 'statement-conflict-r
         assert.match(params.validationFeedback, /Example 1:.*35.*55/);
         assert.equal(params.topicTitle, 'Arrays');
         assert.equal(options.maxAttempts, 2);
-        if (scenario === 'statement-conflict-repaired') {
+        if (scenario === 'statement-conflict-repaired' || scenario === 'statement-repair-then-timeout') {
           return { success: true, data: { description: 'Corrected condition with recomputed examples.' } };
         }
         return { success: false, error: { statusCode: 502, message: 'AI_GENERATION_FAILED', error: 'Repair unavailable' } };
@@ -82,6 +82,10 @@ for (const scenario of ['empty-success', 'oracle-failure', 'statement-conflict-r
         details: { validationError: 'TASK_CONTRACT_REVIEW_FAILED[publicExamples]: Example 1: sum of maxima is 35, but expected output is 55.' },
       } };
       assert.equal(params.taskDescription, 'Corrected condition with recomputed examples.');
+      if (scenario === 'statement-repair-then-timeout') return { success: false, error: {
+        statusCode: 504,
+        message: 'AI_GENERATION_FAILED: Request aborted (deadline exceeded)',
+      } };
       return { success: true, data: [{ input: '0\n', output: '\n' }] };
     }) as any);
 
@@ -123,6 +127,21 @@ for (const scenario of ['empty-success', 'oracle-failure', 'statement-conflict-r
       assert.equal(saved[0].input, '{"events":[{"type":"click","x":50,"y":20}]}');
       assert.equal(saved[0].expectedOutput, '{"geometry":"160x100","title":"Counter","widgets":[]}');
       assert.equal(saved[0].source, 'AI_GENERATED');
+    } else if (scenario === 'statement-repair-then-timeout') {
+      assert.equal(status, 504);
+      assert.equal(body.code, 'EDU_TEST_GENERATION_FAILED');
+      assert.match(body.message, /could not finish verifying/);
+      assert.equal(testGenerationAttempts, 2);
+      assert.equal(repairAttempts, 1);
+      assert.equal(repairedDescription, null);
+      assert.equal(saved.length, 0);
+    } else if (scenario === 'statement-conflict-unrepairable') {
+      assert.equal(status, 503);
+      assert.equal(body.code, 'EDU_TEST_GENERATION_FAILED');
+      assert.equal(testGenerationAttempts, 1);
+      assert.equal(repairAttempts, 1);
+      assert.equal(repairedDescription, null);
+      assert.equal(saved.length, 0);
     } else {
       assert.equal(status, 422);
       assert.equal(body.code, 'EDU_TASK_CONDITION_REPAIR_FAILED');
