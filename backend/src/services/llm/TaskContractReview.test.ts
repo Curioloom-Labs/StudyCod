@@ -603,14 +603,25 @@ test('Tkinter test review uses the UI-event contract instead of console IO assum
     'A Tkinter window has a focused Entry and a clear button. Typing inserts text into the Entry; clicking the button clears it; BackSpace removes the final character.',
     'STDIN_STDOUT',
     examples,
-    { pythonRuntimeProfile: 'TKINTER', publicExamples: examples },
+    {
+      pythonRuntimeProfile: 'TKINTER',
+      publicExamples: examples,
+      executedReference: {
+        language: 'python',
+        source: 'import tkinter as tk\nroot = tk.Tk()\nroot.mainloop()',
+      },
+    },
   );
 
   const payload = JSON.parse(calls[0]);
   assert.equal(payload.ioType, 'TKINTER');
   assert.equal(payload.pythonRuntimeProfile, 'TKINTER');
+  assert.equal(payload.executedReference.language, 'python');
   assert.deepEqual(payload.publicExamples, examples);
   assert.match(systemPrompts[0], /Do not apply stdin\/stdout or console-only assumptions/);
+  assert.match(systemPrompts[0], /each candidate output as its observed JSON widget snapshot/);
+  assert.match(systemPrompts[0], /do not require stdin\/stdout, interpret silent Python stdout as an empty candidate output/);
+  assert.doesNotMatch(systemPrompts[0], /verify that the reference program implements every observable stdin\/stdout rule/);
   assert.match(systemPrompts[0], /deterministically stated focused widget/);
 });
 
