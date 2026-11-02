@@ -273,7 +273,7 @@ test('Tkinter condition repairs a non-GUI reference once and injects valid event
   const orchestrator = new LLMOrchestrator();
   const generate = (orchestrator as unknown as {
     generateTaskCondition_OpenRouter: (params: {
-      topicTitle: string; taskTitle: string; taskType: 'PRACTICE'; language: 'PYTHON'; userLanguage: 'uk'; difficulty?: number;
+      topicTitle: string; taskTitle: string; taskType: 'PRACTICE'; language: 'PYTHON'; userLanguage: 'uk' | 'en'; difficulty?: number;
       generationGuidance?: string;
       pythonRuntimeProfile: 'TKINTER';
     }, provider: LLMProvider) => Promise<{ description: string }>;
@@ -297,12 +297,28 @@ test('Tkinter condition repairs a non-GUI reference once and injects valid event
   assert.match(calls[0].systemPrompt ?? '', /Не читай stdin, не розбирай JSON/);
   assert.match(calls[0].systemPrompt ?? '', /об’єкт знімка harness формату/);
   assert.match(calls[0].systemPrompt ?? '', /фіксоване розташування через place\(x, y, width, height\)/);
+  assert.match(calls[0].systemPrompt ?? '', /порядком створення Tk winfo_children\(\)/);
+  assert.match(calls[0].systemPrompt ?? '', /кожен знімок можна було однозначно вивести з умови/);
   assert.match(calls[0].systemPrompt ?? '', /координата кожного кліку в прикладі має бути чітко всередині центру/);
   assert.match(calls[0].systemPrompt ?? '', /Це вступна задача з Tkinter:.*не додавай Entry\/Text та поведінку з фокусом\/введенням/s);
   assert.doesNotMatch(calls[0].systemPrompt ?? '', /Each output must be exact stdout/);
   assert.match(calls[1].prompt, /Tkinter program did not create a Tk window/);
   assert.match(calls[2].prompt, /executedReference/);
   assert.match(result.description, /\{"title":"Counter","geometry":"58x52","widgets":\[\]\}/);
+
+  responses.push(tkDraft, { valid: true, invalidSource: 'none', issues: [], clarificationQuestion: null });
+  const englishResult = await runWithPromptExecutionContext('task.condition-draft', {}, () => generate.call(orchestrator, {
+    topicTitle: 'Tkinter',
+    taskTitle: 'Counter window',
+    taskType: 'PRACTICE',
+    difficulty: 3,
+    language: 'PYTHON',
+    userLanguage: 'en',
+    pythonRuntimeProfile: 'TKINTER',
+  }, provider));
+  assert.match(calls[3].systemPrompt ?? '', /winfo_children\(\) creation order/);
+  assert.match(calls[3].systemPrompt ?? '', /Specify the root title, geometry, widget classes/);
+  assert.match(englishResult.description, /Counter/);
 });
 
 test('Ukrainian beginner Tkinter rejects text-entry controls and type events before Judge execution', async t => {

@@ -87,6 +87,8 @@ test('Tkinter condition review uses the event object contract and checks click t
   assert.match(systemPrompts[0], /JSON object with an events array/);
   assert.match(systemPrompts[0], /define tested widget placement\/click regions/);
   assert.match(systemPrompts[0], /does not contain per-widget x\/y\/width\/height/);
+  assert.match(systemPrompts[0], /winfo_children\(\) creation order/);
+  assert.match(systemPrompts[0], /Treat that order as observable/);
   assert.doesNotMatch(systemPrompts[0], /each input is a JSON list/);
 });
 
