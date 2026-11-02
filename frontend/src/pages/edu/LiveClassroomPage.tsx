@@ -483,7 +483,7 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
                 {roomConn === "connected" ? tr("З’єднано", "Connected") : roomConn === "failed" ? tr("Немає з’єднання", "Connection lost") : tr("Підключення…", "Connecting…")}
               </span>
               <span className="edu-live-room__participant-count" role="status" aria-label={`${participants.length} ${participants.length === 1 ? tr("учасник", "participant") : tr("учасників", "participants")}`}><Users className="size-4" aria-hidden="true" />{participants.length}</span>
-              {isTeacher && <button type="button" disabled={busy} onClick={() => void handleEnd()} className="edu-live-room__finish"><PhoneOff className="size-4" />{busy ? tr("Завершуємо…", "Ending…") : tr("Завершити урок", "End lesson")}</button>}
+              {isTeacher && <button type="button" disabled={busy} onClick={() => void handleEnd()} className="edu-live-room__finish" aria-label={busy ? tr("Завершуємо урок", "Ending lesson") : tr("Завершити", "End")}><PhoneOff className="size-4" />{busy ? tr("Завершуємо…", "Ending…") : tr("Завершити урок", "End lesson")}</button>}
             </div>
           </header>
 
