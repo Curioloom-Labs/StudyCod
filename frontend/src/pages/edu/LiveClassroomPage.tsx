@@ -36,7 +36,7 @@ import "./eduWorkspace.css";
 import "./eduVisualQuality.css";
 
 type Phase = "loading" | "lobby" | "prejoin" | "in_room" | "disabled" | "error";
-type SidePanel = "people" | "materials" | "code" | "board";
+type SidePanel = "people" | "materials" | "code" | "board" | "practice" | "groups";
 type ActiveRoom = { token: string; url: string; kind: string };
 type LiveParticipant = { identity: string; name: string; isLocal: boolean };
 type DeviceChoices = {
@@ -141,7 +141,6 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
     setSidePanel(panel);
     revealLivePanel(sidePanelRef.current);
   };
-  const [breakoutsOpen, setBreakoutsOpen] = useState(false);
   const [myBreakoutIndex, setMyBreakoutIndex] = useState<number | null>(null);
   const [watched, setWatched] = useState<{ studentId: number; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -466,39 +465,31 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
           >
             <ConnectionStateToast />
             <ParticipantReporter onChange={syncParticipants} />
-          <header className="edu-live-room__header flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-bg-surface px-4 py-3 text-text-primary shadow-[var(--workshop-panel-shadow)]">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className={`edu-live-room__status-dot is-${roomConn}`} aria-hidden="true" />
-              <div className="min-w-0">
-                <div className="truncate font-bold">{joinInfo.session.title || tr("Живий урок", "Live lesson")}</div>
+          <header className="edu-live-room__header">
+            <div className="edu-live-room__identity">
+              <div className="edu-live-room__identity-copy">
+                <h1>{joinInfo.session.title || tr("Живий урок", "Live lesson")}</h1>
                 <div className="edu-live-room__session-meta" aria-live="polite">
                   <span>{joinInfo.role === "host" ? tr("Викладач", "Teacher") : tr("Учасник", "Participant")}</span>
                   <span aria-hidden="true">·</span>
-                  <span>{activeRoom.kind === "main" ? tr("основна кімната", "main room") : `${tr("група", "group")} ${activeRoom.kind.split(":")[1]}`}</span>
-                  <span className="edu-live-room__connection-state">
-                    {roomConn === "connected" ? tr("З’єднано", "Connected") : roomConn === "failed" ? tr("Немає з’єднання", "Connection lost") : tr("Підключення…", "Connecting…")}
-                  </span>
-                  <span className="edu-live-room__participant-count">{participants.length} {participants.length === 1 ? tr("учасник", "participant") : tr("учасників", "participants")}</span>
+                  <span>{activeRoom.kind === "main" ? tr("Основна кімната", "Main room") : `${tr("Група", "Group")} ${activeRoom.kind.split(":")[1]}`}</span>
+                  {myBreakoutIndex != null && activeRoom.kind === "main" && <span className="edu-live-room__group-badge">{tr("Переходимо до групи", "Joining group")} {myBreakoutIndex + 1}</span>}
                 </div>
               </div>
             </div>
-            <nav aria-label={tr("Інструменти онлайн-уроку", "Live lesson tools")} className={`edu-live-room__tools flex items-center gap-2 overflow-x-auto${isTeacher ? " edu-live-room__tools--teacher" : ""}`}>
-              <Tool active={sidePanel === "people"} controls="live-panel-people" onClick={() => selectSidePanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
-              <Tool active={sidePanel === "materials"} controls="live-panel-materials" onClick={() => selectSidePanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
-              <Tool active={sidePanel === "board"} controls="live-panel-board" onClick={() => selectSidePanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
-              <Tool active={sidePanel === "code"} controls="live-panel-code" onClick={() => selectSidePanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
-              {isTeacher && <Tool active={breakoutsOpen} onClick={() => setBreakoutsOpen((value) => !value)} icon={<Users className="size-4" />} label={tr("Групи", "Groups")} />}
-              {!isTeacher && <button type="button" onClick={() => void handleLeave()} className="edu-live-room__leave inline-flex shrink-0 items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm font-bold text-text-secondary hover:bg-bg-hover"><ArrowLeft className="size-4" />{tr("Вийти з уроку", "Leave lesson")}</button>}
-              {isTeacher && <button type="button" disabled={busy} onClick={() => void handleEnd()} className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-accent-error/35 bg-accent-error/10 px-3 py-2 text-sm font-bold text-accent-error hover:bg-accent-error/15 disabled:opacity-50"><PhoneOff className="size-4" />{tr("Завершити", "End")}</button>}
-            </nav>
+            <div className="edu-live-room__header-actions">
+              <span className={`edu-live-room__connection-state is-${roomConn}`} aria-live="polite">
+                <i aria-hidden="true" />
+                {roomConn === "connected" ? tr("З’єднано", "Connected") : roomConn === "failed" ? tr("Немає з’єднання", "Connection lost") : tr("Підключення…", "Connecting…")}
+              </span>
+              <span className="edu-live-room__participant-count" role="status" aria-label={`${participants.length} ${participants.length === 1 ? tr("учасник", "participant") : tr("учасників", "participants")}`}><Users className="size-4" aria-hidden="true" />{participants.length}</span>
+              {isTeacher && <button type="button" disabled={busy} onClick={() => void handleEnd()} className="edu-live-room__finish"><PhoneOff className="size-4" />{busy ? tr("Завершуємо…", "Ending…") : tr("Завершити урок", "End lesson")}</button>}
+            </div>
           </header>
 
           {error && <div role="alert" className="edu-live-room__error rounded-xl border border-accent-error/30 bg-accent-error/10 px-4 py-2 text-sm text-accent-error">{error}</div>}
-          {Number.isFinite(classId) && <LiveChallengePanel classId={classId} isTeacher={isTeacher} />}
-          {isTeacher && breakoutsOpen && <BreakoutPanel classId={classId} currentKind={activeRoom.kind} onJoinGroup={(index) => void teacherJoinGroup(index)} onReturnMain={teacherReturnMain} />}
-          {!isTeacher && myBreakoutIndex != null && <div className="rounded-2xl border border-primary/20 bg-primary/10 px-4 py-2 text-sm font-bold text-primary-soft">{tr("Ви в групі", "You are in group")} {myBreakoutIndex + 1}</div>}
 
-          <main className="edu-live-room__body grid min-h-0 flex-1 gap-3">
+          <main className="edu-live-room__workspace">
             <section aria-label={tr("Відеозустріч", "Video meeting")} className="edu-live-room__stage relative min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-code shadow-[0_28px_64px_-46px_rgba(0,0,0,.82)]" data-lk-theme="default">
               <div className="flex h-full min-h-0 flex-col">
                 {isTeacher ? <RaisedHandsBar /> : <div className="flex items-center justify-end border-b border-white/10 px-4 py-2"><RaiseHandButton /></div>}
@@ -516,21 +507,36 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
               )}
             </section>
 
+            <nav aria-label={tr("Інструменти онлайн-уроку", "Live lesson tools")} className="edu-live-room__tool-rail">
+              <Tool active={sidePanel === "people"} controls="live-panel-people" onClick={() => selectSidePanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
+              <Tool active={sidePanel === "materials"} controls="live-panel-materials" onClick={() => selectSidePanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
+              <Tool active={sidePanel === "board"} controls="live-panel-board" onClick={() => selectSidePanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
+              <Tool active={sidePanel === "code"} controls="live-panel-code" onClick={() => selectSidePanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
+              <Tool active={sidePanel === "practice"} controls="live-panel-practice" onClick={() => selectSidePanel("practice")} icon={<Flag className="size-4" />} label={tr("Практика", "Practice")} />
+              {isTeacher && <Tool active={sidePanel === "groups"} controls="live-panel-groups" onClick={() => selectSidePanel("groups")} icon={<Users className="size-4" />} label={tr("Групи", "Groups")} />}
+            </nav>
+
             <aside ref={sidePanelRef} className="edu-live-room__aside min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-surface">
               <PanelHeading panel={sidePanel} />
-              <div className="edu-live-room__panel-body h-[calc(100%-56px)] min-h-0">
-                <section id="live-panel-people" role="region" aria-label={tr("Учасники уроку", "Lesson participants")} aria-hidden={sidePanel !== "people"} className="h-full min-h-0 overflow-auto p-3" hidden={sidePanel !== "people"}>
+              <div className="edu-live-room__panel-body">
+                <section id="live-panel-people" role="region" aria-label={tr("Учасники уроку", "Lesson participants")} aria-hidden={sidePanel !== "people"} className="edu-live-room__panel-section p-3" hidden={sidePanel !== "people"}>
                   {sidePanel === "people" && isTeacher && Number.isFinite(classId) && (watched ? <StudentCodeStream classId={classId} studentId={watched.studentId} studentName={watched.name} onBack={() => setWatched(null)} /> : <ClassLiveOverview classId={classId} enableCopilot onSelectStudent={(studentId, name) => setWatched({ studentId, name })} />)}
                   {sidePanel === "people" && !isTeacher && <StudentSide participants={participants} />}
                 </section>
-                <section id="live-panel-materials" role="region" aria-label={tr("Матеріали уроку", "Lesson materials")} aria-hidden={sidePanel !== "materials"} className="h-full min-h-0 overflow-auto" hidden={sidePanel !== "materials"}>
+                <section id="live-panel-materials" role="region" aria-label={tr("Матеріали уроку", "Lesson materials")} aria-hidden={sidePanel !== "materials"} className="edu-live-room__panel-section" hidden={sidePanel !== "materials"}>
                   {sidePanel === "materials" && <LessonMaterialsPanel classId={classId} sessionId={joinInfo.session.id} isTeacher={isTeacher} />}
                 </section>
-                <section id="live-panel-board" role="region" aria-label={tr("Спільна дошка", "Shared board")} aria-hidden={sidePanel !== "board"} className="edu-live-room__collaboration-surface h-full min-h-0" hidden={sidePanel !== "board"}>
+                <section id="live-panel-board" role="region" aria-label={tr("Спільна дошка", "Shared board")} aria-hidden={sidePanel !== "board"} className="edu-live-room__panel-section edu-live-room__collaboration-surface" hidden={sidePanel !== "board"}>
                   {sidePanel === "board" && <LiveCodeBoard isTeacher={isTeacher} />}
                 </section>
-                <section id="live-panel-code" role="region" aria-label={tr("Спільний код", "Shared code")} aria-hidden={sidePanel !== "code"} className="edu-live-room__collaboration-surface h-full min-h-0" hidden={sidePanel !== "code"}>
+                <section id="live-panel-code" role="region" aria-label={tr("Спільний код", "Shared code")} aria-hidden={sidePanel !== "code"} className="edu-live-room__panel-section edu-live-room__collaboration-surface" hidden={sidePanel !== "code"}>
                   {sidePanel === "code" && <LivePairEditor topic={`class-${classId}-collab`} userName={isTeacher ? tr("Викладач", "Teacher") : tr("Учень", "Student")} theme={appTheme} height="100%" />}
+                </section>
+                <section id="live-panel-practice" role="region" aria-label={tr("Швидка практика", "Quick practice")} aria-hidden={sidePanel !== "practice"} className="edu-live-room__panel-section p-4" hidden={sidePanel !== "practice"}>
+                  <LiveChallengePanel classId={classId} isTeacher={isTeacher} />
+                </section>
+                <section id="live-panel-groups" role="region" aria-label={tr("Малі групи", "Breakout groups")} aria-hidden={sidePanel !== "groups"} className="edu-live-room__panel-section p-4" hidden={sidePanel !== "groups"}>
+                  {isTeacher && sidePanel === "groups" && <BreakoutPanel classId={classId} currentKind={activeRoom.kind} onJoinGroup={(index) => void teacherJoinGroup(index)} onReturnMain={teacherReturnMain} />}
                 </section>
               </div>
             </aside>
@@ -589,8 +595,12 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
 };
 
 const PREVIEW_LIVE_OVERVIEW: LiveOverview = {
-  totals: { stuck: 0, in_progress: 0, passed: 0, not_started: 0 },
-  students: [],
+  totals: { stuck: 2, in_progress: 8, passed: 4, not_started: 2 },
+  students: [
+    { studentId: 1, name: "Олена Коваль", status: "in_progress", lastVerdict: null, testsPassed: 3, testsTotal: 5, lastActivityMs: Date.now() - 18_000, currentTaskTitle: "Сума від 1 до n" },
+    { studentId: 2, name: "Максим Ткаченко", status: "stuck", lastVerdict: "WRONG_ANSWER", testsPassed: 1, testsTotal: 4, lastActivityMs: Date.now() - 46_000, currentTaskTitle: "Знайди межу циклу" },
+    { studentId: 3, name: "Софія Мельник", status: "passed", lastVerdict: "ACCEPTED", testsPassed: 6, testsTotal: 6, lastActivityMs: Date.now() - 92_000, currentTaskTitle: "Сума від 1 до n" },
+  ],
   generatedAtMs: Date.now(),
 };
 
@@ -601,69 +611,84 @@ const LiveClassroomPreview: React.FC = () => {
   const [panel, setPanel] = useState<SidePanel>("people");
   const [previewMicOn, setPreviewMicOn] = useState(false);
   const [previewCameraOn, setPreviewCameraOn] = useState(false);
+  const [previewScreenShareOn, setPreviewScreenShareOn] = useState(false);
+  const [previewChatOpen, setPreviewChatOpen] = useState(false);
   const sidePanelRef = useRef<HTMLElement>(null);
   const selectPanel = (next: SidePanel) => {
     setPanel(next);
     revealLivePanel(sidePanelRef.current);
   };
+  const returnToClass = () => navigate("/edu/classes/" + classId + "?preview=true");
 
   return (
     <LiveShell>
       <div className="edu-live-room edu-live-room--preview">
-        <header className="edu-live-room__header edu-live-room__preview-header">
-          <div className="edu-live-room__preview-title">
-            <button type="button" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)} aria-label={tr("Повернутися до класу 11-А", "Back to class 11-A")}><ArrowLeft className="size-4" /></button>
-            <span className="edu-live-room__status-dot is-connected" aria-hidden="true" />
-            <div className="min-w-0"><p className="edu-live-room__preview-label">{tr("Урок наживо · 11-А · Python", "Live lesson · Class 11-A · Python")}</p><h1 className="truncate">{tr("Цикли: від ідеї до коду", "Loops: from idea to code")}</h1></div>
-            <span className="edu-live-room__preview-count"><Users className="size-3.5" aria-hidden="true" />16 {tr("учнів", "learners")}</span>
+        <header className="edu-live-room__header">
+          <div className="edu-live-room__identity">
+            <div className="edu-live-room__identity-copy">
+              <p className="edu-live-room__preview-label">{tr("ДЕМО · 11-А · Python", "DEMO · CLASS 11-A · PYTHON")}</p>
+              <h1>{tr("Цикли: від ідеї до коду", "Loops: from idea to code")}</h1>
+              <div className="edu-live-room__session-meta"><span>{tr("Викладач", "Teacher")}</span><span aria-hidden="true">·</span><span>{tr("Основна кімната", "Main room")}</span></div>
+            </div>
           </div>
-          <nav aria-label={tr("Інструменти уроку", "Lesson tools")} className="edu-live-room__tools">
-            <Tool active={panel === "people"} controls="live-preview-panel-people" onClick={() => selectPanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
-            <Tool active={panel === "materials"} controls="live-preview-panel-materials" onClick={() => selectPanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
-            <Tool active={panel === "board"} controls="live-preview-panel-board" onClick={() => selectPanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
-            <Tool active={panel === "code"} controls="live-preview-panel-code" onClick={() => selectPanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
-            <button type="button" className="edu-live-room__preview-end" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)}><PhoneOff className="size-4" />{tr("Завершити", "End")}</button>
-          </nav>
+          <div className="edu-live-room__header-actions">
+            <span className="edu-live-room__connection-state is-connected"><i aria-hidden="true" />{tr("З’єднано", "Connected")}</span>
+            <span className="edu-live-room__participant-count" role="status" aria-label={tr("16 учнів", "16 learners")}><Users className="size-4" aria-hidden="true" />16</span>
+            <button type="button" className="edu-live-room__finish" onClick={returnToClass}><PhoneOff className="size-4" />{tr("Завершити урок", "End lesson")}</button>
+          </div>
         </header>
 
-        <section className="edu-live-challenge edu-live-challenge--setup edu-live-challenge--preview" aria-label={tr("Швидка практика", "Quick practice")}>
-          <div className="edu-live-challenge__identity"><span><Flag className="size-4" aria-hidden="true" /></span><div><strong>{tr("Швидка практика", "Quick practice")}</strong><small>{tr("Коротка задача для всього класу", "A short task for the class")}</small></div></div>
-          <label><span>{tr("Задача", "Problem")}</span><select aria-label={tr("Задача челенджу", "Challenge task")} disabled><option>{tr("Задачі поки недоступні", "No problems available")}</option></select></label>
-          <label className="edu-live-challenge__duration"><span>{tr("Час", "Time")}</span><select aria-label={tr("Тривалість челенджу", "Challenge duration")} defaultValue="90" disabled><option value="90">1:30</option></select></label>
-          <button type="button" disabled className="edu-live-challenge__launch"><PlayCircle className="size-4" aria-hidden="true" />{tr("Запустити", "Start")}</button>
-        </section>
-
-        <main className="edu-live-room__body grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <section aria-label={tr("Демонстраційний відеодзвінок", "Demo video call")} className="edu-live-room__stage edu-live-room__preview-stage">
-            <div className="edu-live-room__preview-stage-head"><span><i aria-hidden="true" />{tr("Зустріч відкрита", "Room is open")}</span><span>{tr("Приклад інтерфейсу · камера вимкнена", "Interface preview · camera off")}</span></div>
+        <main className="edu-live-room__workspace">
+          <section aria-label={tr("Демонстраційна відеозустріч", "Demo video meeting")} className="edu-live-room__stage edu-live-room__preview-stage">
+            <div className="edu-live-room__preview-stage-head"><span><i aria-hidden="true" />{tr("Відеозустріч", "Video meeting")}</span><span>{tr("Керування дзвінком унизу", "Call controls below")}</span></div>
             <div className="edu-live-room__preview-camera">
-              <div className="edu-live-room__preview-person"><span>ОК</span><strong>{tr("Олена Коваль", "Olena Koval")}</strong><small><VideoOff className="size-3.5" aria-hidden="true" />{tr("Камера вимкнена", "Camera is off")}</small></div>
+              <div className="edu-live-room__preview-person"><span>ОК</span><strong>{tr("Олена Коваль", "Olena Koval")}</strong><small>{previewCameraOn ? <Video className="size-3.5" aria-hidden="true" /> : <VideoOff className="size-3.5" aria-hidden="true" />}{previewCameraOn ? tr("Камера увімкнена", "Camera on") : tr("Камера вимкнена", "Camera off")}</small></div>
               <span className="edu-live-room__preview-speaker-tag"><MicOff className="size-3.5" aria-hidden="true" />{tr("Олена Коваль · викладач", "Olena Koval · teacher")}</span>
+              {previewChatOpen && <div className="edu-live-room__preview-chat"><strong>{tr("Чат уроку", "Lesson chat")}</strong><p>{tr("Матеріали та посилання також доступні у вкладці «Матеріали».", "Lesson links and files are also in the Materials panel.")}</p></div>}
             </div>
             <div className="edu-live-room__preview-controls" aria-label={tr("Керування дзвінком", "Call controls")}>
               <button type="button" aria-pressed={previewMicOn} onClick={() => setPreviewMicOn((value) => !value)}><span>{previewMicOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}</span>{tr("Мікрофон", "Microphone")}</button>
               <button type="button" aria-pressed={previewCameraOn} onClick={() => setPreviewCameraOn((value) => !value)}><span>{previewCameraOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}</span>{tr("Камера", "Camera")}</button>
-              <button type="button" onClick={() => selectPanel("board")}><span><MonitorUp className="size-4" /></span>{tr("Показ екрана", "Share screen")}</button>
-              <button type="button" onClick={() => selectPanel("materials")}><span><MessageCircle className="size-4" /></span>{tr("Чат", "Chat")}</button>
-              <button type="button" className="is-leave" onClick={() => navigate(`/edu/classes/${classId}?preview=true`)}><span><PhoneOff className="size-4" /></span>{tr("Вийти", "Leave")}</button>
+              <button type="button" aria-pressed={previewScreenShareOn} onClick={() => setPreviewScreenShareOn((value) => !value)}><span><MonitorUp className="size-4" /></span>{previewScreenShareOn ? tr("Зупинити показ", "Stop sharing") : tr("Показ екрана", "Share screen")}</button>
+              <button type="button" aria-pressed={previewChatOpen} onClick={() => setPreviewChatOpen((value) => !value)}><span><MessageCircle className="size-4" /></span>{tr("Чат", "Chat")}</button>
+              <button type="button" className="is-leave" onClick={returnToClass}><span><PhoneOff className="size-4" /></span>{tr("Вийти", "Leave")}</button>
             </div>
           </section>
 
-          <aside ref={sidePanelRef} className="edu-live-room__aside min-h-0 overflow-hidden rounded-[24px] border border-border bg-bg-surface">
+          <nav aria-label={tr("Інструменти онлайн-уроку", "Live lesson tools")} className="edu-live-room__tool-rail">
+            <Tool active={panel === "people"} controls="live-preview-panel-people" onClick={() => selectPanel("people")} icon={<Users className="size-4" />} label={tr("Люди", "People")} />
+            <Tool active={panel === "materials"} controls="live-preview-panel-materials" onClick={() => selectPanel("materials")} icon={<BookOpen className="size-4" />} label={tr("Матеріали", "Materials")} />
+            <Tool active={panel === "board"} controls="live-preview-panel-board" onClick={() => selectPanel("board")} icon={<PenSquare className="size-4" />} label={tr("Дошка", "Board")} />
+            <Tool active={panel === "code"} controls="live-preview-panel-code" onClick={() => selectPanel("code")} icon={<Code2 className="size-4" />} label={tr("Код", "Code")} />
+            <Tool active={panel === "practice"} controls="live-preview-panel-practice" onClick={() => selectPanel("practice")} icon={<Flag className="size-4" />} label={tr("Практика", "Practice")} />
+            <Tool active={panel === "groups"} controls="live-preview-panel-groups" onClick={() => selectPanel("groups")} icon={<Users className="size-4" />} label={tr("Групи", "Groups")} />
+          </nav>
+
+          <aside ref={sidePanelRef} className="edu-live-room__aside">
             <PanelHeading panel={panel} />
-            <div className="edu-live-room__panel-body h-[calc(100%-56px)] min-h-0 overflow-auto p-3">
-              <p className="edu-live-room__preview-notice mb-3">{tr("Попередній перегляд. Керування дзвінком тут демонстраційне.", "Design preview. Call controls are illustrative.")}</p>
-              <section id="live-preview-panel-people" role="region" aria-label={tr("Учасники уроку", "Lesson participants")} hidden={panel !== "people"}>
+            <div className="edu-live-room__panel-body">
+              <section id="live-preview-panel-people" className="edu-live-room__panel-section p-3" role="region" aria-label={tr("Огляд класу", "Class overview")} hidden={panel !== "people"}>
                 {panel === "people" && <ClassLiveOverview classId={Number(classId) || 31} enableCopilot previewData={PREVIEW_LIVE_OVERVIEW} />}
               </section>
-              <section id="live-preview-panel-materials" role="region" aria-label={tr("Матеріали уроку", "Lesson materials")} hidden={panel !== "materials"}>
+              <section id="live-preview-panel-materials" className="edu-live-room__panel-section p-4" role="region" aria-label={tr("Матеріали уроку", "Lesson materials")} hidden={panel !== "materials"}>
                 {panel === "materials" && <div className="space-y-4"><div className="edu-live-room__demo-material"><p className="text-xs font-semibold uppercase tracking-[.12em] text-primary-strong dark:text-primary-soft">{tr("Матеріал до зустрічі", "Lesson material")}</p><h2 className="mt-2 text-lg font-bold">{tr("Цикли: діапазон і сума", "Loops: range and sum")}</h2><p className="mt-2 text-sm leading-6 text-text-secondary">{tr("Розберіть приклад разом із викладачем, а потім перевірте ту саму ідею у практиці.", "Work through the example with the teacher, then test the same idea in practice.")}</p></div><div><p className="mb-1 text-xs font-bold uppercase tracking-[.1em] text-text-secondary">{tr("Практика уроку", "Lesson practice")}</p><button type="button" onClick={() => setPanel("code")} className="edu-live-room__demo-task"><strong>{tr("Сума від 1 до n", "Sum from 1 to n")}</strong><span>PY · 1 test</span></button><button type="button" onClick={() => setPanel("board")} className="edu-live-room__demo-task"><strong>{tr("Знайди межу циклу", "Find the loop boundary")}</strong><span>{tr("дошка", "board")}</span></button></div></div>}
               </section>
-              <section id="live-preview-panel-board" role="region" aria-label={tr("Спільна дошка", "Shared board")} hidden={panel !== "board"}>
+              <section id="live-preview-panel-board" className="edu-live-room__panel-section edu-live-room__collaboration-surface p-4" role="region" aria-label={tr("Спільна дошка", "Shared board")} hidden={panel !== "board"}>
                 {panel === "board" && <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-primary-strong dark:text-primary-soft">{tr("Спільна дошка · демо", "Shared board · demo")}</p><h2 className="mt-2 font-bold">{tr("Крок 1. Знайди межу циклу", "Step 1. Find the loop boundary")}</h2><div className="mt-5 grid grid-cols-5 gap-2 text-center text-xs"><span>1</span><span>2</span><span>3</span><span>4</span><span className="rounded-lg bg-primary/15 py-2 font-bold text-primary-strong dark:text-primary-soft">5</span></div><p className="mt-4 text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Верхня межа range у Python не входить до послідовності.", "The upper bound of Python's range is exclusive.")}</p></div>}
               </section>
-              <section id="live-preview-panel-code" role="region" aria-label={tr("Спільний код", "Shared code")} hidden={panel !== "code"}>
-                {panel === "code" && <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-primary-strong dark:text-primary-soft">Python · {tr("приклад", "example")}</p><pre className="mt-3 overflow-auto rounded-xl bg-bg-code p-4 text-xs leading-6 text-emerald-200"><code>{`n = 5\ntotal = 0\nfor number in range(1, n):\n    total += number\nprint(total)  # 10`}</code></pre><p className="mt-3 text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Очікувана сума від 1 до 5 — 15. Зараз range зупиняється перед 5.", "The expected sum from 1 through 5 is 15. This range stops before 5.")}</p></div>}
+              <section id="live-preview-panel-code" className="edu-live-room__panel-section edu-live-room__collaboration-surface p-4" role="region" aria-label={tr("Спільний код", "Shared code")} hidden={panel !== "code"}>
+                {panel === "code" && <div><p className="text-xs font-semibold uppercase tracking-[.12em] text-primary-strong dark:text-primary-soft">Python · {tr("приклад", "example")}</p><pre className="mt-3 overflow-auto rounded-xl bg-bg-code p-4 text-xs leading-6 text-emerald-200"><code>{["n = 5", "total = 0", "for number in range(1, n):", "    total += number", "print(total)  # 10"].join("\n")}</code></pre><p className="mt-3 text-sm leading-6 text-text-muted dark:text-text-secondary">{tr("Очікувана сума від 1 до 5 — 15. Зараз range зупиняється перед 5.", "The expected sum from 1 through 5 is 15. This range stops before 5.")}</p></div>}
+              </section>
+              <section id="live-preview-panel-practice" className="edu-live-room__panel-section p-4" role="region" aria-label={tr("Швидка практика", "Quick practice")} hidden={panel !== "practice"}>
+                {panel === "practice" && <div className="edu-live-challenge edu-live-challenge--active">
+                  <div className="edu-live-challenge__identity"><span><Flag className="size-4" aria-hidden="true" /></span><div><small>{tr("Завдання для класу", "Class challenge")}</small><strong>{tr("Сума від 1 до n", "Sum from 1 to n")}</strong></div></div>
+                  <div className="edu-live-challenge__timer"><Clock3 className="size-4" aria-hidden="true" /><span>00:42</span></div>
+                  <div className="edu-live-challenge__results"><span className="edu-live-challenge__results-label">{tr("Вже розв’язали", "Solved so far")}</span><ol className="edu-live-challenge__leaders"><li><span className="edu-live-challenge__rank">1</span><span className="edu-live-challenge__leader-name">{tr("Максим", "Maksym")}</span><small>34s</small></li><li><span className="edu-live-challenge__rank">2</span><span className="edu-live-challenge__leader-name">{tr("Олена", "Olena")}</span><small>52s</small></li></ol></div>
+                  <button type="button" disabled className="edu-live-challenge__end">{tr("Завершити", "End")}</button>
+                </div>}
+              </section>
+              <section id="live-preview-panel-groups" className="edu-live-room__panel-section p-4" role="region" aria-label={tr("Малі групи", "Breakout groups")} hidden={panel !== "groups"}>
+                {panel === "groups" && <div className="edu-live-room__preview-groups"><p className="edu-live-room__preview-label">{tr("РОБОЧІ ГРУПИ", "BREAKOUT ROOMS")}</p><h2>{tr("Учні працюють у малих групах", "Learners are working in small groups")}</h2><div><span><Users className="size-4" aria-hidden="true" />{tr("Група 1 · 5 учнів", "Group 1 · 5 learners")}</span><span><Users className="size-4" aria-hidden="true" />{tr("Група 2 · 5 учнів", "Group 2 · 5 learners")}</span><span><Users className="size-4" aria-hidden="true" />{tr("Група 3 · 6 учнів", "Group 3 · 6 learners")}</span></div><button type="button" disabled>{tr("Управління групами", "Manage groups")}</button></div>}
               </section>
             </div>
           </aside>
@@ -672,12 +697,11 @@ const LiveClassroomPreview: React.FC = () => {
     </LiveShell>
   );
 };
-
 const LiveShell: React.FC<{ children: React.ReactNode }> = ({ children }) => <div className="edu-live-shell min-h-[calc(100dvh-72px)] bg-bg-base text-text-primary">{children}</div>;
-const Tool: React.FC<{ active: boolean; controls?: string; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, controls, onClick, icon, label }) => <button type="button" aria-pressed={active} aria-controls={controls} onClick={onClick} className={`edu-live-tool inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition ${active ? "bg-primary/12 text-primary-strong dark:text-primary-soft" : "bg-bg-hover text-text-muted hover:text-text-primary dark:bg-white/[.045] dark:text-text-secondary dark:hover:bg-white/[.08]"}`}>{icon}{label}</button>;
+const Tool: React.FC<{ active: boolean; controls?: string; onClick: () => void; icon: React.ReactNode; label: string }> = ({ active, controls, onClick, icon, label }) => <button type="button" aria-label={label} title={label} aria-pressed={active} aria-controls={controls} onClick={onClick} className={`edu-live-tool inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition ${active ? "bg-primary/12 text-primary-strong dark:text-primary-soft" : "bg-bg-hover text-text-muted hover:text-text-primary dark:bg-white/[.045] dark:text-text-secondary dark:hover:bg-white/[.08]"}`}><span aria-hidden="true">{icon}</span><span className="edu-live-tool__label">{label}</span></button>;
 const PanelHeading: React.FC<{ panel: SidePanel }> = ({ panel }) => {
-  const icon = panel === "people" ? <Users className="size-4" /> : panel === "materials" ? <BookOpen className="size-4" /> : panel === "board" ? <PenSquare className="size-4" /> : <Code2 className="size-4" />;
-  const title = panel === "people" ? tr("Учасники уроку", "Lesson participants") : panel === "materials" ? tr("Матеріали уроку", "Lesson materials") : panel === "board" ? tr("Спільна дошка", "Shared board") : tr("Спільний код", "Shared code");
+  const icon = panel === "people" ? <Users className="size-4" /> : panel === "materials" ? <BookOpen className="size-4" /> : panel === "board" ? <PenSquare className="size-4" /> : panel === "code" ? <Code2 className="size-4" /> : panel === "practice" ? <Flag className="size-4" /> : <Users className="size-4" />;
+  const title = panel === "people" ? tr("Учасники", "People") : panel === "materials" ? tr("Матеріали уроку", "Lesson materials") : panel === "board" ? tr("Спільна дошка", "Shared board") : panel === "code" ? tr("Спільний код", "Shared code") : panel === "practice" ? tr("Швидка практика", "Quick practice") : tr("Малі групи", "Breakout groups");
   return <div className="edu-live-panel-heading" aria-live="polite"><span>{icon}</span><strong>{title}</strong></div>;
 };
 const ParticipantReporter: React.FC<{ onChange: (participants: LiveParticipant[]) => void }> = ({ onChange }) => {

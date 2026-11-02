@@ -141,9 +141,15 @@ export const LiveChallengePanel: React.FC<Props> = ({ classId, isTeacher }) => {
     }
   }, [classId]);
 
-  // No active challenge: teacher sees the launcher; students see no empty panel.
+  // The student empty state only appears inside the dedicated practice panel.
   if (!challenge) {
-    if (!isTeacher) return null;
+    if (!isTeacher) return (
+      <div className="edu-live-challenge__empty" role="status">
+        <span><Flag className="size-5" aria-hidden="true" /></span>
+        <strong>{tr("Зараз немає активної практики", "No active practice right now")}</strong>
+        <p>{tr("Коли викладач запустить коротку задачу, вона з’явиться тут.", "When your teacher starts a quick problem, it will appear here.")}</p>
+      </div>
+    );
     return (
       <section className="edu-live-challenge edu-live-challenge--setup" aria-label={tr("Швидка практика", "Quick practice")}>
         <div className="edu-live-challenge__identity"><span><Flag className="size-4" /></span><div><strong>{tr("Швидка практика", "Quick practice")}</strong><small>{tr("Коротка задача для всього класу", "A short task for the class")}</small></div></div>
