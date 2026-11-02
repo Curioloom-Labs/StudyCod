@@ -63,6 +63,6 @@ test("student agenda includes topic tasks and filters targeted assignments", asy
   assert.equal(student.find(item => item.id === 5)?.topicId, 10);
   const teacher = await getDeadlinesForClasses([1], now, new Date("2026-07-01"));
   assert.equal(teacher.length, 6);
-  assert.ok(conditions.includes("t.isAssigned = 1"));
+  assert.ok(conditions.some(({ clause }) => clause === "t.isAssigned = 1"));
   assert.deepEqual(conditions.find(({ clause }) => clause === "t.type IN (:...types)")?.params?.types, ["PRACTICE", "CLASSWORK"]);
 });
