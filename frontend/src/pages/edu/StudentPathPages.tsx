@@ -107,8 +107,8 @@ export const StudentLessonsWorkspace: React.FC = () => {
   }, [classId]);
   if (loading) return <div className={container}><div className="h-[580px] animate-pulse rounded-[30px] bg-bg-hover dark:bg-white/[.05]" /></div>;
   const isStandaloneClasswork = (lesson: Lesson) => lesson.type === "LESSON" && lesson.source !== "course" && !lesson.parentTopicId;
-  const classworks = lessons.filter(isStandaloneClasswork);
-  const topics = lessons.filter((lesson) => lesson.type === "TOPIC" || lesson.type === "LESSON" && !isStandaloneClasswork(lesson)); const controls = lessons.filter((lesson) => lesson.type === "CONTROL");
+  const classworks = lessons.filter((lesson) => lesson.type === "LESSON" && Boolean(lesson.parentTopicId));
+  const topics = lessons.filter((lesson) => lesson.type === "TOPIC" || lesson.type === "LESSON" && !lesson.parentTopicId && !isStandaloneClasswork(lesson)); const controls = lessons.filter((lesson) => lesson.type === "CONTROL");
   const nextTopic = topics.find((topic) => {
     const topicTasks = topic.tasks || [];
     return !topicTasks.length || topicTasks.some((task) => !task.progressCompleted && !task.grade?.isCompleted);
@@ -150,7 +150,7 @@ export const StudentLessonsWorkspace: React.FC = () => {
       <div className="min-w-0 flex-1">
         <div className="edu-live-invite__eyebrow"><span className="edu-live-invite__dot" />{preview() ? tr("ДЕМО · онлайн-урок", "DEMO · live lesson") : tr("Урок триває зараз", "Lesson in progress now")}</div>
         <h2>{liveSession.title || liveLesson?.title || tr("Зустріч із класом", "Classroom session")}</h2>
-        <p>{liveLesson?.title ? `${tr("Тема", "Topic")}: ${liveLesson.title}` : tr("Викладач відкрив кімнату класу. Можна приєднатися в будь-який момент.", "Your teacher opened the class room. Join whenever you are ready.")}</p>
+        <p>{liveLesson?.parentTopicTitle ? `${tr("Тема", "Topic")}: ${liveLesson.parentTopicTitle} · ${tr("Робота", "Classwork")}: ${liveLesson.title}` : liveLesson?.title ? `${tr("Матеріал", "Material")}: ${liveLesson.title}` : tr("Викладач відкрив кімнату класу. Можна приєднатися в будь-який момент.", "Your teacher opened the class room. Join whenever you are ready.")}</p>
       </div>
       <button type="button" onClick={() => navigate(livePath)} className="edu-live-invite__action"><Play className="size-4 fill-current" />{tr("Увійти в урок", "Join lesson")}<ArrowRight className="size-4" /></button>
     </section>}
@@ -161,6 +161,7 @@ export const StudentLessonsWorkspace: React.FC = () => {
         <div className="edu-curriculum__list">
           {topics.map((topic, index) => {
             const related = controls.filter((item) => item.parentTopicId === topic.id && (item.source || "legacy") === (topic.source || "legacy"));
+            const relatedClasswork = classworks.filter((item) => item.parentTopicId === topic.id && (item.parentTopicSource || "legacy") === (topic.source || "legacy"));
             return <article key={eduLessonKey(topic)} className="edu-topic-row">
               <button type="button" onClick={() => navigate(eduLessonPath(topic))} className="edu-topic-row__main">
                 <span className="edu-topic-row__number">{String(index + 1).padStart(2, "0")}</span>
@@ -168,23 +169,11 @@ export const StudentLessonsWorkspace: React.FC = () => {
                 <span className="edu-topic-row__completion">{lessonCompletion(topic)}</span><ArrowRight className="size-4 shrink-0" />
               </button>
               {related.map((control) => <button type="button" key={eduLessonKey(control)} onClick={() => navigate(eduLessonPath(control))} className="edu-topic-row__assessment"><ClipboardList className="size-4" /><span>{control.title}</span><span>{control.courseAttempt?.status === "COMPLETED" ? control.courseReport?.pendingReview ? tr("На перевірці", "Under review") : tr("Завершено", "Completed") : control.courseAttempt?.status === "IN_PROGRESS" ? tr("Розпочато", "In progress") : tr("Контрольна", "Assessment")}</span><ArrowRight className="size-4" /></button>)}
+              {relatedClasswork.map((work) => <button type="button" key={eduLessonKey(work)} onClick={() => navigate(eduLessonPath(work))} className="edu-topic-row__assessment"><ClipboardList className="size-4" /><span>{work.title}</span><span>{liveSession?.lessonId === work.id ? tr("Активна зараз", "Active now") : work.courseReport?.pendingReview ? tr("На перевірці", "Under review") : lessonCompletion(work)}</span><ArrowRight className="size-4" /></button>)}
             </article>;
           })}
           {controls.filter((control) => !topics.some((topic) => topic.id === control.parentTopicId && (topic.source || "legacy") === (control.source || "legacy"))).map((control) => <button type="button" key={eduLessonKey(control)} onClick={() => navigate(eduLessonPath(control))} className="edu-topic-row edu-topic-row__standalone"><span className="edu-topic-row__number"><ClipboardList className="size-4" /></span><span className="edu-topic-row__copy"><strong>{control.title}</strong><span>{control.courseAttempt?.status === "COMPLETED" ? control.courseReport?.pendingReview ? tr("Здано · очікує перевірки", "Submitted · awaiting review") : tr("Завершено", "Completed") : control.courseAttempt?.status === "IN_PROGRESS" ? tr("Розпочато", "In progress") : tr("Контрольна робота", "Assessment")}</span></span><ArrowRight className="size-4" /></button>)}
           {!lessons.length && <div className="edu-curriculum__empty"><BookOpen className="size-5" /><strong>{tr("Тут з’являться уроки класу", "Your class lessons will appear here")}</strong><span>{tr("Коли викладач опублікує тему або практику, вона буде додана до маршруту.", "When your teacher publishes a topic or practice, it will be added to this pathway.")}</span></div>}
-        </div>
-      </section>
-
-      <section className="edu-curriculum" aria-labelledby="edu-classwork-title">
-        <div className="edu-section-heading"><div><p>{tr("Окремо від тем", "Outside the topic pathway")}</p><h2 id="edu-classwork-title">{tr("Робота в класі", "Classwork")}</h2></div><span>{classworks.length} {tr("робіт", "items")}</span></div>
-        <div className="edu-curriculum__list">
-          {classworks.map((work) => <button type="button" key={eduLessonKey(work)} onClick={() => navigate(eduLessonPath(work))} className="edu-topic-row edu-topic-row__standalone">
-            <span className="edu-topic-row__number"><ClipboardList className="size-4" aria-hidden="true" /></span>
-            <span className="edu-topic-row__copy"><strong>{work.title}</strong><span>{work.tasksCount || work.tasks?.length || 0} {tr("завдань до здачі", "tasks to submit")}</span></span>
-            <span className="edu-topic-row__completion">{work.tasks?.some((task) => task.grade?.isCompleted) ? tr("Оцінено", "Graded") : tr("Очікує здачі", "To submit")}</span>
-            <ArrowRight className="size-4" aria-hidden="true" />
-          </button>)}
-          {!classworks.length && <div className="edu-curriculum__empty"><ClipboardList className="size-5" aria-hidden="true" /><strong>{tr("Робіт у класі поки немає", "No classwork yet")}</strong><span>{tr("Коли викладач призначить роботу, вона з’явиться тут окремо від тем.", "Classwork from your teacher will appear here, outside the topic pathway.")}</span></div>}
         </div>
       </section>
 

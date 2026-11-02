@@ -1,9 +1,9 @@
-import React, { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { PageHero } from "../../components/ui/PageHero";
-import { createLesson, generateTheoryPreview, generateInteractiveLesson, type CreateLessonRequest } from "../../lib/api/edu";
+import { createLesson, generateTheoryPreview, generateInteractiveLesson, getTopics, type CreateLessonRequest, type Topic } from "../../lib/api/edu";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { tr } from "../../i18n";
 import { showToast } from "../../lib/toast";
@@ -23,7 +23,11 @@ export const CreateLessonPage: React.FC = () => {
     classId: string;
   }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedTopicId = Number(searchParams.get("topicId") || 0);
   const [type, setType] = useState<"LESSON" | "CONTROL">("LESSON");
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [topicId, setTopicId] = useState(0);
   const [title, setTitle] = useState("");
   const [theory, setTheory] = useState("");
   const [hasTheory, setHasTheory] = useState(false);
@@ -36,6 +40,19 @@ export const CreateLessonPage: React.FC = () => {
   const [generatingInteractive, setGeneratingInteractive] = useState(false);
   const [topicTitle, setTopicTitle] = useState("");
   const [language, setLanguage] = useState<EduLanguage>("JAVA");
+  useEffect(() => {
+    const parsedClassId = Number(classId);
+    if (!Number.isSafeInteger(parsedClassId) || parsedClassId <= 0) return;
+    let active = true;
+    void getTopics(parsedClassId).then((availableTopics) => {
+      if (!active) return;
+      setTopics(availableTopics);
+      setTopicId(availableTopics.some((topic) => topic.id === requestedTopicId) ? requestedTopicId : 0);
+    }).catch(() => {
+      if (active) showToast({ type: "error", message: tr("Не вдалося завантажити теми класу.", "Could not load class topics.") });
+    });
+    return () => { active = false; };
+  }, [classId, requestedTopicId]);
   const safeServerMessage = (value: unknown) => {
     const msg = typeof value === "string" ? value : String(value ?? "");
     if (typeof i18n.language === "string" && i18n.language.startsWith("en") && /[А-Яа-яІіЇїЄєҐґ]/.test(msg)) return "";
@@ -50,10 +67,15 @@ export const CreateLessonPage: React.FC = () => {
       showToast({ type: "error", message: tr("Хоча б одна частина контрольної повинна бути включена", "At least one control work section must be enabled") });
       return;
     }
+    if (type === "LESSON" && !topics.some((topic) => topic.id === topicId)) {
+      showToast({ type: "error", message: tr("Оберіть тему для роботи в класі", "Choose a topic for this classwork") });
+      return;
+    }
     try {
       const lessonData: CreateLessonRequest = {
         type,
         title,
+        ...(type === "LESSON" ? { topicId } : {}),
         theory: hasTheory ? theory : undefined,
         hasTheory,
         timeLimitMinutes,
@@ -61,7 +83,7 @@ export const CreateLessonPage: React.FC = () => {
         controlHasPractice
       };
       const newLesson = await createLesson(parseInt(classId, 10), lessonData);
-      navigate(`/edu/lessons/${newLesson.id}`);
+      navigate(`/edu/lessons/${newLesson.id}?type=${type}&source=course`);
     } catch (error: unknown) {
       console.error("Failed to create lesson:", error);
       const raw = safeServerMessage(getErrorMessageFromUnknown(error, ""));
@@ -136,6 +158,7 @@ export const CreateLessonPage: React.FC = () => {
 
           <div className="border-t border-border pt-6 space-y-6">
             <h2 className="text-sm font-mono uppercase tracking-[0.08em] text-text-muted">{tr("Зміст", "Content")}</h2>
+            {type === "LESSON" && <div><label className="block text-sm font-mono text-text-secondary mb-2">{tr("Тема *", "Topic *")}</label><select required value={topicId || ""} onChange={event => setTopicId(Number(event.target.value) || 0)} className="w-full px-3 py-2 bg-bg-base border border-border text-text-primary font-mono focus:outline-none focus:border-primary transition-fast"><option value="">{tr("Оберіть тему", "Choose a topic")}</option>{topics.map(topic => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select></div>}
             <div>
               <label className="block text-sm font-mono text-text-secondary mb-2">
                 {tr("Назва уроку *", "Lesson title *")}

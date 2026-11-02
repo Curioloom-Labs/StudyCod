@@ -23,11 +23,14 @@ import {
   deleteGeneratedTestData,
   deleteTestData,
   generateTestData,
+  getLessons,
   getTestData,
+  setEduLessonTopic,
   unassignControlWork,
   unassignTask,
   updateControlWorkFormula,
   type TestData,
+  type Lesson,
   type PythonTaskAssetInput,
 } from "../../lib/api/edu";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
@@ -81,6 +84,7 @@ type Topic = {
   class?: { id: number; name?: string } | null;
   tasks?: TopicTask[];
   controlWorks?: Control[];
+  classworkLessons?: Array<{ id: number; title: string; tasks?: Array<{ id: number }>; createdAt?: string }>;
 };
 
 const preview = () => import.meta.env.DEV && new URLSearchParams(window.location.search).get("preview") === "true";
@@ -211,6 +215,7 @@ export const TopicStudioPage: React.FC = () => {
   const navigate = useNavigate();
   const id = Number(topicId);
   const [topic, setTopic] = React.useState<Topic | null>(null);
+  const [unattachedClasswork, setUnattachedClasswork] = React.useState<Lesson[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [mode, setMode] = React.useState<"task" | "control" | "tests" | null>(null);
@@ -280,6 +285,36 @@ export const TopicStudioPage: React.FC = () => {
   }, [id]);
 
   React.useEffect(() => { void load(); }, [load]);
+
+  React.useEffect(() => {
+    const classId = topic?.class?.id;
+    if (!classId || preview()) {
+      setUnattachedClasswork([]);
+      return;
+    }
+    let active = true;
+    void getLessons(classId).then((lessons) => {
+      if (active) setUnattachedClasswork(lessons.filter((lesson) => lesson.type === "LESSON" && !lesson.parentTopicId));
+    }).catch(() => {
+      if (active) setUnattachedClasswork([]);
+    });
+    return () => { active = false; };
+  }, [topic?.class?.id]);
+
+  const attachExistingClasswork = async (lesson: Lesson) => {
+    if (!topic) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await setEduLessonTopic(lesson.id, topic.id);
+      setUnattachedClasswork((current) => current.filter((item) => item.id !== lesson.id));
+      await load();
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, tr("Не вдалося додати роботу до теми.", "Could not add the classwork to this topic.")));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const backPath = topic?.class?.id ? `/edu/classes/${topic.class.id}${preview() ? "?preview=true" : ""}` : `/edu${preview() ? "?preview=true" : ""}`;
 
@@ -890,6 +925,14 @@ export const TopicStudioPage: React.FC = () => {
         </header>
         <div className="classroom-facts"><span className="classroom-language">{topic.language}</span><span>{tr("Завдання", "Tasks")}: {tasks.length}</span><span><span className="classroom-status-dot" />{tr("Відкрито учням", "Open to students")}: {assignedTasks}</span></div>
         {error && <div className="classroom-notice classroom-notice--error" role="alert">{error}</div>}
+        <section className="mt-6 rounded-3xl border border-border bg-bg-surface p-5 sm:p-6" aria-labelledby="topic-classwork-title">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div><p className="text-xs font-bold uppercase tracking-[.14em] text-primary-strong">{tr("У цій темі", "Inside this topic")}</p><h2 id="topic-classwork-title" className="mt-1 text-xl font-bold">{tr("Робота в класі", "Classwork")} <span className="text-sm font-medium text-text-muted">{topic.classworkLessons?.length ?? 0}</span></h2></div>
+            {topic.class?.id && <button type="button" className="classroom-button classroom-button--primary" onClick={() => navigate(withDevPreview(`/edu/classes/${topic.class!.id}/lessons/new?topicId=${topic.id}`))}><Plus className="size-4" aria-hidden="true" />{tr("Додати роботу в класі", "Add classwork")}</button>}
+          </div>
+          {topic.classworkLessons?.length ? <div className="mt-4 grid gap-2">{topic.classworkLessons.map((work) => <button type="button" key={work.id} onClick={() => navigate(withDevPreview(`/edu/lessons/${work.id}?type=LESSON&source=course`))} className="flex min-h-14 items-center justify-between gap-4 rounded-2xl border border-border px-4 py-3 text-left transition-colors hover:bg-bg-hover"><span><strong className="block">{work.title}</strong><small className="text-text-muted">{work.tasks?.length || 0} {tr("робіт для виконання", "classwork tasks")}</small></span><ArrowRight className="size-4 shrink-0" aria-hidden="true" /></button>)}</div> : <p className="mt-4 rounded-2xl bg-bg-hover px-4 py-3 text-sm leading-6 text-text-muted">{tr("Робота в класі буде тут разом із темою та її практикою.", "Classwork will appear here with this topic and its practice.")}</p>}
+          {!!unattachedClasswork.length && <div className="mt-5 border-t border-border pt-4"><p className="text-sm font-semibold">{tr("Додати наявну роботу до цієї теми", "Attach existing classwork to this topic")}</p><div className="mt-2 grid gap-2">{unattachedClasswork.map((lesson) => <div key={lesson.id} className="flex items-center justify-between gap-3 rounded-xl bg-bg-hover px-4 py-3"><span className="truncate text-sm">{lesson.title}</span><button type="button" disabled={busy} className="classroom-text-button shrink-0" onClick={() => void attachExistingClasswork(lesson)}>{tr("Додати до теми", "Attach to topic")}</button></div>)}</div></div>}
+        </section>
         <div className="classroom-tabs" role="tablist" aria-label={tr("Матеріали теми", "Topic materials")}>
           <button type="button" role="tab" id="topic-tab-tasks" aria-selected={topicTab === "tasks"} aria-controls="topic-panel-tasks" onClick={() => setTopicTab("tasks")}>{tr("Завдання", "Tasks")}<span>{tasks.length}</span></button>
           <button type="button" role="tab" id="topic-tab-controls" aria-selected={topicTab === "controls"} aria-controls="topic-panel-controls" onClick={() => setTopicTab("controls")}>{tr("Контрольні роботи", "Assessments")}<span>{controls.length}</span></button>

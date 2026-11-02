@@ -147,6 +147,17 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
   const [error, setError] = useState<string | null>(null);
   const [roomConn, setRoomConn] = useState<"connecting" | "connected" | "failed">("connecting");
   const [retryNonce, setRetryNonce] = useState(0);
+  const standaloneClassLessons = classLessons.filter((lesson) => !lesson.parentTopicId);
+  const topicLessonGroups = Array.from(classLessons.reduce((groups, lesson) => {
+    if (lesson.parentTopicId == null) return groups;
+    const group = groups.get(lesson.parentTopicId) || {
+      title: lesson.parentTopicTitle || tr("Тема", "Topic"),
+      lessons: [] as LessonBrief[],
+    };
+    group.lessons.push(lesson);
+    groups.set(lesson.parentTopicId, group);
+    return groups;
+  }, new Map<number, { title: string; lessons: LessonBrief[] }>()).entries());
 
   useEffect(() => {
     const root = document.documentElement;
@@ -550,10 +561,11 @@ const LiveClassroomRuntime: React.FC<{ user?: LiveClassroomUser }> = ({ user }) 
                 </div>
               ) : isTeacher ? (
                 <div className="edu-live-lobby__state">
-                  <div><strong>{tr("Кімната готова до уроку", "Your classroom is ready")}</strong><p>{tr("За бажанням прикріпіть тему: учні одразу побачать її теорію й задачі поруч із відео.", "Optionally attach a topic so students see its explanation and practice beside the video.")}</p></div>
-                  <label className="edu-live-lobby__lesson-field"><span>{tr("Тема уроку", "Lesson topic")}</span><select value={selectedLessonId} onChange={(event) => setSelectedLessonId(event.target.value ? Number(event.target.value) : "")} disabled={busy || classLessonsLoading}>
-                    <option value="">{classLessonsLoading ? tr("Завантажуємо теми…", "Loading topics…") : classLessonsError ? tr("Не вдалося завантажити теми", "Could not load topics") : classLessons.length ? tr("Без прив’язаної теми", "No topic attached") : tr("У класі ще немає тем", "No class topics yet")}</option>
-                    {classLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}
+                  <div><strong>{tr("Кімната готова до уроку", "Your classroom is ready")}</strong><p>{tr("Виберіть тему або роботу в темі — учні побачать вибраний матеріал поруч із відео.", "Choose a topic or classwork inside a topic to share it with students beside the video.")}</p></div>
+                  <label className="edu-live-lobby__lesson-field"><span>{tr("Тема або робота", "Topic or classwork")}</span><select value={selectedLessonId} onChange={(event) => setSelectedLessonId(event.target.value ? Number(event.target.value) : "")} disabled={busy || classLessonsLoading}>
+                    <option value="">{classLessonsLoading ? tr("Завантажуємо матеріали…", "Loading materials…") : classLessonsError ? tr("Не вдалося завантажити матеріали", "Could not load materials") : classLessons.length ? tr("Без активного матеріалу", "No active material") : tr("У класі ще немає матеріалів", "No class materials yet")}</option>
+                    {standaloneClassLessons.length > 0 && <optgroup label={tr("Матеріали без теми", "Materials without a topic")}>{standaloneClassLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}</optgroup>}
+                    {topicLessonGroups.map(([topicId, group]) => <optgroup key={topicId} label={group.title}>{group.lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}</optgroup>)}
                   </select>{classLessonsError && <span role="status" className="edu-live-lobby__lesson-error">{tr("Можна повторити завантаження або почати без теми.", "Retry loading topics, or start without an attached lesson.")} <button type="button" onClick={() => void loadClassLessons()}>{classLessonsLoading ? tr("Завантажуємо…", "Loading…") : tr("Повторити", "Retry")}</button></span>}</label>
                   <button type="button" disabled={busy || classLessonsLoading} onClick={() => void handleStart()} className="edu-live-lobby__primary"><PlayCircle className="size-4" />{busy ? tr("Створюємо кімнату…", "Starting the room…") : tr("Почати онлайн-урок", "Start live lesson")}<ArrowLeft className="size-4 rotate-180" /></button>
                 </div>

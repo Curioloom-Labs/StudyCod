@@ -652,11 +652,18 @@ router.get("/classes/:classId/lessons-list", authRequired, async (req: AuthReque
 
     const lessons = await lessonRepo().find({
       where: { class: { id: classId } },
+      relations: ["topic"],
       order: { id: "DESC" },
       take: 200
     });
     disableCache(res);
-    return res.json({ lessons: lessons.map((l) => ({ id: l.id, title: l.title, type: l.type })) });
+    return res.json({ lessons: lessons.map((l) => ({
+      id: l.id,
+      title: l.title,
+      type: l.type,
+      parentTopicId: l.topic?.id,
+      parentTopicTitle: l.topic?.title,
+    })) });
   } catch (error: unknown) {
     logger.error("[edu/live] lessons-list failed", { requestId: req.requestId, err: error });
     return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
@@ -721,14 +728,15 @@ router.get("/live-sessions/:id/materials", authRequired, async (req: AuthRequest
       return res.json({ lessonId: null, title: null, theory: null, hasTheory: false, tasks: [] });
     }
 
-    const lesson = await lessonRepo().findOne({ where: { id: session.lesson.id }, relations: ["tasks"] });
+    const lesson = await lessonRepo().findOne({ where: { id: session.lesson.id }, relations: ["tasks", "topic"] });
     disableCache(res);
     return res.json({
       lessonId: lesson?.id ?? null,
       title: lesson?.title ?? null,
+      parentTopicTitle: lesson?.topic?.title ?? null,
       theory: lesson?.hasTheory ? lesson?.theory ?? null : null,
       hasTheory: Boolean(lesson?.hasTheory && lesson?.theory),
-      tasks: (lesson?.tasks ?? []).map((t) => ({ id: t.id, title: t.title }))
+      tasks: (lesson?.tasks ?? []).map((t) => ({ id: t.id, title: t.title, taskMode: t.taskMode ?? "CODE" }))
     });
   } catch (error: unknown) {
     logger.error("[edu/live] materials failed", { requestId: req.requestId, err: error });

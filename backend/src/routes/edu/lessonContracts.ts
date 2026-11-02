@@ -3,6 +3,7 @@ import { z } from "zod";
 export const createLessonBodySchema = z.object({
   type: z.string().transform(value => value.trim().toUpperCase()).pipe(z.enum(["LESSON", "CONTROL"])),
   title: z.string().trim().min(1).max(255),
+  topicId: z.number().int().positive().optional(),
   theory: z.string().max(100_000).nullable().optional(),
   hasTheory: z.boolean().optional(),
   timeLimitMinutes: z.number().int().min(1).max(1440).nullable().optional(),

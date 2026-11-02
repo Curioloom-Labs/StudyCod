@@ -4,6 +4,7 @@ import { ControlWork } from "./ControlWork";
 import { TopicProgress } from "./TopicProgress";
 import { Class } from "./Class";
 import { TheoryBlock } from "./TheoryBlock";
+import { EduLesson } from "./EduLesson";
 import { TOPIC_LANGUAGES, type TopicLanguage } from "../utils/topicLanguage";
 export { TOPIC_LANGUAGES } from "../utils/topicLanguage";
 export type { TopicLanguage } from "../utils/topicLanguage";
@@ -79,6 +80,8 @@ export class TopicNew {
   controlWorks!: ControlWork[];
   @OneToMany(() => TopicProgress, progress => progress.topic)
   progresses!: TopicProgress[];
+  @OneToMany(() => EduLesson, lesson => lesson.topic)
+  classworkLessons!: EduLesson[];
   @CreateDateColumn({
     name: "created_at"
   })

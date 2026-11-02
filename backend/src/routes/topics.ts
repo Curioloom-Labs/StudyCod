@@ -282,15 +282,19 @@ topicsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
         order: {
           order: "ASC"
         },
-        relations: ["tasks", "controlWorks"]
+        relations: ["tasks", "controlWorks", "classworkLessons"]
       });
       return res.json({
-        topics: topics.map(topic => ({
-          ...topic,
+        topics: topics.map(topic => {
+          const { classworkLessons, ...topicData } = topic;
+          return {
+          ...topicData,
+          classworkCount: classworkLessons?.length ?? 0,
           // Control-work exercises share the TopicTask relation but belong to
           // the assessment column, not the topic's regular practice count.
           tasks: regularTopicPracticeTasks(topic.tasks)
-        }))
+          };
+        })
       });
     }
     const normalizedLanguage = normalizeTopicLanguage(language);
@@ -341,7 +345,7 @@ topicsRouter.get("/:topicId", authRequired, async (req: AuthRequest, res: Respon
       where: {
         id: topicId
       },
-      relations: ["class", "class.teacher", "tasks", "tasks.theory", "controlWorks"],
+      relations: ["class", "class.teacher", "tasks", "tasks.theory", "controlWorks", "classworkLessons", "classworkLessons.tasks"],
       order: {
         tasks: {
           order: "ASC"

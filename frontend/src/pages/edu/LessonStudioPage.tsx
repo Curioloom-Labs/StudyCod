@@ -352,7 +352,7 @@ const LessonTeacherStudio: React.FC = () => {
   const tasks = lesson.tasks || [];
   const isControl =
     lesson.type === "CONTROL" || Boolean(lesson.timeLimitMinutes);
-  const isStandaloneClasswork = lesson.type === "LESSON" && lesson.source !== "course" && !lesson.parentTopicId;
+  const isStandaloneClasswork = lesson.type === "LESSON" && (lesson.source !== "course" || Boolean(lesson.parentTopicId));
   return (
     <div className={`${shell} edu-teacher-lesson`}>
       <button type="button"
@@ -862,7 +862,7 @@ const StudentLessonWorkspace: React.FC = () => {
     );
   const courseControl = lesson.source === "course" && lesson.type === "CONTROL";
   const tasks = courseControl && lesson.controlHasPractice === false ? [] : lesson.tasks || [];
-  const isStandaloneClasswork = lesson.type === "LESSON" && lesson.source !== "course" && !lesson.parentTopicId;
+  const isStandaloneClasswork = lesson.type === "LESSON" && (lesson.source !== "course" || Boolean(lesson.parentTopicId));
   const completedTaskCount = tasks.filter((task) => task.progressCompleted || task.grade?.isCompleted).length;
   let quiz: Quiz[] = [];
   if (isControl && lesson.quizJson) {

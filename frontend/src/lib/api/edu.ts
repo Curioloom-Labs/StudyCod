@@ -134,6 +134,7 @@ export interface Lesson {
   title: string;
   parentTopicId?: number;
   parentTopicTitle?: string;
+  parentTopicSource?: "course" | "legacy";
   controlWorks?: Array<{
     id: number;
     title: string;
@@ -617,6 +618,7 @@ export async function resetClassStudentPasswords(classId: number, studentIds: nu
 export interface CreateLessonRequest {
   type: "LESSON" | "CONTROL";
   title: string;
+  topicId?: number;
   theory?: string;
   hasTheory: boolean;
   timeLimitMinutes?: number;
@@ -626,6 +628,9 @@ export interface CreateLessonRequest {
 export async function createLesson(classId: number, lesson: CreateLessonRequest): Promise<Lesson> {
   const res = await api.post(`/edu/classes/${classId}/lessons`, lesson);
   return res.data.lesson;
+}
+export async function setEduLessonTopic(lessonId: number, topicId: number): Promise<void> {
+  await api.put(`/edu/lessons/${lessonId}/topic`, { topicId });
 }
 export async function deleteEduLesson(lessonId: number): Promise<{ deleted: boolean; lessonId: number; classId: number }> {
   const res = await api.delete(`/edu/lessons/${lessonId}`);
@@ -660,6 +665,8 @@ export interface Topic {
   description?: string | null;
   order: number;
   language: EduLanguage;
+  classworkCount?: number;
+  classworkLessons?: Array<{ id: number; title: string; tasks?: Array<{ id: number }>; createdAt?: string }>;
   tasks?: unknown[];
   controlWorks?: unknown[];
 }

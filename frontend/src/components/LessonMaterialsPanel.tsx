@@ -146,11 +146,22 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
     },
     [sessionId, load]
   );
+  const standaloneLessons = lessons.filter((lesson) => !lesson.parentTopicId);
+  const topicGroups = Array.from(lessons.reduce((groups, lesson) => {
+    if (lesson.parentTopicId == null) return groups;
+    const group = groups.get(lesson.parentTopicId) || {
+      title: lesson.parentTopicTitle || tr("Тема", "Topic"),
+      lessons: [] as LessonBrief[],
+    };
+    group.lessons.push(lesson);
+    groups.set(lesson.parentTopicId, group);
+    return groups;
+  }, new Map<number, { title: string; lessons: LessonBrief[] }>()).entries());
 
   return (
     <div className="edu-live-materials flex h-full flex-col bg-bg-surface">
       <div className="edu-live-materials__head">
-        <div className="min-w-0"><p><BookOpen className="size-4" />{tr("Тема онлайн-уроку", "Live lesson topic")}</p><h2 title={materials?.title || undefined}>{materials?.title || tr("Матеріали уроку", "Lesson materials")}</h2></div>
+        <div className="min-w-0"><p><BookOpen className="size-4" />{materials?.parentTopicTitle || tr("Матеріал онлайн-уроку", "Live lesson material")}</p><h2 title={materials?.title || undefined}>{materials?.title || tr("Матеріали уроку", "Lesson materials")}</h2></div>
         {isTeacher && (
           <select
             value={materials?.lessonId ?? ""}
@@ -159,10 +170,9 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
             aria-label={tr("Вибрати матеріал уроку", "Choose lesson materials")}
             className="edu-live-materials__select"
           >
-            <option value="">{lessonsLoading || loading ? tr("Завантажуємо уроки…", "Loading lessons…") : lessonsError ? tr("Не вдалося завантажити уроки", "Could not load lessons") : lessons.length ? tr("— без прив’язаної теми —", "— no lesson attached —") : tr("У класі ще немає уроків", "No lessons in this class yet")}</option>
-            {lessons.map((l) => (
-              <option key={l.id} value={l.id}>{l.title}</option>
-            ))}
+            <option value="">{lessonsLoading || loading ? tr("Завантажуємо матеріали…", "Loading materials…") : lessonsError ? tr("Не вдалося завантажити матеріали", "Could not load materials") : lessons.length ? tr("— без активного матеріалу —", "— no active material —") : tr("У класі ще немає матеріалів", "No class materials yet")}</option>
+            {standaloneLessons.length > 0 && <optgroup label={tr("Матеріали без теми", "Materials without a topic")}>{standaloneLessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}</optgroup>}
+            {topicGroups.map(([topicId, group]) => <optgroup key={topicId} label={group.title}>{group.lessons.map((lesson) => <option key={lesson.id} value={lesson.id}>{lesson.title}</option>)}</optgroup>)}
           </select>
         )}
       </div>
@@ -180,11 +190,11 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
           <div className="edu-live-materials__empty">
             {(error || syncStale) && <p role="status" className="edu-live-materials__stale">{tr("Показано останній стан. Не вдалося перевірити оновлення.", "Showing the last available state. Could not check for updates.")} <button type="button" onClick={() => void load()}>{tr("Оновити", "Refresh")}</button></p>}
             <span><FileText className="size-5" /></span>
-            <strong>{tr("Тему ще не вибрано", "No topic selected yet")}</strong>
+            <strong>{tr("Матеріал ще не вибрано", "No material selected yet")}</strong>
             <p>
             {isTeacher
-                ? tr("Виберіть тему вище — її пояснення й практичні задачі одразу з’являться тут для всього класу.", "Choose a topic above to show its explanation and practice here for the class.")
-                : tr("Викладач ще не прикріпив тему до заняття. Можна слухати пояснення й повернутися сюди пізніше.", "Your teacher has not attached a topic yet. You can follow the discussion and return here later.")}
+                ? tr("Виберіть тему або роботу в темі вище — матеріал одразу з’явиться тут для всього класу.", "Choose a topic or classwork inside a topic above to share it with the whole class.")
+                : tr("Викладач ще не вибрав матеріал для спільної роботи. Він з’явиться тут після вибору.", "Your teacher has not selected class material yet. It will appear here once selected.")}
             </p>
           </div>
         ) : (
@@ -198,7 +208,7 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
             )}
             {materials.tasks.length > 0 && (
               <section className="edu-live-materials__tasks">
-                <div className="edu-live-materials__section-title"><ClipboardList className="size-4" />{tr("Практика уроку", "Lesson practice")}<span>{materials.tasks.length}</span></div>
+                <div className="edu-live-materials__section-title"><ClipboardList className="size-4" />{materials.tasks.some((task) => task.taskMode === "MANUAL") ? tr("Робота в класі", "Classwork") : tr("Практика уроку", "Lesson practice")}<span>{materials.tasks.length}</span></div>
                 <ul>
                   {materials.tasks.map((task, index) => (
                     <li key={task.id}>
@@ -206,7 +216,8 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
                         type="button"
                         onClick={() => {
                           const returnTo = `${window.location.pathname}${window.location.search}`;
-                          const url = new URL(withDevPreview(`/edu/tasks/${task.id}`), window.location.origin);
+                          const taskPath = task.taskMode === "MANUAL" ? `/edu/manual-tasks/${task.id}` : `/edu/tasks/${task.id}?source=course`;
+                          const url = new URL(withDevPreview(taskPath), window.location.origin);
                           url.searchParams.set("returnTo", returnTo);
                           window.open(url.toString(), "_blank", "noopener,noreferrer");
                         }}
@@ -214,7 +225,7 @@ export const LessonMaterialsPanel: React.FC<Props> = ({ classId, sessionId, isTe
                         title={task.title}
                       >
                         <span className="edu-live-materials__task-index">{String(index + 1).padStart(2, "0")}</span>
-                        <span className="min-w-0 flex-1"><strong>{task.title}</strong><small>{tr("Практична задача", "Practice problem")}</small></span>
+                        <span className="min-w-0 flex-1"><strong>{task.title}</strong><small>{task.taskMode === "MANUAL" ? tr("Робота в класі", "Classwork") : tr("Практична задача", "Practice problem")}</small></span>
                         <ArrowRight className="size-4" />
                       </button>
                     </li>

@@ -211,7 +211,7 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
 
     const courseLessons = await eduLessonRepo().find({
       where: { class: { id: student.class.id } },
-      relations: ["class", "tasks", "tasks.testData"],
+      relations: ["class", "topic", "tasks", "tasks.testData"],
       order: { createdAt: "ASC" }
     });
     const courseTaskIds = courseLessons.flatMap((lesson) => (lesson.tasks || []).map((task) => task.id));
@@ -245,9 +245,11 @@ router.get("/students/me/lessons", authRequired, async (req: AuthRequest, res: R
       // response shape/execution compatible without deriving a language from
       // the class, which is intentionally language-agnostic now.
       language: "PYTHON",
-      // StudentPathPages groups regular course lessons with topics; preserve
-      // CONTROL for assessments while exposing LESSON as a normal topic card.
-      type: lesson.type === "CONTROL" ? "CONTROL" : "TOPIC",
+      // Attach classwork to its topic while keeping historical lessons usable.
+      type: lesson.type === "CONTROL" ? "CONTROL" : lesson.topic ? "LESSON" : "TOPIC",
+      parentTopicId: lesson.topic?.id,
+      parentTopicTitle: lesson.topic?.title,
+      parentTopicSource: lesson.topic ? "legacy" : undefined,
       hasTheory: lesson.hasTheory,
       theory: lesson.theory || undefined,
       timeLimitMinutes: lesson.timeLimitMinutes || null,

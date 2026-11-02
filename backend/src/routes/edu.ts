@@ -543,16 +543,18 @@ eduRouter.put("/classes/:classId/grading-system", authRequired, requireClassCapa
 eduRouter.get("/classes/:classId/lessons", authRequired, requireClassCapability("CLASS_VIEW"), async (req: ClassAccessRequest, res: Response) => {
   try {
     const classId = req.classAccess!.cls.id;
-    const topics = await topicRepo().createQueryBuilder("topic").leftJoinAndSelect("topic.tasks", "task").where("topic.class_id = :classId", {
+    const topics = await topicRepo().createQueryBuilder("topic").leftJoinAndSelect("topic.tasks", "task").leftJoinAndSelect("topic.classworkLessons", "classworkLesson").where("topic.class_id = :classId", {
       classId
     }).orderBy("topic.order", "ASC").addOrderBy("topic.created_at", "ASC").getMany();
-    const courseLessons = await lessonRepo().find({ where: { class: { id: classId } }, relations: ["tasks"], order: { createdAt: "DESC" } });
+    const courseLessons = await lessonRepo().find({ where: { class: { id: classId } }, relations: ["tasks", "topic"], order: { createdAt: "DESC" } });
     res.json({
       lessons: [...courseLessons.map(lesson => ({
         id: lesson.id,
         source: "course",
         type: lesson.type,
         title: lesson.title,
+        parentTopicId: lesson.topic?.id,
+        parentTopicTitle: lesson.topic?.title,
         hasTheory: lesson.hasTheory,
         tasksCount: lesson.tasks?.length || 0,
         createdAt: lesson.createdAt.toISOString(),
@@ -565,6 +567,7 @@ eduRouter.get("/classes/:classId/lessons", authRequired, requireClassCapability(
         order: topic.order,
         language: topic.language,
         tasksCount: regularTopicPracticeTasks(topic.tasks).length,
+        classworkCount: topic.classworkLessons?.length ?? 0,
         createdAt: topic.createdAt.toISOString(),
         tasks: regularTopicPracticeTasks(topic.tasks).map(task => ({
           id: task.id,
@@ -602,9 +605,14 @@ eduRouter.post("/classes/:classId/lessons", authRequired, requireClassCapability
   const type = parsedBody.data.type as LessonType;
   const title = parsedBody.data.title;
   const cls = req.classAccess!.cls;
+  const { topicId, ...lessonData } = parsedBody.data;
+  if (type === "LESSON" && !topicId) return res.status(400).json({ message: "TOPIC_REQUIRED_FOR_CLASSWORK" });
+  const topic = topicId ? await topicRepo().findOne({ where: { id: topicId, class: { id: cls.id } } }) : null;
+  if (topicId && !topic) return res.status(400).json({ message: "TOPIC_NOT_IN_CLASS" });
   const lesson = lessonRepo().create({
-    ...parsedBody.data,
+    ...lessonData,
     class: cls,
+    topic,
     type,
     title
   });
@@ -612,6 +620,33 @@ eduRouter.post("/classes/:classId/lessons", authRequired, requireClassCapability
   res.status(201).json({
     lesson
   });
+});
+eduRouter.put("/lessons/:lessonId/topic", authRequired, async (req: AuthRequest, res: Response) => {
+  try {
+    const lessonId = Number(req.params.lessonId);
+    const topicId = Number(req.body?.topicId);
+    if (!Number.isSafeInteger(lessonId) || lessonId <= 0 || !Number.isSafeInteger(topicId) || topicId <= 0) {
+      return res.status(400).json({ message: "INVALID_ID" });
+    }
+    if (!req.userId || req.studentId || req.userType === "STUDENT") {
+      return res.status(403).json({ message: "ONLY_TEACHERS_CAN_MODIFY" });
+    }
+    const lesson = await lessonRepo().findOne({ where: { id: lessonId }, relations: ["class"] });
+    if (!lesson || lesson.type !== "LESSON") return res.status(404).json({ message: "LESSON_NOT_FOUND" });
+    const access = await authorizeClassAction(req.userId, lesson.class.id, "CONTENT_AUTHOR", {
+      isSystemAdmin: req.userRole === "SYSTEM_ADMIN",
+    });
+    if (!access) return res.status(404).json({ message: "LESSON_NOT_FOUND" });
+    if (!access.allowed) return res.status(403).json({ message: "ACCESS_DENIED" });
+    const topic = await topicRepo().findOne({ where: { id: topicId, class: { id: lesson.class.id } } });
+    if (!topic) return res.status(400).json({ message: "TOPIC_NOT_IN_CLASS" });
+    lesson.topic = topic;
+    await lessonRepo().save(lesson);
+    return res.json({ lesson: { id: lesson.id, parentTopicId: topic.id, parentTopicTitle: topic.title } });
+  } catch (error) {
+    logger.error("[edu] Error attaching classwork to topic", { requestId: req.requestId, err: error });
+    return res.status(500).json({ message: "INTERNAL_SERVER_ERROR" });
+  }
 });
 eduRouter.delete("/lessons/:lessonId", authRequired, async (req: AuthRequest, res: Response) => {
   try {

@@ -147,7 +147,7 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
     if (source === "course" || (source !== "legacy" && (!requestedType || requestedType === "LESSON"))) {
       const eduLesson = await eduLessonRepo().findOne({
         where: classIdScope ? { id, class: { id: classIdScope } } : { id },
-        relations: ["class", "class.teacher", "tasks"]
+        relations: ["class", "class.teacher", "tasks", "topic"]
       });
       const matchesRequestedType = source === "course" || !requestedType || requestedType === "LESSON";
       if (eduLesson && matchesRequestedType) {
@@ -162,8 +162,12 @@ router.get("/lessons/:id", authRequired, async (req: AuthRequest, res: Response)
           lesson: {
             id: eduLesson.id,
             source: "course",
+            classId: eduLesson.class?.id,
             type: eduLesson.type,
             title: eduLesson.title,
+            parentTopicId: eduLesson.topic?.id,
+            parentTopicTitle: eduLesson.topic?.title,
+            parentTopicSource: eduLesson.topic ? "legacy" : undefined,
             theory: eduLesson.theory || undefined,
             hasTheory: eduLesson.hasTheory,
             timeLimitMinutes: eduLesson.timeLimitMinutes || undefined,

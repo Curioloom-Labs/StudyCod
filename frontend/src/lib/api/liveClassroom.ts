@@ -168,14 +168,17 @@ export interface LessonBrief {
   id: number;
   title: string;
   type: string;
+  parentTopicId?: number;
+  parentTopicTitle?: string | null;
 }
 
 export interface SessionMaterials {
   lessonId: number | null;
   title: string | null;
+  parentTopicTitle?: string | null;
   theory: string | null;
   hasTheory: boolean;
-  tasks: Array<{ id: number; title: string }>;
+  tasks: Array<{ id: number; title: string; taskMode?: "MANUAL" | "CODE" | "WEB" }>;
 }
 
 export async function getClassLessonsList(classId: number): Promise<LessonBrief[]> {

@@ -1,9 +1,9 @@
 import React from "react";
 import "./eduWorkspace.css";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, BookOpen, ClipboardCheck, FileText, Save } from "lucide-react";
 import { api } from "../../lib/api/client";
-import { createLesson, createTask, deleteEduLesson, type EduLanguage } from "../../lib/api/edu";
+import { createLesson, createTask, deleteEduLesson, getTopics, type EduLanguage, type Topic } from "../../lib/api/edu";
 import { enabledJudgeLanguages, JUDGE_LANGUAGE_LABELS } from "../../lib/judgeLanguages";
 import { getEduErrorMessage as getErrorMessageFromUnknown } from "../../lib/eduError";
 import { withDevPreview } from "../../lib/devPreview";
@@ -28,11 +28,41 @@ export const CreateTopicWorkspace: React.FC = () => {
 export const CreateLessonWorkspace: React.FC = () => {
   useTranslation();
   const { classId } = useParams<{ classId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [title, setTitle] = React.useState("");
   const [instructions, setInstructions] = React.useState("");
+  const requestedTopicId = Number(searchParams.get("topicId") || 0);
+  const [topics, setTopics] = React.useState<Topic[]>([]);
+  const [topicId, setTopicId] = React.useState(0);
+  const [topicsLoading, setTopicsLoading] = React.useState(false);
+  const [topicsError, setTopicsError] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const numericClassId = Number(classId);
+    if (!Number.isSafeInteger(numericClassId) || numericClassId <= 0) return;
+    if (preview()) {
+      const demoTopicId = requestedTopicId || 1;
+      setTopics([{ id: demoTopicId, title: tr("Демо-тема", "Demo topic"), order: 1, language: "PYTHON" }]);
+      setTopicId(demoTopicId);
+      return;
+    }
+    let active = true;
+    setTopicsLoading(true);
+    setTopicsError(false);
+    void getTopics(numericClassId).then((availableTopics) => {
+      if (!active) return;
+      setTopics(availableTopics);
+      setTopicId(availableTopics.some((topic) => topic.id === requestedTopicId) ? requestedTopicId : 0);
+    }).catch(() => {
+      if (active) setTopicsError(true);
+    }).finally(() => {
+      if (active) setTopicsLoading(false);
+    });
+    return () => { active = false; };
+  }, [classId, requestedTopicId]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -40,6 +70,10 @@ export const CreateLessonWorkspace: React.FC = () => {
     const numericClassId = Number(classId);
     if (!Number.isSafeInteger(numericClassId) || numericClassId <= 0) {
       setError(tr("Некоректний клас.", "Invalid class."));
+      return;
+    }
+    if (!topics.some((topic) => topic.id === topicId)) {
+      setError(topicsError ? tr("Не вдалося завантажити теми класу. Спробуйте ще раз.", "Could not load class topics. Try again.") : tr("Оберіть тему для цієї роботи.", "Choose a topic for this classwork."));
       return;
     }
 
@@ -56,6 +90,7 @@ export const CreateLessonWorkspace: React.FC = () => {
       const wrapper = await createLesson(numericClassId, {
         type: "LESSON",
         title: title.trim(),
+        topicId,
         hasTheory: false,
       });
       createdLessonId = wrapper.id;
@@ -77,9 +112,15 @@ export const CreateLessonWorkspace: React.FC = () => {
   };
 
   return <div className={shell}>
-    <ComposerHeader eyebrow={tr("EDU / робота в класі", "EDU / classwork")} title={tr("Нова робота в класі", "New classwork")} text={tr("Додайте умову завдання. Учні надішлють текст або файл, а ви виставите оцінку та коментар.", "Add the task instructions. Students submit text or a file, then you enter a grade and feedback.")} classId={classId} />
+    <ComposerHeader eyebrow={tr("EDU / робота в класі", "EDU / classwork")} title={tr("Робота в класі для теми", "Classwork for a topic")} text={tr("Учні знайдуть роботу всередині теми. Під час онлайн-уроку виберіть її в матеріалах, щоб активувати для класу.", "Students will find the work inside its topic. Select it in the live lesson materials to activate it for the class.")} classId={classId} />
     <form onSubmit={submit} className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <section className="space-y-6 rounded-[30px] border border-border/10 bg-white p-6 shadow-[0_20px_56px_rgba(12,36,20,.06)] dark:border-white/[.09] dark:bg-bg-surface sm:p-8">
+        <Field label={tr("Тема", "Topic")}>
+          <select required value={topicId || ""} onChange={(event) => setTopicId(Number(event.target.value) || 0)} disabled={topicsLoading || busy} className={input}>
+            <option value="">{topicsLoading ? tr("Завантажуємо теми…", "Loading topics…") : topicsError ? tr("Не вдалося завантажити теми", "Could not load topics") : tr("Оберіть тему", "Choose a topic")}</option>
+            {topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}
+          </select>
+        </Field>
         <Field label={tr("Назва роботи", "Work title")}>
           <input required maxLength={255} value={title} onChange={(event) => setTitle(event.target.value)} className={input} placeholder={tr("Наприклад, Пояснити роботу циклу", "For example, Explain how the loop works")} />
         </Field>
@@ -87,7 +128,7 @@ export const CreateLessonWorkspace: React.FC = () => {
           <textarea required maxLength={50000} value={instructions} onChange={(event) => setInstructions(event.target.value)} className={`${input} min-h-44 resize-y`} placeholder={tr("Опишіть, що потрібно виконати в класі.", "Describe the work students should complete in class.")} />
         </Field>
         {error && <p role="alert" className="rounded-2xl bg-accent-error/10 px-4 py-3 text-sm font-medium text-accent-error dark:text-accent-error">{error}</p>}
-        <button type="submit" disabled={busy || !title.trim() || !instructions.trim()} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-45 dark:bg-primary dark:text-primary-foreground">
+        <button type="submit" disabled={busy || topicsLoading || !topicId || !title.trim() || !instructions.trim()} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-45 dark:bg-primary dark:text-primary-foreground">
           <ClipboardCheck className="size-4" />{busy ? tr("Створюємо…", "Creating…") : tr("Створити роботу", "Create classwork")}
         </button>
       </section>

@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { Class } from "./Class";
 import { EduTask } from "./EduTask";
+import { TopicNew } from "./TopicNew";
 export type LessonType = "LESSON" | "CONTROL";
 @Entity("edu_lessons")
 export class EduLesson {
@@ -13,6 +14,14 @@ export class EduLesson {
     name: "class_id"
   })
   class!: Class;
+  @ManyToOne(() => TopicNew, topic => topic.classworkLessons, {
+    nullable: true,
+    onDelete: "SET NULL"
+  })
+  @JoinColumn({
+    name: "topic_id"
+  })
+  topic?: TopicNew | null;
   @Column({
     type: "enum",
     enum: ["LESSON", "CONTROL"],
