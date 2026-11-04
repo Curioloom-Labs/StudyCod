@@ -85,7 +85,10 @@ function normalizeAndDeduplicateKeys(primary: string, backups: string[]): string
 }
 
 function normalizeAndDeduplicateModels(models: string[]): string[] {
-  const raw = models.map(s => String(s ?? '').trim()).filter(Boolean);
+  const raw = models
+    .map(s => String(s ?? '').trim())
+    .filter(Boolean)
+    .filter(model => !isFreeModelCandidate(model));
   const seen = new Set<string>();
   const out: string[] = [];
   for (const model of raw) {
@@ -95,6 +98,11 @@ function normalizeAndDeduplicateModels(models: string[]): string[] {
     out.push(model);
   }
   return out;
+}
+
+function isFreeModelCandidate(model: string): boolean {
+  const normalized = String(model ?? '').trim().toLowerCase();
+  return normalized === 'openrouter/free' || /:free$/.test(normalized);
 }
 
 function looksLikeOpenRouterKey(key: string): boolean {
@@ -341,22 +349,16 @@ function modelsWithoutSystemSupport(): string[] {
   // When that happens, we inline system text into the user message.
   return [
     'google/gemma-3-27b-it',
-    'google/gemma-3-27b-it:free',
     'google/gemma-3-12b-it',
-    'google/gemma-3-12b-it:free',
     'google/gemma-3-12b',
-    'google/gemma-3-12b:free'
   ];
 }
 function modelsWithoutJsonMode(): string[] {
   // These models frequently error on OpenAI-style JSON mode / response_format.
   return [
     'google/gemma-3-27b-it',
-    'google/gemma-3-27b-it:free',
     'google/gemma-3-12b-it',
-    'google/gemma-3-12b-it:free',
     'google/gemma-3-12b',
-    'google/gemma-3-12b:free'
   ];
 }
 function normalizeModelForSystemCheck(model: string): string {
@@ -493,10 +495,9 @@ function getConfiguredOpenRouterFallbackModels(): string[] {
     .split(',')
     .map(s => s.trim())
     .filter(Boolean)
-    .map(m => resolveTextModel(m));
+    .map(m => resolveTextModel(m))
+    .filter(m => !isFreeModelCandidate(m));
 }
-
-const OPENROUTER_FREE_ROUTER_MODEL = 'openrouter/free';
 
 function buildModelCandidateChain(params: {
   primaryModel: string;
@@ -516,15 +517,6 @@ function buildModelCandidateChain(params: {
     if (configuredTextModel) candidates.push(resolveTextModel(configuredTextModel));
   }
   candidates.push(...explicitFallbacks);
-
-  // The production setup historically used only Gemma free variants. When
-  // those routed providers exhaust their quota, keep generation alive by
-  // handing the request to OpenRouter's free router instead of dropping into
-  // the low-quality deterministic task fallback.
-  const gemmaOnlyChain = isGemmaModel(primary) && candidates.every(isGemmaModel);
-  if (gemmaOnlyChain && !candidates.includes(OPENROUTER_FREE_ROUTER_MODEL)) {
-    candidates.push(OPENROUTER_FREE_ROUTER_MODEL);
-  }
 
   return normalizeAndDeduplicateModels(candidates);
 }
@@ -670,10 +662,14 @@ export class OpenRouterProvider implements LLMProvider {
         const user = await AppDataSource.getRepository(User).findOne({ where: { id: options.userId }, select: ['id', 'role'] });
         if (user && user.role === 'SYSTEM_ADMIN') {
           const adminModel = resolveTextModel(adminModelRaw);
-          // Prepend admin model if not already first candidate
-          const rest = candidates.filter(c => c !== adminModel);
-          candidates = [adminModel, ...rest];
-          logger.info('Using admin-specific OpenRouter model for SYSTEM_ADMIN user', { userId: options.userId, adminModel });
+          if (isFreeModelCandidate(adminModel)) {
+            logger.warn('Ignoring free OpenRouter admin model; free models are disabled', { adminModel });
+          } else {
+            // Prepend admin model if not already first candidate.
+            const rest = candidates.filter(c => c !== adminModel);
+            candidates = normalizeAndDeduplicateModels([adminModel, ...rest]);
+            logger.info('Using admin-specific OpenRouter model for SYSTEM_ADMIN user', { userId: options.userId, adminModel });
+          }
         }
       }
     } catch (err: unknown) {
@@ -766,6 +762,9 @@ export class OpenRouterProvider implements LLMProvider {
       return 90_000;
     })();
     const requestedModel = request.model || env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+    if (isFreeModelCandidate(requestedModel)) {
+      throw new Error('AI_GENERATION_FAILED: Free OpenRouter models are disabled');
+    }
     const model = resolveTextModel(requestedModel);
     const url = env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';
     const adaptedRequest = {

@@ -32,11 +32,15 @@ export interface OpenRouterCallOptions {
   topicId?: number;
   traceId?: string;
 }
+function isFreeModelCandidate(model: string): boolean {
+  const normalized = String(model ?? '').trim().toLowerCase();
+  return normalized === 'openrouter/free' || /:free$/.test(normalized);
+}
 function modelsWithoutSystemSupport(): string[] {
-  return ['google/gemma-3-27b-it', 'google/gemma-3-27b-it:free'];
+  return ['google/gemma-3-27b-it'];
 }
 function modelsWithoutJsonMode(): string[] {
-  return ['google/gemma-3-27b-it', 'google/gemma-3-27b-it:free'];
+  return ['google/gemma-3-27b-it'];
 }
 function normalizeModelForSystemCheck(model: string): string {
   return model.toLowerCase().trim();
@@ -125,6 +129,9 @@ export async function callOpenRouter(request: OpenRouterRequest, options: OpenRo
     traceId = `trace-${randomUUID()}`
   } = options;
   const model = request.model || env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+  if (isFreeModelCandidate(model)) {
+    throw new Error('AI_GENERATION_FAILED: Free OpenRouter models are disabled');
+  }
   const url = env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions';
   const adaptedMessages = adaptMessagesForModel(request.messages, model);
   const adaptedRequest = {

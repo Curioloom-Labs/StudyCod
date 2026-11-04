@@ -52,14 +52,65 @@ async function runAtAssessmentStage<T>(stage: AssessmentGenerationStage, operati
   }
 }
 
-function assessmentFailureReason(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(recordOf(error)?.message ?? error ?? "");
+export function assessmentFailureReason(error: unknown): string {
+  const details = recordOf(error);
+  const message = error instanceof Error ? error.message : String(details?.message ?? error ?? "");
   if (/\b429\b|rate.?limit|too many requests/i.test(message)) return "provider_rate_limited";
   if (/timeout|timed out|ETIMEDOUT|aborted/i.test(message)) return "provider_timeout";
   if (/ECONN|ENOTFOUND|fetch failed|network|\b50[234]\b|bad gateway|unavailable/i.test(message)) return "provider_unavailable";
+  if (typeof details?.invalidSource === "string") return "task_contract_review_failed";
+  if (details?.name === "AIValidationError" || recordOf(details?.errors)) return "invalid_provider_response";
   if (/empty (ai )?response/i.test(message)) return "empty_provider_response";
   if (/json|parse|schema|invalid response|validation/i.test(message)) return "invalid_provider_response";
   return "provider_generation_failed";
+}
+
+/** Select bounded, non-payload diagnostics; deliberately never includes rawResponse or prompts. */
+export function assessmentGenerationErrorLogDetails(error: unknown): Record<string, unknown> {
+  const details = recordOf(error);
+  const validation = recordOf(details?.errors);
+  const zodIssues = Array.isArray(validation?.issues) ? validation.issues : [];
+  const contractIssues = Array.isArray(details?.issues) ? details.issues : [];
+  const cause = recordOf(details?.cause);
+  const invalidSource = details?.invalidSource;
+  const validationMode = details?.mode;
+
+  return {
+    ...(typeof details?.message === "string" && typeof invalidSource !== "string"
+      ? { errorMessage: text(details.message, 1_200) }
+      : {}),
+    ...(typeof validationMode === "string" ? { validationMode: text(validationMode, 100) } : {}),
+    ...(zodIssues.length ? {
+      validationIssueCount: zodIssues.length,
+      validationIssues: zodIssues.slice(0, 8).map((value) => {
+        const issue = recordOf(value);
+        const path = Array.isArray(issue?.path)
+          ? issue.path.map((part) => String(part)).join(".").slice(0, 200)
+          : "";
+        return {
+          ...(path ? { path } : {}),
+          ...(typeof issue?.code === "string" ? { code: text(issue.code, 60) } : {}),
+          ...(typeof issue?.message === "string" ? { message: text(issue.message, 400) } : {}),
+        };
+      }),
+      ...(zodIssues.length > 8 ? { validationIssuesTruncated: true } : {}),
+    } : {}),
+    ...(typeof invalidSource === "string" ? { contractInvalidSource: text(invalidSource, 40) } : {}),
+    ...(contractIssues.length ? {
+      contractIssueCount: contractIssues.length,
+      contractIssues: contractIssues.slice(0, 3).map((issue) => text(issue, 400)).filter(Boolean),
+      ...(contractIssues.length > 3 ? { contractIssuesTruncated: true } : {}),
+    } : {}),
+    ...(typeof details?.clarificationQuestion === "string"
+      ? { clarificationQuestion: text(details.clarificationQuestion, 500) }
+      : {}),
+    ...(cause ? {
+      causeName: typeof cause.name === "string" ? text(cause.name, 100) : undefined,
+      causeCode: typeof cause.code === "string" || typeof cause.code === "number" ? cause.code : undefined,
+      causeStatusCode: typeof cause.statusCode === "number" || typeof cause.statusCode === "string" ? cause.statusCode : undefined,
+      ...(typeof cause.message === "string" ? { causeMessage: text(cause.message, 600) } : {}),
+    } : {}),
+  };
 }
 
 function percent(value: unknown): number {
@@ -182,6 +233,7 @@ function courseDiagnosticTopics(course: Course, locale: CurriculumLocale): Cours
 
 async function generateAssessment(course: Course, runtime: Runtime, userId: number, locale: CurriculumLocale, courseTopics: CourseDiagnosticTopic[]): Promise<CourseDiagnosticPayload> {
   const seed = crypto.randomBytes(16).toString("hex");
+  const requestId = `assessment-${crypto.randomUUID()}`;
   const courseContext = [
     `Course: ${localizedCourseTitle(course, locale)}.`,
     localizedCourseDescription(course, locale)?.slice(0, 1_000),
@@ -222,6 +274,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             count: topicAssignments.length,
             userId,
             language,
+            requestId,
           });
           return normalizeQuestions(quiz.quizJson, topicAssignments, topicAssignments.length, batchIndex * 8);
         } catch (error) {
@@ -253,6 +306,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             userId,
             topicId: topicGroup[0].id > 0 ? topicGroup[0].id : undefined,
             language,
+            requestId,
           }));
         const taskDescription = [
           generatedTask.practicalTask,
@@ -269,6 +323,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             ioType: generatedTask.ioType ?? "STDIN_STDOUT",
             language,
             userId,
+            requestId,
             publicExamples: generatedTask.examples,
             requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
           }));
@@ -310,20 +365,23 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
   } catch (error) {
     const details = recordOf(error);
     const stage = details?.assessmentStage;
+    const reason = assessmentFailureReason(error);
     logger.error("[learning/diagnostic] assessment generation failed", {
+      requestId,
       userId,
       courseId: course.id,
       stage: typeof stage === "string" ? stage : "unknown",
       errorName: error instanceof Error ? error.name : "UnknownError",
       errorCode: details?.code,
       statusCode: details?.statusCode,
-      reason: assessmentFailureReason(error),
+      reason,
+      ...assessmentGenerationErrorLogDetails(error),
     });
     if (recordOf(error)?.statusCode) throw error;
     const failure = assessmentError("ASSESSMENT_GENERATION_FAILED", 503);
     throw Object.assign(failure, {
       assessmentStage: typeof stage === "string" ? stage : "unknown",
-      assessmentReason: assessmentFailureReason(error),
+      assessmentReason: reason,
     });
   }
 }

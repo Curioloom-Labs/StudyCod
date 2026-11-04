@@ -100,6 +100,7 @@ type QuizGenerationParams = {
   topicId?: number;
   language?: "uk" | "en";
   signal?: AbortSignal;
+  requestId?: string;
   avoidQuestionStems?: string[];
 };
 export interface TestDataExample {
@@ -1895,7 +1896,7 @@ REQUIREMENTS (mandatory):
     }
   }
   async generateQuizWithAI(params: QuizGenerationParams): Promise<AiQuizResult> {
-    return runWithPromptExecutionContext('task.quiz', { signal: params.signal }, () => this.generateQuizWithAIInPromptContext(params));
+    return runWithPromptExecutionContext('task.quiz', { signal: params.signal, traceId: params.requestId }, () => this.generateQuizWithAIInPromptContext(params));
   }
   private async generateQuizInBatches(
     params: QuizGenerationParams,
@@ -3047,6 +3048,7 @@ public class Main {
     language?: "uk" | "en";
     userId?: number;
     signal?: AbortSignal;
+    requestId?: string;
     validationFeedback?: string;
     publicExamples?: TestDataExample[];
     requiredCases?: string[];
@@ -3055,7 +3057,7 @@ public class Main {
     referenceExamplesAreAuthoritative?: boolean;
     pythonRuntimeProfile?: EduPythonRuntimeProfile;
   }): Promise<TestDataExample[]> {
-    return runWithPromptExecutionContext('task.generated-tests', { signal: params.signal }, () => this.generateTestDataWithAIInPromptContext(params));
+    return runWithPromptExecutionContext('task.generated-tests', { signal: params.signal, traceId: params.requestId }, () => this.generateTestDataWithAIInPromptContext(params));
   }
   private async generateTestDataWithAIInPromptContext(params: {
     taskDescription: string;

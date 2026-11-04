@@ -79,7 +79,7 @@ test('OpenRouterProvider disables invalid keys (401) and skips them on subsequen
 
   process.env.OPENROUTER_API_KEY = KEY_BAD;
   process.env.OPENROUTER_BACKUP_API_KEYS = KEY_GOOD;
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   const calls: FetchCall[] = [];
@@ -132,7 +132,7 @@ test('OpenRouterProvider cools down rate-limited keys (429) using Retry-After', 
 
   process.env.OPENROUTER_API_KEY = KEY_RL;
   process.env.OPENROUTER_BACKUP_API_KEYS = KEY_GOOD;
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   const calls: FetchCall[] = [];
@@ -187,7 +187,7 @@ test('OpenRouterProvider reads text when message.content is an array of parts', 
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-array_content_test';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   globalThis.fetch = async () => makeCustomOkResponse({
@@ -222,7 +222,7 @@ test('OpenRouterProvider reads text from choice.text fallback', async () => {
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-choice_text_test';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   globalThis.fetch = async () => makeCustomOkResponse({
@@ -250,7 +250,7 @@ test('OpenRouterProvider reads text when message.content is an object', async ()
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-content_object_test';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   globalThis.fetch = async () => makeCustomOkResponse({
@@ -282,7 +282,7 @@ test('OpenRouterProvider reads text from delta.content fallback', async () => {
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-delta_content_test';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   globalThis.fetch = async () => makeCustomOkResponse({
@@ -314,7 +314,7 @@ test('OpenRouterProvider falls back to reasoning when text content is missing', 
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-reasoning_test';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   globalThis.fetch = async () => makeCustomOkResponse({
@@ -346,7 +346,7 @@ test('OpenRouterProvider inlines system instructions into user for gemma-3n-e2b-
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-system_to_user_inline_test';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3n-e2b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3n-e2b-it';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   const calls: FetchCall[] = [];
@@ -364,7 +364,7 @@ test('OpenRouterProvider inlines system instructions into user for gemma-3n-e2b-
   const provider = new OpenRouterProvider() as any;
   await provider.callOpenRouter(
     {
-      model: 'google/gemma-3n-e2b-it:free',
+      model: 'google/gemma-3n-e2b-it',
       messages: [
         { role: 'system', content: 'You are strict.' },
         { role: 'user', content: 'Solve task' }
@@ -449,7 +449,7 @@ test('OpenRouterProvider removes response_format for gemma-3n-e2b-it', async () 
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-strip_json_mode_test';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3n-e2b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3n-e2b-it';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   const calls: FetchCall[] = [];
@@ -467,7 +467,7 @@ test('OpenRouterProvider removes response_format for gemma-3n-e2b-it', async () 
   const provider = new OpenRouterProvider() as any;
   await provider.callOpenRouter(
     {
-      model: 'google/gemma-3n-e2b-it:free',
+      model: 'google/gemma-3n-e2b-it',
       messages: [
         { role: 'system', content: 'Return strict JSON' },
         { role: 'user', content: 'Solve task' }
@@ -501,7 +501,7 @@ test('OpenRouterProvider falls back to configured model when primary model is ra
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-fallback_test_key';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-12b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-12b-it';
   process.env.OPENROUTER_TEXT_MODEL = '';
   process.env.OPENROUTER_JSON_MODEL = '';
   process.env.OPENROUTER_FALLBACK_MODELS = 'openai/gpt-4o-mini';
@@ -518,13 +518,13 @@ test('OpenRouterProvider falls back to configured model when primary model is ra
     calls.push({ url: 'x', body: parsedBody });
 
     const model = String(parsedBody?.model || '');
-    if (model.includes('gemma-3-12b-it:free')) {
+    if (model.includes('gemma-3-12b-it')) {
       return makeErrorResponse(429, {
         error: {
           message: 'Provider returned error',
           code: 429,
           metadata: {
-            raw: 'google/gemma-3-12b-it:free is temporarily rate-limited upstream'
+            raw: 'google/gemma-3-12b-it is temporarily rate-limited upstream'
           }
         }
       });
@@ -538,7 +538,7 @@ test('OpenRouterProvider falls back to configured model when primary model is ra
 
   assert.equal(text, 'fallback model worked');
   assert.equal(calls.length, 2);
-  assert.equal(String(calls[0].body?.model), 'google/gemma-3-12b-it:free');
+  assert.equal(String(calls[0].body?.model), 'google/gemma-3-12b-it');
   assert.equal(String(calls[1].body?.model), 'openai/gpt-4o-mini');
 
   process.env.OPENROUTER_API_KEY = old.OPENROUTER_API_KEY;
@@ -550,7 +550,7 @@ test('OpenRouterProvider falls back to configured model when primary model is ra
   process.env.OPENROUTER_URL = old.OPENROUTER_URL;
 });
 
-test('OpenRouterProvider adds the free router after an exhausted Gemma-only chain', () => {
+test('OpenRouterProvider does not add a free router to an exhausted Gemma chain', () => {
   const old = {
     OPENROUTER_MODEL: process.env.OPENROUTER_MODEL,
     OPENROUTER_TEXT_MODEL: process.env.OPENROUTER_TEXT_MODEL,
@@ -559,17 +559,16 @@ test('OpenRouterProvider adds the free router after an exhausted Gemma-only chai
     OPENROUTER_MODEL_FALLBACKS: process.env.OPENROUTER_MODEL_FALLBACKS,
   };
 
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it:free';
-  process.env.OPENROUTER_TEXT_MODEL = 'google/gemma-3-27b-it:free';
-  process.env.OPENROUTER_JSON_MODEL = 'google/gemma-3-27b-it:free';
-  process.env.OPENROUTER_FALLBACK_MODELS = 'google/gemma-3-12b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it';
+  process.env.OPENROUTER_TEXT_MODEL = 'google/gemma-3-27b-it';
+  process.env.OPENROUTER_JSON_MODEL = 'google/gemma-3-27b-it';
+  process.env.OPENROUTER_FALLBACK_MODELS = 'google/gemma-3-12b-it';
   process.env.OPENROUTER_MODEL_FALLBACKS = '';
 
   const diagnostics = getOpenRouterRuntimeDiagnostics();
   assert.deepEqual(diagnostics.modelCandidates.json, [
-    'google/gemma-3-27b-it:free',
-    'google/gemma-3-12b-it:free',
-    'openrouter/free',
+    'google/gemma-3-27b-it',
+    'google/gemma-3-12b-it',
   ]);
 
   process.env.OPENROUTER_MODEL = old.OPENROUTER_MODEL;
@@ -577,6 +576,55 @@ test('OpenRouterProvider adds the free router after an exhausted Gemma-only chai
   process.env.OPENROUTER_JSON_MODEL = old.OPENROUTER_JSON_MODEL;
   process.env.OPENROUTER_FALLBACK_MODELS = old.OPENROUTER_FALLBACK_MODELS;
   process.env.OPENROUTER_MODEL_FALLBACKS = old.OPENROUTER_MODEL_FALLBACKS;
+});
+
+test('OpenRouterProvider excludes free routes from configured candidates and never calls them', async (t) => {
+  const names = [
+    'OPENROUTER_API_KEY',
+    'OPENROUTER_BACKUP_API_KEYS',
+    'OPENROUTER_MODEL',
+    'OPENROUTER_TEXT_MODEL',
+    'OPENROUTER_JSON_MODEL',
+    'OPENROUTER_FALLBACK_MODELS',
+    'OPENROUTER_MODEL_FALLBACKS',
+    'OPENROUTER_URL',
+  ];
+  const previous = names.map((name) => process.env[name]);
+  t.after(() => names.forEach((name, index) => {
+    if (previous[index] === undefined) delete process.env[name];
+    else process.env[name] = previous[index];
+  }));
+
+  process.env.OPENROUTER_API_KEY = 'sk-or-v1-paid_only_test_key';
+  process.env.OPENROUTER_BACKUP_API_KEYS = '';
+  process.env.OPENROUTER_MODEL = 'google/gemma-4-26b-a4b-it';
+  process.env.OPENROUTER_TEXT_MODEL = 'google/gemma-4-26b-a4b-it:free';
+  process.env.OPENROUTER_JSON_MODEL = 'openrouter/free';
+  process.env.OPENROUTER_FALLBACK_MODELS = 'google/gemma-4-26b-a4b-it:free,openai/gpt-4o-mini';
+  process.env.OPENROUTER_MODEL_FALLBACKS = 'openrouter/free';
+  process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+  const diagnostics = getOpenRouterRuntimeDiagnostics();
+  assert.deepEqual(diagnostics.env.effectiveFallbackModels, ['openai/gpt-4o-mini']);
+  assert.deepEqual(diagnostics.modelCandidates.text, ['google/gemma-4-26b-a4b-it', 'openai/gpt-4o-mini']);
+  assert.deepEqual(diagnostics.modelCandidates.json, ['google/gemma-4-26b-a4b-it', 'openai/gpt-4o-mini']);
+
+  process.env.OPENROUTER_MODEL = 'google/gemma-4-26b-a4b-it:free';
+  process.env.OPENROUTER_TEXT_MODEL = '';
+  process.env.OPENROUTER_JSON_MODEL = '';
+  process.env.OPENROUTER_FALLBACK_MODELS = 'openrouter/free';
+  process.env.OPENROUTER_MODEL_FALLBACKS = 'google/gemma-4-26b-a4b-it:free';
+  const freeOnlyDiagnostics = getOpenRouterRuntimeDiagnostics();
+  assert.deepEqual(freeOnlyDiagnostics.modelCandidates.text, []);
+  assert.deepEqual(freeOnlyDiagnostics.modelCandidates.json, []);
+
+  let fetchCalls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    fetchCalls += 1;
+    return makeOkResponse('should not be called');
+  });
+  await assert.rejects(() => new OpenRouterProvider().generateText('hello', 'system', { maxRetries: 0 }), /No OpenRouter model candidates configured/);
+  assert.equal(fetchCalls, 0);
 });
 
 test('OpenRouterProvider does not fallback to another model on invalid request errors', async () => {
@@ -590,7 +638,7 @@ test('OpenRouterProvider does not fallback to another model on invalid request e
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-no_fallback_invalid_request';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-12b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-12b-it';
   process.env.OPENROUTER_FALLBACK_MODELS = 'openai/gpt-4o-mini';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -617,7 +665,7 @@ test('OpenRouterProvider does not fallback to another model on invalid request e
   );
 
   assert.equal(calls.length, 1);
-  assert.equal(String(calls[0].body?.model), 'google/gemma-3-12b-it:free');
+  assert.equal(String(calls[0].body?.model), 'google/gemma-3-12b-it');
 
   process.env.OPENROUTER_API_KEY = old.OPENROUTER_API_KEY;
   process.env.OPENROUTER_BACKUP_API_KEYS = old.OPENROUTER_BACKUP_API_KEYS;
@@ -640,7 +688,7 @@ test('OpenRouterProvider falls back when gpt-oss endpoint requires reasoning to 
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-gptoss_reasoning_mandatory_fallback';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'openai/gpt-oss-20b:free';
+  process.env.OPENROUTER_MODEL = 'openai/gpt-oss-20b';
   // Neutralize ambient OPENROUTER_TEXT_MODEL/JSON_MODEL from a loaded .env so the
   // candidate chain is exactly [primary, ...OPENROUTER_FALLBACK_MODELS]. Without
   // this the configured text model leaks in as the 2nd candidate, making the
@@ -648,7 +696,7 @@ test('OpenRouterProvider falls back when gpt-oss endpoint requires reasoning to 
   process.env.OPENROUTER_TEXT_MODEL = '';
   process.env.OPENROUTER_JSON_MODEL = '';
   process.env.OPENROUTER_REASONING_ENABLED = '0';
-  process.env.OPENROUTER_FALLBACK_MODELS = 'google/gemma-3-12b-it:free';
+  process.env.OPENROUTER_FALLBACK_MODELS = 'google/gemma-3-12b-it';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   const calls: FetchCall[] = [];
@@ -662,7 +710,7 @@ test('OpenRouterProvider falls back when gpt-oss endpoint requires reasoning to 
     calls.push({ url: 'x', body: parsedBody });
 
     const model = String(parsedBody?.model || '');
-    if (model.includes('openai/gpt-oss-20b:free')) {
+    if (model.includes('openai/gpt-oss-20b')) {
       return makeErrorResponse(400, {
         error: {
           message: 'Reasoning is mandatory for this endpoint and cannot be disabled.',
@@ -679,9 +727,9 @@ test('OpenRouterProvider falls back when gpt-oss endpoint requires reasoning to 
 
   assert.equal(text, 'fallback after reasoning requirement');
   assert.equal(calls.length, 2);
-  assert.equal(String(calls[0].body?.model), 'openai/gpt-oss-20b:free');
+  assert.equal(String(calls[0].body?.model), 'openai/gpt-oss-20b');
   assert.deepEqual(calls[0].body?.reasoning, { enabled: false });
-  assert.equal(String(calls[1].body?.model), 'google/gemma-3-12b-it:free');
+  assert.equal(String(calls[1].body?.model), 'google/gemma-3-12b-it');
   assert.equal(calls[1].body?.reasoning, undefined);
 
   process.env.OPENROUTER_API_KEY = old.OPENROUTER_API_KEY;
@@ -707,7 +755,7 @@ test('OpenRouterProvider generateJSON falls back to configured model when primar
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-json_fallback_test_key';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-12b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-12b-it';
   process.env.OPENROUTER_TEXT_MODEL = '';
   process.env.OPENROUTER_JSON_MODEL = '';
   process.env.OPENROUTER_FALLBACK_MODELS = 'openai/gpt-4o-mini';
@@ -724,13 +772,13 @@ test('OpenRouterProvider generateJSON falls back to configured model when primar
     calls.push({ url: 'x', body: parsedBody });
 
     const model = String(parsedBody?.model || '');
-    if (model.includes('gemma-3-12b-it:free')) {
+    if (model.includes('gemma-3-12b-it')) {
       return makeErrorResponse(429, {
         error: {
           message: 'Provider returned error',
           code: 429,
           metadata: {
-            raw: 'google/gemma-3-12b-it:free is temporarily rate-limited upstream'
+            raw: 'google/gemma-3-12b-it is temporarily rate-limited upstream'
           }
         }
       });
@@ -750,7 +798,7 @@ test('OpenRouterProvider generateJSON falls back to configured model when primar
   assert.equal(json.ok, true);
   assert.equal(json.via, 'fallback');
   assert.equal(calls.length, 2);
-  assert.equal(String(calls[0].body?.model), 'google/gemma-3-12b-it:free');
+  assert.equal(String(calls[0].body?.model), 'google/gemma-3-12b-it');
   assert.equal(String(calls[1].body?.model), 'openai/gpt-4o-mini');
 
   process.env.OPENROUTER_API_KEY = old.OPENROUTER_API_KEY;
@@ -818,7 +866,7 @@ test('OpenRouterProvider supports OPENROUTER_MODEL_FALLBACKS alias for model fal
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-fallback_alias_test_key';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-12b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-12b-it';
   process.env.OPENROUTER_TEXT_MODEL = '';
   process.env.OPENROUTER_JSON_MODEL = '';
   process.env.OPENROUTER_FALLBACK_MODELS = '';
@@ -836,13 +884,13 @@ test('OpenRouterProvider supports OPENROUTER_MODEL_FALLBACKS alias for model fal
     calls.push({ url: 'x', body: parsedBody });
 
     const model = String(parsedBody?.model || '');
-    if (model.includes('gemma-3-12b-it:free')) {
+    if (model.includes('gemma-3-12b-it')) {
       return makeErrorResponse(429, {
         error: {
           message: 'Provider returned error',
           code: 429,
           metadata: {
-            raw: 'google/gemma-3-12b-it:free is temporarily rate-limited upstream'
+            raw: 'google/gemma-3-12b-it is temporarily rate-limited upstream'
           }
         }
       });
@@ -856,7 +904,7 @@ test('OpenRouterProvider supports OPENROUTER_MODEL_FALLBACKS alias for model fal
 
   assert.equal(text, 'alias fallback worked');
   assert.equal(calls.length, 2);
-  assert.equal(String(calls[0].body?.model), 'google/gemma-3-12b-it:free');
+  assert.equal(String(calls[0].body?.model), 'google/gemma-3-12b-it');
   assert.equal(String(calls[1].body?.model), 'openai/gpt-4o-mini');
 
   process.env.OPENROUTER_API_KEY = old.OPENROUTER_API_KEY;
@@ -883,7 +931,7 @@ test('OpenRouter runtime diagnostics exposes model candidates and does not leak 
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-secret_primary_test_key';
   process.env.OPENROUTER_BACKUP_API_KEYS = 'sk-or-v1-backup_1,sk-or-v1-backup_2';
-  process.env.OPENROUTER_MODEL = 'google/gemma-3-12b-it:free';
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-12b-it';
   process.env.OPENROUTER_TEXT_MODEL = '';
   process.env.OPENROUTER_JSON_MODEL = '';
   process.env.OPENROUTER_FALLBACK_MODELS = 'openai/gpt-4o-mini,openai/gpt-4o-mini';
@@ -899,11 +947,11 @@ test('OpenRouter runtime diagnostics exposes model candidates and does not leak 
   assert.equal(Array.isArray(diagnostics.modelCandidates.json), true);
   assert.deepEqual(
     diagnostics.modelCandidates.text,
-    ['google/gemma-3-12b-it:free', 'openai/gpt-4o-mini', 'anthropic/claude-3-haiku']
+    ['google/gemma-3-12b-it', 'openai/gpt-4o-mini', 'anthropic/claude-3-haiku']
   );
   assert.deepEqual(
     diagnostics.modelCandidates.json,
-    ['google/gemma-3-12b-it:free', 'openai/gpt-4o-mini', 'anthropic/claude-3-haiku']
+    ['google/gemma-3-12b-it', 'openai/gpt-4o-mini', 'anthropic/claude-3-haiku']
   );
   assert.equal(serialized.includes('sk-or-v1-secret_primary_test_key'), false);
   assert.equal(serialized.includes('sk-or-v1-backup_1'), false);
@@ -919,7 +967,7 @@ test('OpenRouter runtime diagnostics exposes model candidates and does not leak 
   process.env.OPENROUTER_LOG_MODEL_CANDIDATES = old.OPENROUTER_LOG_MODEL_CANDIDATES;
 });
 
-test('OpenRouterProvider disables reasoning by default for openai/gpt-oss-20b:free', async () => {
+test('OpenRouterProvider disables reasoning by default for openai/gpt-oss-20b', async () => {
   const old = {
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
     OPENROUTER_BACKUP_API_KEYS: process.env.OPENROUTER_BACKUP_API_KEYS,
@@ -930,7 +978,7 @@ test('OpenRouterProvider disables reasoning by default for openai/gpt-oss-20b:fr
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-gptoss_reasoning_default_off';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'openai/gpt-oss-20b:free';
+  process.env.OPENROUTER_MODEL = 'openai/gpt-oss-20b';
   process.env.OPENROUTER_REASONING_ENABLED = '';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -960,7 +1008,7 @@ test('OpenRouterProvider disables reasoning by default for openai/gpt-oss-20b:fr
   process.env.OPENROUTER_URL = old.OPENROUTER_URL;
 });
 
-test('OpenRouterProvider can enable reasoning for openai/gpt-oss-20b:free via env toggle', async () => {
+test('OpenRouterProvider can enable reasoning for openai/gpt-oss-20b via env toggle', async () => {
   const old = {
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
     OPENROUTER_BACKUP_API_KEYS: process.env.OPENROUTER_BACKUP_API_KEYS,
@@ -971,7 +1019,7 @@ test('OpenRouterProvider can enable reasoning for openai/gpt-oss-20b:free via en
 
   process.env.OPENROUTER_API_KEY = 'sk-or-v1-gptoss_reasoning_enabled';
   process.env.OPENROUTER_BACKUP_API_KEYS = '';
-  process.env.OPENROUTER_MODEL = 'openai/gpt-oss-20b:free';
+  process.env.OPENROUTER_MODEL = 'openai/gpt-oss-20b';
   process.env.OPENROUTER_REASONING_ENABLED = '1';
   process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
