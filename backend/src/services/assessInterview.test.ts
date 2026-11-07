@@ -4,7 +4,9 @@ import { AppDataSource } from "../data-source";
 import { ASSESS_RUNTIMES, ALL_JUDGE_LANGUAGES } from "../config/judgeLanguages";
 import { assessEntryFile } from "./assessInterviewLanguage";
 import { BUILTIN_INTERVIEW_KITS, gradeInterviewQuiz, interviewFiles, interviewKitSchema, publicInterviewKit } from "./assessInterviewKit";
-import { canReadInterviewWorkspace, interviewAccess, interviewCalendar, revokeAssessInterviewMemberAccess } from "./assessInterviewAccess";
+import { canReadInterviewWorkspace, canRunInterviewCodeInSession, interviewAccess } from "./assessInterviewAccess";
+import { interviewCalendar } from "./assessInterviewCalendar";
+import { revokeAssessInterviewMemberAccess } from "./assessInterviewMembership";
 import { summarizeAssessInterviewExecution } from "./assessInterviewResult";
 import type { JudgeResponse, JudgeTestCase } from "./judgeWorker/types";
 import { RoomServiceClient } from "livekit-server-sdk";
@@ -60,6 +62,9 @@ test("interview access is limited to the candidate or an assigned active team me
   assert.equal((await interviewAccess(id, 30))?.canHost, false);
   assert.equal((await interviewAccess(id, 20))?.canHost, true);
   assert.equal(await interviewAccess(id, 40), null);
+  row.interviewer_ids_json = '["20","30"]';
+  assert.equal(await interviewAccess(id, 30), null, "string IDs in stored JSON must not grant team access");
+  row.interviewer_ids_json = "[20,30]";
   member = "OWNER"; assert.equal((await interviewAccess(id, 40))?.canHost, true);
   member = null; assert.equal(await interviewAccess(id, 20), null);
 });
@@ -103,10 +108,23 @@ test("revoking a company member cancels their hosted session and ejects them fro
   assert.deepEqual(removedParticipants, [{ room: "shared-room", identity: "talent-user-20" }]);
 });
 test("a candidate sees preparation but no code until consent and interview start", () => {
-  const base = { row, role: "CANDIDATE" as const, userId: 10, canHost: false, consented: false };
+  const base = {
+    row: { ...row, consent_status: "INVITED", consent_at: null, status: "SCHEDULED" },
+    role: "CANDIDATE" as const,
+    userId: 10,
+    canHost: false,
+    consented: false,
+  };
   assert.equal(canReadInterviewWorkspace(base), false);
-  assert.equal(canReadInterviewWorkspace({ ...base, consented: true, row: { ...row, status: "SCHEDULED" } }), false);
-  assert.equal(canReadInterviewWorkspace({ ...base, consented: true }), true);
+  const accepted = { consent_status: "ACCEPTED", consent_at: "2026-10-26", status: "SCHEDULED" };
+  assert.equal(canReadInterviewWorkspace({ ...base, consented: true, row: { ...row, ...accepted } }), false);
+  assert.equal(canReadInterviewWorkspace({ ...base, consented: true, row: { ...row, ...accepted, status: "LIVE" } }), true);
+});
+test("execution authorization rechecks the editor against the locked interview session", () => {
+  const access = { row, role: "CANDIDATE" as const, userId: 10, canHost: false, consented: true };
+  assert.equal(canRunInterviewCodeInSession(access, { status: "LIVE", editor_user_id: 10 }), true);
+  assert.equal(canRunInterviewCodeInSession(access, { status: "LIVE", editor_user_id: 11 }), false);
+  assert.equal(canRunInterviewCodeInSession(access, { status: "COMPLETED", editor_user_id: 10 }), false);
 });
 test("calendar uses UTC and escapes untrusted titles without introducing ICS fields", () => {
   const ics = interviewCalendar({ ...row, title: "Role, test;\nATTENDEE:bad", company_name: "Company", scheduled_utc: "2026-10-26T12:00:00.000Z", scheduled_at: "wrong-local-value", duration_minutes: 45, created_at: "2026-10-25T00:00:00Z" }, "https://studycod.space");

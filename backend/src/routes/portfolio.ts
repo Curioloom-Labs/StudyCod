@@ -4,7 +4,7 @@ import { z } from "zod";
 import { AppDataSource } from "../data-source";
 import { authRequired, type AuthRequest } from "../middleware/authMiddleware";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
-import { parsePortfolioBirthDate, portfolioSharingAgeStatus, privatePortfolioBirthDate, type PortfolioSharingAgeStatus } from "../utils/portfolioAge";
+import { parsePortfolioBirthDate, privatePortfolioBirthDate } from "../utils/portfolioAge";
 import { PORTFOLIO_SKILL_IDS, PORTFOLIO_SKILLS } from "../data/portfolioSkills";
 import {
   findPortfolioSourcedEvidenceSource,
@@ -12,6 +12,8 @@ import {
   PORTFOLIO_SOURCED_EVIDENCE_TYPES,
   type PortfolioSourcedEvidenceType,
 } from "../services/portfolioEvidenceSources";
+import { requirePersonalAccountPrincipal } from "../services/personalAccountAccess";
+import { portfolioOwnerAgeStatus, requireAdultPortfolioSharing } from "../services/portfolioSharingAccess";
 
 export const portfolioRouter = Router();
 export const publicPortfolioRouter = Router();
@@ -95,21 +97,6 @@ type ProfileRow = {
 };
 
 const sendError = (res: Response, status: number, code: string) => res.status(status).json({ code, message: code });
-function ageStatusFromRow(row?: Record<string, unknown>): PortfolioSharingAgeStatus {
-  if (!row) return "UNKNOWN";
-  return portfolioSharingAgeStatus({ birthDay: row.birthDay, birthMonth: row.birthMonth, birthYear: row.birthYear });
-}
-async function requireAdultPortfolioSharing(ownerId: number, res: Response): Promise<boolean> {
-  const rows = await AppDataSource.query(
-    "SELECT birth_day AS birthDay,birth_month AS birthMonth,birth_year AS birthYear FROM users WHERE id=? AND user_mode='PERSONAL' LIMIT 1",
-    [ownerId]
-  ) as Array<Record<string, unknown>>;
-  if (ageStatusFromRow(rows[0]) !== "ADULT") {
-    sendError(res, 403, "PUBLIC_SHARING_REQUIRES_ADULT_AGE");
-    return false;
-  }
-  return true;
-}
 const parseJsonArray = (value: unknown, limit = 16): string[] => {
   try {
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
@@ -136,14 +123,6 @@ const parseJsonObject = <T extends Record<string, unknown>>(value: unknown, fall
     return fallback;
   }
 };
-
-async function personalOwner(req: AuthRequest, res: Response): Promise<number | null> {
-  if (!req.userId || req.userType !== "USER" || req.userMode !== "PERSONAL") {
-    sendError(res, 403, "PERSONAL_USER_REQUIRED");
-    return null;
-  }
-  return req.userId;
-}
 
 async function listWorks(ownerId: number): Promise<Array<Record<string, unknown>>> {
   const rows = await AppDataSource.query(
@@ -371,7 +350,7 @@ portfolioRouter.use(authRequired, createRouteLimiter({ windowMs: 60_000, limit: 
 publicPortfolioRouter.use(createRouteLimiter({ windowMs: 60_000, limit: 90, namespace: "portfolio-public" }));
 
 portfolioRouter.get("/me", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const [profile, works, userRows, publicationRows, gradeEvidence, evidenceSources, sourcedEvidenceSources, sourcedEvidence, evidencePacks] = await Promise.all([
     loadProfile(ownerId),
     listWorks(ownerId),
@@ -395,11 +374,11 @@ portfolioRouter.get("/me", async (req: AuthRequest, res: Response) => {
   const user = userRows[0];
   return res.json({ username: user?.username ?? "", avatarUrl: user?.avatarUrl ?? null,
     birthDate: privatePortfolioBirthDate({ birthDay: user?.birthDay, birthMonth: user?.birthMonth, birthYear: user?.birthYear }),
-    publicSharingAgeStatus: ageStatusFromRow(user), profile, works, availablePublications: publicationRows, evidence, evidenceSources, sourcedEvidenceSources: availableSourcedEvidenceSources, evidencePacks, skills: PORTFOLIO_SKILLS });
+    publicSharingAgeStatus: portfolioOwnerAgeStatus(user), profile, works, availablePublications: publicationRows, evidence, evidenceSources, sourcedEvidenceSources: availableSourcedEvidenceSources, evidencePacks, skills: PORTFOLIO_SKILLS });
 });
 
 portfolioRouter.put("/me/birth-date", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const parsed = privateBirthDateSchema.safeParse(req.body?.birthDate);
   if (!parsed.success) return sendError(res, 400, "INVALID_PRIVATE_BIRTH_DATE");
   const birthDate = parsePortfolioBirthDate(parsed.data);
@@ -408,11 +387,11 @@ portfolioRouter.put("/me/birth-date", async (req: AuthRequest, res: Response) =>
     "UPDATE users SET birth_day=?,birth_month=?,birth_year=? WHERE id=? AND user_mode='PERSONAL'",
     [birthDate.birthDay, birthDate.birthMonth, birthDate.birthYear, ownerId]
   );
-  return res.json({ birthDate: birthDate.isoDate, publicSharingAgeStatus: portfolioSharingAgeStatus(birthDate) });
+  return res.json({ birthDate: birthDate.isoDate, publicSharingAgeStatus: portfolioOwnerAgeStatus(birthDate) });
 });
 
 portfolioRouter.delete("/me/birth-date", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   await AppDataSource.query(
     "UPDATE users SET birth_year=NULL WHERE id=? AND user_mode='PERSONAL'",
     [ownerId]
@@ -423,7 +402,7 @@ portfolioRouter.delete("/me/birth-date", async (req: AuthRequest, res: Response)
 portfolioRouter.get("/preview", async (req: AuthRequest, res: Response) => {
   res.setHeader("Cache-Control", "no-store, private");
   res.setHeader("Referrer-Policy", "no-referrer");
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const [userRows, profile, works, judgeEvidence, sourcedEvidence] = await Promise.all([
     AppDataSource.query("SELECT username,avatar_url AS avatarUrl FROM users WHERE id=? AND user_mode='PERSONAL' LIMIT 1", [ownerId]) as Promise<Array<{ username: string; avatarUrl: string | null }>>,
     loadProfile(ownerId),
@@ -437,7 +416,7 @@ portfolioRouter.get("/preview", async (req: AuthRequest, res: Response) => {
 });
 
 portfolioRouter.post("/evidence", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const parsed = evidenceSchema.safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_SKILL_EVIDENCE");
   const evidence = parsed.data;
@@ -476,7 +455,7 @@ portfolioRouter.post("/evidence", async (req: AuthRequest, res: Response) => {
 });
 
 portfolioRouter.post("/evidence/sourced", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const parsed = sourcedEvidenceSchema.safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_SKILL_EVIDENCE");
   const evidence = parsed.data;
@@ -513,7 +492,7 @@ portfolioRouter.post("/evidence/sourced", async (req: AuthRequest, res: Response
 });
 
 portfolioRouter.patch("/evidence/:evidenceId", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   if (!UUID_RE.test(req.params.evidenceId)) return sendError(res, 404, "SKILL_EVIDENCE_NOT_FOUND");
   const parsed = evidenceUpdateSchema.safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_SKILL_EVIDENCE");
@@ -540,7 +519,7 @@ portfolioRouter.patch("/evidence/:evidenceId", async (req: AuthRequest, res: Res
 });
 
 portfolioRouter.delete("/evidence/:evidenceId", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   if (!UUID_RE.test(req.params.evidenceId)) return sendError(res, 404, "SKILL_EVIDENCE_NOT_FOUND");
   const result = await AppDataSource.query(
     "UPDATE portfolio_evidence SET archived_at=UTC_TIMESTAMP(3),visibility='PRIVATE' WHERE id=? AND owner_id=? AND archived_at IS NULL",
@@ -557,7 +536,7 @@ portfolioRouter.delete("/evidence/:evidenceId", async (req: AuthRequest, res: Re
 });
 
 portfolioRouter.put("/evidence/order", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const parsed = evidenceOrderSchema.safeParse(req.body ?? {});
   if (!parsed.success || new Set(parsed.data?.ids ?? []).size !== (parsed.data?.ids.length ?? 0)) return sendError(res, 400, "INVALID_PORTFOLIO_EVIDENCE_ORDER");
   const ids = parsed.data.ids;
@@ -606,7 +585,7 @@ portfolioRouter.put("/evidence/order", async (req: AuthRequest, res: Response) =
 });
 
 portfolioRouter.get("/evidence-packs", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const rows = await AppDataSource.query(
     `SELECT id,title,specialization,include_profile AS includeProfile,work_ids_json AS workIdsJson,evidence_ids_json AS evidenceIdsJson,
             skill_ids_json AS skillIdsJson,
@@ -628,7 +607,7 @@ portfolioRouter.get("/evidence-packs", async (req: AuthRequest, res: Response) =
 });
 
 portfolioRouter.post("/evidence-packs", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const parsed = evidencePackSchema.safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_EVIDENCE_PACK");
   const pack = parsed.data;
@@ -669,7 +648,7 @@ portfolioRouter.post("/evidence-packs", async (req: AuthRequest, res: Response) 
 });
 
 portfolioRouter.delete("/evidence-packs/:packId", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   if (!UUID_RE.test(req.params.packId)) return sendError(res, 404, "EVIDENCE_PACK_NOT_FOUND");
   const result = await AppDataSource.query(
     "UPDATE portfolio_evidence_packs SET revoked_at=UTC_TIMESTAMP(3) WHERE id=? AND owner_id=? AND revoked_at IS NULL",
@@ -680,7 +659,7 @@ portfolioRouter.delete("/evidence-packs/:packId", async (req: AuthRequest, res: 
 });
 
 portfolioRouter.put("/me", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const parsed = profileSchema.safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_PORTFOLIO_PROFILE");
   const profile = parsed.data;
@@ -695,7 +674,7 @@ portfolioRouter.put("/me", async (req: AuthRequest, res: Response) => {
 });
 
 portfolioRouter.post("/works", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const parsed = workSchema.safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_PORTFOLIO_WORK");
   const work: WorkInput = parsed.data;
@@ -732,7 +711,7 @@ portfolioRouter.post("/works", async (req: AuthRequest, res: Response) => {
 });
 
 portfolioRouter.patch("/works/:workId", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   if (!UUID_RE.test(req.params.workId)) return sendError(res, 404, "PORTFOLIO_WORK_NOT_FOUND");
   const parsed = workSchema.omit({ sourcePublicationId: true }).safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_PORTFOLIO_WORK");
@@ -749,7 +728,7 @@ portfolioRouter.patch("/works/:workId", async (req: AuthRequest, res: Response) 
 });
 
 portfolioRouter.delete("/works/:workId", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   if (!UUID_RE.test(req.params.workId)) return sendError(res, 404, "PORTFOLIO_WORK_NOT_FOUND");
   const result = await AppDataSource.query(
     "UPDATE portfolio_works SET archived_at=UTC_TIMESTAMP(3),visibility='PRIVATE' WHERE id=? AND owner_id=? AND archived_at IS NULL",
@@ -760,7 +739,7 @@ portfolioRouter.delete("/works/:workId", async (req: AuthRequest, res: Response)
 });
 
 portfolioRouter.put("/works/order", async (req: AuthRequest, res: Response) => {
-  const ownerId = await personalOwner(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const parsed = workOrderSchema.safeParse(req.body ?? {});
   if (!parsed.success || new Set(parsed.data?.ids ?? []).size !== (parsed.data?.ids.length ?? 0)) return sendError(res, 400, "INVALID_PORTFOLIO_ORDER");
   const ids = parsed.data.ids;
@@ -807,7 +786,7 @@ publicPortfolioRouter.get("/u/:username", async (req, res: Response) => {
      WHERE u.username=? AND u.user_mode='PERSONAL' AND p.visibility='PUBLIC' LIMIT 1`, [username]
   ) as Array<Record<string, unknown>>;
   const profile = profiles[0];
-  if (!profile || ageStatusFromRow(profile) !== "ADULT") return sendError(res, 404, "PORTFOLIO_NOT_FOUND");
+  if (!profile || portfolioOwnerAgeStatus(profile) !== "ADULT") return sendError(res, 404, "PORTFOLIO_NOT_FOUND");
   const works = await AppDataSource.query(
     `SELECT w.id,w.title,w.problem,w.solution,w.role,w.technologies_json AS technologiesJson,w.skill_ids_json AS skillIdsJson,
             w.repository_url AS repositoryUrl,w.demo_url AS demoUrl,p.public_id AS sourcePublicId
@@ -884,7 +863,7 @@ publicPortfolioRouter.get("/p/:token", async (req, res: Response) => {
      WHERE p.token_hash=? AND p.revoked_at IS NULL AND p.expires_at>UTC_TIMESTAMP(3) LIMIT 1`, [tokenHash]
   ) as Array<Record<string, unknown>>;
   const grant = grants[0];
-  if (!grant || ageStatusFromRow(grant) !== "ADULT") return sendError(res, 404, "EVIDENCE_PACK_NOT_FOUND");
+  if (!grant || portfolioOwnerAgeStatus(grant) !== "ADULT") return sendError(res, 404, "EVIDENCE_PACK_NOT_FOUND");
   const workIds = parseJsonArray(grant.workIdsJson, 50);
   const evidenceIds = parseJsonArray(grant.evidenceIdsJson, 50);
   const skillIds = [...new Set(parseJsonArray(grant.skillIdsJson, 12))].filter(id => PORTFOLIO_SKILL_IDS.has(id));

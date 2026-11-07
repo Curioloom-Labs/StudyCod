@@ -11,7 +11,8 @@ import { cancelGrowthProjectJob, wakeGrowthProjectQueue } from "../services/grow
 import type { JudgeFile, JudgeTestCase } from "../services/judgeWorker/types";
 import { logger } from "../utils/logger";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
-import { portfolioSharingAgeStatus } from "../utils/portfolioAge";
+import { requirePersonalAccountPrincipal } from "../services/personalAccountAccess";
+import { isAdultPortfolioOwner, requireAdultPortfolioSharing } from "../services/portfolioSharingAccess";
 
 export const portfolioProjectsRouter = Router();
 export const portfolioProjectPublicRouter = Router();
@@ -43,20 +44,6 @@ function v3NextAction(byKind?: Map<string, Set<string>>): string {
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const bad = (res: Response, status: number, code: string) => res.status(status).json({ code, message: code });
 const text = (value: unknown, max: number) => typeof value === "string" ? value.trim().slice(0, max) : "";
-function isAdultPortfolioOwner(row?: Record<string, unknown>): boolean {
-  return Boolean(row) && portfolioSharingAgeStatus({ birthDay: row!.birthDay, birthMonth: row!.birthMonth, birthYear: row!.birthYear }) === "ADULT";
-}
-async function requireAdultPortfolioSharing(ownerId: number, res: Response): Promise<boolean> {
-  const rows = await AppDataSource.query(
-    "SELECT birth_day AS birthDay,birth_month AS birthMonth,birth_year AS birthYear FROM users WHERE id=? AND user_mode='PERSONAL' LIMIT 1",
-    [ownerId]
-  ) as Array<Record<string, unknown>>;
-  if (!isAdultPortfolioOwner(rows[0])) {
-    bad(res, 403, "PUBLIC_SHARING_REQUIRES_ADULT_AGE");
-    return false;
-  }
-  return true;
-}
 type GrowthReviewNotice = "GROWTH_REVIEW_INVITATION" | "GROWTH_REVIEW_ASSIGNED" | "GROWTH_REVIEW_ASSIGNED_TO_AUTHOR" | "GROWTH_REVIEW_ACCEPTED" | "GROWTH_REVIEW_DECLINED" | "GROWTH_REVIEW_SUBMITTED" | "GROWTH_REVIEW_REQUESTED" | "COMPANY_ASSESSMENT_UPDATED";
 async function notifyGrowthReview(recipientId: number | null, actorId: number, type: GrowthReviewNotice, relatedPath: string): Promise<void> {
   if (!recipientId || recipientId === actorId) return;
@@ -115,14 +102,6 @@ async function ownedProject(id: string, ownerId: number): Promise<ProjectRow | n
   if (!UUID_RE.test(id)) return null;
   const rows = await AppDataSource.query("SELECT * FROM growth_projects WHERE id=? AND owner_id=? LIMIT 1", [id, ownerId]) as ProjectRow[];
   return rows[0] ?? null;
-}
-
-async function ownerOnly(req: AuthRequest, res: Response): Promise<number | null> {
-  if (!req.userId || req.userType !== "USER" || req.userMode !== "PERSONAL") {
-    bad(res, 403, "PERSONAL_USER_REQUIRED");
-    return null;
-  }
-  return req.userId;
 }
 
 async function artifactFor(ownerId: number, draft: Draft, runner?: { query: (sql: string, parameters?: unknown[]) => Promise<unknown> }): Promise<string> {
@@ -232,7 +211,7 @@ async function assessmentTests(project: ProjectRow, assessmentId: string): Promi
 }
 
 portfolioProjectsRouter.get("/catalog", authRequired, async (req: AuthRequest, res: Response) => {
-  if (!await ownerOnly(req, res)) return;
+  if (!requirePersonalAccountPrincipal(req, res)) return;
   const en = String(req.query.uiLang ?? req.headers["accept-language"] ?? "uk").toLowerCase().startsWith("en");
   return res.json({ revision: CURRENT_GROWTH_PROJECT_BLUEPRINT_REVISION, families: GROWTH_PROJECT_FAMILIES.map(family => ({
     key: family.key,
@@ -246,7 +225,7 @@ portfolioProjectsRouter.get("/catalog", authRequired, async (req: AuthRequest, r
 });
 
 portfolioProjectsRouter.get("/legacy", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const personal = await AppDataSource.query("SELECT id,title,description,lang,draft_code,final_code FROM tasks WHERE user_id=? AND completed=1 AND subtitle LIKE 'MPJ:%' ORDER BY created_at DESC LIMIT 50", [ownerId]) as Array<Record<string, unknown>>;
   const courseSql = "SELECT DISTINCT p.item_id AS sourceId,p.completed_at,p.project_data,ci.title,cm.title AS module_title,c.title AS course_title,v.runtime FROM course_item_progress p " +
     "JOIN user_course_enrollments e ON e.id=p.enrollment_id JOIN course_variants v ON v.id=e.variant_id " +
@@ -274,7 +253,7 @@ portfolioProjectsRouter.get("/legacy", authRequired, async (req: AuthRequest, re
 });
 
 portfolioProjectsRouter.post("/import", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const parsed = z.object({ kind: z.enum(["PERSONAL_MINI_PROJECT", "COURSE_PROJECT", "LIBRARY_PROJECT"]), sourceId: z.number().int().positive() }).safeParse(req.body ?? {});
   if (!parsed.success) return bad(res, 400, "INVALID_LEGACY_SOURCE");
   const source = await findLegacySource(ownerId, parsed.data.kind, parsed.data.sourceId);
@@ -304,7 +283,7 @@ portfolioProjectsRouter.post("/import", authRequired, async (req: AuthRequest, r
 });
 
 portfolioProjectsRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const rows = await AppDataSource.query("SELECT id,family_key,runtime,current_stage,draft_revision,archived,source_json,updated_at FROM growth_projects WHERE owner_id=? ORDER BY updated_at DESC LIMIT 100", [ownerId]) as Array<Record<string, unknown>>;
   const [latestJobs, latestVersions, recentAssessments] = await Promise.all([
     AppDataSource.query("SELECT j.id,j.project_id,j.context_key,j.state,j.result_json FROM growth_project_jobs j JOIN growth_projects p ON p.id=j.project_id WHERE p.owner_id=? AND j.context_key=p.current_stage AND NOT EXISTS (SELECT 1 FROM growth_project_jobs newer WHERE newer.project_id=j.project_id AND newer.context_key=j.context_key AND (newer.created_at>j.created_at OR (newer.created_at=j.created_at AND newer.id>j.id)))", [ownerId]) as Promise<Array<{ id: string; project_id: string; context_key: string; state: string; result_json: string | null }>>,
@@ -347,7 +326,7 @@ portfolioProjectsRouter.get("/", authRequired, async (req: AuthRequest, res: Res
 });
 
 portfolioProjectsRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const parsed = z.object({ family: z.enum(["contacts", "inventory", "logs"]), runtime: runtimeSchema }).safeParse(req.body ?? {});
   if (!parsed.success) return bad(res, 400, "INVALID_PROJECT");
   const family = growthFamilyFor(parsed.data.family, CURRENT_GROWTH_PROJECT_BLUEPRINT_REVISION)!;
@@ -366,7 +345,7 @@ portfolioProjectsRouter.post("/", authRequired, async (req: AuthRequest, res: Re
 });
 
 portfolioProjectsRouter.get("/:projectId", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId);
   if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const [versionRows, executionRows, attempts, publications, reviews] = await Promise.all([
@@ -385,7 +364,7 @@ portfolioProjectsRouter.get("/:projectId", authRequired, async (req: AuthRequest
 });
 
 portfolioProjectsRouter.get("/:projectId/versions", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const beforeCreatedAt = text(req.query.beforeCreatedAt, 40);
   const beforeId = text(req.query.beforeId, 36);
@@ -409,7 +388,7 @@ portfolioProjectsRouter.get("/:projectId/versions", authRequired, async (req: Au
 });
 
 portfolioProjectsRouter.patch("/:projectId/archive", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   if (typeof req.body?.archived !== "boolean") return bad(res, 400, "INVALID_ARCHIVE_STATE");
   await AppDataSource.query("UPDATE growth_projects SET archived=? WHERE id=? AND owner_id=?", [req.body.archived ? 1 : 0, project.id, ownerId]);
@@ -417,7 +396,7 @@ portfolioProjectsRouter.patch("/:projectId/archive", authRequired, async (req: A
 });
 
 portfolioProjectsRouter.get("/:projectId/draft", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const attemptId = String(req.query.assessmentId ?? "");
   if (attemptId) {
@@ -429,7 +408,7 @@ portfolioProjectsRouter.get("/:projectId/draft", authRequired, async (req: AuthR
 });
 
 portfolioProjectsRouter.put("/:projectId/draft", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const expectedRevision = Number(req.body?.expectedRevision);
   const draft = cleanDraft(req.body?.draft);
@@ -448,7 +427,7 @@ portfolioProjectsRouter.put("/:projectId/draft", authRequired, async (req: AuthR
 });
 
 portfolioProjectsRouter.post("/:projectId/executions", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const idempotencyKey = text(req.header("Idempotency-Key") ?? req.body?.idempotencyKey, 128);
   if (!idempotencyKey) return bad(res, 400, "IDEMPOTENCY_KEY_REQUIRED");
@@ -517,7 +496,7 @@ portfolioProjectsRouter.post("/:projectId/executions", authRequired, async (req:
 });
 
 portfolioProjectsRouter.get("/executions/:jobId", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   if (!UUID_RE.test(req.params.jobId)) return bad(res, 404, "JOB_NOT_FOUND");
   const rows = await AppDataSource.query("SELECT id,state,result_json,error_code,context_key,created_at,started_at,completed_at FROM growth_project_jobs WHERE id=? AND owner_id=? AND project_id IS NOT NULL", [req.params.jobId, ownerId]) as Array<Record<string, unknown>>;
   const row = rows[0]; if (!row) return bad(res, 404, "JOB_NOT_FOUND");
@@ -525,7 +504,7 @@ portfolioProjectsRouter.get("/executions/:jobId", authRequired, async (req: Auth
 });
 
 portfolioProjectsRouter.get("/:projectId/executions", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const beforeCreatedAt = text(req.query.beforeCreatedAt, 40);
   const beforeId = text(req.query.beforeId, 36);
@@ -552,7 +531,7 @@ portfolioProjectsRouter.get("/:projectId/executions", authRequired, async (req: 
 });
 
 portfolioProjectsRouter.post("/:projectId/executions/:jobId/cancel", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   if (!UUID_RE.test(req.params.jobId)) return bad(res, 404, "JOB_NOT_FOUND");
   const rows = await AppDataSource.query("SELECT id FROM growth_project_jobs WHERE id=? AND project_id=? AND owner_id=? LIMIT 1", [req.params.jobId, project.id, ownerId]) as Array<{ id: string }>;
@@ -564,7 +543,7 @@ portfolioProjectsRouter.post("/:projectId/executions/:jobId/cancel", authRequire
 });
 
 portfolioProjectsRouter.post("/:projectId/versions", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const parsed = z.object({ jobId: z.string().uuid(), expectedRevision: z.number().int().positive(), explanation: z.string().trim().min(12).max(8_000) }).safeParse(req.body ?? {});
   if (!parsed.success) return bad(res, 400, "VERSION_EXPLANATION_REQUIRED");
@@ -647,7 +626,7 @@ portfolioProjectsRouter.post("/:projectId/versions", authRequired, async (req: A
 });
 
 portfolioProjectsRouter.get("/:projectId/versions/:versionId", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const rows = await AppDataSource.query(`SELECT v.id,v.stage_key,v.sequence_no,v.previous_version_id,v.blueprint_revision,v.explanation,v.created_at,a.files_json,a.examples_json,j.result_json
     FROM growth_project_versions v JOIN growth_project_artifacts a ON a.id=v.artifact_id
     JOIN growth_project_jobs j ON j.id=v.check_job_id WHERE v.id=? AND v.project_id=? AND v.owner_id=?`, [req.params.versionId, req.params.projectId, ownerId]) as Array<Record<string, unknown>>;
@@ -657,7 +636,7 @@ portfolioProjectsRouter.get("/:projectId/versions/:versionId", authRequired, asy
 });
 
 portfolioProjectsRouter.post("/:projectId/versions/:versionId/restore", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const expectedRevision = Number(req.body?.expectedRevision);
   if (!Number.isInteger(expectedRevision) || expectedRevision < 1) return bad(res, 400, "INVALID_DRAFT_REVISION");
@@ -682,7 +661,7 @@ portfolioProjectsRouter.post("/:projectId/versions/:versionId/restore", authRequ
 });
 
 portfolioProjectsRouter.post("/:projectId/assessments", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const kind = req.body?.kind === "TRANSFER" ? "TRANSFER" : req.body?.kind === "DEFENSE" ? "DEFENSE" : null;
   if (!kind) return bad(res, 400, "INVALID_ASSESSMENT_KIND");
@@ -740,7 +719,7 @@ portfolioProjectsRouter.post("/:projectId/assessments", authRequired, async (req
 });
 
 portfolioProjectsRouter.get("/:projectId/assessments/:assessmentId", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const rows = await AppDataSource.query("SELECT id,kind,card_id,card_snapshot,draft_json,draft_revision,status,completed_at FROM growth_project_assessments WHERE id=? AND project_id=? AND owner_id=? LIMIT 1", [req.params.assessmentId, project.id, ownerId]) as Array<Record<string, unknown>>;
   if (!rows[0]) return bad(res, 404, "ASSESSMENT_NOT_FOUND");
@@ -749,7 +728,7 @@ portfolioProjectsRouter.get("/:projectId/assessments/:assessmentId", authRequire
 });
 
 portfolioProjectsRouter.delete("/:projectId/assessments/:assessmentId", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const rows = await AppDataSource.query("SELECT id,job_id,status FROM growth_project_assessments WHERE id=? AND project_id=? AND owner_id=? LIMIT 1", [req.params.assessmentId, project.id, ownerId]) as Array<{ id: string; job_id: string | null; status: string }>;
   if (!rows[0]) return bad(res, 404, "ASSESSMENT_NOT_FOUND");
@@ -761,7 +740,7 @@ portfolioProjectsRouter.delete("/:projectId/assessments/:assessmentId", authRequ
 });
 
 portfolioProjectsRouter.post("/:projectId/assessments/:assessmentId/finish", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const explanation = text(req.body?.explanation, 8_000);
   if (explanation.length < 12) return bad(res, 400, "EXPLANATION_REQUIRED");
@@ -816,7 +795,7 @@ async function reviewSnapshot(ownerId: number, projectId: string, versionId: str
 }
 
 portfolioProjectsRouter.post("/:projectId/publications", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const parsed = z.object({
     versionId: z.string().uuid(), channel: z.enum(["LINK", "PROFILE"]), title: z.string().trim().min(1).max(160),
@@ -869,7 +848,7 @@ portfolioProjectsRouter.post("/:projectId/publications", authRequired, async (re
 });
 
 portfolioProjectsRouter.put("/:projectId/publications/:publicationId/version", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const parsed = z.object({ versionId: z.string().uuid(), assessmentIds: z.array(z.string().uuid()).max(2).default([]), demoIndex: z.number().int().min(0).max(9).optional() }).safeParse(req.body ?? {});
   if (!parsed.success) return bad(res, 400, "INVALID_PUBLICATION_VERSION");
@@ -895,14 +874,14 @@ portfolioProjectsRouter.put("/:projectId/publications/:publicationId/version", a
 });
 
 portfolioProjectsRouter.delete("/:projectId/publications/:publicationId", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const result = await AppDataSource.query("UPDATE growth_project_publications SET revoked=1 WHERE id=? AND project_id=? AND owner_id=?", [req.params.publicationId, req.params.projectId, ownerId]);
   if (!result.affectedRows) return bad(res, 404, "PUBLICATION_NOT_FOUND");
   return res.json({ revoked: true });
 });
 
 portfolioProjectsRouter.put("/:projectId/publications/:publicationId/reviews", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const visible = req.body?.visible === true;
   if (visible && !await requireAdultPortfolioSharing(ownerId, res)) return;
   const result = await AppDataSource.query("UPDATE growth_project_publications SET review_visible=? WHERE id=? AND project_id=? AND owner_id=? AND revoked=0", [visible ? 1 : 0, req.params.publicationId, req.params.projectId, ownerId]);
@@ -911,7 +890,7 @@ portfolioProjectsRouter.put("/:projectId/publications/:publicationId/reviews", a
 });
 
 portfolioProjectsRouter.post("/:projectId/publications/:publicationId/rotate-link", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const rows = await AppDataSource.query("SELECT id,channel FROM growth_project_publications WHERE id=? AND project_id=? AND owner_id=? AND revoked=0", [req.params.publicationId, req.params.projectId, ownerId]) as Array<{ id: string; channel: string }>;
   if (!rows[0] || rows[0].channel !== "LINK") return bad(res, 404, "PUBLIC_LINK_NOT_FOUND");
   if (!await requireAdultPortfolioSharing(ownerId, res)) return;
@@ -921,7 +900,7 @@ portfolioProjectsRouter.post("/:projectId/publications/:publicationId/rotate-lin
 });
 
 portfolioProjectsRouter.post("/:projectId/reviews", authRequired, async (req: AuthRequest, res: Response) => {
-  const ownerId = await ownerOnly(req, res); if (!ownerId) return;
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const project = await ownedProject(req.params.projectId, ownerId); if (!project) return bad(res, 404, "PROJECT_NOT_FOUND");
   const parsed = z.object({ versionId: z.string().uuid(), reviewerUsername: z.string().trim().min(1).max(80).optional(), assessmentIds: z.array(z.string().uuid()).max(2).default([]) }).safeParse(req.body ?? {});
   if (!parsed.success) return bad(res, 400, "INVALID_REVIEW_REQUEST");
@@ -945,66 +924,66 @@ portfolioProjectsRouter.post("/:projectId/reviews", authRequired, async (req: Au
 });
 
 portfolioProjectsRouter.get("/reviews/inbox", authRequired, async (req: AuthRequest, res: Response) => {
-  if (!req.userId || req.userType !== "USER" || req.userMode !== "PERSONAL") return bad(res, 403, "PERSONAL_USER_REQUIRED");
-  const rows = await AppDataSource.query("SELECT id,project_id,owner_id,kind,status,created_at FROM growth_project_reviews WHERE reviewer_id=? AND status IN ('INVITED','PENDING') ORDER BY created_at ASC LIMIT 50", [req.userId]);
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
+  const rows = await AppDataSource.query("SELECT id,project_id,owner_id,kind,status,created_at FROM growth_project_reviews WHERE reviewer_id=? AND status IN ('INVITED','PENDING') ORDER BY created_at ASC LIMIT 50", [userId]);
   return res.json({ reviews: rows });
 });
 
 portfolioProjectsRouter.get("/reviews/:reviewId", authRequired, async (req: AuthRequest, res: Response) => {
-  if (!req.userId || req.userType !== "USER" || req.userMode !== "PERSONAL") return bad(res, 403, "PERSONAL_USER_REQUIRED");
-  const rows = await AppDataSource.query("SELECT * FROM growth_project_reviews WHERE id=? AND (owner_id=? OR reviewer_id=?) LIMIT 1", [req.params.reviewId, req.userId, req.userId]) as Array<Record<string, unknown>>;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
+  const rows = await AppDataSource.query("SELECT * FROM growth_project_reviews WHERE id=? AND (owner_id=? OR reviewer_id=?) LIMIT 1", [req.params.reviewId, userId, userId]) as Array<Record<string, unknown>>;
   if (!rows[0]) return bad(res, 404, "REVIEW_NOT_FOUND");
   const row = rows[0];
-  if (row.owner_id !== req.userId && row.status === "INVITED") return res.json({ review: { id: row.id, kind: row.kind, status: row.status, projectId: row.project_id } });
-  if (row.owner_id !== req.userId && !["PENDING", "SUBMITTED"].includes(String(row.status))) return bad(res, 404, "REVIEW_NOT_FOUND");
-  if (row.owner_id !== req.userId && row.kind === "OFFICIAL") {
-    const grant = await AppDataSource.query("SELECT id FROM growth_project_reviewer_grants WHERE user_id=? AND revoked_at IS NULL LIMIT 1", [req.userId]);
+  if (row.owner_id !== userId && row.status === "INVITED") return res.json({ review: { id: row.id, kind: row.kind, status: row.status, projectId: row.project_id } });
+  if (row.owner_id !== userId && !["PENDING", "SUBMITTED"].includes(String(row.status))) return bad(res, 404, "REVIEW_NOT_FOUND");
+  if (row.owner_id !== userId && row.kind === "OFFICIAL") {
+    const grant = await AppDataSource.query("SELECT id FROM growth_project_reviewer_grants WHERE user_id=? AND revoked_at IS NULL LIMIT 1", [userId]);
     if (!grant.length) return bad(res, 403, "REVIEWER_GRANT_REVOKED");
   }
   return res.json({ review: { id: row.id, kind: row.kind, status: row.status, snapshot: json(row.snapshot_json, {}), scores: json(row.scores_json, null), comment: row.comment, recommendation: row.recommendation, reviewerNamePublic: Boolean(row.reviewer_name_public), authorPublic: Boolean(row.author_public) } });
 });
 
 portfolioProjectsRouter.delete("/reviews/:reviewId", authRequired, async (req: AuthRequest, res: Response) => {
-  if (!req.userId || req.userType !== "USER" || req.userMode !== "PERSONAL") return bad(res, 403, "PERSONAL_USER_REQUIRED");
-  const result = await AppDataSource.query("UPDATE growth_project_reviews SET status='CANCELLED',reviewer_id=NULL,invite_token=NULL WHERE id=? AND owner_id=? AND status IN ('REQUESTED','INVITED','PENDING')", [req.params.reviewId, req.userId]);
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
+  const result = await AppDataSource.query("UPDATE growth_project_reviews SET status='CANCELLED',reviewer_id=NULL,invite_token=NULL WHERE id=? AND owner_id=? AND status IN ('REQUESTED','INVITED','PENDING')", [req.params.reviewId, userId]);
   if (!result.affectedRows) return bad(res, 404, "REVIEW_REQUEST_NOT_CANCELLABLE");
   return res.json({ cancelled: true });
 });
 
 portfolioProjectsRouter.post("/reviews/:reviewId/respond", authRequired, async (req: AuthRequest, res: Response) => {
-  if (!req.userId || req.userType !== "USER" || req.userMode !== "PERSONAL") return bad(res, 403, "PERSONAL_USER_REQUIRED");
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   const decision = req.body?.decision;
   if (decision !== "ACCEPT" && decision !== "DECLINE") return bad(res, 400, "INVALID_REVIEW_DECISION");
-  const before = await AppDataSource.query("SELECT owner_id,project_id FROM growth_project_reviews WHERE id=? AND reviewer_id=? AND kind='INVITED' AND status='INVITED' LIMIT 1", [req.params.reviewId, req.userId]) as Array<{ owner_id: number; project_id: string }>;
-  const result = await AppDataSource.query("UPDATE growth_project_reviews SET status=?,responded_at=NOW(3) WHERE id=? AND reviewer_id=? AND kind='INVITED' AND status='INVITED'", [decision === "ACCEPT" ? "PENDING" : "DECLINED", req.params.reviewId, req.userId]);
+  const before = await AppDataSource.query("SELECT owner_id,project_id FROM growth_project_reviews WHERE id=? AND reviewer_id=? AND kind='INVITED' AND status='INVITED' LIMIT 1", [req.params.reviewId, userId]) as Array<{ owner_id: number; project_id: string }>;
+  const result = await AppDataSource.query("UPDATE growth_project_reviews SET status=?,responded_at=NOW(3) WHERE id=? AND reviewer_id=? AND kind='INVITED' AND status='INVITED'", [decision === "ACCEPT" ? "PENDING" : "DECLINED", req.params.reviewId, userId]);
   if (!result.affectedRows) return bad(res, 409, "REVIEW_INVITATION_UNAVAILABLE");
-  if (before[0]) await notifyGrowthReview(before[0].owner_id, Number(req.userId), decision === "ACCEPT" ? "GROWTH_REVIEW_ACCEPTED" : "GROWTH_REVIEW_DECLINED", `/portfolio/projects?project=${before[0].project_id}`);
+  if (before[0]) await notifyGrowthReview(before[0].owner_id, userId, decision === "ACCEPT" ? "GROWTH_REVIEW_ACCEPTED" : "GROWTH_REVIEW_DECLINED", `/portfolio/projects?project=${before[0].project_id}`);
   return res.json({ status: decision === "ACCEPT" ? "PENDING" : "DECLINED" });
 });
 
 portfolioProjectsRouter.post("/reviews/:reviewId/submit", authRequired, async (req: AuthRequest, res: Response) => {
-  if (!req.userId || req.userType !== "USER" || req.userMode !== "PERSONAL") return bad(res, 403, "PERSONAL_USER_REQUIRED");
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   const parsed = z.object({ scores: z.array(z.number().int().min(0).max(3)).length(4), comment: z.string().trim().min(1).max(8_000), recommendation: z.enum(["READY_TO_PUBLISH", "NEEDS_WORK"]), reviewerNamePublic: z.boolean().default(false) }).safeParse(req.body ?? {});
   if (!parsed.success) return bad(res, 400, "INVALID_REVIEW");
   const rows = await AppDataSource.query("SELECT kind,status,reviewer_id,owner_id FROM growth_project_reviews WHERE id=? LIMIT 1", [req.params.reviewId]) as Array<Record<string, unknown>>;
   const row = rows[0];
-  if (!row || row.status !== "PENDING" || row.reviewer_id !== req.userId || row.owner_id === req.userId) return bad(res, 403, "REVIEW_ACCESS_DENIED");
+  if (!row || row.status !== "PENDING" || row.reviewer_id !== userId || row.owner_id === userId) return bad(res, 403, "REVIEW_ACCESS_DENIED");
   if (row.kind === "OFFICIAL") {
-    const grants = await AppDataSource.query("SELECT id FROM growth_project_reviewer_grants WHERE user_id=? AND revoked_at IS NULL", [req.userId]);
+    const grants = await AppDataSource.query("SELECT id FROM growth_project_reviewer_grants WHERE user_id=? AND revoked_at IS NULL", [userId]);
     if (!grants.length) return bad(res, 403, "REVIEWER_GRANT_REQUIRED");
   }
   const saved = await AppDataSource.query("UPDATE growth_project_reviews SET status='SUBMITTED',scores_json=?,comment=?,recommendation=?,reviewer_name_public=?,responded_at=NOW(3) WHERE id=? AND status='PENDING'", [JSON.stringify(parsed.data.scores), parsed.data.comment, parsed.data.recommendation, parsed.data.reviewerNamePublic ? 1 : 0, req.params.reviewId]);
   if (!saved.affectedRows) return bad(res, 409, "REVIEW_ALREADY_SUBMITTED");
   const reviewProject = await AppDataSource.query("SELECT project_id FROM growth_project_reviews WHERE id=?", [req.params.reviewId]) as Array<{ project_id: string }>;
-  if (reviewProject[0]) await notifyGrowthReview(Number(row.owner_id), Number(req.userId), "GROWTH_REVIEW_SUBMITTED", `/portfolio/projects?project=${reviewProject[0].project_id}`);
+  if (reviewProject[0]) await notifyGrowthReview(Number(row.owner_id), userId, "GROWTH_REVIEW_SUBMITTED", `/portfolio/projects?project=${reviewProject[0].project_id}`);
   return res.json({ status: "SUBMITTED" });
 });
 
 portfolioProjectsRouter.post("/reviews/:reviewId/public-visibility", authRequired, async (req: AuthRequest, res: Response) => {
-  if (!req.userId || req.userType !== "USER" || req.userMode !== "PERSONAL") return bad(res, 403, "PERSONAL_USER_REQUIRED");
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const visible = req.body?.visible === true;
-  if (visible && !await requireAdultPortfolioSharing(Number(req.userId), res)) return;
-  const result = await AppDataSource.query("UPDATE growth_project_reviews SET author_public=? WHERE id=? AND owner_id=? AND status='SUBMITTED'", [visible ? 1 : 0, req.params.reviewId, req.userId]);
+  if (visible && !await requireAdultPortfolioSharing(ownerId, res)) return;
+  const result = await AppDataSource.query("UPDATE growth_project_reviews SET author_public=? WHERE id=? AND owner_id=? AND status='SUBMITTED'", [visible ? 1 : 0, req.params.reviewId, ownerId]);
   if (!result.affectedRows) return bad(res, 404, "REVIEW_NOT_FOUND");
   return res.json({ visible });
 });

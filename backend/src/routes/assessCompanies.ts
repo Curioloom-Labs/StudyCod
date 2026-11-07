@@ -7,7 +7,10 @@ import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { growthFamilyFor, growthJudgeTests } from "../data/growthProjects";
 import { cancelGrowthProjectJob } from "../services/growthProjectQueue";
 import { revokeAssessInterviewAccess } from "../services/assessInterviewMedia";
-import { revokeAssessInterviewMemberAccess } from "../services/assessInterviewAccess";
+import { revokeAssessInterviewMemberAccess } from "../services/assessInterviewMembership";
+import { activeAssessCompanyRole } from "../services/assessCompanyAccess";
+import { canAssessCompanyRole, type AssessCompanyRole } from "../services/assessAccessPolicy";
+import { requirePersonalAccountPrincipal } from "../services/personalAccountAccess";
 import { writeAudit } from "../services/audit/auditLog";
 import { logger } from "../utils/logger";
 import type { JudgeFile } from "../services/judgeWorker/types";
@@ -45,23 +48,6 @@ async function notifyCompanyUser(recipientId: number | null | undefined, actorId
   }
 }
 
-async function personalUser(req: AuthRequest, res: Response): Promise<number | null> {
-  if (!req.userId || req.userType !== "USER" || req.userMode !== "PERSONAL") {
-    sendError(res, 403, "PERSONAL_USER_REQUIRED");
-    return null;
-  }
-  return req.userId;
-}
-
-type CompanyRole = "OWNER" | "HR" | "ENGINEER";
-async function companyRole(companyId: string, userId: number): Promise<CompanyRole | null> {
-  const rows = await AppDataSource.query(
-    "SELECT role FROM growth_company_members WHERE company_id=? AND user_id=? AND status='ACTIVE' LIMIT 1",
-    [companyId, userId]
-  ) as Array<{ role: CompanyRole }>;
-  return rows[0]?.role ?? null;
-}
-
 async function companyAssessmentForCandidate(id: string, candidateId: number): Promise<Record<string, unknown> | null> {
   if (!UUID_RE.test(id)) return null;
   const rows = await AppDataSource.query(
@@ -74,18 +60,44 @@ async function companyAssessmentForCandidate(id: string, candidateId: number): P
   return rows[0] ?? null;
 }
 
-function publicCase(row: Record<string, unknown>, includeCandidatePrivate = false) {
+type CaseAudience = AssessCompanyRole | "CANDIDATE";
+
+function publicCase(row: Record<string, unknown>, audience: CaseAudience) {
   const base: Record<string, unknown> = {
     id: row.id, companyId: row.company_id, companyName: row.company_name,
     roleTitle: row.role_title, introduction: row.introduction,
     questions: parseJson(row.questions_json, []), status: row.status,
     createdAt: row.created_at, updatedAt: row.updated_at,
-    consentAt: row.consent_at, projectId: row.project_id, versionId: row.version_id,
-    technicalAssessmentId: row.technical_assessment_id,
-    taskTitle: row.task_title, taskPrompt: row.task_prompt,
-    hrReview: parseJson(row.hr_review_json, null), technicalReview: parseJson(row.technical_review_json, null),
+    consentAt: row.consent_at,
   };
-  if (includeCandidatePrivate) base.answers = parseJson(row.answers_json, []);
+  if (row.status === "WITHDRAWN") return base;
+
+  if (audience === "CANDIDATE") {
+    if (row.status !== "INVITED") {
+      base.answers = parseJson(row.answers_json, []);
+      base.projectId = row.project_id;
+      base.versionId = row.version_id;
+      base.technicalAssessmentId = row.technical_assessment_id;
+      base.taskTitle = row.task_title;
+      base.taskPrompt = row.task_prompt;
+      base.hrReview = parseJson(row.hr_review_json, null);
+      base.technicalReview = parseJson(row.technical_review_json, null);
+    }
+    return base;
+  }
+
+  if (canAssessCompanyRole(audience, "READ_CANDIDATE_DOSSIER")) {
+    base.projectId = row.project_id;
+    base.versionId = row.version_id;
+  }
+  if (canAssessCompanyRole(audience, "READ_CANDIDATE_ANSWERS")) base.answers = parseJson(row.answers_json, []);
+  if (canAssessCompanyRole(audience, "READ_HR_REVIEW")) base.hrReview = parseJson(row.hr_review_json, null);
+  if (canAssessCompanyRole(audience, "READ_TECHNICAL_REVIEW")) base.technicalReview = parseJson(row.technical_review_json, null);
+  if (canAssessCompanyRole(audience, "READ_TECHNICAL_TASK")) {
+    base.technicalAssessmentId = row.technical_assessment_id;
+    base.taskTitle = row.task_title;
+    base.taskPrompt = row.task_prompt;
+  }
   return base;
 }
 
@@ -96,7 +108,7 @@ const reviewSchema = z.object({
 });
 
 assessCompaniesRouter.get("/", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   const [companies, pendingMembers, candidateCases] = await Promise.all([
     AppDataSource.query(
       `SELECT c.id,c.name,m.role,m.status,c.created_at,c.updated_at
@@ -124,7 +136,7 @@ assessCompaniesRouter.get("/", authRequired, async (req: AuthRequest, res: Respo
 });
 
 assessCompaniesRouter.post("/", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   const parsed = z.object({ name: z.string().trim().min(2).max(160) }).safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_COMPANY_NAME");
   const id = randomUUID();
@@ -139,16 +151,10 @@ assessCompaniesRouter.post("/", authRequired, async (req: AuthRequest, res: Resp
 });
 
 assessCompaniesRouter.get("/candidate/assessments/:assessmentId", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   const row = await companyAssessmentForCandidate(req.params.assessmentId, userId);
   if (!row || ["WITHDRAWN", "CLOSED"].includes(String(row.status))) return sendError(res, 404, "ASSESSMENT_NOT_FOUND");
-  const response = publicCase(row, true);
-  if (row.status === "INVITED") {
-    delete response.answers;
-    delete response.projectId;
-    delete response.versionId;
-    delete response.technicalAssessmentId;
-  }
+  const response = publicCase(row, "CANDIDATE");
   if (row.technical_assessment_id) {
     const taskRows = await AppDataSource.query(
       `SELECT a.id,a.status,a.card_snapshot,a.draft_json,a.draft_revision,a.job_id,j.state AS job_state,j.result_json
@@ -168,7 +174,7 @@ assessCompaniesRouter.get("/candidate/assessments/:assessmentId", authRequired, 
 });
 
 assessCompaniesRouter.post("/candidate/assessments/:assessmentId/respond", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   const parsed = z.object({ decision: z.enum(["ACCEPT", "DECLINE"]), consent: z.literal(true).optional() }).safeParse(req.body ?? {});
   if (!parsed.success || parsed.data.decision === "ACCEPT" && parsed.data.consent !== true) return sendError(res, 400, "EXPLICIT_CONSENT_REQUIRED");
   const status = parsed.data.decision === "ACCEPT" ? "ACCEPTED" : "DECLINED";
@@ -184,7 +190,7 @@ assessCompaniesRouter.post("/candidate/assessments/:assessmentId/respond", authR
 });
 
 assessCompaniesRouter.get("/candidate/assessments/:assessmentId/portfolio-options", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   const row = await companyAssessmentForCandidate(req.params.assessmentId, userId);
   if (!row || !["ACCEPTED", "PORTFOLIO_SELECTED"].includes(String(row.status))) return sendError(res, 404, "ASSESSMENT_NOT_AVAILABLE");
   const rows = await AppDataSource.query(
@@ -199,7 +205,7 @@ assessCompaniesRouter.get("/candidate/assessments/:assessmentId/portfolio-option
 });
 
 assessCompaniesRouter.post("/candidate/assessments/:assessmentId/portfolio", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   const parsed = z.object({ projectId: z.string().uuid(), versionId: z.string().uuid() }).safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_PROJECT_VERSION");
   const row = await companyAssessmentForCandidate(req.params.assessmentId, userId);
@@ -221,7 +227,7 @@ assessCompaniesRouter.post("/candidate/assessments/:assessmentId/portfolio", aut
 });
 
 assessCompaniesRouter.put("/candidate/assessments/:assessmentId/interview-answers", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   const parsed = z.object({ answers: z.array(z.object({ questionId: z.string().min(1).max(40), answer: z.string().max(6000) })).max(8) }).safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_INTERVIEW_ANSWERS");
   const result = await AppDataSource.query(
@@ -235,7 +241,7 @@ assessCompaniesRouter.put("/candidate/assessments/:assessmentId/interview-answer
 });
 
 assessCompaniesRouter.post("/candidate/assessments/:assessmentId/withdraw", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   const linked = await AppDataSource.query(
     "SELECT id,job_id FROM growth_project_assessments WHERE company_assessment_id=? AND owner_id=? AND status='ACTIVE' LIMIT 1",
     [req.params.assessmentId, userId]
@@ -256,10 +262,10 @@ assessCompaniesRouter.post("/candidate/assessments/:assessmentId/withdraw", auth
 });
 
 assessCompaniesRouter.post("/:companyId/members", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   if (!UUID_RE.test(req.params.companyId)) return sendError(res, 404, "COMPANY_NOT_FOUND");
-  const role = await companyRole(req.params.companyId, userId);
-  if (role !== "OWNER") return sendError(res, 403, "COMPANY_OWNER_REQUIRED");
+  const role = await activeAssessCompanyRole(req.params.companyId, userId);
+  if (!canAssessCompanyRole(role, "MANAGE_MEMBERS")) return sendError(res, 403, "COMPANY_OWNER_REQUIRED");
   const parsed = z.object({ username: z.string().trim().min(1).max(80), role: z.enum(["HR", "ENGINEER"]) }).safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_MEMBER");
   const users = await AppDataSource.query("SELECT id,username FROM users WHERE username=? AND user_mode='PERSONAL' LIMIT 1", [parsed.data.username]) as Array<{ id: number; username: string }>;
@@ -300,7 +306,7 @@ assessCompaniesRouter.post("/:companyId/members", authRequired, async (req: Auth
 });
 
 assessCompaniesRouter.post("/members/:membershipId/respond", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   const parsed = z.object({ decision: z.enum(["ACCEPT", "DECLINE"]) }).safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_DECISION");
   const pending = await AppDataSource.query("SELECT invited_by FROM growth_company_members WHERE id=? AND user_id=? AND status='PENDING' LIMIT 1", [req.params.membershipId, userId]) as Array<{ invited_by: number }>;
@@ -313,16 +319,16 @@ assessCompaniesRouter.post("/members/:membershipId/respond", authRequired, async
 });
 
 assessCompaniesRouter.patch("/:companyId/members/:membershipId", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   if (!UUID_RE.test(req.params.companyId) || !UUID_RE.test(req.params.membershipId)) return sendError(res, 404, "MEMBERSHIP_NOT_FOUND");
-  const role = await companyRole(req.params.companyId, userId);
-  if (role !== "OWNER") return sendError(res, 403, "COMPANY_OWNER_REQUIRED");
+  const role = await activeAssessCompanyRole(req.params.companyId, userId);
+  if (!canAssessCompanyRole(role, "MANAGE_MEMBERS")) return sendError(res, 403, "COMPANY_OWNER_REQUIRED");
   const parsed = z.object({ role: z.enum(["HR", "ENGINEER"]) }).safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_MEMBER_ROLE");
   const members = await AppDataSource.query(
     "SELECT id,user_id,role,status FROM growth_company_members WHERE id=? AND company_id=? LIMIT 1",
     [req.params.membershipId, req.params.companyId]
-  ) as Array<{ id: string; user_id: number; role: CompanyRole; status: string }>;
+  ) as Array<{ id: string; user_id: number; role: AssessCompanyRole; status: string }>;
   const member = members[0];
   if (!member) return sendError(res, 404, "MEMBERSHIP_NOT_FOUND");
   if (member.role === "OWNER") return sendError(res, 409, "COMPANY_OWNER_ROLE_IMMUTABLE");
@@ -343,14 +349,14 @@ assessCompaniesRouter.patch("/:companyId/members/:membershipId", authRequired, a
 });
 
 assessCompaniesRouter.delete("/:companyId/members/:membershipId", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   if (!UUID_RE.test(req.params.companyId) || !UUID_RE.test(req.params.membershipId)) return sendError(res, 404, "MEMBERSHIP_NOT_FOUND");
-  const role = await companyRole(req.params.companyId, userId);
-  if (role !== "OWNER") return sendError(res, 403, "COMPANY_OWNER_REQUIRED");
+  const role = await activeAssessCompanyRole(req.params.companyId, userId);
+  if (!canAssessCompanyRole(role, "MANAGE_MEMBERS")) return sendError(res, 403, "COMPANY_OWNER_REQUIRED");
   const members = await AppDataSource.query(
     "SELECT id,user_id,role,status FROM growth_company_members WHERE id=? AND company_id=? LIMIT 1",
     [req.params.membershipId, req.params.companyId]
-  ) as Array<{ id: string; user_id: number; role: CompanyRole; status: string }>;
+  ) as Array<{ id: string; user_id: number; role: AssessCompanyRole; status: string }>;
   const member = members[0];
   if (!member) return sendError(res, 404, "MEMBERSHIP_NOT_FOUND");
   if (member.role === "OWNER") return sendError(res, 409, "COMPANY_OWNER_ROLE_IMMUTABLE");
@@ -372,10 +378,10 @@ assessCompaniesRouter.delete("/:companyId/members/:membershipId", authRequired, 
 });
 
 assessCompaniesRouter.post("/:companyId/assessments", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   if (!UUID_RE.test(req.params.companyId)) return sendError(res, 404, "COMPANY_NOT_FOUND");
-  const role = await companyRole(req.params.companyId, userId);
-  if (role !== "OWNER" && role !== "HR") return sendError(res, 403, "HR_ACCESS_REQUIRED");
+  const role = await activeAssessCompanyRole(req.params.companyId, userId);
+  if (!canAssessCompanyRole(role, "INVITE_CANDIDATES")) return sendError(res, 403, "HR_ACCESS_REQUIRED");
   const parsed = z.object({
     candidateUsername: z.string().trim().min(1).max(80), roleTitle: z.string().trim().min(2).max(160),
     introduction: z.string().trim().min(10).max(4000),
@@ -413,10 +419,10 @@ assessCompaniesRouter.post("/:companyId/assessments", authRequired, async (req: 
 });
 
 assessCompaniesRouter.get("/:companyId", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
   if (!UUID_RE.test(req.params.companyId)) return sendError(res, 404, "COMPANY_NOT_FOUND");
-  const role = await companyRole(req.params.companyId, userId);
-  if (!role) return sendError(res, 404, "COMPANY_NOT_FOUND");
+  const role = await activeAssessCompanyRole(req.params.companyId, userId);
+  if (!canAssessCompanyRole(role, "READ_WORKSPACE")) return sendError(res, 404, "COMPANY_NOT_FOUND");
   const companies = await AppDataSource.query("SELECT id,name,created_at,updated_at FROM growth_companies WHERE id=? LIMIT 1", [req.params.companyId]) as Array<Record<string, unknown>>;
   if (!companies[0]) return sendError(res, 404, "COMPANY_NOT_FOUND");
   const [members, assessments] = await Promise.all([
@@ -442,9 +448,9 @@ assessCompaniesRouter.get("/:companyId", authRequired, async (req: AuthRequest, 
 });
 
 assessCompaniesRouter.get("/:companyId/assessments/:assessmentId", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
-  const role = await companyRole(req.params.companyId, userId);
-  if (!role) return sendError(res, 404, "ASSESSMENT_NOT_FOUND");
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
+  const role = await activeAssessCompanyRole(req.params.companyId, userId);
+  if (!canAssessCompanyRole(role, "READ_CANDIDATE_DOSSIER")) return sendError(res, 404, "ASSESSMENT_NOT_FOUND");
   const rows = await AppDataSource.query(
     `SELECT a.*,c.name AS company_name,u.username AS candidate_username,v.stage_key,v.sequence_no,v.explanation AS portfolio_explanation,p.family_key,p.runtime,p.blueprint_revision,art.files_json,art.examples_json,
             pa.status AS task_status,pa.explanation AS task_explanation,pa.draft_json AS task_draft,pa.job_id,j.state AS job_state,j.result_json
@@ -465,7 +471,7 @@ assessCompaniesRouter.get("/:companyId/assessments/:assessmentId", authRequired,
     metadata: { assessmentId: req.params.assessmentId, companyId: req.params.companyId, role, status: row.status },
     requestId: req.requestId, ip: req.ip,
   });
-  const response = publicCase(row, role === "OWNER" || role === "HR");
+  const response = publicCase(row, role);
   response.candidateUsername = row.candidate_username;
   if (row.status !== "WITHDRAWN" && row.status !== "INVITED" && row.project_id && row.version_id) {
     response.portfolio = {
@@ -475,7 +481,7 @@ assessCompaniesRouter.get("/:companyId/assessments/:assessmentId", authRequired,
       files: parseJson<JudgeFile[]>(row.files_json, []),
     };
   }
-  if ((role === "OWNER" || role === "ENGINEER") && row.technical_assessment_id) {
+  if (row.status !== "WITHDRAWN" && canAssessCompanyRole(role, "READ_TECHNICAL_TASK") && row.technical_assessment_id) {
     response.task = {
       id: row.technical_assessment_id, title: row.task_title, status: row.task_status,
       explanation: row.task_explanation,
@@ -486,18 +492,13 @@ assessCompaniesRouter.get("/:companyId/assessments/:assessmentId", authRequired,
       executionState: row.job_state,
     };
   }
-  if (row.status === "WITHDRAWN") {
-    delete response.answers; delete response.hrReview; delete response.technicalReview; delete response.portfolio; delete response.task;
-  }
-  if (role === "ENGINEER") { delete response.answers; delete response.hrReview; }
-  if (role === "HR") delete response.task;
   return res.json({ assessment: response, role });
 });
 
 assessCompaniesRouter.post("/:companyId/assessments/:assessmentId/interview-review", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
-  const role = await companyRole(req.params.companyId, userId);
-  if (role !== "OWNER" && role !== "HR") return sendError(res, 403, "HR_ACCESS_REQUIRED");
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
+  const role = await activeAssessCompanyRole(req.params.companyId, userId);
+  if (!canAssessCompanyRole(role, "REVIEW_HR")) return sendError(res, 403, "HR_ACCESS_REQUIRED");
   const parsed = reviewSchema.safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_HR_REVIEW");
   const reviewers = await AppDataSource.query("SELECT username FROM users WHERE id=? LIMIT 1", [userId]) as Array<{ username: string }>;
@@ -513,9 +514,9 @@ assessCompaniesRouter.post("/:companyId/assessments/:assessmentId/interview-revi
 });
 
 assessCompaniesRouter.post("/:companyId/assessments/:assessmentId/technical-task", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
-  const role = await companyRole(req.params.companyId, userId);
-  if (role !== "OWNER" && role !== "ENGINEER") return sendError(res, 403, "ENGINEER_ACCESS_REQUIRED");
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
+  const role = await activeAssessCompanyRole(req.params.companyId, userId);
+  if (!canAssessCompanyRole(role, "MANAGE_TECHNICAL_TASK")) return sendError(res, 403, "ENGINEER_ACCESS_REQUIRED");
   const parsed = z.object({
     title: z.string().trim().min(3).max(120), prompt: z.string().trim().min(20).max(5000),
     tests: z.array(z.object({ input: z.string().max(4096), output: z.string().max(4096), group: z.string().trim().min(1).max(80), hidden: z.boolean().default(false) })).min(2).max(10),
@@ -581,9 +582,9 @@ assessCompaniesRouter.post("/:companyId/assessments/:assessmentId/technical-task
 });
 
 assessCompaniesRouter.post("/:companyId/assessments/:assessmentId/technical-review", authRequired, async (req: AuthRequest, res: Response) => {
-  const userId = await personalUser(req, res); if (!userId) return;
-  const role = await companyRole(req.params.companyId, userId);
-  if (role !== "OWNER" && role !== "ENGINEER") return sendError(res, 403, "ENGINEER_ACCESS_REQUIRED");
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
+  const role = await activeAssessCompanyRole(req.params.companyId, userId);
+  if (!canAssessCompanyRole(role, "REVIEW_TECHNICAL")) return sendError(res, 403, "ENGINEER_ACCESS_REQUIRED");
   const parsed = reviewSchema.extend({ allowPortfolioEvidence: z.boolean().default(false) }).safeParse(req.body ?? {});
   if (!parsed.success) return sendError(res, 400, "INVALID_TECHNICAL_REVIEW");
   const rows = await AppDataSource.query(

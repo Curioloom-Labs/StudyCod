@@ -5,7 +5,30 @@ import { AppDataSource } from "../data-source";
 import { authRequired, type AuthRequest } from "../middleware/authMiddleware";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { BUILTIN_INTERVIEW_KITS, gradeInterviewQuiz, interviewFiles, interviewKitSchema, publicInterviewKit, assessInterviewHash, assessInterviewJson, type InterviewKit } from "../services/assessInterviewKit";
-import { canReadInterviewWorkspace, interviewAccess, interviewCalendar, type InterviewAccess } from "../services/assessInterviewAccess";
+import {
+  canCancelInterview,
+  canCancelInterviewExecution,
+  canControlInterview,
+  canEditInterviewDraft,
+  canEndInterview,
+  canJoinInterview,
+  canReadInterviewNotes,
+  canReadInterviewQuizAnswers,
+  canReadInterviewWorkspace,
+  canReleaseInterviewFeedback,
+  canRespondToInterview,
+  canRunInterviewCode,
+  canRunInterviewCodeInSession,
+  canSendInterviewMessage,
+  canStartInterview,
+  canTakeInterviewQuiz,
+  interviewAccess,
+  type InterviewAccess,
+} from "../services/assessInterviewAccess";
+import { activeAssessCompanyRole } from "../services/assessCompanyAccess";
+import { canAssessCompanyRole, type AssessCompanyCapability } from "../services/assessAccessPolicy";
+import { requirePersonalAccountMiddleware } from "../services/personalAccountAccess";
+import { interviewCalendar } from "../services/assessInterviewCalendar";
 import { closeAssessInterviewMediaRoom, assessInterviewMediaEnabled, assessInterviewMediaToken } from "../services/assessInterviewMedia";
 import { cancelGrowthProjectJob, wakeGrowthProjectQueue } from "../services/growthProjectQueue";
 import { createAssessInterviewArtifact, finalizeExpiredAssessInterview } from "../services/assessInterviewSession";
@@ -26,14 +49,14 @@ const handle = (fn: (req: AuthRequest, res: Response) => Promise<unknown>) => as
     return res.status(500).json({ code: "INTERVIEW_REQUEST_FAILED", message: "INTERVIEW_REQUEST_FAILED" });
   }
 };
-assessInterviewsRouter.use(authRequired, assessInterviewsLimiter, (req: AuthRequest, res, next) => {
-  if (!req.userId || req.userType !== "USER" || req.userMode !== "PERSONAL") return res.status(403).json({ code: "PERSONAL_USER_REQUIRED" });
-  next();
-});
-async function memberRole(companyId: string, userId: number) {
-  if (!/^[0-9a-f-]{36}$/i.test(companyId)) return reject(404, "COMPANY_NOT_FOUND");
-  const rows = await AppDataSource.query("SELECT role FROM growth_company_members WHERE company_id=? AND user_id=? AND status='ACTIVE' LIMIT 1", [companyId, userId]) as Array<{ role: string }>;
-  return rows[0]?.role ?? reject(404, "COMPANY_NOT_FOUND");
+assessInterviewsRouter.use(authRequired, assessInterviewsLimiter, requirePersonalAccountMiddleware);
+
+const COMPANY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+async function requireCompanyCapability(companyId: string, userId: number, capability: AssessCompanyCapability) {
+  if (!COMPANY_ID_PATTERN.test(companyId)) return reject(404, "COMPANY_NOT_FOUND");
+  const role = await activeAssessCompanyRole(companyId, userId);
+  if (!canAssessCompanyRole(role, capability)) return reject(404, "COMPANY_NOT_FOUND");
+  return role;
 }
 async function accessFor(req: AuthRequest): Promise<InterviewAccess> {
   const access = await interviewAccess(req.params.interviewId, req.userId!);
@@ -56,8 +79,8 @@ function publicSession(access: InterviewAccess, knownRevision?: number) {
     durationMinutes: row.duration_minutes, startedAt: row.started_at, completedAt: row.completed_at,
     runtime: row.runtime, role, userId, canHost, consented, editorUserId: Number(row.editor_user_id),
     revision: Number(row.draft_revision), sourceVersionId: row.source_version_id,
-    canEdit: workspaceAllowed && row.status === "LIVE" && Number(row.editor_user_id) === userId,
-    canRun: workspaceAllowed && row.status === "LIVE" && (role !== "CANDIDATE" || Number(row.editor_user_id) === userId),
+    canEdit: canEditInterviewDraft(access),
+    canRun: canRunInterviewCode(access),
     ...(workspaceAllowed && knownRevision !== Number(row.draft_revision) ? { files: assessInterviewJson<{ files: JudgeFile[] }>(row.draft_json, { files: [] }).files } : {}),
     mediaEnabled: assessInterviewMediaEnabled(), documentationAllowed: true, builtInAi: false, recording: false,
   };
@@ -72,13 +95,13 @@ async function notice(recipientId: number, actorId: number, path: string) {
 
 assessInterviewsRouter.get("/kits", handle(async (req, res) => {
   const companyId = String(req.query.companyId ?? "");
-  await memberRole(companyId, req.userId!);
+  await requireCompanyCapability(companyId, req.userId!, "READ_WORKSPACE");
   const rows = await AppDataSource.query("SELECT id,snapshot_json FROM growth_interview_kits WHERE company_id=? ORDER BY created_at DESC LIMIT 100", [companyId]) as Array<{ id: string; snapshot_json: string }>;
   const languages = filterEnabledJudgeLanguages(ALL_JUDGE_LANGUAGES);
   return res.json({ kits: [...BUILTIN_INTERVIEW_KITS.map(item => ({ ...item, builtIn: true })), ...rows.map(row => ({ id: row.id, kit: assessInterviewJson(row.snapshot_json, null), builtIn: false }))], languages });
 }));
 assessInterviewsRouter.post("/companies/:companyId/kits", handle(async (req, res) => {
-  await memberRole(req.params.companyId, req.userId!);
+  await requireCompanyCapability(req.params.companyId, req.userId!, "MANAGE_INTERVIEWS");
   const parsed = interviewKitSchema.safeParse(req.body?.kit);
   if (!parsed.success) return reject(400, "INVALID_INTERVIEW_KIT");
   if (parsed.data.kind === "TECHNICAL" && !isAssessRuntimeEnabled(parsed.data.runtime)) return reject(409, "JUDGE_LANGUAGE_DISABLED");
@@ -91,7 +114,7 @@ assessInterviewsRouter.post("/companies/:companyId/kits", handle(async (req, res
 
 assessInterviewsRouter.get("/interviews", handle(async (req, res) => {
   const companyId = String(req.query.companyId ?? "");
-  if (companyId) await memberRole(companyId, req.userId!);
+  if (companyId) await requireCompanyCapability(companyId, req.userId!, "READ_WORKSPACE");
   const rows = await AppDataSource.query(`SELECT DISTINCT i.id,i.company_id,c.name AS company_name,i.assessment_id,i.title,i.status,i.phase,
     DATE_FORMAT(i.scheduled_at,'%Y-%m-%dT%H:%i:%s.000Z') AS scheduled_at,i.duration_minutes,
     a.candidate_id,u.username AS candidate_name,i.host_user_id,h.username AS host_name,
@@ -107,7 +130,7 @@ assessInterviewsRouter.get("/interviews", handle(async (req, res) => {
 }));
 
 assessInterviewsRouter.post("/companies/:companyId/interviews", handle(async (req, res) => {
-  await memberRole(req.params.companyId, req.userId!);
+  await requireCompanyCapability(req.params.companyId, req.userId!, "MANAGE_INTERVIEWS");
   const parsed = z.object({
     candidateUsername: z.string().trim().min(1).max(80).optional(), assessmentId: z.string().uuid().optional(),
     kitId: z.string().min(1).max(100), title: z.string().trim().min(3).max(160), scheduledAt: z.string().datetime(),
@@ -174,7 +197,7 @@ assessInterviewsRouter.post("/companies/:companyId/interviews", handle(async (re
 assessInterviewsRouter.get("/interviews/:interviewId", handle(async (req, res) => {
   const access = await accessFor(req); const { row, role } = access;
   const [notes, released, quizzes, staff, jobs] = await Promise.all([
-    role === "CANDIDATE" ? [] : AppDataSource.query("SELECT revision,private_text,scores_json,feedback_text,practice_text,released_at,released_json FROM growth_interview_notes WHERE interview_id=? AND user_id=? LIMIT 1", [row.id, req.userId]),
+    canReadInterviewNotes(access) ? AppDataSource.query("SELECT revision,private_text,scores_json,feedback_text,practice_text,released_at,released_json FROM growth_interview_notes WHERE interview_id=? AND user_id=? LIMIT 1", [row.id, req.userId]) : [],
     AppDataSource.query("SELECT n.released_json,u.username FROM growth_interview_notes n JOIN users u ON u.id=n.user_id WHERE n.interview_id=? AND n.released_at IS NOT NULL", [row.id]),
     access.consented ? AppDataSource.query("SELECT result_json,answers_json,submitted_at FROM growth_interview_quizzes WHERE interview_id=? LIMIT 1", [row.id]) : [],
     AppDataSource.query("SELECT m.user_id AS id,u.username,m.role FROM growth_company_members m JOIN users u ON u.id=m.user_id WHERE m.company_id=? AND m.status='ACTIVE'", [row.company_id]),
@@ -194,7 +217,7 @@ assessInterviewsRouter.get("/interviews/:interviewId", handle(async (req, res) =
     ] },
     ownNote: notes[0] ? { revision: notes[0].revision, privateText: notes[0].private_text, scores: assessInterviewJson(notes[0].scores_json, []), feedback: notes[0].feedback_text, practice: notes[0].practice_text, releasedAt: notes[0].released_at, allowPublicPortfolio: Boolean(assessInterviewJson<Record<string, unknown> | null>(notes[0].released_json, null)?.allowPublicPortfolio) } : null,
     feedback: released.map(item => ({ ...assessInterviewJson<Record<string, unknown>>(item.released_json, {}), reviewer: item.username })),
-    quizResult: quizzes[0] ? { ...assessInterviewJson<Record<string, unknown>>(quizzes[0].result_json, {}), submittedAt: quizzes[0].submitted_at, ...(role === "CANDIDATE" ? { answers: assessInterviewJson(quizzes[0].answers_json, {}) } : {}) } : null,
+    quizResult: quizzes[0] ? { ...assessInterviewJson<Record<string, unknown>>(quizzes[0].result_json, {}), submittedAt: quizzes[0].submitted_at, ...(canReadInterviewQuizAnswers(access) ? { answers: assessInterviewJson(quizzes[0].answers_json, {}) } : {}) } : null,
     executions: jobs.map(job => ({ id: job.id, state: job.state, kind: job.execution_kind, revision: job.interview_draft_revision, result: assessInterviewJson(job.result_json, null), errorCode: job.error_code, createdAt: job.created_at })),
   });
 }));
@@ -215,7 +238,7 @@ assessInterviewsRouter.get("/interviews/:interviewId/calendar", handle(async (re
 
 assessInterviewsRouter.post("/interviews/:interviewId/respond", handle(async (req, res) => {
   const access = await accessFor(req);
-  if (access.role !== "CANDIDATE" || access.row.consent_status !== "INVITED") return reject(409, "INVITATION_ALREADY_RESPONDED");
+  if (!canRespondToInterview(access)) return reject(409, "INVITATION_ALREADY_RESPONDED");
   const parsed = z.object({ decision: z.enum(["ACCEPT", "DECLINE"]), consent: z.boolean() }).safeParse(req.body);
   if (!parsed.success || parsed.data.decision === "ACCEPT" && !parsed.data.consent) return reject(400, "EXPLICIT_CONSENT_REQUIRED");
   await AppDataSource.query("UPDATE growth_company_assessments SET status=?,consent_at=IF(?='ACCEPT',UTC_TIMESTAMP(3),NULL) WHERE id=? AND candidate_id=? AND status='INVITED'", [parsed.data.decision === "ACCEPT" ? "ACCEPTED" : "DECLINED", parsed.data.decision, access.row.assessment_id, req.userId]);
@@ -228,13 +251,14 @@ assessInterviewsRouter.post("/interviews/:interviewId/start", handle(async (req,
   const access = await accessFor(req);
   if (!access.canHost) return reject(403, "INTERVIEW_HOST_REQUIRED");
   if (!access.consented) return reject(409, "CANDIDATE_CONSENT_REQUIRED");
+  if (access.row.status !== "LIVE" && !canStartInterview(access)) return reject(409, "INTERVIEW_NOT_SCHEDULED");
   const result = await AppDataSource.query("UPDATE growth_interviews SET status='LIVE',started_at=UTC_TIMESTAMP(3) WHERE id=? AND status='SCHEDULED'", [access.row.id]);
   if (!result.affectedRows && access.row.status !== "LIVE") return reject(409, "INTERVIEW_NOT_SCHEDULED");
   return res.json({ status: "LIVE" });
 }));
 assessInterviewsRouter.post("/interviews/:interviewId/join", handle(async (req, res) => {
   const access = await accessFor(req);
-  if (!access.consented || access.row.status !== "LIVE") return reject(409, "INTERVIEW_NOT_LIVE");
+  if (!canJoinInterview(access)) return reject(409, "INTERVIEW_NOT_LIVE");
   const names = await AppDataSource.query("SELECT username FROM users WHERE id=? LIMIT 1", [req.userId]) as Array<{ username: string }>;
   const connection = await assessInterviewMediaToken(access.row.room_name, req.userId!, names[0]?.username ?? "StudyCod");
   if (!connection) return reject(503, "INTERVIEW_MEDIA_UNAVAILABLE");
@@ -243,7 +267,7 @@ assessInterviewsRouter.post("/interviews/:interviewId/join", handle(async (req, 
 
 assessInterviewsRouter.put("/interviews/:interviewId/draft", handle(async (req, res) => {
   const access = await accessFor(req);
-  if (!access.consented || access.row.status !== "LIVE" || Number(access.row.editor_user_id) !== req.userId) return reject(403, "INTERVIEW_EDITOR_REQUIRED");
+  if (!canEditInterviewDraft(access)) return reject(403, "INTERVIEW_EDITOR_REQUIRED");
   const files = interviewFiles(req.body?.files, access.row.runtime); const revision = Number(req.body?.expectedRevision);
   if (!files || !Number.isInteger(revision) || revision < 1) return reject(400, "INVALID_INTERVIEW_DRAFT");
   const result = await AppDataSource.query("UPDATE growth_interviews SET draft_json=?,draft_revision=draft_revision+1 WHERE id=? AND status='LIVE' AND editor_user_id=? AND draft_revision=? AND TIMESTAMPADD(MINUTE,duration_minutes,started_at)>UTC_TIMESTAMP(3)", [JSON.stringify({ files }), access.row.id, req.userId, revision]);
@@ -253,7 +277,7 @@ assessInterviewsRouter.put("/interviews/:interviewId/draft", handle(async (req, 
 
 assessInterviewsRouter.post("/interviews/:interviewId/control", handle(async (req, res) => {
   const access = await accessFor(req); if (!access.canHost) return reject(403, "INTERVIEW_HOST_REQUIRED");
-  if (access.row.status !== "LIVE" || !access.consented) return reject(409, "INTERVIEW_NOT_LIVE");
+  if (!canControlInterview(access)) return reject(409, "INTERVIEW_NOT_LIVE");
   const target = Number(req.body?.editorUserId); const revision = Number(req.body?.expectedRevision);
   if (target !== Number(access.row.candidate_id)) {
     const assigned = assessInterviewJson<number[]>(access.row.interviewer_ids_json, []);
@@ -267,7 +291,7 @@ assessInterviewsRouter.post("/interviews/:interviewId/control", handle(async (re
 assessInterviewsRouter.post("/interviews/:interviewId/phase", handle(async (req, res) => {
   const access = await accessFor(req); if (!access.canHost) return reject(403, "INTERVIEW_HOST_REQUIRED");
   const phase = z.enum(["INTRO", "DISCUSSION", "CODE", "REVIEW", "PAUSE"]).safeParse(req.body?.phase);
-  if (!phase.success || access.row.status !== "LIVE") return reject(409, "INTERVIEW_NOT_LIVE");
+  if (!phase.success || !canControlInterview(access)) return reject(409, "INTERVIEW_NOT_LIVE");
   const result = await AppDataSource.query("UPDATE growth_interviews SET phase=? WHERE id=? AND status='LIVE' AND TIMESTAMPADD(MINUTE,duration_minutes,started_at)>UTC_TIMESTAMP(3)", [phase.data, access.row.id]);
   if (!result.affectedRows) return reject(409, "INTERVIEW_TIME_LIMIT_REACHED");
   return res.json({ phase: phase.data });
@@ -275,7 +299,7 @@ assessInterviewsRouter.post("/interviews/:interviewId/phase", handle(async (req,
 
 assessInterviewsRouter.post("/interviews/:interviewId/messages", handle(async (req, res) => {
   const access = await accessFor(req);
-  if (!access.consented || !["SCHEDULED", "LIVE"].includes(access.row.status)) return reject(409, "INTERVIEW_CHAT_CLOSED");
+  if (!canSendInterviewMessage(access)) return reject(409, "INTERVIEW_CHAT_CLOSED");
   const parsed = z.object({ text: z.string().trim().min(1).max(2000), clientKey: z.string().min(8).max(64) }).safeParse(req.body);
   if (!parsed.success) return reject(400, "INVALID_INTERVIEW_MESSAGE");
   const rate = await AppDataSource.query("SELECT COUNT(*) AS count FROM growth_interview_messages WHERE interview_id=? AND user_id=? AND created_at>DATE_SUB(UTC_TIMESTAMP(3),INTERVAL 1 MINUTE)", [access.row.id, req.userId]) as Array<{ count: number }>;
@@ -295,7 +319,7 @@ assessInterviewsRouter.post("/interviews/:interviewId/messages", handle(async (r
 
 assessInterviewsRouter.post("/interviews/:interviewId/quiz", handle(async (req, res) => {
   const access = await accessFor(req);
-  if (access.role !== "CANDIDATE" || !access.consented || !["SCHEDULED", "LIVE"].includes(access.row.status)) return reject(403, "CANDIDATE_QUIZ_REQUIRED");
+  if (!canTakeInterviewQuiz(access)) return reject(403, "CANDIDATE_QUIZ_REQUIRED");
   const answers = z.record(z.string(), z.number().int().min(0).max(4)).safeParse(req.body?.answers);
   const kit = kitFor(access.row); if (!answers.success || !kit.quiz.length) return reject(400, "INVALID_QUIZ_ANSWERS");
   const result = gradeInterviewQuiz(kit, answers.data); if (!result) return reject(400, "INVALID_QUIZ_ANSWERS");
@@ -317,7 +341,7 @@ assessInterviewsRouter.post("/interviews/:interviewId/quiz", handle(async (req, 
 }));
 
 assessInterviewsRouter.put("/interviews/:interviewId/notes", handle(async (req, res) => {
-  const access = await accessFor(req); if (access.role === "CANDIDATE") return reject(403, "INTERVIEWER_NOTES_REQUIRED");
+  const access = await accessFor(req); if (!canReadInterviewNotes(access)) return reject(403, "INTERVIEWER_NOTES_REQUIRED");
   const parsed = z.object({ expectedRevision: z.number().int().min(0), privateText: z.string().max(8000), scores: z.array(z.number().int().min(0).max(3).nullable()).min(2).max(6), feedback: z.string().max(4000), practice: z.string().max(2000) }).safeParse(req.body);
   if (!parsed.success || parsed.data.scores.length !== kitFor(access.row).rubric.length) return reject(400, "INVALID_INTERVIEW_NOTES");
   const data = parsed.data;
@@ -328,7 +352,7 @@ assessInterviewsRouter.put("/interviews/:interviewId/notes", handle(async (req, 
   return res.json({ revision: data.expectedRevision + 1 });
 }));
 assessInterviewsRouter.post("/interviews/:interviewId/release-feedback", handle(async (req, res) => {
-  const access = await accessFor(req); if (access.role === "CANDIDATE" || access.row.status !== "COMPLETED") return reject(403, "COMPLETED_INTERVIEW_REQUIRED");
+  const access = await accessFor(req); if (!canReleaseInterviewFeedback(access)) return reject(403, "COMPLETED_INTERVIEW_REQUIRED");
   const rows = await AppDataSource.query("SELECT revision,feedback_text,practice_text,released_json FROM growth_interview_notes WHERE interview_id=? AND user_id=? LIMIT 1", [access.row.id, req.userId]) as Array<Record<string, any>>;
   const parsed = z.object({ expectedRevision: z.number().int().min(0), allowPublicPortfolio: z.boolean().default(false) }).safeParse(req.body ?? {});
   if (!parsed.success) return reject(400, "INVALID_RELEASE_FEEDBACK");
@@ -350,7 +374,7 @@ assessInterviewsRouter.post("/interviews/:interviewId/release-feedback", handle(
 
 assessInterviewsRouter.post("/interviews/:interviewId/executions", handle(async (req, res) => {
   const access = await accessFor(req);
-  if (!access.consented || access.row.status !== "LIVE" || access.role === "CANDIDATE" && Number(access.row.editor_user_id) !== req.userId) return reject(403, "INTERVIEW_RUN_UNAVAILABLE");
+  if (!canRunInterviewCode(access)) return reject(403, "INTERVIEW_RUN_UNAVAILABLE");
   const parsed = z.object({ kind: z.enum(["RUN", "CHECK"]), input: z.string().max(8192).default(""), expectedRevision: z.number().int().positive(), idempotencyKey: z.string().min(8).max(128) }).safeParse(req.body);
   if (!parsed.success) return reject(400, "INVALID_INTERVIEW_EXECUTION");
   const data = parsed.data; const kit = kitFor(access.row);
@@ -367,7 +391,7 @@ assessInterviewsRouter.post("/interviews/:interviewId/executions", handle(async 
     const session = sessions[0];
     if (session?.status === "LIVE" && session.duration_active !== undefined && Number(session.duration_active) !== 1) return reject(409, "INTERVIEW_TIME_LIMIT_REACHED");
     if (!session || session.status !== "LIVE" || Number(session.draft_revision) !== data.expectedRevision) return reject(409, "DRAFT_REVISION_CONFLICT");
-    if (access.role === "CANDIDATE" && Number(session.editor_user_id) !== req.userId) return reject(403, "INTERVIEW_EDITOR_REQUIRED");
+    if (!canRunInterviewCodeInSession(access, session)) return reject(403, "INTERVIEW_EDITOR_REQUIRED");
     const files = interviewFiles(assessInterviewJson<{ files: JudgeFile[] }>(session.draft_json, { files: [] }).files, access.row.runtime) ?? reject(400, "INVALID_INTERVIEW_DRAFT");
     const artifact = await createAssessInterviewArtifact(runner, req.userId!, files); const testsHash = assessInterviewHash(tests);
     const previous = await runner.query("SELECT id,artifact_id,tests_hash,context_key,state FROM growth_project_jobs WHERE owner_id=? AND idempotency_key=? LIMIT 1", [req.userId, data.idempotencyKey]) as Array<Record<string, any>>;
@@ -391,12 +415,12 @@ assessInterviewsRouter.post("/interviews/:interviewId/executions", handle(async 
 
 assessInterviewsRouter.post("/interviews/:interviewId/executions/:jobId/cancel", handle(async (req, res) => {
   const access = await accessFor(req); const jobs = await AppDataSource.query("SELECT owner_id FROM growth_project_jobs WHERE id=? AND interview_id=? LIMIT 1", [req.params.jobId, access.row.id]) as Array<{ owner_id: number }>;
-  if (!jobs[0] || access.role === "CANDIDATE" && jobs[0].owner_id !== req.userId) return reject(404, "EXECUTION_NOT_FOUND");
+  if (!jobs[0] || !canCancelInterviewExecution(access, Number(jobs[0].owner_id))) return reject(404, "EXECUTION_NOT_FOUND");
   return res.json({ status: await cancelGrowthProjectJob(req.params.jobId, jobs[0].owner_id) });
 }));
 
 assessInterviewsRouter.post("/interviews/:interviewId/end", handle(async (req, res) => {
-  const access = await accessFor(req); if (!access.canHost) return reject(403, "INTERVIEW_HOST_REQUIRED");
+  const access = await accessFor(req); if (!canEndInterview(access)) return reject(403, "INTERVIEW_HOST_REQUIRED");
   if (access.row.status === "COMPLETED") return res.json({ status: "COMPLETED" });
   const runner = AppDataSource.createQueryRunner(); await runner.connect(); await runner.startTransaction();
   try {
@@ -412,7 +436,7 @@ assessInterviewsRouter.post("/interviews/:interviewId/end", handle(async (req, r
 }));
 
 assessInterviewsRouter.post("/interviews/:interviewId/cancel", handle(async (req, res) => {
-  const access = await accessFor(req); if (!access.canHost) return reject(403, "INTERVIEW_HOST_REQUIRED");
+  const access = await accessFor(req); if (!canCancelInterview(access)) return reject(403, "INTERVIEW_HOST_REQUIRED");
   const update = await AppDataSource.query("UPDATE growth_interviews SET status='CANCELLED',completed_at=UTC_TIMESTAMP(3) WHERE id=? AND status='SCHEDULED'", [access.row.id]);
   if (!update.affectedRows) return reject(409, "INTERVIEW_NOT_SCHEDULED");
   await notice(Number(access.row.candidate_id), req.userId!, `/assess/interviews/${access.row.id}`);

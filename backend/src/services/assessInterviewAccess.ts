@@ -1,11 +1,61 @@
 import { AppDataSource } from "../data-source";
 import { assessInterviewJson } from "./assessInterviewKit";
-import { closeAssessInterviewMediaRoom, removeAssessInterviewParticipant } from "./assessInterviewMedia";
+import { activeAssessCompanyRole } from "./assessCompanyAccess";
+import {
+  canCompanyMemberAccessInterview,
+  canCancelAssessInterview,
+  canCancelAssessInterviewExecution,
+  canControlAssessInterview,
+  canEndAssessInterview,
+  canEditAssessInterviewDraft,
+  canHostAssessInterview,
+  canJoinAssessInterview,
+  canReadAssessInterviewNotes,
+  canReadAssessInterviewQuizAnswers,
+  canReadAssessInterviewWorkspace,
+  canReleaseAssessInterviewFeedback,
+  canRespondToAssessInterview,
+  canRunAssessInterviewCode,
+  canSendAssessInterviewMessage,
+  canStartAssessInterview,
+  canSubmitAssessInterviewQuiz,
+  hasActiveInterviewConsent,
+  type AssessInterviewRole,
+  type InterviewPolicyContext,
+} from "./assessAccessPolicy";
 
-export type InterviewRole = "OWNER" | "HR" | "ENGINEER" | "CANDIDATE";
-export type InterviewAccess = { row: Record<string, any>; role: InterviewRole; userId: number; canHost: boolean; consented: boolean };
+export type InterviewAccess = {
+  row: Record<string, any>;
+  role: AssessInterviewRole;
+  userId: number;
+  canHost: boolean;
+  consented: boolean;
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TERMINAL_CONSENT_STATUSES = new Set(["WITHDRAWN", "DECLINED", "CLOSED"]);
+
+function safeInterviewerIds(value: unknown): number[] {
+  const parsed = assessInterviewJson<unknown>(value, []);
+  if (!Array.isArray(parsed)) return [];
+  return [...new Set(parsed.filter((item): item is number => Number.isSafeInteger(item) && item > 0))];
+}
+
+function policyContext(access: InterviewAccess): InterviewPolicyContext {
+  return {
+    role: access.role,
+    userId: access.userId,
+    hostUserId: Number(access.row.host_user_id),
+    editorUserId: Number(access.row.editor_user_id),
+    status: String(access.row.status ?? ""),
+    consentStatus: String(access.row.consent_status ?? ""),
+    consentAt: access.row.consent_at,
+  };
+}
+
 export async function interviewAccess(id: string, userId: number): Promise<InterviewAccess | null> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  if (!UUID_PATTERN.test(id) || !Number.isSafeInteger(userId) || userId <= 0) return null;
+
   const rows = await AppDataSource.query(`SELECT i.*,DATE_FORMAT(i.scheduled_at,'%Y-%m-%dT%H:%i:%s.000Z') AS scheduled_utc,a.candidate_id,a.status AS consent_status,a.consent_at,
     CASE WHEN i.status='LIVE' AND i.started_at IS NOT NULL AND TIMESTAMPADD(MINUTE,i.duration_minutes,i.started_at)<=UTC_TIMESTAMP(3) THEN 1 ELSE 0 END AS duration_expired,
     CASE WHEN i.status='LIVE' AND i.started_at IS NOT NULL THEN GREATEST(0,TIMESTAMPDIFF(SECOND,UTC_TIMESTAMP(3),TIMESTAMPADD(MINUTE,i.duration_minutes,i.started_at))) ELSE NULL END AS duration_remaining_seconds,
@@ -13,56 +63,94 @@ export async function interviewAccess(id: string, userId: number): Promise<Inter
     FROM growth_interviews i JOIN growth_company_assessments a ON a.id=i.assessment_id
     JOIN growth_companies c ON c.id=i.company_id JOIN users u ON u.id=a.candidate_id JOIN users h ON h.id=i.host_user_id
     WHERE i.id=? LIMIT 1`, [id]) as Array<Record<string, any>>;
+
   const row = rows[0];
-  if (!row || ["WITHDRAWN", "DECLINED", "CLOSED"].includes(row.consent_status)) return null;
-  const consented = Boolean(row.consent_at) && row.consent_status !== "INVITED";
-  if (Number(row.candidate_id) === userId) return { row, role: "CANDIDATE", userId, canHost: false, consented };
-  const members = await AppDataSource.query("SELECT role FROM growth_company_members WHERE company_id=? AND user_id=? AND status='ACTIVE' LIMIT 1", [row.company_id, userId]) as Array<{ role: InterviewRole }>;
-  const role = members[0]?.role;
-  const assigned = assessInterviewJson<number[]>(row.interviewer_ids_json, []);
-  if (!role || role !== "OWNER" && Number(row.host_user_id) !== userId && !assigned.includes(userId)) return null;
-  return { row, role, userId, canHost: role === "OWNER" || Number(row.host_user_id) === userId, consented };
+  if (!row || TERMINAL_CONSENT_STATUSES.has(String(row.consent_status ?? ""))) return null;
+
+  const candidateId = Number(row.candidate_id);
+  if (!Number.isSafeInteger(candidateId) || candidateId <= 0) return null;
+  const consented = hasActiveInterviewConsent(row.consent_status, row.consent_at);
+
+  let role: AssessInterviewRole;
+  if (candidateId === userId) {
+    role = "CANDIDATE";
+  } else {
+    const companyId = typeof row.company_id === "string" ? row.company_id : "";
+    const companyRole = await activeAssessCompanyRole(companyId, userId);
+    if (!companyRole) return null;
+    if (!canCompanyMemberAccessInterview(companyRole, userId, Number(row.host_user_id), safeInterviewerIds(row.interviewer_ids_json))) return null;
+    role = companyRole;
+  }
+
+  const access: InterviewAccess = { row, role, userId, canHost: false, consented };
+  access.canHost = canHostAssessInterview(policyContext(access));
+  return access;
 }
 
 export function canReadInterviewWorkspace(access: InterviewAccess): boolean {
-  return access.role !== "CANDIDATE" || access.consented && access.row.status !== "SCHEDULED";
+  return canReadAssessInterviewWorkspace(policyContext(access));
 }
 
-/** Revoke a removed company member's participation in any scheduled/live interview. */
-export async function revokeAssessInterviewMemberAccess(companyId: string, userId: number): Promise<void> {
-  const interviews = await AppDataSource.query(
-    `SELECT id,status,room_name,host_user_id,interviewer_ids_json FROM growth_interviews i
-     WHERE i.company_id=? AND i.status IN ('SCHEDULED','LIVE')
-       AND (i.host_user_id=? OR JSON_CONTAINS(i.interviewer_ids_json,JSON_ARRAY(?)))`,
-    [companyId, userId, userId]
-  ) as Array<{ id: string; status: string; room_name: string; host_user_id: number; interviewer_ids_json: unknown }>;
-  for (const interview of interviews) {
-    const assigned = assessInterviewJson<number[]>(interview.interviewer_ids_json, []);
-    const assignedIndex = assigned.findIndex(id => Number(id) === userId);
-    if (assignedIndex >= 0) {
-      await AppDataSource.query(
-        `UPDATE growth_interviews SET interviewer_ids_json=JSON_REMOVE(interviewer_ids_json,?)
-         WHERE id=? AND company_id=? AND status IN ('SCHEDULED','LIVE')`,
-        [`$[${assignedIndex}]`, interview.id, companyId]
-      );
-    }
-    if (Number(interview.host_user_id) === userId) {
-      const cancelled = await AppDataSource.query(
-        `UPDATE growth_interviews SET status='CANCELLED',completed_at=UTC_TIMESTAMP(3)
-         WHERE id=? AND company_id=? AND status IN ('SCHEDULED','LIVE')`,
-        [interview.id, companyId]
-      );
-      if (interview.status === "LIVE" && cancelled.affectedRows) await closeAssessInterviewMediaRoom(interview.room_name);
-    } else if (interview.status === "LIVE" && assignedIndex >= 0) {
-      await removeAssessInterviewParticipant(interview.room_name, userId);
-    }
-  }
+export function canEditInterviewDraft(access: InterviewAccess): boolean {
+  return canEditAssessInterviewDraft(policyContext(access));
 }
 
-export function interviewCalendar(row: Record<string, any>, origin: string): string {
-  const escape = (value: string) => value.replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
-  const stamp = (value: Date) => value.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-  const start = new Date(row.scheduled_utc ?? row.scheduled_at);
-  const end = new Date(start.getTime() + Number(row.duration_minutes) * 60_000);
-  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//StudyCod//Assess Interviews//EN", "BEGIN:VEVENT", `UID:${row.id}@studycod.space`, `DTSTAMP:${stamp(new Date(row.created_at))}`, `DTSTART:${stamp(start)}`, `DTEND:${stamp(end)}`, `SUMMARY:${escape(String(row.title))}`, `DESCRIPTION:${escape(`${row.company_name}\n${origin}/assess/interviews/${row.id}`)}`, `URL:${origin}/assess/interviews/${row.id}`, "END:VEVENT", "END:VCALENDAR", ""].join("\r\n");
+export function canJoinInterview(access: InterviewAccess): boolean {
+  return canJoinAssessInterview(policyContext(access));
+}
+
+export function canSendInterviewMessage(access: InterviewAccess): boolean {
+  return canSendAssessInterviewMessage(policyContext(access));
+}
+
+export function canStartInterview(access: InterviewAccess): boolean {
+  return canStartAssessInterview(policyContext(access));
+}
+
+export function canControlInterview(access: InterviewAccess): boolean {
+  return canControlAssessInterview(policyContext(access));
+}
+
+export function canEndInterview(access: InterviewAccess): boolean {
+  return canEndAssessInterview(policyContext(access));
+}
+
+export function canCancelInterview(access: InterviewAccess): boolean {
+  return canCancelAssessInterview(policyContext(access));
+}
+
+export function canCancelInterviewExecution(access: InterviewAccess, jobOwnerId: number): boolean {
+  return canCancelAssessInterviewExecution(policyContext(access), jobOwnerId);
+}
+
+export function canRunInterviewCode(access: InterviewAccess): boolean {
+  return canRunAssessInterviewCode(policyContext(access));
+}
+
+export function canTakeInterviewQuiz(access: InterviewAccess): boolean {
+  return canSubmitAssessInterviewQuiz(policyContext(access));
+}
+
+export function canReadInterviewQuizAnswers(access: InterviewAccess): boolean {
+  return canReadAssessInterviewQuizAnswers(policyContext(access));
+}
+
+export function canRunInterviewCodeInSession(access: InterviewAccess, session: Record<string, unknown>): boolean {
+  return canRunAssessInterviewCode({
+    ...policyContext(access),
+    status: String(session.status ?? ""),
+    editorUserId: Number(session.editor_user_id),
+  });
+}
+
+export function canReadInterviewNotes(access: InterviewAccess): boolean {
+  return canReadAssessInterviewNotes(policyContext(access));
+}
+
+export function canReleaseInterviewFeedback(access: InterviewAccess): boolean {
+  return canReleaseAssessInterviewFeedback(policyContext(access));
+}
+
+export function canRespondToInterview(access: InterviewAccess): boolean {
+  return canRespondToAssessInterview(policyContext(access));
 }

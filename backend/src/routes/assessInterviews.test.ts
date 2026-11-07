@@ -5,6 +5,7 @@ import { assessInterviewsRouter } from "./assessInterviews";
 import { portfolioProjectsRouter } from "./portfolioProjects";
 import { RoomServiceClient } from "livekit-server-sdk";
 import { BUILTIN_INTERVIEW_KITS } from "../services/assessInterviewKit";
+import { requirePersonalAccountMiddleware } from "../services/personalAccountAccess";
 
 const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const kit = BUILTIN_INTERVIEW_KITS[1].kit;
@@ -29,7 +30,7 @@ function captureAudit(t: any) {
 
 test("EDU principals are rejected before Assess interview routes run", () => {
   const guard = assessInterviewsRouter.stack.find((item: any) =>
-    !item.route && String(item.handle).includes("PERSONAL_USER_REQUIRED")) as any;
+    !item.route && item.handle === requirePersonalAccountMiddleware) as any;
   assert.ok(guard, "the interview router must keep its Personal-mode guard");
   let status = 200;
   let result: any;
