@@ -371,7 +371,9 @@ function isRetryableError(error: unknown): boolean {
 }
 function isInvalidGeneratedContentError(error: unknown): boolean {
   if (readProperty(error, 'name') === 'AIValidationError') return true;
-  return /validation failed|failed to parse|invalid json|empty response|schema mismatch/i.test(errorMessage(error));
+  const message = errorMessage(error);
+  return /validation failed|failed to parse|invalid json|empty response|schema mismatch/i.test(message)
+    || /quiz generation failed:\s*quiz_[a-z0-9_]+:/i.test(message);
 }
 export class LLMOrchestrator {
   private cloudflareProvider: CloudflareAIProvider;
