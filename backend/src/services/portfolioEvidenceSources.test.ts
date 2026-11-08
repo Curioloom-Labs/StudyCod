@@ -75,6 +75,7 @@ test("Portfolio sourced evidence lists platform-derived records and counts only 
   assert.match(queries[3].sql, /IF\(JSON_VALID\(n\.released_json\),JSON_UNQUOTE\(JSON_EXTRACT\(n\.released_json,'\$\.allowPublicPortfolio'\)\),'false'\)='true'/);
   assert.match(queries[4].sql, /a\.status='REVIEWED'.*IF\(JSON_VALID\(a\.technical_review_json\),JSON_UNQUOTE\(JSON_EXTRACT\(a\.technical_review_json,'\$\.allowPortfolioEvidence'\)\),'false'\)='true'.*pa\.status IN \('PASSED','FAILED'\)/s);
   const competitionQuery = queries.find(query => query.sql.includes("FROM contest_participants cp"))?.sql ?? "";
+  assert.match(competitionQuery, /COALESCE\(result\.acceptedProblems,0\) AS acceptedProblems,\s*certificate\.place_text AS certificatePlace\s+FROM contest_participants cp/);
   assert.match(competitionQuery, /c\.visibility='PUBLIC'.*c\.scoreboard_visibility<>'ORGANIZERS_ONLY'/s);
   assert.match(competitionQuery, /s\.phase='CONTEST' AND s\.execution_status='completed' AND s\.verdict='AC'/);
   assert.match(competitionQuery, /sc\.starts_at IS NULL OR s\.created_at>=sc\.starts_at/);
@@ -108,6 +109,8 @@ test("Portfolio competition source remains compatible before optional contest ad
   await listPortfolioSourcedEvidenceSources(42);
   const competitionQuery = queries.find(sql => sql.includes("FROM contest_participants cp")) ?? "";
   assert.ok(competitionQuery);
+  assert.match(competitionQuery, /COALESCE\(result\.acceptedProblems,0\) AS acceptedProblems,\s*NULL AS certificatePlace\s+FROM contest_participants cp/);
+  assert.doesNotMatch(competitionQuery, /AS certificatePlace,\s*FROM contest_participants cp/);
   assert.doesNotMatch(competitionQuery, /contest_annulments|contest_organizers|certificates/);
   assert.match(competitionQuery, /s\.execution_status='completed'.*s\.verdict='AC'/);
 });

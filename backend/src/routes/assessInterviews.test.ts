@@ -44,6 +44,18 @@ test("EDU principals are rejected before Assess interview routes run", () => {
   assert.equal(continued, false);
 });
 
+test("interview list avoids MySQL DISTINCT ordering on an unselected timestamp", async t => {
+  let listQuery = "";
+  t.mock.method(AppDataSource, "query", async (sql: string) => { listQuery = sql; return []; });
+
+  const result = await request("/interviews", "get");
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.result.interviews, []);
+  assert.doesNotMatch(listQuery, /SELECT\s+DISTINCT/i);
+  assert.match(listQuery, /ORDER BY \(i\.status='LIVE'\) DESC,\(i\.status='SCHEDULED'\) DESC,i\.scheduled_at ASC/);
+});
+
 test("candidate detail has no private notes, hidden tests, starter files or quiz keys before consent", async t => {
   const reads: string[] = [];
   t.mock.method(AppDataSource, "query", async (sql: string) => {

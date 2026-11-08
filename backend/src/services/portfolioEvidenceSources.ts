@@ -128,8 +128,8 @@ export async function listPortfolioSourcedEvidenceSources(ownerId: number): Prom
        )`
     : "";
   const certificateSelect = contestOptionalTables.has("certificates")
-    ? "certificate.place_text AS certificatePlace,"
-    : "NULL AS certificatePlace,";
+    ? "certificate.place_text AS certificatePlace"
+    : "NULL AS certificatePlace";
   const certificateJoin = contestOptionalTables.has("certificates")
     ? `LEFT JOIN certificates certificate ON certificate.contest_id=c.id AND certificate.participant_id=cp.id
          AND certificate.status IN ('rendered','emailed') AND certificate.issued_at IS NOT NULL AND certificate.revoked_at IS NULL`

@@ -115,7 +115,7 @@ assessInterviewsRouter.post("/companies/:companyId/kits", handle(async (req, res
 assessInterviewsRouter.get("/interviews", handle(async (req, res) => {
   const companyId = String(req.query.companyId ?? "");
   if (companyId) await requireCompanyCapability(companyId, req.userId!, "READ_WORKSPACE");
-  const rows = await AppDataSource.query(`SELECT DISTINCT i.id,i.company_id,c.name AS company_name,i.assessment_id,i.title,i.status,i.phase,
+  const rows = await AppDataSource.query(`SELECT i.id,i.company_id,c.name AS company_name,i.assessment_id,i.title,i.status,i.phase,
     DATE_FORMAT(i.scheduled_at,'%Y-%m-%dT%H:%i:%s.000Z') AS scheduled_at,i.duration_minutes,
     a.candidate_id,u.username AS candidate_name,i.host_user_id,h.username AS host_name,
     IF(a.candidate_id=?,'CANDIDATE',m.role) AS my_role,a.status AS consent_status
