@@ -168,19 +168,23 @@ function buildQuizGenerationGuidance(params: { difficulty?: number; questionStyl
     params.questionStyle ? styleInstructions[params.questionStyle] : "",
     params.questionStyle !== "CONCEPTS" ? codeLengthInstructions[codeLength] : "",
     isEnglish
-      ? "MANDATORY CODE COMPLETENESS: Every item that refers to code, a program, execution, or output must include the entire standalone code in its `code` field and its language in `codeLanguage`. Never ask about 'the following code' when the snippet is missing. Use an empty code field only for purely conceptual questions. Teacher instructions are hard requirements and override generic defaults."
-      : "ОБОВ’ЯЗКОВА ПОВНОТА КОДУ: Кожне питання про код, програму, виконання або виведення має містити весь самодостатній код у полі `code` і мову в `codeLanguage`. Не питай про «наступний код», якщо фрагмента немає. Порожнє поле code дозволене лише для суто поняттєвих питань. Побажання вчителя є обов’язковими й важливіші за загальні типові налаштування.",
+      ? "MANDATORY CODE COMPLETENESS: Any question that asks about the behavior or output of a particular code snippet or program must include its complete standalone code in `code` and its language in `codeLanguage`. Never ask about 'the following code' or a specific program output without including the snippet. Conceptual questions about programming terms do not need code. Teacher instructions are hard requirements and override generic defaults."
+      : "ОБОВ’ЯЗКОВА ПОВНОТА КОДУ: Якщо питання просить визначити поведінку або результат конкретного фрагмента коду чи програми, додай повний самодостатній код у `code` і вкажи мову в `codeLanguage`. Не питай про «наступний код» або результат конкретної програми без фрагмента. Поняттєві питання про терміни програмування можуть бути без коду. Побажання вчителя є обов’язковими й важливіші за загальні типові налаштування.",
     teacherNotes ? (isEnglish ? `Mandatory teacher instructions: ${teacherNotes}` : `Обов’язкові вимоги вчителя: ${teacherNotes}`) : ""
   ].filter(Boolean).join("\n");
 }
 
 function enforceQuizCodeCompleteness(result: AiQuizResult, questionStyle?: QuizQuestionStyle): AiQuizResult {
-  const parsed = JSON.parse(result.quizJson) as Array<{ q?: string }>;
-  const codeQuestionPattern = /(?:\bcode\b|\bsnippet\b|\bprogram\b|\bexecution\b|\boutput\b|код|фрагмент|програм|виконан|вивед|результат)/i;
+  const parsed = JSON.parse(result.quizJson) as Array<{ q?: string; code?: string }>;
+  const codeReferencePattern = /(?:\b(?:this|that|following|given|shown|provided|above|below)\b.{0,40}\b(?:code|snippet|program)\b|\b(?:code|snippet|program)\b.{0,40}\b(?:above|below|shown|provided|given)\b|(?:цей|ця|це|наведен|подан|показан|нижче|вище).{0,40}(?:код|фрагмент|програм))/i;
+  const codeBehaviorPattern = /(?:\b(?:output|result|value|print(?:ed)?|return(?:ed)?|run(?:ning)?|execute|execution|behavio[u]?r)\b|вивед|результат|надрук|поверта|виконан|працю)/i;
   const missingCode = parsed.findIndex((question) => {
-    const hasSnippet = typeof question.q === "string" && /```[^\n]*\n[\s\S]+?```/.test(question.q);
+    const questionText = typeof question.q === "string" ? question.q : "";
+    const hasSnippet = Boolean(question.code?.trim()) || /```[^\n]*\n[\s\S]+?```/.test(questionText);
     if (questionStyle === "CODE_READING" || questionStyle === "DEBUGGING") return !hasSnippet;
-    return typeof question.q === "string" && codeQuestionPattern.test(question.q) && !hasSnippet;
+    const refersToSpecificCode = codeReferencePattern.test(questionText)
+      || (/(?:\b(?:code|snippet|program)\b|код|фрагмент|програм)/i.test(questionText) && codeBehaviorPattern.test(questionText));
+    return refersToSpecificCode && !hasSnippet;
   });
   if (missingCode < 0) return result;
   const error = new Error(`QUIZ_CODE_MISSING: question ${missingCode + 1} refers to code but has no complete code snippet`);
@@ -2058,7 +2062,7 @@ REQUIREMENTS:
 - Each question has exactly 5 options
 - Output format: ONLY valid JSON array
 - Each item format: {"q": "question stem", "code": "complete code or empty string", "codeLanguage": "${langName}", "options": ["A", "B", "C", "D", "E"], "correct": 0}
-- If a question refers to code, execution, a program, or its output, its complete standalone snippet MUST be in the "code" field. Never mention missing or implied code.
+- If a question asks about the behavior or output of a particular code snippet or program, its complete standalone snippet MUST be in the "code" field. Never ask about a specific program output without including the snippet.
 - For CODE_READING or DEBUGGING, every single question MUST have code. For other styles, use code only where appropriate and keep purely conceptual items code-free.
 - Return ONLY JSON array, no markdown, no explanations.${quizGuidance ? `\n${quizGuidance}` : ""}${responseLanguageInstruction}`
       : `Створи тест виключно по мові ${langName}. Теми для питань: ${params.prevTopics}.
@@ -2067,7 +2071,7 @@ REQUIREMENTS:
 - Кожне питання має рівно 5 варіантів відповіді
 - Формат: ТІЛЬКИ ВАЛІДНИЙ JSON масив без жодного додаткового тексту
 - Кожне питання має формат: {"q": "текст питання", "code": "повний код або порожній рядок", "codeLanguage": "${langName}", "options": ["А", "Б", "В", "Г", "Д"], "correct": 0}
-- Якщо питання згадує код, виконання програми або її вивід, повний самодостатній фрагмент ОБОВ’ЯЗКОВО має бути в полі "code". Не посилайся на відсутній чи уявний код.
+- Якщо питання просить визначити поведінку або результат конкретного фрагмента коду чи програми, повний самодостатній фрагмент ОБОВ’ЯЗКОВО має бути в полі "code". Не питай про результат конкретної програми без фрагмента.
 - Для стилю CODE_READING або DEBUGGING кожне без винятку питання має містити код. Для інших стилів додавай код лише до доречних питань, а суто поняттєві залишай без нього.
 - Відповідай ТІЛЬКИ JSON масивом, без пояснень, без markdown.${quizGuidance ? `\n${quizGuidance}` : ""}${responseLanguageInstruction}`;
     let lastError: Error | null = null;
@@ -2081,6 +2085,7 @@ REQUIREMENTS:
           userId: params.userId,
           topicId: params.topicId,
           signal: params.signal,
+          validationRetry: attempt > 0,
           temperature: 0.7,
           maxTokens,
           language: params.language ?? 'uk',
@@ -2181,7 +2186,9 @@ REQUIREMENTS:
         const message = errorMessage(err);
         lastError = err instanceof Error ? err : new Error(message);
         if (attempt < maxRetries) {
-          userPrompt += `\n\nПопередню відповідь відхилено: ${message}. Якщо питання посилається на код, додай повний код у поле "code" і вкажи "codeLanguage". Для CODE_READING або DEBUGGING код обов’язковий у кожному питанні. Поверни ТІЛЬКИ JSON-масив із ${questionCount} питаннями, кожне з 5 варіантами відповіді; без тексту поза JSON.`;
+          userPrompt += isEnglish
+            ? `\n\nThe previous response was rejected: ${message}. For any question about the behavior or output of a specific code snippet, add its complete standalone code to the "code" field and set "codeLanguage". Code is required in every question for CODE_READING or DEBUGGING. Return only a JSON array of exactly ${questionCount} questions with 5 options each.`
+            : `\n\nПопередню відповідь відхилено: ${message}. Якщо питання просить визначити поведінку або результат конкретного фрагмента коду, додай повний самодостатній код у поле "code" і вкажи "codeLanguage". Для CODE_READING або DEBUGGING код обов’язковий у кожному питанні. Поверни лише JSON-масив із рівно ${questionCount} питаннями, кожне з 5 варіантами відповіді.`;
           await new Promise(r => setTimeout(r, 1000));
           continue;
         }
