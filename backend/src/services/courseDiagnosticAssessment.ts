@@ -12,6 +12,7 @@ import {
 } from "../entities/CourseDiagnosticAssessment";
 import { UserCourseEnrollment } from "../entities/UserCourseEnrollment";
 import { getLLMOrchestrator } from "./llm/LLMOrchestrator";
+import { safeAICall } from "./ai/safeAICall";
 import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeLanguage } from "./judgeWorker/types";
 import { projectEntryFile } from "./learningCatalogProjectFiles";
@@ -315,18 +316,36 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
           `Constraints: ${generatedTask.constraints}`,
           `Examples: ${generatedTask.examples.map((example) => `Input:\n${example.input}\nOutput:\n${example.output}`).join("\n")}`,
         ].join("\n\n");
-        const tests = await runAtAssessmentStage("hidden_tests", () => llm.generateTestDataWithAI({
+        const tests = await runAtAssessmentStage("hidden_tests", async () => {
+          const result = await safeAICall<Array<{ input: string; output: string; explanation?: string }>>("generateTestData", {
             taskTitle: generatedTask.title,
             taskDescription,
             lang: runtime,
             count: 5,
             ioType: generatedTask.ioType ?? "STDIN_STDOUT",
-            language,
             userId,
-            requestId,
             publicExamples: generatedTask.examples,
             requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
-          }));
+          }, { language, requestId, maxAttempts: 2 });
+          if (result.success) return result.data;
+
+          const resultDetails = recordOf(result.error.details);
+          const validationMessage = typeof resultDetails?.validationError === "string"
+            ? resultDetails.validationError
+            : String(result.error.error ?? result.error.message);
+          const contractFailure = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:\s*(.*)$/s);
+          const providerStatus = result.error.statusCode;
+          const statusCode = providerStatus === 429 || providerStatus === 503 || providerStatus === 504
+            ? providerStatus
+            : 503;
+          throw Object.assign(new Error(validationMessage), {
+            name: "AIValidationError",
+            statusCode,
+            mode: "generateTestData",
+            ...(contractFailure ? { invalidSource: contractFailure[1], issues: [contractFailure[2]] } : {}),
+            cause: result.error,
+          });
+        });
         const cleanTests = tests
           .map((test) => ({ input: text(test.input, 10_000), output: text(test.output, 10_000) }))
           .filter((test) => test.input.length > 0 && test.output.length > 0)

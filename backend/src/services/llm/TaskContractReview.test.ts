@@ -589,6 +589,19 @@ test('generated-test review receives required coverage and public examples', asy
   assert.deepEqual(review.publicExamples, [{ input: '3', output: '6' }]);
 });
 
+test('test review treats 0.00 as numeric precision unless the statement requires that literal', async () => {
+  const calls: string[] = [];
+  const systemPrompts: string[] = [];
+  await reviewGeneratedTests(
+    fakeProvider([{ valid: true, invalidSource: 'none', issues: [] }], calls, systemPrompts),
+    'Read a decimal value and print the calculated result rounded to two decimal places.',
+    'STDIN_STDOUT',
+    [{ input: '0.01', output: '0.01' }],
+  );
+  assert.match(systemPrompts[0], /format pattern such as "0\.00" \(two decimal places\)/);
+  assert.match(systemPrompts[0], /Still reject it if the calculated result is wrong/);
+});
+
 test('Tkinter test review uses the UI-event contract instead of console IO assumptions', async () => {
   const calls: string[] = [];
   const systemPrompts: string[] = [];
