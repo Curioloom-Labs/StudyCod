@@ -565,7 +565,7 @@ test('Olympiad task generation rejects no-input responses despite the legacy sof
     allowedIoTypes: ['STDIN_STDOUT'],
   }, { maxAttempts: 1 });
   assert.equal(result.success, false);
-  if (!result.success) assert.match(String(result.error.details?.validationError), /requires a stdin\/stdout Judge problem/);
+  if (!result.success) assert.match(String(result.error.details?.validationError), /ioType NO_INPUT_FIXED_OUTPUT is not in allowedIoTypes \(STDIN_STDOUT\)/);
 });
 
 test('test review rejects a mathematically wrong expected answer', async () => {
