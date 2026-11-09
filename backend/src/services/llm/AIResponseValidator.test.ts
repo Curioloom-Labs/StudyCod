@@ -383,6 +383,10 @@ test('AIResponseValidator.validateGenerateTask: coerces a disallowed stdin type 
   );
   assert.equal(result.ioType, 'NO_INPUT_FIXED_OUTPUT');
   assert.equal(result.examples[0]?.input, '');
+  assert.throws(
+    () => AIResponseValidator.validateGenerateTask(data, 'Data types and variables', 1, ['STDIN_STDOUT']),
+    /Task generation validation failed: ioType NO_INPUT_FIXED_OUTPUT is not in allowedIoTypes/,
+  );
 });
 
 test('AIResponseValidator.validateGenerateTask: repairs STDIN type when both statement and input format say no input', () => {

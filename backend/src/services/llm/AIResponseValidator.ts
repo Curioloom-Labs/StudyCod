@@ -743,6 +743,12 @@ export class AIResponseValidator {
     try {
       const fixed = this.fixTaskGenerationData(data, allowedIoTypes);
       const validated = TaskGenerationSchema.parse(fixed);
+      if (Array.isArray(allowedIoTypes) && allowedIoTypes.length > 0 && !allowedIoTypes.includes(validated.ioType)) {
+        throw makeAIValidationError(
+          'generateTask',
+          `Task generation validation failed: ioType ${validated.ioType} is not in allowedIoTypes (${allowedIoTypes.join(', ')}).`,
+        );
+      }
 
       // Conditional IO semantics validation.
       const ioType = validated.ioType;

@@ -122,6 +122,7 @@ test('EDU task condition uses structured JSON generation and forwards repair fee
   assert.equal(call.options?.promptId, 'task.condition-draft');
   assert.match(call.prompt, /Use three distinct examples\./);
   assert.match(call.systemPrompt ?? '', /JSON-об’єкт/);
+  assert.match(call.systemPrompt ?? '', /рівно ту кількість різних коректних прикладів вводу\/виводу, яку вимагають інструкції до задачі/);
   assert.match(call.systemPrompt ?? '', /вбудований Markdown/);
   assert.match(call.systemPrompt ?? '', /n\+1 токенів/);
   assert.match(call.systemPrompt ?? '', /лише прихований Python 3 оракул/);

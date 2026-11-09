@@ -238,13 +238,16 @@ function taskAnchorRedisKey(cacheKey: string): string {
 function buildTaskAnchorCacheKey(params: {
   topicTitle: string;
   lang: LLMTaskLanguage;
+  allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
 }): string {
-  // Bump this when the semantic anchor contract changes. Old anchors can
-  // contain implementation hints (for example, "use if/else or switch") and
-  // must not leak into otherwise clean task prompts after a deployment.
+  // Bump this when the semantic anchor contract changes. Include the IO
+  // contract so a cached no-input anchor cannot constrain a stdin task.
   const modelConfig = [env.LLM_PROVIDER, env.OPENROUTER_MODEL, env.OPENROUTER_TEXT_MODEL, env.OPENROUTER_JSON_MODEL, env.OPENROUTER_FALLBACK_MODELS, env.OPENROUTER_MODEL_FALLBACKS, env.LOCAL_LLM_MODEL].map(value => String(value ?? '').trim()).join('|');
   const modelVersion = createHash('sha256').update(modelConfig).digest('hex').slice(0, 10);
-  return `v3|${getActivePromptBundleVersion()}|${PROMPT_SCHEMA_VERSION}|${modelVersion}|${params.lang}|${String(params.topicTitle ?? '').trim().toLowerCase()}`;
+  const allowedIoTypes = Array.isArray(params.allowedIoTypes) && params.allowedIoTypes.length
+    ? [...params.allowedIoTypes].sort().join(',')
+    : 'ALL';
+  return `v4|${getActivePromptBundleVersion()}|${PROMPT_SCHEMA_VERSION}|${modelVersion}|${params.lang}|${allowedIoTypes}|${String(params.topicTitle ?? '').trim().toLowerCase()}`;
 }
 
 function compactPromptText(raw: string, maxLength: number): string {
@@ -669,6 +672,7 @@ export class LLMOrchestrator {
   private async generateTaskAnchor(params: {
     topicTitle: string;
     lang: LLMTaskLanguage;
+    allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
     userId?: number;
     topicId?: number;
     language?: "uk" | "en";
@@ -683,6 +687,15 @@ export class LLMOrchestrator {
     const provider = providerOverride ?? this.openRouterProvider;
     const langName = topicLanguageLabel(params.lang);
     const isEnglish = params.language === "en";
+    const allowedIoTypes = Array.isArray(params.allowedIoTypes) && params.allowedIoTypes.length
+      ? params.allowedIoTypes
+      : ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"];
+    const stdinRequired = allowedIoTypes.length === 1 && allowedIoTypes[0] === "STDIN_STDOUT";
+    const ioContract = stdinRequired
+      ? isEnglish
+        ? "The task MUST read at least one concrete value from stdin and its output MUST depend on that value. A fixed-output or no-input task is forbidden."
+        : "Завдання ОБОВ'ЯЗКОВО має зчитувати зі stdin щонайменше одне конкретне значення, а результат має залежати від нього. Завдання без вводу або з фіксованим результатом заборонене."
+      : "";
     const anchorSchema = {
       type: "object",
       properties: {
@@ -692,7 +705,10 @@ export class LLMOrchestrator {
         },
         coreOperation: {
           type: "string",
-          description: isEnglish ? "One clear statement of exactly what needs to be done" : "Одна чітке формулювання того, ЩО саме потрібно зробити"
+          description: [
+            isEnglish ? "One clear statement of exactly what needs to be done" : "Одна чітке формулювання того, ЩО саме потрібно зробити",
+            ioContract,
+          ].filter(Boolean).join(" ")
         },
         allowedScope: {
           type: "array",
@@ -720,6 +736,7 @@ export class LLMOrchestrator {
 CRITICALLY IMPORTANT:
 - The "topic" field in JSON MUST exactly match "${params.topicTitle}" (1:1)
 - coreOperation: ONE clear statement of the observable behaviour the program must produce (always emphasize: "write a complete program that..."). Describe the required result, not the implementation method.
+- IO contract: ${ioContract || `Use only one of these allowed input/output modes: ${allowedIoTypes.join(" | ")}.`}
 - If the topic is about if/else, switch, loops, recursion, sorting, or another construct, NEVER put that construct in coreOperation as an instruction such as "use if/else". The learner-facing task must test the behaviour without revealing the solution technique.
 - allowedScope: what is allowed in the task (must include "complete program with main()")
 - forbiddenScope: ALWAYS include: "standalone function/method/class implementation" and "unit tests" — even if the topic is about functions, the task must be about writing a complete program, not just implementing a function
@@ -730,6 +747,7 @@ Return ONLY JSON without explanations.`
 КРИТИЧНО ВАЖЛИВО:
 - Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.topicTitle}" точно (1:1)
 - coreOperation: ОДНА дія, що описує спостережувану поведінку програми (завжди наголошуй: "напиши повну програму, яка..."). Описуй очікуваний результат, а не спосіб реалізації.
+- Контракт вводу/виводу: ${ioContract || `Використовуй лише один із дозволених режимів: ${allowedIoTypes.join(" | ")}.`}
 - Якщо тема про if/else, switch, цикли, рекурсію, сортування чи іншу конструкцію, НІКОЛИ не перетворюй coreOperation на інструкцію "використай if/else". Умова має перевіряти поведінку, але не розкривати техніку розв'язання.
 - allowedScope: що дозволено робити в завданні (ОБОВ'ЯЗКОВО "повна програма з main()")
 - forbiddenScope: ЗАВЖДИ включай: "реалізація окремих функцій/методів/класів" та "unit-тести" — навіть якщо тема про функції, завдання ПОВИННО бути про написання повної програми, а не просто реалізацію функції
@@ -738,12 +756,15 @@ Return ONLY JSON without explanations.`
     const expectedTopic = params.topicTitle.trim();
     const cacheKey = buildTaskAnchorCacheKey({
       topicTitle: expectedTopic,
-      lang: params.lang
+      lang: params.lang,
+      allowedIoTypes: params.allowedIoTypes,
     });
     const fallbackAnchor = isEnglish ? {
       topic: expectedTopic,
-      coreOperation: `Solve a problem on the topic "${expectedTopic}" and output the result to stdout`,
-      allowedScope: [expectedTopic, 'basic language constructs', 'stdout output', 'complete program with main()'],
+      coreOperation: stdinRequired
+        ? `Read at least one concrete value from stdin, solve a problem on the topic "${expectedTopic}", and output a result that depends on the input.`
+        : `Solve a problem on the topic "${expectedTopic}" and output the result to stdout`,
+      allowedScope: [expectedTopic, ...(stdinRequired ? ['read stdin'] : []), 'basic language constructs', 'stdout output', 'complete program with main()'],
       forbiddenScope: [
         'multi-task structure',
         'compiler meta-messages',
@@ -755,8 +776,10 @@ Return ONLY JSON without explanations.`
       ]
     } : {
       topic: expectedTopic,
-      coreOperation: `Розв'язати задачу з теми "${expectedTopic}" та вивести результат у stdout`,
-      allowedScope: [expectedTopic, 'базові конструкції мови', 'вивід у stdout', 'повна програма з main()'],
+      coreOperation: stdinRequired
+        ? `Зчитати зі stdin щонайменше одне конкретне значення, розв'язати задачу з теми "${expectedTopic}" і вивести результат, що залежить від вводу.`
+        : `Розв'язати задачу з теми "${expectedTopic}" та вивести результат у stdout`,
+      allowedScope: [expectedTopic, ...(stdinRequired ? ['читання stdin'] : []), 'базові конструкції мови', 'вивід у stdout', 'повна програма з main()'],
       forbiddenScope: [
         'multi-task структура',
         'мета-повідомлення компілятора',
@@ -1680,6 +1703,8 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     const provider = providerOverride ?? this.openRouterProvider;
     const isIntroTopic = params.topicIndex === 0;
     const isEnglish = params.language === "en";
+    const allowsNoInput = !Array.isArray(params.allowedIoTypes) || params.allowedIoTypes.length === 0
+      || params.allowedIoTypes.some((ioType) => ioType === "NO_INPUT_FIXED_OUTPUT" || ioType === "NO_INPUT_FREE_OUTPUT");
     const olympiadContract = parseOlympiadPracticeContract(params.theory);
     const anchor = olympiadContract
       ? {
@@ -1688,7 +1713,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
           allowedScope: olympiadContract.allowedScope,
           forbiddenScope: olympiadContract.forbiddenScope,
         }
-      : isIntroTopic
+      : isIntroTopic && allowsNoInput
       ? {
           topic: params.topicTitle,
           coreOperation: isEnglish
@@ -1700,6 +1725,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
       : await this.generateTaskAnchor({
           topicTitle: params.topicTitle,
           lang: params.lang,
+          allowedIoTypes: params.allowedIoTypes,
           userId: params.userId,
           topicId: params.topicId,
           language: params.language,
@@ -2617,13 +2643,13 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
           "The statement must describe what the program does, never how to implement it. Do not reveal algorithms, solution steps, or implementation hints.",
           "Define a precise input grammar, valid domain, output format, and any boundary, tie, ordering, duplicate, default, or no-result rules that affect the answer.",
           "For count-prefixed lists, the first token n is a header: one n token followed by exactly n values is valid and has n+1 total tokens. Verify the number of values after n; never require the total token count to equal n.",
-          "The referenceSolution field is only a hidden Python 3 oracle, unrelated to the student's programming language. Return complete, executable Python 3 source there; never put Java, C++, another language, Markdown fences, or a leading backslash in that field. Do not hardcode the three examples. The server executes this oracle on every public example and rejects output mismatches.",
+          "The referenceSolution field is only a hidden Python 3 oracle, unrelated to the student's programming language. Return complete, executable Python 3 source there; never put Java, C++, another language, Markdown fences, or a leading backslash in that field. Do not hardcode any public example. The server executes this oracle on every public example and rejects output mismatches.",
           params.includeSubtasks === false
             ? "Return an empty subtasks array."
             : "When the task has naturally progressive, independently testable requirements, split them into 2–5 learner-facing subtasks. Allocate integer percentages of the total maximum score; weights must sum to exactly 100. Use the simplest first tier and progressively harder tiers. For a truly single-skill task, use an empty subtasks array. Do not invent tiers just to fill the list.",
           runtimeProfile === "TKINTER"
-            ? "Provide exactly three distinct valid JSON UI-event inputs and expected widget-tree snapshots. The Tk harness injects events into the real window and supplies the snapshot; these expected outputs are not stdout. Keep each input within the supported event schema and make each example distinct."
-            : "Provide exactly three distinct valid input/output examples and manually verify every output against the statement. Each output must be exact stdout; empty stdout is allowed only when outputFormat explicitly defines an empty line. An empty input string is allowed only when the statement explicitly requires no input.",
+            ? "Provide exactly the number of distinct valid JSON UI-event inputs and expected widget-tree snapshots requested in the task instructions (default to three only when no count is specified). The Tk harness injects events into the real window and supplies the snapshot; these expected outputs are not stdout. Keep each input within the supported event schema and make each example distinct."
+            : "Provide exactly the number of distinct valid input/output examples requested in the task instructions (default to three only when no count is specified) and manually verify every output against the statement. Each output must be exact stdout; empty stdout is allowed only when outputFormat explicitly defines an empty line. An empty input string is allowed only when the statement explicitly requires no input.",
           "Keep statement, inputFormat, outputFormat, constraints, and examples consistent. Put only raw input data in each example input and only the exact expected result in each example output.",
           ...(runtimeInstructions ? [runtimeInstructions] : []),
           ...(runtimeProfile === "TKINTER" ? ["For every widget targeted by a click, specify fixed placement with place(x, y, width, height), its clickable rectangle, and the window geometry in the learner-facing statement. Ensure target rectangles do not overlap and each click example lands strictly inside the center of its named widget. State the focused widget for type/key events and call focus_force() before mainloop when a text-entry event is used. Explicitly define the order of root widgets and every nested children array as Tk winfo_children() creation order, and make the reference create widgets in that order; this order is observable in the exact snapshot. Specify the root title, geometry, widget classes, visible text, initial values, and event effects so each snapshot is uniquely derivable. Never infer targets from coordinates alone; inputs are JSON objects with an events array. The harness snapshot contains root title and geometry plus each widget's type, children, and available text/value/state; it does not include per-widget x/y/width/height, so never require those fields in example outputs."] : []),
@@ -2649,8 +2675,8 @@ Choose difficulty from 1 to 5 based on the title, class, and prerequisites. If t
             ? "Поверни порожній масив subtasks."
             : "Якщо задача має природні поступові й незалежно перевірювані вимоги, розбий їх на 2–5 підзадач для учня. Розподіли цілі відсотки від максимальної оцінки; сума ваг має дорівнювати рівно 100. Перша підзадача має бути найпростішою, наступні — поступово складнішими. Для справді одноетапної задачі поверни порожній масив subtasks. Не вигадуй етапи лише заради списку.",
           runtimeProfile === "TKINTER"
-            ? "Поверни рівно три різні коректні JSON-приклади UI-подій і очікуваних знімків дерева віджетів. Tk harness вводить події у справжнє вікно й формує знімок; ці очікувані результати не є stdout. Дотримуйся підтримуваної схеми подій."
-            : "Поверни рівно три різні коректні приклади вводу/виводу та вручну перевір кожен результат за умовою. Кожен output має точно відповідати stdout; порожній stdout дозволений лише коли outputFormat прямо визначає порожній рядок. Порожній input дозволений лише коли умова прямо вказує, що вводу немає.",
+            ? "Поверни рівно ту кількість різних коректних JSON-прикладів UI-подій і очікуваних знімків дерева віджетів, яку вимагають інструкції до задачі (якщо кількість не вказана — три). Tk harness вводить події у справжнє вікно й формує знімок; ці очікувані результати не є stdout. Дотримуйся підтримуваної схеми подій."
+            : "Поверни рівно ту кількість різних коректних прикладів вводу/виводу, яку вимагають інструкції до задачі (якщо кількість не вказана — три), та вручну перевір кожен результат за умовою. Кожен output має точно відповідати stdout; порожній stdout дозволений лише коли outputFormat прямо визначає порожній рядок. Порожній input дозволений лише коли умова прямо вказує, що вводу немає.",
           "Узгодь statement, inputFormat, outputFormat, constraints та examples. У кожному input подавай лише сирі дані, а в output — лише точний очікуваний результат.",
           ...(runtimeInstructions ? [runtimeInstructions] : []),
           ...(runtimeProfile === "TKINTER" ? ["Для кожного віджета, на який спрямовано клік, задай в учнівській умові фіксоване розташування через place(x, y, width, height), область кліку та геометрію вікна. Прямокутники цільових віджетів не повинні перетинатися; координата кожного кліку в прикладі має бути чітко всередині центру названого віджета. Вкажи сфокусований віджет для type/key і викликай focus_force() перед mainloop, якщо використовуються події введення тексту. Явно задай порядок кореневих віджетів і кожного вкладеного масиву children за порядком створення Tk winfo_children(); цей порядок спостерігається у точному знімку. Еталон має створювати віджети саме в такому порядку. Вкажи заголовок і геометрію вікна, класи віджетів, видимі тексти, початкові значення й наслідки подій, щоб кожен знімок можна було однозначно вивести з умови. Не виводь ціль лише з координат; ввід — JSON-об’єкт із масивом events. Snapshot harness містить заголовок і геометрію вікна, а також type, children і наявні text/value/state віджетів; він не містить x/y/width/height окремих віджетів, тому не вимагай цих полів у прикладах."] : []),

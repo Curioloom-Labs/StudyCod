@@ -17,7 +17,7 @@ import { safeAICall } from "./ai/safeAICall";
 import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeLanguage } from "./judgeWorker/types";
 import { projectEntryFile } from "./learningCatalogProjectFiles";
-import { localizeCourseItem, localizedCourseDescription, localizedCourseTitle, localizedModuleTitle, type CurriculumLocale } from "./curriculumLocalization";
+import { localizeCourseItem, localizedCourseTitle, localizedModuleTitle, type CurriculumLocale } from "./curriculumLocalization";
 import { logger } from "../utils/logger";
 
 const assessmentRepo = () => AppDataSource.getRepository(CourseDiagnosticAssessment);
@@ -66,6 +66,22 @@ export function assessmentFailureReason(error: unknown): string {
   if (/empty (ai )?response/i.test(message)) return "empty_provider_response";
   if (/json|parse|schema|invalid response|validation/i.test(message)) return "invalid_provider_response";
   return "provider_generation_failed";
+}
+
+const RETRYABLE_DIAGNOSTIC_TASK_PROVIDER_FAILURE_REASONS = new Set([
+  "provider_generation_failed",
+  "provider_unavailable",
+  "provider_timeout",
+  "invalid_provider_response",
+  "empty_provider_response",
+]);
+
+function isRetryableDiagnosticTaskProviderFailure(error: unknown): boolean {
+  const details = recordOf(error);
+  if (details?.assessmentStage !== "practical_task") return false;
+  const statusCode = Number(details.statusCode);
+  if (Number.isFinite(statusCode) && ![502, 503, 504].includes(statusCode)) return false;
+  return RETRYABLE_DIAGNOSTIC_TASK_PROVIDER_FAILURE_REASONS.has(assessmentFailureReason(error));
 }
 
 /** Select bounded, non-payload diagnostics; deliberately never includes rawResponse or prompts. */
@@ -137,6 +153,26 @@ function chunks<T>(items: T[], size: number): T[][] {
 }
 
 type CourseDiagnosticTestCase = { input: string; output: string };
+const DIAGNOSTIC_QUESTION_BATCH_SIZE = 4;
+const DIAGNOSTIC_PRACTICAL_TASK_COUNT = 5;
+
+export function groupDiagnosticTopicsForPracticals(
+  topics: CourseDiagnosticTopic[],
+  requestedTaskCount = DIAGNOSTIC_PRACTICAL_TASK_COUNT,
+): CourseDiagnosticTopic[][] {
+  if (!topics.length) return [];
+  const taskCount = Math.min(topics.length, Math.max(1, Math.floor(requestedTaskCount)));
+  const groups: CourseDiagnosticTopic[][] = [];
+  let offset = 0;
+  for (let taskIndex = 0; taskIndex < taskCount; taskIndex += 1) {
+    const tasksRemaining = taskCount - taskIndex;
+    const topicsRemaining = topics.length - offset;
+    const groupSize = Math.ceil(topicsRemaining / tasksRemaining);
+    groups.push(topics.slice(offset, offset + groupSize));
+    offset += groupSize;
+  }
+  return groups;
+}
 
 export function canFallbackToDiagnosticPublicExamples(validationMessage: string): boolean {
   const rejectedSource = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:/s)?.[1];
@@ -148,15 +184,17 @@ export function shouldRegenerateDiagnosticTask(error: unknown): boolean {
   if (details?.invalidSource === "statement" || details?.invalidSource === "publicExamples") return true;
   const message = String(details?.message ?? "");
   if (/\b(?:CORE_OPERATION_MISSING|TOPIC_MISMATCH_HARD_FAIL|FORBIDDEN_SCOPE_VIOLATION|MULTI_TASK_NOT_ALLOWED):/i.test(message)) return true;
+  if (isRetryableDiagnosticTaskProviderFailure(error)) return true;
   return details?.name === "AIValidationError"
     && details?.mode === "generateTask"
     && /^Task generation validation failed:/i.test(message);
 }
 
-function diagnosticTaskRegenerationReason(error: unknown): "statement" | "publicExamples" | "shallowDecision" | "implementationHint" | "emptyOutput" | "coreOperation" | "topicMismatch" | "forbiddenScope" | "multipleTasks" | "taskValidation" | null {
+function diagnosticTaskRegenerationReason(error: unknown): "statement" | "publicExamples" | "shallowDecision" | "implementationHint" | "emptyOutput" | "coreOperation" | "topicMismatch" | "forbiddenScope" | "multipleTasks" | "providerFailure" | "taskValidation" | null {
   const details = recordOf(error);
   if (details?.invalidSource === "statement") return "statement";
   if (details?.invalidSource === "publicExamples") return "publicExamples";
+  if (isRetryableDiagnosticTaskProviderFailure(error)) return "providerFailure";
   if (!shouldRegenerateDiagnosticTask(error)) return null;
   const message = String(details?.message ?? "");
   if (/decision task is too shallow/i.test(message)) return "shallowDecision";
@@ -216,6 +254,10 @@ export function selectCourseDiagnosticTestCases(
   return examples.length ? { tests: examples, source: "public_examples" } : null;
 }
 
+export function isDiagnosticPracticalInputContractValid(ioType: unknown, publicExamples: unknown): boolean {
+  return ioType === "STDIN_STDOUT" && selectCourseDiagnosticTestCases([], publicExamples) !== null;
+}
+
 type DiagnosticTestGenerationResult =
   | { success: true; data: unknown }
   | { success: false; error: { details?: unknown; error?: unknown; message?: unknown } };
@@ -270,6 +312,7 @@ export function normalizeQuestions(
   topicAssignments: CourseDiagnosticTopic[],
   expectedCount: number,
   startIndex: number,
+  allowPartial = false,
 ): CourseDiagnosticQuestion[] {
   let parsed: unknown = rawQuiz;
   if (typeof parsed === "string") {
@@ -301,7 +344,7 @@ export function normalizeQuestions(
     });
     if (questions.length >= expectedCount) break;
   }
-  if (questions.length !== expectedCount) throw assessmentError("ASSESSMENT_QUESTIONS_INVALID", 503);
+  if (questions.length !== expectedCount && !allowPartial) throw assessmentError("ASSESSMENT_QUESTIONS_INVALID", 503);
   return questions;
 }
 
@@ -316,12 +359,16 @@ export function hasExactDiagnosticQuestionCoverage(
   return expected.size === actual.size && [...expected].every(([topicId, count]) => actual.get(topicId) === count);
 }
 
-export async function generateDiagnosticQuestionsWithCoverageRetry<T>(
-  topicAssignments: Array<Pick<CourseDiagnosticTopic, "id">>,
-  generate: (coverageFeedback?: string) => Promise<T>,
-  normalize: (raw: T) => CourseDiagnosticQuestion[],
+export async function generateDiagnosticQuestionsWithCoverageRetry<
+  TTopic extends Pick<CourseDiagnosticTopic, "id">,
+  T,
+>(
+  topicAssignments: TTopic[],
+  generate: (assignments: TTopic[], coverageFeedback?: string) => Promise<T>,
+  normalize: (raw: T, assignments: TTopic[], startIndex: number) => CourseDiagnosticQuestion[],
+  startIndex = 0,
 ): Promise<CourseDiagnosticQuestion[]> {
-  const first = normalize(await generate());
+  const first = normalize(await generate(topicAssignments), topicAssignments, startIndex);
   if (hasExactDiagnosticQuestionCoverage(first, topicAssignments)) return first;
 
   const expected = new Map<number, number>();
@@ -331,15 +378,66 @@ export async function generateDiagnosticQuestionsWithCoverageRetry<T>(
   const findings = [...expected].filter(([topicId, count]) => actual.get(topicId) !== count)
     .map(([topicId, count]) => `topic ${topicId}: expected ${count}, received ${actual.get(topicId) ?? 0}`);
   const feedback = [
-    "REGENERATE THIS QUESTION BATCH. The previous response did not cover the assigned topics exactly.",
+    "GENERATE ONLY THE MISSING QUESTIONS. Keep the valid questions from the previous response; do not regenerate them.",
     `Coverage findings: ${findings.join("; ")}.`,
-    "Return exactly one question for each listed assignment, in the listed order, with the matching [topic:ID] marker. Do not add or omit questions.",
+    "Return exactly one question for each supplied missing assignment, in order, with the matching [topic:ID] marker. Do not add or omit questions.",
   ].join("\n");
-  const replacement = normalize(await generate(feedback));
-  if (!hasExactDiagnosticQuestionCoverage(replacement, topicAssignments)) {
+  const retainedByTopic = new Map<number, CourseDiagnosticQuestion[]>();
+  for (const question of first) {
+    const limit = expected.get(question.topicId) ?? 0;
+    const retained = retainedByTopic.get(question.topicId) ?? [];
+    if (retained.length < limit) retained.push(question);
+    retainedByTopic.set(question.topicId, retained);
+  }
+
+  const retainedQuestionCount = [...retainedByTopic.values()].reduce((total, questions) => total + questions.length, 0);
+  const missingAssignments: TTopic[] = [];
+  const assignmentOccurrences = new Map<number, number>();
+  for (const assignment of topicAssignments) {
+    const occurrence = (assignmentOccurrences.get(assignment.id) ?? 0) + 1;
+    assignmentOccurrences.set(assignment.id, occurrence);
+    if ((retainedByTopic.get(assignment.id)?.length ?? 0) < occurrence) missingAssignments.push(assignment);
+  }
+
+  if (!missingAssignments.length) {
+    const occurrences = new Map<number, number>();
+    return topicAssignments.map((assignment, index) => {
+      const occurrence = occurrences.get(assignment.id) ?? 0;
+      occurrences.set(assignment.id, occurrence + 1);
+      const question = retainedByTopic.get(assignment.id)?.[occurrence];
+      if (!question) throw assessmentError("ASSESSMENT_QUESTIONS_INVALID", 503);
+      return { ...question, id: `q${startIndex + index + 1}` };
+    });
+  }
+
+  const replacement = normalize(
+    await generate(missingAssignments, feedback),
+    missingAssignments,
+    startIndex + retainedQuestionCount,
+  );
+  if (!hasExactDiagnosticQuestionCoverage(replacement, missingAssignments)) {
     throw assessmentError("ASSESSMENT_QUESTIONS_INVALID", 503);
   }
-  return replacement;
+
+  const replacementByTopic = new Map<number, CourseDiagnosticQuestion[]>();
+  for (const question of replacement) {
+    const questions = replacementByTopic.get(question.topicId) ?? [];
+    questions.push(question);
+    replacementByTopic.set(question.topicId, questions);
+  }
+
+  const merged: CourseDiagnosticQuestion[] = [];
+  const mergedOccurrences = new Map<number, number>();
+  for (const assignment of topicAssignments) {
+    const occurrence = mergedOccurrences.get(assignment.id) ?? 0;
+    mergedOccurrences.set(assignment.id, occurrence + 1);
+    const retained = retainedByTopic.get(assignment.id) ?? [];
+    const question = retained[occurrence] ?? replacementByTopic.get(assignment.id)?.[occurrence - retained.length];
+    if (!question) throw assessmentError("ASSESSMENT_QUESTIONS_INVALID", 503);
+    merged.push(question);
+  }
+
+  return merged.map((question, index) => ({ ...question, id: `q${startIndex + index + 1}` }));
 }
 
 function courseDiagnosticTopics(course: Course, locale: CurriculumLocale): CourseDiagnosticTopic[] {
@@ -392,7 +490,6 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
   const requestId = `assessment-${crypto.randomUUID()}`;
   const courseContext = [
     `Course: ${localizedCourseTitle(course, locale)}.`,
-    localizedCourseDescription(course, locale)?.slice(0, 1_000),
     "Generate new assessment content using only the curriculum topics supplied with each task.",
     `Variation token (never include it in the learner-facing text): ${seed}`,
   ].filter(Boolean).join("\n");
@@ -402,44 +499,45 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
   const language = locale === "en" ? "en" : "uk";
   try {
     const questionAssignments = topics.flatMap((topic) => Array.from({ length: 2 }, () => topic));
-    const questionBatches = chunks(questionAssignments, 4);
-    const practicalGroups: CourseDiagnosticTopic[][] = [];
-    for (const topic of topics) {
-      const currentGroup = practicalGroups[practicalGroups.length - 1];
-      if (!currentGroup || currentGroup[0].moduleId !== topic.moduleId || currentGroup.length >= 4) {
-        practicalGroups.push([topic]);
-      } else {
-        currentGroup.push(topic);
-      }
-    }
+    const questionBatches = chunks(questionAssignments, DIAGNOSTIC_QUESTION_BATCH_SIZE);
+    const practicalGroups = groupDiagnosticTopicsForPracticals(topics);
 
     const generationFailureState = { failed: false };
     const [questionResult, practicalResult] = await Promise.allSettled([
       // Keep provider concurrency bounded to avoid retry-budget exhaustion.
       mapWithConcurrency(questionBatches, 1, async (topicAssignments, batchIndex) => {
         try {
-          const questionPlan = [
-            "QUESTION COVERAGE PLAN. Generate exactly one question for each listed assignment, in order. Prefix q with [topic:ID].",
-            ...topicAssignments.map((topic, index) => `Question ${index + 1}: [topic:${topic.id}] ${topic.title}. Test this topic only. ${topic.context}`),
-            "When the same topic appears twice, assess two different skills. The [topic:ID] marker is metadata and must be at the beginning of q.",
-          ].join("\n");
           const baseGuidance = language === "en"
             ? "COURSE DIAGNOSTIC KNOWLEDGE QUESTIONS: Test the assigned programming concept. Every question must be answerable from its wording and choices alone, without executing or tracing a program. Ask about language rules, syntax, terminology, and when a construct is used. Do not mention or refer to code, snippets, or programs in a question; never ask what one prints, returns, outputs, or does. If the assigned topic is flow control, ask about the meaning and use of conditions and branches without presenting a tiny list of values to map directly to outputs."
             : "ПИТАННЯ ДІАГНОСТИКИ ЗНАНЬ: Перевіряй призначене поняття з програмування. На кожне питання має бути можна відповісти лише за його формулюванням і варіантами, без запуску чи простеження програми. Питай про правила мови, синтаксис, терміни й призначення конструкцій. Не згадуй і не описуй код, фрагменти чи програми в питаннях; ніколи не питай, що програма виведе, поверне або виконає. Якщо тема стосується керування потоком, перевіряй значення й призначення умов та гілок без прямого зіставлення невеликого набору значень із результатами.";
           return runWithPromptExecutionContext("task.quiz", { traceId: requestId, forceNewContext: true }, () =>
             generateDiagnosticQuestionsWithCoverageRetry(
               topicAssignments,
-              (coverageFeedback) => llm.generateQuizWithAI({
-                lang: runtime,
-                prevTopics: `${courseContext}\n\n${questionPlan}`,
-                count: topicAssignments.length,
-                questionStyle: "CONCEPTS",
-                generationGuidance: [baseGuidance, coverageFeedback].filter(Boolean).join("\n\n"),
-                userId,
-                language,
-                requestId,
-              }),
-              (quiz) => normalizeQuestions(quiz.quizJson, topicAssignments, topicAssignments.length, batchIndex * 4),
+              (assignments, coverageFeedback) => {
+                const repairPlan = [
+                  "QUESTION COVERAGE PLAN. Generate exactly one question for each listed assignment, in order. Prefix q with [topic:ID].",
+                  ...assignments.map((topic, index) => `Question ${index + 1}: [topic:${topic.id}] ${topic.title}. Test this topic only. ${topic.context}`),
+                  "When the same topic appears twice, assess two different skills. The [topic:ID] marker is metadata and must be at the beginning of q.",
+                ].join("\n");
+                return llm.generateQuizWithAI({
+                  lang: runtime,
+                  prevTopics: `${courseContext}\n\n${repairPlan}`,
+                  count: assignments.length,
+                  questionStyle: "CONCEPTS",
+                  generationGuidance: [baseGuidance, coverageFeedback].filter(Boolean).join("\n\n"),
+                  userId,
+                  language,
+                  requestId,
+                });
+              },
+              (quiz, assignments, startIndex) => normalizeQuestions(
+                quiz.quizJson,
+                assignments as CourseDiagnosticTopic[],
+                assignments.length,
+                startIndex,
+                true,
+              ),
+              batchIndex * DIAGNOSTIC_QUESTION_BATCH_SIZE,
             ),
           );
         } catch (error) {
@@ -448,14 +546,14 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
       }, generationFailureState),
       mapWithConcurrency(practicalGroups, 2, async (topicGroup, taskIndex) => {
         const topicList = topicGroup.map((topic) => `- [topic:${topic.id}] ${topic.title}: ${topic.context}`).join("\n");
+        const moduleTitles = Array.from(new Set(topicGroup.map((topic) => topic.moduleTitle)));
         const groupSeed = `${seed}-task-${taskIndex + 1}`;
-        const topicTitle = topicGroup[0].moduleTitle.slice(0, 255);
+        const topicTitle = moduleTitles[0].slice(0, 255);
         const taskContext = [
-          courseContext,
-          `Module: ${topicTitle}`,
+          `Modules: ${moduleTitles.join(" · ")}`,
           `PRACTICAL ASSESSMENT ${taskIndex + 1}/${practicalGroups.length}. This task covers the following course topics:`,
           topicList,
-          `Variation token: ${groupSeed}. Generate a fresh integrated programming task that requires applying the listed topics. Do not use concepts outside the course. Include standard input/output, clear constraints, examples, and a concise starter template with TODO markers. Every public example must have concrete non-empty input and output; calculate each output from the exact task rules and ensure it matches the reference behavior. If a result would otherwise be empty, define and use a non-empty sentinel such as NONE. Describe observable behavior without prescribing an implementation technique.`,
+          `Variation token: ${groupSeed}. Generate a fresh, compact programming task that mixes at least two of the listed topics in one coherent problem and uses no concepts outside them. The task MUST use STDIN_STDOUT: read at least one concrete input token and make the output depend on that input. Never create a no-input, fixed-output, or constant-output task. Keep it as simple and deterministic as possible. Prefer one input/output transformation and a one-line output. Include exactly three short, distinct public examples, each with small, concrete, non-empty input and output; choose cases that are easy to calculate by hand, then verify every output against the written rules. Avoid combining unrelated subproblems, multi-block output, floating-point calculations, and condition branches unless the listed topics require them. Include clear input/output rules, constraints, and a concise starter template with TODO markers. If a result would otherwise be empty, define and use a non-empty sentinel such as NONE. Describe observable behavior without prescribing an implementation technique.`,
         ].join("\n\n");
         const generatePackage = async (generationContext: string): Promise<CourseDiagnosticPractical> => {
           const generatedTask = await runAtAssessmentStage("practical_task", () => runWithPromptExecutionContext("task.generate", { traceId: requestId, forceNewContext: true }, () => llm.generateTaskWithAI({
@@ -468,12 +566,28 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             isControl: true,
             difus: 0.5,
             allowedIoTypes: ["STDIN_STDOUT"],
-            prevTopics: topicList,
             userId,
             topicId: topicGroup[0].id > 0 ? topicGroup[0].id : undefined,
             language,
             requestId,
           })));
+          if (!isDiagnosticPracticalInputContractValid(generatedTask.ioType, generatedTask.examples)) {
+            logger.warn("[learning/diagnostic] practical task rejected before hidden-test generation", {
+              requestId,
+              courseId: course.id,
+              moduleId: topicGroup[0].moduleId,
+              ioType: generatedTask.ioType,
+              publicExampleCount: generatedTask.examples.length,
+              emptyInputCount: generatedTask.examples.filter((example) => !text(example.input, 10_000)).length,
+              emptyOutputCount: generatedTask.examples.filter((example) => !text(example.output, 10_000)).length,
+            });
+            throw Object.assign(new Error("Diagnostic practical task must use STDIN_STDOUT and include at least one usable public example."), {
+              name: "AIValidationError",
+              statusCode: 503,
+              mode: "generateTask",
+              invalidSource: "publicExamples",
+            });
+          }
           const taskDescription = [
             generatedTask.practicalTask,
             `Input format: ${generatedTask.inputFormat}`,
@@ -486,11 +600,13 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
               taskTitle: generatedTask.title,
               taskDescription,
               lang: runtime,
-              count: 5,
+              count: 3,
               ioType: generatedTask.ioType ?? "STDIN_STDOUT",
               userId,
               publicExamples: generatedTask.examples,
               requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
+            // One bounded safeAICall repair handles candidate-test contract findings
+            // without starting over on the whole course assessment.
             }, { language, requestId, maxAttempts: 2 });
             const resultDetails = recordOf(result.success ? null : result.error.details);
             const validationMessage = result.success
@@ -517,6 +633,16 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
               }
               return selection;
             }
+
+            logger.error("[learning/diagnostic] hidden tests and public-example fallback are unavailable", {
+              requestId,
+              courseId: course.id,
+              moduleId: topicGroup[0].moduleId,
+              reason: rejectedSource || (result.success ? "insufficient_test_cases" : "hidden_test_generation_failed"),
+              statusCode: result.success ? null : result.error.statusCode,
+              publicExampleCount: Array.isArray(generatedTask.examples) ? generatedTask.examples.length : 0,
+              usablePublicExampleCount: selectCourseDiagnosticTestCases([], generatedTask.examples)?.tests.length ?? 0,
+            });
 
             if (result.success) {
               throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "hidden_tests");
@@ -545,7 +671,6 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             .map((example) => ({ input: text(example.input, 2_000), output: text(example.output, 2_000), explanation: text(example.explanation, 1_000) }))
             .filter((example) => example.input || example.output)
             .slice(0, 3);
-          const moduleTitles = Array.from(new Set(topicGroup.map((topic) => topic.moduleTitle)));
           const practical: CourseDiagnosticPractical = {
             id: `p${taskIndex + 1}`,
             moduleTitle: moduleTitles.join(" · "),
@@ -571,10 +696,12 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             const validationIssues = Array.isArray(recordOf(previousError)?.issues)
               ? (recordOf(previousError)?.issues as unknown[]).map((issue) => text(issue, 500)).filter(Boolean).slice(0, 3)
               : [];
-            if (!validationIssues.length && shouldRegenerateDiagnosticTask(previousError)) {
+            if (!validationIssues.length && regenerationReason !== "providerFailure" && shouldRegenerateDiagnosticTask(previousError)) {
               validationIssues.push(text(recordOf(previousError)?.message, 500));
             }
-            const replacementRequirement = regenerationReason === "coreOperation"
+            const replacementRequirement = regenerationReason === "providerFailure"
+              ? "RETRY AFTER TRANSIENT GENERATION FAILURE: No valid task was returned for this assignment. Generate the same compact task package from scratch, preserving the listed topic group, the required STDIN_STDOUT contract, and exactly three short public examples with non-empty input/output. Do not invent validator findings or mention the retry."
+              : regenerationReason === "coreOperation"
               ? "REPLACEMENT TASK REQUIREMENT: The previous task omitted the required core operation. Regenerate a substantially different task that explicitly asks the learner to perform that operation in its title or statement, while keeping the task within the assigned topic and preserving a complete input/output contract. Recompute every example."
               : regenerationReason === "topicMismatch"
                 ? "REPLACEMENT TASK REQUIREMENT: The previous task did not assess the assigned topic. Generate a new task directly about the assigned topic and required core operation; do not introduce adjacent concepts. Keep one cohesive task and recompute every example."
@@ -588,7 +715,9 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
                         ? "REPLACEMENT TASK REQUIREMENT: Describe only the required observable behavior. Do not reveal or prescribe an implementation technique, algorithm, data structure, or sequence of solution steps. Keep the task a complete, unambiguous programming problem with examples that follow its rules."
                         : regenerationReason === "emptyOutput"
                           ? "REPLACEMENT TASK REQUIREMENT: Every example and the output contract must use a concrete, non-empty stdout value. When the logical result is absence, define an explicit non-empty sentinel such as NONE and use it consistently. Recompute every example from the rules."
-                          : `REPLACEMENT TASK REQUIREMENT: The previous draft failed independent review of its ${regenerationReason === "publicExamples" ? "public examples" : "task contract"}. Generate a substantially different task with a complete, unambiguous input/output contract. For every decimal or floating-point output, state exact precision and rounding or an explicit tolerance. Recompute each example from the written rules and verify its output before returning it.`;
+                      : regenerationReason === "publicExamples"
+                        ? "REPLACEMENT TASK REQUIREMENT: The previous draft failed public-example validation. Generate a simple STDIN_STDOUT task that reads a concrete integer and produces output that depends on it. Do not make a no-input, fixed-output, or constant-output task. Include exactly three short examples with non-empty inputs and outputs; calculate each from the rules and verify every output before returning."
+                        : `REPLACEMENT TASK REQUIREMENT: The previous draft failed independent review of its task contract. Generate a substantially different task with a complete, unambiguous input/output contract. For every decimal or floating-point output, state exact precision and rounding or an explicit tolerance. Recompute each example from the written rules and verify its output before returning it.`;
             const replacementContext = [
               taskContext,
               replacementRequirement,
@@ -599,7 +728,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
           },
           (error, nextAttempt) => {
             const regenerationReason = diagnosticTaskRegenerationReason(error);
-            logger.warn("[learning/diagnostic] regenerating practical task after validation failure", {
+            logger.warn("[learning/diagnostic] retrying practical task package after generation failure", {
               requestId,
               courseId: course.id,
               moduleId: topicGroup[0].moduleId,

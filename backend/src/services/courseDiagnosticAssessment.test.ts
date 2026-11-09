@@ -7,7 +7,9 @@ import {
   canFallbackToDiagnosticPublicExamples,
   generateDiagnosticQuestionsWithCoverageRetry,
   generateDiagnosticTaskPackageWithRetry,
+  groupDiagnosticTopicsForPracticals,
   hasExactDiagnosticQuestionCoverage,
+  isDiagnosticPracticalInputContractValid,
   mapWithConcurrency,
   normalizeQuestions,
   resolveCourseDiagnosticTestCases,
@@ -39,6 +41,24 @@ test("diagnostic generation waits for active workers and stops scheduling after 
   assert.equal(siblingResult.status, "fulfilled");
   assert.deepEqual(scheduled, [0, 10]);
   assert.equal(activeWorkerFinished, true);
+});
+
+test("course diagnostics create five balanced practical tasks covering all topics", () => {
+  const topics = Array.from({ length: 29 }, (_, index) => ({
+    id: index + 1,
+    moduleId: Math.floor(index / 4) + 1,
+    moduleTitle: `Module ${Math.floor(index / 4) + 1}`,
+    title: `Topic ${index + 1}`,
+    context: `Context ${index + 1}`,
+    itemIds: [index + 1],
+  }));
+
+  const groups = groupDiagnosticTopicsForPracticals(topics);
+  assert.equal(groups.length, 5);
+  assert.deepEqual(groups.map((group) => group.length), [6, 6, 6, 6, 5]);
+  assert.deepEqual(groups.flat().map((topic) => topic.id), topics.map((topic) => topic.id));
+  assert.ok(groups.every((group) => group.length > 1));
+  assert.ok(groups.some((group) => new Set(group.map((topic) => topic.moduleId)).size > 1));
 });
 
 test("diagnostic quiz fallback assignment stays aligned when invalid candidates are skipped", () => {
@@ -76,25 +96,70 @@ test("diagnostic quiz batches regenerate once when topic tags produce uneven cov
     topicTitle: `Topic ${topicId}`,
   });
   const invalidCoverage = [question(11), question(11), question(11), question(22)];
-  const validCoverage = [question(11), question(11), question(22), question(22)];
+  const repairedQuestion = question(22);
   let calls = 0;
 
   const generated = await generateDiagnosticQuestionsWithCoverageRetry(
     assignments,
-    async (feedback) => {
+    async (requestedAssignments, feedback) => {
       calls += 1;
       if (calls === 1) {
+        assert.equal(requestedAssignments.length, 4);
         assert.equal(feedback, undefined);
         return invalidCoverage;
       }
       assert.match(String(feedback), /topic 11: expected 2, received 3/);
       assert.match(String(feedback), /topic 22: expected 2, received 1/);
-      return validCoverage;
+      assert.deepEqual(requestedAssignments.map(({ id }) => id), [22]);
+      return [repairedQuestion];
     },
     (raw) => raw as ReturnType<typeof question>[],
   );
 
   assert.equal(calls, 2);
+  assert.equal(hasExactDiagnosticQuestionCoverage(generated, assignments), true);
+});
+
+test("diagnostic quiz batches retry after malformed candidates leave a partial batch", async () => {
+  const assignments = [
+    { id: 11, title: "A" },
+    { id: 11, title: "A" },
+    { id: 22, title: "B" },
+    { id: 22, title: "B" },
+  ] as any;
+  const question = (topicId: number, index: number) => ({
+    q: `[topic:${topicId}] Question ${index}`,
+    options: ["one", "two", "three", "four"],
+    correct: 0,
+  });
+  const partial = [question(11, 1), question(11, 2), question(22, 1)];
+  const missingQuestion = question(22, 2);
+  let calls = 0;
+
+  const generated = await generateDiagnosticQuestionsWithCoverageRetry(
+    assignments,
+    async (requestedAssignments, feedback) => {
+      calls += 1;
+      if (calls === 1) {
+        assert.equal(requestedAssignments.length, 4);
+        assert.equal(feedback, undefined);
+        return partial;
+      }
+      assert.match(String(feedback), /topic 22: expected 2, received 1/);
+      assert.deepEqual(requestedAssignments.map(({ id }) => id), [22]);
+      return [missingQuestion];
+    },
+    (raw, repairAssignments, startIndex) => normalizeQuestions(
+      raw,
+      repairAssignments as any,
+      repairAssignments.length,
+      startIndex,
+      true,
+    ),
+  );
+
+  assert.equal(calls, 2);
+  assert.equal(generated.length, 4);
   assert.equal(hasExactDiagnosticQuestionCoverage(generated, assignments), true);
 });
 
@@ -199,6 +264,14 @@ test("diagnostic assessment prefers a complete hidden suite over public examples
 
 test("diagnostic assessment does not create an empty fallback suite", () => {
   assert.equal(selectCourseDiagnosticTestCases([], [{ input: "", output: "" }]), null);
+  assert.equal(selectCourseDiagnosticTestCases([], [{ input: "", output: "non-empty" }]), null);
+});
+
+test("diagnostic practical tasks require stdin mode and a usable input example", () => {
+  const examples = [{ input: "5", output: "6" }];
+  assert.equal(isDiagnosticPracticalInputContractValid("STDIN_STDOUT", examples), true);
+  assert.equal(isDiagnosticPracticalInputContractValid("NO_INPUT_FIXED_OUTPUT", examples), false);
+  assert.equal(isDiagnosticPracticalInputContractValid("STDIN_STDOUT", [{ input: "", output: "6" }]), false);
 });
 
 test("diagnostic assessment never masks statement or public-example contract failures", () => {
@@ -250,7 +323,34 @@ test("diagnostic assessment regenerates the whole task for statement or public-e
   assert.equal(shouldRegenerateDiagnosticTask(new Error("TOPIC_MISMATCH_HARD_FAIL: task covers another topic.")), true);
   assert.equal(shouldRegenerateDiagnosticTask(new Error("FORBIDDEN_SCOPE_VIOLATION: task contains forbidden scope.")), true);
   assert.equal(shouldRegenerateDiagnosticTask(new Error("MULTI_TASK_NOT_ALLOWED: task has more than one exercise.")), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("AI_GENERATION_FAILED: Provider generation failed"), {
+    assessmentStage: "practical_task",
+    statusCode: 503,
+  })), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("AI_GENERATION_FAILED: Provider generation failed"), {
+    assessmentStage: "questions",
+    statusCode: 503,
+  })), false);
   assert.equal(shouldRegenerateDiagnosticTask(new Error("provider unavailable")), false);
+});
+
+test("a transient provider failure retries only the practical-task package", async () => {
+  const attempts: number[] = [];
+  const providerUnavailable = Object.assign(new Error("AI_GENERATION_FAILED: Provider generation failed"), {
+    assessmentStage: "practical_task",
+    statusCode: 503,
+  });
+  const validReplacement = { practicalTask: "A complete replacement task with a valid input/output contract." };
+
+  const result = await generateDiagnosticTaskPackageWithRetry(async (attempt, previousError) => {
+    attempts.push(attempt);
+    if (attempt === 1) throw providerUnavailable;
+    assert.equal(previousError, providerUnavailable);
+    return validReplacement;
+  });
+
+  assert.deepEqual(attempts, [1, 2]);
+  assert.equal(result, validReplacement);
 });
 
 test("a task rejected for omitting its core operation is regenerated as a replacement package", async () => {
