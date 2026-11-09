@@ -134,6 +134,62 @@ function chunks<T>(items: T[], size: number): T[][] {
   return groups;
 }
 
+type CourseDiagnosticTestCase = { input: string; output: string };
+
+export function canFallbackToDiagnosticPublicExamples(validationMessage: string): boolean {
+  const rejectedSource = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:/s)?.[1];
+  return rejectedSource !== "statement" && rejectedSource !== "publicExamples";
+}
+
+export function selectCourseDiagnosticTestCases(
+  generatedTests: unknown,
+  publicExamples: unknown,
+): { tests: CourseDiagnosticTestCase[]; source: "hidden" | "public_examples" } | null {
+  const cleanCases = (value: unknown): CourseDiagnosticTestCase[] => {
+    if (!Array.isArray(value)) return [];
+    const cases: CourseDiagnosticTestCase[] = [];
+    const seenInputs = new Set<string>();
+    for (const candidate of value) {
+      const item = recordOf(candidate);
+      const input = text(item?.input, 10_000);
+      const output = text(item?.output, 10_000);
+      if (!input || !output || seenInputs.has(input)) continue;
+      seenInputs.add(input);
+      cases.push({ input, output });
+      if (cases.length === 8) break;
+    }
+    return cases;
+  };
+
+  const hidden = cleanCases(generatedTests);
+  if (hidden.length >= 3) return { tests: hidden, source: "hidden" };
+
+  // The task and these public examples have already passed the independent
+  // task-contract review. They keep the diagnostic usable if the separate
+  // hidden-test oracle cannot produce a consistent output suite.
+  const examples = cleanCases(publicExamples);
+  return examples.length ? { tests: examples, source: "public_examples" } : null;
+}
+
+type DiagnosticTestGenerationResult =
+  | { success: true; data: unknown }
+  | { success: false; error: { details?: unknown; error?: unknown; message?: unknown } };
+
+export function resolveCourseDiagnosticTestCases(
+  result: DiagnosticTestGenerationResult,
+  publicExamples: unknown,
+): { tests: CourseDiagnosticTestCase[]; source: "hidden" | "public_examples" } | null {
+  if (result.success) return selectCourseDiagnosticTestCases(result.data, publicExamples);
+
+  const details = recordOf(result.error.details);
+  const validationMessage = typeof details?.validationError === "string"
+    ? details.validationError
+    : String(result.error.error ?? result.error.message ?? "");
+  return canFallbackToDiagnosticPublicExamples(validationMessage)
+    ? selectCourseDiagnosticTestCases([], publicExamples)
+    : null;
+}
+
 async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(items.length);
   let nextIndex = 0;
@@ -316,7 +372,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
           `Constraints: ${generatedTask.constraints}`,
           `Examples: ${generatedTask.examples.map((example) => `Input:\n${example.input}\nOutput:\n${example.output}`).join("\n")}`,
         ].join("\n\n");
-        const tests = await runAtAssessmentStage("hidden_tests", async () => {
+        const testSelection = await runAtAssessmentStage("hidden_tests", async () => {
           const result = await safeAICall<Array<{ input: string; output: string; explanation?: string }>>("generateTestData", {
             taskTitle: generatedTask.title,
             taskDescription,
@@ -327,12 +383,36 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             publicExamples: generatedTask.examples,
             requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
           }, { language, requestId, maxAttempts: 2 });
-          if (result.success) return result.data;
+          const resultDetails = recordOf(result.success ? null : result.error.details);
+          const validationMessage = result.success
+            ? ""
+            : typeof resultDetails?.validationError === "string"
+              ? resultDetails.validationError
+              : String(result.error.error ?? result.error.message);
+          const rejectedSource = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:/s)?.[1];
 
-          const resultDetails = recordOf(result.error.details);
-          const validationMessage = typeof resultDetails?.validationError === "string"
-            ? resultDetails.validationError
-            : String(result.error.error ?? result.error.message);
+          // A failed hidden-test oracle should not make a valid practical
+          // task unavailable. The public examples were independently
+          // reviewed with the task, so retain them as the checked fallback.
+          // Do not mask a broken statement or broken public examples.
+          const selection = resolveCourseDiagnosticTestCases(result, generatedTask.examples);
+          if (selection) {
+            if (selection.source === "public_examples") {
+              logger.warn("[learning/diagnostic] hidden tests unavailable; using reviewed public examples", {
+                requestId,
+                courseId: course.id,
+                moduleId: topicGroup[0].moduleId,
+                testCount: selection.tests.length,
+                reason: result.success ? "insufficient_hidden_tests" : rejectedSource || "hidden_test_generation_failed",
+              });
+            }
+            return selection;
+          }
+
+          if (result.success) {
+            throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "hidden_tests");
+          }
+
           const contractFailure = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:\s*(.*)$/s);
           const providerStatus = result.error.statusCode;
           const statusCode = providerStatus === 429 || providerStatus === 503 || providerStatus === 504
@@ -346,14 +426,10 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             cause: result.error,
           });
         });
-        const cleanTests = tests
-          .map((test) => ({ input: text(test.input, 10_000), output: text(test.output, 10_000) }))
-          .filter((test) => test.input.length > 0 && test.output.length > 0)
-          .slice(0, 8);
         if (!text(generatedTask.practicalTask)) {
           throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "practical_task");
         }
-        if (cleanTests.length < 3) {
+        if (testSelection.tests.length < 1) {
           throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "hidden_tests");
         }
         const examples = generatedTask.examples
@@ -374,7 +450,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
           codeTemplate: text(generatedTask.codeTemplate, 40_000),
           runtime,
           entryFile: projectEntryFile(runtime),
-          tests: cleanTests,
+          tests: testSelection.tests,
         };
         return practical;
       }),

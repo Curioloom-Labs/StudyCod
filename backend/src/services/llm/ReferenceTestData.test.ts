@@ -61,6 +61,38 @@ test('expected outputs come from execution and the reviewer receives the execute
   assert.equal(calls, 2);
 });
 
+test('floating-point reference oracle follows stated stdout formatting instead of Python defaults', async () => {
+  let calls = 0;
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string, _schema: object, instructions = ''): Promise<T> {
+      calls++;
+      if (calls === 1) {
+        assert.match(instructions, /never rely on Python's default float printing/);
+        return {
+          referenceSolution: 'value = float(input()); print(f"{value:.2f}")',
+          inputs: ['0', '1', '2'],
+        } as T;
+      }
+      const payload = JSON.parse(prompt);
+      assert.deepEqual(payload.candidateTests, [{ input: '0', output: '0.00' }]);
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+
+  const result = await generateReferenceTestData(provider, {
+    taskDescription: 'Read a decimal x and print x rounded to exactly two decimal places.',
+    lang: 'JAVA',
+    count: 1,
+    executeReference: async () => ['0.00'],
+  });
+
+  assert.deepEqual(
+    result.map(({ input, output }) => ({ input, output })),
+    [{ input: '0', output: '0.00' }],
+  );
+});
+
 test('Tkinter reference generation uses validated JSON events and reviews UI snapshots as TKINTER', async () => {
   const source = 'import tkinter as tk\nroot = tk.Tk()\nroot.title("Counter")\nroot.geometry("160x100")\nbutton = tk.Button(root, text="Count: 0")\nbutton.place(x=20, y=10, width=80, height=24)\nroot.mainloop()';
   const input = '{"events":[{"type":"click","x":50,"y":20}]}';
