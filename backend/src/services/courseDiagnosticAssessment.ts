@@ -347,6 +347,10 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             lang: runtime,
             prevTopics: `${courseContext}\n\n${questionPlan}`,
             count: topicAssignments.length,
+            questionStyle: "CONCEPTS",
+            generationGuidance: language === "en"
+              ? "COURSE DIAGNOSTIC KNOWLEDGE QUESTIONS: Test the assigned programming concept. Every question must be answerable from its wording and choices without executing a program. Do not ask for the output or behavior of a particular program and do not refer to a specific code snippet."
+              : "ПИТАННЯ ДІАГНОСТИКИ ЗНАНЬ: Перевіряй призначене поняття з програмування. На кожне питання має бути можна відповісти за формулюванням і варіантами без запуску програми. Не питай про результат чи поведінку конкретної програми та не посилайся на певний фрагмент коду.",
             userId,
             language,
             requestId,

@@ -174,20 +174,24 @@ function buildQuizGenerationGuidance(params: { difficulty?: number; questionStyl
   ].filter(Boolean).join("\n");
 }
 
-function enforceQuizCodeCompleteness(result: AiQuizResult, questionStyle?: QuizQuestionStyle): AiQuizResult {
+function quizQuestionsMissingCodeIndexes(result: AiQuizResult, questionStyle?: QuizQuestionStyle): number[] {
   const parsed = JSON.parse(result.quizJson) as Array<{ q?: string; code?: string }>;
   const codeReferencePattern = /(?:\b(?:this|that|following|given|shown|provided|above|below)\b.{0,40}\b(?:code|snippet|program)\b|\b(?:code|snippet|program)\b.{0,40}\b(?:above|below|shown|provided|given)\b|(?:цей|ця|це|наведен|подан|показан|нижче|вище).{0,40}(?:код|фрагмент|програм))/i;
   const codeBehaviorPattern = /(?:\b(?:output|result|value|print(?:ed)?|return(?:ed)?|run(?:ning)?|execute|execution|behavio[u]?r)\b|вивед|результат|надрук|поверта|виконан|працю)/i;
-  const missingCode = parsed.findIndex((question) => {
+  return parsed.flatMap((question, index) => {
     const questionText = typeof question.q === "string" ? question.q : "";
     const hasSnippet = Boolean(question.code?.trim()) || /```[^\n]*\n[\s\S]+?```/.test(questionText);
-    if (questionStyle === "CODE_READING" || questionStyle === "DEBUGGING") return !hasSnippet;
+    if (questionStyle === "CODE_READING" || questionStyle === "DEBUGGING") return hasSnippet ? [] : [index];
     const refersToSpecificCode = codeReferencePattern.test(questionText)
       || (/(?:\b(?:code|snippet|program)\b|код|фрагмент|програм)/i.test(questionText) && codeBehaviorPattern.test(questionText));
-    return refersToSpecificCode && !hasSnippet;
+    return refersToSpecificCode && !hasSnippet ? [index] : [];
   });
-  if (missingCode < 0) return result;
-  const error = new Error(`QUIZ_CODE_MISSING: question ${missingCode + 1} refers to code but has no complete code snippet`);
+}
+
+function enforceQuizCodeCompleteness(result: AiQuizResult, questionStyle?: QuizQuestionStyle): AiQuizResult {
+  const missingCode = quizQuestionsMissingCodeIndexes(result, questionStyle);
+  if (missingCode.length === 0) return result;
+  const error = new Error(`QUIZ_CODE_MISSING: question ${missingCode[0] + 1} refers to code but has no complete code snippet`);
   (error as Error & { shouldFallback?: boolean }).shouldFallback = true;
   throw error;
 }
@@ -1909,7 +1913,7 @@ REQUIREMENTS (mandatory):
     generateBatch: (batch: QuizGenerationParams) => Promise<AiQuizResult>,
   ): Promise<AiQuizResult> {
     const expectedCount = Math.max(1, Math.min(50, Math.floor(params.count || 12)));
-    const questions: Array<{ q: string }> = [];
+    const questions: Array<{ q: string; code?: string; codeLanguage?: string }> = [];
     for (let offset = 0; offset < expectedCount; offset += MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL) {
       const batchCount = Math.min(MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL, expectedCount - offset);
       const response = await generateBatch({
@@ -1919,6 +1923,67 @@ REQUIREMENTS (mandatory):
       });
       const validatedBatch = AIResponseValidator.validateGenerateQuiz(response, batchCount);
       questions.push(...JSON.parse(validatedBatch.quizJson) as Array<{ q: string }>);
+    }
+
+    let missingCodeIndexes = quizQuestionsMissingCodeIndexes(
+      { quizJson: JSON.stringify(questions) },
+      params.questionStyle,
+    );
+    let codeCompletenessRepairAttempt = 0;
+    while (missingCodeIndexes.length > 0 && codeCompletenessRepairAttempt < 2) {
+      consumeRetryOrThrow("quiz code completeness repair");
+      const repairIndexes = [...missingCodeIndexes];
+      const repairedStems: string[] = [];
+      const repairGuidance = params.questionStyle === "CODE_READING" || params.questionStyle === "DEBUGGING"
+        ? params.language === "en"
+          ? codeCompletenessRepairAttempt === 0
+            ? "CODE COMPLETENESS REPAIR: Replace each requested slot with a self-contained question for the same assigned topic and include its complete standalone snippet in `code` plus the language in `codeLanguage`. Every replacement must include code."
+            : "SECOND CODE COMPLETENESS REPAIR: Your previous replacement still omitted code. Replace each requested slot with a different question for the same topic and include a complete standalone snippet in `code` plus the language in `codeLanguage`."
+          : codeCompletenessRepairAttempt === 0
+            ? "ВИПРАВЛЕННЯ ПОВНОТИ КОДУ: Заміни кожне вказане питання самодостатнім питанням на ту саму призначену тему й додай повний окремий фрагмент у `code` та мову в `codeLanguage`. Кожне замінне питання має містити код."
+            : "ДРУГЕ ВИПРАВЛЕННЯ ПОВНОТИ КОДУ: У попередній заміні знову не було коду. Створи інше питання на ту саму тему й додай повний окремий фрагмент у `code` та мову в `codeLanguage`."
+        : params.language === "en"
+          ? codeCompletenessRepairAttempt === 0
+            ? "CODE COMPLETENESS REPAIR: Replace each requested slot with a self-contained conceptual question for the same assigned topic. Do not ask for the output or behavior of a particular program and do not refer to a specific code snippet. Keep the replacement answerable without code."
+            : "SECOND CODE COMPLETENESS REPAIR: Your previous replacement still referred to code without a snippet. Replace it with a different self-contained conceptual question for the same topic that can be answered without executing a program or referring to code."
+          : codeCompletenessRepairAttempt === 0
+            ? "ВИПРАВЛЕННЯ ПОВНОТИ ПИТАННЯ: Заміни кожне вказане питання самодостатнім поняттєвим питанням на ту саму призначену тему. Не питай про результат чи поведінку конкретної програми та не посилайся на певний фрагмент коду. На замінне питання має бути можна відповісти без коду."
+            : "ДРУГЕ ВИПРАВЛЕННЯ ПОВНОТИ ПИТАННЯ: У попередній заміні знову було посилання на код без фрагмента. Створи інше самодостатнє поняттєве питання на ту саму тему, на яке можна відповісти без запуску програми чи посилання на код.";
+
+      for (let offset = 0; offset < repairIndexes.length; offset += MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL) {
+        const batchIndexes = repairIndexes.slice(offset, offset + MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL);
+        const replacementAssignments = batchIndexes.map((questionIndex, index) => {
+          const topicMarker = questions[questionIndex].q.match(/^\[topic:-?\d+\]/i)?.[0];
+          return topicMarker
+            ? `Replacement ${index + 1} replaces original question ${questionIndex + 1}; preserve the same topic and begin q with ${topicMarker}.`
+            : `Replacement ${index + 1} replaces original question ${questionIndex + 1}; preserve its assigned topic.`;
+        });
+        const retainedStems = questions
+          .filter((_, questionIndex) => !repairIndexes.includes(questionIndex))
+          .map(quizQuestionStem);
+        const replacementResponse = await generateBatch({
+          ...params,
+          count: batchIndexes.length,
+          avoidQuestionStems: [...(params.avoidQuestionStems ?? []), ...retainedStems, ...repairedStems],
+          generationGuidance: [
+            params.generationGuidance,
+            ...replacementAssignments,
+            repairGuidance,
+          ].filter(Boolean).join("\n"),
+        });
+        const replacements = AIResponseValidator.validateGenerateQuiz(replacementResponse, batchIndexes.length);
+        const replacementQuestions = JSON.parse(replacements.quizJson) as typeof questions;
+        batchIndexes.forEach((questionIndex, replacementIndex) => {
+          questions[questionIndex] = replacementQuestions[replacementIndex];
+          repairedStems.push(quizQuestionStem(replacementQuestions[replacementIndex]));
+        });
+      }
+
+      missingCodeIndexes = quizQuestionsMissingCodeIndexes(
+        { quizJson: JSON.stringify(questions) },
+        params.questionStyle,
+      );
+      codeCompletenessRepairAttempt++;
     }
 
     let duplicateIndexes = duplicateQuizQuestionIndexes(questions);
@@ -2181,7 +2246,9 @@ REQUIREMENTS:
           }
         }
         const validated = AIResponseValidator.validateGenerateQuiz(parsed, questionCount);
-        return enforceQuizCodeCompleteness(validated, params.questionStyle);
+        // Code completeness is repaired by generateQuizInBatches so every
+        // provider gets the same bounded, topic-preserving repair path.
+        return validated;
       } catch (err: unknown) {
         const message = errorMessage(err);
         lastError = err instanceof Error ? err : new Error(message);
