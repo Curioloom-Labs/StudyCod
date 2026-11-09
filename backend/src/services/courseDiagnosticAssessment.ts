@@ -141,6 +141,24 @@ export function canFallbackToDiagnosticPublicExamples(validationMessage: string)
   return rejectedSource !== "statement" && rejectedSource !== "publicExamples";
 }
 
+export function shouldRegenerateDiagnosticTask(error: unknown): boolean {
+  const details = recordOf(error);
+  return details?.invalidSource === "statement" || details?.invalidSource === "publicExamples";
+}
+
+export async function generateDiagnosticTaskPackageWithRetry<T>(
+  generatePackage: (attempt: 1 | 2, previousError?: unknown) => Promise<T>,
+  onRetry?: (error: unknown) => void,
+): Promise<T> {
+  try {
+    return await generatePackage(1);
+  } catch (error) {
+    if (!shouldRegenerateDiagnosticTask(error)) throw error;
+    onRetry?.(error);
+    return generatePackage(2, error);
+  }
+}
+
 export function selectCourseDiagnosticTestCases(
   generatedTests: unknown,
   publicExamples: unknown,
@@ -349,9 +367,10 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
           topicList,
           `Variation token: ${groupSeed}. Generate a fresh integrated programming task that requires applying the listed topics. Do not use concepts outside the course. Include standard input/output, clear constraints, examples, and a concise starter template with TODO markers.`,
         ].join("\n\n");
-        const generatedTask = await runAtAssessmentStage("practical_task", () => llm.generateTaskWithAI({
+        const generatePackage = async (generationContext: string): Promise<CourseDiagnosticPractical> => {
+          const generatedTask = await runAtAssessmentStage("practical_task", () => llm.generateTaskWithAI({
             topicTitle,
-            theory: taskContext,
+            theory: generationContext,
             lang: runtime,
             topicIndex: taskIndex + 1,
             numInTopic: practicalGroups.length,
@@ -365,94 +384,118 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             language,
             requestId,
           }));
-        const taskDescription = [
-          generatedTask.practicalTask,
-          `Input format: ${generatedTask.inputFormat}`,
-          `Output format: ${generatedTask.outputFormat}`,
-          `Constraints: ${generatedTask.constraints}`,
-          `Examples: ${generatedTask.examples.map((example) => `Input:\n${example.input}\nOutput:\n${example.output}`).join("\n")}`,
-        ].join("\n\n");
-        const testSelection = await runAtAssessmentStage("hidden_tests", async () => {
-          const result = await safeAICall<Array<{ input: string; output: string; explanation?: string }>>("generateTestData", {
-            taskTitle: generatedTask.title,
-            taskDescription,
-            lang: runtime,
-            count: 5,
-            ioType: generatedTask.ioType ?? "STDIN_STDOUT",
-            userId,
-            publicExamples: generatedTask.examples,
-            requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
-          }, { language, requestId, maxAttempts: 2 });
-          const resultDetails = recordOf(result.success ? null : result.error.details);
-          const validationMessage = result.success
-            ? ""
-            : typeof resultDetails?.validationError === "string"
-              ? resultDetails.validationError
-              : String(result.error.error ?? result.error.message);
-          const rejectedSource = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:/s)?.[1];
+          const taskDescription = [
+            generatedTask.practicalTask,
+            `Input format: ${generatedTask.inputFormat}`,
+            `Output format: ${generatedTask.outputFormat}`,
+            `Constraints: ${generatedTask.constraints}`,
+            `Examples: ${generatedTask.examples.map((example) => `Input:\n${example.input}\nOutput:\n${example.output}`).join("\n")}`,
+          ].join("\n\n");
+          const testSelection = await runAtAssessmentStage("hidden_tests", async () => {
+            const result = await safeAICall<Array<{ input: string; output: string; explanation?: string }>>("generateTestData", {
+              taskTitle: generatedTask.title,
+              taskDescription,
+              lang: runtime,
+              count: 5,
+              ioType: generatedTask.ioType ?? "STDIN_STDOUT",
+              userId,
+              publicExamples: generatedTask.examples,
+              requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
+            }, { language, requestId, maxAttempts: 2 });
+            const resultDetails = recordOf(result.success ? null : result.error.details);
+            const validationMessage = result.success
+              ? ""
+              : typeof resultDetails?.validationError === "string"
+                ? resultDetails.validationError
+                : String(result.error.error ?? result.error.message);
+            const rejectedSource = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:/s)?.[1];
 
-          // A failed hidden-test oracle should not make a valid practical
-          // task unavailable. The public examples were independently
-          // reviewed with the task, so retain them as the checked fallback.
-          // Do not mask a broken statement or broken public examples.
-          const selection = resolveCourseDiagnosticTestCases(result, generatedTask.examples);
-          if (selection) {
-            if (selection.source === "public_examples") {
-              logger.warn("[learning/diagnostic] hidden tests unavailable; using reviewed public examples", {
-                requestId,
-                courseId: course.id,
-                moduleId: topicGroup[0].moduleId,
-                testCount: selection.tests.length,
-                reason: result.success ? "insufficient_hidden_tests" : rejectedSource || "hidden_test_generation_failed",
-              });
+            // A failed hidden-test oracle should not make a valid practical
+            // task unavailable. The public examples were independently
+            // reviewed with the task, so retain them as the checked fallback.
+            // Do not mask a broken statement or broken public examples.
+            const selection = resolveCourseDiagnosticTestCases(result, generatedTask.examples);
+            if (selection) {
+              if (selection.source === "public_examples") {
+                logger.warn("[learning/diagnostic] hidden tests unavailable; using reviewed public examples", {
+                  requestId,
+                  courseId: course.id,
+                  moduleId: topicGroup[0].moduleId,
+                  testCount: selection.tests.length,
+                  reason: result.success ? "insufficient_hidden_tests" : rejectedSource || "hidden_test_generation_failed",
+                });
+              }
+              return selection;
             }
-            return selection;
-          }
 
-          if (result.success) {
+            if (result.success) {
+              throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "hidden_tests");
+            }
+
+            const contractFailure = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:\s*(.*)$/s);
+            const providerStatus = result.error.statusCode;
+            const statusCode = providerStatus === 429 || providerStatus === 503 || providerStatus === 504
+              ? providerStatus
+              : 503;
+            throw Object.assign(new Error(validationMessage), {
+              name: "AIValidationError",
+              statusCode,
+              mode: "generateTestData",
+              ...(contractFailure ? { invalidSource: contractFailure[1], issues: [contractFailure[2]] } : {}),
+              cause: result.error,
+            });
+          });
+          if (!text(generatedTask.practicalTask)) {
+            throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "practical_task");
+          }
+          if (testSelection.tests.length < 1) {
             throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "hidden_tests");
           }
-
-          const contractFailure = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:\s*(.*)$/s);
-          const providerStatus = result.error.statusCode;
-          const statusCode = providerStatus === 429 || providerStatus === 503 || providerStatus === 504
-            ? providerStatus
-            : 503;
-          throw Object.assign(new Error(validationMessage), {
-            name: "AIValidationError",
-            statusCode,
-            mode: "generateTestData",
-            ...(contractFailure ? { invalidSource: contractFailure[1], issues: [contractFailure[2]] } : {}),
-            cause: result.error,
-          });
-        });
-        if (!text(generatedTask.practicalTask)) {
-          throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "practical_task");
-        }
-        if (testSelection.tests.length < 1) {
-          throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "hidden_tests");
-        }
-        const examples = generatedTask.examples
-          .map((example) => ({ input: text(example.input, 2_000), output: text(example.output, 2_000), explanation: text(example.explanation, 1_000) }))
-          .filter((example) => example.input || example.output)
-          .slice(0, 3);
-        const moduleTitles = Array.from(new Set(topicGroup.map((topic) => topic.moduleTitle)));
-        const practical: CourseDiagnosticPractical = {
-          id: `p${taskIndex + 1}`,
-          moduleTitle: moduleTitles.join(" · "),
-          topicIds: topicGroup.map((topic) => topic.id),
-          title: text(generatedTask.title, 255) || (locale === "en" ? `Practical task ${taskIndex + 1}` : `Практичне завдання ${taskIndex + 1}`),
-          statement: text(generatedTask.practicalTask, 8_000),
-          inputFormat: text(generatedTask.inputFormat, 2_000),
-          outputFormat: text(generatedTask.outputFormat, 2_000),
-          constraints: text(generatedTask.constraints, 2_000),
-          examples,
-          codeTemplate: text(generatedTask.codeTemplate, 40_000),
-          runtime,
-          entryFile: projectEntryFile(runtime),
-          tests: testSelection.tests,
+          const examples = generatedTask.examples
+            .map((example) => ({ input: text(example.input, 2_000), output: text(example.output, 2_000), explanation: text(example.explanation, 1_000) }))
+            .filter((example) => example.input || example.output)
+            .slice(0, 3);
+          const moduleTitles = Array.from(new Set(topicGroup.map((topic) => topic.moduleTitle)));
+          const practical: CourseDiagnosticPractical = {
+            id: `p${taskIndex + 1}`,
+            moduleTitle: moduleTitles.join(" · "),
+            topicIds: topicGroup.map((topic) => topic.id),
+            title: text(generatedTask.title, 255) || (locale === "en" ? `Practical task ${taskIndex + 1}` : `Практичне завдання ${taskIndex + 1}`),
+            statement: text(generatedTask.practicalTask, 8_000),
+            inputFormat: text(generatedTask.inputFormat, 2_000),
+            outputFormat: text(generatedTask.outputFormat, 2_000),
+            constraints: text(generatedTask.constraints, 2_000),
+            examples,
+            codeTemplate: text(generatedTask.codeTemplate, 40_000),
+            runtime,
+            entryFile: projectEntryFile(runtime),
+            tests: testSelection.tests,
+          };
+          return practical;
         };
-        return practical;
+
+        return generateDiagnosticTaskPackageWithRetry(
+          (packageAttempt, previousError) => {
+            if (packageAttempt === 1) return generatePackage(taskContext);
+            const rejectedSource = recordOf(previousError)?.invalidSource === "publicExamples" ? "public examples" : "statement";
+            const replacementContext = [
+              taskContext,
+              `REPLACEMENT TASK REQUIREMENT: The previous draft failed independent review of its ${rejectedSource}. Generate a substantially different task with a complete, unambiguous input/output contract. For every decimal or floating-point output, state exact precision and rounding or an explicit tolerance, then recalculate every public example.`,
+              `Replacement variation token: ${groupSeed}-replacement-${packageAttempt}.`,
+            ].join("\n\n");
+            return generatePackage(replacementContext);
+          },
+          (error) => {
+            const rejectedSource = recordOf(error)?.invalidSource === "publicExamples" ? "public examples" : "statement";
+            logger.warn("[learning/diagnostic] regenerating practical task after contract failure", {
+              requestId,
+              courseId: course.id,
+              moduleId: topicGroup[0].moduleId,
+              attempt: 2,
+              rejectedSource,
+            });
+          },
+        );
       }),
     ]);
     const questions = generatedQuestions.flat();

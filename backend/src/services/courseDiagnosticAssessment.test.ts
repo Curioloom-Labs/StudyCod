@@ -5,8 +5,10 @@ import {
   assessmentFailureReason,
   assessmentGenerationErrorLogDetails,
   canFallbackToDiagnosticPublicExamples,
+  generateDiagnosticTaskPackageWithRetry,
   resolveCourseDiagnosticTestCases,
   selectCourseDiagnosticTestCases,
+  shouldRegenerateDiagnosticTask,
 } from "./courseDiagnosticAssessment";
 import { AIValidationError } from "./llm/AIResponseValidator";
 import { TaskContractReviewError } from "./llm/TaskContractReview";
@@ -106,4 +108,59 @@ test("diagnostic assessment never masks statement or public-example contract fai
     success: false,
     error: { error: "TASK_CONTRACT_REVIEW_FAILED[statement]: missing output rule" },
   }, [{ input: "0", output: "0" }]), null);
+});
+
+test("diagnostic assessment regenerates the whole task for statement or public-example failures", () => {
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("missing decimal precision"), {
+    invalidSource: "statement",
+  })), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("incorrect sample output"), {
+    invalidSource: "publicExamples",
+  })), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("invalid hidden oracle output"), {
+    invalidSource: "candidateTests",
+  })), false);
+  assert.equal(shouldRegenerateDiagnosticTask(new Error("provider unavailable")), false);
+});
+
+test("a rejected decimal-output task is regenerated once with a replacement package", async () => {
+  const attempts: number[] = [];
+  const rejectedTask = Object.assign(new Error("TIME output has no decimal precision"), {
+    invalidSource: "statement",
+  });
+  const validReplacement = {
+    outputFormat: "Print TIME rounded to exactly two decimal places.",
+    examples: [{ input: "1 2", output: "0.50" }],
+    tests: [{ input: "2 4", output: "0.50" }],
+  };
+
+  const result = await generateDiagnosticTaskPackageWithRetry(async (attempt, previousError) => {
+    attempts.push(attempt);
+    if (attempt === 1) throw rejectedTask;
+    assert.equal(previousError, rejectedTask);
+    return validReplacement;
+  });
+
+  assert.deepEqual(attempts, [1, 2]);
+  assert.equal(result, validReplacement);
+});
+
+test("whole-task regeneration is bounded and only handles statement/example failures", async () => {
+  let attempts = 0;
+  const invalidStatement = Object.assign(new Error("missing decimal precision"), { invalidSource: "statement" });
+  const stillInvalid = Object.assign(new Error("replacement still missing precision"), { invalidSource: "statement" });
+  await assert.rejects(generateDiagnosticTaskPackageWithRetry(async () => {
+    attempts += 1;
+    if (attempts === 1) throw invalidStatement;
+    throw stillInvalid;
+  }), /replacement still missing precision/);
+  assert.equal(attempts, 2);
+
+  attempts = 0;
+  const invalidCandidateTests = Object.assign(new Error("hidden candidate output mismatch"), { invalidSource: "candidateTests" });
+  await assert.rejects(generateDiagnosticTaskPackageWithRetry(async () => {
+    attempts += 1;
+    throw invalidCandidateTests;
+  }), /hidden candidate output mismatch/);
+  assert.equal(attempts, 1);
 });
