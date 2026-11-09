@@ -84,6 +84,16 @@ export type CourseDiagnosticResult = {
   submittedAt: string;
 };
 
+const diagnosticPayloadTransformer = {
+  to(value: CourseDiagnosticPayload | null | undefined): string | null {
+    return value == null ? null : JSON.stringify(value);
+  },
+  from(value: string | null | undefined): CourseDiagnosticPayload | null {
+    if (value == null) return null;
+    return JSON.parse(value) as CourseDiagnosticPayload;
+  },
+};
+
 @Entity("course_diagnostic_assessments")
 @Index("uq_course_diagnostic_attempt", ["enrollment", "attemptNumber"], { unique: true })
 export class CourseDiagnosticAssessment {
@@ -100,7 +110,7 @@ export class CourseDiagnosticAssessment {
   @Column({ type: "int", default: 1, name: "attempt_number" })
   attemptNumber!: number;
 
-  @Column({ type: "simple-json", name: "assessment_data" })
+  @Column({ type: "mediumtext", name: "assessment_data", transformer: diagnosticPayloadTransformer })
   assessmentData!: CourseDiagnosticPayload;
 
   @Column({ type: "enum", enum: ["READY", "SUBMITTED"], default: "READY" })

@@ -980,10 +980,20 @@ export class OpenRouterProvider implements LLMProvider {
             } catch {
               parsedError = null;
             }
-            const nestedErrorMessage = readProperty(readProperty(parsedError, 'error'), 'message');
+            const parsedProviderError = readProperty(parsedError, 'error');
+            const nestedErrorMessage = readProperty(parsedProviderError, 'message');
+            const errorMetadata = readProperty(parsedProviderError, 'metadata');
+            const limitSource = readProperty(errorMetadata, 'limit_source');
+            const errorReason = readProperty(errorMetadata, 'reason');
             const responseErrorMessage = typeof nestedErrorMessage === 'string' ? nestedErrorMessage : errorText;
             const isInvalidArgument = response.status === 400 && (responseErrorMessage.includes('INVALID_ARGUMENT') || responseErrorMessage.includes('JSON mode is not enabled') || responseErrorMessage.includes('not enabled'));
             const isRateLimit = response.status === 429 || isRateLimitLike(responseErrorMessage);
+            const isInflightBudgetExceeded = response.status === 402 && (
+              errorReason === 'in_flight_budget_exhausted' || limitSource === 'openrouter_in_flight_budget'
+            );
+            const isCreditBalanceExhausted = response.status === 402 && !isInflightBudgetExceeded && (
+              limitSource === 'openrouter_credits' || /insufficient credits/i.test(responseErrorMessage)
+            );
             if (isInvalidArgument) {
               throw new Error(`AI_GENERATION_FAILED: Invalid request for model ${model}. ${errorText}`);
             }
@@ -993,6 +1003,35 @@ export class OpenRouterProvider implements LLMProvider {
             if (response.status === 401 || response.status === 403) {
               // Invalid/unauthorized key – disable it for a while so we stop burning it on every request.
               keyHealth.disabledUntilMs = nowMs() + keyDisableMs;
+              lastError = error;
+              break;
+            }
+            if (isCreditBalanceExhausted) {
+              // A no-credit key will not recover by retrying this request. Skip
+              // it for the current process and continue with the next key.
+              keyHealth.disabledUntilMs = nowMs() + keyDisableMs;
+              lastError = error;
+              break;
+            }
+            if (isInflightBudgetExceeded) {
+              // OpenRouter reports its in-flight account budget as HTTP 402,
+              // but it is transient. Respect Retry-After and retry this key
+              // instead of treating it as a permanent billing failure.
+              const retryAfterMs = parseRetryAfterMs(response);
+              const cooldownMs = retryAfterMs > 0 ? retryAfterMs : defaultRateLimitCooldownMs;
+              keyHealth.cooldownUntilMs = nowMs() + cooldownMs;
+              if (attempt < maxRetries) {
+                lastError = error;
+                logger.info('OpenRouter retry (in-flight budget)', {
+                  traceId,
+                  userId,
+                  topicId,
+                  attempt: attempt + 1,
+                  delay: cooldownMs
+                });
+                await waitWithinAIExecutionContext(cooldownMs, options);
+                continue;
+              }
               lastError = error;
               break;
             }

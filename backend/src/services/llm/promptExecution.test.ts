@@ -100,18 +100,75 @@ test('bundle rollback selects the previous policy version without changing user 
   assert.equal(resolvePromptBundleVersion(undefined), PROMPT_BUNDLE_VERSION);
 });
 
-test('direct prompt operations share a two-retry budget across nested calls', async () => {
+test('direct prompt operations share a bounded retry budget across nested calls', async () => {
   await runWithPromptExecutionContext('task.generate', {}, async () => {
     const outer = getCurrentAIExecutionContext();
-    assert.equal(outer?.retryBudget?.remaining, 2);
+    assert.equal(outer?.retryBudget?.remaining, 16);
     assert.equal(consumeCurrentAIExecutionRetry(), true);
     await runWithPromptExecutionContext('task.generated-tests', {}, async () => {
       assert.equal(getCurrentAIExecutionContext()?.retryBudget, outer?.retryBudget);
       assert.equal(consumeCurrentAIExecutionRetry(), true);
     });
+    for (let retry = 0; retry < 14; retry += 1) {
+      assert.equal(consumeCurrentAIExecutionRetry(), true);
+    }
     assert.equal(consumeCurrentAIExecutionRetry(), false);
   });
   assert.equal(getCurrentAIExecutionContext(), undefined);
+});
+
+test('quiz prompt operations receive a bounded repair budget without changing other prompt budgets', async () => {
+  await runWithPromptExecutionContext('task.quiz', {}, async () => {
+    assert.equal(getCurrentAIExecutionContext()?.retryBudget?.remaining, 16);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+    assert.equal(consumeCurrentAIExecutionRetry(), false);
+  });
+
+  await runWithPromptExecutionContext('task.generate', {}, async () => {
+    assert.equal(getCurrentAIExecutionContext()?.retryBudget?.remaining, 16);
+  });
+
+  await runWithPromptExecutionContext('task.generated-tests', {}, async () => {
+    assert.equal(getCurrentAIExecutionContext()?.retryBudget?.remaining, 2);
+  });
+});
+
+test('independent diagnostic batches receive fresh retry budgets while nested calls share them', async () => {
+  await runWithPromptExecutionContext('task.generate', {}, async () => {
+    const outer = getCurrentAIExecutionContext();
+    assert.equal(consumeCurrentAIExecutionRetry(), true);
+
+    await runWithPromptExecutionContext('task.quiz', { forceNewContext: true }, async () => {
+      const isolated = getCurrentAIExecutionContext();
+      assert.notEqual(isolated, outer);
+      assert.equal(isolated?.promptId, 'task.quiz');
+      assert.equal(isolated?.retryBudget?.remaining, 16);
+      assert.equal(consumeCurrentAIExecutionRetry(), true);
+
+      await runWithPromptExecutionContext('task.generate', {}, async () => {
+        assert.equal(getCurrentAIExecutionContext(), isolated);
+        assert.equal(consumeCurrentAIExecutionRetry(), true);
+      });
+    });
+
+    assert.equal(getCurrentAIExecutionContext(), outer);
+    assert.equal(outer?.retryBudget?.remaining, 15);
+  });
 });
 
 test('retry waits stop at the shared deadline and honor cancellation', async () => {

@@ -12,6 +12,7 @@ import {
 } from "../entities/CourseDiagnosticAssessment";
 import { UserCourseEnrollment } from "../entities/UserCourseEnrollment";
 import { getLLMOrchestrator } from "./llm/LLMOrchestrator";
+import { runWithPromptExecutionContext } from "./llm/promptExecution";
 import { safeAICall } from "./ai/safeAICall";
 import { judgeWithSemaphore } from "./judgeWorker";
 import type { JudgeLanguage } from "./judgeWorker/types";
@@ -57,8 +58,9 @@ export function assessmentFailureReason(error: unknown): string {
   const details = recordOf(error);
   const message = error instanceof Error ? error.message : String(details?.message ?? error ?? "");
   if (/\b429\b|rate.?limit|too many requests/i.test(message)) return "provider_rate_limited";
-  if (/timeout|timed out|ETIMEDOUT|aborted/i.test(message)) return "provider_timeout";
+  if (/timeout|timed out|ETIMEDOUT|request aborted|deadline exceeded|AbortError/i.test(message)) return "provider_timeout";
   if (/ECONN|ENOTFOUND|fetch failed|network|\b50[234]\b|bad gateway|unavailable/i.test(message)) return "provider_unavailable";
+  if (/\b(?:CORE_OPERATION_MISSING|TOPIC_MISMATCH_HARD_FAIL|FORBIDDEN_SCOPE_VIOLATION|MULTI_TASK_NOT_ALLOWED):/i.test(message)) return "task_semantic_validation_failed";
   if (typeof details?.invalidSource === "string") return "task_contract_review_failed";
   if (details?.name === "AIValidationError" || recordOf(details?.errors)) return "invalid_provider_response";
   if (/empty (ai )?response/i.test(message)) return "empty_provider_response";
@@ -143,20 +145,45 @@ export function canFallbackToDiagnosticPublicExamples(validationMessage: string)
 
 export function shouldRegenerateDiagnosticTask(error: unknown): boolean {
   const details = recordOf(error);
-  return details?.invalidSource === "statement" || details?.invalidSource === "publicExamples";
+  if (details?.invalidSource === "statement" || details?.invalidSource === "publicExamples") return true;
+  const message = String(details?.message ?? "");
+  if (/\b(?:CORE_OPERATION_MISSING|TOPIC_MISMATCH_HARD_FAIL|FORBIDDEN_SCOPE_VIOLATION|MULTI_TASK_NOT_ALLOWED):/i.test(message)) return true;
+  return details?.name === "AIValidationError"
+    && details?.mode === "generateTask"
+    && /^Task generation validation failed:/i.test(message);
+}
+
+function diagnosticTaskRegenerationReason(error: unknown): "statement" | "publicExamples" | "shallowDecision" | "implementationHint" | "emptyOutput" | "coreOperation" | "topicMismatch" | "forbiddenScope" | "multipleTasks" | "taskValidation" | null {
+  const details = recordOf(error);
+  if (details?.invalidSource === "statement") return "statement";
+  if (details?.invalidSource === "publicExamples") return "publicExamples";
+  if (!shouldRegenerateDiagnosticTask(error)) return null;
+  const message = String(details?.message ?? "");
+  if (/decision task is too shallow/i.test(message)) return "shallowDecision";
+  if (/reveals an implementation technique/i.test(message)) return "implementationHint";
+  if (/requires empty output/i.test(message)) return "emptyOutput";
+  if (/CORE_OPERATION_MISSING/i.test(message)) return "coreOperation";
+  if (/TOPIC_MISMATCH_HARD_FAIL/i.test(message)) return "topicMismatch";
+  if (/FORBIDDEN_SCOPE_VIOLATION/i.test(message)) return "forbiddenScope";
+  if (/MULTI_TASK_NOT_ALLOWED/i.test(message)) return "multipleTasks";
+  return "taskValidation";
 }
 
 export async function generateDiagnosticTaskPackageWithRetry<T>(
-  generatePackage: (attempt: 1 | 2, previousError?: unknown) => Promise<T>,
-  onRetry?: (error: unknown) => void,
+  generatePackage: (attempt: 1 | 2 | 3 | 4, previousError?: unknown) => Promise<T>,
+  onRetry?: (error: unknown, nextAttempt: 2 | 3 | 4) => void,
 ): Promise<T> {
-  try {
-    return await generatePackage(1);
-  } catch (error) {
-    if (!shouldRegenerateDiagnosticTask(error)) throw error;
-    onRetry?.(error);
-    return generatePackage(2, error);
+  let previousError: unknown;
+  for (const attempt of [1, 2, 3, 4] as const) {
+    try {
+      return await generatePackage(attempt, previousError);
+    } catch (error) {
+      if (attempt === 4 || !shouldRegenerateDiagnosticTask(error)) throw error;
+      previousError = error;
+      onRetry?.(error, (attempt + 1) as 2 | 3 | 4);
+    }
   }
+  throw new Error("Unreachable diagnostic task regeneration state");
 }
 
 export function selectCourseDiagnosticTestCases(
@@ -208,20 +235,37 @@ export function resolveCourseDiagnosticTestCases(
     : null;
 }
 
-async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+  failureState: { failed: boolean } = { failed: false },
+): Promise<R[]> {
   const results = new Array<R>(items.length);
   let nextIndex = 0;
+  let hasFailure = false;
+  let firstFailure: unknown;
   await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, async () => {
-    while (true) {
+    while (!failureState.failed) {
       const index = nextIndex++;
       if (index >= items.length) return;
-      results[index] = await worker(items[index], index);
+      try {
+        results[index] = await worker(items[index], index);
+      } catch (error) {
+        failureState.failed = true;
+        if (!hasFailure) {
+          hasFailure = true;
+          firstFailure = error;
+        }
+        return;
+      }
     }
   }));
+  if (hasFailure) throw firstFailure;
   return results;
 }
 
-function normalizeQuestions(
+export function normalizeQuestions(
   rawQuiz: unknown,
   topicAssignments: CourseDiagnosticTopic[],
   expectedCount: number,
@@ -239,7 +283,7 @@ function normalizeQuestions(
     const rawPrompt = text(question?.q ?? question?.question ?? question?.prompt, 2_000);
     const topicMarker = rawPrompt.match(/^\[topic:(-?\d+)\]\s*/i);
     const markedTopic = topicMarker ? topicAssignments.find((topic) => topic.id === Number(topicMarker[1])) : undefined;
-    const topic = markedTopic ?? topicAssignments[index % topicAssignments.length];
+    const topic = markedTopic ?? topicAssignments[questions.length % topicAssignments.length];
     const prompt = rawPrompt.replace(/^\[topic:-?\d+\]\s*/i, "").trim();
     const rawOptions = Array.isArray(question?.options) ? question.options.map((option) => text(option, 800)) : [];
     const correct = Number(question?.correct);
@@ -259,6 +303,43 @@ function normalizeQuestions(
   }
   if (questions.length !== expectedCount) throw assessmentError("ASSESSMENT_QUESTIONS_INVALID", 503);
   return questions;
+}
+
+export function hasExactDiagnosticQuestionCoverage(
+  questions: CourseDiagnosticQuestion[],
+  topicAssignments: Array<Pick<CourseDiagnosticTopic, "id">>,
+): boolean {
+  const expected = new Map<number, number>();
+  const actual = new Map<number, number>();
+  for (const topic of topicAssignments) expected.set(topic.id, (expected.get(topic.id) ?? 0) + 1);
+  for (const question of questions) actual.set(question.topicId, (actual.get(question.topicId) ?? 0) + 1);
+  return expected.size === actual.size && [...expected].every(([topicId, count]) => actual.get(topicId) === count);
+}
+
+export async function generateDiagnosticQuestionsWithCoverageRetry<T>(
+  topicAssignments: Array<Pick<CourseDiagnosticTopic, "id">>,
+  generate: (coverageFeedback?: string) => Promise<T>,
+  normalize: (raw: T) => CourseDiagnosticQuestion[],
+): Promise<CourseDiagnosticQuestion[]> {
+  const first = normalize(await generate());
+  if (hasExactDiagnosticQuestionCoverage(first, topicAssignments)) return first;
+
+  const expected = new Map<number, number>();
+  const actual = new Map<number, number>();
+  for (const topic of topicAssignments) expected.set(topic.id, (expected.get(topic.id) ?? 0) + 1);
+  for (const question of first) actual.set(question.topicId, (actual.get(question.topicId) ?? 0) + 1);
+  const findings = [...expected].filter(([topicId, count]) => actual.get(topicId) !== count)
+    .map(([topicId, count]) => `topic ${topicId}: expected ${count}, received ${actual.get(topicId) ?? 0}`);
+  const feedback = [
+    "REGENERATE THIS QUESTION BATCH. The previous response did not cover the assigned topics exactly.",
+    `Coverage findings: ${findings.join("; ")}.`,
+    "Return exactly one question for each listed assignment, in the listed order, with the matching [topic:ID] marker. Do not add or omit questions.",
+  ].join("\n");
+  const replacement = normalize(await generate(feedback));
+  if (!hasExactDiagnosticQuestionCoverage(replacement, topicAssignments)) {
+    throw assessmentError("ASSESSMENT_QUESTIONS_INVALID", 503);
+  }
+  return replacement;
 }
 
 function courseDiagnosticTopics(course: Course, locale: CurriculumLocale): CourseDiagnosticTopic[] {
@@ -321,7 +402,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
   const language = locale === "en" ? "en" : "uk";
   try {
     const questionAssignments = topics.flatMap((topic) => Array.from({ length: 2 }, () => topic));
-    const questionBatches = chunks(questionAssignments, 8);
+    const questionBatches = chunks(questionAssignments, 4);
     const practicalGroups: CourseDiagnosticTopic[][] = [];
     for (const topic of topics) {
       const currentGroup = practicalGroups[practicalGroups.length - 1];
@@ -332,10 +413,9 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
       }
     }
 
-    const [generatedQuestions, practicals] = await Promise.all([
-      // Keep one question batch and one practical task in flight at a time.
-      // This overlaps the two parts without flooding providers with four
-      // concurrent generation/review chains.
+    const generationFailureState = { failed: false };
+    const [questionResult, practicalResult] = await Promise.allSettled([
+      // Keep provider concurrency bounded to avoid retry-budget exhaustion.
       mapWithConcurrency(questionBatches, 1, async (topicAssignments, batchIndex) => {
         try {
           const questionPlan = [
@@ -343,24 +423,30 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             ...topicAssignments.map((topic, index) => `Question ${index + 1}: [topic:${topic.id}] ${topic.title}. Test this topic only. ${topic.context}`),
             "When the same topic appears twice, assess two different skills. The [topic:ID] marker is metadata and must be at the beginning of q.",
           ].join("\n");
-          const quiz = await llm.generateQuizWithAI({
-            lang: runtime,
-            prevTopics: `${courseContext}\n\n${questionPlan}`,
-            count: topicAssignments.length,
-            questionStyle: "CONCEPTS",
-            generationGuidance: language === "en"
-              ? "COURSE DIAGNOSTIC KNOWLEDGE QUESTIONS: Test the assigned programming concept. Every question must be answerable from its wording and choices without executing a program. Do not ask for the output or behavior of a particular program and do not refer to a specific code snippet."
-              : "ПИТАННЯ ДІАГНОСТИКИ ЗНАНЬ: Перевіряй призначене поняття з програмування. На кожне питання має бути можна відповісти за формулюванням і варіантами без запуску програми. Не питай про результат чи поведінку конкретної програми та не посилайся на певний фрагмент коду.",
-            userId,
-            language,
-            requestId,
-          });
-          return normalizeQuestions(quiz.quizJson, topicAssignments, topicAssignments.length, batchIndex * 8);
+          const baseGuidance = language === "en"
+            ? "COURSE DIAGNOSTIC KNOWLEDGE QUESTIONS: Test the assigned programming concept. Every question must be answerable from its wording and choices alone, without executing or tracing a program. Ask about language rules, syntax, terminology, and when a construct is used. Do not mention or refer to code, snippets, or programs in a question; never ask what one prints, returns, outputs, or does. If the assigned topic is flow control, ask about the meaning and use of conditions and branches without presenting a tiny list of values to map directly to outputs."
+            : "ПИТАННЯ ДІАГНОСТИКИ ЗНАНЬ: Перевіряй призначене поняття з програмування. На кожне питання має бути можна відповісти лише за його формулюванням і варіантами, без запуску чи простеження програми. Питай про правила мови, синтаксис, терміни й призначення конструкцій. Не згадуй і не описуй код, фрагменти чи програми в питаннях; ніколи не питай, що програма виведе, поверне або виконає. Якщо тема стосується керування потоком, перевіряй значення й призначення умов та гілок без прямого зіставлення невеликого набору значень із результатами.";
+          return runWithPromptExecutionContext("task.quiz", { traceId: requestId, forceNewContext: true }, () =>
+            generateDiagnosticQuestionsWithCoverageRetry(
+              topicAssignments,
+              (coverageFeedback) => llm.generateQuizWithAI({
+                lang: runtime,
+                prevTopics: `${courseContext}\n\n${questionPlan}`,
+                count: topicAssignments.length,
+                questionStyle: "CONCEPTS",
+                generationGuidance: [baseGuidance, coverageFeedback].filter(Boolean).join("\n\n"),
+                userId,
+                language,
+                requestId,
+              }),
+              (quiz) => normalizeQuestions(quiz.quizJson, topicAssignments, topicAssignments.length, batchIndex * 4),
+            ),
+          );
         } catch (error) {
           throw withAssessmentStage(error, "questions");
         }
-      }),
-      mapWithConcurrency(practicalGroups, 1, async (topicGroup, taskIndex) => {
+      }, generationFailureState),
+      mapWithConcurrency(practicalGroups, 2, async (topicGroup, taskIndex) => {
         const topicList = topicGroup.map((topic) => `- [topic:${topic.id}] ${topic.title}: ${topic.context}`).join("\n");
         const groupSeed = `${seed}-task-${taskIndex + 1}`;
         const topicTitle = topicGroup[0].moduleTitle.slice(0, 255);
@@ -369,10 +455,10 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
           `Module: ${topicTitle}`,
           `PRACTICAL ASSESSMENT ${taskIndex + 1}/${practicalGroups.length}. This task covers the following course topics:`,
           topicList,
-          `Variation token: ${groupSeed}. Generate a fresh integrated programming task that requires applying the listed topics. Do not use concepts outside the course. Include standard input/output, clear constraints, examples, and a concise starter template with TODO markers.`,
+          `Variation token: ${groupSeed}. Generate a fresh integrated programming task that requires applying the listed topics. Do not use concepts outside the course. Include standard input/output, clear constraints, examples, and a concise starter template with TODO markers. Every public example must have concrete non-empty input and output; calculate each output from the exact task rules and ensure it matches the reference behavior. If a result would otherwise be empty, define and use a non-empty sentinel such as NONE. Describe observable behavior without prescribing an implementation technique.`,
         ].join("\n\n");
         const generatePackage = async (generationContext: string): Promise<CourseDiagnosticPractical> => {
-          const generatedTask = await runAtAssessmentStage("practical_task", () => llm.generateTaskWithAI({
+          const generatedTask = await runAtAssessmentStage("practical_task", () => runWithPromptExecutionContext("task.generate", { traceId: requestId, forceNewContext: true }, () => llm.generateTaskWithAI({
             topicTitle,
             theory: generationContext,
             lang: runtime,
@@ -387,7 +473,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             topicId: topicGroup[0].id > 0 ? topicGroup[0].id : undefined,
             language,
             requestId,
-          }));
+          })));
           const taskDescription = [
             generatedTask.practicalTask,
             `Input format: ${generatedTask.inputFormat}`,
@@ -481,27 +567,53 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
         return generateDiagnosticTaskPackageWithRetry(
           (packageAttempt, previousError) => {
             if (packageAttempt === 1) return generatePackage(taskContext);
-            const rejectedSource = recordOf(previousError)?.invalidSource === "publicExamples" ? "public examples" : "statement";
+            const regenerationReason = diagnosticTaskRegenerationReason(previousError);
+            const validationIssues = Array.isArray(recordOf(previousError)?.issues)
+              ? (recordOf(previousError)?.issues as unknown[]).map((issue) => text(issue, 500)).filter(Boolean).slice(0, 3)
+              : [];
+            if (!validationIssues.length && shouldRegenerateDiagnosticTask(previousError)) {
+              validationIssues.push(text(recordOf(previousError)?.message, 500));
+            }
+            const replacementRequirement = regenerationReason === "coreOperation"
+              ? "REPLACEMENT TASK REQUIREMENT: The previous task omitted the required core operation. Regenerate a substantially different task that explicitly asks the learner to perform that operation in its title or statement, while keeping the task within the assigned topic and preserving a complete input/output contract. Recompute every example."
+              : regenerationReason === "topicMismatch"
+                ? "REPLACEMENT TASK REQUIREMENT: The previous task did not assess the assigned topic. Generate a new task directly about the assigned topic and required core operation; do not introduce adjacent concepts. Keep one cohesive task and recompute every example."
+                : regenerationReason === "forbiddenScope"
+                  ? "REPLACEMENT TASK REQUIREMENT: The previous task included forbidden scope. Remove the prohibited concepts entirely and create one task limited to the assigned topic and required core operation. Recompute every example."
+                  : regenerationReason === "multipleTasks"
+                    ? "REPLACEMENT TASK REQUIREMENT: The previous output contained multiple exercises. Return exactly one cohesive programming task with one clear goal and contract."
+                    : regenerationReason === "shallowDecision"
+                      ? "REPLACEMENT TASK REQUIREMENT: The previous decision task was rejected as too shallow. Create a substantially richer decision problem with at least two interacting conditions and at least four meaningful valid input combinations. Specify the input bounds and behavior for every combination. Avoid a direct one-to-one mapping of a tiny set of values to outputs. Include examples that demonstrate distinct branches, then recalculate their outputs."
+                      : regenerationReason === "implementationHint"
+                        ? "REPLACEMENT TASK REQUIREMENT: Describe only the required observable behavior. Do not reveal or prescribe an implementation technique, algorithm, data structure, or sequence of solution steps. Keep the task a complete, unambiguous programming problem with examples that follow its rules."
+                        : regenerationReason === "emptyOutput"
+                          ? "REPLACEMENT TASK REQUIREMENT: Every example and the output contract must use a concrete, non-empty stdout value. When the logical result is absence, define an explicit non-empty sentinel such as NONE and use it consistently. Recompute every example from the rules."
+                          : `REPLACEMENT TASK REQUIREMENT: The previous draft failed independent review of its ${regenerationReason === "publicExamples" ? "public examples" : "task contract"}. Generate a substantially different task with a complete, unambiguous input/output contract. For every decimal or floating-point output, state exact precision and rounding or an explicit tolerance. Recompute each example from the written rules and verify its output before returning it.`;
             const replacementContext = [
               taskContext,
-              `REPLACEMENT TASK REQUIREMENT: The previous draft failed independent review of its ${rejectedSource}. Generate a substantially different task with a complete, unambiguous input/output contract. For every decimal or floating-point output, state exact precision and rounding or an explicit tolerance, then recalculate every public example.`,
+              replacementRequirement,
+              ...(validationIssues.length ? [`INDEPENDENT VALIDATOR FINDINGS TO FIX: ${validationIssues.map((issue) => JSON.stringify(issue)).join("; ")}`] : []),
               `Replacement variation token: ${groupSeed}-replacement-${packageAttempt}.`,
             ].join("\n\n");
             return generatePackage(replacementContext);
           },
-          (error) => {
-            const rejectedSource = recordOf(error)?.invalidSource === "publicExamples" ? "public examples" : "statement";
-            logger.warn("[learning/diagnostic] regenerating practical task after contract failure", {
+          (error, nextAttempt) => {
+            const regenerationReason = diagnosticTaskRegenerationReason(error);
+            logger.warn("[learning/diagnostic] regenerating practical task after validation failure", {
               requestId,
               courseId: course.id,
               moduleId: topicGroup[0].moduleId,
-              attempt: 2,
-              rejectedSource,
+              attempt: nextAttempt,
+              reason: regenerationReason,
             });
           },
         );
-      }),
+      }, generationFailureState),
     ]);
+    if (questionResult.status === "rejected") throw questionResult.reason;
+    if (practicalResult.status === "rejected") throw practicalResult.reason;
+    const generatedQuestions = questionResult.value;
+    const practicals = practicalResult.value;
     const questions = generatedQuestions.flat();
     return { version: 2, seed, questions, practicals };
   } catch (error) {

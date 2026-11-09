@@ -5,13 +5,112 @@ import {
   assessmentFailureReason,
   assessmentGenerationErrorLogDetails,
   canFallbackToDiagnosticPublicExamples,
+  generateDiagnosticQuestionsWithCoverageRetry,
   generateDiagnosticTaskPackageWithRetry,
+  hasExactDiagnosticQuestionCoverage,
+  mapWithConcurrency,
+  normalizeQuestions,
   resolveCourseDiagnosticTestCases,
   selectCourseDiagnosticTestCases,
   shouldRegenerateDiagnosticTask,
 } from "./courseDiagnosticAssessment";
 import { AIValidationError } from "./llm/AIResponseValidator";
 import { TaskContractReviewError } from "./llm/TaskContractReview";
+
+test("diagnostic generation waits for active workers and stops scheduling after a failure", async () => {
+  const failureState = { failed: false };
+  const scheduled: number[] = [];
+  let activeWorkerFinished = false;
+  const failing = mapWithConcurrency([0, 1, 2], 1, async (item) => {
+    scheduled.push(item);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    throw new Error("diagnostic worker failed");
+  }, failureState);
+  const sibling = mapWithConcurrency([0, 1, 2], 1, async (item) => {
+    scheduled.push(item + 10);
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    activeWorkerFinished = true;
+    return item;
+  }, failureState);
+
+  const [failureResult, siblingResult] = await Promise.allSettled([failing, sibling]);
+  assert.equal(failureResult.status, "rejected");
+  assert.match(String(failureResult.reason), /diagnostic worker failed/);
+  assert.equal(siblingResult.status, "fulfilled");
+  assert.deepEqual(scheduled, [0, 10]);
+  assert.equal(activeWorkerFinished, true);
+});
+
+test("diagnostic quiz fallback assignment stays aligned when invalid candidates are skipped", () => {
+  const assignments = [
+    { id: 11, title: "A" },
+    { id: 11, title: "A" },
+    { id: 22, title: "B" },
+    { id: 22, title: "B" },
+  ] as any;
+  const makeQuestion = (question: string, correct = 0) => ({
+    q: question,
+    options: ["one", "two", "three", "four"],
+    correct,
+  });
+  const normalized = normalizeQuestions([
+    makeQuestion("Invalid candidate", 9),
+    makeQuestion("Question one"),
+    makeQuestion("Question two"),
+    makeQuestion("Question three"),
+    makeQuestion("Question four"),
+  ], assignments, 4, 0);
+
+  assert.deepEqual(normalized.map((question) => question.topicId), [11, 11, 22, 22]);
+  assert.equal(hasExactDiagnosticQuestionCoverage(normalized, assignments), true);
+});
+
+test("diagnostic quiz batches regenerate once when topic tags produce uneven coverage", async () => {
+  const assignments = [{ id: 11 }, { id: 11 }, { id: 22 }, { id: 22 }];
+  const question = (topicId: number) => ({
+    id: `q-${topicId}`,
+    question: `Question for ${topicId}`,
+    options: ["one", "two", "three", "four"],
+    correct: 0,
+    topicId,
+    topicTitle: `Topic ${topicId}`,
+  });
+  const invalidCoverage = [question(11), question(11), question(11), question(22)];
+  const validCoverage = [question(11), question(11), question(22), question(22)];
+  let calls = 0;
+
+  const generated = await generateDiagnosticQuestionsWithCoverageRetry(
+    assignments,
+    async (feedback) => {
+      calls += 1;
+      if (calls === 1) {
+        assert.equal(feedback, undefined);
+        return invalidCoverage;
+      }
+      assert.match(String(feedback), /topic 11: expected 2, received 3/);
+      assert.match(String(feedback), /topic 22: expected 2, received 1/);
+      return validCoverage;
+    },
+    (raw) => raw as ReturnType<typeof question>[],
+  );
+
+  assert.equal(calls, 2);
+  assert.equal(hasExactDiagnosticQuestionCoverage(generated, assignments), true);
+});
+
+test("diagnostic quiz batches fail closed after a coverage repair is still uneven", async () => {
+  const assignments = [{ id: 11 }, { id: 11 }, { id: 22 }, { id: 22 }];
+  const invalid = [
+    { id: "a", question: "a", options: [], correct: 0, topicId: 11, topicTitle: "A" },
+    { id: "b", question: "b", options: [], correct: 0, topicId: 11, topicTitle: "A" },
+    { id: "c", question: "c", options: [], correct: 0, topicId: 11, topicTitle: "A" },
+    { id: "d", question: "d", options: [], correct: 0, topicId: 22, topicTitle: "B" },
+  ];
+  await assert.rejects(
+    () => generateDiagnosticQuestionsWithCoverageRetry(assignments, async () => invalid, (raw) => raw as any),
+    /ASSESSMENT_QUESTIONS_INVALID/,
+  );
+});
 
 test("diagnostic assessment logs structured validation details without raw model output", () => {
   const schemaError = z.object({ examples: z.array(z.object({ input: z.string() })) }).safeParse({
@@ -22,6 +121,9 @@ test("diagnostic assessment logs structured validation details without raw model
   });
 
   assert.equal(assessmentFailureReason(error), "invalid_provider_response");
+  assert.equal(assessmentFailureReason(new Error("CORE_OPERATION_MISSING: task generation aborted.")), "task_semantic_validation_failed");
+  assert.equal(assessmentFailureReason(new Error("Generation aborted.")), "provider_generation_failed");
+  assert.equal(assessmentFailureReason(new Error("Request aborted (deadline exceeded)")), "provider_timeout");
   const details = assessmentGenerationErrorLogDetails(error);
   assert.equal(details.validationMode, "generateTask");
   assert.equal(details.validationIssueCount, 1);
@@ -120,7 +222,49 @@ test("diagnostic assessment regenerates the whole task for statement or public-e
   assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("invalid hidden oracle output"), {
     invalidSource: "candidateTests",
   })), false);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Task generation validation failed: decision task is too shallow; create richer behaviour with enough valid cases for meaningful tests"), {
+    name: "AIValidationError",
+    mode: "generateTask",
+  })), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Task generation validation failed: decision task is too shallow"), {
+    name: "AIValidationError",
+    mode: "generateTestData",
+  })), false);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Task generation validation failed: missing input format"), {
+    name: "AIValidationError",
+    mode: "generateTask",
+  })), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Task generation validation failed: practicalTask reveals an implementation technique"), {
+    name: "AIValidationError",
+    mode: "generateTask",
+  })), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Task generation validation failed: practicalTask requires empty output"), {
+    name: "AIValidationError",
+    mode: "generateTask",
+  })), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Task generation validation failed: practicalTask must be a natural narrative"), {
+    name: "AIValidationError",
+    mode: "generateTestData",
+  })), false);
+  assert.equal(shouldRegenerateDiagnosticTask(new Error("CORE_OPERATION_MISSING: Practical task omitted the required operation. Generation aborted.")), true);
+  assert.equal(shouldRegenerateDiagnosticTask(new Error("TOPIC_MISMATCH_HARD_FAIL: task covers another topic.")), true);
+  assert.equal(shouldRegenerateDiagnosticTask(new Error("FORBIDDEN_SCOPE_VIOLATION: task contains forbidden scope.")), true);
+  assert.equal(shouldRegenerateDiagnosticTask(new Error("MULTI_TASK_NOT_ALLOWED: task has more than one exercise.")), true);
   assert.equal(shouldRegenerateDiagnosticTask(new Error("provider unavailable")), false);
+});
+
+test("a task rejected for omitting its core operation is regenerated as a replacement package", async () => {
+  const attempts: number[] = [];
+  const missingCoreOperation = new Error("CORE_OPERATION_MISSING: Practical task omitted the required operation. Generation aborted.");
+  const replacement = { practicalTask: "Implement the required operation with a validated input/output contract." };
+  const result = await generateDiagnosticTaskPackageWithRetry(async (attempt, previousError) => {
+    attempts.push(attempt);
+    if (attempt === 1) throw missingCoreOperation;
+    assert.equal(previousError, missingCoreOperation);
+    return replacement;
+  });
+  assert.deepEqual(attempts, [1, 2]);
+  assert.equal(result, replacement);
 });
 
 test("a rejected decimal-output task is regenerated once with a replacement package", async () => {
@@ -145,22 +289,69 @@ test("a rejected decimal-output task is regenerated once with a replacement pack
   assert.equal(result, validReplacement);
 });
 
-test("whole-task regeneration is bounded and only handles statement/example failures", async () => {
-  let attempts = 0;
+test("a shallow decision task is regenerated once with a richer replacement package", async () => {
+  const attempts: number[] = [];
+  const shallowDecision = Object.assign(new Error("Task generation validation failed: decision task is too shallow; create richer behaviour with enough valid cases for meaningful tests"), {
+    name: "AIValidationError",
+    mode: "generateTask",
+  });
+  const validReplacement = {
+    statement: "Select a fee based on the requested service and customer tier.",
+    tests: [
+      { input: "standard silver", output: "5" },
+      { input: "express silver", output: "8" },
+      { input: "standard gold", output: "2" },
+      { input: "express gold", output: "4" },
+    ],
+  };
+
+  const result = await generateDiagnosticTaskPackageWithRetry(async (attempt, previousError) => {
+    attempts.push(attempt);
+    if (attempt === 1) throw shallowDecision;
+    assert.equal(previousError, shallowDecision);
+    return validReplacement;
+  });
+
+  assert.deepEqual(attempts, [1, 2]);
+  assert.equal(result, validReplacement);
+});
+
+test("whole-task regeneration allows three bounded retries and stops on unrelated failures", async () => {
+  const attempts: number[] = [];
   const invalidStatement = Object.assign(new Error("missing decimal precision"), { invalidSource: "statement" });
   const stillInvalid = Object.assign(new Error("replacement still missing precision"), { invalidSource: "statement" });
-  await assert.rejects(generateDiagnosticTaskPackageWithRetry(async () => {
-    attempts += 1;
-    if (attempts === 1) throw invalidStatement;
-    throw stillInvalid;
-  }), /replacement still missing precision/);
-  assert.equal(attempts, 2);
+  const thirdInvalid = Object.assign(new Error("third replacement still missing precision"), { invalidSource: "statement" });
+  const fourthInvalid = Object.assign(new Error("fourth replacement still missing precision"), { invalidSource: "statement" });
+  await assert.rejects(generateDiagnosticTaskPackageWithRetry(async (attempt, previousError) => {
+    attempts.push(attempt);
+    if (attempt === 1) throw invalidStatement;
+    if (attempt === 2) {
+      assert.equal(previousError, invalidStatement);
+      throw stillInvalid;
+    }
+    if (attempt === 3) {
+      assert.equal(previousError, stillInvalid);
+      throw thirdInvalid;
+    }
+    assert.equal(previousError, thirdInvalid);
+    throw fourthInvalid;
+  }), /fourth replacement still missing precision/);
+  assert.deepEqual(attempts, [1, 2, 3, 4]);
 
-  attempts = 0;
+  attempts.length = 0;
+  const providerUnavailable = new Error("provider unavailable");
+  await assert.rejects(generateDiagnosticTaskPackageWithRetry(async (attempt) => {
+    attempts.push(attempt);
+    if (attempt === 1) throw invalidStatement;
+    throw providerUnavailable;
+  }), /provider unavailable/);
+  assert.deepEqual(attempts, [1, 2]);
+
+  attempts.length = 0;
   const invalidCandidateTests = Object.assign(new Error("hidden candidate output mismatch"), { invalidSource: "candidateTests" });
-  await assert.rejects(generateDiagnosticTaskPackageWithRetry(async () => {
-    attempts += 1;
+  await assert.rejects(generateDiagnosticTaskPackageWithRetry(async (attempt) => {
+    attempts.push(attempt);
     throw invalidCandidateTests;
   }), /hidden candidate output mismatch/);
-  assert.equal(attempts, 1);
+  assert.deepEqual(attempts, [1]);
 });

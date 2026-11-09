@@ -38,17 +38,20 @@ export function runWithAIExecutionContext<T>(context: AIExecutionContext, operat
 /** Establish one shared budget and deadline for direct orchestrator calls. */
 export function runWithPromptExecutionContext<T>(
   id: PromptId,
-  options: { signal?: AbortSignal; traceId?: string; deadlineAt?: number; timeoutMs?: number } = {},
+  options: { signal?: AbortSignal; traceId?: string; deadlineAt?: number; timeoutMs?: number; forceNewContext?: boolean } = {},
   operation: () => Promise<T>,
 ): Promise<T> {
-  if (getCurrentAIExecutionContext()) return operation();
+  if (!options.forceNewContext && getCurrentAIExecutionContext()) return operation();
   const timeoutMs = typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
     ? options.timeoutMs
     : 120_000;
   return runWithAIExecutionContext(createExecutionContext(id, {
     traceId: options.traceId ?? `trace-${randomUUID()}`,
     deadlineAt: options.deadlineAt ?? Date.now() + timeoutMs,
-    retryBudget: { remaining: 2 },
+    // Quiz batches may need code-completeness and duplicate repairs in addition
+    // to provider fallback and format repair. Practical task generation also
+    // nests anchor, provider fallback, contract, and semantic repairs.
+    retryBudget: { remaining: id === 'task.quiz' || id === 'task.generate' ? 16 : 2 },
     signal: options.signal,
     promptVersion: getActivePromptBundleVersion(),
   }), operation);

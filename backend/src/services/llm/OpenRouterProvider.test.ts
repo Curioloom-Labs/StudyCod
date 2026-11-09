@@ -177,6 +177,100 @@ test('OpenRouterProvider cools down rate-limited keys (429) using Retry-After', 
   process.env.OPENROUTER_URL = old.OPENROUTER_URL;
 });
 
+test('OpenRouterProvider skips keys with exhausted credits without retrying them', async (t) => {
+  const names = ['OPENROUTER_API_KEY', 'OPENROUTER_BACKUP_API_KEYS', 'OPENROUTER_MODEL', 'OPENROUTER_TEXT_MODEL', 'OPENROUTER_JSON_MODEL', 'OPENROUTER_FALLBACK_MODELS', 'OPENROUTER_MODEL_FALLBACKS', 'OPENROUTER_URL'];
+  const previous = names.map(name => process.env[name]);
+  t.after(() => names.forEach((name, index) => {
+    if (previous[index] === undefined) delete process.env[name];
+    else process.env[name] = previous[index];
+  }));
+
+  const KEY_EMPTY = 'sk-or-v1-empty_credits_for_test_402';
+  const KEY_GOOD = 'sk-or-v1-good_after_empty_credits_test';
+  process.env.OPENROUTER_API_KEY = KEY_EMPTY;
+  process.env.OPENROUTER_BACKUP_API_KEYS = KEY_GOOD;
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it';
+  process.env.OPENROUTER_TEXT_MODEL = '';
+  process.env.OPENROUTER_JSON_MODEL = '';
+  process.env.OPENROUTER_FALLBACK_MODELS = '';
+  process.env.OPENROUTER_MODEL_FALLBACKS = '';
+  process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+  const calls: FetchCall[] = [];
+  globalThis.fetch = async (_url: any, init: any) => {
+    const auth = String(init?.headers?.Authorization ?? '');
+    calls.push({ url: 'x', auth });
+    if (auth.includes(KEY_EMPTY)) {
+      return makeErrorResponse(402, {
+        error: {
+          message: 'Insufficient credits.',
+          code: 402,
+          metadata: { limit_source: 'openrouter_credits' }
+        }
+      });
+    }
+    return makeOkResponse('OK with funded key');
+  };
+
+  const provider = new OpenRouterProvider();
+  assert.equal(await provider.generateText('hi', 'sys', { maxRetries: 2 }), 'OK with funded key');
+  assert.equal(calls.length, 2, 'empty-credit key should not be retried');
+  assert.ok(calls[0].auth?.includes(KEY_EMPTY));
+  assert.ok(calls[1].auth?.includes(KEY_GOOD));
+
+  calls.length = 0;
+  assert.equal(await provider.generateText('hi again', 'sys', { maxRetries: 2 }), 'OK with funded key');
+  assert.equal(calls.length, 1, 'empty-credit key should be skipped during its cooldown');
+  assert.ok(calls[0].auth?.includes(KEY_GOOD));
+});
+
+test('OpenRouterProvider treats in-flight budget 402 as transient and honors Retry-After', async (t) => {
+  const names = ['OPENROUTER_API_KEY', 'OPENROUTER_BACKUP_API_KEYS', 'OPENROUTER_MODEL', 'OPENROUTER_TEXT_MODEL', 'OPENROUTER_JSON_MODEL', 'OPENROUTER_FALLBACK_MODELS', 'OPENROUTER_MODEL_FALLBACKS', 'OPENROUTER_URL'];
+  const previous = names.map(name => process.env[name]);
+  t.after(() => names.forEach((name, index) => {
+    if (previous[index] === undefined) delete process.env[name];
+    else process.env[name] = previous[index];
+  }));
+
+  const KEY_BUSY = 'sk-or-v1-inflight_budget_for_test_402';
+  const KEY_GOOD = 'sk-or-v1-good_after_inflight_budget_test';
+  process.env.OPENROUTER_API_KEY = KEY_BUSY;
+  process.env.OPENROUTER_BACKUP_API_KEYS = KEY_GOOD;
+  process.env.OPENROUTER_MODEL = 'google/gemma-3-27b-it';
+  process.env.OPENROUTER_TEXT_MODEL = '';
+  process.env.OPENROUTER_JSON_MODEL = '';
+  process.env.OPENROUTER_FALLBACK_MODELS = '';
+  process.env.OPENROUTER_MODEL_FALLBACKS = '';
+  process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+  const calls: FetchCall[] = [];
+  globalThis.fetch = async (_url: any, init: any) => {
+    const auth = String(init?.headers?.Authorization ?? '');
+    calls.push({ url: 'x', auth });
+    if (auth.includes(KEY_BUSY)) {
+      return makeErrorResponse(402, {
+        error: {
+          message: 'This request would exceed your available credits given your current in-flight requests.',
+          code: 402,
+          metadata: { reason: 'in_flight_budget_exhausted', limit_source: 'openrouter_in_flight_budget' }
+        }
+      }, { 'retry-after': '30' });
+    }
+    return makeOkResponse('OK after in-flight limit');
+  };
+
+  const provider = new OpenRouterProvider();
+  assert.equal(await provider.generateText('hi', 'sys', { maxRetries: 0 }), 'OK after in-flight limit');
+  assert.equal(calls.length, 2);
+  assert.ok(calls[0].auth?.includes(KEY_BUSY));
+  assert.ok(calls[1].auth?.includes(KEY_GOOD));
+
+  calls.length = 0;
+  assert.equal(await provider.generateText('hi again', 'sys', { maxRetries: 0 }), 'OK after in-flight limit');
+  assert.equal(calls.length, 1, 'busy key should be skipped until Retry-After expires');
+  assert.ok(calls[0].auth?.includes(KEY_GOOD));
+});
+
 test('OpenRouterProvider reads text when message.content is an array of parts', async () => {
   const old = {
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
