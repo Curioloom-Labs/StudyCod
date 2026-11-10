@@ -650,7 +650,7 @@ const TASK_VALIDATION_RULES: TaskValidationRule[] = [
   {
     id: "stdin.requires_example_input",
     applies: c => c.ioType === "STDIN_STDOUT",
-    message: "Task generation validation failed: STDIN_STDOUT requires non-empty examples[0].input",
+    message: "Task generation validation failed: every STDIN_STDOUT example must have non-empty input",
     fails: c => !c.exInput,
   },
   {

@@ -177,13 +177,11 @@ function buildQuizGenerationGuidance(params: { difficulty?: number; questionStyl
 function quizQuestionsMissingCodeIndexes(result: AiQuizResult, questionStyle?: QuizQuestionStyle): number[] {
   const parsed = JSON.parse(result.quizJson) as Array<{ q?: string; code?: string }>;
   const codeReferencePattern = /(?:\b(?:this|that|following|given|shown|provided|above|below)\b.{0,40}\b(?:code|snippet|program)\b|\b(?:code|snippet|program)\b.{0,40}\b(?:above|below|shown|provided|given)\b|(?:цей|ця|це|наведен|подан|показан|нижче|вище).{0,40}(?:код|фрагмент|програм))/i;
-  const codeBehaviorPattern = /(?:\b(?:output|result|value|print(?:ed)?|return(?:ed)?|run(?:ning)?|execute|execution|behavio[u]?r)\b|вивед|результат|надрук|поверта|виконан|працю)/i;
   return parsed.flatMap((question, index) => {
     const questionText = typeof question.q === "string" ? question.q : "";
     const hasSnippet = Boolean(question.code?.trim()) || /```[^\n]*\n[\s\S]+?```/.test(questionText);
     if (questionStyle === "CODE_READING" || questionStyle === "DEBUGGING") return hasSnippet ? [] : [index];
-    const refersToSpecificCode = codeReferencePattern.test(questionText)
-      || (/(?:\b(?:code|snippet|program)\b|код|фрагмент|програм)/i.test(questionText) && codeBehaviorPattern.test(questionText));
+    const refersToSpecificCode = codeReferencePattern.test(questionText);
     return refersToSpecificCode && !hasSnippet ? [index] : [];
   });
 }
@@ -1979,21 +1977,43 @@ REQUIREMENTS (mandatory):
       for (let offset = 0; offset < repairIndexes.length; offset += MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL) {
         const batchIndexes = repairIndexes.slice(offset, offset + MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL);
         const replacementAssignments = batchIndexes.map((questionIndex, index) => {
-          const topicMarker = questions[questionIndex].q.match(/^\[topic:-?\d+\]/i)?.[0];
-          return topicMarker
-            ? `Replacement ${index + 1} replaces original question ${questionIndex + 1}; preserve the same topic and begin q with ${topicMarker}.`
-            : `Replacement ${index + 1} replaces original question ${questionIndex + 1}; preserve its assigned topic.`;
+          const originalQuestion = questions[questionIndex].q;
+          const topicMarker = originalQuestion.match(/^\[topic:-?\d+\]/i)?.[0];
+          const assignmentLine = (params.prevTopics.match(/^Question\s+\d+:.+$/gim) ?? [])
+            .find(line => line.match(/\[topic:-?\d+\]/i)?.[0]?.toLowerCase() === topicMarker?.toLowerCase());
+          const assignment = assignmentLine?.replace(/^Question\s+\d+:\s*/i, "")
+            ?? topicMarker
+            ?? "the same assigned topic";
+          const rejectedStem = originalQuestion.replace(/^\[topic:-?\d+\]\s*/i, "").trim().slice(0, 400);
+          return [
+            `Replacement ${index + 1} replaces original question ${questionIndex + 1}.`,
+            `Assigned topic: ${assignment}.`,
+            `Rejected question stem: ${JSON.stringify(rejectedStem)}.`,
+            topicMarker ? `Begin q with ${topicMarker}.` : "Preserve the same assigned topic.",
+          ].join(" ");
         });
+        const coveragePlanIndex = params.prevTopics.search(/\bQUESTION COVERAGE PLAN\./i);
+        const stableTopicContext = coveragePlanIndex >= 0
+          ? params.prevTopics.slice(0, coveragePlanIndex).trim()
+          : params.prevTopics;
+        const repairTopicContext = coveragePlanIndex >= 0
+          ? [
+              stableTopicContext,
+              `QUESTION REPAIR PLAN. Generate exactly ${batchIndexes.length} replacement question(s), one for each assignment below. Do not regenerate the original batch or any other topic.`,
+              ...replacementAssignments,
+            ].filter(Boolean).join("\n")
+          : params.prevTopics;
         const retainedStems = questions
           .filter((_, questionIndex) => !repairIndexes.includes(questionIndex))
           .map(quizQuestionStem);
         const replacementResponse = await generateBatch({
           ...params,
+          prevTopics: repairTopicContext,
           count: batchIndexes.length,
           avoidQuestionStems: [...(params.avoidQuestionStems ?? []), ...retainedStems, ...repairedStems],
           generationGuidance: [
             params.generationGuidance,
-            ...replacementAssignments,
+            ...(coveragePlanIndex >= 0 ? [] : replacementAssignments),
             repairGuidance,
           ].filter(Boolean).join("\n"),
         });

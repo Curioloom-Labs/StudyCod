@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   assessmentFailureReason,
   assessmentGenerationErrorLogDetails,
+  buildDiagnosticPracticalTaskContext,
   canFallbackToDiagnosticPublicExamples,
   generateDiagnosticQuestionsWithCoverageRetry,
   generateDiagnosticTaskPackageWithRetry,
@@ -59,6 +60,30 @@ test("course diagnostics create five balanced practical tasks covering all topic
   assert.deepEqual(groups.flat().map((topic) => topic.id), topics.map((topic) => topic.id));
   assert.ok(groups.every((group) => group.length > 1));
   assert.ok(groups.some((group) => new Set(group.map((topic) => topic.moduleId)).size > 1));
+});
+
+test("diagnostic practical context preserves mixed-topic and example requirements within the compact prompt limit", () => {
+  const topics = Array.from({ length: 6 }, (_, index) => ({
+    id: index + 1,
+    moduleId: Math.floor(index / 2) + 1,
+    moduleTitle: "Module " + (Math.floor(index / 2) + 1),
+    title: "Topic " + (index + 1),
+    context: "Topic " + (index + 1) + "\nsource-" + index + "\nA focused lesson summary for the assigned topic.",
+    itemIds: [index + 1],
+  }));
+
+  for (const locale of ["uk", "en"] as const) {
+    const context = buildDiagnosticPracticalTaskContext("Java Core", topics, "test-variation", locale);
+    assert.ok(context.length <= 1_200, "diagnostic requirements and all six topics must fit the compacted theory context");
+    assert.ok(context.startsWith(locale === "en" ? "COURSE DIAGNOSTIC:" : "ДІАГНОСТИКА КУРСУ:"));
+    assert.ok(context.indexOf("Topic 1") > context.indexOf("Assigned course topics:"));
+    for (const topic of topics) {
+      assert.ok(context.includes("[topic:" + topic.id + "] " + topic.title));
+    }
+    assert.ok(context.includes("test-variation"));
+    assert.match(context, locale === "en" ? /at least two assigned topics/ : /щонайменше дві призначені теми/);
+    assert.match(context, locale === "en" ? /exactly three distinct examples/ : /рівно три різні приклади/);
+  }
 });
 
 test("diagnostic quiz fallback assignment stays aligned when invalid candidates are skipped", () => {
@@ -315,6 +340,10 @@ test("diagnostic assessment regenerates the whole task for statement or public-e
     name: "AIValidationError",
     mode: "generateTask",
   })), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Example 3: Task generation validation failed: every STDIN_STDOUT example must have non-empty input"), {
+    name: "AIValidationError",
+    mode: "generateTask",
+  })), true);
   assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Task generation validation failed: practicalTask must be a natural narrative"), {
     name: "AIValidationError",
     mode: "generateTestData",
@@ -332,6 +361,25 @@ test("diagnostic assessment regenerates the whole task for statement or public-e
     statusCode: 503,
   })), false);
   assert.equal(shouldRegenerateDiagnosticTask(new Error("provider unavailable")), false);
+});
+
+test("a task with an empty indexed public-example input retries the whole package", async () => {
+  const invalidExample = Object.assign(new Error("Example 3: Task generation validation failed: every STDIN_STDOUT example must have non-empty input"), {
+    name: "AIValidationError",
+    mode: "generateTask",
+  });
+  const attempts: number[] = [];
+  const replacement = { practicalTask: "A corrected task with three non-empty examples." };
+
+  const result = await generateDiagnosticTaskPackageWithRetry(async (attempt, previousError) => {
+    attempts.push(attempt);
+    if (attempt === 1) throw invalidExample;
+    assert.equal(previousError, invalidExample);
+    return replacement;
+  });
+
+  assert.deepEqual(attempts, [1, 2]);
+  assert.equal(result, replacement);
 });
 
 test("a transient provider failure retries only the practical-task package", async () => {

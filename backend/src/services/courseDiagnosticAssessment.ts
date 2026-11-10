@@ -174,6 +174,35 @@ export function groupDiagnosticTopicsForPracticals(
   return groups;
 }
 
+export function buildDiagnosticPracticalTaskContext(
+  courseTitle: string,
+  topicGroup: readonly CourseDiagnosticTopic[],
+  variationToken: string,
+  locale: CurriculumLocale,
+): string {
+  const requirements = locale === "en"
+    ? "COURSE DIAGNOSTIC: Create one cohesive STDIN_STDOUT task that genuinely combines at least two assigned topics; both must affect the solution. Use only assigned topics. Read concrete non-empty input and make the output depend on it. Include exactly three distinct examples with non-empty input and output; each must follow the input grammar and stated rules. Print one deterministic, non-empty line. Do not name the implementation method."
+    : "ДІАГНОСТИКА КУРСУ: Створи одну цілісну задачу STDIN_STDOUT, що справді поєднує щонайменше дві призначені теми; обидві мають впливати на розв’язання. Використовуй лише призначені теми. Прочитай конкретний непорожній ввід, а результат зроби залежним від нього. Додай рівно три різні приклади з непорожніми вводом і виводом; кожен має відповідати граматиці вводу й правилам задачі. Виводь один детермінований непорожній рядок. Не називай спосіб реалізації.";
+  const topicList = topicGroup.map((topic) => {
+    const detail = topic.context
+      .split(/\r?\n/)
+      .slice(2)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const shortDetail = text(detail, 24);
+    return "[topic:" + topic.id + "] " + text(topic.title, 55) + (shortDetail ? " — " + shortDetail : "");
+  }).join("\n");
+
+  return [
+    requirements,
+    "Course: " + text(courseTitle, 60) + ".",
+    "Assigned course topics:",
+    topicList,
+    "Variation token: " + text(variationToken, 40) + " (internal; never include in the task).",
+  ].join("\n\n");
+}
+
 export function canFallbackToDiagnosticPublicExamples(validationMessage: string): boolean {
   const rejectedSource = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:/s)?.[1];
   return rejectedSource !== "statement" && rejectedSource !== "publicExamples";
@@ -187,7 +216,7 @@ export function shouldRegenerateDiagnosticTask(error: unknown): boolean {
   if (isRetryableDiagnosticTaskProviderFailure(error)) return true;
   return details?.name === "AIValidationError"
     && details?.mode === "generateTask"
-    && /^Task generation validation failed:/i.test(message);
+    && /^(?:Example\s+\d+:\s*)?Task generation validation failed:/i.test(message);
 }
 
 function diagnosticTaskRegenerationReason(error: unknown): "statement" | "publicExamples" | "shallowDecision" | "implementationHint" | "emptyOutput" | "coreOperation" | "topicMismatch" | "forbiddenScope" | "multipleTasks" | "providerFailure" | "taskValidation" | null {
@@ -549,12 +578,12 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
         const moduleTitles = Array.from(new Set(topicGroup.map((topic) => topic.moduleTitle)));
         const groupSeed = `${seed}-task-${taskIndex + 1}`;
         const topicTitle = moduleTitles[0].slice(0, 255);
-        const taskContext = [
-          `Modules: ${moduleTitles.join(" · ")}`,
-          `PRACTICAL ASSESSMENT ${taskIndex + 1}/${practicalGroups.length}. This task covers the following course topics:`,
-          topicList,
-          `Variation token: ${groupSeed}. Generate a fresh, compact programming task that mixes at least two of the listed topics in one coherent problem and uses no concepts outside them. The task MUST use STDIN_STDOUT: read at least one concrete input token and make the output depend on that input. Never create a no-input, fixed-output, or constant-output task. Keep it as simple and deterministic as possible. Prefer one input/output transformation and a one-line output. Include exactly three short, distinct public examples, each with small, concrete, non-empty input and output; choose cases that are easy to calculate by hand, then verify every output against the written rules. Avoid combining unrelated subproblems, multi-block output, floating-point calculations, and condition branches unless the listed topics require them. Include clear input/output rules, constraints, and a concise starter template with TODO markers. If a result would otherwise be empty, define and use a non-empty sentinel such as NONE. Describe observable behavior without prescribing an implementation technique.`,
-        ].join("\n\n");
+        const taskContext = buildDiagnosticPracticalTaskContext(
+          localizedCourseTitle(course, locale),
+          topicGroup,
+          groupSeed,
+          locale,
+        );
         const generatePackage = async (generationContext: string): Promise<CourseDiagnosticPractical> => {
           const generatedTask = await runAtAssessmentStage("practical_task", () => runWithPromptExecutionContext("task.generate", { traceId: requestId, forceNewContext: true }, () => llm.generateTaskWithAI({
             topicTitle,
@@ -693,6 +722,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
           (packageAttempt, previousError) => {
             if (packageAttempt === 1) return generatePackage(taskContext);
             const regenerationReason = diagnosticTaskRegenerationReason(previousError);
+            const previousMessage = String(recordOf(previousError)?.message ?? "");
             const validationIssues = Array.isArray(recordOf(previousError)?.issues)
               ? (recordOf(previousError)?.issues as unknown[]).map((issue) => text(issue, 500)).filter(Boolean).slice(0, 3)
               : [];
@@ -701,6 +731,8 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             }
             const replacementRequirement = regenerationReason === "providerFailure"
               ? "RETRY AFTER TRANSIENT GENERATION FAILURE: No valid task was returned for this assignment. Generate the same compact task package from scratch, preserving the listed topic group, the required STDIN_STDOUT contract, and exactly three short public examples with non-empty input/output. Do not invent validator findings or mention the retry."
+              : /STDIN_STDOUT.*non-empty.*input/i.test(previousMessage)
+                ? "REPLACEMENT TASK REQUIREMENT: The previous draft had an empty input in a public example. Generate exactly three distinct examples, and give every example a concrete, non-empty STDIN value and its correct non-empty output. Recheck all three examples against the input grammar and task rules."
               : regenerationReason === "coreOperation"
               ? "REPLACEMENT TASK REQUIREMENT: The previous task omitted the required core operation. Regenerate a substantially different task that explicitly asks the learner to perform that operation in its title or statement, while keeping the task within the assigned topic and preserving a complete input/output contract. Recompute every example."
               : regenerationReason === "topicMismatch"

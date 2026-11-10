@@ -71,7 +71,13 @@ test('diagnostic quizzes regenerate code-referencing questions as same-topic con
   const requestedCounts: number[] = [];
   const result = await runWithPromptExecutionContext('task.quiz', { timeoutMs: 10_000 }, () => orchestrator.generateQuizInBatches({
     lang: 'PYTHON',
-    prevTopics: '[topic:10] arrays\n[topic:11] indexing',
+    prevTopics: [
+      'Course: Java.',
+      'QUESTION COVERAGE PLAN. Generate exactly one question for each listed assignment, in order. Prefix q with [topic:ID].',
+      'Question 1: [topic:10] arrays. Test this topic only. Arrays store ordered values.',
+      'Question 2: [topic:11] indexing. Test this topic only. The first index is zero.',
+      'When the same topic appears twice, assess two different skills.',
+    ].join('\n'),
     count: 2,
     questionStyle: 'CONCEPTS',
     language: 'en',
@@ -80,9 +86,14 @@ test('diagnostic quizzes regenerate code-referencing questions as same-topic con
     requestedCounts.push(batch.count);
     if (batch.generationGuidance?.includes('CODE COMPLETENESS REPAIR')) {
       assert.equal(batch.count, 1);
-      assert(batch.generationGuidance.includes('Replacement 1 replaces original question 2'));
-      assert(batch.generationGuidance.includes('begin q with [topic:11]'));
+      assert(batch.prevTopics.includes('Replacement 1 replaces original question 2'));
+      assert.match(batch.prevTopics, /begin q with \[topic:11\]/i);
       assert(batch.generationGuidance.includes('Do not ask for the output or behavior'));
+      assert.match(batch.prevTopics, /QUESTION REPAIR PLAN\. Generate exactly 1 replacement question/);
+      assert.match(batch.prevTopics, /Assigned topic: \[topic:11\] indexing/);
+      assert.match(batch.prevTopics, /Rejected question stem: "What output is produced by the following code\?"/);
+      assert.doesNotMatch(batch.prevTopics, /\[topic:10\] arrays/);
+      assert.doesNotMatch(batch.prevTopics, /QUESTION COVERAGE PLAN/);
       assert(batch.avoidQuestionStems?.some(stem => stem.includes('[topic:10]')));
       return {
         quizJson: JSON.stringify([{
@@ -106,6 +117,30 @@ test('diagnostic quizzes regenerate code-referencing questions as same-topic con
   assert.equal(questions[1].q, '[topic:11] What does zero-based indexing mean?');
 });
 
+test('conceptual quizzes accept generic code concepts without requiring a snippet', async () => {
+  const orchestrator = new LLMOrchestrator() as unknown as QuizBatchAccess;
+  let calls = 0;
+  const result = await runWithPromptExecutionContext('task.quiz', { timeoutMs: 10_000 }, () => orchestrator.generateQuizInBatches({
+    lang: 'PYTHON',
+    prevTopics: '[topic:12] functions and return values',
+    count: 1,
+    questionStyle: 'CONCEPTS',
+    language: 'en',
+  }, async () => {
+    calls += 1;
+    return {
+      quizJson: JSON.stringify([{
+        q: '[topic:12] What does a return statement do in the program?',
+        options: ['It sends a value back to the caller', 'It starts a loop', 'It declares a variable', 'It imports a module', 'It repeats the function definition'],
+        correct: 0,
+      }]),
+    };
+  }));
+
+  assert.equal(calls, 1);
+  assert.match(JSON.parse(result.quizJson)[0].q, /return statement/);
+});
+
 test('OpenRouter code-incomplete answers reach the shared topic-preserving repair instead of exhausting provider retries', async () => {
   const orchestrator = new LLMOrchestrator() as unknown as QuizBatchAccess;
   let providerCalls = 0;
@@ -113,7 +148,7 @@ test('OpenRouter code-incomplete answers reach the shared topic-preserving repai
     generateText: async (prompt: string) => {
       providerCalls++;
       if (prompt.includes('CODE COMPLETENESS REPAIR')) {
-        assert(prompt.includes('begin q with [topic:11]'));
+        assert.match(prompt, /begin q with \[topic:11\]/i);
         return JSON.stringify([{
           q: '[topic:11] What does zero-based indexing mean?',
           options: ['The first position is 0', 'The first position is 1', 'Indexes are random', 'Arrays have no positions', 'Only strings use indexes'],
