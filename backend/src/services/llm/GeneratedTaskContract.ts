@@ -25,6 +25,24 @@ function removeVagueOutputCatchAll(outputFormat: string): string {
     .trim();
 }
 
+function exactFixedOutputFromExamples(candidate: Record<string, unknown>): string | null {
+  if (candidate.ioType !== 'NO_INPUT_FIXED_OUTPUT' || !Array.isArray(candidate.examples) || candidate.examples.length === 0) {
+    return null;
+  }
+
+  const normalizeOutput = (output: string) => output.replace(/\r\n/g, '\n').trim();
+  let fixedOutput: string | null = null;
+  for (const value of candidate.examples) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const example = value as Record<string, unknown>;
+    if (typeof example.input !== 'string' || example.input.trim() !== '' || typeof example.output !== 'string') return null;
+    const output = normalizeOutput(example.output);
+    if (!output || (fixedOutput !== null && output !== fixedOutput)) return null;
+    fixedOutput ??= output;
+  }
+  return fixedOutput;
+}
+
 /** Reconcile descriptive outputFormat only after the original contract is reviewed. */
 export async function validateAndReviewGeneratedTask(
   provider: LLMProvider,
@@ -53,12 +71,13 @@ export async function validateAndReviewGeneratedTask(
   } catch (error) {
     if (error instanceof AIValidationError
       && error.message === VAGUE_OUTPUT_FORMAT_ERROR
-      && isOlympiadLearningContract(options.learningContract)
       && error.rawResponse && typeof error.rawResponse === 'object' && !Array.isArray(error.rawResponse)) {
       const candidate = error.rawResponse as Record<string, unknown>;
       const originalFormat = typeof candidate.outputFormat === 'string' ? candidate.outputFormat : '';
-      const preciseFormat = removeVagueOutputCatchAll(originalFormat);
-      if (preciseFormat !== originalFormat) {
+      const preciseFormat = isOlympiadLearningContract(options.learningContract)
+        ? removeVagueOutputCatchAll(originalFormat)
+        : exactFixedOutputFromExamples(candidate);
+      if (preciseFormat !== null && preciseFormat !== originalFormat) {
         task = validate({ ...candidate, outputFormat: preciseFormat });
         options.beforeReview?.(task);
         task = validate(task);

@@ -652,10 +652,10 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
             }
 
             // Curriculum stage policy enforcement (e.g., prevent tasks requiring concepts not taught yet).
-            if (!isOlympiadAlgorithmicPractice) {
+            if (!isOlympiadAlgorithmicPractice && sanitizedParams.isCatalogPractice !== true) {
               const violation = getCurriculumPolicyViolationForGeneratedTask({
                 lang: taskLanguage,
-                topicIndex: optionalNumber(sanitizedParams.topicIndex),
+                topicIndex: validationTopicIndex,
                 topicTitle: optionalString(sanitizedParams.topicTitle),
                 title: taskResult.title,
                 practicalTask: taskResult.practicalTask
@@ -663,7 +663,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
 
               if (violation) {
                 throw makeAIValidationError('generateTask', `Task generation validation failed: ${violation}`, {
-                  topicIndex: optionalNumber(sanitizedParams.topicIndex),
+                  topicIndex: validationTopicIndex,
                   lang: taskLanguage,
                   title: taskResult.title,
                   practicalTask: taskResult.practicalTask

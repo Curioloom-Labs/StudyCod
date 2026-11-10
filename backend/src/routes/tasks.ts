@@ -3791,9 +3791,11 @@ tasksRouter.post("/generate", authMiddleware, async (req: AuthRequest, res: Resp
         requiredTasksInThisGroup: 1,
         topicTitleForAi: context.item.title,
         theoryForAi,
-        ...(isRecord(exercise.learningContract) && exercise.learningContract.kind === "OLYMPIAD_ALGORITHMIC_PRACTICE"
+        ...(isOlympiadVariant
           ? { allowedIoTypesOverride: ["STDIN_STDOUT" as const] }
-          : {}),
+          : !context.course.isBase
+            ? { allowedIoTypesOverride: ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"] as Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT"> }
+            : {}),
         subtitle: `CATALOG_ITEM:${requestedCourseItemId}|${context.course.catalogKey || context.course.id}`,
         existingTasksForContext: existingCourseTasks.map((task) => ({
           id: task.id,
