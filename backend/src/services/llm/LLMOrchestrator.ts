@@ -585,7 +585,7 @@ export class LLMOrchestrator {
           }, {
             signal: params.signal
           });
-          const validationTopicIndex = olympiadContract && params.topicIndex === 0 ? 1 : params.topicIndex;
+          const validationTopicIndex = (olympiadContract || params.isCatalogPractice === true) && params.topicIndex === 0 ? 1 : params.topicIndex;
           return await validateAndReviewGeneratedTask(this.cloudflareProvider, raw, {
             expectedTopic: params.topicTitle,
             topicIndex: validationTopicIndex,
@@ -900,6 +900,7 @@ Return ONLY JSON without explanations.`
     theory: string;
     lang: LLMTaskLanguage;
     topicIndex?: number;
+    isCatalogPractice?: boolean;
     anchor: {
       topic: string;
       coreOperation: string;
@@ -1037,7 +1038,7 @@ CRITICAL: The "topic" field in JSON MUST be equal to "${params.anchor.topic}". D
       ? Math.min(LLM_TASK_THEORY_CONTEXT_CHARS, 3_200)
       : LLM_TASK_THEORY_CONTEXT_CHARS;
     const compactTheoryContext = compactPromptText(theoryContext, theoryContextLimit);
-    const isIntroPractice = params.topicIndex === 0 && !olympiadContract;
+    const isIntroPractice = params.topicIndex === 0 && params.isCatalogPractice !== true && !olympiadContract;
     const taskDifficultyPrompt = olympiadContract
       ? isEnglish
         ? 'Choose difficulty 0–5 to match the contract stage and target algorithm; do not reduce an algorithm lesson to syntax-only practice.'
@@ -1613,7 +1614,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
         });
         const validated = await validateAndReviewGeneratedTask(provider, parsed, {
           expectedTopic: params.anchor.topic,
-          topicIndex: params.topicIndex === 0 && olympiadContract ? 1 : params.topicIndex,
+          topicIndex: params.topicIndex === 0 && (olympiadContract || params.isCatalogPractice === true) ? 1 : params.topicIndex,
           allowedIoTypes: params.allowedIoTypes,
         }, {
           validationRetry: Boolean(lastError || params.validationFeedback),
@@ -1684,6 +1685,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     theory: string;
     lang: LLMTaskLanguage;
     topicIndex?: number;
+    isCatalogPractice?: boolean;
     numInTopic: number;
     isFirstTask: boolean;
     difus?: number;
@@ -1700,7 +1702,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     requestId?: string;
   }, providerOverride?: LLMProvider): Promise<AiTaskGenerationResult> {
     const provider = providerOverride ?? this.openRouterProvider;
-    const isIntroTopic = params.topicIndex === 0;
+    const isIntroTopic = params.topicIndex === 0 && params.isCatalogPractice !== true;
     const isEnglish = params.language === "en";
     const allowsNoInput = !Array.isArray(params.allowedIoTypes) || params.allowedIoTypes.length === 0
       || params.allowedIoTypes.some((ioType) => ioType === "NO_INPUT_FIXED_OUTPUT" || ioType === "NO_INPUT_FREE_OUTPUT");
@@ -1736,6 +1738,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
       theory: params.theory,
       lang: params.lang,
       topicIndex: params.topicIndex,
+      isCatalogPractice: params.isCatalogPractice,
       anchor: anchor,
       prevTopics: params.prevTopics,
       previousTasks: params.previousTasks,

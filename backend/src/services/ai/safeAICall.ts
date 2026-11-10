@@ -612,7 +612,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
             const taskAllowedIoTypes = optionalTaskIoTypes(sanitizedParams.allowedIoTypes);
             const isOlympiadAlgorithmicPractice = /<!--\s*STUDYCOD_LEARNING_META_START[\s\S]*?"kind"\s*:\s*"OLYMPIAD_ALGORITHMIC_PRACTICE"[\s\S]*?STUDYCOD_LEARNING_META_END\s*-->/i.test(taskTheory);
             const generationTopicIndex = optionalNumber(sanitizedParams.topicIndex);
-            const validationTopicIndex = isOlympiadAlgorithmicPractice && generationTopicIndex === 0
+            const validationTopicIndex = (isOlympiadAlgorithmicPractice || sanitizedParams.isCatalogPractice === true) && generationTopicIndex === 0
               ? 1
               : generationTopicIndex;
             result = await orchestrator.generateTaskWithAI({
