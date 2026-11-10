@@ -37,6 +37,7 @@ import { assessCompaniesRouter } from "./routes/assessCompanies";
 import { assessInterviewsRouter } from "./routes/assessInterviews";
 import { portfolioRouter, publicPortfolioRouter } from "./routes/portfolio";
 import { startGrowthProjectQueueWorker } from "./services/growthProjectQueue";
+import { startCourseDiagnosticReportWorker, stopCourseDiagnosticReportWorker } from "./services/CourseDiagnosticReportWorker";
 import { startAssessInterviewExpiryWorker } from "./services/assessInterviewSession";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware";
 import { geoBlockMiddleware } from "./middleware/geoBlockMiddleware";
@@ -114,6 +115,7 @@ async function gracefulShutdown(reason: string, exitCode: number): Promise<void>
   if (shutdownInProgress) return;
   shutdownInProgress = true;
   await stopContestQueueWorker();
+  stopCourseDiagnosticReportWorker();
   logger.info("[shutdown] starting graceful shutdown", { reason, exitCode, drainTimeoutMs: SHUTDOWN_DRAIN_TIMEOUT_MS });
 
   // 1) Stop accepting new HTTP connections and drain existing ones.
@@ -1284,6 +1286,7 @@ async function bootstrap(): Promise<void> {
     startCertificateQueueWorker();
     startContestQueueWorker();
     startGrowthProjectQueueWorker();
+    startCourseDiagnosticReportWorker();
     startAssessInterviewExpiryWorker();
     startCredentialRecoveryCleanup();
 

@@ -9,6 +9,8 @@ import {
   type CourseDiagnosticPractical,
   type CourseDiagnosticQuestion,
   type CourseDiagnosticResult,
+  type CourseDiagnosticTaskAttempts,
+  type CourseDiagnosticTaskAttemptState,
 } from "../entities/CourseDiagnosticAssessment";
 import { UserCourseEnrollment } from "../entities/UserCourseEnrollment";
 import { getLLMOrchestrator } from "./llm/LLMOrchestrator";
@@ -181,8 +183,8 @@ export function buildDiagnosticPracticalTaskContext(
   locale: CurriculumLocale,
 ): string {
   const requirements = locale === "en"
-    ? "COURSE DIAGNOSTIC: Create one cohesive STDIN_STDOUT task that genuinely combines at least two assigned topics; both must affect the solution. Use only assigned topics. Read concrete non-empty input and make the output depend on it. Include exactly three distinct examples with non-empty input and output; each must follow the input grammar and stated rules. Print one deterministic, non-empty line. Do not name the implementation method."
-    : "ДІАГНОСТИКА КУРСУ: Створи одну цілісну задачу STDIN_STDOUT, що справді поєднує щонайменше дві призначені теми; обидві мають впливати на розв’язання. Використовуй лише призначені теми. Прочитай конкретний непорожній ввід, а результат зроби залежним від нього. Додай рівно три різні приклади з непорожніми вводом і виводом; кожен має відповідати граматиці вводу й правилам задачі. Виводь один детермінований непорожній рядок. Не називай спосіб реалізації.";
+    ? "COURSE DIAGNOSTIC: Create one beginner-friendly STDIN/STDOUT task combining at least two assigned topics; each must affect output. Keep behavior observable through input/output—no unobservable method calls, UI actions, or external setup. If objects/methods matter, encode actions in input and show results. Define exact input grammar (tokens vs lines, delimiters, whitespace); never silently split or trim meaningful text. Give exactly three distinct non-empty input/output examples matching the statement and reference. Use only assigned topics and deterministic, non-empty output."
+    : "ДІАГНОСТИКА КУРСУ: Створи доступну консольну задачу STDIN/STDOUT, що поєднує щонайменше дві призначені теми; кожна впливає на результат. Уся поведінка має бути видимою через ввід/вивід: не вимагай невидимих викликів методів, дій UI чи зовнішнього налаштування. Якщо важливі об’єкти/методи, закодуй дії у вводі й покажи результати. Точно опиши граматику вводу (токени чи рядки, роздільники, пробіли); не діли й не обрізай значущий текст мовчки. Додай рівно три різні приклади з непорожніми вводом/виводом, узгоджені з умовою й еталоном. Використовуй лише призначені теми; вивід детермінований і непорожній.";
   const topicList = topicGroup.map((topic) => {
     const detail = topic.context
       .split(/\r?\n/)
@@ -201,11 +203,6 @@ export function buildDiagnosticPracticalTaskContext(
     topicList,
     "Variation token: " + text(variationToken, 40) + " (internal; never include in the task).",
   ].join("\n\n");
-}
-
-export function canFallbackToDiagnosticPublicExamples(validationMessage: string): boolean {
-  const rejectedSource = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:/s)?.[1];
-  return rejectedSource !== "statement" && rejectedSource !== "publicExamples";
 }
 
 export function shouldRegenerateDiagnosticTask(error: unknown): boolean {
@@ -255,9 +252,10 @@ export async function generateDiagnosticTaskPackageWithRetry<T>(
 
 export function selectCourseDiagnosticTestCases(
   generatedTests: unknown,
-  publicExamples: unknown,
-): { tests: CourseDiagnosticTestCase[]; source: "hidden" | "public_examples" } | null {
-  const cleanCases = (value: unknown): CourseDiagnosticTestCase[] => {
+  publicExamples: unknown = [],
+): { tests: CourseDiagnosticTestCase[]; source: "hidden" } | null {
+  const publicInputs = new Set(Array.isArray(publicExamples) ? publicExamples.map((candidate) => text(recordOf(candidate)?.input, 10_000)).filter(Boolean) : []);
+  const cleanCases = (value: unknown, excludedInputs = new Set<string>()): CourseDiagnosticTestCase[] => {
     if (!Array.isArray(value)) return [];
     const cases: CourseDiagnosticTestCase[] = [];
     const seenInputs = new Set<string>();
@@ -265,26 +263,30 @@ export function selectCourseDiagnosticTestCases(
       const item = recordOf(candidate);
       const input = text(item?.input, 10_000);
       const output = text(item?.output, 10_000);
-      if (!input || !output || seenInputs.has(input)) continue;
+      if (!input || !output || seenInputs.has(input) || excludedInputs.has(input)) continue;
       seenInputs.add(input);
       cases.push({ input, output });
-      if (cases.length === 8) break;
+      if (cases.length === 15) break;
     }
     return cases;
   };
 
-  const hidden = cleanCases(generatedTests);
-  if (hidden.length >= 3) return { tests: hidden, source: "hidden" };
-
-  // The task and these public examples have already passed the independent
-  // task-contract review. They keep the diagnostic usable if the separate
-  // hidden-test oracle cannot produce a consistent output suite.
-  const examples = cleanCases(publicExamples);
-  return examples.length ? { tests: examples, source: "public_examples" } : null;
+  const hidden = cleanCases(generatedTests, publicInputs);
+  if (hidden.length !== 15) return null;
+  return { tests: hidden, source: "hidden" };
 }
 
 export function isDiagnosticPracticalInputContractValid(ioType: unknown, publicExamples: unknown): boolean {
-  return ioType === "STDIN_STDOUT" && selectCourseDiagnosticTestCases([], publicExamples) !== null;
+  if (ioType !== "STDIN_STDOUT" || !Array.isArray(publicExamples) || publicExamples.length !== 3) return false;
+  const seen = new Set<string>();
+  return publicExamples.every((candidate) => {
+    const item = recordOf(candidate);
+    const input = text(item?.input, 10_000);
+    const output = text(item?.output, 10_000);
+    if (!input || !output || seen.has(input)) return false;
+    seen.add(input);
+    return true;
+  });
 }
 
 type DiagnosticTestGenerationResult =
@@ -293,17 +295,10 @@ type DiagnosticTestGenerationResult =
 
 export function resolveCourseDiagnosticTestCases(
   result: DiagnosticTestGenerationResult,
-  publicExamples: unknown,
-): { tests: CourseDiagnosticTestCase[]; source: "hidden" | "public_examples" } | null {
+  publicExamples: unknown = [],
+): { tests: CourseDiagnosticTestCase[]; source: "hidden" } | null {
   if (result.success) return selectCourseDiagnosticTestCases(result.data, publicExamples);
-
-  const details = recordOf(result.error.details);
-  const validationMessage = typeof details?.validationError === "string"
-    ? details.validationError
-    : String(result.error.error ?? result.error.message ?? "");
-  return canFallbackToDiagnosticPublicExamples(validationMessage)
-    ? selectCourseDiagnosticTestCases([], publicExamples)
-    : null;
+  return null;
 }
 
 export async function mapWithConcurrency<T, R>(
@@ -350,6 +345,7 @@ export function normalizeQuestions(
   const root = recordOf(parsed);
   const candidates = Array.isArray(parsed) ? parsed : Array.isArray(root?.questions) ? root.questions : [];
   const questions: CourseDiagnosticQuestion[] = [];
+  const seenPrompts = new Set<string>();
   for (const [index, raw] of candidates.entries()) {
     const question = recordOf(raw);
     const rawPrompt = text(question?.q ?? question?.question ?? question?.prompt, 2_000);
@@ -359,7 +355,13 @@ export function normalizeQuestions(
     const prompt = rawPrompt.replace(/^\[topic:-?\d+\]\s*/i, "").trim();
     const rawOptions = Array.isArray(question?.options) ? question.options.map((option) => text(option, 800)) : [];
     const correct = Number(question?.correct);
-    if (!prompt || rawOptions.length < 4 || rawOptions.length > 5 || !Number.isInteger(correct) || correct < 0 || correct >= rawOptions.length || rawOptions.some((option) => !option)) continue;
+    const normalizedPrompt = prompt.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    const normalizedOptions = rawOptions.map((option) => option.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim());
+    const vagueQuestion = /^(?:why (?:is|are) (?:programming|coding)|what is the point of programming|explain why|describe the general idea)|^(?:чому програмування|для чого взагалі програмування|поясни чому|опиши загальну ідею)/i.test(prompt);
+    if (!prompt || prompt.length < 24 || normalizedPrompt.split(/\s+/).length < 5 || vagueQuestion || seenPrompts.has(normalizedPrompt)
+      || rawOptions.length !== 4 || !Number.isInteger(correct) || correct < 0 || correct >= rawOptions.length
+      || rawOptions.some((option) => !option) || new Set(normalizedOptions).size !== 4) continue;
+    seenPrompts.add(normalizedPrompt);
 
     const distractorIndexes = shuffled(rawOptions.map((_, optionIndex) => optionIndex).filter((optionIndex) => optionIndex !== correct)).slice(0, 3);
     const options = shuffled([correct, ...distractorIndexes].map((optionIndex) => ({ text: rawOptions[optionIndex], correct: optionIndex === correct })));
@@ -537,8 +539,8 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
       mapWithConcurrency(questionBatches, 1, async (topicAssignments, batchIndex) => {
         try {
           const baseGuidance = language === "en"
-            ? "COURSE DIAGNOSTIC KNOWLEDGE QUESTIONS: Test the assigned programming concept. Every question must be answerable from its wording and choices alone, without executing or tracing a program. Ask about language rules, syntax, terminology, and when a construct is used. Do not mention or refer to code, snippets, or programs in a question; never ask what one prints, returns, outputs, or does. If the assigned topic is flow control, ask about the meaning and use of conditions and branches without presenting a tiny list of values to map directly to outputs."
-            : "ПИТАННЯ ДІАГНОСТИКИ ЗНАНЬ: Перевіряй призначене поняття з програмування. На кожне питання має бути можна відповісти лише за його формулюванням і варіантами, без запуску чи простеження програми. Питай про правила мови, синтаксис, терміни й призначення конструкцій. Не згадуй і не описуй код, фрагменти чи програми в питаннях; ніколи не питай, що програма виведе, поверне або виконає. Якщо тема стосується керування потоком, перевіряй значення й призначення умов та гілок без прямого зіставлення невеликого набору значень із результатами.";
+            ? "COURSE DIAGNOSTIC KNOWLEDGE QUESTIONS: Test the assigned programming concept. Each question must assess one concrete skill or language rule from its assigned topic, be precise, and be fully answerable from its wording and choices alone without executing or tracing a program. Avoid vague, opinion-based, analogy-based, metaphorical, open-ended, or generic discussion questions (for example, 'why is programming like ...'). Ask about specific language rules, syntax, terminology, and the purpose of constructs. Do not mention or refer to code, snippets, or programs in a question; never ask what one prints, returns, outputs, or does. If the assigned topic is flow control, ask about the meaning and use of conditions and branches without presenting a tiny list of values to map directly to outputs. Return exactly four distinct choices: one technically unambiguous correct answer and three plausible but clearly incorrect distractors from the same category. Do not use 'all/none of the above'. Before responding, verify the language rule, unique correctness, topic alignment, and that no wording or options are duplicated."
+            : "ПИТАННЯ ДІАГНОСТИКИ ЗНАНЬ: Перевіряй призначене поняття з програмування. Кожне питання має перевіряти одну конкретну навичку або правило з відповідної теми й бути зрозумілим без додаткового контексту; формулюй його точно, без розпливчастості, думок, аналогій, метафор і загальних міркувань. Не використовуй питання на кшталт «чому програмування схоже на…». Питай про правила мови, синтаксис, терміни й призначення конструкцій. Не згадуй і не описуй код, фрагменти чи програми в питаннях; ніколи не питай, що програма виведе, поверне або виконає. Якщо тема стосується керування потоком, перевіряй значення й призначення умов та гілок без прямого зіставлення невеликого набору значень із результатами. Поверни рівно 4 різні варіанти відповіді: один беззаперечно правильний згідно з правилами мови, три правдоподібні, але однозначно неправильні відволікальні варіанти з тієї самої категорії. Не використовуй варіанти «усі відповіді» або «жодна відповідь». Перед відповіддю перевір фактичну правильність, єдиність правильної відповіді, відсутність дублювання та відповідність питання саме призначеній темі.";
           return runWithPromptExecutionContext("task.quiz", { traceId: requestId, forceNewContext: true }, () =>
             generateDiagnosticQuestionsWithCoverageRetry(
               topicAssignments,
@@ -552,6 +554,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
                   lang: runtime,
                   prevTopics: `${courseContext}\n\n${repairPlan}`,
                   count: assignments.length,
+                  optionCount: 4,
                   questionStyle: "CONCEPTS",
                   generationGuidance: [baseGuidance, coverageFeedback].filter(Boolean).join("\n\n"),
                   userId,
@@ -610,7 +613,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
               emptyInputCount: generatedTask.examples.filter((example) => !text(example.input, 10_000)).length,
               emptyOutputCount: generatedTask.examples.filter((example) => !text(example.output, 10_000)).length,
             });
-            throw Object.assign(new Error("Diagnostic practical task must use STDIN_STDOUT and include at least one usable public example."), {
+            throw Object.assign(new Error("Diagnostic practical task must use STDIN_STDOUT and include exactly three distinct usable public examples."), {
               name: "AIValidationError",
               statusCode: 503,
               mode: "generateTask",
@@ -629,11 +632,15 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
               taskTitle: generatedTask.title,
               taskDescription,
               lang: runtime,
-              count: 3,
+              count: 15,
               ioType: generatedTask.ioType ?? "STDIN_STDOUT",
               userId,
               publicExamples: generatedTask.examples,
-              requiredCases: ["minimum valid input", "typical input", "boundary input defined by the statement"],
+              requiredCases: [
+                "5 hidden basic cases: smallest valid input, simplest non-trivial input, repeated values, zero or neutral value when allowed, and a small positive case",
+                "5 hidden typical cases: ordinary values, varied ordering, multiple values, mixed signs or categories when allowed, and a case that exercises the main topic interaction",
+                "5 hidden edge cases: exact lower bound, exact upper bound, just-inside bounds, maximum permitted size, and a boundary interaction defined by the statement",
+              ],
             // One bounded safeAICall repair handles candidate-test contract findings
             // without starting over on the whole course assessment.
             }, { language, requestId, maxAttempts: 2 });
@@ -645,32 +652,21 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
                 : String(result.error.error ?? result.error.message);
             const rejectedSource = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:/s)?.[1];
 
-            // A failed hidden-test oracle should not make a valid practical
-            // task unavailable. The public examples were independently
-            // reviewed with the task, so retain them as the checked fallback.
-            // Do not mask a broken statement or broken public examples.
+            // A fixed assessment contract requires a complete hidden suite.
+            // Public examples remain visible and never count as a hidden-test fallback.
             const selection = resolveCourseDiagnosticTestCases(result, generatedTask.examples);
             if (selection) {
-              if (selection.source === "public_examples") {
-                logger.warn("[learning/diagnostic] hidden tests unavailable; using reviewed public examples", {
-                  requestId,
-                  courseId: course.id,
-                  moduleId: topicGroup[0].moduleId,
-                  testCount: selection.tests.length,
-                  reason: result.success ? "insufficient_hidden_tests" : rejectedSource || "hidden_test_generation_failed",
-                });
-              }
               return selection;
             }
 
-            logger.error("[learning/diagnostic] hidden tests and public-example fallback are unavailable", {
+            logger.error("[learning/diagnostic] required hidden test suite is unavailable", {
               requestId,
               courseId: course.id,
               moduleId: topicGroup[0].moduleId,
               reason: rejectedSource || (result.success ? "insufficient_test_cases" : "hidden_test_generation_failed"),
               statusCode: result.success ? null : result.error.statusCode,
+              requiredHiddenTestCount: 15,
               publicExampleCount: Array.isArray(generatedTask.examples) ? generatedTask.examples.length : 0,
-              usablePublicExampleCount: selectCourseDiagnosticTestCases([], generatedTask.examples)?.tests.length ?? 0,
             });
 
             if (result.success) {
@@ -693,7 +689,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
           if (!text(generatedTask.practicalTask)) {
             throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "practical_task");
           }
-          if (testSelection.tests.length < 1) {
+          if (testSelection.tests.length !== 15) {
             throw withAssessmentStage(assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503), "hidden_tests");
           }
           const examples = generatedTask.examples
@@ -823,13 +819,22 @@ function assessmentPracticals(payload: CourseDiagnosticPayload): CourseDiagnosti
 }
 
 function hasComprehensivePayload(payload: CourseDiagnosticPayload): boolean {
-  return payload.version >= 2 && Array.isArray(payload.practicals) && payload.practicals.length > 0;
+  const practicals = assessmentPracticals(payload);
+  return payload.version >= 2
+    && Array.isArray(payload.practicals)
+    && practicals.length === 5
+    && payload.questions.every((question) => question.options.length === 4)
+    && practicals.every((practical) => practical.examples.length === 3 && practical.tests.length === 15);
 }
 
 function publicAssessment(assessment: CourseDiagnosticAssessment, course: Course) {
   const payload = assessment.assessmentData;
   const practicals = assessmentPracticals(payload);
-  const publicPracticals = practicals.map(({ tests: _tests, ...practical }) => practical);
+  const publicPracticals = practicals.map(({ tests, ...practical }) => ({
+    ...practical,
+    publicTestCount: practical.examples.length,
+    hiddenTestCount: tests.length,
+  }));
   if (!publicPracticals.length) throw assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503);
   return {
     id: assessment.id,
@@ -841,7 +846,10 @@ function publicAssessment(assessment: CourseDiagnosticAssessment, course: Course
     questions: payload.questions.map(({ id, question, options, topicId, topicTitle }) => ({ id, question, options, topicId, topicTitle })),
     practical: publicPracticals[0],
     practicals: publicPracticals,
+    taskAttempts: taskAttemptData(assessment, practicals),
     result: assessment.resultData ?? null,
+    reportStatus: assessment.reportStatus ?? "NOT_REQUESTED",
+    mentorReport: assessment.mentorReport ?? null,
   };
 }
 
@@ -958,44 +966,107 @@ function gradeAnswers(questions: CourseDiagnosticQuestion[], answers: Array<{ qu
 }
 
 async function runPractical(enrollmentId: number, assessmentId: number, practical: CourseDiagnosticPractical, code: string) {
+  const publicTests = practical.examples.map((test, index) => ({ id: `public-${index + 1}`, input: test.input, output: test.output, hidden: false, group: "diagnostic-public", weight: 1 }));
+  const hiddenTests = practical.tests.map((test, index) => ({ id: `hidden-${index + 1}`, input: test.input, output: test.output, hidden: true, group: "diagnostic-hidden", weight: 1 }));
+  const tests = [...publicTests, ...hiddenTests];
+  if (publicTests.length !== 3 || hiddenTests.length !== 15) throw assessmentError("ASSESSMENT_PRACTICAL_INVALID", 503);
   const result = await judgeWithSemaphore({
     submission_id: `diagnostic-${enrollmentId}-${assessmentId}-${practical.id}-${Date.now()}`,
     language: practical.runtime.toLowerCase() as JudgeLanguage,
     files: [{ path: practical.entryFile, content: code }],
     entry: practical.entryFile,
-    tests: practical.tests.map((test, index) => ({ id: `case-${index + 1}`, input: test.input, output: test.output, hidden: true, group: "diagnostic", weight: 1 })),
+    tests,
     checker: { type: "exact" },
     limits: { time_limit_ms: 5_000, memory_limit_mb: 384, output_limit_kb: 32 },
     run_all: true,
     debug: false,
   }, { timeoutMs: 15_000 });
   const testsPassed = result.tests.filter((test) => test.verdict === "AC").length;
-  const testsTotal = result.tests.length;
-  if (!testsTotal) throw assessmentError("JUDGE_UNAVAILABLE", 503);
+  const testsTotal = tests.length;
   return { testsPassed, testsTotal, score: Math.round(testsPassed / testsTotal * 100) };
 }
 
-function normalizePracticalSubmissions(
-  rawPracticals: unknown,
-  rawLegacyCode: unknown,
-  practicals: CourseDiagnosticPractical[],
-): Array<{ taskId: string; code: string }> | null {
-  if (Array.isArray(rawPracticals)) {
-    if (rawPracticals.length !== practicals.length) return null;
-    const codeByTask = new Map<string, string>();
-    for (const raw of rawPracticals) {
-      const submission = recordOf(raw);
-      const taskId = text(submission?.taskId, 80);
-      const code = text(submission?.code, 100_000);
-      if (!taskId || !code || codeByTask.has(taskId)) return null;
-      codeByTask.set(taskId, code);
-    }
-    if (practicals.some((practical) => !codeByTask.has(practical.id))) return null;
-    return practicals.map((practical) => ({ taskId: practical.id, code: codeByTask.get(practical.id)! }));
-  }
+function emptyTaskAttemptState(): CourseDiagnosticTaskAttemptState {
+  return { attemptsUsed: 0, inFlight: 0, latestResult: null, bestResult: null };
+}
 
-  const code = text(rawLegacyCode, 100_000);
-  return practicals.length === 1 && code ? [{ taskId: practicals[0].id, code }] : null;
+function taskAttemptData(assessment: CourseDiagnosticAssessment, practicals: CourseDiagnosticPractical[]): CourseDiagnosticTaskAttempts {
+  const saved = assessment.taskAttemptsData && typeof assessment.taskAttemptsData === "object" ? assessment.taskAttemptsData : {};
+  return Object.fromEntries(practicals.map((practical) => {
+    const current = saved[practical.id];
+    return [practical.id, {
+      ...emptyTaskAttemptState(),
+      ...(current && typeof current === "object" ? current : {}),
+    } satisfies CourseDiagnosticTaskAttemptState];
+  }));
+}
+
+async function reserveTaskAttempt(assessmentId: number, enrollmentId: number, taskId: string) {
+  return AppDataSource.transaction(async (manager) => {
+    const repository = manager.getRepository(CourseDiagnosticAssessment);
+    const assessment = await repository.createQueryBuilder("assessment")
+      .setLock("pessimistic_write")
+      .where("assessment.id = :assessmentId", { assessmentId })
+      .andWhere("assessment.enrollment_id = :enrollmentId", { enrollmentId })
+      .getOne();
+    if (!assessment) throw assessmentError("ASSESSMENT_NOT_FOUND", 404);
+    if (assessment.status === "SUBMITTED") throw assessmentError("ASSESSMENT_ALREADY_SUBMITTED", 409);
+    const practicals = assessmentPracticals(assessment.assessmentData);
+    const practical = practicals.find((item) => item.id === taskId);
+    if (!practical) throw assessmentError("ASSESSMENT_PRACTICAL_INVALID", 400);
+    const attempts = taskAttemptData(assessment, practicals);
+    const state = attempts[taskId];
+    if (state.attemptsUsed + state.inFlight >= 10) throw assessmentError("DIAGNOSTIC_ATTEMPT_LIMIT_REACHED", 429);
+    state.inFlight += 1;
+    assessment.taskAttemptsData = attempts;
+    await repository.save(assessment);
+    return { assessmentId: assessment.id, practical };
+  });
+}
+
+async function completeTaskAttempt(assessmentId: number, enrollmentId: number, taskId: string, evaluation: { testsPassed: number; testsTotal: number; score: number }) {
+  await AppDataSource.transaction(async (manager) => {
+    const repository = manager.getRepository(CourseDiagnosticAssessment);
+    const assessment = await repository.createQueryBuilder("assessment")
+      .setLock("pessimistic_write")
+      .where("assessment.id = :assessmentId", { assessmentId })
+      .andWhere("assessment.enrollment_id = :enrollmentId", { enrollmentId })
+      .getOne();
+    if (!assessment || assessment.status === "SUBMITTED") throw assessmentError("ASSESSMENT_ALREADY_SUBMITTED", 409);
+    const practicals = assessmentPracticals(assessment.assessmentData);
+    const attempts = taskAttemptData(assessment, practicals);
+    const state = attempts[taskId];
+    if (!state || state.inFlight < 1) throw assessmentError("ASSESSMENT_SUBMISSION_INVALID", 409);
+    state.inFlight -= 1;
+    state.attemptsUsed += 1;
+    state.latestResult = evaluation;
+    if (!state.bestResult || evaluation.score >= state.bestResult.score) state.bestResult = evaluation;
+    assessment.taskAttemptsData = attempts;
+    await repository.save(assessment);
+  });
+}
+
+async function releaseTaskAttempt(assessmentId: number, enrollmentId: number, taskId: string): Promise<void> {
+  try {
+    await AppDataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(CourseDiagnosticAssessment);
+      const assessment = await repository.createQueryBuilder("assessment")
+        .setLock("pessimistic_write")
+        .where("assessment.id = :assessmentId", { assessmentId })
+        .andWhere("assessment.enrollment_id = :enrollmentId", { enrollmentId })
+        .getOne();
+      if (!assessment) return;
+      const practicals = assessmentPracticals(assessment.assessmentData);
+      const attempts = taskAttemptData(assessment, practicals);
+      const state = attempts[taskId];
+      if (!state || state.inFlight < 1) return;
+      state.inFlight -= 1;
+      assessment.taskAttemptsData = attempts;
+      await repository.save(assessment);
+    });
+  } catch (error) {
+    logger.warn("[learning/diagnostic] could not release a failed Judge attempt reservation", { assessmentId, taskId, error });
+  }
 }
 
 export async function runCourseDiagnosticSample(userId: number, enrollmentId: number, rawTaskId: unknown, rawCode: unknown, rawInput: unknown) {
@@ -1034,13 +1105,34 @@ export async function runCourseDiagnosticSample(userId: number, enrollmentId: nu
   }
 }
 
-export async function submitCourseDiagnosticAssessment(
-  userId: number,
-  enrollmentId: number,
-  rawAnswers: unknown,
-  rawPracticals: unknown,
-  rawLegacyCode?: unknown,
-) {
+export async function submitCourseDiagnosticTask(userId: number, enrollmentId: number, rawTaskId: unknown, rawCode: unknown) {
+  const enrollment = await ownedEnrollment(userId, enrollmentId);
+  const taskId = text(rawTaskId, 80);
+  const code = text(rawCode, 100_000);
+  if (!taskId || !code) throw assessmentError("PRACTICAL_CODE_REQUIRED", 400);
+  const latest = await assessmentRepo().findOne({ where: { enrollment: { id: enrollment.id } }, order: { attemptNumber: "DESC", id: "DESC" } });
+  if (!latest) throw assessmentError("ASSESSMENT_NOT_FOUND", 404);
+  const reserved = await reserveTaskAttempt(latest.id, enrollment.id, taskId);
+  try {
+    const evaluation = await runPractical(enrollment.id, reserved.assessmentId, reserved.practical, code);
+    await completeTaskAttempt(reserved.assessmentId, enrollment.id, taskId, evaluation);
+    const updated = await assessmentRepo().findOne({ where: { id: reserved.assessmentId } });
+    const state = updated ? taskAttemptData(updated, assessmentPracticals(updated.assessmentData))[taskId] : emptyTaskAttemptState();
+    return {
+      taskId,
+      ...evaluation,
+      attemptsUsed: state.attemptsUsed,
+      attemptsRemaining: Math.max(0, 10 - state.attemptsUsed),
+      bestResult: state.bestResult,
+    };
+  } catch (error) {
+    await releaseTaskAttempt(reserved.assessmentId, enrollment.id, taskId);
+    if (recordOf(error)?.statusCode) throw error;
+    throw assessmentError("JUDGE_UNAVAILABLE", 503);
+  }
+}
+
+export async function submitCourseDiagnosticAssessment(userId: number, enrollmentId: number, rawAnswers: unknown) {
   const enrollment = await ownedEnrollment(userId, enrollmentId);
   const assessment = await assessmentRepo().findOne({ where: { enrollment: { id: enrollment.id } }, order: { attemptNumber: "DESC", id: "DESC" } });
   if (!assessment) throw assessmentError("ASSESSMENT_NOT_FOUND", 404);
@@ -1049,72 +1141,73 @@ export async function submitCourseDiagnosticAssessment(
   const answers = normalizeAnswers(rawAnswers, payload.questions);
   if (!answers) throw assessmentError("ASSESSMENT_ANSWERS_INVALID", 400);
   const practicals = assessmentPracticals(payload);
-  const practicalSubmissions = normalizePracticalSubmissions(rawPracticals, rawLegacyCode, practicals);
-  if (!practicalSubmissions) throw assessmentError("PRACTICAL_CODE_REQUIRED", 400);
-  const submissionByTask = new Map(practicalSubmissions.map((submission) => [submission.taskId, submission.code]));
-
-  let practicalResults: Array<{
-    taskId: string;
-    title: string;
-    moduleTitle: string;
-    topicIds: number[];
-    testsPassed: number;
-    testsTotal: number;
-    score: number;
-  }>;
-  try {
-    practicalResults = await mapWithConcurrency(practicals, 2, async (practical) => {
-      const evaluation = await runPractical(enrollment.id, assessment.id, practical, submissionByTask.get(practical.id)!);
-      return {
-        taskId: practical.id,
-        title: practical.title,
-        moduleTitle: practical.moduleTitle,
-        topicIds: practical.topicIds,
-        ...evaluation,
-      };
-    });
-  } catch (error) {
-    if (recordOf(error)?.statusCode) throw error;
-    throw assessmentError("JUDGE_UNAVAILABLE", 503);
+  const attempts = taskAttemptData(assessment, practicals);
+  if (Object.values(attempts).some((state) => state.inFlight > 0)) throw assessmentError("DIAGNOSTIC_JUDGE_IN_PROGRESS", 409);
+  if (practicals.some((practical) => attempts[practical.id].attemptsUsed < 1 || !attempts[practical.id].bestResult)) {
+    throw assessmentError("DIAGNOSTIC_TASKS_NOT_SUBMITTED", 400);
   }
-  const testsPassed = practicalResults.reduce((total, task) => total + task.testsPassed, 0);
-  const testsTotal = practicalResults.reduce((total, task) => total + task.testsTotal, 0);
-  if (!testsTotal) throw assessmentError("JUDGE_UNAVAILABLE", 503);
-  const practicalScore = Math.round(testsPassed / testsTotal * 100);
-  const topicPracticeScores = new Map<number, number>();
-  for (const task of practicalResults) {
-    for (const topicId of task.topicIds) topicPracticeScores.set(topicId, task.score);
-  }
-  const hasTopicCoverage = practicals.some((practical) => practical.topicIds.length > 0);
   const knowledge = gradeAnswers(payload.questions, answers);
-  const score = Math.round((knowledge.score + practicalScore) / 2);
-  const passed = score >= 75 && knowledge.score >= 70 && practicalScore >= 60;
-  const result: CourseDiagnosticResult = {
-    score,
-    knowledgeScore: knowledge.score,
-    practicalScore,
-    correctCount: knowledge.correctCount,
-    totalQuestions: payload.questions.length,
-    testsPassed,
-    testsTotal,
-    practicalResults,
-    passed,
-    answers,
-    topicResults: knowledge.topicResults.map((topic) => ({
-      ...topic,
-      practiceCredited: topic.theoryCredited && (hasTopicCoverage ? (topicPracticeScores.get(topic.topicId) ?? 0) >= 60 : practicalScore >= 60),
-    })),
-    review: knowledge.review,
-    submittedAt: new Date().toISOString(),
-  };
-
+  let submittedResult: CourseDiagnosticResult | null = null;
   await AppDataSource.transaction(async (manager) => {
-    const storedAssessment = await manager.getRepository(CourseDiagnosticAssessment).findOne({ where: { id: assessment.id, enrollment: { id: enrollment.id } } });
+    const assessmentRepository = manager.getRepository(CourseDiagnosticAssessment);
+    const storedAssessment = await assessmentRepository.createQueryBuilder("assessment")
+      .setLock("pessimistic_write")
+      .where("assessment.id = :assessmentId", { assessmentId: assessment.id })
+      .andWhere("assessment.enrollment_id = :enrollmentId", { enrollmentId: enrollment.id })
+      .getOne();
     if (!storedAssessment || storedAssessment.status === "SUBMITTED") throw assessmentError("ASSESSMENT_ALREADY_SUBMITTED", 409);
+    const finalAttempts = taskAttemptData(storedAssessment, practicals);
+    if (Object.values(finalAttempts).some((state) => state.inFlight > 0)) throw assessmentError("DIAGNOSTIC_JUDGE_IN_PROGRESS", 409);
+    if (practicals.some((practical) => finalAttempts[practical.id].attemptsUsed < 1 || !finalAttempts[practical.id].bestResult)) {
+      throw assessmentError("DIAGNOSTIC_TASKS_NOT_SUBMITTED", 400);
+    }
+    const practicalResults = practicals.map((practical) => ({
+      taskId: practical.id,
+      title: practical.title,
+      moduleTitle: practical.moduleTitle,
+      topicIds: practical.topicIds,
+      ...finalAttempts[practical.id].bestResult!,
+      attemptsUsed: finalAttempts[practical.id].attemptsUsed,
+    }));
+    const testsPassed = practicalResults.reduce((total, task) => total + task.testsPassed, 0);
+    const testsTotal = practicalResults.reduce((total, task) => total + task.testsTotal, 0);
+    if (!testsTotal) throw assessmentError("JUDGE_UNAVAILABLE", 503);
+    const practicalScore = Math.round(testsPassed / testsTotal * 100);
+    const topicPracticeScores = new Map<number, number>();
+    for (const task of practicalResults) {
+      for (const topicId of task.topicIds) topicPracticeScores.set(topicId, task.score);
+    }
+    const hasTopicCoverage = practicals.some((practical) => practical.topicIds.length > 0);
+    const score = Math.round((knowledge.score + practicalScore) / 2);
+    const passed = score >= 75 && knowledge.score >= 70 && practicalScore >= 60;
+    const resultData: CourseDiagnosticResult = {
+      score,
+      knowledgeScore: knowledge.score,
+      practicalScore,
+      correctCount: knowledge.correctCount,
+      totalQuestions: payload.questions.length,
+      testsPassed,
+      testsTotal,
+      practicalResults,
+      passed,
+      answers,
+      topicResults: knowledge.topicResults.map((topic) => ({
+        ...topic,
+        practiceCredited: topic.theoryCredited && (hasTopicCoverage ? (topicPracticeScores.get(topic.topicId) ?? 0) >= 60 : practicalScore >= 60),
+      })),
+      review: knowledge.review,
+      submittedAt: new Date().toISOString(),
+    };
+    submittedResult = resultData;
     storedAssessment.status = "SUBMITTED";
-    storedAssessment.resultData = result;
-    storedAssessment.submittedAt = new Date(result.submittedAt);
-    await manager.getRepository(CourseDiagnosticAssessment).save(storedAssessment);
+    storedAssessment.resultData = resultData;
+    storedAssessment.submittedAt = new Date(resultData.submittedAt);
+    storedAssessment.reportStatus = "PENDING";
+    storedAssessment.reportAttempts = 0;
+    storedAssessment.reportNextAttemptAt = new Date();
+    storedAssessment.reportEmailAttempts = 0;
+    storedAssessment.reportEmailNextAttemptAt = new Date();
+    await assessmentRepository.save(storedAssessment);
 
     const course = await manager.getRepository(Course).findOne({ where: { id: enrollment.courseId }, relations: ["modules", "modules.items"] });
     if (!course) throw assessmentError("COURSE_NOT_FOUND", 404);
@@ -1136,7 +1229,7 @@ export async function submitCourseDiagnosticAssessment(
       await progressRepository.save(progress);
     };
 
-    for (const topicResult of result.topicResults) {
+    for (const topicResult of resultData.topicResults) {
       if (!topicResult.theoryCredited) continue;
       const topic = topicById.get(topicResult.topicId);
       if (!topic) continue;
@@ -1148,7 +1241,7 @@ export async function submitCourseDiagnosticAssessment(
       }
     }
 
-    if (passed) {
+    if (resultData.passed) {
       for (const item of items) await completeItem(item);
       enrollment.finalAssessmentPassed = true;
       enrollment.status = "COMPLETED";
@@ -1168,5 +1261,6 @@ export async function submitCourseDiagnosticAssessment(
     else if (enrollment.status === "AVAILABLE") enrollment.status = "IN_PROGRESS";
     await manager.getRepository(UserCourseEnrollment).save(enrollment);
   });
-  return result;
+  if (!submittedResult) throw assessmentError("ASSESSMENT_SUBMISSION_FAILED", 503);
+  return submittedResult;
 }

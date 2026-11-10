@@ -1368,7 +1368,7 @@ export const App: React.FC = () => {
                 </PersonalRouteShell>
               </RequireToken>} />
           <Route path="/learning/course/:courseId/path" element={<RequireToken><PersonalRouteShell courseTab="path"><Suspense fallback={<PageLoader />}><AnimatedPage><LearningCoursePage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
-          <Route path="/learning/course/:courseId/assessment" element={<RequireToken><PersonalRouteShell courseTab="path"><Suspense fallback={<PageLoader />}><AnimatedPage><CourseDiagnosticPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
+          <Route path="/learning/course/:courseId/assessment" element={<RequireToken><PersonalRouteShell courseTab="none" hideNavigation><Suspense fallback={<PageLoader />}><AnimatedPage><CourseDiagnosticPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
           <Route path="/learning/course/:courseId/practice/:courseItemId" element={<RequireToken><PersonalRouteShell courseTab="practice"><Suspense fallback={<PageLoader />}><AnimatedPage><CoursePracticePage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
           <Route path="/learning/course/:courseId/progress" element={<RequireToken><PersonalRouteShell courseTab="progress"><Suspense fallback={<PageLoader />}><AnimatedPage><CourseProgressPage /></AnimatedPage></Suspense></PersonalRouteShell></RequireToken>} />
           <Route path="/invite/:token" element={<RequireToken>

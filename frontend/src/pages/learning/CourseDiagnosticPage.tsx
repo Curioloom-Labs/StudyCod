@@ -1,6 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, ArrowRight, CheckCircle2, LoaderCircle, Play, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, LoaderCircle, Play, Send, Sparkles } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { CodeEditor } from "../../components/CodeEditor";
 import { MarkdownView } from "../../components/MarkdownView";
@@ -11,6 +11,7 @@ import {
   runCourseDiagnostic,
   retryCourseDiagnostic,
   submitCourseDiagnostic,
+  submitCourseDiagnosticTask,
   type CourseDiagnosticAssessment,
   type CourseDiagnosticPractical,
   type CourseDiagnosticResult,
@@ -36,6 +37,12 @@ function messageForError(error: unknown): string {
       return tr("Кваліфікацію вже підтверджено.", "Your qualification has already been confirmed.");
     case "ASSESSMENT_ANSWERS_INVALID":
       return tr("Перевір, що відповів на кожне питання.", "Make sure you answered every question.");
+    case "DIAGNOSTIC_TASKS_NOT_SUBMITTED":
+      return tr("Надішли кожну практичну задачу судді хоча б один раз.", "Submit every practical task to Judge at least once.");
+    case "DIAGNOSTIC_JUDGE_IN_PROGRESS":
+      return tr("Дочекайся завершення перевірки коду.", "Wait for the current Judge run to finish.");
+    case "DIAGNOSTIC_ATTEMPT_LIMIT_REACHED":
+      return tr("Для цієї задачі використано всі 10 спроб.", "All 10 attempts for this task have been used.");
     case "COURSE_NOT_ACTIVE":
       return tr("Спочатку активуй курс, щоб пройти діагностику.", "Activate the course before taking its diagnostic.");
     case "COURSE_ALREADY_COMPLETED":
@@ -44,12 +51,6 @@ function messageForError(error: unknown): string {
       return tr("Не вдалося завантажити або зберегти тест.", "Could not load or submit the assessment.");
   }
 }
-
-const hasPracticalAnswer = (task: CourseDiagnosticPractical, codes: Record<string, string>) => {
-  const code = (codes[task.id] || "").trim();
-  const starter = (task.codeTemplate || "").trim();
-  return Boolean(code && code !== starter);
-};
 
 export const CourseDiagnosticPage: React.FC = () => {
   const { i18n } = useTranslation();
@@ -63,8 +64,10 @@ export const CourseDiagnosticPage: React.FC = () => {
   const [sampleInputs, setSampleInputs] = React.useState<Record<string, string>>({});
   const [sampleOutputs, setSampleOutputs] = React.useState<Record<string, string | null>>({});
   const [sampleErrors, setSampleErrors] = React.useState<Record<string, string | null>>({});
+  const [judgeErrors, setJudgeErrors] = React.useState<Record<string, string | null>>({});
   const [loading, setLoading] = React.useState(true);
   const [runningTaskId, setRunningTaskId] = React.useState<string | null>(null);
+  const [judgingTaskId, setJudgingTaskId] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [retrying, setRetrying] = React.useState(false);
   const [activePart, setActivePart] = React.useState<"knowledge" | "practical">("knowledge");
@@ -87,6 +90,7 @@ export const CourseDiagnosticPage: React.FC = () => {
       setSampleInputs(Object.fromEntries(tasks.map((task) => [task.id, task.examples[0]?.input || ""])));
       setSampleOutputs({});
       setSampleErrors({});
+      setJudgeErrors({});
       setAnswers({});
       setActivePart("knowledge");
       setActivePracticalIndex(0);
@@ -98,6 +102,54 @@ export const CourseDiagnosticPage: React.FC = () => {
   }, [courseId, locale]);
 
   React.useEffect(() => { void load(); }, [load]);
+
+  React.useEffect(() => {
+    const blockClipboard = (event: ClipboardEvent) => event.preventDefault();
+    const blockContextMenu = (event: MouseEvent) => event.preventDefault();
+    const blockTextSelection = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".monaco-editor")) return;
+      event.preventDefault();
+    };
+    const blockCopyShortcuts = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && ["c", "x"].includes(key)
+        || event.ctrlKey && key === "insert"
+        || event.shiftKey && key === "delete") {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    document.addEventListener("copy", blockClipboard, true);
+    document.addEventListener("cut", blockClipboard, true);
+    document.addEventListener("contextmenu", blockContextMenu, true);
+    document.addEventListener("selectstart", blockTextSelection, true);
+    document.addEventListener("keydown", blockCopyShortcuts, true);
+    return () => {
+      document.removeEventListener("copy", blockClipboard, true);
+      document.removeEventListener("cut", blockClipboard, true);
+      document.removeEventListener("contextmenu", blockContextMenu, true);
+      document.removeEventListener("selectstart", blockTextSelection, true);
+      document.removeEventListener("keydown", blockCopyShortcuts, true);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!assessment || assessment.status !== "SUBMITTED" || !["PENDING", "PROCESSING"].includes(assessment.reportStatus)) return;
+    let active = true;
+    const pollReport = async () => {
+      try {
+        const latest = await getCourseDiagnostic(assessment.enrollmentId);
+        if (!active) return;
+        setAssessment((current) => current ? { ...current, reportStatus: latest.reportStatus, mentorReport: latest.mentorReport } : current);
+      } catch {
+        // Keep showing the preparing state; the account notification and email are delivered independently.
+      }
+    };
+    void pollReport();
+    const timer = window.setInterval(() => void pollReport(), 5_000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [assessment?.id, assessment?.enrollmentId, assessment?.status, assessment?.reportStatus]);
 
   const runSample = async (task: CourseDiagnosticPractical) => {
     if (!assessment || runningTaskId) return;
@@ -119,6 +171,38 @@ export const CourseDiagnosticPage: React.FC = () => {
     }
   };
 
+  const submitTaskToJudge = async (task: CourseDiagnosticPractical) => {
+    if (!assessment || judgingTaskId || submitting) return;
+    const code = practicalCodes[task.id] || "";
+    if (!code.trim()) return;
+    setJudgingTaskId(task.id);
+    setJudgeErrors((current) => ({ ...current, [task.id]: null }));
+    try {
+      const verdict = await submitCourseDiagnosticTask(assessment.enrollmentId, task.id, code);
+      setAssessment((current) => {
+        if (!current) return current;
+        const previous = current.taskAttempts[task.id] ?? { attemptsUsed: 0, inFlight: 0, latestResult: null, bestResult: null };
+        return {
+          ...current,
+          taskAttempts: {
+            ...current.taskAttempts,
+            [task.id]: {
+              ...previous,
+              inFlight: 0,
+              attemptsUsed: verdict.attemptsUsed,
+              latestResult: { testsPassed: verdict.testsPassed, testsTotal: verdict.testsTotal, score: verdict.score },
+              bestResult: verdict.bestResult,
+            },
+          },
+        };
+      });
+    } catch (caught: unknown) {
+      setJudgeErrors((current) => ({ ...current, [task.id]: messageForError(caught) }));
+    } finally {
+      setJudgingTaskId(null);
+    }
+  };
+
   const submit = async () => {
     if (!assessment || submitting) return;
     if (assessment.questions.some((question) => !Number.isInteger(answers[question.id]))) {
@@ -127,23 +211,19 @@ export const CourseDiagnosticPage: React.FC = () => {
       return;
     }
     const tasks = assessment.practicals?.length ? assessment.practicals : [assessment.practical];
-    const missingTaskIndex = tasks.findIndex((task) => !hasPracticalAnswer(task, practicalCodes));
+    const missingTaskIndex = tasks.findIndex((task) => (assessment.taskAttempts[task.id]?.attemptsUsed ?? 0) < 1);
     if (missingTaskIndex >= 0) {
       setActivePart("practical");
       setActivePracticalIndex(missingTaskIndex);
-      setError(tr("Додай розв’язок до кожної практичної задачі.", "Add a solution to every practical task."));
+      setError(tr("Надішли кожну практичну задачу судді хоча б один раз.", "Submit every practical task to Judge at least once."));
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
-      const graded = await submitCourseDiagnostic(
-        assessment.enrollmentId,
-        assessment.questions.map((question) => ({ questionId: question.id, selectedIndex: answers[question.id] })),
-        tasks.map((task) => ({ taskId: task.id, code: practicalCodes[task.id] })),
-      );
+      const graded = await submitCourseDiagnostic(assessment.enrollmentId, assessment.questions.map((question) => ({ questionId: question.id, selectedIndex: answers[question.id] })));
       setResult(graded);
-      setAssessment((current) => current ? { ...current, status: "SUBMITTED", result: graded } : current);
+      setAssessment((current) => current ? { ...current, status: "SUBMITTED", result: graded, reportStatus: "PENDING", mentorReport: null } : current);
       window.dispatchEvent(new Event("studycod:course-progress-changed"));
     } catch (caught: unknown) {
       setError(messageForError(caught));
@@ -166,6 +246,7 @@ export const CourseDiagnosticPage: React.FC = () => {
       setSampleInputs(Object.fromEntries(tasks.map((task) => [task.id, task.examples[0]?.input || ""])));
       setSampleOutputs({});
       setSampleErrors({});
+      setJudgeErrors({});
       setActivePart("knowledge");
       setActivePracticalIndex(0);
     } catch (caught: unknown) {
@@ -178,7 +259,7 @@ export const CourseDiagnosticPage: React.FC = () => {
   const answeredCount = Object.values(answers).filter(Number.isInteger).length;
   const practicals = assessment?.practicals?.length ? assessment.practicals : assessment?.practical ? [assessment.practical] : [];
   const practical = practicals[activePracticalIndex] ?? practicals[0] ?? null;
-  const practicalCompletedCount = practicals.filter((task) => hasPracticalAnswer(task, practicalCodes)).length;
+  const practicalCompletedCount = practicals.filter((task) => (assessment?.taskAttempts[task.id]?.attemptsUsed ?? 0) > 0).length;
 
   if (loading) return <TaskGenerationOverlay open mode="assessment" phase="generating" />;
 
@@ -235,10 +316,21 @@ export const CourseDiagnosticPage: React.FC = () => {
         </div>
       </div>
 
+      {assessment.reportStatus === "PENDING" || assessment.reportStatus === "PROCESSING" ? <section role="status" className="flex items-start gap-3 rounded-2xl border border-primary/25 bg-primary/[.06] p-5">
+        <LoaderCircle className="mt-0.5 size-5 shrink-0 animate-spin text-primary" />
+        <div><h2 className="font-extrabold">{tr("Cody готує докладний звіт", "Cody is preparing your detailed report")}</h2><p className="mt-1 text-sm leading-6 text-text-secondary">{tr("Зазвичай це займає до 2 хвилин. Повідомимо тут і надішлемо звіт на пошту.", "This usually takes up to 2 minutes. We’ll notify you here and email the report when it’s ready.")}</p></div>
+      </section> : assessment.reportStatus === "READY" && assessment.mentorReport ? <section aria-labelledby="diagnostic-mentor-report" className="rounded-2xl border border-primary/25 bg-primary/[.06] p-5 sm:p-6">
+        <p className="text-[10px] font-black uppercase tracking-[.15em] text-primary">Cody · {tr("коментар ментора", "mentor feedback")}</p>
+        <h2 id="diagnostic-mentor-report" className="mt-1 text-lg font-black">{tr("Твій звіт готовий", "Your report is ready")}</h2>
+        <p className="mt-3 whitespace-pre-line text-sm leading-6 text-text-secondary">{assessment.mentorReport}</p>
+      </section> : assessment.reportStatus === "FAILED" ? <section role="status" className="rounded-2xl border border-accent-warn/30 bg-accent-warn/[.06] p-5 text-sm text-text-secondary">
+        {tr("Результати тесту збережено, але Cody не зміг підготувати коментар. Докладні оцінки доступні нижче.", "Your assessment results are saved, but Cody could not prepare a mentor comment. Detailed scores are available below.")}
+      </section> : null}
+
       {result.practicalResults?.length ? <section aria-labelledby="diagnostic-practical-results" className="rounded-2xl border border-border bg-bg-surface p-5 sm:p-6">
         <div className="border-b border-border pb-3"><p className="text-[10px] font-black uppercase tracking-[.15em] text-primary">{tr("Частина 2", "Part 2")}</p><h2 id="diagnostic-practical-results" className="mt-1 text-lg font-black">{tr("Результати практичних задач", "Practical task results")}</h2></div>
         <div className="mt-3 divide-y divide-border">{result.practicalResults.map((task) => <article key={task.taskId} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-          <div><h3 className="font-bold">{task.title}</h3><p className="mt-1 text-xs text-text-secondary">{task.moduleTitle || tr("Теми курсу", "Course topics")} · {task.testsPassed}/{task.testsTotal} {tr("перевірок", "checks")}</p></div>
+          <div><h3 className="font-bold">{task.title}</h3><p className="mt-1 text-xs text-text-secondary">{task.moduleTitle || tr("Теми курсу", "Course topics")} · {task.testsPassed}/{task.testsTotal} {tr("перевірок", "checks")} · {task.attemptsUsed}/10 {tr("спроб", "attempts")}</p></div>
           <strong className="text-xl font-black tabular-nums">{task.score}%</strong>
         </article>)}</div>
       </section> : null}
@@ -310,43 +402,57 @@ export const CourseDiagnosticPage: React.FC = () => {
           <button type="button" onClick={() => { setActivePart("practical"); setError(null); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-extrabold text-primary-foreground transition hover:brightness-105">{tr("До практичної частини", "Continue to practical tasks")}<ArrowRight className="size-4" /></button>
         </div>
       </> : <>
-        <nav aria-label={tr("Практичні задачі", "Practical tasks")} className="flex gap-2 overflow-x-auto pb-1">
+        <div className="grid gap-4 lg:grid-cols-[72px_minmax(0,1fr)]">
+        <nav aria-label={tr("Практичні задачі", "Practical tasks")} className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
           {practicals.map((task, index) => {
             const active = activePracticalIndex === index;
-            const completed = hasPracticalAnswer(task, practicalCodes);
-            return <button key={task.id} type="button" aria-current={active ? "step" : undefined} onClick={() => setActivePracticalIndex(index)} className={`flex min-w-52 max-w-72 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${active ? "border-primary bg-primary/[.08]" : "border-border bg-bg-surface hover:border-primary/40"}`}>
-              <span className={`grid size-8 shrink-0 place-items-center rounded-lg text-xs font-black ${completed ? "bg-primary text-primary-foreground" : "bg-bg-hover text-text-secondary"}`}>{completed ? <CheckCircle2 className="size-4" /> : String(index + 1).padStart(2, "0")}</span>
-              <span className="min-w-0"><span className="block truncate text-xs font-extrabold">{task.title}</span><span className="block truncate text-[10px] text-text-muted">{task.moduleTitle || tr("Теми курсу", "Course topics")}</span></span>
+            const attempts = assessment.taskAttempts[task.id]?.attemptsUsed ?? 0;
+            return <button key={task.id} type="button" aria-label={`${tr("Задача", "Task")} ${index + 1}: ${task.title}`} aria-current={active ? "step" : undefined} onClick={() => setActivePracticalIndex(index)} className={`flex min-w-14 items-center justify-center gap-1 rounded-xl border px-3 py-2.5 text-left transition lg:min-h-16 lg:flex-col ${active ? "border-primary bg-primary/[.08]" : "border-border bg-bg-surface hover:border-primary/40"}`}>
+              <span className={`grid size-9 shrink-0 place-items-center rounded-lg text-sm font-black ${attempts > 0 ? "bg-primary text-primary-foreground" : "bg-bg-hover text-text-secondary"}`}>{String(index + 1).padStart(2, "0")}</span>
+              <span className="text-[10px] font-semibold text-text-muted">{attempts}/10</span>
             </button>;
           })}
         </nav>
 
-        {practical && <section aria-labelledby="diagnostic-practical" className="overflow-hidden rounded-2xl border border-border bg-bg-surface">
-          <div className="border-b border-border p-4 sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-primary">{tr("Частина 2 · Задача", "Part 2 · Task")} {activePracticalIndex + 1} / {practicals.length}</p><h2 id="diagnostic-practical" className="mt-1 text-xl font-black">{practical.title}</h2></div><span className="rounded-full border border-border px-3 py-1.5 text-xs font-bold text-text-secondary">{practical.moduleTitle || tr("Усі теми курсу", "Course topics")}</span></div>
+        {practical && <section aria-labelledby="diagnostic-practical" className="overflow-hidden rounded-2xl border border-border bg-bg-surface lg:grid lg:grid-cols-2">
+          <div className="border-b border-border p-4 sm:p-6 lg:border-b-0 lg:border-r">
+            <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.16em] text-primary">{tr("Задача", "Task")} {String(activePracticalIndex + 1).padStart(2, "0")} / {practicals.length}</p><h2 id="diagnostic-practical" className="mt-1 text-xl font-black">{practical.title}</h2></div><span className="rounded-full border border-border px-3 py-1.5 text-xs font-bold text-text-secondary">{practical.moduleTitle || tr("Усі теми курсу", "Course topics")}</span></div>
             <div className="mt-3 max-w-none text-sm leading-6 text-text-secondary"><MarkdownView content={practical.statement} /></div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl bg-bg-base p-3"><p className="text-[10px] font-black uppercase tracking-[.12em] text-text-muted">{tr("Формат введення", "Input format")}</p><div className="mt-1 text-sm text-text-primary"><MarkdownView content={practical.inputFormat} /></div></div>
               <div className="rounded-xl bg-bg-base p-3"><p className="text-[10px] font-black uppercase tracking-[.12em] text-text-muted">{tr("Формат виведення", "Output format")}</p><div className="mt-1 text-sm text-text-primary"><MarkdownView content={practical.outputFormat} /></div></div>
               {practical.constraints && <div className="rounded-xl bg-bg-base p-3 sm:col-span-2"><p className="text-[10px] font-black uppercase tracking-[.12em] text-text-muted">{tr("Обмеження", "Constraints")}</p><div className="mt-1 text-sm text-text-primary"><MarkdownView content={practical.constraints} /></div></div>}
             </div>
-            {practical.examples.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{practical.examples.map((example, index) => <article key={`example-${index}`} className="rounded-xl border border-border p-3"><p className="text-[10px] font-black uppercase tracking-[.12em] text-text-muted">{tr("Приклад", "Example")} {index + 1}</p><div className="mt-2 grid grid-cols-2 gap-2"><div><p className="text-[10px] font-bold text-text-muted">{tr("Ввід", "Input")}</p><pre className="mt-1 overflow-x-auto rounded-md bg-bg-base p-2 text-xs">{example.input || "∅"}</pre></div><div><p className="text-[10px] font-bold text-text-muted">{tr("Вивід", "Output")}</p><pre className="mt-1 overflow-x-auto rounded-md bg-bg-base p-2 text-xs">{example.output || "∅"}</pre></div></div>{example.explanation && <p className="mt-2 text-xs leading-5 text-text-secondary">{example.explanation}</p>}</article>)}</div>}
+            {practical.examples.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{practical.examples.map((example, index) => <article key={`example-${index}`} className="rounded-xl border border-border p-3"><p className="text-[10px] font-black uppercase tracking-[.12em] text-text-muted">{tr("Відкритий приклад", "Public example")} {index + 1}</p><div className="mt-2 grid grid-cols-2 gap-2"><div><p className="text-[10px] font-bold text-text-muted">{tr("Ввід", "Input")}</p><pre className="mt-1 overflow-x-auto rounded-md bg-bg-base p-2 text-xs">{example.input || "∅"}</pre></div><div><p className="text-[10px] font-bold text-text-muted">{tr("Вивід", "Output")}</p><pre className="mt-1 overflow-x-auto rounded-md bg-bg-base p-2 text-xs">{example.output || "∅"}</pre></div></div>{example.explanation && <p className="mt-2 text-xs leading-5 text-text-secondary">{example.explanation}</p>}</article>)}</div>}
           </div>
           <div className="p-4 sm:p-6">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-extrabold">{practical.entryFile}</h3><p className="text-xs text-text-muted">{practical.runtime}</p></div><button type="button" disabled={runningTaskId !== null || !(practicalCodes[practical.id] || "").trim()} onClick={() => void runSample(practical)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 text-xs font-bold text-text-primary transition hover:border-primary/40 disabled:opacity-50">{runningTaskId === practical.id ? <LoaderCircle className="size-4 animate-spin" /> : <Play className="size-4" />}{tr("Запустити приклад", "Run sample")}</button></div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-extrabold">{practical.entryFile}</h3><p className="text-xs text-text-muted">{practical.runtime} · {practical.publicTestCount} {tr("відкриті", "open")} · {practical.hiddenTestCount} {tr("приховані", "hidden")}</p></div><button type="button" disabled={runningTaskId !== null || judgingTaskId !== null || !(practicalCodes[practical.id] || "").trim()} onClick={() => void runSample(practical)} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3 text-xs font-bold text-text-primary transition hover:border-primary/40 disabled:opacity-50">{runningTaskId === practical.id ? <LoaderCircle className="size-4 animate-spin" /> : <Play className="size-4" />}{tr("Запустити приклад", "Run sample")}</button></div>
             <CodeEditor language={practical.runtime.toLowerCase() as JudgeLanguage} value={practicalCodes[practical.id] || ""} onChange={(value) => setPracticalCodes((current) => ({ ...current, [practical.id]: value }))} height={340} fontSize={14} wordWrap enableSemanticLsp={false} filePath={practical.entryFile} />
             <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <label className="block text-xs font-bold text-text-secondary">{tr("Тестове введення", "Sample input")}<textarea value={sampleInputs[practical.id] || ""} onChange={(event) => setSampleInputs((current) => ({ ...current, [practical.id]: event.target.value }))} rows={3} spellCheck={false} className="mt-1.5 w-full resize-y rounded-xl border border-border bg-bg-base p-3 font-mono text-sm text-text-primary outline-none focus:border-primary" /></label>
               <div aria-live="polite" className="rounded-xl border border-border bg-[#171b19] p-3 text-[#e8eee7]"><p className="text-[10px] font-black uppercase tracking-[.12em] text-[#a2cdaa]">{tr("Результат запуску", "Run output")}</p>{sampleOutputs[practical.id] == null ? <p className="mt-2 text-xs text-[#aeb9af]">{tr("Запусти код, щоб побачити його вивід.", "Run the code to see its output.")}</p> : <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs">{sampleOutputs[practical.id] || tr("Немає виводу", "No output")}</pre>}{sampleErrors[practical.id] && <p className="mt-2 whitespace-pre-wrap text-xs text-red-300">{sampleErrors[practical.id]}</p>}</div>
             </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-bg-base p-3">
+              <div className="text-xs text-text-secondary">
+                <p>{tr("Спроби Judge", "Judge attempts")}: {assessment.taskAttempts[practical.id]?.attemptsUsed ?? 0}/10</p>
+                {assessment.taskAttempts[practical.id]?.latestResult && <p className="mt-1">{tr("Останній результат", "Latest result")}: {assessment.taskAttempts[practical.id].latestResult!.testsPassed}/{assessment.taskAttempts[practical.id].latestResult!.testsTotal} · {assessment.taskAttempts[practical.id].latestResult!.score}%</p>}
+                {assessment.taskAttempts[practical.id]?.bestResult && <p className="mt-1">{tr("Найкращий результат", "Best result")}: {assessment.taskAttempts[practical.id].bestResult!.testsPassed}/{assessment.taskAttempts[practical.id].bestResult!.testsTotal} · {assessment.taskAttempts[practical.id].bestResult!.score}%</p>}
+                {judgeErrors[practical.id] && <p role="alert" className="mt-1 text-accent-error">{judgeErrors[practical.id]}</p>}
+              </div>
+              <button type="button" disabled={judgingTaskId !== null || submitting || assessment.status === "SUBMITTED" || (assessment.taskAttempts[practical.id]?.attemptsUsed ?? 0) >= 10 || !(practicalCodes[practical.id] || "").trim()} onClick={() => void submitTaskToJudge(practical)} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-extrabold text-primary-foreground transition hover:brightness-105 disabled:cursor-wait disabled:opacity-55">
+                {judgingTaskId === practical.id ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}
+                {judgingTaskId === practical.id ? tr("Суддя перевіряє…", "Judge is checking…") : tr("Надіслати судді", "Submit to Judge")}
+              </button>
+            </div>
           </div>
         </section>}
+        </div>
 
         <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-bg-surface p-4">
           <button type="button" onClick={() => { setActivePart("knowledge"); setError(null); }} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-extrabold text-text-primary transition hover:border-primary/40"><ArrowLeft className="size-4" />{tr("До ABCD", "Back to ABCD")}</button>
           {activePracticalIndex > 0 && <button type="button" onClick={() => setActivePracticalIndex((index) => index - 1)} className="inline-flex min-h-11 items-center rounded-xl border border-border px-4 text-sm font-bold text-text-secondary transition hover:border-primary/40">{tr("Попередня задача", "Previous task")}</button>}
           {activePracticalIndex < practicals.length - 1 && <button type="button" onClick={() => setActivePracticalIndex((index) => index + 1)} className="inline-flex min-h-11 items-center rounded-xl border border-border px-4 text-sm font-bold text-text-secondary transition hover:border-primary/40">{tr("Наступна задача", "Next task")}</button>}
-          <div className="ml-auto flex flex-wrap items-center gap-3"><p className="text-xs leading-5 text-text-secondary">{practicalCompletedCount}/{practicals.length} {tr("розв’язано · потрібні всі відповіді й задачі", "solutions · all answers and tasks are required")}</p><button type="button" disabled={submitting || assessment.status === "SUBMITTED"} onClick={() => void submit()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-extrabold text-primary-foreground transition hover:brightness-105 disabled:cursor-wait disabled:opacity-55">{submitting && <LoaderCircle className="size-4 animate-spin" />}{submitting ? tr("Перевіряємо…", "Checking…") : tr("Подати оцінювання", "Submit assessment")}<ArrowRight className="size-4" /></button></div>
+          <div className="ml-auto flex flex-wrap items-center gap-3"><p className="text-xs leading-5 text-text-secondary">{practicalCompletedCount}/{practicals.length} {tr("задач подано судді", "tasks submitted to Judge")}</p><button type="button" disabled={submitting || judgingTaskId !== null || practicalCompletedCount < practicals.length || assessment.status === "SUBMITTED"} onClick={() => void submit()} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-5 text-sm font-extrabold text-primary-foreground transition hover:brightness-105 disabled:cursor-wait disabled:opacity-55">{submitting && <LoaderCircle className="size-4 animate-spin" />}{submitting ? tr("Завершуємо…", "Finishing…") : tr("Завершити тест", "Finish assessment")}<ArrowRight className="size-4" /></button></div>
         </div>
       </>}
     </div>}

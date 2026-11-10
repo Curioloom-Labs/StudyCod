@@ -84,6 +84,7 @@ export const NotificationsBell: React.FC = () => {
 
   const label = (n: AppNotification): string => {
     const who = n.actorName ?? tr("Хтось", "Someone");
+    if (n.type === "COURSE_DIAGNOSTIC_REPORT_READY") return tr("Готовий докладний звіт за діагностикою курсу", "Your detailed course diagnostic report is ready");
     if (n.type === "COMPANY_TEAM_INVITATION") return tr(`${who} запросив вас до команди компанії`, `${who} invited you to a company team`);
     if (n.type === "COMPANY_ASSESSMENT_INVITATION") return tr(`${who} запросив вас до оцінювання кандидата`, `${who} invited you to a candidate assessment`);
     if (n.type === "COMPANY_ASSESSMENT_UPDATED") return tr(`${who} оновив процес оцінювання в компанії`, `${who} updated a company assessment`);

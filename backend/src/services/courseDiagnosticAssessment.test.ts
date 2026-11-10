@@ -5,7 +5,6 @@ import {
   assessmentFailureReason,
   assessmentGenerationErrorLogDetails,
   buildDiagnosticPracticalTaskContext,
-  canFallbackToDiagnosticPublicExamples,
   generateDiagnosticQuestionsWithCoverageRetry,
   generateDiagnosticTaskPackageWithRetry,
   groupDiagnosticTopicsForPracticals,
@@ -82,7 +81,7 @@ test("diagnostic practical context preserves mixed-topic and example requirement
     }
     assert.ok(context.includes("test-variation"));
     assert.match(context, locale === "en" ? /at least two assigned topics/ : /щонайменше дві призначені теми/);
-    assert.match(context, locale === "en" ? /exactly three distinct examples/ : /рівно три різні приклади/);
+    assert.match(context, locale === "en" ? /exactly three distinct non-empty input\/output examples/ : /рівно три різні приклади/);
   }
 });
 
@@ -99,11 +98,11 @@ test("diagnostic quiz fallback assignment stays aligned when invalid candidates 
     correct,
   });
   const normalized = normalizeQuestions([
-    makeQuestion("Invalid candidate", 9),
-    makeQuestion("Question one"),
-    makeQuestion("Question two"),
-    makeQuestion("Question three"),
-    makeQuestion("Question four"),
+    makeQuestion("Which rule describes a valid assignment statement?", 9),
+    makeQuestion("Which rule describes assigning a value to a variable?"),
+    makeQuestion("Which rule describes reading a value from input?"),
+    makeQuestion("Which rule describes returning a value from a function?"),
+    makeQuestion("Which rule describes creating a list of values?"),
   ], assignments, 4, 0);
 
   assert.deepEqual(normalized.map((question) => question.topicId), [11, 11, 22, 22]);
@@ -153,7 +152,7 @@ test("diagnostic quiz batches retry after malformed candidates leave a partial b
     { id: 22, title: "B" },
   ] as any;
   const question = (topicId: number, index: number) => ({
-    q: `[topic:${topicId}] Question ${index}`,
+    q: `[topic:${topicId}] Which programming rule for topic ${topicId} applies in scenario ${index}?`,
     options: ["one", "two", "three", "four"],
     correct: 0,
   });
@@ -243,7 +242,7 @@ test("diagnostic assessment identifies contract-review failures and logs bounded
   });
 });
 
-test("diagnostic assessment falls back to reviewed examples when hidden-test generation fails", () => {
+test("diagnostic assessment fails closed when the required hidden suite is unavailable", () => {
   const failedGeneration = {
     success: false,
     error: {
@@ -259,32 +258,23 @@ test("diagnostic assessment falls back to reviewed examples when hidden-test gen
     { input: "0.0 1 10", output: "0.0", explanation: "zero boundary" },
     { input: "1000000.0 1000 100", output: "1000000000.0" },
   ];
-  const expected = {
-    source: "public_examples",
-    tests: [
-      { input: "0.0 1 10", output: "0.0" },
-      { input: "1000000.0 1000 100", output: "1000000000.0" },
-    ],
-  };
-
-  // Repeat the same production failure shape to simulate flaky oracle output
-  // across fresh assessment generations on the VDS.
+  // Repeat the same provider failure shape to confirm public examples never
+  // get silently counted as hidden tests.
   for (let run = 0; run < 10; run += 1) {
-    assert.deepEqual(resolveCourseDiagnosticTestCases(failedGeneration, publicExamples), expected);
+    assert.equal(resolveCourseDiagnosticTestCases(failedGeneration, publicExamples), null);
   }
 });
 
 test("diagnostic assessment prefers a complete hidden suite over public examples", () => {
-  const hiddenTests = [
-    { input: "1 2", output: "3" },
-    { input: "3 4", output: "7" },
-    { input: "5 6", output: "11" },
-  ];
+  const publicExamples = [{ input: "0 0", output: "0" }, { input: "1 1", output: "2" }, { input: "2 2", output: "4" }];
+  const hiddenTests = Array.from({ length: 15 }, (_, index) => ({ input: `${index + 3} ${index + 4}`, output: String(index * 2 + 7) }));
 
   assert.deepEqual(
-    selectCourseDiagnosticTestCases(hiddenTests, [{ input: "0 0", output: "0" }]),
+    selectCourseDiagnosticTestCases(hiddenTests, publicExamples),
     { source: "hidden", tests: hiddenTests },
   );
+  assert.equal(selectCourseDiagnosticTestCases(hiddenTests.slice(0, 14), publicExamples), null);
+  assert.equal(selectCourseDiagnosticTestCases([...hiddenTests.slice(0, 14), publicExamples[0]], publicExamples), null);
 });
 
 test("diagnostic assessment does not create an empty fallback suite", () => {
@@ -293,17 +283,24 @@ test("diagnostic assessment does not create an empty fallback suite", () => {
 });
 
 test("diagnostic practical tasks require stdin mode and a usable input example", () => {
-  const examples = [{ input: "5", output: "6" }];
+  const examples = [{ input: "5", output: "6" }, { input: "7", output: "8" }, { input: "9", output: "10" }];
   assert.equal(isDiagnosticPracticalInputContractValid("STDIN_STDOUT", examples), true);
   assert.equal(isDiagnosticPracticalInputContractValid("NO_INPUT_FIXED_OUTPUT", examples), false);
   assert.equal(isDiagnosticPracticalInputContractValid("STDIN_STDOUT", [{ input: "", output: "6" }]), false);
+  assert.equal(isDiagnosticPracticalInputContractValid("STDIN_STDOUT", [{ input: "5", output: "6" }]), false);
+  assert.equal(isDiagnosticPracticalInputContractValid("STDIN_STDOUT", [{ input: "5", output: "6" }, { input: "5", output: "6" }, { input: "9", output: "10" }]), false);
 });
 
-test("diagnostic assessment never masks statement or public-example contract failures", () => {
-  assert.equal(canFallbackToDiagnosticPublicExamples("TASK_CONTRACT_REVIEW_FAILED[statement]: missing output rule"), false);
-  assert.equal(canFallbackToDiagnosticPublicExamples("TASK_CONTRACT_REVIEW_FAILED[publicExamples]: wrong example output"), false);
-  assert.equal(canFallbackToDiagnosticPublicExamples("TASK_CONTRACT_REVIEW_FAILED[candidateTests]: wrong oracle output"), true);
-  assert.equal(canFallbackToDiagnosticPublicExamples("AI_GENERATION_FAILED: provider unavailable"), true);
+test("diagnostic questions reject vague, duplicate, and duplicated-option candidates", () => {
+  const topic = [{ id: 8, title: "Conditions" }] as any;
+  const valid = { q: "Which branch runs when the condition evaluates to false?", options: ["else", "for", "class", "import"], correct: 0 };
+  const vague = { ...valid, q: "Why is programming often compared to a conversation?" };
+  const duplicateOptions = { ...valid, options: ["else", "for", "for", "import"] };
+  const result = normalizeQuestions([vague, duplicateOptions, valid, { ...valid }], topic, 2, 0, true);
+  assert.equal(result.length, 1);
+});
+
+test("diagnostic assessment does not create hidden tests after provider failure", () => {
   assert.equal(resolveCourseDiagnosticTestCases({
     success: false,
     error: { error: "TASK_CONTRACT_REVIEW_FAILED[statement]: missing output rule" },

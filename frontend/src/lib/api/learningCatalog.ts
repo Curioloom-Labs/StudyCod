@@ -12,6 +12,7 @@ import {
   retryLearningPreviewDiagnostic,
   setCurrentLearningPreviewCourse,
   submitLearningPreviewDiagnostic,
+  submitLearningPreviewDiagnosticTask,
 } from "../learningPreview";
 
 export type CatalogRuntime = "JAVA" | "PYTHON" | "CPP";
@@ -96,7 +97,7 @@ export interface CourseDiagnosticResult {
   totalQuestions: number;
   testsPassed: number;
   testsTotal: number;
-  practicalResults?: Array<{ taskId: string; title: string; moduleTitle: string; topicIds: number[]; testsPassed: number; testsTotal: number; score: number }>;
+  practicalResults?: Array<{ taskId: string; title: string; moduleTitle: string; topicIds: number[]; testsPassed: number; testsTotal: number; score: number; attemptsUsed: number }>;
   passed: boolean;
   answers: Array<{ questionId: string; selectedIndex: number }>;
   topicResults: Array<{ topicId: number; topicTitle: string; correctCount: number; totalQuestions: number; score: number; theoryCredited: boolean; practiceCredited: boolean }>;
@@ -117,6 +118,15 @@ export interface CourseDiagnosticPractical {
   codeTemplate: string;
   runtime: CatalogRuntime;
   entryFile: string;
+  publicTestCount: number;
+  hiddenTestCount: number;
+}
+
+export interface CourseDiagnosticTaskAttemptState {
+  attemptsUsed: number;
+  inFlight: number;
+  latestResult: { testsPassed: number; testsTotal: number; score: number } | null;
+  bestResult: { testsPassed: number; testsTotal: number; score: number } | null;
 }
 
 export interface CourseDiagnosticAssessment {
@@ -130,6 +140,9 @@ export interface CourseDiagnosticAssessment {
   /** First task retained for compatibility with older stored assessments. */
   practical: CourseDiagnosticPractical;
   practicals?: CourseDiagnosticPractical[];
+  taskAttempts: Record<string, CourseDiagnosticTaskAttemptState>;
+  reportStatus: "NOT_REQUESTED" | "PENDING" | "PROCESSING" | "READY" | "FAILED";
+  mentorReport: string | null;
   result: CourseDiagnosticResult | null;
 }
 
@@ -138,6 +151,16 @@ export interface CourseDiagnosticRunResult {
   stderr: string;
   exitCode: number;
   success: boolean;
+}
+
+export interface CourseDiagnosticTaskSubmissionResult {
+  taskId: string;
+  testsPassed: number;
+  testsTotal: number;
+  score: number;
+  attemptsUsed: number;
+  attemptsRemaining: number;
+  bestResult: { testsPassed: number; testsTotal: number; score: number } | null;
 }
 
 export interface LearningProjectProgress {
@@ -347,9 +370,15 @@ export async function runCourseDiagnostic(enrollmentId: number, taskId: string, 
   return response.data?.result;
 }
 
-export async function submitCourseDiagnostic(enrollmentId: number, answers: Array<{ questionId: string; selectedIndex: number }>, practicals: Array<{ taskId: string; code: string }>): Promise<CourseDiagnosticResult> {
-  if (isDevPreviewActive()) return submitLearningPreviewDiagnostic(enrollmentId, answers, practicals);
-  const response = await api.post(`/learning/enrollments/${enrollmentId}/diagnostic/submit`, { answers, practicals });
+export async function submitCourseDiagnosticTask(enrollmentId: number, taskId: string, code: string): Promise<CourseDiagnosticTaskSubmissionResult> {
+  if (isDevPreviewActive()) return submitLearningPreviewDiagnosticTask(enrollmentId, taskId, code);
+  const response = await api.post(`/learning/enrollments/${enrollmentId}/diagnostic/task-submit`, { taskId, code });
+  return response.data?.result;
+}
+
+export async function submitCourseDiagnostic(enrollmentId: number, answers: Array<{ questionId: string; selectedIndex: number }>): Promise<CourseDiagnosticResult> {
+  if (isDevPreviewActive()) return submitLearningPreviewDiagnostic(enrollmentId, answers);
+  const response = await api.post(`/learning/enrollments/${enrollmentId}/diagnostic/submit`, { answers });
   return response.data?.result;
 }
 

@@ -91,6 +91,7 @@ type QuizGenerationParams = {
   lang: LLMTaskLanguage;
   prevTopics: string;
   count?: number;
+  optionCount?: 4 | 5;
   difficulty?: number;
   questionStyle?: "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
   codeLength?: QuizCodeLength;
@@ -1934,13 +1935,15 @@ REQUIREMENTS (mandatory):
     }
   }
   async generateQuizWithAI(params: QuizGenerationParams): Promise<AiQuizResult> {
-    return runWithPromptExecutionContext('task.quiz', { signal: params.signal, traceId: params.requestId }, () => this.generateQuizWithAIInPromptContext(params));
+    const promptId = params.optionCount === 4 ? 'assessment.diagnostic-questions' : 'task.quiz';
+    return runWithPromptExecutionContext(promptId, { signal: params.signal, traceId: params.requestId }, () => this.generateQuizWithAIInPromptContext(params));
   }
   private async generateQuizInBatches(
     params: QuizGenerationParams,
     generateBatch: (batch: QuizGenerationParams) => Promise<AiQuizResult>,
   ): Promise<AiQuizResult> {
     const expectedCount = Math.max(1, Math.min(50, Math.floor(params.count || 12)));
+    const expectedOptionCount = params.optionCount ?? 5;
     const questions: Array<{ q: string; code?: string; codeLanguage?: string }> = [];
     for (let offset = 0; offset < expectedCount; offset += MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL) {
       const batchCount = Math.min(MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL, expectedCount - offset);
@@ -1949,7 +1952,7 @@ REQUIREMENTS (mandatory):
         count: batchCount,
         avoidQuestionStems: questions.map(quizQuestionStem),
       });
-      const validatedBatch = AIResponseValidator.validateGenerateQuiz(response, batchCount);
+      const validatedBatch = AIResponseValidator.validateGenerateQuiz(response, batchCount, expectedOptionCount);
       questions.push(...JSON.parse(validatedBatch.quizJson) as Array<{ q: string }>);
     }
 
@@ -2021,7 +2024,7 @@ REQUIREMENTS (mandatory):
             repairGuidance,
           ].filter(Boolean).join("\n"),
         });
-        const replacements = AIResponseValidator.validateGenerateQuiz(replacementResponse, batchIndexes.length);
+        const replacements = AIResponseValidator.validateGenerateQuiz(replacementResponse, batchIndexes.length, expectedOptionCount);
         const replacementQuestions = JSON.parse(replacements.quizJson) as typeof questions;
         batchIndexes.forEach((questionIndex, replacementIndex) => {
           questions[questionIndex] = replacementQuestions[replacementIndex];
@@ -2057,7 +2060,7 @@ REQUIREMENTS (mandatory):
         avoidQuestionStems: uniqueQuestions.map(quizQuestionStem),
         generationGuidance: [params.generationGuidance, repairGuidance].filter(Boolean).join("\n"),
       });
-      const replacements = AIResponseValidator.validateGenerateQuiz(replacementResponse, duplicateIndexes.length);
+      const replacements = AIResponseValidator.validateGenerateQuiz(replacementResponse, duplicateIndexes.length, expectedOptionCount);
       const replacementQuestions = JSON.parse(replacements.quizJson) as Array<{ q: string }>;
       duplicateIndexes.forEach((index, replacementIndex) => {
         questions[index] = replacementQuestions[replacementIndex];
@@ -2069,7 +2072,7 @@ REQUIREMENTS (mandatory):
     if (duplicateIndexes.length > 0) {
       throw makeAIValidationError("generateQuiz", "Quiz validation failed: duplicate question stems were generated across batches");
     }
-    const validated = AIResponseValidator.validateGenerateQuiz(questions, expectedCount);
+    const validated = AIResponseValidator.validateGenerateQuiz(questions, expectedCount, expectedOptionCount);
     return enforceQuizCodeCompleteness(validated, params.questionStyle);
   }
 
@@ -2088,6 +2091,7 @@ REQUIREMENTS (mandatory):
           lang: batch.lang,
           prevTopics: batch.prevTopics,
           count: batch.count,
+          optionCount: batch.optionCount,
           difficulty: batch.difficulty,
           questionStyle: batch.questionStyle,
           codeLength: batch.codeLength,
@@ -2100,9 +2104,10 @@ REQUIREMENTS (mandatory):
           topicId: batch.topicId
         }, {
           language: batch.language,
+          promptId: batch.optionCount === 4 ? 'assessment.diagnostic-questions' : 'task.quiz',
           signal: batch.signal
         });
-        return AIResponseValidator.validateGenerateQuiz(raw, batch.count || 12);
+        return AIResponseValidator.validateGenerateQuiz(raw, batch.count || 12, batch.optionCount ?? 5);
       });
     };
 
@@ -2161,7 +2166,11 @@ REQUIREMENTS (mandatory):
     const provider = providerOverride ?? this.openRouterProvider;
     const langName = topicLanguageLabel(params.lang);
     const questionCount = params.count || 12;
+    const optionCount = params.optionCount ?? 5;
     const isEnglish = params.language === "en";
+    const optionLabels = (isEnglish ? ["A", "B", "C", "D", "E"] : ["А", "Б", "В", "Г", "Д"]).slice(0, optionCount);
+    const optionLabelJson = JSON.stringify(optionLabels);
+    const promptId = optionCount === 4 ? "assessment.diagnostic-questions" : "task.quiz";
     const responseLanguageInstruction = buildResponseLanguageInstruction(normalizeResponseLanguage(params.responseLanguage), isEnglish);
     const quizGuidance = [
       buildQuizGenerationGuidance(params, params.language),
@@ -2174,18 +2183,18 @@ REQUIREMENTS (mandatory):
       ? `Create a quiz only for ${langName}. Topics: ${params.prevTopics}.
 REQUIREMENTS:
 - EXACTLY ${questionCount} questions
-- Each question has exactly 5 options
+- Each question has exactly ${optionCount} options
 - Output format: ONLY valid JSON array
-- Each item format: {"q": "question stem", "code": "complete code or empty string", "codeLanguage": "${langName}", "options": ["A", "B", "C", "D", "E"], "correct": 0}
+- Each item format: {"q": "question stem", "code": "complete code or empty string", "codeLanguage": "${langName}", "options": ${optionLabelJson}, "correct": 0}
 - If a question asks about the behavior or output of a particular code snippet or program, its complete standalone snippet MUST be in the "code" field. Never ask about a specific program output without including the snippet.
 - For CODE_READING or DEBUGGING, every single question MUST have code. For other styles, use code only where appropriate and keep purely conceptual items code-free.
 - Return ONLY JSON array, no markdown, no explanations.${quizGuidance ? `\n${quizGuidance}` : ""}${responseLanguageInstruction}`
       : `Створи тест виключно по мові ${langName}. Теми для питань: ${params.prevTopics}.
 ВИМОГИ:
 - Кількість питань: РІВНО ${questionCount}
-- Кожне питання має рівно 5 варіантів відповіді
+- Кожне питання має рівно ${optionCount} варіантів відповіді
 - Формат: ТІЛЬКИ ВАЛІДНИЙ JSON масив без жодного додаткового тексту
-- Кожне питання має формат: {"q": "текст питання", "code": "повний код або порожній рядок", "codeLanguage": "${langName}", "options": ["А", "Б", "В", "Г", "Д"], "correct": 0}
+- Кожне питання має формат: {"q": "текст питання", "code": "повний код або порожній рядок", "codeLanguage": "${langName}", "options": ${optionLabelJson}, "correct": 0}
 - Якщо питання просить визначити поведінку або результат конкретного фрагмента коду чи програми, повний самодостатній фрагмент ОБОВ’ЯЗКОВО має бути в полі "code". Не питай про результат конкретної програми без фрагмента.
 - Для стилю CODE_READING або DEBUGGING кожне без винятку питання має містити код. Для інших стилів додавай код лише до доречних питань, а суто поняттєві залишай без нього.
 - Відповідай ТІЛЬКИ JSON масивом, без пояснень, без markdown.${quizGuidance ? `\n${quizGuidance}` : ""}${responseLanguageInstruction}`;
@@ -2195,7 +2204,7 @@ REQUIREMENTS:
       if (attempt > 0) consumeRetryOrThrow('quiz format repair');
       try {
         const maxTokens = Math.min(10000, Math.max(3000, questionCount * (params.codeLength === "LONG" ? 500 : 240)));
-        const content = await generatePromptText(provider, 'task.quiz', userPrompt, systemPrompt, {
+        const content = await generatePromptText(provider, promptId, userPrompt, systemPrompt, {
           timeout: 30000,
           userId: params.userId,
           topicId: params.topicId,
@@ -2295,7 +2304,7 @@ REQUIREMENTS:
             parsed = firstValue;
           }
         }
-        const validated = AIResponseValidator.validateGenerateQuiz(parsed, questionCount);
+        const validated = AIResponseValidator.validateGenerateQuiz(parsed, questionCount, optionCount);
         // Code completeness is repaired by generateQuizInBatches so every
         // provider gets the same bounded, topic-preserving repair path.
         return validated;
@@ -2304,8 +2313,8 @@ REQUIREMENTS:
         lastError = err instanceof Error ? err : new Error(message);
         if (attempt < maxRetries) {
           userPrompt += isEnglish
-            ? `\n\nThe previous response was rejected: ${message}. For any question about the behavior or output of a specific code snippet, add its complete standalone code to the "code" field and set "codeLanguage". Code is required in every question for CODE_READING or DEBUGGING. Return only a JSON array of exactly ${questionCount} questions with 5 options each.`
-            : `\n\nПопередню відповідь відхилено: ${message}. Якщо питання просить визначити поведінку або результат конкретного фрагмента коду, додай повний самодостатній код у поле "code" і вкажи "codeLanguage". Для CODE_READING або DEBUGGING код обов’язковий у кожному питанні. Поверни лише JSON-масив із рівно ${questionCount} питаннями, кожне з 5 варіантами відповіді.`;
+            ? `\n\nThe previous response was rejected: ${message}. For any question about the behavior or output of a specific code snippet, add its complete standalone code to the "code" field and set "codeLanguage". Code is required in every question for CODE_READING or DEBUGGING. Return only a JSON array of exactly ${questionCount} questions with ${optionCount} options each.`
+            : `\n\nПопередню відповідь відхилено: ${message}. Якщо питання просить визначити поведінку або результат конкретного фрагмента коду, додай повний самодостатній код у поле "code" і вкажи "codeLanguage". Для CODE_READING або DEBUGGING код обов’язковий у кожному питанні. Поверни лише JSON-масив із рівно ${questionCount} питаннями, кожне з ${optionCount} варіантами відповіді.`;
           await new Promise(r => setTimeout(r, 1000));
           continue;
         }

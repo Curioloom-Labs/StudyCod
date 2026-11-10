@@ -422,15 +422,13 @@ const TheoryResponseSchema = z.object({
   theory: z.string().min(1, 'theory must be a non-empty string'),
 });
 
-const QuizQuestionSchema = z.object({
+const quizQuestionSchema = (optionCount: number) => z.object({
   q: z.string().min(1, 'question text must be a non-empty string'),
   code: z.string().max(12000).optional(),
   codeLanguage: z.string().max(24).optional(),
-  options: z.array(z.string().min(1)).length(5, 'question must have exactly 5 options'),
-  correct: z.number().int().min(0).max(4, 'correct must be between 0 and 4'),
+  options: z.array(z.string().min(1)).length(optionCount, `question must have exactly ${optionCount} options`),
+  correct: z.number().int().min(0).max(optionCount - 1, `correct must be between 0 and ${optionCount - 1}`),
 });
-
-const QuizResponseSchema = z.array(QuizQuestionSchema).min(1, 'quiz must contain at least one question');
 
 const TaskConditionSchema = z.object({
   description: z.string().min(1, 'description must be a non-empty string'),
@@ -968,28 +966,31 @@ export class AIResponseValidator {
       throw new AIValidationError('generateTheory', emptyZod(), `Theory generation validation failed: ${unknownErr(error)}`);
     }
   }
-  static validateGenerateQuiz(data: unknown, expectedCount?: number): AiQuizResult {
+  static validateGenerateQuiz(data: unknown, expectedCount?: number, expectedOptionCount = 5): AiQuizResult {
     try {
-      let questions: z.infer<typeof QuizQuestionSchema>[];
+      const optionCount = expectedOptionCount === 4 ? 4 : 5;
+      const questionSchema = quizQuestionSchema(optionCount);
+      const responseSchema = z.array(questionSchema).min(1, 'quiz must contain at least one question');
+      let questions: z.infer<typeof questionSchema>[];
       if (Array.isArray(data)) {
-        questions = QuizResponseSchema.parse(data);
+        questions = responseSchema.parse(data);
       } else if (typeof data === 'object' && data !== null && 'quizJson' in data) {
         const quizJson = (data as JsonRecord).quizJson;
         if (typeof quizJson === 'string') {
           const parsed = JSON.parse(quizJson);
-          questions = QuizResponseSchema.parse(parsed);
+          questions = responseSchema.parse(parsed);
         } else {
-          questions = QuizResponseSchema.parse(quizJson);
+          questions = responseSchema.parse(quizJson);
         }
       } else {
-        questions = QuizResponseSchema.parse(data);
+        questions = responseSchema.parse(data);
       }
       if (expectedCount !== undefined && questions.length !== expectedCount) {
         throw new AIValidationError('generateQuiz', emptyZod(), `Quiz validation failed: expected ${expectedCount} questions, got ${questions.length}`);
       }
       questions.forEach((q, idx) => {
         try {
-          QuizQuestionSchema.parse(q);
+          questionSchema.parse(q);
         } catch (err) {
           if (err instanceof z.ZodError) {
             throw new AIValidationError('generateQuiz', err, `Question ${idx + 1} validation failed: ${zodMessages(err)}`);

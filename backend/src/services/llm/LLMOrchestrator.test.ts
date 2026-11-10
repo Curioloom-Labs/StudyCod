@@ -7,6 +7,7 @@ type QuizBatch = {
   lang: 'PYTHON';
   prevTopics: string;
   count: number;
+  optionCount?: 4 | 5;
   questionStyle?: 'CONCEPTS' | 'CODE_READING' | 'DEBUGGING';
   language?: 'en' | 'uk';
   generationGuidance?: string;
@@ -207,4 +208,43 @@ test('quiz code-completeness repair is bounded and fails closed after two invali
 
   await assert.rejects(generation, /QUIZ_CODE_MISSING/);
   assert.deepEqual(requestedCounts, [1, 1, 1]);
+});
+
+test('diagnostic quiz code-completeness repair preserves four-option questions', async () => {
+  const orchestrator = new LLMOrchestrator() as unknown as QuizBatchAccess;
+  const result = await runWithPromptExecutionContext('assessment.diagnostic-questions', { timeoutMs: 10_000 }, () => orchestrator.generateQuizInBatches({
+    lang: 'PYTHON', prevTopics: '[topic:11] indexing', count: 1, optionCount: 4, questionStyle: 'CONCEPTS', language: 'en',
+  }, async batch => ({
+    quizJson: JSON.stringify([batch.generationGuidance?.includes('CODE COMPLETENESS REPAIR')
+      ? { q: '[topic:11] What does zero-based indexing mean?', options: ['The first position is 0', 'The first position is 1', 'Indexes are random', 'Arrays have no positions'], correct: 0 }
+      : { q: '[topic:11] What output is produced by the following code?', options: ['0', '1', '2', '3'], correct: 0 }]),
+  })));
+
+  const [question] = JSON.parse(result.quizJson);
+  assert.equal(question.options.length, 4);
+  assert.equal(question.correct, 0);
+});
+
+test('diagnostic quiz duplicate repair preserves four-option questions', async () => {
+  const orchestrator = new LLMOrchestrator() as unknown as QuizBatchAccess;
+  const result = await runWithPromptExecutionContext('assessment.diagnostic-questions', { timeoutMs: 10_000 }, () => orchestrator.generateQuizInBatches({
+    lang: 'PYTHON', prevTopics: 'arrays and loops', count: 2, optionCount: 4, questionStyle: 'CONCEPTS', language: 'en',
+  }, async batch => {
+    if (batch.generationGuidance?.includes('DUPLICATE REPAIR')) {
+      assert.equal(batch.count, 1);
+      return {
+        quizJson: JSON.stringify([{ q: 'What does a loop repeat?', options: ['A block of instructions', 'A variable declaration', 'A comment', 'A file name'], correct: 0 }]),
+      };
+    }
+    return {
+      quizJson: JSON.stringify([
+        { q: 'What does an array store?', options: ['An ordered collection of values', 'A condition', 'A comment', 'A file name'], correct: 0 },
+        { q: 'What does an array store?', options: ['An ordered collection of values', 'A condition', 'A comment', 'A file name'], correct: 0 },
+      ]),
+    };
+  }));
+
+  const questions = JSON.parse(result.quizJson);
+  assert.equal(questions.length, 2);
+  assert(questions.every((question: { options: string[] }) => question.options.length === 4));
 });

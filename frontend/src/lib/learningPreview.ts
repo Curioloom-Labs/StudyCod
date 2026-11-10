@@ -4,6 +4,8 @@ import type {
   CourseDiagnosticAssessment,
   CourseDiagnosticResult,
   CourseDiagnosticRunResult,
+  CourseDiagnosticTaskSubmissionResult,
+  CourseDiagnosticTaskAttemptState,
   LearningCourse,
   LearningCourseItem,
   LearningEnrollmentSummary,
@@ -45,6 +47,7 @@ const completedItems = new Set<number>([
 ]);
 const previewDiagnosticResults = new Map<number, CourseDiagnosticResult>();
 const previewDiagnosticAttempts = new Map<number, number>();
+const previewDiagnosticTaskAttempts = new Map<number, Record<string, CourseDiagnosticTaskAttemptState>>();
 
 const isEnglish = () => typeof document !== "undefined" && document.documentElement.lang.toLowerCase().startsWith("en");
 const copy = (uk: string, en: string) => isEnglish() ? en : uk;
@@ -166,6 +169,8 @@ export function getLearningPreviewDiagnostic(enrollmentId: number): CourseDiagno
       codeTemplate: "values = list(map(int, input().split()))\n# TODO: find and print the minimum",
       runtime: meta.runtime,
       entryFile: "main.py",
+      publicTestCount: 3,
+      hiddenTestCount: 15,
     },
     {
       id: "p2",
@@ -180,6 +185,8 @@ export function getLearningPreviewDiagnostic(enrollmentId: number): CourseDiagno
       codeTemplate: "values = list(map(int, input().split()))\n# TODO: count even values",
       runtime: meta.runtime,
       entryFile: "main.py",
+      publicTestCount: 3,
+      hiddenTestCount: 15,
     },
   ];
   return {
@@ -192,6 +199,9 @@ export function getLearningPreviewDiagnostic(enrollmentId: number): CourseDiagno
     questions: previewDiagnosticQuestions(),
     practical: practicals[0],
     practicals,
+    taskAttempts: previewDiagnosticTaskAttempts.get(enrollmentId) ?? Object.fromEntries(practicals.map((task) => [task.id, { attemptsUsed: 0, inFlight: 0, latestResult: null, bestResult: null }])),
+    reportStatus: previewDiagnosticResults.has(enrollmentId) ? "READY" : "NOT_REQUESTED",
+    mentorReport: previewDiagnosticResults.has(enrollmentId) ? copy("Режим попереднього перегляду: тренуйся на різних тестах і перевіряй граничні випадки.", "Preview mode: practice varied cases and check edge conditions.") : null,
     result: previewDiagnosticResults.get(enrollmentId) ?? null,
   };
 }
@@ -200,6 +210,27 @@ export async function runLearningPreviewDiagnostic(_enrollmentId: number, taskId
   const numbers = input.trim().split(/\s+/).map(Number).filter(Number.isFinite);
   const value = taskId === "p2" ? numbers.filter((number) => number % 2 === 0).length : numbers.length ? Math.min(...numbers) : "";
   return { stdout: numbers.length ? `${value}\n` : "", stderr: "", exitCode: 0, success: numbers.length > 0 };
+}
+
+export async function submitLearningPreviewDiagnosticTask(enrollmentId: number, taskId: string, code: string): Promise<CourseDiagnosticTaskSubmissionResult> {
+  const assessment = getLearningPreviewDiagnostic(enrollmentId);
+  if (!assessment.practicals?.some((task) => task.id === taskId)) throw new Error("ASSESSMENT_PRACTICAL_INVALID");
+  const current = previewDiagnosticTaskAttempts.get(enrollmentId) ?? Object.fromEntries(assessment.practicals.map((task) => [task.id, { attemptsUsed: 0, inFlight: 0, latestResult: null, bestResult: null }]));
+  const state = current[taskId];
+  if (state.attemptsUsed >= 10) throw new Error("DIAGNOSTIC_ATTEMPT_LIMIT_REACHED");
+  const accepted = taskId === "p1" ? /min\s*\(/.test(code) : /%\s*2/.test(code);
+  const evaluation = { testsPassed: accepted ? 18 : 8, testsTotal: 18, score: accepted ? 100 : 44 };
+  const next = {
+    ...current,
+    [taskId]: {
+      ...state,
+      attemptsUsed: state.attemptsUsed + 1,
+      latestResult: evaluation,
+      bestResult: !state.bestResult || evaluation.score > state.bestResult.score ? evaluation : state.bestResult,
+    },
+  };
+  previewDiagnosticTaskAttempts.set(enrollmentId, next);
+  return { taskId, ...evaluation, attemptsUsed: next[taskId].attemptsUsed, attemptsRemaining: 10 - next[taskId].attemptsUsed, bestResult: next[taskId].bestResult };
 }
 
 export function retryLearningPreviewDiagnostic(enrollmentId: number): CourseDiagnosticAssessment {
@@ -213,7 +244,6 @@ export function retryLearningPreviewDiagnostic(enrollmentId: number): CourseDiag
 export async function submitLearningPreviewDiagnostic(
   enrollmentId: number,
   answers: Array<{ questionId: string; selectedIndex: number }>,
-  practicalSubmissions: Array<{ taskId: string; code: string }>,
 ): Promise<CourseDiagnosticResult> {
   const questions = previewDiagnosticQuestions();
   const correctIndexes = [0, 0, 0, 0, 0, 0];
@@ -228,10 +258,9 @@ export async function submitLearningPreviewDiagnostic(
   }));
   const correctCount = review.filter((item) => item.selectedIndex === item.correctIndex).length;
   const knowledgeScore = Math.round(correctCount / questions.length * 100);
-  const taskScores = [
-    practicalSubmissions.find((submission) => submission.taskId === "p1")?.code.includes("min(") ? 100 : 40,
-    practicalSubmissions.find((submission) => submission.taskId === "p2")?.code.includes("% 2") ? 100 : 40,
-  ];
+  const taskAttempts = previewDiagnosticTaskAttempts.get(enrollmentId) ?? {};
+  if (["p1", "p2"].some((taskId) => !taskAttempts[taskId]?.bestResult)) throw new Error("DIAGNOSTIC_TASKS_NOT_SUBMITTED");
+  const taskScores = [taskAttempts.p1.bestResult!.score, taskAttempts.p2.bestResult!.score];
   const practicalScore = Math.round(taskScores.reduce((sum, value) => sum + value, 0) / taskScores.length);
   const score = Math.round((knowledgeScore + practicalScore) / 2);
   const passed = score >= 75 && knowledgeScore >= 70 && practicalScore >= 60;
@@ -256,11 +285,11 @@ export async function submitLearningPreviewDiagnostic(
     practicalScore,
     correctCount,
     totalQuestions: questions.length,
-    testsPassed: taskScores.reduce((sum, taskScore) => sum + (taskScore === 100 ? 5 : 2), 0),
-    testsTotal: 10,
+    testsPassed: taskAttempts.p1.bestResult!.testsPassed + taskAttempts.p2.bestResult!.testsPassed,
+    testsTotal: 36,
     practicalResults: [
-      { taskId: "p1", title: copy("Знайди найменше значення", "Find the smallest value"), moduleTitle: copy("Послідовності", "Sequences"), topicIds: [6101], testsPassed: taskScores[0] === 100 ? 5 : 2, testsTotal: 5, score: taskScores[0] },
-      { taskId: "p2", title: copy("Порахуй парні числа", "Count even numbers"), moduleTitle: copy("Цикли та умови", "Loops and conditions"), topicIds: [6103], testsPassed: taskScores[1] === 100 ? 5 : 2, testsTotal: 5, score: taskScores[1] },
+      { taskId: "p1", title: copy("Знайди найменше значення", "Find the smallest value"), moduleTitle: copy("Послідовності", "Sequences"), topicIds: [6101], testsPassed: taskAttempts.p1.bestResult!.testsPassed, testsTotal: 18, score: taskScores[0], attemptsUsed: taskAttempts.p1.attemptsUsed },
+      { taskId: "p2", title: copy("Порахуй парні числа", "Count even numbers"), moduleTitle: copy("Цикли та умови", "Loops and conditions"), topicIds: [6103], testsPassed: taskAttempts.p2.bestResult!.testsPassed, testsTotal: 18, score: taskScores[1], attemptsUsed: taskAttempts.p2.attemptsUsed },
     ],
     passed,
     answers,

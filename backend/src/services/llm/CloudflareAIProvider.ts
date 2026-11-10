@@ -610,6 +610,7 @@ ${JSON.stringify(schema, null, 2)}
     lang: TopicLanguage;
     prevTopics: string;
     count?: number;
+    optionCount?: 4 | 5;
     difficulty?: number;
     questionStyle?: "MIXED" | "CONCEPTS" | "CODE_READING" | "DEBUGGING";
     codeLength?: "SHORT" | "MEDIUM" | "LONG";
@@ -621,12 +622,14 @@ ${JSON.stringify(schema, null, 2)}
     quizJson: string;
   }> {
     const count = Math.max(1, Math.min(50, Math.floor(params.count || 12)));
+    const optionCount = params.optionCount ?? 5;
+    const labels = (params.responseLanguage?.toLowerCase().startsWith("en") ? ["A", "B", "C", "D", "E"] : ["А", "Б", "В", "Г", "Д"]).slice(0, optionCount);
     const maxTokens = Math.min(8000, Math.max(2048, count * (params.codeLength === "LONG" ? 400 : 200)));
     const prompt = [
       `Topic: ${params.prevTopics}`,
       `Programming language: ${params.lang}`,
-      `Generate exactly ${count} multiple-choice questions. Each question must have exactly five non-empty answer options and exactly one correct answer.`,
-      `Return only a valid JSON array. Each item must have the format {"q":"question stem","code":"complete code or empty string","codeLanguage":"${params.lang}","options":["A","B","C","D","E"],"correct":0}; correct is a zero-based option index from 0 to 4.`,
+      `Generate exactly ${count} multiple-choice questions. Each question must have exactly ${optionCount} non-empty answer options and exactly one correct answer.`,
+      `Return only a valid JSON array. Each item must have the format {"q":"question stem","code":"complete code or empty string","codeLanguage":"${params.lang}","options":${JSON.stringify(labels)},"correct":0}; correct is a zero-based option index from 0 to ${optionCount - 1}.`,
       `Any question mentioning code, a program, execution, or output must include its full standalone code in "code". Every CODE_READING or DEBUGGING question requires code. Never refer to an absent snippet.`,
       params.responseLanguage ? `Write question and option text in: ${params.responseLanguage}.` : "",
       params.generationGuidance || ""

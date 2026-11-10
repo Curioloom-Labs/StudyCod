@@ -11,7 +11,7 @@ import { PersonalWorkspaceContext } from "./PersonalWorkspaceContext";
 import { getDevPreviewUser, isDevPreviewActive, withDevPreview } from "../../lib/devPreview";
 import { logoutAndReload } from "../../lib/authSession";
 
-export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "learning" | "lab"; courseTab?: "overview" | "path" | "practice" | "progress" | "none" }> = ({ children, area = "learning", courseTab = "overview" }) => {
+export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "learning" | "lab"; courseTab?: "overview" | "path" | "practice" | "progress" | "none"; hideNavigation?: boolean }> = ({ children, area = "learning", courseTab = "overview", hideNavigation = false }) => {
   const sharedWorkspace = useContext(PersonalWorkspaceContext);
   const [user, setUser] = React.useState<User | null>(() => getCachedMeUser() ?? (isDevPreviewActive() ? getDevPreviewUser() : null));
   const [loading, setLoading] = React.useState(() => !getCachedMeUser());
@@ -74,5 +74,5 @@ export const PersonalRouteShell: React.FC<{ children: React.ReactNode; area?: "l
     }
     void logoutAndReload("/");
   };
-  return <PersonalLearningProvider><PremiumWorkspaceShell user={user} page={area === "lab" ? "tasks" : "home"} area={area} courseTab={courseTab} theme={theme} onNavigate={go} onLibrary={() => navigateWithPreview("/lab/library")} onCourses={() => navigateWithPreview("/learning/catalog")} onPlayground={() => navigateWithPreview("/lab/playground")} onToggleTheme={() => setTheme((prev) => { const next = prev === "dark" ? "light" : "dark"; applyTheme(next); return next; })} onToggleLanguage={() => void i18n.changeLanguage(i18n.language.startsWith("en") ? "uk" : "en")} onSupport={() => navigateWithPreview("/support")} onSupportDesk={() => navigateWithPreview("/support/desk")} onLogout={logout}>{children}</PremiumWorkspaceShell></PersonalLearningProvider>;
+  return <PersonalLearningProvider><PremiumWorkspaceShell user={user} page={area === "lab" ? "tasks" : "home"} area={area} courseTab={courseTab} hideNavigation={hideNavigation} theme={theme} onNavigate={go} onLibrary={() => navigateWithPreview("/lab/library")} onCourses={() => navigateWithPreview("/learning/catalog")} onPlayground={() => navigateWithPreview("/lab/playground")} onToggleTheme={() => setTheme((prev) => { const next = prev === "dark" ? "light" : "dark"; applyTheme(next); return next; })} onToggleLanguage={() => void i18n.changeLanguage(i18n.language.startsWith("en") ? "uk" : "en")} onSupport={() => navigateWithPreview("/support")} onSupportDesk={() => navigateWithPreview("/support/desk")} onLogout={logout}>{children}</PremiumWorkspaceShell></PersonalLearningProvider>;
 };

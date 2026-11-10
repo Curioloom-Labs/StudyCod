@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authRequired, AuthRequest } from "../middleware/authMiddleware";
 import { checkCourseProject, completeCourseItem, enrollInCourseVariant, getCatalogCourseSyllabus, getCourseForUser, getCourseProject, getCourseQuiz, getEnrollmentIad, getLearningCatalog, getLearningMe, passFinalAssessment, runCourseProject, saveCourseProject, setCurrentCourseEnrollment, submitCourseProject, submitCourseQuiz } from "../services/learningCatalogService";
 import { normalizeUiLocale, resolveUiLocaleFromHeaders, type UiLocale } from "../utils/uiLocale";
-import { getCourseDiagnosticAssessment, retryCourseDiagnosticAssessment, runCourseDiagnosticSample, submitCourseDiagnosticAssessment } from "../services/courseDiagnosticAssessment";
+import { getCourseDiagnosticAssessment, retryCourseDiagnosticAssessment, runCourseDiagnosticSample, submitCourseDiagnosticAssessment, submitCourseDiagnosticTask } from "../services/courseDiagnosticAssessment";
 
 export const learningCatalogRouter = Router();
 
@@ -303,18 +303,29 @@ learningCatalogRouter.post("/enrollments/:enrollmentId/diagnostic/run", authRequ
   }
 });
 
+const diagnosticTaskSubmitSchema = z.object({ taskId: z.string().trim().min(1).max(80), code: z.string().trim().min(1).max(100_000) }).strict();
+learningCatalogRouter.post("/enrollments/:enrollmentId/diagnostic/task-submit", authRequired, async (req: AuthRequest, res: Response) => {
+  if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
+  const enrollmentId = Number(req.params.enrollmentId);
+  const parsed = diagnosticTaskSubmitSchema.safeParse(req.body ?? {});
+  if (!Number.isInteger(enrollmentId) || enrollmentId <= 0 || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT" });
+  try {
+    return res.json({ result: await submitCourseDiagnosticTask(req.userId, enrollmentId, parsed.data.taskId, parsed.data.code) });
+  } catch (error: unknown) {
+    return res.status(errorStatus(error)).json(diagnosticErrorPayload(error));
+  }
+});
+
 const diagnosticSubmitSchema = z.object({
   answers: z.array(z.object({ questionId: z.string().trim().min(1).max(32), selectedIndex: z.number().int().min(0).max(3) })).min(1).max(300),
-  practicals: z.array(z.object({ taskId: z.string().trim().min(1).max(80), code: z.string().trim().min(1).max(100_000) })).min(1).max(50).optional(),
-  code: z.string().trim().min(1).max(100_000).optional(),
-}).strict().refine((value) => Boolean(value.practicals?.length || value.code), { message: "PRACTICAL_CODE_REQUIRED" });
+}).strict();
 learningCatalogRouter.post("/enrollments/:enrollmentId/diagnostic/submit", authRequired, async (req: AuthRequest, res: Response) => {
   if (!req.userId || req.userType === "STUDENT") return res.status(403).json({ message: "ONLY_USERS" });
   const enrollmentId = Number(req.params.enrollmentId);
   const parsed = diagnosticSubmitSchema.safeParse(req.body ?? {});
   if (!Number.isInteger(enrollmentId) || enrollmentId <= 0 || !parsed.success) return res.status(400).json({ message: "INVALID_INPUT", issues: parsed.success ? undefined : parsed.error.issues });
   try {
-    return res.json({ result: await submitCourseDiagnosticAssessment(req.userId, enrollmentId, parsed.data.answers, parsed.data.practicals, parsed.data.code) });
+    return res.json({ result: await submitCourseDiagnosticAssessment(req.userId, enrollmentId, parsed.data.answers) });
   } catch (error: unknown) {
     return res.status(errorStatus(error)).json({ message: errorMessage(error) });
   }

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Logo } from "../Logo";
 import { PlatformFooter } from "./PlatformFooter";
+import { NotificationsBell } from "../blog/NotificationsBell";
 import type { User } from "../../types";
 import type { AppTheme } from "../../theme";
 import { usePersonalLearning } from "../learning/PersonalLearningProvider";
@@ -49,6 +50,7 @@ type ShellProps = {
   children: React.ReactNode;
   area?: "learning" | "lab" | "contest";
   courseTab?: "overview" | "path" | "practice" | "progress" | "none";
+  hideNavigation?: boolean;
 };
 
 export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
@@ -68,6 +70,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   children,
   area = "learning",
   courseTab = "overview",
+  hideNavigation = false,
 }) => {
   const { i18n } = useTranslation();
   const navigate = useNavigate();
@@ -150,12 +153,12 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
   };
   const hasSupportDesk = user.role === "SUPPORT" || user.role === "SYSTEM_ADMIN";
   const isAdmin = user.role === "SYSTEM_ADMIN";
-  const showCourseNavigation = area === "learning" && page !== "admin" && courseTab !== "none" && Boolean(learning.currentCourse);
+  const showCourseNavigation = !hideNavigation && area === "learning" && page !== "admin" && courseTab !== "none" && Boolean(learning.currentCourse);
   return (
     <div ref={shellRef} className={`mobile-app-shell flex min-h-[100dvh] flex-col bg-bg-base text-text-primary ${showCourseNavigation ? "has-course-context" : ""}`}>
       <a className="skip-link" href="#main-content">{uk ? "Перейти до основного вмісту" : "Skip to main content"}</a>
       <DialogA11yObserver rootRef={shellRef} />
-      <header data-material="premium-header" className="product-shell__header sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl">
+      {!hideNavigation && <header data-material="premium-header" className="product-shell__header sticky top-0 z-50 border-b border-border/50 bg-bg-base/92 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-[1600px] items-center justify-between gap-2 px-3 max-[360px]:gap-1 max-[360px]:px-2 sm:h-16 sm:px-6 lg:px-8">
           <button
             type="button"
@@ -182,6 +185,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
           />
 
           <div className="flex shrink-0 items-center gap-1.5 max-[360px]:gap-1 sm:gap-2">
+            <NotificationsBell />
             <button
               type="button"
               onClick={onToggleTheme}
@@ -278,7 +282,7 @@ export const PremiumWorkspaceShell: React.FC<ShellProps> = ({
           </div>
         </div>
 
-      </header>
+      </header>}
       <div className="min-w-0 flex-1 flex flex-col">
       {showCourseNavigation && learning.currentCourse ? (
         <div data-material="premium-course-nav" className="sticky top-14 z-40 border-b border-border/70 bg-bg-base/92 backdrop-blur-xl sm:top-16">

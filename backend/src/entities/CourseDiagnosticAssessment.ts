@@ -61,6 +61,7 @@ export type CourseDiagnosticResult = {
     testsPassed: number;
     testsTotal: number;
     score: number;
+    attemptsUsed: number;
   }>;
   passed: boolean;
   answers: Array<{ questionId: string; selectedIndex: number }>;
@@ -83,6 +84,22 @@ export type CourseDiagnosticResult = {
   }>;
   submittedAt: string;
 };
+
+export type CourseDiagnosticTaskAttemptResult = {
+  testsPassed: number;
+  testsTotal: number;
+  score: number;
+};
+
+export type CourseDiagnosticTaskAttemptState = {
+  attemptsUsed: number;
+  inFlight: number;
+  latestResult: CourseDiagnosticTaskAttemptResult | null;
+  bestResult: CourseDiagnosticTaskAttemptResult | null;
+};
+
+export type CourseDiagnosticTaskAttempts = Record<string, CourseDiagnosticTaskAttemptState>;
+export type CourseDiagnosticReportStatus = "NOT_REQUESTED" | "PENDING" | "PROCESSING" | "READY" | "FAILED";
 
 const diagnosticPayloadTransformer = {
   to(value: CourseDiagnosticPayload | null | undefined): string | null {
@@ -118,6 +135,30 @@ export class CourseDiagnosticAssessment {
 
   @Column({ type: "simple-json", nullable: true, name: "result_data" })
   resultData?: CourseDiagnosticResult | null;
+
+  @Column({ type: "simple-json", nullable: true, name: "task_attempts_data" })
+  taskAttemptsData?: CourseDiagnosticTaskAttempts | null;
+
+  @Column({ type: "enum", enum: ["NOT_REQUESTED", "PENDING", "PROCESSING", "READY", "FAILED"], default: "NOT_REQUESTED", name: "report_status" })
+  reportStatus!: CourseDiagnosticReportStatus;
+
+  @Column({ type: "mediumtext", nullable: true, name: "mentor_report" })
+  mentorReport?: string | null;
+
+  @Column({ type: "int", default: 0, name: "report_attempts" })
+  reportAttempts!: number;
+
+  @Column({ type: "datetime", nullable: true, name: "report_next_attempt_at" })
+  reportNextAttemptAt?: Date | null;
+
+  @Column({ type: "int", default: 0, name: "report_email_attempts" })
+  reportEmailAttempts!: number;
+
+  @Column({ type: "datetime", nullable: true, name: "report_email_next_attempt_at" })
+  reportEmailNextAttemptAt?: Date | null;
+
+  @Column({ type: "datetime", nullable: true, name: "report_email_sent_at" })
+  reportEmailSentAt?: Date | null;
 
   @Column({ type: "timestamp", nullable: true, name: "submitted_at" })
   submittedAt?: Date | null;

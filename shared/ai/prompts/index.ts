@@ -4,7 +4,7 @@
  * Worker can use the same prompt contract.
  */
 
-export const PROMPT_BUNDLE_VERSION = "studycod-ai-2026-11-02-v20" as const;
+export const PROMPT_BUNDLE_VERSION = "studycod-ai-2026-11-10-v21" as const;
 export const LEGACY_PROMPT_BUNDLE_VERSION = "studycod-ai-legacy-v0" as const;
 // Incremented for the generated-subtask output contract so pre-change cached
 // responses cannot mask the new format while the deployed Worker stays stable.
@@ -37,6 +37,8 @@ export const PROMPT_IDS = [
   "mentor.hints",
   "mentor.explain-error",
   "mentor.debug",
+  "mentor.assessment-report",
+  "assessment.diagnostic-questions",
   "edu.tutor",
   "edu.code-review",
   "edu.live-copilot",
@@ -113,6 +115,8 @@ const definitions: Record<PromptId, PromptSpec> = {
   "mentor.hints": spec({ id: "mentor.hints", purpose: "Give progressive, evidence-based hints", output: "json", inputContext: ["task", "submission", "Judge failures", "previous hints", "UI locale"], format: "JSON object with a hint ladder", validation: "JSON schema, sanitization, bounded count, deterministic fallback", generation: { temperature: 0.2, maxTokens: 480 } }),
   "mentor.explain-error": spec({ id: "mentor.explain-error", purpose: "Explain an observed submission failure", output: "json", inputContext: ["submission", "observed compiler or Judge failure", "task", "UI locale"], format: "JSON object with a concise explanation", validation: "JSON schema and evidence-based normalization", generation: { temperature: 0.2, maxTokens: 600 } }),
   "mentor.debug": spec({ id: "mentor.debug", purpose: "Guide a learner through debugging", output: "text", inputContext: ["task", "current code", "recent attempts", "prior feedback", "learner question"], format: "Short coaching text with one next action", validation: "Non-empty response and tutor output normalization", generation: { temperature: 0.3, maxTokens: 320 } }),
+  "assessment.diagnostic-questions": spec({ id: "assessment.diagnostic-questions", purpose: "Create precise course-wide diagnostic questions", output: "json", inputContext: ["one assigned curriculum topic per question", "learner level", "language", "requested question count"], format: "JSON array with one concrete, self-contained question and exactly four distinct options with one correct index", validation: "Exact topic coverage, exactly four unique options, duplicate/vague stem rejection, and one correct answer index", generation: { temperature: 0.35, maxTokens: 3000 } }),
+  "mentor.assessment-report": spec({ id: "mentor.assessment-report", purpose: "Write evidence-based feedback after a course diagnostic", output: "text", inputContext: ["diagnostic scores", "topic-level strengths and gaps", "Judge results per practical task", "response locale"], format: "Concise, supportive mentor report with evidence and next steps; no invented evidence or code solutions", validation: "Non-empty bounded report that references supplied results only", generation: { temperature: 0.3, maxTokens: 750 } }),
   "edu.tutor": spec({ id: "edu.tutor", purpose: "Answer a learner's programming question", output: "json", inputContext: ["question", "sanitized learning context", "recent dialogue", "UI locale"], format: "JSON answer and tips", validation: "Tutor schema and response normalization", generation: { temperature: 0.4, maxTokens: 1200 } }),
   "edu.code-review": spec({ id: "edu.code-review", purpose: "Review code with line-level evidence", output: "json", inputContext: ["source code", "programming language", "task statement"], format: "JSON review with nullable line references", validation: "Provider schema, line-bound checks, and normalized review", generation: { temperature: 0.3, maxTokens: 1500 } }),
   "edu.live-copilot": spec({ id: "edu.live-copilot", purpose: "Suggest actions from classroom signals", output: "json", inputContext: ["aggregated classroom signals", "task clusters", "idle counts"], format: "JSON headline, diagnosis, and 2–4 actions", validation: "Provider schema, content checks, and rule-based fallback", generation: { temperature: 0.3, maxTokens: 500 } }),
