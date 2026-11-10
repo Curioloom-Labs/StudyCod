@@ -1898,45 +1898,67 @@ export const StudentTaskPage: React.FC = () => {
         </div>}
 
       {}
-      {showTheory ? <div className="flex-1 flex flex-col overflow-hidden bg-bg-base">
+      {showTheory ? <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-bg-base">
           {}
-          <div className="border-b border-border bg-bg-surface px-3 sm:px-4 py-2.5 flex-shrink-0 flex items-center gap-3">
+          <div className="relative z-10 flex flex-shrink-0 items-center gap-3 border-b border-border/80 bg-bg-surface/90 px-3 py-3 backdrop-blur-xl sm:px-5">
             <button
               type="button"
               onClick={handleBack}
-              className="flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-fast"
+              className="inline-flex size-10 flex-shrink-0 items-center justify-center rounded-xl border border-border bg-bg-base/60 text-text-secondary transition-all hover:-translate-x-0.5 hover:bg-bg-hover hover:text-text-primary"
               title={t("back")}
               aria-label={t("back")}
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <h1 className="min-w-0 flex-1 text-sm sm:text-base font-semibold tracking-tight text-text-primary truncate">{task.title}</h1>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-base font-semibold tracking-tight text-text-primary sm:text-lg">{task.title}</h1>
+            </div>
             {}
-            <div className="flex-shrink-0 flex items-center gap-1 rounded-lg border border-border p-0.5 bg-bg-base">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono uppercase tracking-[0.04em] bg-primary/12 text-primary">
+            <div className="flex flex-shrink-0 items-center gap-1 rounded-xl border border-border/80 bg-bg-base/70 p-1">
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-primary/12 px-3 py-2 text-xs font-semibold text-primary">
                 <BookOpen className="w-3.5 h-3.5" /> {t("theory")}
               </span>
-              <button type="button" onClick={() => setTheoryAcknowledged(true)} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono uppercase tracking-[0.04em] text-text-muted hover:text-text-primary hover:bg-bg-hover transition-fast">
+              <button type="button" onClick={() => setTheoryAcknowledged(true)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-text-muted transition-colors hover:bg-bg-hover hover:text-text-primary">
                 <FileText className="w-3.5 h-3.5" /> {t("task")}
               </button>
             </div>
           </div>
-              <div className="flex-1 overflow-y-auto p-4 sm:p-8 pb-32 sm:pb-24" ref={setTheoryPaneEl}>
-                <div className="max-w-3xl mx-auto">
-                  <div className="text-[11px] font-mono uppercase tracking-[0.08em] text-text-muted mb-4">// {t("theory")}</div>
-                  <div className="prose prose-invert max-w-none text-text-secondary font-mono">
-                    <LessonTheoryView theory={task.lesson.theory || ""} />
+              <div className="relative min-h-0 flex-1 overflow-y-auto" ref={setTheoryPaneEl}>
+                <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-primary/5 via-primary/[0.02] to-transparent" />
+                <section aria-label={t("theory")} className="relative mx-auto w-full max-w-5xl px-4 pb-36 pt-8 sm:px-8 sm:pb-36 sm:pt-12 lg:px-12">
+                  <div className="mx-auto mb-6 flex max-w-4xl items-center gap-3 sm:mb-8">
+                    <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 text-primary shadow-sm shadow-primary/5">
+                      <BookOpen className="size-5" />
+                    </span>
+                    <span className="text-sm font-medium tracking-tight text-text-secondary">{tr("Матеріал до практики", "Before practice")}</span>
+                    <span aria-hidden="true" className="h-px flex-1 bg-gradient-to-r from-border/80 to-transparent" />
                   </div>
-                </div>
+                  <article className="mx-auto max-w-4xl rounded-3xl border border-border/70 bg-bg-surface/35 px-5 py-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.025)] sm:px-9 sm:py-10 md:px-12 md:py-12">
+                    <div className={[
+                      "mx-auto max-w-[72ch] font-sans text-text-secondary",
+                      "[&_a]:!font-medium [&_a]:!text-primary [&_a]:!underline-offset-4",
+                      "[&_code]:!rounded-md [&_code]:!border-border/80 [&_code]:!bg-bg-base/80 [&_code]:!px-1.5 [&_code]:!py-0.5 [&_code]:!text-[0.9em] [&_code]:!text-primary",
+                      "[&_h1]:!mb-8 [&_h1]:!mt-0 [&_h1]:!text-3xl [&_h1]:!leading-tight [&_h1]:!tracking-[-0.035em] sm:[&_h1]:!text-4xl",
+                      "[&_h2]:!mb-4 [&_h2]:!mt-12 [&_h2]:!text-2xl [&_h2]:!leading-tight [&_h2]:!tracking-[-0.025em]",
+                      "[&_h3]:!mb-3 [&_h3]:!mt-9 [&_h3]:!text-lg [&_h3]:!leading-snug",
+                      "[&_li]:!my-2 [&_li]:!text-[15px] [&_li]:!leading-7 [&_li]:!text-text-secondary",
+                      "[&_p]:!my-5 [&_p]:!text-[15px] [&_p]:!leading-8 [&_p]:!text-text-secondary",
+                      "[&_pre]:!my-7 [&_pre]:!overflow-x-auto [&_pre]:!rounded-2xl [&_pre]:!border [&_pre]:!border-border/70 [&_pre]:!bg-bg-base/75 [&_pre]:!p-5 [&_pre]:!shadow-lg [&_pre]:!shadow-black/10",
+                      "[&_strong]:!font-semibold [&_strong]:!text-text-primary"
+                    ].join(" ")}>
+                      <LessonTheoryView theory={task.lesson.theory || ""} />
+                    </div>
+                  </article>
+                </section>
               </div>
-              <div className="bg-bg-surface/95 backdrop-blur border-t border-border p-3 sm:p-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] flex-shrink-0 fixed bottom-0 left-0 right-0 z-30">
-                <div className="max-w-3xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-                  <p className="text-xs font-mono text-text-muted flex-1">
+              <div className="fixed bottom-0 left-0 right-0 z-30 flex-shrink-0 border-t border-border/80 bg-bg-surface/90 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgba(0,0,0,0.18)] backdrop-blur-xl sm:py-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                  <p className="flex-1 text-sm leading-6 text-text-muted">
                     {tr("Після прочитання теорії ви зможете перейти до практичного завдання", "After reading theory you can proceed to the practice task")}
                   </p>
                   <Button variant="primary" onClick={() => {
             setTheoryAcknowledged(true);
-          }} className="whitespace-nowrap w-full sm:w-auto">
+          }} className="w-full whitespace-nowrap rounded-xl px-5 py-3 font-semibold shadow-sm shadow-primary/15 transition-transform hover:-translate-y-0.5 active:translate-y-0 sm:w-auto">
                     <CheckCircle2 className="w-4 h-4 mr-1.5" /> {tr("Я прочитав теорію", "I have read the theory")}
                   </Button>
                 </div>
