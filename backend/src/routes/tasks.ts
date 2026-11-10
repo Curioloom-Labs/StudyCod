@@ -2111,6 +2111,7 @@ async function generateAndPersistPersonalProgrammingTask(params: {
       || i18nText(params.userLanguage, "Контрольна робота.", "Control work."),
     lang: params.lang,
     topicIndex: params.topicIndex,
+    isCatalogPractice: String(params.subtitle ?? "").startsWith("CATALOG_ITEM:"),
     numInTopic: params.numInTopic,
     isFirstTask: params.numInTopic === 1,
     difus: params.difus,

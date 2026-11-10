@@ -620,6 +620,7 @@ async function safeAICallInner<T = any>(mode: AIMode, params: unknown, options?:
               theory: taskTheory,
               lang: taskLanguage,
               topicIndex: optionalNumber(sanitizedParams.topicIndex),
+              isCatalogPractice: sanitizedParams.isCatalogPractice === true,
               numInTopic: Number(sanitizedParams.numInTopic),
               isFirstTask: sanitizedParams.isFirstTask === true,
               difus: optionalNumber(sanitizedParams.difus),

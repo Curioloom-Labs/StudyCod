@@ -5,10 +5,11 @@ export function shouldUseCanonicalIntroductoryPractice(params: {
   topicIndex?: number;
   numInTopic?: number;
   isControl?: boolean;
+  isCatalogPractice?: boolean;
 }): boolean {
-  // Regenerations of the one-topic introduction must remain canonical too;
-  // numInTopic is deliberately not a reason to send the learner back to AI.
-  return params.topicIndex === 0 && params.isControl !== true;
+  // Catalog module order is course-local and can also start at zero. Only
+  // legacy personal topic zero maps to the canonical Hello World checkpoint.
+  return params.topicIndex === 0 && params.isControl !== true && params.isCatalogPractice !== true;
 }
 
 export function createIntroductoryHelloWorldTask(params: {

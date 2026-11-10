@@ -357,6 +357,12 @@ export const TasksPage: React.FC<Props> = ({
     if (serverMsg.toUpperCase().includes("AI_GENERATION_FAILED")) {
       return tr("AI тимчасово недоступний. Спробуйте ще раз трохи пізніше.", "AI is temporarily unavailable. Please try again a bit later.");
     }
+    if (status === 503 && serverMsg.toUpperCase() === "COURSE_PRACTICE_GENERATION_UNAVAILABLE") {
+      return tr(
+        "Не вдалося створити курсову практику: AI-сервіс тимчасово недоступний. Спробуй ще раз пізніше.",
+        "Could not create course practice because the AI service is temporarily unavailable. Please try again later."
+      );
+    }
     if (looksLikeHtml && status && status >= 500) {
       return tr(
         "Сервер тимчасово недоступний або перевищив таймаут. Спробуйте ще раз трохи пізніше.",

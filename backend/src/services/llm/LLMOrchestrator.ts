@@ -486,6 +486,7 @@ export class LLMOrchestrator {
     theory: string;
     lang: LLMTaskLanguage;
     topicIndex?: number;
+    isCatalogPractice?: boolean;
     numInTopic: number;
     isFirstTask: boolean;
     difus?: number;
@@ -513,6 +514,7 @@ export class LLMOrchestrator {
     theory: string;
     lang: LLMTaskLanguage;
     topicIndex?: number;
+    isCatalogPractice?: boolean;
     numInTopic: number;
     isFirstTask: boolean;
     difus?: number;
@@ -542,9 +544,8 @@ export class LLMOrchestrator {
       });
     }
 
-    // Topic 0 has one intentionally canonical Hello World checkpoint. Asking
-    // an LLM to creatively regenerate this exact task has repeatedly produced
-    // arithmetic exercises, which the curriculum validator correctly rejects.
+    // Legacy personal topic 0 has one intentionally canonical Hello World
+    // checkpoint; catalog module order is course-local and must not use it.
     if (!olympiadContract && shouldUseCanonicalIntroductoryPractice(params)) {
       return createIntroductoryHelloWorldTask({
         topicTitle: params.topicTitle,
