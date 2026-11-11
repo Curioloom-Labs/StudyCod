@@ -15,7 +15,7 @@
 .assess-workspace h1 { font-size: clamp(1.8rem, 3.5vw, 2.65rem); font-weight: 650; letter-spacing: -.055em; line-height: 1.13; text-wrap: balance; }
 .assess-workspace h2 { font-size: 1.15rem; font-weight: 650; letter-spacing: -.025em; line-height: 1.35; }
 .assess-workspace h3 { font-weight: 600; }
-.assess-masthead { background: var(--bg-surface); border-bottom: 1px solid var(--assess-line); }
+.assess-masthead { position: relative; z-index: 60; background: var(--bg-surface); border-bottom: 1px solid var(--assess-line); }
 .assess-masthead__inner, .assess-context-bar__inner, .assess-nav, .assess-main, .assess-footer { width: min(100% - 3rem, 82rem); margin-inline: auto; }
 .assess-masthead__inner { min-height: 4.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .assess-brand { display: inline-flex; align-items: center; gap: .7rem; color: var(--text-primary); text-decoration: none; flex-shrink: 0; }
