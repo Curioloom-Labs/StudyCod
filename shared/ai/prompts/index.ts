@@ -4,7 +4,7 @@
  * Worker can use the same prompt contract.
  */
 
-export const PROMPT_BUNDLE_VERSION = "studycod-ai-2026-11-10-v21" as const;
+export const PROMPT_BUNDLE_VERSION = "studycod-ai-2026-11-11-v26" as const;
 export const LEGACY_PROMPT_BUNDLE_VERSION = "studycod-ai-legacy-v0" as const;
 // Incremented for the generated-subtask output contract so pre-change cached
 // responses cannot mask the new format while the deployed Worker stays stable.

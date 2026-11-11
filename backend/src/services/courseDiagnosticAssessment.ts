@@ -86,6 +86,12 @@ function isRetryableDiagnosticTaskProviderFailure(error: unknown): boolean {
   return RETRYABLE_DIAGNOSTIC_TASK_PROVIDER_FAILURE_REASONS.has(assessmentFailureReason(error));
 }
 
+function isRetryableDiagnosticHiddenTestFailure(error: unknown): boolean {
+  const details = recordOf(error);
+  if (details?.assessmentStage !== "hidden_tests") return false;
+  return [502, 503, 504].includes(Number(details.statusCode));
+}
+
 /** Select bounded, non-payload diagnostics; deliberately never includes rawResponse or prompts. */
 export function assessmentGenerationErrorLogDetails(error: unknown): Record<string, unknown> {
   const details = recordOf(error);
@@ -183,8 +189,8 @@ export function buildDiagnosticPracticalTaskContext(
   locale: CurriculumLocale,
 ): string {
   const requirements = locale === "en"
-    ? "COURSE DIAGNOSTIC: Create one beginner-friendly STDIN/STDOUT task combining at least two assigned topics; each must affect output. Keep behavior observable through input/output—no unobservable method calls, UI actions, or external setup. If objects/methods matter, encode actions in input and show results. Define exact input grammar (tokens vs lines, delimiters, whitespace); never silently split or trim meaningful text. Give exactly three distinct non-empty input/output examples matching the statement and reference. Use only assigned topics and deterministic, non-empty output."
-    : "ДІАГНОСТИКА КУРСУ: Створи доступну консольну задачу STDIN/STDOUT, що поєднує щонайменше дві призначені теми; кожна впливає на результат. Уся поведінка має бути видимою через ввід/вивід: не вимагай невидимих викликів методів, дій UI чи зовнішнього налаштування. Якщо важливі об’єкти/методи, закодуй дії у вводі й покажи результати. Точно опиши граматику вводу (токени чи рядки, роздільники, пробіли); не діли й не обрізай значущий текст мовчки. Додай рівно три різні приклади з непорожніми вводом/виводом, узгоджені з умовою й еталоном. Використовуй лише призначені теми; вивід детермінований і непорожній.";
+    ? "COURSE DIAGNOSTIC: Create one beginner-friendly STDIN/STDOUT task combining at least two assigned topics; each must affect output. Keep behavior observable; avoid unobservable method calls, UI actions, or external setup. If objects/methods matter, encode actions in input and show results. Define exact input grammar; never silently split or trim meaningful text. Give exactly three distinct non-empty examples matching the statement and reference. Samples must be plain data, never labels/type names/comments or blank/extra lines; prefer one non-empty input line and use multiline only when the grammar defines each line. Use assigned topics and deterministic, non-empty output. Prefer integers; avoid weights, percentages, and decimals. If decimals are essential, specify fixed digits, rounding, trailing-zero policy, and decimal point; never imply preserving the input's spelling. Include a non-integer example."
+    : "ДІАГНОСТИКА КУРСУ: Створи доступну консольну задачу STDIN/STDOUT, що поєднує щонайменше дві призначені теми; кожна впливає на результат. Уся поведінка має бути видимою через ввід/вивід: без невидимих викликів методів, дій UI чи зовнішнього налаштування. Якщо важливі об’єкти/методи, закодуй дії у вводі й покажи результати. Точно опиши граматику вводу; не діли й не обрізай значущий текст мовчки. Додай рівно три різні непорожні приклади, узгоджені з умовою й еталоном. Приклади — лише дані, без міток/назв типів/коментарів і порожніх чи зайвих рядків. Ввід — в один рядок, крім випадків, коли граматика визначає кожен рядок. Використовуй лише призначені теми; вивід детермінований і непорожній. Переважно використовуй цілі числа; уникай ваги, відсотків і дробових результатів. Якщо дроби необхідні, задай фіксовану точність, округлення, правило кінцевих нулів і десяткову крапку; не вимагай зберігати запис числа з вводу. Додай приклад із нецілим результатом."
   const topicList = topicGroup.map((topic) => {
     const detail = topic.context
       .split(/\r?\n/)
@@ -192,13 +198,13 @@ export function buildDiagnosticPracticalTaskContext(
       .join(" ")
       .replace(/\s+/g, " ")
       .trim();
-    const shortDetail = text(detail, 24);
-    return "[topic:" + topic.id + "] " + text(topic.title, 55) + (shortDetail ? " — " + shortDetail : "");
+    const shortDetail = text(detail, 14);
+    return "[topic:" + topic.id + "] " + text(topic.title, 50) + (shortDetail ? " — " + shortDetail : "");
   }).join("\n");
 
   return [
     requirements,
-    "Course: " + text(courseTitle, 60) + ".",
+    "Course: " + text(courseTitle, 55) + ".",
     "Assigned course topics:",
     topicList,
     "Variation token: " + text(variationToken, 40) + " (internal; never include in the task).",
@@ -210,19 +216,23 @@ export function shouldRegenerateDiagnosticTask(error: unknown): boolean {
   if (details?.invalidSource === "statement" || details?.invalidSource === "publicExamples") return true;
   const message = String(details?.message ?? "");
   if (/\b(?:CORE_OPERATION_MISSING|TOPIC_MISMATCH_HARD_FAIL|FORBIDDEN_SCOPE_VIOLATION|MULTI_TASK_NOT_ALLOWED):/i.test(message)) return true;
+  if (isRetryableDiagnosticHiddenTestFailure(error)) return true;
   if (isRetryableDiagnosticTaskProviderFailure(error)) return true;
   return details?.name === "AIValidationError"
     && details?.mode === "generateTask"
     && /^(?:Example\s+\d+:\s*)?Task generation validation failed:/i.test(message);
 }
 
-function diagnosticTaskRegenerationReason(error: unknown): "statement" | "publicExamples" | "shallowDecision" | "implementationHint" | "emptyOutput" | "coreOperation" | "topicMismatch" | "forbiddenScope" | "multipleTasks" | "providerFailure" | "taskValidation" | null {
+export function diagnosticTaskRegenerationReason(error: unknown): "statement" | "publicExamples" | "hiddenTestFailure" | "shallowDecision" | "implementationHint" | "emptyOutput" | "coreOperation" | "topicMismatch" | "forbiddenScope" | "multipleTasks" | "providerFailure" | "taskValidation" | null {
   const details = recordOf(error);
   if (details?.invalidSource === "statement") return "statement";
   if (details?.invalidSource === "publicExamples") return "publicExamples";
-  if (isRetryableDiagnosticTaskProviderFailure(error)) return "providerFailure";
-  if (!shouldRegenerateDiagnosticTask(error)) return null;
+  if (isRetryableDiagnosticHiddenTestFailure(error)) return "hiddenTestFailure";
   const message = String(details?.message ?? "");
+  if (/examples\.\d+\.(?:input|output).*non-empty string/i.test(message)
+    || /Example\s+\d+:.*(?:STDIN_STDOUT example must have non-empty input|example output must be a non-empty string)/i.test(message)) {
+    return "publicExamples";
+  }
   if (/decision task is too shallow/i.test(message)) return "shallowDecision";
   if (/reveals an implementation technique/i.test(message)) return "implementationHint";
   if (/requires empty output/i.test(message)) return "emptyOutput";
@@ -230,21 +240,28 @@ function diagnosticTaskRegenerationReason(error: unknown): "statement" | "public
   if (/TOPIC_MISMATCH_HARD_FAIL/i.test(message)) return "topicMismatch";
   if (/FORBIDDEN_SCOPE_VIOLATION/i.test(message)) return "forbiddenScope";
   if (/MULTI_TASK_NOT_ALLOWED/i.test(message)) return "multipleTasks";
+  if (details?.name === "AIValidationError"
+    && details?.mode === "generateTask"
+    && /^(?:Example\s+\d+:\s*)?Task generation validation failed:/i.test(message)) {
+    return "taskValidation";
+  }
+  if (isRetryableDiagnosticTaskProviderFailure(error)) return "providerFailure";
+  if (!shouldRegenerateDiagnosticTask(error)) return null;
   return "taskValidation";
 }
 
 export async function generateDiagnosticTaskPackageWithRetry<T>(
-  generatePackage: (attempt: 1 | 2 | 3 | 4, previousError?: unknown) => Promise<T>,
-  onRetry?: (error: unknown, nextAttempt: 2 | 3 | 4) => void,
+  generatePackage: (attempt: 1 | 2 | 3 | 4 | 5, previousError?: unknown) => Promise<T>,
+  onRetry?: (error: unknown, nextAttempt: 2 | 3 | 4 | 5) => void,
 ): Promise<T> {
   let previousError: unknown;
-  for (const attempt of [1, 2, 3, 4] as const) {
+  for (const attempt of [1, 2, 3, 4, 5] as const) {
     try {
       return await generatePackage(attempt, previousError);
     } catch (error) {
-      if (attempt === 4 || !shouldRegenerateDiagnosticTask(error)) throw error;
+      if (attempt === 5 || !shouldRegenerateDiagnosticTask(error)) throw error;
       previousError = error;
-      onRetry?.(error, (attempt + 1) as 2 | 3 | 4);
+      onRetry?.(error, (attempt + 1) as 2 | 3 | 4 | 5);
     }
   }
   throw new Error("Unreachable diagnostic task regeneration state");
@@ -598,6 +615,7 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             isControl: true,
             difus: 0.5,
             allowedIoTypes: ["STDIN_STDOUT"],
+            exampleCount: 3,
             userId,
             topicId: topicGroup[0].id > 0 ? topicGroup[0].id : undefined,
             language,
@@ -628,7 +646,13 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             `Examples: ${generatedTask.examples.map((example) => `Input:\n${example.input}\nOutput:\n${example.output}`).join("\n")}`,
           ].join("\n\n");
           const testSelection = await runAtAssessmentStage("hidden_tests", async () => {
-            const result = await safeAICall<Array<{ input: string; output: string; explanation?: string }>>("generateTestData", {
+            const result = await runWithPromptExecutionContext("task.reference-tests", {
+              traceId: requestId,
+              // Allow one initial call and two bounded candidate-suite repairs,
+              // each with headroom beyond the 90s OpenRouter transport guard.
+              timeoutMs: 330_000,
+              forceNewContext: true,
+            }, () => safeAICall<Array<{ input: string; output: string; explanation?: string }>>("generateTestData", {
               taskTitle: generatedTask.title,
               taskDescription,
               lang: runtime,
@@ -641,13 +665,18 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
                 "5 hidden typical cases: ordinary values, varied ordering, multiple values, mixed signs or categories when allowed, and a case that exercises the main topic interaction",
                 "5 hidden edge cases: exact lower bound, exact upper bound, just-inside bounds, maximum permitted size, and a boundary interaction defined by the statement",
               ],
-            // One bounded safeAICall repair handles candidate-test contract findings
-            // without starting over on the whole course assessment.
-            }, { language, requestId, maxAttempts: 2 });
+            // Two bounded safeAICall repairs handle candidate-test contract findings
+            // before replacing the whole practical task package.
+            }, { language, requestId, maxAttempts: 3 }));
             const resultDetails = recordOf(result.success ? null : result.error.details);
+            const clarificationQuestion = result.success
+              ? ""
+              : text(recordOf(result.error.clarification)?.question, 500);
             const validationMessage = result.success
               ? ""
-              : typeof resultDetails?.validationError === "string"
+              : result.error.error === "AI_CLARIFICATION_REQUIRED" && clarificationQuestion
+                ? `TASK_CONTRACT_REVIEW_FAILED[statement]: ${clarificationQuestion}`
+                : typeof resultDetails?.validationError === "string"
                 ? resultDetails.validationError
                 : String(result.error.error ?? result.error.message);
             const rejectedSource = validationMessage.match(/^TASK_CONTRACT_REVIEW_FAILED\[([^\]]+)\]:/s)?.[1];
@@ -727,6 +756,8 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
             }
             const replacementRequirement = regenerationReason === "providerFailure"
               ? "RETRY AFTER TRANSIENT GENERATION FAILURE: No valid task was returned for this assignment. Generate the same compact task package from scratch, preserving the listed topic group, the required STDIN_STDOUT contract, and exactly three short public examples with non-empty input/output. Do not invent validator findings or mention the retry."
+              : regenerationReason === "hiddenTestFailure"
+                ? "REPLACEMENT TASK REQUIREMENT: The previous practical package failed hidden-test generation or review after its bounded repair attempts. Generate a simpler but useful replacement task from the assigned topic group, with deterministic behavior, explicit input bounds, an exact non-empty output contract, and exactly three short non-empty public examples. Keep the Python reference implementation straightforward and ensure at least 15 valid, distinct hidden inputs can be generated without relying on ambiguous parsing, unstated edge rules, or complicated output formatting. Recompute and verify every public example."
               : /STDIN_STDOUT.*non-empty.*input/i.test(previousMessage)
                 ? "REPLACEMENT TASK REQUIREMENT: The previous draft had an empty input in a public example. Generate exactly three distinct examples, and give every example a concrete, non-empty STDIN value and its correct non-empty output. Recheck all three examples against the input grammar and task rules."
               : regenerationReason === "coreOperation"
@@ -744,8 +775,8 @@ async function generateAssessment(course: Course, runtime: Runtime, userId: numb
                         : regenerationReason === "emptyOutput"
                           ? "REPLACEMENT TASK REQUIREMENT: Every example and the output contract must use a concrete, non-empty stdout value. When the logical result is absence, define an explicit non-empty sentinel such as NONE and use it consistently. Recompute every example from the rules."
                       : regenerationReason === "publicExamples"
-                        ? "REPLACEMENT TASK REQUIREMENT: The previous draft failed public-example validation. Generate a simple STDIN_STDOUT task that reads a concrete integer and produces output that depends on it. Do not make a no-input, fixed-output, or constant-output task. Include exactly three short examples with non-empty inputs and outputs; calculate each from the rules and verify every output before returning."
-                        : `REPLACEMENT TASK REQUIREMENT: The previous draft failed independent review of its task contract. Generate a substantially different task with a complete, unambiguous input/output contract. For every decimal or floating-point output, state exact precision and rounding or an explicit tolerance. Recompute each example from the written rules and verify its output before returning it.`;
+                        ? "REPLACEMENT TASK REQUIREMENT: The previous draft failed public-example validation. Generate a simple STDIN_STDOUT task using a compact, single-line input grammar. Each of its exactly three distinct examples must contain only the specified data tokens on one non-empty line—no labels, type names, comments, blank lines, or undeclared extra tokens/lines. Use multiple input lines only when the statement explicitly defines every line. Make outputs non-empty and deterministic; recalculate each example against the written rules and reference before returning. Do not make a no-input or constant-output task."
+            : `REPLACEMENT TASK REQUIREMENT: The previous draft failed independent review of its task contract. Generate a substantially different task with a complete, unambiguous input/output contract. Prefer integer-only inputs and outputs; avoid weights, measurements, percentages, and floating-point calculations unless an assigned topic requires them. If a decimal output is required, state exact precision and the rounding rule in the learner-facing statement and examples. Recompute each example from the written rules and verify its output before returning it.`;
             const replacementContext = [
               taskContext,
               replacementRequirement,

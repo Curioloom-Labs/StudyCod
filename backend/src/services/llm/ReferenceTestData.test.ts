@@ -36,10 +36,12 @@ test('expected outputs come from execution and the reviewer receives the execute
   const candidates = [...inputs, '10 1', '0 0'];
   let calls = 0;
   const provider: LLMProvider = {
-    async generateJSON<T>(prompt: string, schema: object): Promise<T> {
+    async generateJSON<T>(prompt: string, schema: object, instructions = ''): Promise<T> {
       if (++calls === 1) {
         assert.equal((schema as { properties: object }).properties.hasOwnProperty('tests'), false);
         assert.equal((schema as { properties: { inputs: { minItems: number; maxItems: number } } }).properties.inputs.minItems, 4);
+        assert.match(instructions ?? '', /exact line\/token\/record counts/);
+        assert.match(instructions ?? '', /letters only/);
         return { referenceSolution: source, inputs: candidates } as T;
       }
       const payload = JSON.parse(prompt);
@@ -110,7 +112,13 @@ test('Tkinter reference generation uses validated JSON events and reviews UI sna
         assert.equal(JSON.parse(prompt).existingExamples[0].input, '{"events":[]}');
         return {
           referenceSolution: source,
-          inputs: [input, '[{"type":"click","x":50,"y":20}]', '{"events":[{"type":"click","x":1280,"y":20}]}'],
+          inputs: [
+            input,
+            '[{"type":"click","x":50,"y":20}]',
+            '{"events":[{"type":"click","x":1280,"y":20}]}',
+            '{"events":[{"type":"click","x":30,"y":20}]}',
+            '{"events":[{"type":"click","x":40,"y":20}]}',
+          ],
         } as T;
       }
       const payload = JSON.parse(prompt);
@@ -174,7 +182,7 @@ test('public example and repeated candidate inputs are discarded before executio
   const source = 'a,b=map(int,input().split()); print(a+b)';
   const provider: LLMProvider = {
     async generateJSON<T>(prompt: string): Promise<T> {
-      if (++calls === 1) return { referenceSolution: source, inputs: ['2 3', '4 5', '4 5', '6 7'] } as T;
+      if (++calls === 1) return { referenceSolution: source, inputs: ['2 3', '4 5', '4 5', '6 7', '8 9', '10 11'] } as T;
       const payload = JSON.parse(prompt);
       assert.deepEqual(payload.candidateTests.map((test: { input: string }) => test.input), ['4 5', '6 7']);
       return { valid: true, invalidSource: 'none', issues: [] } as T;
@@ -193,18 +201,201 @@ test('public example and repeated candidate inputs are discarded before executio
   assert.deepEqual(tests.map(test => test.output), ['9', '13']);
 });
 
-test('large reference suites request a small candidate reserve instead of doubling the response', async () => {
-  let calls = 0;
+test('a runtime-failing hidden candidate is replaced from the requested reserve', async () => {
+  const source = 'a,b=map(int,input().split()); print(a+b)';
+  let providerCalls = 0;
+  let executionCalls = 0;
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string): Promise<T> {
+      if (++providerCalls === 1) return { referenceSolution: source, inputs: ['1 1', '2 1', '3 1', '4 1'] } as T;
+      const payload = JSON.parse(prompt);
+      assert.deepEqual(payload.candidateTests, [
+        { input: '1 1', output: '2' },
+        { input: '3 1', output: '4' },
+      ]);
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+  const tests = await generateReferenceTestData(provider, {
+    taskDescription: 'Read two integers a and b, then print their sum.',
+    lang: 'PYTHON',
+    count: 2,
+    publicExamples: [{ input: '0 1', output: '1' }],
+    executeReference: async (_program, inputs) => {
+      executionCalls += 1;
+      if (executionCalls === 1) {
+        assert.deepEqual(inputs, ['1 1', '2 1']);
+        throw makeAIValidationError('generateTestData', 'Reference program failed on input 3: RE; input count mismatch');
+      }
+      assert.deepEqual(inputs, ['1 1', '3 1']);
+      return ['2', '4'];
+    },
+  });
+
+  assert.deepEqual(tests.map(({ input, output }) => ({ input, output })), [
+    { input: '1 1', output: '2' },
+    { input: '3 1', output: '4' },
+  ]);
+  assert.equal(executionCalls, 2);
+  assert.equal(providerCalls, 2);
+});
+
+test('the candidate reserve replaces several hidden inputs that produce empty output', async () => {
+  let providerCalls = 0;
+  let executionCalls = 0;
+  const inputs = Array.from({ length: 20 }, (_, index) => String(index + 1));
   const provider: LLMProvider = {
     async generateJSON<T>(prompt: string, schema: object): Promise<T> {
+      providerCalls++;
+      if (providerCalls === 1) {
+        const inputSchema = (schema as { properties: { inputs: { minItems: number; maxItems: number } } }).properties.inputs;
+        assert.equal(inputSchema.minItems, 20);
+        assert.equal(inputSchema.maxItems, 20);
+        return { referenceSolution: 'print(input())', inputs } as T;
+      }
+      const candidateTests = JSON.parse(prompt).candidateTests;
+      assert.equal(candidateTests.length, 15);
+      assert.deepEqual(candidateTests[5], { input: '20', output: '20' });
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+
+  const tests = await generateReferenceTestData(provider, {
+    taskDescription: 'Read one integer and print that integer.',
+    lang: 'PYTHON',
+    count: 15,
+    publicExamples: [
+      { input: '100', output: '100' },
+      { input: '200', output: '200' },
+      { input: '300', output: '300' },
+    ],
+    executeReference: async (_source, selectedInputs) => {
+      executionCalls++;
+      assert.equal(selectedInputs[5], executionCalls === 1 ? '6' : String(14 + executionCalls));
+      if (executionCalls <= 5) {
+        throw makeAIValidationError('generateTestData', 'Reference program failed on input 9: WA; Wrong answer');
+      }
+      return selectedInputs.map(input => input.trim());
+    },
+  });
+
+  assert.equal(tests.length, 15);
+  assert.equal(executionCalls, 6);
+  assert.equal(providerCalls, 2);
+});
+
+test('contract review replaces only candidate inputs that violate task constraints', async () => {
+  const source = 'print(int(input()))';
+  let providerCalls = 0;
+  const executedInputs: string[][] = [];
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string): Promise<T> {
+      providerCalls++;
+      if (providerCalls === 1) {
+        return { referenceSolution: source, inputs: ['3', '11', '4', '5'] } as T;
+      }
+      const candidateTests = JSON.parse(prompt).candidateTests;
+      if (providerCalls === 2) {
+        assert.deepEqual(candidateTests.map((candidate: { input: string }) => candidate.input), ['3', '11']);
+        return {
+          valid: false,
+          invalidSource: 'candidateTests',
+          issues: ['Candidate test 2 violates the constraint that n is between 1 and 10.'],
+        } as T;
+      }
+      assert.deepEqual(candidateTests.map((candidate: { input: string }) => candidate.input), ['3', '4']);
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+
+  const tests = await generateReferenceTestData(provider, {
+    taskDescription: 'Read one integer n. It is guaranteed that 1 <= n <= 10. Print n on one line.',
+    lang: 'JAVA',
+    count: 2,
+    publicExamples: [{ input: '2', output: '2' }],
+    executeReference: async (_program, inputs) => {
+      executedInputs.push([...inputs]);
+      return inputs.map(input => input.trim());
+    },
+  });
+
+  assert.deepEqual(executedInputs, [['3', '11'], ['3', '4']]);
+  assert.deepEqual(tests.map(({ input, output }) => ({ input, output })), [
+    { input: '3', output: '3' },
+    { input: '4', output: '4' },
+  ]);
+  assert.equal(providerCalls, 3);
+});
+
+test('contract review repairs the Python oracle for a Java-specific decimal rounding mismatch', async () => {
+  let providerCalls = 0;
+  const executedSources: string[] = [];
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string, _schema: object, systemPrompt?: string): Promise<T> {
+      providerCalls++;
+      const payload = JSON.parse(prompt);
+      if (providerCalls === 1) {
+        return { referenceSolution: 'print(format(float(input()), ".1f"))', inputs: ['50.55', '50.56', '50.57'] } as T;
+      }
+      if (providerCalls === 2) {
+        assert.equal(payload.candidateTests[0].input, '50.55');
+        assert.equal(payload.candidateTests[0].output, '50.5');
+        return {
+          valid: false,
+          invalidSource: 'candidateTests',
+          issues: ["Candidate test '50.55' expects output '50.6', but Java decimal formatting rounds this value to '50.6'."],
+        } as T;
+      }
+      if (providerCalls === 3) {
+        assert.equal(payload.studentLanguage, 'JAVA');
+        assert.deepEqual(payload.reviewFindings.length, 1);
+        assert.match(systemPrompt ?? '', /ROUND_HALF_UP/);
+        return { referenceSolution: 'from decimal import Decimal, ROUND_HALF_UP\nprint(Decimal(input()).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))' } as T;
+      }
+      assert.equal(payload.candidateTests[0].input, '50.55');
+      assert.equal(payload.candidateTests[0].output, '50.6');
+      return { valid: true, invalidSource: 'none', issues: [] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+
+  const tests = await generateReferenceTestData(provider, {
+    taskDescription: 'Read one decimal value. Print it rounded to one decimal place using Java Formatter rounding.',
+    lang: 'JAVA',
+    count: 1,
+    publicExamples: [{ input: '0', output: '0.0' }],
+    executeReference: async (source, inputs) => {
+      executedSources.push(source);
+      return [source.includes('ROUND_HALF_UP') ? '50.6' : '50.5'];
+    },
+  });
+
+  assert.equal(tests[0].input, '50.55');
+  assert.equal(tests[0].output, '50.6');
+  assert.equal(executedSources.length, 2);
+  assert.match(executedSources[1], /ROUND_HALF_UP/);
+  assert.equal(providerCalls, 4);
+});
+
+test('large reference suites request a small candidate reserve instead of doubling the response', async () => {
+  let calls = 0;
+  let generationOptions: LLMGenerateOptions | undefined;
+  const provider: LLMProvider = {
+    async generateJSON<T>(prompt: string, schema: object, systemPrompt?: string, options?: LLMGenerateOptions): Promise<T> {
       calls++;
       if (calls === 1) {
+        generationOptions = options;
         const inputSchema = (schema as { properties: { inputs: { minItems: number; maxItems: number } } }).properties.inputs;
-        assert.equal(inputSchema.minItems, 25);
-        assert.equal(inputSchema.maxItems, 25);
+        assert.equal(inputSchema.minItems, 27);
+        assert.equal(inputSchema.maxItems, 27);
+        assert.match(systemPrompt ?? '', /Input uniqueness is mandatory/);
+        assert.match(systemPrompt ?? '', /Pairwise compare the full inputs/);
         return {
           referenceSolution: 'print(input())',
-          inputs: Array.from({ length: 25 }, (_, index) => String(index + 1)),
+          inputs: Array.from({ length: 27 }, (_, index) => String(index + 1)),
         } as T;
       }
       assert.equal(JSON.parse(prompt).candidateTests.length, 20);
@@ -221,6 +412,7 @@ test('large reference suites request a small candidate reserve instead of doubli
 
   assert.equal(result.length, 20);
   assert.equal(calls, 2);
+  assert.equal(generationOptions?.strictJsonSchema, true);
 });
 
 test('insufficient distinct non-public reference inputs cannot reach code execution', async () => {
@@ -237,6 +429,49 @@ test('insufficient distinct non-public reference inputs cannot reach code execut
     }), /Reference test generation validation failed/);
     assert.equal(executions, 0);
   }
+});
+
+test('candidate input shortages request new inputs without rewriting the reference oracle', async () => {
+  const provider: LLMProvider = {
+    async generateJSON<T>() {
+      return { referenceSolution: 'print(input())', inputs: ['1', '1', '1', '1'] } as T;
+    },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+
+  await assert.rejects(generateReferenceTestData(provider, {
+    taskDescription: 'Read one integer and print it.', lang: 'PYTHON', count: 2,
+    publicExamples: [{ input: '0', output: '0' }],
+    executeReference: async () => { throw new Error('Must not execute an incomplete candidate suite'); },
+  }), (error: unknown) => {
+    assert.ok(error instanceof AIValidationError);
+    const feedback = buildTaskValidationFeedback(error.message, error.rawResponse);
+    assert.match(feedback, /REPAIR THE REFERENCE TEST INPUTS ONLY/);
+    assert.match(feedback, /exactly 2 distinct, non-empty, valid inputs/);
+    assert.match(feedback, /referenceSolution byte-for-byte unchanged/);
+    return true;
+  });
+});
+
+test('malformed structured reference responses are preserved for a targeted repair', async () => {
+  const malformedResponse = { referenceSolution: 'print(input())', inputs: '1' };
+  const provider: LLMProvider = {
+    async generateJSON<T>() { return malformedResponse as T; },
+    async generateText() { throw new Error('Unexpected text call'); },
+  };
+
+  await assert.rejects(generateReferenceTestData(provider, {
+    taskDescription: 'Read one integer and print it.', lang: 'PYTHON', count: 2,
+    executeReference: async () => { throw new Error('Must not execute an invalid response'); },
+  }), (error: unknown) => {
+    assert.ok(error instanceof AIValidationError);
+    assert.deepEqual(error.rawResponse, malformedResponse);
+    const feedback = buildTaskValidationFeedback(error.message, error.rawResponse);
+    assert.match(feedback, /REPAIR THE REFERENCE TEST INPUTS ONLY/);
+    assert.match(feedback, /exactly the required number of distinct, non-empty, valid inputs/);
+    assert.match(feedback, /"inputs":"1"/);
+    return true;
+  });
 });
 
 test('a Java or C++ reference is rejected before the Python executor runs', async () => {

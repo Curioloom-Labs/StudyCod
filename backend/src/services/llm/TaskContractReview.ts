@@ -36,7 +36,7 @@ STATEMENT CONTRACT (mandatory):
 - Keep the narrative consistent with the entire valid input domain. If a signed numeric field permits negative values, explain what a negative value means in the story (such as a refund, debt, or net change), or use a neutral signed-value context; do not describe signed values as inherently non-negative counts, sales or lengths.
 - Specify every rule that determines the answer: inclusive/exclusive boundaries, equality, ties, order, duplicates, case sensitivity and the no-match/default result whenever relevant. Do not introduce cases outside the valid domain.
 - For every public example, parse the declared input structure exactly: counts such as n and q must match the supplied values and rows, with no missing or extra tokens; recheck the output line count against the same counts.
-- Specify exact output literals, order, separators and line count. For decimal results state precision and rounding, or an explicitly allowed absolute/relative error. Never rely on examples or the title to supply missing rules.
+- Specify exact output literals, order, separators and line count. For decimal results state precision and rounding, or an explicitly allowed absolute/relative error. For numeric collections, define one canonical serialization for every element; never mix spellings such as "10" and "10.0" under a vague "standard format". State whether integer-valued decimals include trailing zeros.
 - Public examples must follow these same rules. Recalculate each answer; do not use a guessed or placeholder example.
 - For NO_INPUT_FIXED_OUTPUT, use exactly one public example with empty input. Set outputFormat to the literal stdout with no surrounding prose or code fence, and make examples[0].output byte-for-byte identical to outputFormat, including spaces, punctuation and line breaks.
 - Keep all these rules in the learner-visible statement, inputFormat, outputFormat or constraints. Conciseness must not remove a rule needed to determine the answer.
@@ -48,6 +48,17 @@ export function buildTaskValidationFeedback(message: string, rejectedCandidate?:
   const draft = rejectedCandidate as Record<string, unknown>;
   const reference = typeof draft.referenceSolution === 'string';
   const tkinterReference = reference && draft._pythonRuntimeProfile === 'TKINTER';
+  const candidateInputs = draft.inputs;
+  const malformedCandidateInputs = !Array.isArray(candidateInputs)
+    || candidateInputs.length === 0
+    || candidateInputs.some(input => typeof input !== 'string' || !input.trim());
+  const candidateInputRepair = reference && (
+    (/distinct\s+(?:non-empty\s+)?inputs?/i.test(message)
+      && /(?:required|public examples|candidate inputs)/i.test(message))
+    || (malformedCandidateInputs && /expected a complete reference program and valid inputs/i.test(message))
+  );
+  const requiredInputCount = message.match(/\b(\d+)\s+are\s+required\b/i)?.[1]
+    ?? message.match(/\b(\d+)\s+required\b/i)?.[1];
   const conditionDraft = typeof draft.statement === 'string' && Array.isArray(draft.examples);
   const fields = reference
     ? tkinterReference
@@ -61,7 +72,9 @@ export function buildTaskValidationFeedback(message: string, rejectedCandidate?:
     // Never truncate JSON halfway through a parsing or output rule.
     if (serialized.length > MAX_TASK_DESCRIPTION_CHARS || serialized === '{}') return correction;
     const repair = reference
-      ? tkinterReference
+      ? candidateInputRepair
+        ? `REPAIR THE REFERENCE TEST INPUTS ONLY below. Keep referenceSolution byte-for-byte unchanged. Replace inputs with exactly ${requiredInputCount ?? 'the required number of'} distinct, non-empty, valid inputs that follow the learner-visible grammar; none may match a public example or another candidate. Cover distinct valid value classes and boundaries when the statement allows them. Do not include labels or expected outputs; the server executes the unchanged referenceSolution to compute outputs.${tkinterReference ? ' For TKINTER, inputs must be valid JSON event payloads supported by the stated virtual UI contract.' : ''}`
+        : tkinterReference
         ? 'REPAIR THE REJECTED TKINTER REFERENCE APPLICATION below using the Judge/runtime finding. Return a complete runnable Python 3 Tkinter application that imports tkinter, constructs exactly one Tk() root, creates the widgets and callbacks required by the supplied statement, and calls root.mainloop(). The Judge injects UI events; do not read stdin, parse JSON, simulate events yourself, or print the snapshot. Return valid JSON event-payload inputs. Preserve the supplied statement and public examples; never change expected answers to fit broken code.'
         : 'REPAIR THE REJECTED REFERENCE PROGRAM below using the compiler/runtime finding. Return syntactically valid Python 3 with matching quotes and indentation, plus valid candidate inputs. Preserve the supplied statement and public examples; never change expected answers to fit broken code.'
       : conditionDraft

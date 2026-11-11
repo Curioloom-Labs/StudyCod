@@ -5,6 +5,7 @@ import {
   assessmentFailureReason,
   assessmentGenerationErrorLogDetails,
   buildDiagnosticPracticalTaskContext,
+  diagnosticTaskRegenerationReason,
   generateDiagnosticQuestionsWithCoverageRetry,
   generateDiagnosticTaskPackageWithRetry,
   groupDiagnosticTopicsForPracticals,
@@ -73,7 +74,7 @@ test("diagnostic practical context preserves mixed-topic and example requirement
 
   for (const locale of ["uk", "en"] as const) {
     const context = buildDiagnosticPracticalTaskContext("Java Core", topics, "test-variation", locale);
-    assert.ok(context.length <= 1_200, "diagnostic requirements and all six topics must fit the compacted theory context");
+    assert.ok(context.length <= 1_350, "diagnostic requirements and all six topics must fit the compacted theory context");
     assert.ok(context.startsWith(locale === "en" ? "COURSE DIAGNOSTIC:" : "ДІАГНОСТИКА КУРСУ:"));
     assert.ok(context.indexOf("Topic 1") > context.indexOf("Assigned course topics:"));
     for (const topic of topics) {
@@ -81,7 +82,13 @@ test("diagnostic practical context preserves mixed-topic and example requirement
     }
     assert.ok(context.includes("test-variation"));
     assert.match(context, locale === "en" ? /at least two assigned topics/ : /щонайменше дві призначені теми/);
-    assert.match(context, locale === "en" ? /exactly three distinct non-empty input\/output examples/ : /рівно три різні приклади/);
+    assert.match(context, locale === "en" ? /exactly three distinct non-empty examples/ : /рівно три різні непорожні приклади/);
+    assert.match(context, locale === "en" ? /one non-empty input line/ : /Ввід — в один рядок/);
+    assert.match(context, locale === "en" ? /never labels\/type names\/comments or blank\/extra lines/ : /без міток\/назв типів\/коментарів і порожніх чи зайвих рядків/);
+  assert.match(context, locale === "en" ? /Prefer integers/ : /Переважно використовуй цілі числа/);
+  assert.match(context, locale === "en" ? /trailing-zero policy/ : /правило кінцевих нулів/);
+  assert.match(context, locale === "en" ? /decimal point/ : /десяткову крапку/);
+  assert.match(context, locale === "en" ? /non-integer example/ : /приклад із нецілим результатом/);
   }
 });
 
@@ -317,6 +324,24 @@ test("diagnostic assessment regenerates the whole task for statement or public-e
   assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("invalid hidden oracle output"), {
     invalidSource: "candidateTests",
   })), false);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("TASK_CONTRACT_REVIEW_FAILED[statement]: The intended comparison rule is unclear."), {
+    name: "AIValidationError",
+    mode: "generateTestData",
+    invalidSource: "statement",
+    issues: ["The intended comparison rule is unclear."],
+  })), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Reference test generation validation failed: expected a complete reference program and valid inputs"), {
+    name: "AIValidationError",
+    mode: "generateTestData",
+    assessmentStage: "hidden_tests",
+    statusCode: 503,
+  })), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("rate limited"), {
+    name: "AIValidationError",
+    mode: "generateTestData",
+    assessmentStage: "hidden_tests",
+    statusCode: 429,
+  })), false);
   assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Task generation validation failed: decision task is too shallow; create richer behaviour with enough valid cases for meaningful tests"), {
     name: "AIValidationError",
     mode: "generateTask",
@@ -329,6 +354,26 @@ test("diagnostic assessment regenerates the whole task for statement or public-e
     name: "AIValidationError",
     mode: "generateTask",
   })), true);
+  assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Task generation validation failed: examples.1.output: example output must be a non-empty string"), {
+    name: "AIValidationError",
+    mode: "generateTask",
+  })), true);
+  assert.equal(diagnosticTaskRegenerationReason(Object.assign(new Error("Example 3: Task generation validation failed: every STDIN_STDOUT example must have non-empty input"), {
+    name: "AIValidationError",
+    mode: "generateTask",
+    assessmentStage: "practical_task",
+    statusCode: 503,
+  })), "publicExamples");
+  assert.equal(diagnosticTaskRegenerationReason(Object.assign(new Error("Task generation validation failed: examples.1.output: example output must be a non-empty string"), {
+    name: "AIValidationError",
+    mode: "generateTask",
+    assessmentStage: "practical_task",
+    statusCode: 503,
+  })), "publicExamples");
+  assert.equal(diagnosticTaskRegenerationReason(Object.assign(new Error("Request aborted (deadline exceeded)"), {
+    assessmentStage: "practical_task",
+    statusCode: 503,
+  })), "providerFailure");
   assert.equal(shouldRegenerateDiagnosticTask(Object.assign(new Error("Task generation validation failed: practicalTask reveals an implementation technique"), {
     name: "AIValidationError",
     mode: "generateTask",
@@ -358,6 +403,49 @@ test("diagnostic assessment regenerates the whole task for statement or public-e
     statusCode: 503,
   })), false);
   assert.equal(shouldRegenerateDiagnosticTask(new Error("provider unavailable")), false);
+});
+
+test("a reviewer clarification on a generated hidden-test task regenerates the entire package", async () => {
+  const clarificationRequired = Object.assign(new Error("TASK_CONTRACT_REVIEW_FAILED[statement]: The intended comparison rule is unclear."), {
+    name: "AIValidationError",
+    mode: "generateTestData",
+    statusCode: 503,
+    invalidSource: "statement",
+    issues: ["The intended comparison rule is unclear."],
+  });
+  const attempts: number[] = [];
+  const replacement = { practicalTask: "A replacement with an explicit comparison rule." };
+
+  const result = await generateDiagnosticTaskPackageWithRetry(async (attempt, previousError) => {
+    attempts.push(attempt);
+    if (attempt === 1) throw clarificationRequired;
+    assert.equal(previousError, clarificationRequired);
+    return replacement;
+  });
+
+  assert.deepEqual(attempts, [1, 2]);
+  assert.equal(result, replacement);
+});
+
+test("a failed hidden-test package regenerates the complete practical task within the retry limit", async () => {
+  const invalidHiddenSuite = Object.assign(new Error("Reference test generation validation failed after bounded retries."), {
+    name: "AIValidationError",
+    mode: "generateTestData",
+    assessmentStage: "hidden_tests",
+    statusCode: 503,
+  });
+  const attempts: number[] = [];
+  const replacement = { practicalTask: "A simpler task with deterministic output and exact bounds." };
+
+  const result = await generateDiagnosticTaskPackageWithRetry(async (attempt, previousError) => {
+    attempts.push(attempt);
+    if (attempt === 1) throw invalidHiddenSuite;
+    assert.equal(previousError, invalidHiddenSuite);
+    return replacement;
+  });
+
+  assert.deepEqual(attempts, [1, 2]);
+  assert.equal(result, replacement);
 });
 
 test("a task with an empty indexed public-example input retries the whole package", async () => {
@@ -461,12 +549,13 @@ test("a shallow decision task is regenerated once with a richer replacement pack
   assert.equal(result, validReplacement);
 });
 
-test("whole-task regeneration allows three bounded retries and stops on unrelated failures", async () => {
+test("whole-task regeneration allows four bounded retries and stops on unrelated failures", async () => {
   const attempts: number[] = [];
   const invalidStatement = Object.assign(new Error("missing decimal precision"), { invalidSource: "statement" });
   const stillInvalid = Object.assign(new Error("replacement still missing precision"), { invalidSource: "statement" });
   const thirdInvalid = Object.assign(new Error("third replacement still missing precision"), { invalidSource: "statement" });
   const fourthInvalid = Object.assign(new Error("fourth replacement still missing precision"), { invalidSource: "statement" });
+  const fifthInvalid = Object.assign(new Error("fifth replacement still missing precision"), { invalidSource: "statement" });
   await assert.rejects(generateDiagnosticTaskPackageWithRetry(async (attempt, previousError) => {
     attempts.push(attempt);
     if (attempt === 1) throw invalidStatement;
@@ -478,10 +567,14 @@ test("whole-task regeneration allows three bounded retries and stops on unrelate
       assert.equal(previousError, stillInvalid);
       throw thirdInvalid;
     }
-    assert.equal(previousError, thirdInvalid);
-    throw fourthInvalid;
-  }), /fourth replacement still missing precision/);
-  assert.deepEqual(attempts, [1, 2, 3, 4]);
+    if (attempt === 4) {
+      assert.equal(previousError, thirdInvalid);
+      throw fourthInvalid;
+    }
+    assert.equal(previousError, fourthInvalid);
+    throw fifthInvalid;
+  }), /fifth replacement still missing precision/);
+  assert.deepEqual(attempts, [1, 2, 3, 4, 5]);
 
   attempts.length = 0;
   const providerUnavailable = new Error("provider unavailable");

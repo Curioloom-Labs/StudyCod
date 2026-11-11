@@ -146,6 +146,23 @@ test('quiz prompt operations receive a bounded repair budget without changing ot
   await runWithPromptExecutionContext('task.generated-tests', {}, async () => {
     assert.equal(getCurrentAIExecutionContext()?.retryBudget?.remaining, 2);
   });
+
+  await runWithPromptExecutionContext('task.reference-tests', {}, async () => {
+    assert.equal(getCurrentAIExecutionContext()?.retryBudget?.remaining, 8);
+  });
+});
+
+test('parallel reference test generations receive isolated repair budgets', async () => {
+  const remaining: number[] = [];
+  await Promise.all(Array.from({ length: 2 }, (_, index) => runWithPromptExecutionContext(
+    'task.reference-tests',
+    { traceId: `reference-test-${index}`, forceNewContext: true },
+    async () => {
+      for (let retry = 0; retry < 7; retry += 1) assert.equal(consumeCurrentAIExecutionRetry(), true);
+      remaining.push(getCurrentAIExecutionContext()?.retryBudget?.remaining ?? -1);
+    },
+  )));
+  assert.deepEqual(remaining, [1, 1]);
 });
 
 test('independent diagnostic batches receive fresh retry budgets while nested calls share them', async () => {

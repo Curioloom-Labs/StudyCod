@@ -582,6 +582,47 @@ test('OpenRouterProvider removes response_format for gemma-3n-e2b-it', async () 
   process.env.OPENROUTER_URL = old.OPENROUTER_URL;
 });
 
+test('OpenRouterProvider preserves strict JSON Schema for Gemma and requires a compatible endpoint', async (t) => {
+  const names = ['OPENROUTER_API_KEY', 'OPENROUTER_BACKUP_API_KEYS', 'OPENROUTER_MODEL', 'OPENROUTER_TEXT_MODEL', 'OPENROUTER_JSON_MODEL', 'OPENROUTER_FALLBACK_MODELS', 'OPENROUTER_MODEL_FALLBACKS', 'OPENROUTER_URL'];
+  const previous = names.map(name => process.env[name]);
+  t.after(() => names.forEach((name, index) => {
+    if (previous[index] === undefined) delete process.env[name];
+    else process.env[name] = previous[index];
+  }));
+  process.env.OPENROUTER_API_KEY = 'sk-or-v1-gemma-strict-schema-test';
+  process.env.OPENROUTER_BACKUP_API_KEYS = '';
+  process.env.OPENROUTER_MODEL = 'google/gemma-4-26b-a4b-it';
+  process.env.OPENROUTER_TEXT_MODEL = '';
+  process.env.OPENROUTER_JSON_MODEL = '';
+  process.env.OPENROUTER_FALLBACK_MODELS = '';
+  process.env.OPENROUTER_MODEL_FALLBACKS = '';
+  process.env.OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+  const calls: FetchCall[] = [];
+  t.mock.method(globalThis, 'fetch', async (url: any, init: any) => {
+    calls.push({ url: String(url), body: JSON.parse(String(init?.body ?? '{}')) });
+    return makeOkResponse('{"referenceSolution":"print(1)","inputs":["1"]}');
+  });
+  const schema = {
+    type: 'object',
+    properties: { referenceSolution: { type: 'string' }, inputs: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 1 } },
+    required: ['referenceSolution', 'inputs'],
+    additionalProperties: false,
+  };
+
+  const result = await new OpenRouterProvider().generateJSON<{ referenceSolution: string; inputs: string[] }>(
+    'Generate a reference oracle and one input.', schema, 'Return a reference test package.',
+    { maxRetries: 0, strictJsonSchema: true },
+  );
+
+  assert.deepEqual(result.inputs, ['1']);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].body.response_format.type, 'json_schema');
+  assert.equal(calls[0].body.response_format.json_schema.strict, true);
+  assert.deepEqual(calls[0].body.response_format.json_schema.schema, schema);
+  assert.deepEqual(calls[0].body.provider, { require_parameters: true });
+});
+
 test('OpenRouterProvider falls back to configured model when primary model is rate-limited upstream', async () => {
   const old = {
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,

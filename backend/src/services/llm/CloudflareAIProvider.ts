@@ -541,6 +541,7 @@ ${JSON.stringify(schema, null, 2)}
     prevTopics?: string;
     previousTasks?: string;
     allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
+    exampleCount?: number;
     validationFeedback?: string;
     userId?: number;
     topicId?: number;
@@ -559,7 +560,10 @@ ${JSON.stringify(schema, null, 2)}
     })();
     const response = await this.callCloudflareWorker('generate-task', {
       prompt: JSON.stringify(params),
-      systemPrompt: TASK_PRECISION_INSTRUCTIONS + olympiadPolicy + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nResolve this issue in a complete corrected task.` : '')
+      systemPrompt: TASK_PRECISION_INSTRUCTIONS
+        + olympiadPolicy
+        + (params.exampleCount ? `\nPUBLIC EXAMPLE COUNT (mandatory): Return exactly ${params.exampleCount} distinct public examples. Do not return more or fewer.` : '')
+        + (params.validationFeedback ? `\nPREVIOUS VALIDATION FAILURE: ${params.validationFeedback}\nResolve this issue in a complete corrected task.` : '')
     }, {
       promptId: options?.promptId ?? 'task.generate',
       userId: params.userId,

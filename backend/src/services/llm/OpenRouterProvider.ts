@@ -121,7 +121,13 @@ interface OpenRouterRequest {
   };
   response_format?: {
     type: string;
+    json_schema?: {
+      name: string;
+      strict: boolean;
+      schema: object;
+    };
   };
+  provider?: { require_parameters?: boolean };
   temperature?: number;
   max_tokens?: number;
 }
@@ -775,7 +781,9 @@ export class OpenRouterProvider implements LLMProvider {
     if (reasoning) {
       adaptedRequest.reasoning = reasoning;
     }
-    if (shouldRemoveJsonMode(model) && adaptedRequest.response_format) {
+    // Some Gemma routes reject JSON mode. Keep strict JSON Schema requests;
+    // their caller sets provider.require_parameters to route only compatible endpoints.
+    if (shouldRemoveJsonMode(model) && adaptedRequest.response_format?.type === 'json_object') {
       delete adaptedRequest.response_format;
     }
     const primary = (env.OPENROUTER_API_KEY || '').trim();
@@ -1263,15 +1271,24 @@ export class OpenRouterProvider implements LLMProvider {
       role: 'user',
       content: jsonPrompt
     });
+    const responseFormat = options.strictJsonSchema
+      ? {
+        type: 'json_schema',
+        json_schema: {
+          name: 'task_reference_tests',
+          strict: true,
+          schema,
+        },
+      }
+      : { type: 'json_object' };
     const {
       response,
       model
     } = await this.callOpenRouterWithModelFallback((candidateModel: string) => ({
       model: candidateModel,
       messages,
-      response_format: {
-        type: 'json_object'
-      },
+      response_format: responseFormat,
+      ...(options.strictJsonSchema ? { provider: { require_parameters: true } } : {}),
       temperature: options.temperature,
       max_tokens: options.maxTokens
     }), options, modelCandidates, 'json');

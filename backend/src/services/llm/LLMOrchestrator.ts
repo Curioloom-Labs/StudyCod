@@ -497,6 +497,8 @@ export class LLMOrchestrator {
     previousTasks?: string;
     /** Optional IO-type allowlist (e.g., disallow STDIN before input is taught). */
     allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
+    /** Exact public-example count for flows with a fixed assessment contract. */
+    exampleCount?: number;
     userId?: number;
     topicId?: number;
     language?: "uk" | "en";
@@ -525,6 +527,8 @@ export class LLMOrchestrator {
     previousTasks?: string;
     /** Optional IO-type allowlist (e.g., disallow STDIN before input is taught). */
     allowedIoTypes?: Array<"STDIN_STDOUT" | "NO_INPUT_FIXED_OUTPUT" | "NO_INPUT_FREE_OUTPUT">;
+    /** Exact public-example count for flows with a fixed assessment contract. */
+    exampleCount?: number;
     userId?: number;
     topicId?: number;
     language?: "uk" | "en";
@@ -580,14 +584,25 @@ export class LLMOrchestrator {
             prevTopics: params.prevTopics,
             previousTasks: params.previousTasks,
             allowedIoTypes: params.allowedIoTypes,
+            exampleCount: params.exampleCount,
             validationFeedback,
             userId: params.userId,
             topicId: params.topicId
           }, {
             signal: params.signal
           });
+          if (params.exampleCount) {
+            const rawExamples = readProperty(raw, 'examples');
+            if (!Array.isArray(rawExamples) || rawExamples.length !== params.exampleCount) {
+              throw makeAIValidationError(
+                'generateTask',
+                `Task generation validation failed: expected exactly ${params.exampleCount} public examples; received ${Array.isArray(rawExamples) ? rawExamples.length : 0}.`,
+                raw,
+              );
+            }
+          }
           const validationTopicIndex = (olympiadContract || params.isCatalogPractice === true) && params.topicIndex === 0 ? 1 : params.topicIndex;
-          return await validateAndReviewGeneratedTask(this.cloudflareProvider, raw, {
+          const validated = await validateAndReviewGeneratedTask(this.cloudflareProvider, raw, {
             expectedTopic: params.topicTitle,
             topicIndex: validationTopicIndex,
             allowedIoTypes: params.allowedIoTypes,
@@ -603,6 +618,7 @@ export class LLMOrchestrator {
               validateOlympiadDebuggingTask(olympiadContract, task);
             } : undefined,
           });
+          return validated;
         } catch (error) {
           if (attempt !== 0 || !isInvalidGeneratedContentError(error)) throw error;
           const detail = errorMessage(error).replace(/\s+/g, ' ').trim().slice(0, 800);
@@ -918,6 +934,7 @@ Return ONLY JSON without explanations.`
     signal?: AbortSignal;
     semanticRetries?: number;
     validationFeedback?: string;
+    exampleCount?: number;
     requestId?: string;
   }, providerOverride?: LLMProvider): Promise<AiTaskGenerationResult> {
     const provider = providerOverride ?? this.openRouterProvider;
@@ -928,7 +945,11 @@ Return ONLY JSON without explanations.`
       ? params.allowedIoTypes
       : ["STDIN_STDOUT", "NO_INPUT_FIXED_OUTPUT", "NO_INPUT_FREE_OUTPUT"];
     const allowedIoTypesText = allowedIoTypes.join(" | ");
+    const exampleCount = typeof params.exampleCount === 'number' && Number.isSafeInteger(params.exampleCount) && params.exampleCount > 0
+      ? Math.min(20, params.exampleCount)
+      : undefined;
     const stdinAllowed = allowedIoTypes.includes("STDIN_STDOUT");
+    const requireNonEmptyExampleInput = allowedIoTypes.length === 1 && allowedIoTypes[0] === "STDIN_STDOUT";
     const jsonSchema = {
       type: "object",
       properties: {
@@ -982,12 +1003,14 @@ Return ONLY JSON without explanations.`
         },
         examples: {
           type: "array",
-          minItems: 1,
+          minItems: exampleCount ?? 1,
+          ...(exampleCount !== undefined ? { maxItems: exampleCount } : {}),
           items: {
             type: "object",
             properties: {
               input: {
-                type: "string"
+                type: "string",
+                ...(requireNonEmptyExampleInput ? { minLength: 1 } : {})
               },
               output: {
                 type: "string",
@@ -1009,12 +1032,27 @@ Return ONLY JSON without explanations.`
       },
       required: ["title", "topic", "difficulty", "theoryMarkdown", "practicalTask", "ioType", "inputFormat", "outputFormat", "constraints", "examples", "codeTemplate"]
     };
+    const publicExampleCountRule = exampleCount !== undefined
+      ? isEnglish
+        ? `\nPUBLIC EXAMPLES (mandatory): Return exactly ${exampleCount} distinct public examples. Every example must include its correct, concrete, non-empty output (at least one non-whitespace character); never return an empty or whitespace-only output. Do not return more or fewer examples.`
+        : `\nПУБЛІЧНІ ПРИКЛАДИ (обов'язково): Поверни рівно ${exampleCount} різні публічні приклади. У КОЖНОМУ прикладі вкажи правильний конкретний непорожній output (щонайменше один непробільний символ); ніколи не повертай порожній або пробільний output. Не додавай і не пропускай приклади.`
+      : '';
+    const nonEmptyStdinExampleRule = requireNonEmptyExampleInput
+      ? isEnglish
+        ? "\nSTDIN EXAMPLES (mandatory): Every example input must contain at least one non-whitespace character and follow the input grammar. Never return an empty input string."
+        : "\nПРИКЛАДИ STDIN (обов'язково): Ввід кожного прикладу має містити щонайменше один непробільний символ і відповідати граматиці вводу. Не повертай порожній рядок вводу."
+      : '';
+    const stdinExampleIntegrityRule = requireNonEmptyExampleInput
+      ? isEnglish
+        ? "\nINPUT/EXAMPLE CONSISTENCY (mandatory): Treat inputFormat, outputFormat, and every constraint as exact rules. Before returning, parse and verify EACH public example against the stated grammar, value ranges, lengths, allowed character sets, and exact line/token/record counts. If an input declares N records, include exactly N records and no extras. Never put digits or symbols in a letters-only field, and never invent a value outside a declared range. Check that each output is the exact result required by the task and matches outputFormat. Replace any example that fails any check; do not silently relax or change the statement."
+        : "\nУЗГОДЖЕНІСТЬ ВВОДУ ТА ПРИКЛАДІВ (обов'язково): Вважай inputFormat, outputFormat і кожне обмеження точними правилами. Перед відповіддю розбери й перевір КОЖЕН публічний приклад за граматикою, діапазонами значень, довжинами, дозволеними наборами символів і точною кількістю рядків/токенів/записів. Якщо ввід задає N записів, додай рівно N записів без зайвих. Не додавай цифр або символів у поле, де дозволені лише літери, і не вигадуй значення поза визначеним діапазоном. Перевір, що кожен output є точним результатом задачі й відповідає outputFormat. Заміни будь-який приклад, який не проходить хоча б одну перевірку; не послаблюй і не змінюй умову."
+      : '';
     const systemPrompt = isEnglish
-      ? `You are an experienced programming teacher. Create high-quality, self-contained, auto-checkable programming tasks. Respond in English in JSON format according to the provided schema.
+      ? `You are an experienced programming teacher. Create high-quality, self-contained, auto-checkable programming tasks. Respond in English in JSON format according to the provided schema.${publicExampleCountRule}${nonEmptyStdinExampleRule}${stdinExampleIntegrityRule}
 
 CRITICAL PRIORITY RULE: ioType MUST be exactly one of [${allowedIoTypesText}]. If there is only one allowed value, use that value; never invent or return a disallowed IO type. Keep practicalTask, inputFormat, outputFormat, examples, and codeTemplate consistent with that choice.
 CRITICAL: The "topic" field in JSON MUST be equal to "${params.anchor.topic}". DO NOT change the anchor.`
-      : `Ти досвідчений викладач програмування. Створюй якісні, самодостатні та придатні для автоперевірки програмні завдання. Відповідай українською мовою у форматі JSON згідно з наданою схемою.
+      : `Ти досвідчений викладач програмування. Створюй якісні, самодостатні та придатні для автоперевірки програмні завдання. Відповідай українською мовою у форматі JSON згідно з наданою схемою.${publicExampleCountRule}${nonEmptyStdinExampleRule}${stdinExampleIntegrityRule}
 
 КРИТИЧНИЙ ПРІОРИТЕТ: ioType ОБОВ'ЯЗКОВО має бути рівно одним зі значень [${allowedIoTypesText}]. Якщо дозволене лише одне значення — використай саме його; ніколи не повертай заборонений IO-тип. practicalTask, inputFormat, outputFormat, examples і codeTemplate мають бути узгоджені з цим вибором.
 КРИТИЧНО: Поле "topic" в JSON ОБОВ'ЯЗКОВО має дорівнювати "${params.anchor.topic}". НЕ змінюй anchor.`;
@@ -1613,6 +1651,16 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
           maxTokens: LLM_TASK_MAX_TOKENS,
           language: params.language ?? 'uk',
         });
+        if (exampleCount !== undefined) {
+          const rawExamples = readProperty(parsed, 'examples');
+          if (!Array.isArray(rawExamples) || rawExamples.length !== exampleCount) {
+            throw makeAIValidationError(
+              'generateTask',
+              `Task generation validation failed: expected exactly ${exampleCount} public examples; received ${Array.isArray(rawExamples) ? rawExamples.length : 0}.`,
+              parsed,
+            );
+          }
+        }
         const validated = await validateAndReviewGeneratedTask(provider, parsed, {
           expectedTopic: params.anchor.topic,
           topicIndex: params.topicIndex === 0 && (olympiadContract || params.isCatalogPractice === true) ? 1 : params.topicIndex,
@@ -1700,6 +1748,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
     signal?: AbortSignal;
     semanticRetries?: number;
     validationFeedback?: string;
+    exampleCount?: number;
     requestId?: string;
   }, providerOverride?: LLMProvider): Promise<AiTaskGenerationResult> {
     const provider = providerOverride ?? this.openRouterProvider;
@@ -1751,6 +1800,7 @@ LESSON THEORY CONTEXT (for scope only; do not copy it into the statement):\n${co
       signal: params.signal,
       semanticRetries: params.semanticRetries,
       validationFeedback: params.validationFeedback,
+      exampleCount: params.exampleCount,
       requestId: params.requestId
     }, provider);
     return result;
@@ -1961,7 +2011,8 @@ REQUIREMENTS (mandatory):
       params.questionStyle,
     );
     let codeCompletenessRepairAttempt = 0;
-    while (missingCodeIndexes.length > 0 && codeCompletenessRepairAttempt < 2) {
+    const maxCodeCompletenessRepairAttempts = expectedOptionCount === 4 ? 4 : 2;
+    while (missingCodeIndexes.length > 0 && codeCompletenessRepairAttempt < maxCodeCompletenessRepairAttempts) {
       consumeRetryOrThrow("quiz code completeness repair");
       const repairIndexes = [...missingCodeIndexes];
       const repairedStems: string[] = [];
@@ -1975,11 +2026,11 @@ REQUIREMENTS (mandatory):
             : "ДРУГЕ ВИПРАВЛЕННЯ ПОВНОТИ КОДУ: У попередній заміні знову не було коду. Створи інше питання на ту саму тему й додай повний окремий фрагмент у `code` та мову в `codeLanguage`."
         : params.language === "en"
           ? codeCompletenessRepairAttempt === 0
-            ? "CODE COMPLETENESS REPAIR: Replace each requested slot with a self-contained conceptual question for the same assigned topic. Do not ask for the output or behavior of a particular program and do not refer to a specific code snippet. Keep the replacement answerable without code."
-            : "SECOND CODE COMPLETENESS REPAIR: Your previous replacement still referred to code without a snippet. Replace it with a different self-contained conceptual question for the same topic that can be answered without executing a program or referring to code."
+            ? "CODE COMPLETENESS REPAIR: Replace each requested slot with a self-contained conceptual question for the same assigned topic. Do not ask about a particular program's output or behavior, and do not refer to code, a snippet, a program, or anything shown elsewhere. Keep the replacement answerable from its wording and choices alone."
+            : `CODE COMPLETENESS REPAIR ${codeCompletenessRepairAttempt + 1}: The previous replacement still referred to code without including it. Replace the slot with a different self-contained conceptual question for the same topic. Do not mention code, a snippet, a program, or anything shown elsewhere; do not ask about program output or behavior. The question must be answerable from its wording and choices alone.`
           : codeCompletenessRepairAttempt === 0
-            ? "ВИПРАВЛЕННЯ ПОВНОТИ ПИТАННЯ: Заміни кожне вказане питання самодостатнім поняттєвим питанням на ту саму призначену тему. Не питай про результат чи поведінку конкретної програми та не посилайся на певний фрагмент коду. На замінне питання має бути можна відповісти без коду."
-            : "ДРУГЕ ВИПРАВЛЕННЯ ПОВНОТИ ПИТАННЯ: У попередній заміні знову було посилання на код без фрагмента. Створи інше самодостатнє поняттєве питання на ту саму тему, на яке можна відповісти без запуску програми чи посилання на код.";
+            ? "ВИПРАВЛЕННЯ ПОВНОТИ ПИТАННЯ: Заміни кожне вказане питання самодостатнім поняттєвим питанням на ту саму призначену тему. Не питай про результат чи поведінку конкретної програми та не згадуй код, фрагмент, програму або щось, показане деінде. На питання має бути можна відповісти лише за його формулюванням і варіантами."
+            : `ВИПРАВЛЕННЯ ПОВНОТИ ПИТАННЯ ${codeCompletenessRepairAttempt + 1}: Попередню заміну відхилено, бо вона посилалася на код без самого фрагмента. Створи інше самодостатнє поняттєве питання на ту саму тему. Не згадуй код, фрагмент чи програму й не питай про результат її роботи; відповідь має визначатися лише формулюванням і варіантами.`;
 
       for (let offset = 0; offset < repairIndexes.length; offset += MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL) {
         const batchIndexes = repairIndexes.slice(offset, offset + MAX_QUIZ_QUESTIONS_PER_PROVIDER_CALL);

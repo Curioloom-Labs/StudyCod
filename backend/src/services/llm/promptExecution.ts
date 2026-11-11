@@ -50,8 +50,10 @@ export function runWithPromptExecutionContext<T>(
     deadlineAt: options.deadlineAt ?? Date.now() + timeoutMs,
     // Quiz batches may need code-completeness and duplicate repairs in addition
     // to provider fallback and format repair. Practical task generation also
-    // nests anchor, provider fallback, contract, and semantic repairs.
-    retryBudget: { remaining: id === 'task.quiz' || id === 'task.generate' ? 16 : 2 },
+    // nests anchor, provider fallback, contract, and semantic repairs. Each
+    // reference-test suite gets its own small JSON-recovery budget so parallel
+    // tasks cannot consume one another's retries.
+    retryBudget: { remaining: id === 'task.quiz' || id === 'task.generate' ? 16 : id === 'task.reference-tests' ? 8 : 2 },
     signal: options.signal,
     promptVersion: getActivePromptBundleVersion(),
   }), operation);

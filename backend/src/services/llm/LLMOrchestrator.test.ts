@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LLMOrchestrator, type AiQuizResult } from './LLMOrchestrator';
+import type { LLMProvider } from './LLMProvider';
 import { runWithPromptExecutionContext } from './promptExecution';
 
 type QuizBatch = {
@@ -21,6 +22,57 @@ type QuizBatchAccess = {
   ): Promise<AiQuizResult>;
   generateQuizWithAI_OpenRouter(params: QuizBatch, providerOverride?: unknown): Promise<AiQuizResult>;
 };
+
+type TaskAnchorGenerationAccess = {
+  generateTaskFromAnchor(params: {
+    topicTitle: string;
+    theory: string;
+    lang: 'PYTHON';
+    topicIndex: number;
+    anchor: { topic: string; coreOperation: string; allowedScope: string[]; forbiddenScope: string[] };
+    allowedIoTypes?: Array<'STDIN_STDOUT' | 'NO_INPUT_FIXED_OUTPUT' | 'NO_INPUT_FREE_OUTPUT'>;
+    exampleCount: number;
+    language?: 'en' | 'uk';
+    semanticRetries: number;
+  }, providerOverride?: LLMProvider): Promise<unknown>;
+};
+
+test('diagnostic task generation constrains the schema to three public examples and rejects extra examples before review', async () => {
+  let receivedSchema: Record<string, unknown> | undefined;
+  let receivedInstructions = '';
+  const provider: LLMProvider = {
+    async generateText(): Promise<string> { throw new Error('Unexpected text generation'); },
+    async generateJSON<T>(_prompt: string, schema: object, instructions = ''): Promise<T> {
+      receivedSchema = schema as Record<string, unknown>;
+      receivedInstructions = instructions;
+      return { examples: [{}, {}, {}, {}] } as T;
+    },
+  };
+  const orchestrator = new LLMOrchestrator() as unknown as TaskAnchorGenerationAccess;
+
+  await assert.rejects(
+    runWithPromptExecutionContext('task.generate', { timeoutMs: 10_000 }, () => orchestrator.generateTaskFromAnchor({
+      topicTitle: 'Numbers',
+      theory: 'Read two numbers and combine them.',
+      lang: 'PYTHON',
+      topicIndex: 2,
+      anchor: { topic: 'Arithmetic', coreOperation: 'addition', allowedScope: ['addition'], forbiddenScope: [] },
+      allowedIoTypes: ['STDIN_STDOUT'],
+      exampleCount: 3,
+      language: 'en',
+      semanticRetries: 0,
+    }, provider)),
+    /expected exactly 3 public examples; received 4/,
+  );
+
+  const properties = receivedSchema?.properties as Record<string, Record<string, unknown>>;
+  assert.equal(properties.examples.minItems, 3);
+  assert.equal(properties.examples.maxItems, 3);
+  const exampleProperties = (properties.examples.items as { properties: Record<string, Record<string, unknown>> }).properties;
+  assert.equal(exampleProperties.input.minLength, 1);
+  assert.match(receivedInstructions, /exact line\/token\/record counts/);
+  assert.match(receivedInstructions, /letters-only field/);
+});
 
 test('large quizzes are generated in bounded batches and preserve the requested total', async () => {
   const orchestrator = new LLMOrchestrator() as unknown as QuizBatchAccess;
@@ -89,7 +141,7 @@ test('diagnostic quizzes regenerate code-referencing questions as same-topic con
       assert.equal(batch.count, 1);
       assert(batch.prevTopics.includes('Replacement 1 replaces original question 2'));
       assert.match(batch.prevTopics, /begin q with \[topic:11\]/i);
-      assert(batch.generationGuidance.includes('Do not ask for the output or behavior'));
+      assert(batch.generationGuidance.includes("Do not ask about a particular program's output or behavior"));
       assert.match(batch.prevTopics, /QUESTION REPAIR PLAN\. Generate exactly 1 replacement question/);
       assert.match(batch.prevTopics, /Assigned topic: \[topic:11\] indexing/);
       assert.match(batch.prevTopics, /Rejected question stem: "What output is produced by the following code\?"/);
@@ -223,6 +275,49 @@ test('diagnostic quiz code-completeness repair preserves four-option questions',
   const [question] = JSON.parse(result.quizJson);
   assert.equal(question.options.length, 4);
   assert.equal(question.correct, 0);
+});
+
+test('diagnostic quiz allows a third targeted code-completeness repair before succeeding', async () => {
+  const orchestrator = new LLMOrchestrator() as unknown as QuizBatchAccess;
+  let calls = 0;
+  const result = await runWithPromptExecutionContext('task.quiz', { timeoutMs: 10_000 }, () => orchestrator.generateQuizInBatches({
+    lang: 'PYTHON', prevTopics: '[topic:11] indexing', count: 1, optionCount: 4, questionStyle: 'CONCEPTS', language: 'en',
+  }, async batch => {
+    calls++;
+    if (calls === 1) return {
+      quizJson: JSON.stringify([{ q: '[topic:11] What output does the following code produce?', options: ['0', '1', '2', '3'], correct: 0 }]),
+    };
+    if (calls < 4) {
+      assert.match(batch.generationGuidance ?? '', /CODE COMPLETENESS REPAIR/);
+      assert.equal(batch.count, 1);
+      return {
+        quizJson: JSON.stringify([{ q: '[topic:11] What output does the given program produce?', options: ['0', '1', '2', '3'], correct: 0 }]),
+      };
+    }
+    return {
+      quizJson: JSON.stringify([{ q: '[topic:11] What does zero-based indexing mean?', options: ['The first position is 0', 'The first position is 1', 'Indexes are random', 'Arrays have no positions'], correct: 0 }]),
+    };
+  }));
+
+  const [question] = JSON.parse(result.quizJson);
+  assert.equal(calls, 4);
+  assert.match(question.q, /zero-based indexing/);
+});
+
+test('diagnostic quiz code-completeness repair remains bounded at four retries', async () => {
+  const orchestrator = new LLMOrchestrator() as unknown as QuizBatchAccess;
+  const requestedCounts: number[] = [];
+  const generation = runWithPromptExecutionContext('task.quiz', { timeoutMs: 10_000 }, () => orchestrator.generateQuizInBatches({
+    lang: 'PYTHON', prevTopics: '[topic:11] indexing', count: 1, optionCount: 4, questionStyle: 'CONCEPTS', language: 'en',
+  }, async batch => {
+    requestedCounts.push(batch.count);
+    return {
+      quizJson: JSON.stringify([{ q: '[topic:11] What output does the following code produce?', options: ['0', '1', '2', '3'], correct: 0 }]),
+    };
+  }));
+
+  await assert.rejects(generation, /QUIZ_CODE_MISSING/);
+  assert.deepEqual(requestedCounts, [1, 1, 1, 1, 1]);
 });
 
 test('diagnostic quiz duplicate repair preserves four-option questions', async () => {

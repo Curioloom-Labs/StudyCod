@@ -22,6 +22,8 @@ export interface LLMGenerateOptions {
   retryBudget?: { remaining: number };
   /** Absolute wall-clock deadline shared with nested AI calls. */
   deadlineAt?: number;
+  /** Ask OpenRouter for provider-enforced JSON Schema output instead of best-effort JSON mode. */
+  strictJsonSchema?: boolean;
 }
 export interface LLMProvider {
   generateText(prompt: string, systemPrompt?: string, options?: LLMGenerateOptions): Promise<string>;

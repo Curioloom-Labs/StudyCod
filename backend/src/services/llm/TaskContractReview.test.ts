@@ -4,7 +4,7 @@ import type { LLMProvider, LLMGenerateOptions } from './LLMProvider';
 import { LLMOrchestrator, getLLMOrchestrator, type AiTaskGenerationResult } from './LLMOrchestrator';
 import { safeAICall } from '../ai/safeAICall';
 import { makeAIValidationError } from './AIResponseValidator';
-import { MAX_TASK_DESCRIPTION_CHARS, TaskContractReviewError, buildTaskValidationFeedback, requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTask, reviewGeneratedTaskCondition, reviewGeneratedTests, selectIndependentReviewProvider } from './TaskContractReview';
+import { MAX_TASK_DESCRIPTION_CHARS, TASK_PRECISION_INSTRUCTIONS, TaskContractReviewError, buildTaskValidationFeedback, requireCompleteTaskDescription, resolveTestDataIoType, reviewGeneratedTask, reviewGeneratedTaskCondition, reviewGeneratedTests, selectIndependentReviewProvider } from './TaskContractReview';
 import { buildOlympiadPracticeContract } from '../learning/learningContract';
 
 const task: AiTaskGenerationResult = {
@@ -14,6 +14,12 @@ const task: AiTaskGenerationResult = {
   outputFormat: 'Print one integer: the sum of a and b.', constraints: '-100 <= a, b <= 100.',
   examples: [{ input: '2 3', output: '5', explanation: '2 + 3 = 5.' }], codeTemplate: '# TODO',
 };
+
+test('task contracts require canonical formatting for mixed numeric output', () => {
+  assert.match(TASK_PRECISION_INSTRUCTIONS, /one canonical serialization for every element/);
+  assert.match(TASK_PRECISION_INSTRUCTIONS, /"10" and "10\.0"/);
+  assert.match(TASK_PRECISION_INSTRUCTIONS, /integer-valued decimals include trailing zeros/);
+});
 
 function fakeProvider(responses: unknown[], calls: string[] = [], systemPrompts?: string[], schemas?: unknown[]): LLMProvider {
   return {
