@@ -19,6 +19,8 @@ const eventsHelp: Record<string, [string, string]> = {
   "assessment.task_assigned": ["Завдання призначено", "Task assigned"],
   "assessment.task_submitted": ["Роботу подано на перевірку", "Task submitted"],
   "assessment.review_saved": ["Відгук збережено", "Review saved"],
+  "assessment.followup_requested": ["Кандидату поставлено уточнювальне запитання", "Candidate follow-up requested"],
+  "assessment.followup_answered": ["Кандидат відповів на уточнення", "Candidate answered follow-up"],
   "assessment.decision_saved": ["Рішення зафіксовано", "Hiring decision saved"],
   "assessment.withdrawn": ["Кандидат відкликав згоду", "Candidate withdrew"],
 };

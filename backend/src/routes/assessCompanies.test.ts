@@ -107,6 +107,64 @@ test("EDU principals cannot read the Assess company workspace", async t => {
   assert.equal(databaseReads, 0);
 });
 
+test("an authorized reviewer can ask a consented candidate a bounded follow-up", async t => {
+  const companyId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const assessmentId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const writes: Array<{ sql: string; parameters?: unknown[] }> = [];
+  const layer = assessCompaniesRouter.stack.find((entry: any) => entry.route?.path === "/:companyId/assessments/:assessmentId/followups" && entry.route.methods.post) as any;
+  assert.ok(layer);
+  let status = 200;
+  let body: any;
+  const response = { status(value: number) { status = value; return response; }, json(value: unknown) { body = value; return response; } };
+  t.mock.method(AppDataSource, "query", async (sql: string, parameters?: unknown[]) => {
+    writes.push({ sql, parameters });
+    if (sql.includes("FROM growth_company_members")) return [{ role: "HR" }];
+    if (sql.startsWith("SELECT id,candidate_id,status,consent_at,answers_submitted_at")) return [{ id: assessmentId, candidate_id: 501, status: "TASK_SUBMITTED", consent_at: new Date(), answers_submitted_at: new Date() }];
+    if (sql.startsWith("SELECT COUNT(*) AS total")) return [{ total: 1, open_count: 0 }];
+    if (sql.startsWith("INSERT INTO growth_assess_followups")) return { affectedRows: 1 };
+    if (sql.startsWith("SELECT username FROM users")) return [{ username: "reviewer" }];
+    if (sql.startsWith("SELECT id,events_json AS eventsJson")) return [];
+    return { affectedRows: 1 };
+  });
+  await layer.route.stack.at(-1).handle({
+    userId: 120, userType: "USER", userMode: "PERSONAL", requestId: "request-1", ip: "127.0.0.1",
+    params: { companyId, assessmentId }, body: { reviewerType: "HR", question: "Which part did you personally own?" },
+  }, response);
+  assert.equal(status, 201);
+  assert.equal(body.followup.reviewerType, "HR");
+  assert.equal(body.followup.question, "Which part did you personally own?");
+  const insert = writes.find(item => item.sql.startsWith("INSERT INTO growth_assess_followups"));
+  assert.deepEqual(insert?.parameters?.slice(1), [assessmentId, companyId, 120, 501, "HR", "Which part did you personally own?"]);
+});
+
+test("a candidate can answer a follow-up only once while their assessment consent is active", async t => {
+  const assessmentId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const followupId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const writes: Array<{ sql: string; parameters?: unknown[] }> = [];
+  const layer = assessCompaniesRouter.stack.find((entry: any) => entry.route?.path === "/candidate/assessments/:assessmentId/followups/:followupId/respond" && entry.route.methods.post) as any;
+  assert.ok(layer);
+  let status = 200;
+  let body: any;
+  const response = { status(value: number) { status = value; return response; }, json(value: unknown) { body = value; return response; } };
+  t.mock.method(AppDataSource, "query", async (sql: string, parameters?: unknown[]) => {
+    writes.push({ sql, parameters });
+    if (sql.startsWith("UPDATE growth_assess_followups")) return { affectedRows: 1 };
+    if (sql.startsWith("SELECT company_id,created_by,status FROM growth_company_assessments")) return [{ company_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", created_by: 120, status: "TASK_SUBMITTED" }];
+    if (sql.startsWith("SELECT id,events_json AS eventsJson")) return [];
+    return { affectedRows: 1 };
+  });
+  await layer.route.stack.at(-1).handle({
+    userId: 501, userType: "USER", userMode: "PERSONAL", requestId: "request-1", ip: "127.0.0.1",
+    params: { assessmentId, followupId }, body: { response: "I implemented the migration and monitored the rollout." },
+  }, response);
+  assert.equal(status, 200);
+  assert.deepEqual(body, { answered: true });
+  const update = writes.find(item => item.sql.startsWith("UPDATE growth_assess_followups"));
+  assert.deepEqual(update?.parameters, ["I implemented the migration and monitored the rollout.", followupId, assessmentId, 501]);
+  assert.match(update?.sql ?? "", /f\.answered_at IS NULL/);
+  assert.match(update?.sql ?? "", /a\.consent_at IS NOT NULL/);
+});
+
 test("the engineering dossier reads submitted files from the stored draft envelope and projects only allowed evidence", async t => {
   const auditEvents = captureAudit(t);
   t.mock.method(AppDataSource, "query", async (sql: string, parameters?: unknown[]) => {
@@ -114,6 +172,7 @@ test("the engineering dossier reads submitted files from the stored draft envelo
       assert.deepEqual(parameters, ["company-1", 120]);
       return [{ role: "ENGINEER" }];
     }
+    if (sql.includes("FROM growth_assess_followups")) return [];
     assert.deepEqual(parameters, ["case-1", "company-1"]);
     return [row];
   });
@@ -133,7 +192,7 @@ test("the engineering dossier reads submitted files from the stored draft envelo
 
 test("an active working copy and completed check stay private until the candidate submits", async t => {
   captureAudit(t);
-  t.mock.method(AppDataSource, "query", async (sql: string) => sql.includes("FROM growth_company_members") ? [{ role: "ENGINEER" }] : [{ ...row, status: "TASK_ASSIGNED", task_status: "ACTIVE" }]);
+  t.mock.method(AppDataSource, "query", async (sql: string) => sql.includes("FROM growth_company_members") ? [{ role: "ENGINEER" }] : sql.includes("FROM growth_assess_followups") ? [] : [{ ...row, status: "TASK_ASSIGNED", task_status: "ACTIVE" }]);
   const result = await readDossier();
   assert.equal(result.status, 200);
   assert.equal(result.body.assessment.task.files, undefined);
@@ -148,6 +207,7 @@ test("withdrawal removes source and submitted code from the company dossier", as
   assert.equal(result.status, 200);
   assert.equal(result.body.assessment.portfolio, undefined);
   assert.equal(result.body.assessment.task, undefined);
+  assert.equal(result.body.assessment.followups, undefined);
   assert.doesNotMatch(JSON.stringify(result.body), /print\('submitted'\)|print\('original'\)/);
 });
 

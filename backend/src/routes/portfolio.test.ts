@@ -390,12 +390,14 @@ test("Portfolio work accepts and persists Judge language skills", async t => {
   const result = await request(handler(portfolioRouter, "/works", "post"), {
     body: {
       title: "Multi-language project", problem: "Problem", solution: "Solution", role: "Author",
+      contribution: "I designed the API and owned the migration.", outcome: "Reduced import time by 40%.",
       technologies: ["Rust", "JavaScript"], skillIds: ["rust", "js", "java-language"],
       repositoryUrl: "https://github.com/developer/multi-language", demoUrl: "", visibility: "PRIVATE",
     },
   });
   assert.equal(result.status, 201);
-  assert.deepEqual(JSON.parse(String(insertValues?.[7])), ["rust", "js", "java-language"]);
+  assert.deepEqual(JSON.parse(String(insertValues?.[9])), ["rust", "js", "java-language"]);
+  assert.deepEqual(insertValues?.slice(5, 7), ["I designed the API and owned the migration.", "Reduced import time by 40%."]);
 });
 
 test("Portfolio work rejects duplicate skill labels", async t => {
@@ -615,7 +617,7 @@ test("Evidence Pack shares only selected source-linked evidence and strips sourc
   const judgeId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
   t.mock.method(AppDataSource, "query", async (sql: string) => {
     if (sql.includes("FROM portfolio_evidence_packs")) return [{
-      id: "pack-1", ownerId: 42, title: "Java Backend", specialization: "Backend", includeProfile: 0,
+      id: "pack-1", ownerId: 42, title: "Java Backend", specialization: "Backend", recipientName: "Northwind", purpose: "Staffing review", includeProfile: 0,
       birthDay: 1, birthMonth: 1, birthYear: 1990,
       workIdsJson: "[]", evidenceIdsJson: JSON.stringify([id, judgeId]), skillIdsJson: '["java","unknown-skill"]', expiresAt: "2026-10-30T10:00:00.000Z", username: "developer",
     }];
@@ -636,6 +638,8 @@ test("Evidence Pack shares only selected source-linked evidence and strips sourc
   const result = await request(handler(publicPortfolioRouter as typeof portfolioRouter, "/p/:token", "get"), { params: { token } });
   assert.equal(result.status, 200);
   assert.equal(result.headers["Cache-Control"], "no-store, private");
+  assert.equal(result.result.recipientName, "Northwind");
+  assert.equal(result.result.purpose, "Staffing review");
   assert.deepEqual(result.result.skillIds, ["java"]);
   assert.deepEqual(result.result.competencies.map((skill: { id: string }) => skill.id), ["java"], "the viewer receives only valid competencies explicitly selected for this pack");
   assert.deepEqual(result.result.evidence.map((item: { id: string }) => item.id), [id, judgeId], "an Evidence Pack must preserve the owner's cross-source evidence order");
@@ -660,6 +664,7 @@ test("Evidence Pack stores a hash, selected owner IDs, and a bounded expiry", as
   const result = await request(handler(portfolioRouter, "/evidence-packs", "post"), {
     body: {
       title: "Internship review", specialization: "Java backend", includeProfile: true, expiresInDays: 7, skillIds: ["java", "sql"],
+      recipientName: "Northwind hiring team", purpose: "Senior backend engineer interview",
       workIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"], evidenceIds: ["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
     },
   });
@@ -670,9 +675,9 @@ test("Evidence Pack stores a hash, selected owner IDs, and a bounded expiry", as
   assert.equal(insert.values?.[1], 42);
   assert.equal(insert.values?.[2], createHash("sha256").update(result.result.token).digest("hex"));
   assert.notEqual(insert.values?.[2], result.result.token);
-  assert.deepEqual(insert.values?.slice(4, 8), ["Java backend", 1, '["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]', '["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]']);
-  assert.equal(new Date(insert.values?.[8] as Date).getTime() - Date.now() < 8 * 24 * 60 * 60 * 1000, true);
-  assert.equal(insert.values?.[9], '["java","sql"]', "selected competencies must be persisted with the capability grant");
+  assert.deepEqual(insert.values?.slice(4, 10), ["Java backend", "Northwind hiring team", "Senior backend engineer interview", 1, '["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]', '["bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"]']);
+  assert.equal(new Date(insert.values?.[10] as Date).getTime() - Date.now() < 8 * 24 * 60 * 60 * 1000, true);
+  assert.equal(insert.values?.[11], '["java","sql"]', "selected competencies must be persisted with the capability grant");
 });
 
 test("Evidence Pack management returns only known saved competency IDs", async t => {
@@ -703,7 +708,7 @@ test("Evidence Pack remains compatible with clients that omit competency IDs", a
   assert.equal(result.status, 201);
   const insert = queries.find(query => query.sql.startsWith("INSERT INTO portfolio_evidence_packs"));
   assert.ok(insert);
-  assert.equal(insert.values?.[9], "[]", "an omitted optional field must persist as an empty competency selection");
+  assert.equal(insert.values?.[11], "[]", "an omitted optional field must persist as an empty competency selection");
 });
 
 test("Evidence Pack rejects unknown or duplicate competencies", async () => {
@@ -738,14 +743,14 @@ test("Evidence Pack share page exposes only granted, still-active work metadata"
   t.mock.method(AppDataSource, "query", async (sql: string, values?: unknown[]) => {
     queries.push({ sql, values });
     if (sql.includes("FROM portfolio_evidence_packs p JOIN users")) return [{
-      id: "pack-1", ownerId: 42, title: "Selected work", specialization: "Java backend", includeProfile: 0,
+      id: "pack-1", ownerId: 42, title: "Selected work", specialization: "Java backend", recipientName: "Northwind", purpose: "Staffing review", includeProfile: 0,
       birthDay: 1, birthMonth: 1, birthYear: 1990,
       workIdsJson: '["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]', evidenceIdsJson: "[]", skillIdsJson: '["sql"]',
       expiresAt: "2026-11-04T00:00:00.000Z", username: "developer",
     }];
     if (sql.includes("FROM portfolio_works w")) return [{
       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", title: "Selected private work", problem: "Only this was selected",
-      solution: "Scoped result", role: "Author", technologiesJson: '["Java"]', repositoryUrl: null,
+      solution: "Scoped result", contribution: "Built the importer", outcome: "Cut processing time by 40%", role: "Author", technologiesJson: '["Java"]', repositoryUrl: null,
       demoUrl: null, sourcePublicId: null, codeSnapshot: "must not be returned",
     }];
     return [];
@@ -759,8 +764,12 @@ test("Evidence Pack share page exposes only granted, still-active work metadata"
   assert.equal(result.headers["X-Robots-Tag"], "noindex, nofollow, noarchive");
   assert.equal(result.result.profile, null);
   assert.equal(result.result.specialization, "Java backend");
+  assert.equal(result.result.recipientName, "Northwind");
+  assert.equal(result.result.purpose, "Staffing review");
   assert.equal(result.result.works.length, 1);
   assert.equal(result.result.works[0].title, "Selected private work");
+  assert.equal(result.result.works[0].contribution, "Built the importer");
+  assert.equal(result.result.works[0].outcome, "Cut processing time by 40%");
   assert.doesNotMatch(JSON.stringify(result.result), /codeSnapshot|must not be returned/);
   assert.match(queries[1].sql, /w\.owner_id=\? AND w\.archived_at IS NULL AND w\.id IN/);
   assert.equal(queries.some(query => query.sql.includes("FROM portfolio_profiles")), false, "a pack that excludes the profile must not load profile details");

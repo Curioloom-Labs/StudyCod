@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareAssessFiles, filterAssessCases, normalizeAssessCompany, assessNextAction, assessView, type AssessCase } from "./assessWorkspace";
+import { assessBatchCaseVariant, compareAssessFiles, filterAssessCases, normalizeAssessCompany, assessNextAction, assessView, suggestAssessEvidenceProbes, type AssessCase } from "./assessWorkspace";
 
 describe("Assess workspace data and role actions", () => {
   it("reads company identity and permissions from the nested API response", () => {
@@ -47,5 +47,23 @@ describe("Assess workspace data and role actions", () => {
     ]);
     expect(before[0].content).toBe("same");
     expect(after[0].content).toBe("new");
+  });
+
+  it("suggests human-reviewed follow-up probes only for evidence gaps, using the latest reviewer scorecard", () => {
+    const criteria = [
+      { id: "design", labelUk: "Архітектура", labelEn: "Architecture" },
+      { id: "tests", labelUk: "Перевірки", labelEn: "Verification" },
+    ];
+    expect(suggestAssessEvidenceProbes(criteria, [], false)).toEqual([]);
+    expect(suggestAssessEvidenceProbes(criteria, [
+      { reviewerType: "HR", submittedAt: "2026-01-01T00:00:00Z", scores: [0, 1] },
+      { reviewerType: "HR", submittedAt: "2026-01-02T00:00:00Z", scores: [3, null] },
+    ], true)).toEqual([
+      "We have not yet seen enough evidence for “Verification”. Could you walk us through one concrete example and explain your role and the outcome?",
+    ]);
+  });
+
+  it("alternates practical case variants across bulk invitations from the selected starting variant", () => {
+    expect([0, 1, 2, 3].map(index => assessBatchCaseVariant("B", index))).toEqual(["B", "A", "B", "A"]);
   });
 });

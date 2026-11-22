@@ -34,7 +34,7 @@ const emptyProfile: PortfolioProfile = {
   displayName: "", headline: "", specialization: "", technologies: [], summary: "", githubUrl: null, websiteUrl: null, shareAvatar: false, visibility: "PRIVATE",
 };
 const blankWork = (): PortfolioWorkInput => ({
-  title: "", problem: "", solution: "", role: "", technologies: [], skillIds: [], repositoryUrl: null, demoUrl: null,
+  title: "", problem: "", solution: "", contribution: "", outcome: "", role: "", technologies: [], skillIds: [], repositoryUrl: null, demoUrl: null,
   sourcePublicationId: null, visibility: "PRIVATE",
 });
 const groupPortfolioSkills = (skills: PortfolioDashboard["skills"]) => {
@@ -87,7 +87,7 @@ export const PortfolioDashboardPage: React.FC = () => {
   const [editingEvidenceId, setEditingEvidenceId] = React.useState<string | null>(null);
   const [evidenceDraft, setEvidenceDraft] = React.useState<PortfolioEvidenceInput>({ sourceType: "ONLINE_JUDGE", sourceKey: "", description: "", skillIds: [], visibility: "PRIVATE" });
   const [savingEvidence, setSavingEvidence] = React.useState(false);
-  const [packDraft, setPackDraft] = React.useState({ title: "", specialization: "", includeProfile: false, workIds: [] as string[], evidenceIds: [] as string[], skillIds: [] as string[], expiresInDays: 7 });
+  const [packDraft, setPackDraft] = React.useState({ title: "", specialization: "", recipientName: "", purpose: "", includeProfile: false, workIds: [] as string[], evidenceIds: [] as string[], skillIds: [] as string[], expiresInDays: 7 });
   const packRecommendations = React.useMemo(() => {
     const selectedSkillIds = new Set(packDraft.skillIds);
     const selectedSkills = dashboard?.skills.filter(skill => selectedSkillIds.has(skill.id)) ?? [];
@@ -104,7 +104,7 @@ export const PortfolioDashboardPage: React.FC = () => {
     const workIds = dashboard.works.map(work => ({
       id: work.id,
       score: score([
-        work.title, work.problem, work.solution, work.role, ...work.technologies,
+        work.title, work.problem, work.solution, work.contribution, work.outcome, work.role, ...work.technologies,
         ...work.skillIds.flatMap(id => {
           const skill = skillsById.get(id);
           return skill ? [id, skill.labelEn, skill.labelUk, skill.categoryEn, skill.categoryUk] : [id];
@@ -202,7 +202,7 @@ export const PortfolioDashboardPage: React.FC = () => {
   const editWork = (item: PortfolioWork) => {
     setEditingId(item.id);
     setWork({
-      title: item.title, problem: item.problem, solution: item.solution, role: item.role,
+      title: item.title, problem: item.problem, solution: item.solution, contribution: item.contribution ?? "", outcome: item.outcome ?? "", role: item.role,
       technologies: item.technologies, skillIds: item.skillIds ?? [], repositoryUrl: item.repositoryUrl, demoUrl: item.demoUrl,
       sourcePublicationId: item.sourcePublicationId, visibility: item.visibility,
     });
@@ -352,7 +352,7 @@ export const PortfolioDashboardPage: React.FC = () => {
       const created = await createPortfolioEvidencePack(packDraft);
       const url = `${window.location.origin}/portfolio/p/${encodeURIComponent(created.token)}`;
       setCreatedPackUrl(url);
-      setPackDraft({ title: "", specialization: "", includeProfile: false, workIds: [], evidenceIds: [], skillIds: [], expiresInDays: 7 });
+      setPackDraft({ title: "", specialization: "", recipientName: "", purpose: "", includeProfile: false, workIds: [], evidenceIds: [], skillIds: [], expiresInDays: 7 });
       setPackPreviewOpen(false);
       await refresh();
       setNotice(copy("Пакет створено. Скопіюй посилання зараз: його більше не можна буде відновити.", "Pack created. Copy the link now; it cannot be retrieved again."));
@@ -508,6 +508,8 @@ export const PortfolioDashboardPage: React.FC = () => {
           <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px]">
             <label className="text-sm font-semibold">{copy("Назва пакета", "Pack title")}<input required maxLength={120} className={fieldClass} value={packDraft.title} onChange={event => setPackDraft(current => ({ ...current, title: event.target.value }))} placeholder={copy("Портфоліо для стажування", "Internship application")}/></label>
             <label className="text-sm font-semibold">{copy("Спеціалізація", "Specialization")}<input maxLength={120} className={fieldClass} value={packDraft.specialization} onChange={event => setPackDraft(current => ({ ...current, specialization: event.target.value }))} placeholder={copy("Java backend", "Java backend")}/></label>
+            <label className="text-sm font-semibold">{copy("Клієнт або компанія", "Client or company")}<input maxLength={120} className={fieldClass} value={packDraft.recipientName} onChange={event => setPackDraft(current => ({ ...current, recipientName: event.target.value }))} placeholder={copy("Назва клієнта", "Client name")}/></label>
+            <label className="text-sm font-semibold sm:col-span-2">{copy("Мета цієї добірки", "Purpose of this pack")}<input maxLength={200} className={fieldClass} value={packDraft.purpose} onChange={event => setPackDraft(current => ({ ...current, purpose: event.target.value }))} placeholder={copy("Подання на роль Senior backend engineer", "Submission for Senior backend engineer")}/></label>
             <label className="text-sm font-semibold">{copy("Посилання діє", "Link expires in")}<select className={fieldClass} value={packDraft.expiresInDays} onChange={event => setPackDraft(current => ({ ...current, expiresInDays: Number(event.target.value) }))}><option value={1}>1 {copy("день", "day")}</option><option value={7}>7 {copy("днів", "days")}</option><option value={14}>14 {copy("днів", "days")}</option><option value={30}>30 {copy("днів", "days")}</option></select></label>
           </div>
           <p className="mt-2 text-xs text-text-muted">{packDraft.specialization.trim() || packDraft.skillIds.length ? copy(`${packRecommendations.workIds.size + packRecommendations.evidenceIds.size} рекомендацій за збігом метаданих. Перевір їх і вибери потрібне вручну.`, `${packRecommendations.workIds.size + packRecommendations.evidenceIds.size} metadata-based suggestions. Review them and select items manually.`) : copy("Вкажи спеціалізацію або вибери компетенції — підкажемо роботи й свідчення з відповідними метаданими.", "Enter a specialization or select competencies to see items with matching metadata.")}</p>
@@ -575,6 +577,8 @@ export const PortfolioDashboardPage: React.FC = () => {
         <label className="text-sm font-semibold">{copy("Твоя роль", "Your role")}<input maxLength={120} className={fieldClass} value={work.role} onChange={event => setWork(current => ({ ...current, role: event.target.value }))} placeholder={copy("Автор, розробник…", "Author, developer…")} /></label>
         <label className="text-sm font-semibold sm:col-span-2">{copy("Проблема", "Problem")}<textarea maxLength={4000} className={textAreaClass} value={work.problem} onChange={event => setWork(current => ({ ...current, problem: event.target.value }))} /></label>
         <label className="text-sm font-semibold sm:col-span-2">{copy("Рішення", "Solution")}<textarea maxLength={4000} className={textAreaClass} value={work.solution} onChange={event => setWork(current => ({ ...current, solution: event.target.value }))} /></label>
+        <label className="text-sm font-semibold sm:col-span-2">{copy("Твій особистий внесок", "Your contribution")}<textarea maxLength={2000} className={textAreaClass} value={work.contribution} onChange={event => setWork(current => ({ ...current, contribution: event.target.value }))} placeholder={copy("Що саме ти спроєктував, реалізував або перевірив? Не додавай код чи дані клієнта.", "What did you design, build, or verify? Do not include client code or data.")} /></label>
+        <label className="text-sm font-semibold sm:col-span-2">{copy("Результат і як його виміряли", "Outcome and how it was measured")}<textarea maxLength={2000} className={textAreaClass} value={work.outcome} onChange={event => setWork(current => ({ ...current, outcome: event.target.value }))} placeholder={copy("Наприклад, час відповіді зменшився на 30% за результатами вимірювання.", "For example, measured response time decreased by 30%.")} /></label>
         <label className="text-sm font-semibold sm:col-span-2">{copy("Технології через кому", "Technologies, separated by commas")}<input className={fieldClass} value={work.technologies.join(", ")} onChange={event => setTechnologies(event.target.value)} placeholder="Java, SQL, REST" /></label>
         <fieldset className="sm:col-span-2"><legend className="text-sm font-semibold">{copy("Навички, які демонструє робота", "Skills this work demonstrates")}</legend><div className="mt-3 space-y-3">{skillGroups.map(group => <div key={group.id}><p className="mb-1.5 text-xs font-semibold text-text-muted">{en ? group.labelEn : group.labelUk}</p><div className="flex flex-wrap gap-2">{group.skills.map(skill => <label key={skill.id} className={`inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-xl border px-3 text-xs font-semibold transition ${work.skillIds.includes(skill.id) ? "border-primary/40 bg-primary/5 text-primary-strong dark:text-primary-soft" : "border-border text-text-secondary hover:bg-bg-hover"}`}><input type="checkbox" className="accent-primary" checked={work.skillIds.includes(skill.id)} onChange={event => setWork(current => ({ ...current, skillIds: event.target.checked ? [...current.skillIds, skill.id].slice(0, 12) : current.skillIds.filter(id => id !== skill.id) }))} />{en ? skill.labelEn : skill.labelUk}</label>)}</div></div>)}</div><p className="mt-2 text-xs text-text-muted">{copy("Це авторський опис роботи, не автоматична оцінка компетенцій.", "These are owner-selected labels, not an automated competence score.")}</p></fieldset>
         <label className="text-sm font-semibold">{copy("Посилання на код", "Source repository URL")}<input type="url" inputMode="url" className={fieldClass} value={work.repositoryUrl ?? ""} onChange={event => setWork(current => ({ ...current, repositoryUrl: event.target.value || null }))} placeholder="https://github.com/username/project" /></label>

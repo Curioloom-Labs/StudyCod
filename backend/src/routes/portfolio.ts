@@ -44,6 +44,8 @@ const workSchema = z.object({
   title: z.string().trim().min(1).max(160),
   problem: z.string().trim().max(4_000),
   solution: z.string().trim().max(4_000),
+  contribution: z.string().trim().max(2_000).default(""),
+  outcome: z.string().trim().max(2_000).default(""),
   role: z.string().trim().max(120),
   technologies: z.array(z.string().trim().min(1).max(48)).max(16),
   skillIds: z.array(z.string().min(1).max(48)).max(12),
@@ -81,6 +83,8 @@ const sourcedEvidenceSchema = z.object({
 const evidencePackSchema = z.object({
   title: z.string().trim().min(1).max(120),
   specialization: z.string().trim().max(120),
+  recipientName: z.string().trim().max(120).default(""),
+  purpose: z.string().trim().max(200).default(""),
   includeProfile: z.boolean(),
   workIds: z.array(z.string().uuid()).max(50),
   evidenceIds: z.array(z.string().uuid()).max(50),
@@ -129,7 +133,7 @@ const parseJsonObject = <T extends Record<string, unknown>>(value: unknown, fall
 
 async function listWorks(ownerId: number): Promise<Array<Record<string, unknown>>> {
   const rows = await AppDataSource.query(
-    `SELECT w.id,w.title,w.problem,w.solution,w.role,w.technologies_json AS technologiesJson,w.skill_ids_json AS skillIdsJson,
+    `SELECT w.id,w.title,w.problem,w.solution,w.contribution_summary AS contribution,w.outcome_summary AS outcome,w.role,w.technologies_json AS technologiesJson,w.skill_ids_json AS skillIdsJson,
             w.repository_url AS repositoryUrl,w.demo_url AS demoUrl,w.source_publication_id AS sourcePublicationId,
             w.visibility,w.sort_order AS sortOrder,w.created_at AS createdAt,w.updated_at AS updatedAt,
             p.public_id AS sourcePublicId
@@ -144,6 +148,8 @@ async function listWorks(ownerId: number): Promise<Array<Record<string, unknown>
     title: row.title,
     problem: row.problem,
     solution: row.solution,
+    contribution: row.contribution ?? "",
+    outcome: row.outcome ?? "",
     role: row.role,
     technologies: parseJsonArray(row.technologiesJson),
     skillIds: parseJsonArray(row.skillIdsJson, 12),
@@ -271,7 +277,7 @@ async function listSourcedEvidence(ownerId: number, ids?: string[], visibility?:
 
 async function listEvidencePacks(ownerId: number): Promise<Array<Record<string, unknown>>> {
   const rows = await AppDataSource.query(
-    `SELECT id,title,specialization,include_profile AS includeProfile,work_ids_json AS workIdsJson,evidence_ids_json AS evidenceIdsJson,
+    `SELECT id,title,specialization,recipient_name AS recipientName,purpose,include_profile AS includeProfile,work_ids_json AS workIdsJson,evidence_ids_json AS evidenceIdsJson,
             skill_ids_json AS skillIdsJson,renewal_key_hash AS renewalKeyHash,
             (SELECT child.id FROM portfolio_evidence_packs child WHERE child.renewed_from_pack_id=portfolio_evidence_packs.id AND child.owner_id=portfolio_evidence_packs.owner_id LIMIT 1) AS renewedPackId,
             expires_at AS expiresAt,revoked_at AS revokedAt,created_at AS createdAt
@@ -281,6 +287,8 @@ async function listEvidencePacks(ownerId: number): Promise<Array<Record<string, 
     id: row.id,
     title: row.title,
     specialization: row.specialization,
+    recipientName: row.recipientName ?? "",
+    purpose: row.purpose ?? "",
     includeProfile: Boolean(row.includeProfile),
     workCount: parseJsonArray(row.workIdsJson, 50).length,
     evidenceCount: parseJsonArray(row.evidenceIdsJson, 50).length,
@@ -340,6 +348,8 @@ function publicPortfolioView(
       title: work.title,
       problem: work.problem,
       solution: work.solution,
+      contribution: work.contribution ?? "",
+      outcome: work.outcome ?? "",
       role: work.role,
       technologies: Array.isArray(work.technologies) ? work.technologies : [],
       skillIds: Array.isArray(work.skillIds) ? work.skillIds : [],
@@ -593,7 +603,7 @@ portfolioRouter.put("/evidence/order", async (req: AuthRequest, res: Response) =
 portfolioRouter.get("/evidence-packs", async (req: AuthRequest, res: Response) => {
   const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const rows = await AppDataSource.query(
-    `SELECT id,title,specialization,include_profile AS includeProfile,work_ids_json AS workIdsJson,evidence_ids_json AS evidenceIdsJson,
+    `SELECT id,title,specialization,recipient_name AS recipientName,purpose,include_profile AS includeProfile,work_ids_json AS workIdsJson,evidence_ids_json AS evidenceIdsJson,
             skill_ids_json AS skillIdsJson,
             expires_at AS expiresAt,revoked_at AS revokedAt,created_at AS createdAt
      FROM portfolio_evidence_packs WHERE owner_id=? ORDER BY created_at DESC LIMIT 100`, [ownerId]
@@ -602,6 +612,8 @@ portfolioRouter.get("/evidence-packs", async (req: AuthRequest, res: Response) =
     id: row.id,
     title: row.title,
     specialization: row.specialization,
+    recipientName: row.recipientName ?? "",
+    purpose: row.purpose ?? "",
     includeProfile: Boolean(row.includeProfile),
     workCount: parseJsonArray(row.workIdsJson).length,
     evidenceCount: parseJsonArray(row.evidenceIdsJson).length,
@@ -646,9 +658,9 @@ portfolioRouter.post("/evidence-packs", async (req: AuthRequest, res: Response) 
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const expiresAt = new Date(Date.now() + pack.expiresInDays * 24 * 60 * 60 * 1000);
   await AppDataSource.query(
-    `INSERT INTO portfolio_evidence_packs(id,owner_id,token_hash,title,specialization,include_profile,work_ids_json,evidence_ids_json,expires_at,skill_ids_json)
-     VALUES(?,?,?,?,?,?,?,?,?,?)`,
-    [id, ownerId, tokenHash, pack.title, pack.specialization, pack.includeProfile ? 1 : 0, JSON.stringify(pack.workIds), JSON.stringify(pack.evidenceIds), expiresAt, JSON.stringify(pack.skillIds)]
+    `INSERT INTO portfolio_evidence_packs(id,owner_id,token_hash,title,specialization,recipient_name,purpose,include_profile,work_ids_json,evidence_ids_json,expires_at,skill_ids_json)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, ownerId, tokenHash, pack.title, pack.specialization, pack.recipientName, pack.purpose, pack.includeProfile ? 1 : 0, JSON.stringify(pack.workIds), JSON.stringify(pack.evidenceIds), expiresAt, JSON.stringify(pack.skillIds)]
   );
   return res.status(201).json({ id, token, expiresAt });
 });
@@ -663,7 +675,7 @@ portfolioRouter.post("/evidence-packs/:packId/renew", async (req: AuthRequest, r
   if (!/^[0-9a-f-]{36}$/i.test(idempotencyKey)) return sendError(res, 400, "IDEMPOTENCY_KEY_REQUIRED");
   const renewalKeyHash = createHash("sha256").update(idempotencyKey).digest("hex");
   const rows = await AppDataSource.query(
-    `SELECT id,title,specialization,include_profile AS includeProfile,work_ids_json AS workIdsJson,evidence_ids_json AS evidenceIdsJson,
+    `SELECT id,title,specialization,recipient_name AS recipientName,purpose,include_profile AS includeProfile,work_ids_json AS workIdsJson,evidence_ids_json AS evidenceIdsJson,
             skill_ids_json AS skillIdsJson,revoked_at AS revokedAt,renewal_key_hash AS renewalKeyHash
      FROM portfolio_evidence_packs WHERE id=? AND owner_id=? LIMIT 1`,
     [req.params.packId, ownerId],
@@ -717,9 +729,9 @@ portfolioRouter.post("/evidence-packs/:packId/renew", async (req: AuthRequest, r
     ) as { affectedRows?: number };
     if (!revokeResult.affectedRows) return false;
     await manager.query(
-      `INSERT INTO portfolio_evidence_packs(id,owner_id,token_hash,title,specialization,include_profile,work_ids_json,evidence_ids_json,expires_at,skill_ids_json,renewed_from_pack_id)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-      [id, ownerId, tokenHash, previous.title, previous.specialization, Boolean(previous.includeProfile) ? 1 : 0, JSON.stringify(workIds), JSON.stringify(evidenceIds), expiresAt, JSON.stringify(skillIds), previous.id],
+      `INSERT INTO portfolio_evidence_packs(id,owner_id,token_hash,title,specialization,recipient_name,purpose,include_profile,work_ids_json,evidence_ids_json,expires_at,skill_ids_json,renewed_from_pack_id)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, ownerId, tokenHash, previous.title, previous.specialization, previous.recipientName ?? "", previous.purpose ?? "", Boolean(previous.includeProfile) ? 1 : 0, JSON.stringify(workIds), JSON.stringify(evidenceIds), expiresAt, JSON.stringify(skillIds), previous.id],
     );
     return true;
   });
@@ -774,18 +786,18 @@ portfolioRouter.post("/works", async (req: AuthRequest, res: Response) => {
     if (existing[0] && existing[0].archivedAt == null) return res.status(409).json({ code: "PORTFOLIO_SOURCE_ALREADY_ADDED", id: existing[0].id });
     if (existing[0]) {
       await AppDataSource.query(
-        `UPDATE portfolio_works SET title=?,problem=?,solution=?,role=?,technologies_json=?,skill_ids_json=?,repository_url=?,demo_url=?,visibility=?,archived_at=NULL
+        `UPDATE portfolio_works SET title=?,problem=?,solution=?,contribution_summary=?,outcome_summary=?,role=?,technologies_json=?,skill_ids_json=?,repository_url=?,demo_url=?,visibility=?,archived_at=NULL
          WHERE id=? AND owner_id=?`,
-        [work.title, work.problem, work.solution, work.role, JSON.stringify([...new Set(work.technologies)]), JSON.stringify([...new Set(work.skillIds)]), work.repositoryUrl, work.demoUrl, work.visibility, existing[0].id, ownerId]
+        [work.title, work.problem, work.solution, work.contribution, work.outcome, work.role, JSON.stringify([...new Set(work.technologies)]), JSON.stringify([...new Set(work.skillIds)]), work.repositoryUrl, work.demoUrl, work.visibility, existing[0].id, ownerId]
       );
       return res.json({ id: existing[0].id, restored: true });
     }
   }
   const id = randomUUID();
   await AppDataSource.query(
-    `INSERT INTO portfolio_works(id,owner_id,title,problem,solution,role,technologies_json,skill_ids_json,repository_url,demo_url,source_publication_id,visibility)
-     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [id, ownerId, work.title, work.problem, work.solution, work.role, JSON.stringify([...new Set(work.technologies)]), JSON.stringify([...new Set(work.skillIds)]), work.repositoryUrl, work.demoUrl, sourcePublicationId, work.visibility]
+    `INSERT INTO portfolio_works(id,owner_id,title,problem,solution,contribution_summary,outcome_summary,role,technologies_json,skill_ids_json,repository_url,demo_url,source_publication_id,visibility)
+     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, ownerId, work.title, work.problem, work.solution, work.contribution, work.outcome, work.role, JSON.stringify([...new Set(work.technologies)]), JSON.stringify([...new Set(work.skillIds)]), work.repositoryUrl, work.demoUrl, sourcePublicationId, work.visibility]
   );
   return res.status(201).json({ id });
 });
@@ -799,9 +811,9 @@ portfolioRouter.patch("/works/:workId", async (req: AuthRequest, res: Response) 
   if (!validSkillSelection(work)) return sendError(res, 400, "INVALID_PORTFOLIO_WORK");
   if (work.visibility === "PUBLIC" && !await requireAdultPortfolioSharing(ownerId, res)) return;
   const result = await AppDataSource.query(
-    `UPDATE portfolio_works SET title=?,problem=?,solution=?,role=?,technologies_json=?,skill_ids_json=?,repository_url=?,demo_url=?,visibility=?
+    `UPDATE portfolio_works SET title=?,problem=?,solution=?,contribution_summary=?,outcome_summary=?,role=?,technologies_json=?,skill_ids_json=?,repository_url=?,demo_url=?,visibility=?
      WHERE id=? AND owner_id=? AND archived_at IS NULL`,
-    [work.title, work.problem, work.solution, work.role, JSON.stringify([...new Set(work.technologies)]), JSON.stringify([...new Set(work.skillIds)]), work.repositoryUrl, work.demoUrl, work.visibility, req.params.workId, ownerId]
+    [work.title, work.problem, work.solution, work.contribution, work.outcome, work.role, JSON.stringify([...new Set(work.technologies)]), JSON.stringify([...new Set(work.skillIds)]), work.repositoryUrl, work.demoUrl, work.visibility, req.params.workId, ownerId]
   ) as { affectedRows?: number };
   if (!result.affectedRows) return sendError(res, 404, "PORTFOLIO_WORK_NOT_FOUND");
   return res.json({ updated: true });
@@ -868,7 +880,7 @@ publicPortfolioRouter.get("/u/:username", async (req, res: Response) => {
   const profile = profiles[0];
   if (!profile || portfolioOwnerAgeStatus(profile) !== "ADULT") return sendError(res, 404, "PORTFOLIO_NOT_FOUND");
   const works = await AppDataSource.query(
-    `SELECT w.id,w.title,w.problem,w.solution,w.role,w.technologies_json AS technologiesJson,w.skill_ids_json AS skillIdsJson,
+    `SELECT w.id,w.title,w.problem,w.solution,w.contribution_summary AS contribution,w.outcome_summary AS outcome,w.role,w.technologies_json AS technologiesJson,w.skill_ids_json AS skillIdsJson,
             w.repository_url AS repositoryUrl,w.demo_url AS demoUrl,p.public_id AS sourcePublicId
      FROM portfolio_works w
      LEFT JOIN growth_project_publications p
@@ -920,6 +932,7 @@ publicPortfolioRouter.get("/u/:username", async (req, res: Response) => {
     },
     works: works.map(work => ({
       id: work.id, title: work.title, problem: work.problem, solution: work.solution, role: work.role,
+      contribution: work.contribution ?? "", outcome: work.outcome ?? "",
       technologies: parseJsonArray(work.technologiesJson), skillIds: parseJsonArray(work.skillIdsJson, 12), repositoryUrl: work.repositoryUrl,
       demoUrl: work.demoUrl, sourcePublicId: work.sourcePublicId,
     })),
@@ -936,7 +949,7 @@ publicPortfolioRouter.get("/p/:token", async (req, res: Response) => {
   if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return sendError(res, 404, "EVIDENCE_PACK_NOT_FOUND");
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const grants = await AppDataSource.query(
-    `SELECT p.id,p.owner_id AS ownerId,p.title,p.specialization,p.include_profile AS includeProfile,p.work_ids_json AS workIdsJson,
+    `SELECT p.id,p.owner_id AS ownerId,p.title,p.specialization,p.recipient_name AS recipientName,p.purpose,p.include_profile AS includeProfile,p.work_ids_json AS workIdsJson,
             p.evidence_ids_json AS evidenceIdsJson,p.skill_ids_json AS skillIdsJson,p.expires_at AS expiresAt,u.username,
             u.birth_day AS birthDay,u.birth_month AS birthMonth,u.birth_year AS birthYear
      FROM portfolio_evidence_packs p JOIN users u ON u.id=p.owner_id AND u.user_mode='PERSONAL'
@@ -955,7 +968,7 @@ publicPortfolioRouter.get("/p/:token", async (req, res: Response) => {
        FROM portfolio_profiles p JOIN users u ON u.id=p.owner_id WHERE p.owner_id=? LIMIT 1`, [grant.ownerId]
     ) as Promise<Array<Record<string, unknown>>> : Promise.resolve([]),
     workIds.length ? AppDataSource.query(
-      `SELECT w.id,w.title,w.problem,w.solution,w.role,w.technologies_json AS technologiesJson,w.skill_ids_json AS skillIdsJson,w.sort_order AS sortOrder,
+      `SELECT w.id,w.title,w.problem,w.solution,w.contribution_summary AS contribution,w.outcome_summary AS outcome,w.role,w.technologies_json AS technologiesJson,w.skill_ids_json AS skillIdsJson,w.sort_order AS sortOrder,
               w.repository_url AS repositoryUrl,w.demo_url AS demoUrl,p.public_id AS sourcePublicId
        FROM portfolio_works w LEFT JOIN growth_project_publications p
          ON p.id=w.source_publication_id AND p.owner_id=w.owner_id AND p.revoked=0
@@ -1009,12 +1022,15 @@ publicPortfolioRouter.get("/p/:token", async (req, res: Response) => {
   return res.json({
     title: grant.title,
     specialization: grant.specialization,
+    recipientName: grant.recipientName ?? "",
+    purpose: grant.purpose ?? "",
     skillIds,
     competencies: PORTFOLIO_SKILLS.filter(skill => skillIds.includes(skill.id)),
     expiresAt: grant.expiresAt,
     profile,
     works: workRows.map(work => ({
       id: work.id, title: work.title, problem: work.problem, solution: work.solution, role: work.role,
+      contribution: work.contribution ?? "", outcome: work.outcome ?? "",
       technologies: parseJsonArray(work.technologiesJson), skillIds: parseJsonArray(work.skillIdsJson, 12), repositoryUrl: work.repositoryUrl,
       demoUrl: work.demoUrl, sourcePublicId: work.sourcePublicId,
     })),

@@ -46,6 +46,10 @@ export function assessCaseUrl(companyId: string, assessmentId: string): string {
   return `/assess?${new URLSearchParams({ company: companyId, assessment: assessmentId })}`;
 }
 
+export function assessBatchCaseVariant(first: "A" | "B", index: number): "A" | "B" {
+  return index % 2 === 0 ? first : first === "A" ? "B" : "A";
+}
+
 export function assessNextAction(status: string, role: AssessRole, en: boolean): { label: string; actionable: boolean } {
   const labels: Record<string, [string, string]> = {
     INVITED: ["Очікуємо згоду", "Awaiting consent"], ACCEPTED: ["Переглянути співбесіду", "Review interview"],
@@ -67,4 +71,31 @@ export function filterAssessCases(cases: AssessCase[], query: string, status: st
   return cases.filter(item => (!technicalOnly || technicalStatuses.has(item.status))
     && (!status || item.status === status)
     && (!needle || `${item.candidate_username ?? ""} ${item.role_title ?? ""} ${item.task_title ?? ""}`.toLocaleLowerCase().includes(needle)));
+}
+
+export function suggestAssessEvidenceProbes(
+  criteria: Array<{ id?: string; labelUk?: string; labelEn?: string }>,
+  reviews: Array<{ reviewerType?: string; submittedAt?: string; scores?: Array<number | null> }>,
+  en: boolean,
+): string[] {
+  if (!criteria.length || !reviews.length) return [];
+  const latestByReviewer = new Map<string, { submittedAt: number; scores: Array<number | null> }>();
+  for (const review of reviews) {
+    if (!Array.isArray(review.scores)) continue;
+    const reviewer = review.reviewerType ?? "reviewer";
+    const submittedAt = Date.parse(review.submittedAt ?? "") || 0;
+    if (submittedAt >= (latestByReviewer.get(reviewer)?.submittedAt ?? -1)) {
+      latestByReviewer.set(reviewer, { submittedAt, scores: review.scores });
+    }
+  }
+  if (!latestByReviewer.size) return [];
+  return criteria.flatMap((criterion, index) => {
+    const scores = [...latestByReviewer.values()].map(review => review.scores[index]).filter((score): score is number => typeof score === "number");
+    if (scores.some(score => score >= 2)) return [];
+    const label = (en ? criterion.labelEn : criterion.labelUk)?.trim();
+    if (!label) return [];
+    return [en
+      ? `We have not yet seen enough evidence for “${label}”. Could you walk us through one concrete example and explain your role and the outcome?`
+      : `За критерієм «${label}» поки недостатньо конкретних доказів. Наведи один приклад і поясни свою роль та результат.`];
+  }).slice(0, 3);
 }

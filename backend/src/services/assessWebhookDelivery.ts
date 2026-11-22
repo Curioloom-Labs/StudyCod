@@ -16,6 +16,8 @@ export const assessWebhookEvents = [
   "assessment.task_assigned",
   "assessment.task_submitted",
   "assessment.review_saved",
+  "assessment.followup_requested",
+  "assessment.followup_answered",
   "assessment.decision_saved",
   "assessment.withdrawn",
 ] as const;

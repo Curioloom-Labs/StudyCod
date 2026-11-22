@@ -18,6 +18,8 @@ export type PortfolioWork = {
   title: string;
   problem: string;
   solution: string;
+  contribution: string;
+  outcome: string;
   role: string;
   technologies: string[];
   skillIds: string[];
@@ -89,6 +91,8 @@ export type PortfolioEvidencePack = {
   id: string;
   title: string;
   specialization: string;
+  recipientName: string;
+  purpose: string;
   includeProfile: boolean;
   workCount: number;
   evidenceCount: number;
@@ -123,7 +127,7 @@ export type PortfolioPublicView = {
   profile: Pick<PortfolioProfile, "headline" | "specialization" | "technologies" | "summary" | "githubUrl" | "websiteUrl"> & {
     username: string; displayName: string; avatarUrl: string | null;
   };
-  works: Array<Pick<PortfolioWork, "id" | "title" | "problem" | "solution" | "role" | "technologies" | "skillIds" | "repositoryUrl" | "demoUrl"> & {
+  works: Array<Pick<PortfolioWork, "id" | "title" | "problem" | "solution" | "contribution" | "outcome" | "role" | "technologies" | "skillIds" | "repositoryUrl" | "demoUrl"> & {
     sourcePublicId: string | null;
   }>;
   evidence: Array<Omit<PortfolioEvidence, "sourceGradeId" | "visibility" | "sourceKey">>;
@@ -184,6 +188,8 @@ export async function archivePortfolioEvidence(id: string): Promise<void> {
 export async function createPortfolioEvidencePack(input: {
   title: string;
   specialization: string;
+  recipientName: string;
+  purpose: string;
   includeProfile: boolean;
   workIds: string[];
   evidenceIds: string[];
@@ -212,6 +218,8 @@ export async function getPortfolioPreview(): Promise<PortfolioPublicView> {
 export async function getPublicEvidencePack(token: string): Promise<{
   title: string;
   specialization: string;
+  recipientName: string;
+  purpose: string;
   skillIds: string[];
   competencies: PortfolioSkill[];
   expiresAt: string;

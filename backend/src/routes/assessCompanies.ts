@@ -46,6 +46,15 @@ function reviewHistory(value: unknown): Array<Record<string, unknown>> {
   const rows = Array.isArray(parsed) ? parsed : isObject(parsed) ? [parsed] : [];
   return rows.filter(isObject);
 }
+async function assessFollowups(assessmentId: string): Promise<Array<Record<string, unknown>>> {
+  const rows = await AppDataSource.query(
+    `SELECT f.id,f.reviewer_type AS reviewerType,f.question,f.response,f.asked_at AS askedAt,f.answered_at AS answeredAt,
+            u.username AS reviewerUsername
+     FROM growth_assess_followups f LEFT JOIN users u ON u.id=f.asked_by
+     WHERE f.assessment_id=? ORDER BY f.asked_at ASC,f.id ASC`, [assessmentId],
+  ) as Array<Record<string, unknown>>;
+  return rows;
+}
 const cleanText = (value: unknown, max: number) => typeof value === "string" ? value.trim().slice(0, max) : "";
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 const assessmentInviteToken = (companyId: string, idempotencyKey: string) => createHmac("sha256", JWT_SECRET).update(`assess-invite:v1:${companyId}:${idempotencyKey}`).digest("base64url");
@@ -327,6 +336,9 @@ assessCompaniesRouter.get("/candidate/assessments/:assessmentId", authRequired, 
   const row = await companyAssessmentForCandidate(req.params.assessmentId, userId);
   if (!row || ["WITHDRAWN", "CLOSED"].includes(String(row.status))) return sendError(res, 404, "ASSESSMENT_NOT_FOUND");
   const response = publicCase(row, "CANDIDATE");
+  if (row.consent_at && !["WITHDRAWN", "DECLINED", "CLOSED"].includes(String(row.status))) {
+    response.followups = await assessFollowups(req.params.assessmentId);
+  }
   if (row.technical_assessment_id) {
     const taskRows = await AppDataSource.query(
       `SELECT a.id,a.status,a.card_snapshot,a.draft_json,a.draft_revision,a.job_id,j.state AS job_state,j.result_json
@@ -343,6 +355,27 @@ assessCompaniesRouter.get("/candidate/assessments/:assessmentId", authRequired, 
     }
   }
   return res.json({ assessment: response });
+});
+
+assessCompaniesRouter.post("/candidate/assessments/:assessmentId/followups/:followupId/respond", authRequired, async (req: AuthRequest, res: Response) => {
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
+  if (!UUID_RE.test(req.params.assessmentId) || !UUID_RE.test(req.params.followupId)) return sendError(res, 404, "ASSESS_FOLLOWUP_NOT_FOUND");
+  const parsed = z.object({ response: z.string().trim().min(1).max(6000) }).strict().safeParse(req.body ?? {});
+  if (!parsed.success) return sendError(res, 400, "INVALID_ASSESS_FOLLOWUP_RESPONSE");
+  const updated = await AppDataSource.query(
+    `UPDATE growth_assess_followups f JOIN growth_company_assessments a ON a.id=f.assessment_id
+     SET f.response=?,f.answered_at=UTC_TIMESTAMP(3)
+     WHERE f.id=? AND f.assessment_id=? AND f.candidate_id=? AND f.answered_at IS NULL
+       AND a.consent_at IS NOT NULL AND a.status IN ('ACCEPTED','PORTFOLIO_SELECTED','TASK_ASSIGNED','TASK_SUBMITTED','REVIEWED')`,
+    [parsed.data.response, req.params.followupId, req.params.assessmentId, userId],
+  ) as { affectedRows?: number };
+  if (!updated.affectedRows) return sendError(res, 409, "ASSESS_FOLLOWUP_NOT_AVAILABLE");
+  const rows = await AppDataSource.query("SELECT company_id,created_by,status FROM growth_company_assessments WHERE id=? AND candidate_id=? LIMIT 1", [req.params.assessmentId, userId]) as Array<{ company_id: string; created_by: number; status: string }>;
+  if (rows[0]) {
+    await notifyCompanyUser(rows[0].created_by, userId, "COMPANY_ASSESSMENT_UPDATED", `/assess?company=${rows[0].company_id}&assessment=${req.params.assessmentId}`);
+    await emitAssessWebhookEvent(rows[0].company_id, req.params.assessmentId, "assessment.followup_answered", rows[0].status);
+  }
+  return res.json({ answered: true });
 });
 
 assessCompaniesRouter.post("/candidate/assessments/:assessmentId/respond", authRequired, async (req: AuthRequest, res: Response) => {
@@ -374,7 +407,7 @@ assessCompaniesRouter.get("/candidate/assessments/:assessmentId/portfolio-option
      WHERE p.owner_id=? ORDER BY v.created_at DESC LIMIT 200`, [userId]
   ) as Array<Record<string, unknown>>;
   const works = await AppDataSource.query(
-    `SELECT id,title,problem,solution,role,technologies_json AS technologiesJson,repository_url AS repositoryUrl,demo_url AS demoUrl,visibility
+    `SELECT id,title,problem,solution,contribution_summary AS contribution,outcome_summary AS outcome,role,technologies_json AS technologiesJson,repository_url AS repositoryUrl,demo_url AS demoUrl,visibility
      FROM portfolio_works WHERE owner_id=? AND archived_at IS NULL ORDER BY sort_order ASC,created_at DESC LIMIT 100`,
     [userId],
   ) as Array<Record<string, unknown>>;
@@ -382,7 +415,7 @@ assessCompaniesRouter.get("/candidate/assessments/:assessmentId/portfolio-option
     projectId: item.project_id, family: item.family_key, runtime: item.runtime, versionId: item.version_id,
     stage: item.stage_key, sequence: item.sequence_no, explanation: item.explanation, createdAt: item.created_at,
   })), works: works.map(item => ({
-    id: item.id, title: item.title, problem: item.problem, solution: item.solution, role: item.role,
+    id: item.id, title: item.title, problem: item.problem, solution: item.solution, contribution: item.contribution, outcome: item.outcome, role: item.role,
     technologies: parseJson(item.technologiesJson, []), repositoryUrl: item.repositoryUrl, demoUrl: item.demoUrl,
     visibility: item.visibility,
   })) });
@@ -429,7 +462,7 @@ assessCompaniesRouter.post("/candidate/assessments/:assessmentId/portfolio-evide
   let evidence: Record<string, unknown>;
   if (parsed.data.type === "PORTFOLIO_WORK") {
     const works = await AppDataSource.query(
-      `SELECT id,title,problem,solution,role,technologies_json AS technologiesJson,repository_url AS repositoryUrl,demo_url AS demoUrl
+      `SELECT id,title,problem,solution,contribution_summary AS contribution,outcome_summary AS outcome,role,technologies_json AS technologiesJson,repository_url AS repositoryUrl,demo_url AS demoUrl
        FROM portfolio_works WHERE id=? AND owner_id=? AND archived_at IS NULL LIMIT 1`,
       [parsed.data.workId, userId],
     ) as Array<Record<string, unknown>>;
@@ -437,6 +470,7 @@ assessCompaniesRouter.post("/candidate/assessments/:assessmentId/portfolio-evide
     if (!work) return sendError(res, 404, "PORTFOLIO_WORK_NOT_FOUND");
     evidence = {
       type: parsed.data.type, title: work.title, role: work.role, problem: work.problem, solution: work.solution,
+      contribution: work.contribution ?? "", outcome: work.outcome ?? "",
       technologies: parseJson(work.technologiesJson, []), repositoryUrl: work.repositoryUrl ?? null, demoUrl: work.demoUrl ?? null,
     };
   } else {
@@ -945,6 +979,10 @@ assessCompaniesRouter.get("/:companyId/assessments/:assessmentId", authRequired,
   response.candidateUsername = row.candidate_username;
   if (canAssessCompanyRole(role, "READ_HR_REVIEW")) response.ownHrReview = reviewHistory(row.hr_review_json).find(review => Number(review.reviewerId) === userId) ?? null;
   if (canAssessCompanyRole(role, "READ_TECHNICAL_REVIEW")) response.ownTechnicalReview = reviewHistory(row.technical_review_json).find(review => Number(review.reviewerId) === userId) ?? null;
+  if (!new Set(["WITHDRAWN", "CLOSED"]).has(String(row.status))
+    && (canAssessCompanyRole(role, "REVIEW_HR") || canAssessCompanyRole(role, "REVIEW_TECHNICAL"))) {
+    response.followups = await assessFollowups(req.params.assessmentId);
+  }
   if (row.status !== "WITHDRAWN" && row.status !== "INVITED" && row.project_id && row.version_id) {
     response.portfolio = {
       projectId: row.project_id, versionId: row.version_id, family: row.family_key,
@@ -966,6 +1004,35 @@ assessCompaniesRouter.get("/:companyId/assessments/:assessmentId", authRequired,
     };
   }
   return res.json({ assessment: response, role });
+});
+
+assessCompaniesRouter.post("/:companyId/assessments/:assessmentId/followups", authRequired, async (req: AuthRequest, res: Response) => {
+  const userId = requirePersonalAccountPrincipal(req, res); if (!userId) return;
+  if (!UUID_RE.test(req.params.companyId) || !UUID_RE.test(req.params.assessmentId)) return sendError(res, 404, "ASSESSMENT_NOT_FOUND");
+  const role = await activeAssessCompanyRole(req.params.companyId, userId);
+  const parsed = z.object({ reviewerType: z.enum(["HR", "TECHNICAL"]), question: z.string().trim().min(8).max(1200) }).strict().safeParse(req.body ?? {});
+  if (!parsed.success) return sendError(res, 400, "INVALID_ASSESS_FOLLOWUP");
+  if (parsed.data.reviewerType === "HR" ? !canAssessCompanyRole(role, "REVIEW_HR") : !canAssessCompanyRole(role, "REVIEW_TECHNICAL")) return sendError(res, 403, "ASSESS_REVIEW_ACCESS_REQUIRED");
+  const assessments = await AppDataSource.query(
+    `SELECT id,candidate_id,status,consent_at,answers_submitted_at FROM growth_company_assessments WHERE id=? AND company_id=? LIMIT 1`,
+    [req.params.assessmentId, req.params.companyId],
+  ) as Array<{ id: string; candidate_id: number; status: string; consent_at: unknown; answers_submitted_at: unknown }>;
+  const assessment = assessments[0];
+  if (!assessment || !assessment.consent_at || !assessment.answers_submitted_at || !["TASK_SUBMITTED", "REVIEWED"].includes(assessment.status)) return sendError(res, 409, "ASSESS_FOLLOWUP_NOT_AVAILABLE");
+  const [counts] = await Promise.all([AppDataSource.query(
+    `SELECT COUNT(*) AS total,SUM(answered_at IS NULL) AS open_count FROM growth_assess_followups WHERE assessment_id=?`,
+    [assessment.id],
+  ) as Promise<Array<{ total: number | string; open_count: number | string | null }>>]);
+  if (Number(counts[0]?.total ?? 0) >= 6 || Number(counts[0]?.open_count ?? 0) >= 3) return sendError(res, 409, "ASSESS_FOLLOWUP_LIMIT_REACHED");
+  const id = randomUUID();
+  await AppDataSource.query(
+    `INSERT INTO growth_assess_followups(id,assessment_id,company_id,asked_by,candidate_id,reviewer_type,question)
+     VALUES(?,?,?,?,?,?,?)`,
+    [id, assessment.id, req.params.companyId, userId, assessment.candidate_id, parsed.data.reviewerType, parsed.data.question],
+  );
+  await notifyCompanyUser(assessment.candidate_id, userId, "COMPANY_ASSESSMENT_UPDATED", `/assess?case=${assessment.id}`);
+  await emitAssessWebhookEvent(req.params.companyId, assessment.id, "assessment.followup_requested", assessment.status);
+  return res.status(201).json({ followup: { id, reviewerType: parsed.data.reviewerType, question: parsed.data.question } });
 });
 
 assessCompaniesRouter.post("/:companyId/assessments/:assessmentId/interview-review", authRequired, async (req: AuthRequest, res: Response) => {
