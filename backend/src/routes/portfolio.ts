@@ -40,6 +40,21 @@ const profileSchema = z.object({
   shareAvatar: z.boolean().default(false),
   visibility: visibilitySchema,
 });
+const portfolioSectionSchema = z.object({
+  id: z.string().uuid(),
+  type: z.enum(["EXPERIENCE", "EDUCATION", "CERTIFICATION", "CUSTOM"]),
+  title: z.string().trim().min(1).max(120),
+  organization: z.string().trim().max(160).default(""),
+  location: z.string().trim().max(120).default(""),
+  startDate: z.string().trim().max(40).default(""),
+  endDate: z.string().trim().max(40).default(""),
+  description: z.string().trim().max(4000).default(""),
+  url: safeHttpsUrl.default(null),
+});
+const portfolioContentSchema = z.object({
+  sections: z.array(portfolioSectionSchema).max(20),
+  theme: z.enum(["EXPERIENCE", "PROJECTS"]).default("PROJECTS"),
+}).strict().refine(value => new Set(value.sections.map(section => section.id)).size === value.sections.length, "Duplicate portfolio section");
 const workSchema = z.object({
   title: z.string().trim().min(1).max(160),
   problem: z.string().trim().max(4_000),
@@ -99,8 +114,8 @@ const privateBirthDateSchema = z.string().refine(value => parsePortfolioBirthDat
 
 type WorkInput = z.infer<typeof workSchema>;
 type ProfileRow = {
-  displayName: string; headline: string; specialization: string; technologiesJson?: unknown; technologies?: string[]; summary: string; githubUrl: string | null;
-  websiteUrl: string | null; shareAvatar?: boolean | number; visibility: "PRIVATE" | "PUBLIC"; updatedAt?: Date | string;
+  displayName: string; headline: string; specialization: string; technologiesJson?: unknown; technologies?: string[]; contentJson?: unknown; summary: string; githubUrl: string | null;
+  websiteUrl: string | null; shareAvatar?: boolean | number; visibility: "PRIVATE" | "PUBLIC"; content?: z.infer<typeof portfolioContentSchema>; updatedAt?: Date | string;
 };
 
 const sendError = (res: Response, status: number, code: string) => res.status(status).json({ code, message: code });
@@ -166,7 +181,7 @@ async function listWorks(ownerId: number): Promise<Array<Record<string, unknown>
 
 async function loadProfile(ownerId: number): Promise<ProfileRow> {
   const rows = await AppDataSource.query(
-    `SELECT display_name AS displayName,headline,specialization,technologies_json AS technologiesJson,summary,github_url AS githubUrl,website_url AS websiteUrl,
+    `SELECT display_name AS displayName,headline,specialization,technologies_json AS technologiesJson,summary,github_url AS githubUrl,website_url AS websiteUrl,content_json AS contentJson,
             share_avatar AS shareAvatar,visibility,updated_at AS updatedAt
      FROM portfolio_profiles WHERE owner_id=? LIMIT 1`, [ownerId]
   ) as ProfileRow[];
@@ -174,10 +189,19 @@ async function loadProfile(ownerId: number): Promise<ProfileRow> {
   return row ? {
     displayName: row.displayName, headline: row.headline, specialization: row.specialization,
     technologies: parseJsonArray(row.technologiesJson, 16), summary: row.summary, githubUrl: row.githubUrl,
-    websiteUrl: row.websiteUrl, shareAvatar: Boolean(row.shareAvatar), visibility: row.visibility, updatedAt: row.updatedAt,
+    websiteUrl: row.websiteUrl, shareAvatar: Boolean(row.shareAvatar), visibility: row.visibility, content: parsePortfolioContent(row.contentJson), updatedAt: row.updatedAt,
   } : {
-    displayName: "", headline: "", specialization: "", technologies: [], summary: "", githubUrl: null, websiteUrl: null, shareAvatar: false, visibility: "PRIVATE",
+    displayName: "", headline: "", specialization: "", technologies: [], summary: "", githubUrl: null, websiteUrl: null, shareAvatar: false, visibility: "PRIVATE", content: { sections: [], theme: "PROJECTS" },
   };
+}
+
+function parsePortfolioContent(value: unknown): z.infer<typeof portfolioContentSchema> {
+  try {
+    const parsed = portfolioContentSchema.safeParse(typeof value === "string" ? JSON.parse(value) : value);
+    return parsed.success ? parsed.data : { sections: [], theme: "PROJECTS" };
+  } catch {
+    return { sections: [], theme: "PROJECTS" };
+  }
 }
 
 const eligibleEvidenceSourceSql = `g.user_id=? AND u.user_mode='PERSONAL' AND t.user_id=g.user_id
@@ -342,7 +366,9 @@ function publicPortfolioView(
       githubUrl: profile.githubUrl,
       websiteUrl: profile.websiteUrl,
       avatarUrl: profile.shareAvatar ? shareableAvatarUrl(accountAvatarUrl) : null,
+      theme: profile.content?.theme ?? "PROJECTS",
     },
+    sections: profile.content?.sections ?? [],
     works: works.filter(work => work.visibility === "PUBLIC").map(work => ({
       id: work.id,
       title: work.title,
@@ -765,6 +791,18 @@ portfolioRouter.put("/me", async (req: AuthRequest, res: Response) => {
   return res.json({ profile: await loadProfile(ownerId) });
 });
 
+portfolioRouter.put("/me/content", async (req: AuthRequest, res: Response) => {
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
+  const parsed = portfolioContentSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return sendError(res, 400, "INVALID_PORTFOLIO_CONTENT");
+  await AppDataSource.query(
+    `INSERT INTO portfolio_profiles(owner_id,display_name,headline,specialization,summary,visibility,technologies_json,share_avatar,content_json)
+     VALUES(?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE content_json=VALUES(content_json)`,
+    [ownerId, "", "", "", "", "PRIVATE", "[]", 0, JSON.stringify(parsed.data)]
+  );
+  return res.json({ content: parsed.data });
+});
+
 portfolioRouter.post("/works", async (req: AuthRequest, res: Response) => {
   const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
   const parsed = workSchema.safeParse(req.body ?? {});
@@ -872,7 +910,7 @@ publicPortfolioRouter.get("/u/:username", async (req, res: Response) => {
   if (!username || username.length > 100) return sendError(res, 404, "PORTFOLIO_NOT_FOUND");
   const profiles = await AppDataSource.query(
     `SELECT u.id AS ownerId,u.username,u.birth_day AS birthDay,u.birth_month AS birthMonth,u.birth_year AS birthYear,p.display_name AS displayName,
-            p.headline,p.specialization,p.technologies_json AS technologiesJson,p.summary,p.github_url AS githubUrl,p.website_url AS websiteUrl,
+            p.headline,p.specialization,p.technologies_json AS technologiesJson,p.summary,p.github_url AS githubUrl,p.website_url AS websiteUrl,p.content_json AS contentJson,
             p.share_avatar AS shareAvatar,CASE WHEN p.share_avatar=1 THEN u.avatar_url ELSE NULL END AS avatarUrl
      FROM portfolio_profiles p JOIN users u ON u.id=p.owner_id
      WHERE u.username=? AND u.user_mode='PERSONAL' AND p.visibility='PUBLIC' LIMIT 1`, [username]
@@ -929,7 +967,9 @@ publicPortfolioRouter.get("/u/:username", async (req, res: Response) => {
       githubUrl: profile.githubUrl,
       websiteUrl: profile.websiteUrl,
       avatarUrl: Boolean(profile.shareAvatar) ? shareableAvatarUrl(profile.avatarUrl) : null,
+      theme: parsePortfolioContent(profile.contentJson).theme,
     },
+    sections: parsePortfolioContent(profile.contentJson).sections,
     works: works.map(work => ({
       id: work.id, title: work.title, problem: work.problem, solution: work.solution, role: work.role,
       contribution: work.contribution ?? "", outcome: work.outcome ?? "",

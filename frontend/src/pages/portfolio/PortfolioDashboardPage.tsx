@@ -14,6 +14,7 @@ import {
   reorderPortfolioEvidence,
   reorderPortfolioWorks,
   savePortfolioProfile,
+  savePortfolioContent,
   updatePortfolioWork,
   updatePortfolioEvidence,
   revokePortfolioEvidencePack,
@@ -24,6 +25,7 @@ import {
   type PortfolioEvidenceSource,
   type PortfolioEvidenceSourceType,
   type PortfolioProfile,
+  type PortfolioContentSection,
   type PortfolioWork,
   type PortfolioWorkInput,
 } from "../../lib/api/portfolio";
@@ -73,6 +75,9 @@ export const PortfolioDashboardPage: React.FC = () => {
     ...(dashboard?.sourcedEvidenceSources ?? []),
   ], [dashboard]);
   const [profile, setProfile] = React.useState<PortfolioProfile>(emptyProfile);
+  const [portfolioSections, setPortfolioSections] = React.useState<PortfolioContentSection[]>([]);
+  const [portfolioTheme, setPortfolioTheme] = React.useState<"EXPERIENCE" | "PROJECTS">("PROJECTS");
+  const [savingSections, setSavingSections] = React.useState(false);
   const [birthDate, setBirthDate] = React.useState("");
   const [work, setWork] = React.useState<PortfolioWorkInput>(blankWork);
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -137,6 +142,8 @@ export const PortfolioDashboardPage: React.FC = () => {
       const next = await getPortfolioDashboard();
       setDashboard(next);
       setProfile(next.profile);
+      setPortfolioSections(next.profile.content?.sections ?? []);
+      setPortfolioTheme(next.profile.content?.theme ?? "PROJECTS");
       setBirthDate(next.birthDate ?? "");
     } catch (caught) {
       setError(getErrorMessageFromUnknown(caught, copy("Не вдалося завантажити портфоліо.", "Could not load your portfolio.")));
@@ -163,6 +170,27 @@ export const PortfolioDashboardPage: React.FC = () => {
       setSavingProfile(false);
     }
   };
+
+  const saveSections = async () => {
+    setSavingSections(true);
+    setError("");
+    try {
+      const content = await savePortfolioContent({ sections: portfolioSections, theme: portfolioTheme });
+      setPortfolioSections(content.sections);
+      setPortfolioTheme(content.theme);
+      setProfile(current => ({ ...current, content }));
+      setNotice(copy("Структуру портфоліо збережено.", "Portfolio structure saved."));
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, copy("Не вдалося зберегти секції портфоліо.", "Could not save portfolio sections.")));
+    } finally {
+      setSavingSections(false);
+    }
+  };
+
+  const addPortfolioSection = (type: PortfolioContentSection["type"]) => setPortfolioSections(current => [...current, {
+    id: crypto.randomUUID(), type, title: type === "EXPERIENCE" ? copy("Посада", "Position") : type === "EDUCATION" ? copy("Освіта", "Education") : type === "CERTIFICATION" ? copy("Сертифікат", "Certification") : copy("Нова секція", "New section"),
+    organization: "", location: "", startDate: "", endDate: "", description: "", url: null,
+  }].slice(0, 20));
 
   const saveBirthDate = async () => {
     setSavingBirthDate(true);
@@ -424,13 +452,14 @@ export const PortfolioDashboardPage: React.FC = () => {
     <header className="flex flex-col justify-between gap-5 border-b border-border/70 pb-7 sm:flex-row sm:items-end">
       <div>
         <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.12em] text-primary-strong dark:text-primary-soft"><BriefcaseBusiness className="size-4" /> StudyCod · Portfolio</div>
-        <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.045em] sm:text-4xl">{copy("Твої роботи, твій вибір", "Your work, selected by you")}</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">{copy("Збирай власні проєкти й обирай, що показувати. Портфоліо приватне, доки ти сам не відкриєш його.", "Collect your work and decide what to share. Your portfolio stays private until you choose to publish it.")}</p>
+        <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-[-.045em] sm:text-4xl">{copy("Створи професійне портфоліо", "Build your professional portfolio")}</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-text-secondary">{copy("Покажи свій шлях, досвід, проєкти й результати на власній сторінці. Саме ти вирішуєш, що опублікувати.", "Bring your experience, projects, and results together on your own page. You decide what to publish.")}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         {dashboard?.username && <Link to="/portfolio/preview" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold transition hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Eye className="size-4" />{copy("Попередній перегляд", "Preview page")}<ArrowUpRight className="size-4" /></Link>}
         {dashboard?.username && profile.visibility === "PUBLIC" && dashboard.publicSharingAgeStatus === "ADULT" && <Link to={`/portfolio/u/${encodeURIComponent(dashboard.username)}`} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold transition hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><Eye className="size-4" />{copy("Переглянути сторінку", "View public page")}<ArrowUpRight className="size-4" /></Link>}
-        <Link to="/portfolio/projects" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><FolderKanban className="size-4" />{copy("Розвивати роботу на StudyCod", "Build work on StudyCod")}</Link>
+        <a href="#portfolio-sections-title" className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition hover:brightness-95 active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"><FolderKanban className="size-4" />{copy("Редагувати сторінку", "Edit portfolio page")}</a>
+        <Link to="/portfolio/projects" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold transition hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">{copy("Створити проєкт", "Create a project")}</Link>
       </div>
     </header>
 
@@ -569,6 +598,27 @@ export const PortfolioDashboardPage: React.FC = () => {
         {!!dashboard?.evidencePacks.length && <div className="mt-5"><h3 className="text-sm font-semibold">{copy("Створені посилання", "Created share links")}</h3><div className="mt-2 divide-y divide-border rounded-2xl border border-border px-4">{dashboard.evidencePacks.map(pack => { const expired = new Date(pack.expiresAt).getTime() <= Date.now(); const renewalChild = dashboard.evidencePacks.find(item => item.id === pack.renewedPackId); const canRecover = Boolean(pack.canRecoverRenewal && renewalChild && !renewalChild.revokedAt && new Date(renewalChild.expiresAt).getTime() > Date.now()); const unavailable = Boolean(pack.revokedAt) || expired; return <article key={pack.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{pack.title}</p><span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${pack.revokedAt ? "bg-accent-error/10 text-accent-error" : expired ? "bg-bg-hover text-text-muted" : "bg-accent-success/10 text-accent-success"}`}>{pack.revokedAt ? copy("Відкликано", "Revoked") : expired ? copy("Термін минув", "Expired") : copy("Активне", "Active")}</span></div><p className="mt-1 text-xs text-text-muted">{pack.workCount} {copy("робіт", "work items")} · {pack.evidenceCount} {copy("свідчень", "evidence items")} · {pack.skillIds.length} {copy("компетенцій", "competencies")} · {copy("до", "until")} {new Date(pack.expiresAt).toLocaleDateString(en ? "en-GB" : "uk-UA")}</p></div><div className="flex flex-wrap gap-2">{(expired && !pack.revokedAt || canRecover) && <button type="button" onClick={() => void renewEvidencePack(pack.id)} disabled={renewingPackId !== null} className="min-h-9 shrink-0 rounded-lg border border-primary/25 px-3 text-xs font-semibold text-primary-strong transition hover:bg-primary/5 disabled:cursor-wait disabled:opacity-50">{renewingPackId === pack.id ? copy("Оновлюємо…", "Renewing…") : canRecover ? copy("Відновити нове посилання", "Recover link") : copy("Оновити посилання", "Renew link")}</button>}<button type="button" onClick={() => void revokeEvidencePack(pack.id)} disabled={unavailable} className="min-h-9 shrink-0 rounded-lg border border-border px-3 text-xs font-semibold text-text-secondary transition hover:border-accent-error/40 hover:text-accent-error disabled:cursor-not-allowed disabled:opacity-40">{copy("Відкликати", "Revoke")}</button></div></article>; })}</div></div>}
       </section>
     </div>
+
+    <section className="mt-5 rounded-3xl border border-border bg-bg-surface p-5 sm:p-7" aria-labelledby="portfolio-sections-title">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div><h2 id="portfolio-sections-title" className="text-xl font-bold">{copy("Побудуй сторінку портфоліо", "Build your portfolio page")}</h2><p className="mt-1 max-w-2xl text-sm leading-6 text-text-secondary">{copy("Додай досвід, освіту, сертифікати й власні розділи. Перетягни їх у потрібний порядок. Публічна сторінка показує ці секції разом із роботами та підтвердженими результатами.", "Add experience, education, certifications, and your own sections. Arrange them in the order you want. Your public page combines them with your projects and verified results.")}</p></div>
+        <label className="text-sm font-semibold">{copy("Акцент сторінки", "Page emphasis")}<select className={fieldClass} value={portfolioTheme} onChange={event => setPortfolioTheme(event.target.value as typeof portfolioTheme)}><option value="PROJECTS">{copy("Проєкти", "Projects")}</option><option value="EXPERIENCE">{copy("Досвід", "Experience")}</option></select></label>
+      </div>
+      <div className="mt-5 space-y-3">
+        {portfolioSections.map((section, index) => <article key={section.id} className="rounded-2xl border border-border bg-bg-base p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wide text-text-muted">{({ EXPERIENCE: copy("Досвід", "Experience"), EDUCATION: copy("Освіта", "Education"), CERTIFICATION: copy("Сертифікат", "Certification"), CUSTOM: copy("Власна секція", "Custom section") })[section.type]}</span><div className="flex gap-1"><button type="button" aria-label={copy("Перемістити секцію вгору", "Move section up")} disabled={index === 0} onClick={() => setPortfolioSections(current => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })} className="rounded-lg p-2 hover:bg-bg-hover disabled:opacity-40"><ArrowUp className="size-4"/></button><button type="button" aria-label={copy("Перемістити секцію вниз", "Move section down")} disabled={index === portfolioSections.length - 1} onClick={() => setPortfolioSections(current => { const next = [...current]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; return next; })} className="rounded-lg p-2 hover:bg-bg-hover disabled:opacity-40"><ArrowDown className="size-4"/></button><button type="button" onClick={() => setPortfolioSections(current => current.filter(item => item.id !== section.id))} className="rounded-lg p-2 text-accent-error hover:bg-accent-error/10">{copy("Прибрати", "Remove")}</button></div></div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="text-sm font-semibold">{copy("Заголовок", "Title")}<input className={fieldClass} maxLength={120} value={section.title} onChange={event => setPortfolioSections(current => current.map(item => item.id === section.id ? { ...item, title: event.target.value } : item))}/></label>
+            {section.type !== "CUSTOM" && <label className="text-sm font-semibold">{section.type === "EXPERIENCE" ? copy("Компанія", "Company") : section.type === "EDUCATION" ? copy("Заклад", "Institution") : copy("Видавець", "Issuer")}<input className={fieldClass} maxLength={160} value={section.organization} onChange={event => setPortfolioSections(current => current.map(item => item.id === section.id ? { ...item, organization: event.target.value } : item))}/></label>}
+            <label className="text-sm font-semibold">{copy("Початок", "From")}<input className={fieldClass} maxLength={40} placeholder="2022" value={section.startDate} onChange={event => setPortfolioSections(current => current.map(item => item.id === section.id ? { ...item, startDate: event.target.value } : item))}/></label>
+            <label className="text-sm font-semibold">{copy("Завершення", "To")}<input className={fieldClass} maxLength={40} placeholder={copy("Дотепер", "Present")} value={section.endDate} onChange={event => setPortfolioSections(current => current.map(item => item.id === section.id ? { ...item, endDate: event.target.value } : item))}/></label>
+            <label className="text-sm font-semibold sm:col-span-2">{copy("Опис і досягнення", "Description and achievements")}<textarea className={textAreaClass} rows={3} maxLength={4000} value={section.description} onChange={event => setPortfolioSections(current => current.map(item => item.id === section.id ? { ...item, description: event.target.value } : item))}/></label>
+            {section.type === "CUSTOM" && <label className="text-sm font-semibold">{copy("Посилання HTTPS", "HTTPS link")}<input className={fieldClass} type="url" value={section.url ?? ""} onChange={event => setPortfolioSections(current => current.map(item => item.id === section.id ? { ...item, url: event.target.value || null } : item))}/></label>}
+          </div>
+        </article>)}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">{(["EXPERIENCE", "EDUCATION", "CERTIFICATION", "CUSTOM"] as const).map(type => <button key={type} type="button" onClick={() => addPortfolioSection(type)} disabled={portfolioSections.length >= 20} className="min-h-10 rounded-xl border border-border px-3 text-sm font-semibold hover:bg-bg-hover disabled:opacity-50">+ {({ EXPERIENCE: copy("Досвід", "Experience"), EDUCATION: copy("Освіта", "Education"), CERTIFICATION: copy("Сертифікат", "Certification"), CUSTOM: copy("Власна секція", "Custom section") })[type]}</button>)}<button type="button" onClick={() => void saveSections()} disabled={savingSections} className="ml-auto min-h-10 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50">{savingSections ? copy("Збереження…", "Saving…") : copy("Зберегти структуру", "Save page structure")}</button></div>
+    </section>
 
     {formOpen && <section className="mt-5 rounded-3xl border border-primary/20 bg-bg-surface p-5 sm:p-7" aria-labelledby="portfolio-work-form-title">
       <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 id="portfolio-work-form-title" className="text-lg font-bold">{editingId ? copy("Змінити роботу", "Edit work") : copy("Нова робота", "Add work")}</h2><p className="mt-1 text-sm text-text-secondary">{copy("Посилання перевіряються як HTTPS. StudyCod не завантажує зовнішні сторінки.", "Links must use HTTPS. StudyCod does not fetch external pages.")}</p></div><button type="button" onClick={() => { setFormOpen(false); setEditingId(null); }} className="min-h-9 rounded-lg px-3 text-sm font-semibold text-text-secondary transition hover:bg-bg-hover">{copy("Закрити", "Close")}</button></div>

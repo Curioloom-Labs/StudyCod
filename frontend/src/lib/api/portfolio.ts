@@ -11,7 +11,21 @@ export type PortfolioProfile = {
   shareAvatar: boolean;
   visibility: "PRIVATE" | "PUBLIC";
   updatedAt?: string;
+  content?: PortfolioContent;
 };
+
+export type PortfolioContentSection = {
+  id: string;
+  type: "EXPERIENCE" | "EDUCATION" | "CERTIFICATION" | "CUSTOM";
+  title: string;
+  organization: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  description: string;
+  url: string | null;
+};
+export type PortfolioContent = { sections: PortfolioContentSection[]; theme: "EXPERIENCE" | "PROJECTS" };
 
 export type PortfolioWork = {
   id: string;
@@ -125,8 +139,9 @@ export type PortfolioDashboard = {
 
 export type PortfolioPublicView = {
   profile: Pick<PortfolioProfile, "headline" | "specialization" | "technologies" | "summary" | "githubUrl" | "websiteUrl"> & {
-    username: string; displayName: string; avatarUrl: string | null;
+    username: string; displayName: string; avatarUrl: string | null; theme: "EXPERIENCE" | "PROJECTS";
   };
+  sections: PortfolioContentSection[];
   works: Array<Pick<PortfolioWork, "id" | "title" | "problem" | "solution" | "contribution" | "outcome" | "role" | "technologies" | "skillIds" | "repositoryUrl" | "demoUrl"> & {
     sourcePublicId: string | null;
   }>;
@@ -140,6 +155,10 @@ export async function getPortfolioDashboard(): Promise<PortfolioDashboard> {
 
 export async function savePortfolioProfile(profile: PortfolioProfile): Promise<PortfolioProfile> {
   return (await api.put("/portfolio/me", profile)).data.profile as PortfolioProfile;
+}
+
+export async function savePortfolioContent(content: PortfolioContent): Promise<PortfolioContent> {
+  return (await api.put("/portfolio/me/content", content)).data.content as PortfolioContent;
 }
 
 export async function savePortfolioBirthDate(birthDate: string): Promise<Pick<PortfolioDashboard, "birthDate" | "publicSharingAgeStatus">> {
