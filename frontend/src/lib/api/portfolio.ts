@@ -96,6 +96,8 @@ export type PortfolioEvidencePack = {
   expiresAt: string;
   revokedAt: string | null;
   createdAt: string;
+  renewedPackId?: string | null;
+  canRecoverRenewal?: boolean;
 };
 
 export type PortfolioWorkInput = Omit<PortfolioWork, "id" | "sourcePublicId" | "sortOrder" | "createdAt" | "updatedAt"> & {
@@ -193,6 +195,10 @@ export async function createPortfolioEvidencePack(input: {
 
 export async function revokePortfolioEvidencePack(id: string): Promise<void> {
   await api.delete(`/portfolio/evidence-packs/${encodeURIComponent(id)}`);
+}
+
+export async function renewPortfolioEvidencePack(id: string, expiresInDays: number, idempotencyKey: string): Promise<{ id: string; token: string; expiresAt: string; replayed: boolean }> {
+  return (await api.post(`/portfolio/evidence-packs/${encodeURIComponent(id)}/renew`, { expiresInDays }, { headers: { "Idempotency-Key": idempotencyKey } })).data as { id: string; token: string; expiresAt: string; replayed: boolean };
 }
 
 export async function getPublicPortfolio(username: string): Promise<PortfolioPublicView> {

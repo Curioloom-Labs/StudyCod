@@ -17,6 +17,7 @@ import {
   updatePortfolioWork,
   updatePortfolioEvidence,
   revokePortfolioEvidencePack,
+  renewPortfolioEvidencePack,
   type PortfolioDashboard,
   type PortfolioEvidence,
   type PortfolioEvidenceInput,
@@ -126,6 +127,8 @@ export const PortfolioDashboardPage: React.FC = () => {
   const [packPreviewOpen, setPackPreviewOpen] = React.useState(false);
   const [createdPackUrl, setCreatedPackUrl] = React.useState("");
   const [copiedPackUrl, setCopiedPackUrl] = React.useState(false);
+  const [renewingPackId, setRenewingPackId] = React.useState<string | null>(null);
+  const renewalKeys = React.useRef(new Map<string, string>());
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -384,6 +387,25 @@ export const PortfolioDashboardPage: React.FC = () => {
     }
   };
 
+  const renewEvidencePack = async (id: string) => {
+    const idempotencyKey = renewalKeys.current.get(id) ?? crypto.randomUUID();
+    renewalKeys.current.set(id, idempotencyKey);
+    setRenewingPackId(id);
+    setError("");
+    try {
+      const renewed = await renewPortfolioEvidencePack(id, 7, idempotencyKey);
+      renewalKeys.current.delete(id);
+      setCreatedPackUrl(`${window.location.origin}/portfolio/p/${encodeURIComponent(renewed.token)}`);
+      setCopiedPackUrl(false);
+      await refresh();
+      setNotice(copy("Створено нове посилання, попереднє відкликано. Скопіюй нове посилання зараз.", "A new link was issued and the previous link revoked. Copy the new link now."));
+    } catch (caught) {
+      setError(getErrorMessageFromUnknown(caught, copy("Не вдалося оновити посилання.", "Could not renew the share link.")));
+    } finally {
+      setRenewingPackId(null);
+    }
+  };
+
   const setTechnologies = (value: string) => setWork(current => ({
     ...current,
     technologies: value.split(",").map(item => item.trim()).filter(Boolean).slice(0, 16),
@@ -542,7 +564,7 @@ export const PortfolioDashboardPage: React.FC = () => {
           {createdPackUrl && <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-3"><label className="text-xs font-bold text-primary-strong dark:text-primary-soft">{copy("Нове посилання на пакет", "New Evidence Pack link")}<span className="mt-1.5 flex gap-2"><input readOnly className={`${fieldClass} mt-0 min-w-0 text-xs`} value={createdPackUrl} onFocus={event => event.currentTarget.select()} /><button type="button" onClick={() => void copyPackUrl()} className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-border bg-bg-surface px-3 text-xs font-semibold text-text-primary hover:bg-bg-hover"><Copy className="size-3.5" />{copiedPackUrl ? copy("Скопійовано", "Copied") : copy("Копіювати", "Copy")}</button></span></label></div>}
         </form>
 
-        {!!dashboard?.evidencePacks.length && <div className="mt-5"><h3 className="text-sm font-semibold">{copy("Створені посилання", "Created share links")}</h3><div className="mt-2 divide-y divide-border rounded-2xl border border-border px-4">{dashboard.evidencePacks.map(pack => { const expired = new Date(pack.expiresAt).getTime() <= Date.now(); const unavailable = Boolean(pack.revokedAt) || expired; return <article key={pack.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{pack.title}</p><span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${pack.revokedAt ? "bg-accent-error/10 text-accent-error" : expired ? "bg-bg-hover text-text-muted" : "bg-accent-success/10 text-accent-success"}`}>{pack.revokedAt ? copy("Відкликано", "Revoked") : expired ? copy("Термін минув", "Expired") : copy("Активне", "Active")}</span></div><p className="mt-1 text-xs text-text-muted">{pack.workCount} {copy("робіт", "work items")} · {pack.evidenceCount} {copy("свідчень", "evidence items")} · {pack.skillIds.length} {copy("компетенцій", "competencies")} · {copy("до", "until")} {new Date(pack.expiresAt).toLocaleDateString(en ? "en-GB" : "uk-UA")}</p></div><button type="button" onClick={() => void revokeEvidencePack(pack.id)} disabled={unavailable} className="min-h-9 shrink-0 rounded-lg border border-border px-3 text-xs font-semibold text-text-secondary transition hover:border-accent-error/40 hover:text-accent-error disabled:cursor-not-allowed disabled:opacity-40">{copy("Відкликати", "Revoke")}</button></article>; })}</div></div>}
+        {!!dashboard?.evidencePacks.length && <div className="mt-5"><h3 className="text-sm font-semibold">{copy("Створені посилання", "Created share links")}</h3><div className="mt-2 divide-y divide-border rounded-2xl border border-border px-4">{dashboard.evidencePacks.map(pack => { const expired = new Date(pack.expiresAt).getTime() <= Date.now(); const renewalChild = dashboard.evidencePacks.find(item => item.id === pack.renewedPackId); const canRecover = Boolean(pack.canRecoverRenewal && renewalChild && !renewalChild.revokedAt && new Date(renewalChild.expiresAt).getTime() > Date.now()); const unavailable = Boolean(pack.revokedAt) || expired; return <article key={pack.id} className="flex flex-wrap items-center justify-between gap-3 py-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{pack.title}</p><span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold ${pack.revokedAt ? "bg-accent-error/10 text-accent-error" : expired ? "bg-bg-hover text-text-muted" : "bg-accent-success/10 text-accent-success"}`}>{pack.revokedAt ? copy("Відкликано", "Revoked") : expired ? copy("Термін минув", "Expired") : copy("Активне", "Active")}</span></div><p className="mt-1 text-xs text-text-muted">{pack.workCount} {copy("робіт", "work items")} · {pack.evidenceCount} {copy("свідчень", "evidence items")} · {pack.skillIds.length} {copy("компетенцій", "competencies")} · {copy("до", "until")} {new Date(pack.expiresAt).toLocaleDateString(en ? "en-GB" : "uk-UA")}</p></div><div className="flex flex-wrap gap-2">{(expired && !pack.revokedAt || canRecover) && <button type="button" onClick={() => void renewEvidencePack(pack.id)} disabled={renewingPackId !== null} className="min-h-9 shrink-0 rounded-lg border border-primary/25 px-3 text-xs font-semibold text-primary-strong transition hover:bg-primary/5 disabled:cursor-wait disabled:opacity-50">{renewingPackId === pack.id ? copy("Оновлюємо…", "Renewing…") : canRecover ? copy("Відновити нове посилання", "Recover link") : copy("Оновити посилання", "Renew link")}</button>}<button type="button" onClick={() => void revokeEvidencePack(pack.id)} disabled={unavailable} className="min-h-9 shrink-0 rounded-lg border border-border px-3 text-xs font-semibold text-text-secondary transition hover:border-accent-error/40 hover:text-accent-error disabled:cursor-not-allowed disabled:opacity-40">{copy("Відкликати", "Revoke")}</button></div></article>; })}</div></div>}
       </section>
     </div>
 

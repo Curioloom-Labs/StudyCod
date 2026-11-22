@@ -764,6 +764,31 @@ ${feedbackHtml}`;
      Public API
      ========================= */
 
+  async sendAssessCandidateInvitationEmail(params: {
+    to: string;
+    companyName: string;
+    roleTitle: string;
+    introduction: string;
+    token: string;
+    estimatedMinutes: number;
+    deadlineAt?: string | null;
+    aiPolicy: string;
+  }): Promise<void> {
+    const url = `${this.getFrontendUrl()}/assess/invite/${encodeURIComponent(params.token)}`;
+    const company = this.escapeHtml(params.companyName);
+    const role = this.escapeHtml(params.roleTitle);
+    const introduction = this.escapeHtml(params.introduction).replace(/\n/g, "<br>");
+    const deadline = params.deadlineAt ? new Date(params.deadlineAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) : "No deadline set";
+    const policy = params.aiPolicy === "NOT_ALLOWED" ? "Do not use AI assistance for this assessment." : params.aiPolicy === "DISCUSS" ? "You may use external resources, but explain what you used." : "AI tools are allowed. Explain any AI-generated work.";
+    await this.sendNotificationEmail({
+      to: params.to,
+      subject: `${params.companyName} invited you to interview for ${params.roleTitle}`,
+      title: `Interview invitation from ${company}`,
+      contentHtml: `<p>${company} invited you to discuss the <b>${role}</b> role in StudyCod Assess.</p><p>${introduction}</p><p><b>Estimated time:</b> ${params.estimatedMinutes} minutes<br><b>Deadline:</b> ${this.escapeHtml(deadline)}<br><b>AI and external tools:</b> ${this.escapeHtml(policy)}</p><p>Review the details and accept or decline the invitation using the secure link below.</p><p><a href="${this.escapeHtml(url)}">${this.escapeHtml(url)}</a></p>`,
+      text: `${params.companyName} invited you to interview for ${params.roleTitle}.\n\n${params.introduction}\n\nEstimated time: ${params.estimatedMinutes} minutes\nDeadline: ${deadline}\nAI and external tools: ${policy}\n\nReview the invitation: ${url}`,
+    });
+  }
+
   async sendVerificationEmail(
     email: string,
     token: string,

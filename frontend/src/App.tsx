@@ -54,6 +54,7 @@ const PublicPortfolioPage = React.lazy(() => import("./pages/portfolio/PublicPor
 const EvidencePackPage = React.lazy(() => import("./pages/portfolio/EvidencePackPage").then(mod => ({ default: mod.EvidencePackPage })));
 const AssessWorkspacePage = React.lazy(() => import("./pages/assess/AssessWorkspacePage").then(mod => ({ default: mod.AssessWorkspacePage })));
 const AssessInterviewRoom = React.lazy(() => import("./pages/assess/AssessInterviewRoom").then(mod => ({ default: mod.AssessInterviewRoom })));
+const AssessCandidateInvitePage = React.lazy(() => import("./pages/assess/AssessCandidateInvitePage").then(mod => ({ default: mod.AssessCandidateInvitePage })));
 const PortfolioPublicationPage = React.lazy(() => import("./pages/portfolio/PortfolioPublicationPage").then(mod => ({ default: mod.PortfolioPublicationPage })));
 const PortfolioReviewInboxPage = React.lazy(() => import("./pages/portfolio/PortfolioReviewInboxPage").then(mod => ({ default: mod.PortfolioReviewInboxPage })));
 const PortfolioReviewQueuePage = React.lazy(() => import("./pages/portfolio/PortfolioReviewQueuePage").then(mod => ({ default: mod.PortfolioReviewQueuePage })));
@@ -1347,6 +1348,7 @@ export const App: React.FC = () => {
           <Route path="/projects" element={<RequireToken><LegacyPortfolioWorkspaceRedirect /></RequireToken>} />
           <Route path="/projects/reviews" element={<RequireToken><LegacyPortfolioWorkspaceRedirect /></RequireToken>} />
           <Route path="/projects/admin/reviews" element={<RequireToken><LegacyPortfolioWorkspaceRedirect /></RequireToken>} />
+          <Route path="/assess/invite/:token" element={<PublicPageWithFooter><Suspense fallback={<PageLoader />}><AssessCandidateInvitePage /></Suspense></PublicPageWithFooter>} />
           <Route path="/assess" element={<RequireToken><Suspense fallback={<PageLoader />}><AssessWorkspacePage /></Suspense></RequireToken>} />
           <Route path="/assess/interviews/:interviewId" element={<RequireToken><Suspense fallback={<PageLoader />}><AssessInterviewRoom /></Suspense></RequireToken>} />
           <Route path="/companies" element={<RequireToken><LegacyAssessRedirect /></RequireToken>} />

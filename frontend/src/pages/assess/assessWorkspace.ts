@@ -1,5 +1,5 @@
 export type AssessRole = "OWNER" | "HR" | "ENGINEER";
-export type AssessView = "interviews" | "kits" | "overview" | "candidates" | "assessments" | "team";
+export type AssessView = "interviews" | "kits" | "overview" | "candidates" | "assessments" | "team" | "integrations";
 export type AssessCase = { id: string; status: string; candidate_username?: string; role_title?: string; task_title?: string | null; [key: string]: unknown };
 export type AssessFile = { path: string; content: string };
 
@@ -16,7 +16,17 @@ export function compareAssessFiles(before: AssessFile[], after: AssessFile[]) {
 
 export function normalizeAssessCompany(response: Record<string, any>): Record<string, any> {
   if (!response.company?.id || !response.company?.name || !["OWNER", "HR", "ENGINEER"].includes(response.company.role)) throw new Error("INVALID_COMPANY_RESPONSE");
-  return { ...response.company, members: Array.isArray(response.members) ? response.members : [], assessments: Array.isArray(response.assessments) ? response.assessments : [] };
+  return {
+    ...response.company,
+    members: Array.isArray(response.members) ? response.members : [],
+    assessments: Array.isArray(response.assessments) ? response.assessments : [],
+    assessmentPage: Number(response.assessmentPage ?? 1),
+    assessmentPageSize: Number(response.assessmentPageSize ?? 50),
+    assessmentMatchCount: Number(response.assessmentMatchCount ?? 0),
+    assessmentTotal: Number(response.assessmentTotal ?? 0),
+    technicalAssessmentTotal: Number(response.technicalAssessmentTotal ?? 0),
+    assessmentStatusCounts: response.assessmentStatusCounts && typeof response.assessmentStatusCounts === "object" ? response.assessmentStatusCounts : {},
+  };
 }
 
 export const assessStages = [
@@ -29,7 +39,7 @@ export const assessStages = [
 ] as const;
 
 export function assessView(value: string | null): AssessView {
-  return value === "candidates" || value === "assessments" || value === "team" || value === "kits" || value === "overview" ? value : "interviews";
+  return value === "candidates" || value === "assessments" || value === "team" || value === "integrations" || value === "kits" || value === "overview" ? value : "interviews";
 }
 
 export function assessCaseUrl(companyId: string, assessmentId: string): string {

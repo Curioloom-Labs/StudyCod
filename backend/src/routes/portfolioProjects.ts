@@ -13,6 +13,7 @@ import { logger } from "../utils/logger";
 import { createRouteLimiter } from "../middleware/routeRateLimit";
 import { requirePersonalAccountPrincipal } from "../services/personalAccountAccess";
 import { isAdultPortfolioOwner, requireAdultPortfolioSharing } from "../services/portfolioSharingAccess";
+import { enqueueAssessWebhookEvent } from "../services/assessWebhookDelivery";
 
 export const portfolioProjectsRouter = Router();
 export const portfolioProjectPublicRouter = Router();
@@ -757,12 +758,18 @@ portfolioProjectsRouter.post("/:projectId/assessments/:assessmentId/finish", aut
   const update = await AppDataSource.query("UPDATE growth_project_assessments SET status=?,explanation=?,completed_at=NOW(3),duration_seconds=? WHERE id=? AND owner_id=? AND status='ACTIVE'", [status, explanation, Math.max(0, Math.min(86_400, Number(req.body?.durationSeconds) || 0)), req.params.assessmentId, ownerId]);
   if (!update.affectedRows) return bad(res, 409, "ASSESSMENT_NOT_ACTIVE");
   if (loaded.row.company_assessment_id) {
-    await AppDataSource.query(
+    const companyUpdate = await AppDataSource.query(
       "UPDATE growth_company_assessments SET status='TASK_SUBMITTED' WHERE id=? AND technical_assessment_id=? AND status='TASK_ASSIGNED'",
       [loaded.row.company_assessment_id, req.params.assessmentId]
     );
     const companyCase = await AppDataSource.query("SELECT company_id,created_by FROM growth_company_assessments WHERE id=? LIMIT 1", [loaded.row.company_assessment_id]) as Array<{ company_id: string; created_by: number }>;
-    if (companyCase[0]) await notifyGrowthReview(companyCase[0].created_by, ownerId, "COMPANY_ASSESSMENT_UPDATED", `/assess?company=${companyCase[0].company_id}&assessment=${loaded.row.company_assessment_id}`);
+    if (companyCase[0]) {
+      if (companyUpdate.affectedRows) {
+        try { await enqueueAssessWebhookEvent({ companyId: companyCase[0].company_id, assessmentId: String(loaded.row.company_assessment_id), type: "assessment.task_submitted", status: "TASK_SUBMITTED" }); }
+        catch (error) { logger.error("[assess:webhooks] task submission event could not be queued", { err: error, assessmentId: loaded.row.company_assessment_id }); }
+      }
+      await notifyGrowthReview(companyCase[0].created_by, ownerId, "COMPANY_ASSESSMENT_UPDATED", `/assess?company=${companyCase[0].company_id}&assessment=${loaded.row.company_assessment_id}`);
+    }
   }
   return res.json({ assessment: { id: req.params.assessmentId, status, result } });
 });

@@ -33,11 +33,12 @@ import blogRouter from "./routes/blog";
 import notificationsRouter from "./routes/notifications";
 import { learningCatalogRouter } from "./routes/learningCatalog";
 import { portfolioProjectsRouter, portfolioProjectPublicRouter } from "./routes/portfolioProjects";
-import { assessCompaniesRouter } from "./routes/assessCompanies";
+import { assessApiRouter, assessCompaniesRouter } from "./routes/assessCompanies";
 import { assessInterviewsRouter } from "./routes/assessInterviews";
 import { portfolioRouter, publicPortfolioRouter } from "./routes/portfolio";
 import { startGrowthProjectQueueWorker } from "./services/growthProjectQueue";
 import { startCourseDiagnosticReportWorker, stopCourseDiagnosticReportWorker } from "./services/CourseDiagnosticReportWorker";
+import { startAssessWebhookDeliveryWorker } from "./services/assessWebhookDelivery";
 import { startAssessInterviewExpiryWorker } from "./services/assessInterviewSession";
 import { maintenanceMiddleware } from "./middleware/maintenanceMiddleware";
 import { geoBlockMiddleware } from "./middleware/geoBlockMiddleware";
@@ -986,6 +987,7 @@ app.use("/project-companies", authMiddleware, forbidContestModeUsers, assessComp
 app.use("/api/project-companies", authMiddleware, forbidContestModeUsers, assessCompaniesRouter);
 app.use("/assess/companies", authMiddleware, forbidContestModeUsers, assessCompaniesRouter);
 app.use("/api/assess/companies", authMiddleware, forbidContestModeUsers, assessCompaniesRouter);
+app.use("/api/v1/assess", assessApiRouter);
 app.use("/talent", authMiddleware, forbidContestModeUsers, assessInterviewsRouter);
 app.use("/api/talent", authMiddleware, forbidContestModeUsers, assessInterviewsRouter);
 app.use("/assess", authMiddleware, forbidContestModeUsers, assessInterviewsRouter);
@@ -1288,6 +1290,7 @@ async function bootstrap(): Promise<void> {
     startGrowthProjectQueueWorker();
     startCourseDiagnosticReportWorker();
     startAssessInterviewExpiryWorker();
+    startAssessWebhookDeliveryWorker();
     startCredentialRecoveryCleanup();
 
     // Remove test payloads left behind by already-solved generated personal

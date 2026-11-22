@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "crypto";
 import { Router, type Response } from "express";
 import { z } from "zod";
 import { AppDataSource } from "../data-source";
@@ -14,6 +14,7 @@ import {
 } from "../services/portfolioEvidenceSources";
 import { requirePersonalAccountPrincipal } from "../services/personalAccountAccess";
 import { portfolioOwnerAgeStatus, requireAdultPortfolioSharing } from "../services/portfolioSharingAccess";
+import { JWT_SECRET } from "../config";
 
 export const portfolioRouter = Router();
 export const publicPortfolioRouter = Router();
@@ -88,6 +89,8 @@ const evidencePackSchema = z.object({
 }).refine(value => new Set(value.workIds).size === value.workIds.length && new Set(value.evidenceIds).size === value.evidenceIds.length, "Duplicate selection")
   .refine(value => new Set(value.skillIds).size === value.skillIds.length && value.skillIds.every(id => PORTFOLIO_SKILL_IDS.has(id)), "Unknown or duplicate skill")
   .refine(value => value.workIds.length + value.evidenceIds.length > 0, "At least one item is required");
+const evidencePackRenewSchema = z.object({ expiresInDays: z.number().int().min(1).max(30).default(7) }).strict();
+const renewalTokenForPack = (id: string) => createHmac("sha256", JWT_SECRET).update(`portfolio-pack-renewal:v1:${id}`).digest("base64url");
 const privateBirthDateSchema = z.string().refine(value => parsePortfolioBirthDate(value) !== null, "Invalid birth date");
 
 type WorkInput = z.infer<typeof workSchema>;
@@ -269,7 +272,8 @@ async function listSourcedEvidence(ownerId: number, ids?: string[], visibility?:
 async function listEvidencePacks(ownerId: number): Promise<Array<Record<string, unknown>>> {
   const rows = await AppDataSource.query(
     `SELECT id,title,specialization,include_profile AS includeProfile,work_ids_json AS workIdsJson,evidence_ids_json AS evidenceIdsJson,
-            skill_ids_json AS skillIdsJson,
+            skill_ids_json AS skillIdsJson,renewal_key_hash AS renewalKeyHash,
+            (SELECT child.id FROM portfolio_evidence_packs child WHERE child.renewed_from_pack_id=portfolio_evidence_packs.id AND child.owner_id=portfolio_evidence_packs.owner_id LIMIT 1) AS renewedPackId,
             expires_at AS expiresAt,revoked_at AS revokedAt,created_at AS createdAt
      FROM portfolio_evidence_packs WHERE owner_id=? ORDER BY created_at DESC LIMIT 100`, [ownerId]
   ) as Array<Record<string, unknown>>;
@@ -281,6 +285,8 @@ async function listEvidencePacks(ownerId: number): Promise<Array<Record<string, 
     workCount: parseJsonArray(row.workIdsJson, 50).length,
     evidenceCount: parseJsonArray(row.evidenceIdsJson, 50).length,
     skillIds: parseJsonArray(row.skillIdsJson, 12).filter(id => PORTFOLIO_SKILL_IDS.has(id)),
+    canRecoverRenewal: Boolean(row.renewalKeyHash),
+    renewedPackId: row.renewedPackId ?? null,
     expiresAt: row.expiresAt,
     revokedAt: row.revokedAt,
     createdAt: row.createdAt,
@@ -645,6 +651,80 @@ portfolioRouter.post("/evidence-packs", async (req: AuthRequest, res: Response) 
     [id, ownerId, tokenHash, pack.title, pack.specialization, pack.includeProfile ? 1 : 0, JSON.stringify(pack.workIds), JSON.stringify(pack.evidenceIds), expiresAt, JSON.stringify(pack.skillIds)]
   );
   return res.status(201).json({ id, token, expiresAt });
+});
+
+portfolioRouter.post("/evidence-packs/:packId/renew", async (req: AuthRequest, res: Response) => {
+  const ownerId = requirePersonalAccountPrincipal(req, res); if (!ownerId) return;
+  if (!UUID_RE.test(req.params.packId)) return sendError(res, 404, "EVIDENCE_PACK_NOT_FOUND");
+  if (!await requireAdultPortfolioSharing(ownerId, res)) return;
+  const parsed = evidencePackRenewSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return sendError(res, 400, "INVALID_EVIDENCE_PACK_RENEWAL");
+  const idempotencyKey = String(req.get("Idempotency-Key") ?? "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(idempotencyKey)) return sendError(res, 400, "IDEMPOTENCY_KEY_REQUIRED");
+  const renewalKeyHash = createHash("sha256").update(idempotencyKey).digest("hex");
+  const rows = await AppDataSource.query(
+    `SELECT id,title,specialization,include_profile AS includeProfile,work_ids_json AS workIdsJson,evidence_ids_json AS evidenceIdsJson,
+            skill_ids_json AS skillIdsJson,revoked_at AS revokedAt,renewal_key_hash AS renewalKeyHash
+     FROM portfolio_evidence_packs WHERE id=? AND owner_id=? LIMIT 1`,
+    [req.params.packId, ownerId],
+  ) as Array<Record<string, unknown>>;
+  const previous = rows[0];
+  if (!previous) return sendError(res, 404, "EVIDENCE_PACK_NOT_FOUND");
+  if (previous.revokedAt) {
+    if (!previous.renewalKeyHash) return sendError(res, 409, "EVIDENCE_PACK_REVOKED");
+    const childRows = await AppDataSource.query(
+      "SELECT id,expires_at AS expiresAt,revoked_at AS revokedAt FROM portfolio_evidence_packs WHERE renewed_from_pack_id=? AND owner_id=? LIMIT 1",
+      [previous.id, ownerId],
+    ) as Array<{ id: string; expiresAt: Date | string; revokedAt: Date | string | null }>;
+    const child = childRows[0];
+    if (!child || child.revokedAt) return sendError(res, 409, "EVIDENCE_PACK_RENEWAL_UNAVAILABLE");
+    return res.json({ id: child.id, token: renewalTokenForPack(child.id), expiresAt: child.expiresAt, replayed: true });
+  }
+
+  const workIds = parseJsonArray(previous.workIdsJson, 50);
+  const evidenceIds = parseJsonArray(previous.evidenceIdsJson, 50);
+  const skillIds = parseJsonArray(previous.skillIdsJson, 12).filter(id => PORTFOLIO_SKILL_IDS.has(id));
+  if (!workIds.length && !evidenceIds.length) return sendError(res, 409, "EVIDENCE_PACK_ITEMS_UNAVAILABLE");
+  let ownedWorks: Array<{ id: string }> = [];
+  if (workIds.length) {
+    ownedWorks = await AppDataSource.query(
+      `SELECT id FROM portfolio_works WHERE owner_id=? AND archived_at IS NULL AND id IN (${workIds.map(() => "?").join(",")})`,
+      [ownerId, ...workIds],
+    ) as Array<{ id: string }>;
+  }
+  if (ownedWorks.length !== workIds.length) return sendError(res, 409, "EVIDENCE_PACK_ITEMS_UNAVAILABLE");
+  let ownedEvidence: Array<{ id: string }> = [];
+  if (evidenceIds.length) {
+    ownedEvidence = await AppDataSource.query(
+      `SELECT e.id FROM portfolio_evidence e JOIN grades g ON g.id=e.source_grade_id AND g.user_id=e.owner_id
+       JOIN tasks t ON t.id=g.task_id JOIN users u ON u.id=e.owner_id
+       WHERE e.owner_id=? AND e.archived_at IS NULL AND e.id IN (${evidenceIds.map(() => "?").join(",")})
+         AND ${eligibleEvidenceSourceSql}`,
+      [ownerId, ...evidenceIds, ownerId],
+    ) as Array<{ id: string }>;
+  }
+  const sourcedEvidence = await listSourcedEvidence(ownerId, evidenceIds);
+  if (ownedEvidence.length + sourcedEvidence.length !== evidenceIds.length) return sendError(res, 409, "EVIDENCE_PACK_ITEMS_UNAVAILABLE");
+
+  const id = randomUUID();
+  const token = renewalTokenForPack(id);
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const expiresAt = new Date(Date.now() + parsed.data.expiresInDays * 24 * 60 * 60 * 1000);
+  const rotated = await AppDataSource.transaction(async manager => {
+    const revokeResult = await manager.query(
+      "UPDATE portfolio_evidence_packs SET revoked_at=UTC_TIMESTAMP(3),renewal_key_hash=? WHERE id=? AND owner_id=? AND revoked_at IS NULL",
+      [renewalKeyHash, previous.id, ownerId],
+    ) as { affectedRows?: number };
+    if (!revokeResult.affectedRows) return false;
+    await manager.query(
+      `INSERT INTO portfolio_evidence_packs(id,owner_id,token_hash,title,specialization,include_profile,work_ids_json,evidence_ids_json,expires_at,skill_ids_json,renewed_from_pack_id)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, ownerId, tokenHash, previous.title, previous.specialization, Boolean(previous.includeProfile) ? 1 : 0, JSON.stringify(workIds), JSON.stringify(evidenceIds), expiresAt, JSON.stringify(skillIds), previous.id],
+    );
+    return true;
+  });
+  if (!rotated) return sendError(res, 409, "EVIDENCE_PACK_RENEWAL_CONFLICT");
+  return res.status(201).json({ id, token, expiresAt, replayed: false });
 });
 
 portfolioRouter.delete("/evidence-packs/:packId", async (req: AuthRequest, res: Response) => {
