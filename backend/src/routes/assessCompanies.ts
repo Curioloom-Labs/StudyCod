@@ -862,12 +862,13 @@ assessCompaniesRouter.get("/:companyId", authRequired, async (req: AuthRequest, 
   if (!canAssessCompanyRole(role, "READ_WORKSPACE")) return sendError(res, 404, "COMPANY_NOT_FOUND");
   const companies = await AppDataSource.query("SELECT id,name,created_at,updated_at FROM growth_companies WHERE id=? LIMIT 1", [req.params.companyId]) as Array<Record<string, unknown>>;
   if (!companies[0]) return sendError(res, 404, "COMPANY_NOT_FOUND");
-  const page = Math.min(Math.max(Number.parseInt(String(req.query.page ?? "1"), 10) || 1, 1), 100_000);
+  const query = req.query ?? {};
+  const page = Math.min(Math.max(Number.parseInt(String(query.page ?? "1"), 10) || 1, 1), 100_000);
   const pageSize = 50;
-  const search = cleanText(req.query.search, 120);
+  const search = cleanText(query.search, 120);
   const statusValues = ["INVITED", "ACCEPTED", "PORTFOLIO_SELECTED", "TASK_ASSIGNED", "TASK_SUBMITTED", "REVIEWED", "DECLINED", "WITHDRAWN", "CLOSED"];
-  const requestedStatus = typeof req.query.status === "string" && statusValues.includes(req.query.status) ? req.query.status : "";
-  const technicalOnly = req.query.technical === "true";
+  const requestedStatus = typeof query.status === "string" && statusValues.includes(query.status) ? query.status : "";
+  const technicalOnly = query.technical === "true";
   const filters = ["a.company_id=?"];
   const filterParams: unknown[] = [req.params.companyId];
   if (technicalOnly) filters.push("a.status IN ('PORTFOLIO_SELECTED','TASK_ASSIGNED','TASK_SUBMITTED','REVIEWED')");

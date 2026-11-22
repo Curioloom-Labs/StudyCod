@@ -1,7 +1,7 @@
 import type { MigrationInterface, QueryRunner } from "typeorm";
 
-export class ExtendGrowthCompanyAssessments1794500000000 implements MigrationInterface {
-  name = "ExtendGrowthCompanyAssessments1794500000000";
+export class ExtendGrowthCompanyAssessments1795100000000 implements MigrationInterface {
+  name = "ExtendGrowthCompanyAssessments1795100000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`ALTER TABLE growth_company_assessments

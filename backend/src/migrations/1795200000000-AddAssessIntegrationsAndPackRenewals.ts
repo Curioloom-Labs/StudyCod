@@ -1,7 +1,7 @@
 import type { MigrationInterface, QueryRunner } from "typeorm";
 
-export class AddAssessIntegrationsAndPackRenewals1794600000000 implements MigrationInterface {
-  name = "AddAssessIntegrationsAndPackRenewals1794600000000";
+export class AddAssessIntegrationsAndPackRenewals1795200000000 implements MigrationInterface {
+  name = "AddAssessIntegrationsAndPackRenewals1795200000000";
 
   async up(q: QueryRunner): Promise<void> {
     await q.query(`ALTER TABLE growth_company_assessments

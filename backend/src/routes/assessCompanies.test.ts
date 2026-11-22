@@ -187,7 +187,9 @@ test("opening a company assessment list records only its scope, role and result 
     if (sql.includes("SELECT role FROM growth_company_members")) return [{ role: "HR" }];
     if (sql.startsWith("SELECT id,name,created_at,updated_at FROM growth_companies")) return [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Example" }];
     if (sql.includes("FROM growth_company_members m JOIN users u")) return [{ id: "member-1", user_id: 120, username: "hr", role: "HR", status: "ACTIVE" }];
-    if (sql.includes("FROM growth_company_assessments a JOIN users u")) return [{ id: "case-1", candidate_id: 501, candidate_username: "candidate", status: "TASK_SUBMITTED" }];
+    if (sql.startsWith("SELECT COUNT(*)")) return [{ total: 1 }];
+    if (sql.startsWith("SELECT a.id,a.candidate_id") && sql.includes("FROM growth_company_assessments a LEFT JOIN users u")) return [{ id: "case-1", candidate_id: 501, candidate_username: "candidate", status: "TASK_SUBMITTED" }];
+    if (sql.includes("SELECT status,COUNT(*) AS total FROM growth_company_assessments")) return [{ status: "TASK_SUBMITTED", total: 1 }];
     throw new Error(`Unexpected query: ${sql}`);
   });
   const result = await readCompanySummary();
@@ -195,7 +197,7 @@ test("opening a company assessment list records only its scope, role and result 
   assert.equal(auditEvents.length, 1);
   assert.deepEqual(auditEvents[0], {
     actorType: "USER", actorId: 120, action: "assess.company-assessments.list.read", targetType: "company_assessment_list", targetId: null,
-    orgId: null, metadata: { companyId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", role: "HR", resultCount: 1 }, requestId: "request-1", ip: "127.0.0.1",
+    orgId: null, metadata: { companyId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", role: "HR", resultCount: 1, assessmentTotal: 1 }, requestId: "request-1", ip: "127.0.0.1",
   });
   assert.doesNotMatch(JSON.stringify(auditEvents[0]), /candidate|case-1/);
 });
@@ -359,6 +361,7 @@ test("an engineer assigns a task against the candidate's selected version and ke
     }
     if (sql.includes("SELECT username FROM users")) return [{ username: "engineer" }];
     if (sql.includes("INSERT INTO notifications")) return { affectedRows: 1 };
+    if (sql.includes("FROM growth_assess_webhooks")) return [];
     assert.fail(`Unexpected direct database query: ${sql}`);
   });
   const runner = {
@@ -376,7 +379,7 @@ test("an engineer assigns a task against the candidate's selected version and ke
   assert.equal(result.status, 201);
   assert.deepEqual(result.body, { assessmentId: result.body.assessmentId, status: "TASK_ASSIGNED", runtime: "PYTHON", tests: 2 });
   assert.match(result.body.assessmentId, /^[0-9a-f-]{36}$/i);
-  assert.equal(directQueryCalls, 4);
+  assert.equal(directQueryCalls, 5);
 
   const attemptInsert = queryRunnerCalls.find(call => call.sql.includes("INSERT INTO growth_project_assessments"));
   assert.ok(attemptInsert);
@@ -399,7 +402,7 @@ test("an engineer assigns a task against the candidate's selected version and ke
 });
 
 test("an engineer explicitly grants only the reviewed summary for Portfolio sharing", async t => {
-  const savedReviews: Array<Record<string, unknown>> = [];
+  const savedReviews: Array<Array<Record<string, unknown>>> = [];
   t.mock.method(AppDataSource, "query", async (sql: string, parameters?: unknown[]) => {
     if (sql.includes("FROM growth_company_members")) return [{ role: "ENGINEER" }];
     if (sql.includes("FROM growth_company_assessments a")) {
@@ -408,17 +411,28 @@ test("an engineer explicitly grants only the reviewed summary for Portfolio shar
       return [{ status: "TASK_SUBMITTED", attempt_status: "PASSED" }];
     }
     if (sql.includes("SELECT username FROM users")) return [{ username: "engineer" }];
-    if (sql.startsWith("UPDATE growth_company_assessments SET technical_review_json")) {
-      savedReviews.push(JSON.parse(String(parameters?.[0])) as Record<string, unknown>);
-      assert.deepEqual(parameters?.slice(1), ["case-1", "company-1"]);
-      return { affectedRows: 1 };
-    }
-    if (sql.includes("SELECT candidate_id FROM growth_company_assessments")) return [{ candidate_id: 501 }];
+    if (sql.includes("SELECT candidate_id,status FROM growth_company_assessments")) return [{ candidate_id: 501, status: "TASK_SUBMITTED" }];
     if (sql.includes("INSERT INTO notifications")) return { affectedRows: 1 };
+    if (sql.includes("FROM growth_assess_webhooks")) return [];
     assert.fail(`Unexpected review query: ${sql}`);
   });
+  const runner = {
+    async connect() {}, async startTransaction() {},
+    async query(sql: string, parameters?: unknown[]) {
+      if (sql.startsWith("SELECT a.technical_review_json")) return [{ status: "TASK_SUBMITTED", attempt_status: "PASSED" }];
+      if (sql.includes("SELECT username FROM users")) return [{ username: "engineer" }];
+      if (sql.startsWith("UPDATE growth_company_assessments SET technical_review_json")) {
+        savedReviews.push(JSON.parse(String(parameters?.[0])) as Array<Record<string, unknown>>);
+        assert.deepEqual(parameters?.slice(1), ["case-1", "company-1"]);
+        return { affectedRows: 1 };
+      }
+      assert.fail(`Unexpected review transaction query: ${sql}`);
+    },
+    async commitTransaction() {}, async rollbackTransaction() {}, async release() {},
+  };
+  t.mock.method(AppDataSource, "createQueryRunner", () => runner as any);
   const result = await submitTechnicalReview({ scores: [2, 2, 3], comment: "Reviewed test result.", recommendation: "READY_TO_CONTINUE", allowPortfolioEvidence: true });
   assert.equal(result.status, 200);
   assert.equal(result.result.review.allowPortfolioEvidence, true);
-  assert.equal(savedReviews[0]?.allowPortfolioEvidence, true);
+  assert.equal(savedReviews[0]?.[0]?.allowPortfolioEvidence, true);
 });
