@@ -6,8 +6,8 @@ export class AddPortfolioAttributionAndAssessFollowups1795300000000 implements M
 
   async up(q: QueryRunner): Promise<void> {
     await q.query(`ALTER TABLE portfolio_works
-      ADD COLUMN contribution_summary TEXT NOT NULL DEFAULT '' AFTER solution,
-      ADD COLUMN outcome_summary TEXT NOT NULL DEFAULT '' AFTER contribution_summary`);
+      ADD COLUMN contribution_summary VARCHAR(2000) NOT NULL DEFAULT '' AFTER solution,
+      ADD COLUMN outcome_summary VARCHAR(2000) NOT NULL DEFAULT '' AFTER contribution_summary`);
     await q.query(`ALTER TABLE portfolio_evidence_packs
       ADD COLUMN recipient_name VARCHAR(120) NULL,
       ADD COLUMN purpose VARCHAR(200) NULL`);

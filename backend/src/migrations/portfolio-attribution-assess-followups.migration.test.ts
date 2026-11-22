@@ -7,8 +7,8 @@ test("Portfolio attribution, targeted Evidence Packs, and Assess follow-ups are 
   const runner = { query: async (sql: string) => { statements.push(sql); return []; } } as any;
   await new AddPortfolioAttributionAndAssessFollowups1795300000000().up(runner);
   assert.equal(statements.length, 3);
-  assert.match(statements[0], /ADD COLUMN contribution_summary TEXT NOT NULL DEFAULT ''/);
-  assert.match(statements[0], /ADD COLUMN outcome_summary TEXT NOT NULL DEFAULT ''/);
+  assert.match(statements[0], /ADD COLUMN contribution_summary VARCHAR\(2000\) NOT NULL DEFAULT ''/);
+  assert.match(statements[0], /ADD COLUMN outcome_summary VARCHAR\(2000\) NOT NULL DEFAULT ''/);
   assert.match(statements[1], /recipient_name VARCHAR\(120\)/);
   assert.match(statements[1], /purpose VARCHAR\(200\)/);
   assert.match(statements[2], /CREATE TABLE growth_assess_followups/);
