@@ -1122,6 +1122,8 @@ courses:
     - key: cpp-build-tool
       title: "Multi-file C++ Build Tool"
       description: "Build a multi-file C++ utility that creates a build plan. Handle ADD <relative .cpp path>, REMOVE <path>, REPORT, and EXIT in main.cpp; declare the report function in include/report.hpp and define it in src/report.cpp. Add a CMakeLists.txt with separate translation units. REPORT prints sorted paths and translation_units=N."
+      inputFormat: "Commands ADD <relative .cpp path>, REMOVE <path>, REPORT, and EXIT are entered one per line. Reject paths containing .., absolute paths, and suffixes other than .cpp."
+      outputFormat: "ADD prints ADDED <path>; a duplicate prints ERROR: duplicate path. REMOVE prints REMOVED <path> or ERROR: path not found. REPORT prints unique paths in lexical order, then translation_units=N; an empty report prints translation_units=0. An absolute path prints ERROR: path must be relative; traversal prints ERROR: path escapes project root; another suffix prints ERROR: only .cpp paths are allowed; an unknown command prints ERROR: unknown command. EXIT prints nothing."
       estimatedMinutes: 180
       skills: ["headers","translation units","namespaces","linking","path validation","CMake"]
       requiredTopicKeys: [zaholovky-ta-kompilyatsiyni-odynytsi, preprotsesor-i-makrosy, skladannya-proyektu-ta-linkuvannya]
@@ -1131,6 +1133,173 @@ courses:
         [{"id":"manifest","title":"Manifest commands","description":"Implement ADD, REMOVE, REPORT, and EXIT with path deduplication and .cpp suffix validation."},{"id":"units","title":"Separate translation units","description":"Put the declaration in include/report.hpp, the implementation in src/report.cpp, and calls in main.cpp."},{"id":"build","title":"Reproducible build","description":"Define the executable and include directory in CMakeLists.txt and compile the two source files separately."},{"id":"diagnostics","title":"Diagnostics","description":"Check an empty report, a duplicate path, an unknown path, and an invalid command."}]
       acceptanceCriteria:
         ["Judge compiles main.cpp and src/report.cpp as separate translation units and all 15 CLI cases pass.","CMakeLists.txt defines an executable with both source files and the include directory.","Absolute paths, paths escaping through .., and files with another suffix are rejected.","REPORT prints unique paths in lexical order and the correct count."]
+      tests:
+        - input: |-
+            REPORT
+            EXIT
+          expectedOutput: translation_units=0
+          points: 6
+          hidden: false
+          group: basic
+        - input: |-
+            ADD src/main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/main.cpp
+            src/main.cpp
+            translation_units=1
+          points: 6
+          hidden: false
+          group: basic
+        - input: |-
+            ADD src/z.cpp
+            ADD src/a.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/z.cpp
+            ADDED src/a.cpp
+            src/a.cpp
+            src/z.cpp
+            translation_units=2
+          points: 6
+          hidden: false
+          group: basic
+        - input: |-
+            ADD src/main.cpp
+            ADD src/main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/main.cpp
+            ERROR: duplicate path
+            src/main.cpp
+            translation_units=1
+          points: 6
+          hidden: false
+          group: basic
+        - input: |-
+            ADD src/main.cpp
+            REMOVE src/main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/main.cpp
+            REMOVED src/main.cpp
+            translation_units=0
+          points: 6
+          hidden: false
+          group: basic
+        - input: |-
+            REMOVE src/missing.cpp
+            EXIT
+          expectedOutput: "ERROR: path not found"
+          points: 6
+          hidden: false
+          group: edge
+        - input: |-
+            ADD /tmp/main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ERROR: path must be relative
+            translation_units=0
+          points: 6
+          hidden: false
+          group: edge
+        - input: |-
+            ADD ../main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ERROR: path escapes project root
+            translation_units=0
+          points: 6
+          hidden: false
+          group: edge
+        - input: |-
+            ADD src/README.md
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ERROR: only .cpp paths are allowed
+            translation_units=0
+          points: 6
+          hidden: false
+          group: edge
+        - input: |-
+            RENAME src/main.cpp
+            EXIT
+          expectedOutput: "ERROR: unknown command"
+          points: 6
+          hidden: false
+          group: edge
+        - input: |-
+            ADD app/src/main.cpp
+            ADD lib/report.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED app/src/main.cpp
+            ADDED lib/report.cpp
+            app/src/main.cpp
+            lib/report.cpp
+            translation_units=2
+          points: 5
+          hidden: false
+          group: workflow
+        - input: |-
+            ADD src/a.cpp
+            ADD src/b.cpp
+            REMOVE src/a.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/a.cpp
+            ADDED src/b.cpp
+            REMOVED src/a.cpp
+            src/b.cpp
+            translation_units=1
+          points: 5
+          hidden: false
+          group: workflow
+        - input: |-
+            ADD src/a.cpp
+            REPORT
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/a.cpp
+            src/a.cpp
+            translation_units=1
+            src/a.cpp
+            translation_units=1
+          points: 10
+          hidden: true
+          group: workflow
+        - input: |-
+            ADD main.cpp
+            REMOVE main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED main.cpp
+            REMOVED main.cpp
+            translation_units=0
+          points: 10
+          hidden: true
+          group: workflow
+        - input: |-
+            ADD src/main.CPP
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ERROR: only .cpp paths are allowed
+            translation_units=0
+          points: 10
+          hidden: true
+          group: workflow
     - key: cpp-concurrent-queue
       title: Thread-Safe Queue
       description: Implement a bounded producer/consumer queue, synchronize access, and shut down all threads correctly.

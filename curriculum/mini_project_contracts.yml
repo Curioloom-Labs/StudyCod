@@ -163,5 +163,4 @@ projects:
   cpp-file-indexer: records
   cpp-threaded-log-reader: logs
   cpp-move-safe-loader: records
-  cpp-build-tool: "build-report"
   cpp-concurrent-queue: queue

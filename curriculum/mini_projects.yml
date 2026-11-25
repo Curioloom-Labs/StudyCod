@@ -1034,6 +1034,8 @@ courses:
     - key: cpp-build-tool
       title: "Багатофайловий C++ build tool"
       description: "Створіть багатофайлову C++-утиліту для формування плану складання. У main.cpp обробляйте команди ADD <відносний .cpp шлях>, REMOVE <шлях>, REPORT і EXIT; функцію звіту оголосіть в include/report.hpp та визначте в src/report.cpp. Додайте CMakeLists.txt з окремими translation units. REPORT друкує відсортовані шляхи та translation_units=N."
+      inputFormat: "Команди ADD <відносний .cpp шлях>, REMOVE <шлях>, REPORT і EXIT — по одній на рядок. Шляхи з .., абсолютні шляхи та суфікси, відмінні від .cpp, відхиляються."
+      outputFormat: "ADD виводить ADDED <path>; дублікат — ERROR: duplicate path. REMOVE виводить REMOVED <path> або ERROR: path not found. REPORT друкує унікальні шляхи лексикографічно, потім translation_units=N; порожній звіт — translation_units=0. Абсолютний шлях: ERROR: path must be relative; вихід за корінь: ERROR: path escapes project root; інший суфікс: ERROR: only .cpp paths are allowed; невідома команда: ERROR: unknown command. EXIT нічого не друкує."
       estimatedMinutes: 180
       skills: ["заголовки","translation units","простори імен","лінкування","валідація шляхів","CMake"]
       requiredTopicKeys: [zaholovky-ta-kompilyatsiyni-odynytsi, preprotsesor-i-makrosy, skladannya-proyektu-ta-linkuvannya]
@@ -1043,6 +1045,173 @@ courses:
         [{"id":"manifest","title":"Команди маніфесту","description":"Реалізуйте ADD, REMOVE, REPORT та EXIT із дедуплікацією шляхів і перевіркою суфікса .cpp."},{"id":"units","title":"Окремі одиниці трансляції","description":"Розмістіть декларацію в include/report.hpp, реалізацію в src/report.cpp, а виклики в main.cpp."},{"id":"build","title":"Відтворюване складання","description":"Визначте executable і include-директорію в CMakeLists.txt та зберіть два вихідні файли окремо."},{"id":"diagnostics","title":"Діагностика","description":"Перевірте порожній звіт, дублікат, невідомий шлях і помилкову команду."}]
       acceptanceCriteria:
         ["Judge збирає main.cpp і src/report.cpp як окремі translation units та всі 15 прикладів CLI проходять.","CMakeLists.txt містить executable з обома вихідними файлами й include-директорією.","Абсолютні шляхи, вихід через .. та файли з іншим суфіксом відхиляються.","REPORT виводить унікальні шляхи в лексикографічному порядку та правильну кількість."]
+      tests:
+        - input: |-
+            REPORT
+            EXIT
+          expectedOutput: translation_units=0
+          points: 6
+          hidden: false
+          group: basic
+        - input: |-
+            ADD src/main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/main.cpp
+            src/main.cpp
+            translation_units=1
+          points: 6
+          hidden: false
+          group: basic
+        - input: |-
+            ADD src/z.cpp
+            ADD src/a.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/z.cpp
+            ADDED src/a.cpp
+            src/a.cpp
+            src/z.cpp
+            translation_units=2
+          points: 6
+          hidden: false
+          group: basic
+        - input: |-
+            ADD src/main.cpp
+            ADD src/main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/main.cpp
+            ERROR: duplicate path
+            src/main.cpp
+            translation_units=1
+          points: 6
+          hidden: false
+          group: basic
+        - input: |-
+            ADD src/main.cpp
+            REMOVE src/main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/main.cpp
+            REMOVED src/main.cpp
+            translation_units=0
+          points: 6
+          hidden: false
+          group: basic
+        - input: |-
+            REMOVE src/missing.cpp
+            EXIT
+          expectedOutput: "ERROR: path not found"
+          points: 6
+          hidden: false
+          group: edge
+        - input: |-
+            ADD /tmp/main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ERROR: path must be relative
+            translation_units=0
+          points: 6
+          hidden: false
+          group: edge
+        - input: |-
+            ADD ../main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ERROR: path escapes project root
+            translation_units=0
+          points: 6
+          hidden: false
+          group: edge
+        - input: |-
+            ADD src/README.md
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ERROR: only .cpp paths are allowed
+            translation_units=0
+          points: 6
+          hidden: false
+          group: edge
+        - input: |-
+            RENAME src/main.cpp
+            EXIT
+          expectedOutput: "ERROR: unknown command"
+          points: 6
+          hidden: false
+          group: edge
+        - input: |-
+            ADD app/src/main.cpp
+            ADD lib/report.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED app/src/main.cpp
+            ADDED lib/report.cpp
+            app/src/main.cpp
+            lib/report.cpp
+            translation_units=2
+          points: 5
+          hidden: false
+          group: workflow
+        - input: |-
+            ADD src/a.cpp
+            ADD src/b.cpp
+            REMOVE src/a.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/a.cpp
+            ADDED src/b.cpp
+            REMOVED src/a.cpp
+            src/b.cpp
+            translation_units=1
+          points: 5
+          hidden: false
+          group: workflow
+        - input: |-
+            ADD src/a.cpp
+            REPORT
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED src/a.cpp
+            src/a.cpp
+            translation_units=1
+            src/a.cpp
+            translation_units=1
+          points: 10
+          hidden: true
+          group: workflow
+        - input: |-
+            ADD main.cpp
+            REMOVE main.cpp
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ADDED main.cpp
+            REMOVED main.cpp
+            translation_units=0
+          points: 10
+          hidden: true
+          group: workflow
+        - input: |-
+            ADD src/main.CPP
+            REPORT
+            EXIT
+          expectedOutput: |-
+            ERROR: only .cpp paths are allowed
+            translation_units=0
+          points: 10
+          hidden: true
+          group: workflow
     - key: cpp-concurrent-queue
       title: Потокобезпечна черга
       description: Реалізуйте bounded queue для producer/consumer, синхронізуйте доступ і коректно завершіть усі потоки.
