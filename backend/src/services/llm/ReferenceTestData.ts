@@ -59,27 +59,59 @@ function repairMalformedPythonMainGuard(source: string): string | null {
     /^([ \t]*)(\\?)[ \t]*if[ \t]+__name__[ \t]*(==|=)[ \t]*(["'])__main__(['"])([ \t]*)(:)?[ \t]*(#.*)?(\r?)$/gm,
     (_line, indentation: string, leadingBackslash: string, operator: string, openingQuote: string, closingQuote: string, _spaceBeforeColon: string, colon: string | undefined, comment: string | undefined, lineEnding: string) => {
       if (!leadingBackslash && operator === '==' && openingQuote === closingQuote && colon) return _line;
-      return `${indentation}if __name__ == "__main__":${comment ? ` ${comment.trim()}` : ''}${lineEnding}`;
+      return indentation + 'if __name__ == "__main__":' + (comment ? ' ' + comment.trim() : '') + lineEnding;
     },
   );
   return repaired === source ? null : repaired;
 }
 
-async function executeReferenceWithMainGuardRepair(
+function repairMissingPythonSuiteColon(source: string, errorMessage: string): string | null {
+  if (!/SyntaxError:\s*expected ':'/i.test(errorMessage)) return null;
+  const lineMatch = errorMessage.match(/File "[^"]+", line (\d+)/i);
+  const lineIndex = Number(lineMatch?.[1]) - 1;
+  if (!Number.isSafeInteger(lineIndex) || lineIndex < 0) return null;
+
+  const lineEnding = source.includes('\r\n') ? '\r\n' : '\n';
+  const lines = source.split(/\r?\n/);
+  const line = lines[lineIndex];
+  if (typeof line !== 'string') return null;
+  const statement = line.trim();
+  if (!statement || statement.includes('#') || statement.endsWith(':')) return null;
+  if (!/^(?:async\s+(?:def|for|with)\b|if\b|elif\b|for\b|while\b|def\b|class\b|with\b|match\b|case\b|try\b|else\b|except\b|finally\b)/.test(statement)) {
+    return null;
+  }
+
+  lines[lineIndex] = line.replace(/[ \t]+$/, '') + ':';
+  return lines.join(lineEnding);
+}
+
+async function executeReferenceWithSyntaxRepair(
   source: string,
   inputs: string[],
   publicExamples: TestDataExample[],
   signal: AbortSignal | undefined,
   executeReference: ReferenceTestExecutor,
 ): Promise<{ source: string; outputs: string[] }> {
-  try {
-    return { source, outputs: await executeReference(source, inputs, publicExamples, signal) };
-  } catch (error) {
-    if (!(error instanceof AIValidationError) || !/Reference program compilation failed:/i.test(error.message)) throw error;
-    const repaired = repairMalformedPythonMainGuard(source);
-    if (!repaired) throw error;
-    return { source: repaired, outputs: await executeReference(repaired, inputs, publicExamples, signal) };
+  let candidateSource = source;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      return {
+        source: candidateSource,
+        outputs: await executeReference(candidateSource, inputs, publicExamples, signal),
+      };
+    } catch (error) {
+      if (!(error instanceof AIValidationError)
+        || !/Reference program compilation failed:/i.test(error.message)
+        || attempt === 3) {
+        throw error;
+      }
+      const repaired = repairMalformedPythonMainGuard(candidateSource)
+        ?? repairMissingPythonSuiteColon(candidateSource, error.message);
+      if (!repaired || repaired === candidateSource) throw error;
+      candidateSource = repaired;
+    }
   }
+  throw new Error('Reference program syntax repair exhausted');
 }
 
 async function executeReferenceWithCandidateReplacement(params: {
@@ -94,7 +126,7 @@ async function executeReferenceWithCandidateReplacement(params: {
   let replacementIndex = 0;
   while (true) {
     try {
-      const execution = await executeReferenceWithMainGuardRepair(
+      const execution = await executeReferenceWithSyntaxRepair(
         params.source,
         selectedInputs,
         params.publicExamples,
